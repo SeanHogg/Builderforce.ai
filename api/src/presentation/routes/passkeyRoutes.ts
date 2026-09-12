@@ -26,10 +26,44 @@ import {
   relyingPartyFor,
   renamePasskey,
   signInWithPasskey,
-  type AuthenticationResponse,
-  type RegistrationResponse,
 } from '../../application/auth/PasskeyService';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, parseOptionalBody, z, zOptionalString } from './requestBody';
+
+/**
+ * WebAuthn credential JSON is handed to the verifier whole, so both levels stay
+ * loose — `type`, `authenticatorAttachment`, `clientExtensionResults` and whatever a
+ * browser adds next pass through. Only the fields the verifier decodes are typed,
+ * and they are exactly what every browser's credential serialises.
+ */
+const RegistrationBody = z.looseObject({
+  id: z.string(),
+  rawId: z.string(),
+  response: z.looseObject({
+    clientDataJSON: z.string(),
+    attestationObject: z.string(),
+    transports: z.array(z.string()).optional(),
+  }),
+  // The service trims it and falls back to 'Passkey' when blank — the same
+  // reading `zOptionalString` gives.
+  name: zOptionalString,
+});
+
+const AuthenticationBody = z.looseObject({
+  id: z.string(),
+  rawId: z.string(),
+  response: z.looseObject({
+    clientDataJSON: z.string(),
+    authenticatorData: z.string(),
+    signature: z.string(),
+    userHandle: z.string().nullish(),
+  }),
+  sessionName: z.string().nullish(),
+});
+
+const RenameBody = z.object({ name: z.string().nullish() });
+
+const LoginOptionsBody = z.object({ email: z.string().nullish() });
 
 function clientIp(c: Context<HonoEnv>): string | null {
   const cf = c.req.header('CF-Connecting-IP');
@@ -81,13 +115,13 @@ export function createPasskeyRoutes(db: Db): Hono<HonoEnv> {
       db,
       relyingParty(c),
       c.get('userId') as string,
-      await c.req.json<RegistrationResponse>(),
+      await parseBody(c, RegistrationBody),
     ),
   })));
 
   // PATCH /api/auth/passkeys/:id
   router.patch('/:id', (c) => handle(c, async () => {
-    const body = await c.req.json<{ name?: string }>();
+    const body = await parseBody(c, RenameBody);
     return {
       passkey: await renamePasskey(db, c.get('userId') as string, Number(c.req.param('id')), body.name ?? ''),
     };
@@ -108,7 +142,7 @@ export function createPasskeyLoginRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /api/auth/passkey/options
   router.post('/options', (c) => handle(c, async () => {
-    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+    const body = await parseOptionalBody(c, LoginOptionsBody);
     return {
       options: await beginPasskeyAuthentication(db, relyingParty(c), {
         email: body.email ?? null,
@@ -119,7 +153,7 @@ export function createPasskeyLoginRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /api/auth/passkey/verify
   router.post('/verify', (c) => handle(c, async () => {
-    const body = await c.req.json<AuthenticationResponse & { sessionName?: string }>();
+    const body = await parseBody(c, AuthenticationBody);
     const issued = await signInWithPasskey(db, c.env.JWT_SECRET, relyingParty(c), body, {
       sessionName: body.sessionName ?? null,
       userAgent: userAgent(c),

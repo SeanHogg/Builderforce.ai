@@ -29,6 +29,7 @@ import {
   CLOUD_AGENT_PLATFORM_TOOLS, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool,
   CHAT_SCOPED_AGENT_TOOLS, resolveReplayAuth,
 } from './builtinMcpService';
+import { TenantRole } from '../../domain/shared/types';
 
 const db = {} as never;
 const TENANT = 7;
@@ -324,6 +325,27 @@ describe('callBuiltinTool', () => {
     taskSvc.createTask.mockResolvedValue({ toPlain: () => ({ id: 5 }) });
     await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: 'Do it', assignedUserId: 'coordinator-1' } });
     expect(taskSvc.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: 3, title: 'Do it' }), TENANT);
+  });
+
+  it('refuses a workspace write to a canvas contributor or viewer before touching the service', async () => {
+    // `tasks.create` writes through the service, never through the ticket route's
+    // `task:write` gate — so a person seated by one shared canvas must be refused here.
+    for (const role of [TenantRole.CONTRIBUTOR, TenantRole.VIEWER]) {
+      await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', role, arguments: { projectId: 3, title: 'Nope', assignedUserId: 'coordinator-1' } }))
+        .rejects.toThrow(/requires at least the 'developer' role/);
+      await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.create', role, arguments: { name: 'Nope' } }))
+        .rejects.toThrow(/requires at least the 'developer' role/);
+    }
+    expect(taskSvc.createTask).not.toHaveBeenCalled();
+    expect(projectSvc.createProject).not.toHaveBeenCalled();
+  });
+
+  it('still lets a developer write, and a contributor read', async () => {
+    taskSvc.createTask.mockResolvedValue({ toPlain: () => ({ id: 6 }) });
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', role: TenantRole.DEVELOPER, arguments: { projectId: 3, title: 'Ok', assignedUserId: 'coordinator-1' } });
+    expect(taskSvc.createTask).toHaveBeenCalledTimes(1);
+    projectSvc.listProjects.mockResolvedValue([]);
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.list', role: TenantRole.CONTRIBUTOR, arguments: {} })).resolves.toBeDefined();
   });
 
   it('tasks.create is idempotent — a same-title task on the project is returned, not duplicated', async () => {

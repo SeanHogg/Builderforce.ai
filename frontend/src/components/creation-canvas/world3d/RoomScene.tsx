@@ -123,7 +123,7 @@ export function RoomScene({ seats, palette, unknownLabel, controlsEnabled = true
           yaw={seat.yaw}
           color={bodyColor(seat.userId, palette, seat.isSelf)}
           label={seat.displayName || unknownLabel}
-          live={seat.live}
+          live={seat.present}
         />
       ))}
 

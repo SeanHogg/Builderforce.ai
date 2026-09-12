@@ -60,6 +60,7 @@ import {
 import { MAX_AUTONOMOUS_RUNS_PER_TASK, MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { diagnoseStall, STALL_AFTER_MS, type StallCause } from './stallTriage';
 import { getEffectiveManagerPolicy } from './managerPolicyStore';
+import { managerHoldsReviewGate } from './reviewGateAuthority';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
 
@@ -137,6 +138,13 @@ export interface CensusTicketFacts {
 export interface CensusPolicy {
   /** The project's effective `requireSignoffToComplete`. */
   requireSignoff: boolean;
+  /**
+   * The workspace's effective `managerMayCloseReviewedTickets` (1150). REQUIRED for the
+   * same reason as `requireSignoff`: with it on, a human-gated review lane is held by the
+   * manager, and a census that did not know would keep counting a `human_gate` escalation
+   * cohort the manager is in fact working — the report and the actor disagreeing again.
+   */
+  managerMayCloseReviewedTickets: boolean;
 }
 
 /** One cause bucket of the census. */
@@ -231,6 +239,11 @@ export function censusDiagnose(f: CensusTicketFacts, policy: CensusPolicy, stall
     autoRunReason: classifyBulkAutoRunReason(f),
     hasLiveRun: f.hasLiveRun,
     readiness: null,
+    // The SAME question triage asks, answered by the same policy module (1150).
+    reviewGateDelegated: managerHoldsReviewGate({
+      status: f.status, laneGate: f.lane?.gate,
+      managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
+    }),
     // The stage's own owed roles ARE bulk-knowable (one query over the manifest), and
     // they are what turns a generic `will_run` into the real `awaiting_signoff` answer
     // for the measured 149-ticket cohort.
@@ -610,7 +623,10 @@ export async function getStallCensus(
       return computeStallCensus(db, {
         ...args,
         tasks: rows as CensusTask[],
-        policy: { requireSignoff: policy.requireSignoffToComplete },
+        policy: {
+          requireSignoff: policy.requireSignoffToComplete,
+          managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
+        },
         env,
       });
     },

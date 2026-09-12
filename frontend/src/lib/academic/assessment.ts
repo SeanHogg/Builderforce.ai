@@ -58,6 +58,22 @@ export function boardAssessmentMode(nodes: readonly Readonly<Record<string, unkn
   return mode;
 }
 
+/**
+ * The strictest mode among the assessments that are LIVE right now.
+ *
+ * `boardAssessmentMode` answers "what is the strictest thing written on this board";
+ * the composer needs "what is being SAT on this board at this moment". An assessment
+ * is live from its `releaseAt` until its deadline has passed — one with no release
+ * date is still being written, and locking its author's assistant while they draft
+ * the paper would make a closed-book exam impossible to set. Everything that IS live
+ * goes through the same strictest-wins rule, for the reason that rule states.
+ */
+export function liveAssessmentMode(nodes: readonly Readonly<Record<string, unknown>>[], now: number): AssessmentMode {
+  return boardAssessmentMode(nodes.filter((data) => isAssessmentMode(data.assessmentMode)
+    && Number.isFinite(Date.parse(text(data.releaseAt, 60)))
+    && windowState(data, now) === 'open'));
+}
+
 export interface AssessmentGate {
   mode: AssessmentMode;
   /** May the assistant author or answer at all? */

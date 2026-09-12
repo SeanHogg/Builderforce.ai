@@ -7,12 +7,14 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import type { TenantRole } from './rbac';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type PreviewRole = 'owner' | 'manager' | 'developer' | 'viewer';
+/** Any workspace role — read from the ONE frontend mirror of the ladder. */
+export type PreviewRole = TenantRole;
 
 interface RolePreviewContextValue {
   /** Active preview role, or null when not in preview mode. */

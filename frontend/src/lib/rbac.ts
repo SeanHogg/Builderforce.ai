@@ -16,17 +16,22 @@ import type { AuthUser } from './types';
  * this layer is the honest UX signal.
  */
 
-export type TenantRole = 'owner' | 'manager' | 'developer' | 'viewer';
+// `contributor` — seated by a canvas share that grants EDIT on a board. Sees the
+// workspace like a viewer; its write authority is its BOARD role on the canvases
+// it is a member of, which the canvas reads from the session, never from here.
+export type TenantRole = 'owner' | 'manager' | 'developer' | 'contributor' | 'viewer';
 
 // Higher index = more authority. Mirrors ROLE_ORDER on the API.
-export const ROLE_ORDER: TenantRole[] = ['viewer', 'developer', 'manager', 'owner'];
+export const ROLE_ORDER: TenantRole[] = ['viewer', 'contributor', 'developer', 'manager', 'owner'];
 
 // A role's NAME and DESCRIPTION are localized chrome, not model data — they live in
 // the catalogs (`common.tenantRoleLabel` / `common.tenantRoleDescription`) and are
 // read through `useRoleText()` (`lib/useRoleText.ts`).
 
-/** Roles a manager/owner may assign through the Members UI (owner is owner-only). */
-export const ASSIGNABLE_ROLES: TenantRole[] = ['viewer', 'developer', 'manager', 'owner'];
+/** Roles a manager/owner may assign through the Members UI (owner is owner-only).
+ *  Includes `contributor` so a canvas guest's row shows its real role and can be
+ *  promoted or demoted like any other. */
+export const ASSIGNABLE_ROLES: TenantRole[] = ROLE_ORDER;
 
 export function hasMinRole(actual: TenantRole | string | undefined | null, required: TenantRole): boolean {
   if (!actual) return false;

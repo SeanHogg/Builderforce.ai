@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  boundingRect, frameCollapsePatch, frameMemberIds, frameOwners, hiddenByCollapsedFrames, visibleEndpoint,
+  boundingRect, frameCollapsePatch, frameMemberIds, frameOwners, framesToExpandForPlacement, hiddenByCollapsedFrames, visibleEndpoint,
   type FrameBox,
 } from './canvasFrame';
 
@@ -82,6 +82,58 @@ describe('frameCollapsePatch', () => {
 
   it('falls back to the default size for a frame that was never sized', () => {
     expect(frameCollapsePatch(box('f', 'frame', 0, 0, 320, 92, { frameCollapsed: true }), false).size.width).toBeGreaterThan(320);
+  });
+});
+
+describe('framesToExpandForPlacement', () => {
+  // A collapsed frame drawn as its CHIP, remembering the 600×400 section it stands for.
+  const chip = (id: string, x: number, y: number, width: number, height: number) =>
+    box(id, 'frame', x, y, 320, 92, { frameCollapsed: true, frameExpandedWidth: width, frameExpandedHeight: height });
+
+  it('opens a collapsed frame when a placed object\'s centre is inside its EXPANDED rect', () => {
+    const before = [chip('g', 0, 0, 600, 400)];
+    // Centre (450, 330) is well outside the 320×92 chip but inside the section.
+    const after = [...before, box('x', 'flowStep', 400, 300)];
+    expect(framesToExpandForPlacement(before, after, ['x'])).toEqual(['g']);
+  });
+
+  it('is a no-op when the enclosing frame is already open', () => {
+    const before = [OUTER];
+    expect(framesToExpandForPlacement(before, [...before, box('x', 'flowStep', 300, 200)], ['x'])).toEqual([]);
+  });
+
+  it('is a no-op when the centre is outside the section, even if the box overlaps it', () => {
+    const before = [chip('g', 0, 0, 600, 400)];
+    expect(framesToExpandForPlacement(before, [...before, box('x', 'flowStep', 560, 380)], ['x'])).toEqual([]);
+  });
+
+  it('opens EVERY collapsed frame the object is nested in, so it ends up visible', () => {
+    const before = [chip('outer', 0, 0, 600, 400), chip('inner', 50, 50, 200, 200)];
+    const after = [...before, box('x', 'flowStep', 80, 80)];
+    expect(framesToExpandForPlacement(before, after, ['x'])).toEqual(['outer', 'inner']);
+  });
+
+  it('opens only the collapsed outer frame when the inner one is already open', () => {
+    const before = [chip('outer', 0, 0, 600, 400), INNER];
+    expect(framesToExpandForPlacement(before, [...before, box('x', 'flowStep', 80, 80)], ['x'])).toEqual(['outer']);
+  });
+
+  it('handles several placed objects at once, in board order', () => {
+    const before = [chip('a', 0, 0, 600, 400), chip('b', 1000, 0, 600, 400), chip('c', 2000, 0, 600, 400)];
+    const after = [...before, box('x', 'flowStep', 1200, 100), box('y', 'flowStep', 100, 100)];
+    expect(framesToExpandForPlacement(before, after, ['x', 'y'])).toEqual(['a', 'b']);
+  });
+
+  it('does not open a frame the object was already inside (a collapsed frame dragged with its members)', () => {
+    const before = [chip('g', 0, 0, 600, 400), box('m', 'flowStep', 100, 100)];
+    const after = [chip('g', 500, 500, 600, 400), box('m', 'flowStep', 600, 600)];
+    expect(framesToExpandForPlacement(before, after, ['g', 'm'])).toEqual([]);
+  });
+
+  it('does not open a frame collapsed IN THE SAME change — that is an intent to hide', () => {
+    const before = [box('g', 'frame', 0, 0, 600, 400)];
+    const after = [chip('g', 0, 0, 600, 400), box('x', 'flowStep', 100, 100)];
+    expect(framesToExpandForPlacement(before, after, ['x'])).toEqual([]);
   });
 });
 

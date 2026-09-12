@@ -22,6 +22,20 @@ import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspac
 import type { Db } from '../../infrastructure/database/connection';
 import { persistWebSessionToken } from '../../application/auth/webSessionStore';
 import { randomHex } from '../../domain/shared/bytes';
+import { parseBody, parseOptionalBody, z } from './requestBody';
+
+const ExchangeBody = z.object({ code: z.string().nullish() });
+
+/** Every field is optional: the endpoint answers 200 whatever it is given, so it
+ *  never reveals whether an account exists. */
+const MagicLinkBody = z.object({
+  email: z.string().nullish(),
+  redirect: z.string().nullish(),
+  anonId: z.string().nullish(),
+});
+
+/** Never trimmed; the handler answers a short or missing password itself. */
+const AddPasswordBody = z.object({ password: z.string().nullish() });
 
 // ---------------------------------------------------------------------------
 // Provider configuration
@@ -543,8 +557,8 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
   // the URL/analytics/Referer entirely.
   // -------------------------------------------------------------------------
   router.post('/oauth/exchange', async (c) => {
-    const body = await c.req.json<{ code?: string }>().catch(() => ({} as { code?: string }));
-    const code = typeof body.code === 'string' ? body.code : '';
+    const body = await parseOptionalBody(c, ExchangeBody);
+    const code = body.code ?? '';
     if (!code) return c.json({ error: 'Missing code' }, 400);
 
     // 60-second freshness window. verifyState checks the HMAC + timestamp. This
@@ -588,7 +602,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/auth/magic-link   — request a magic sign-in link
   // -------------------------------------------------------------------------
   router.post('/magic-link', async (c) => {
-    const body = await c.req.json<{ email?: string; redirect?: string; anonId?: string }>();
+    const body = await parseBody(c, MagicLinkBody);
     const normalizedEmail = normalizeEmail(body.email ?? '');
     // Open-redirect guard (M5): the magic-link redirect is echoed back to the
     // verify page and used as a navigation target, so validate it here too.
@@ -762,7 +776,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.post('/add-password', webAuthMiddleware, async (c) => {
     const userId = c.var.userId;
-    const body = await c.req.json<{ password?: string }>();
+    const body = await parseBody(c, AddPasswordBody);
 
     if (!body.password || body.password.length < 8) {
       return c.json({ error: 'Password must be at least 8 characters' }, 400);

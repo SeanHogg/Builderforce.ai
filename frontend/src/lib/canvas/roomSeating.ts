@@ -60,16 +60,22 @@ export function seatPlacement(index: number, count: number, radius = ROOM_SEAT_R
   };
 }
 
+/** A person in the session, or an agent whose card is on the board. */
+export type RoomOccupantKind = 'human' | 'agent';
+
 /** The minimum a roster row needs to be seated. The real one carries more. */
 export interface RoomOccupant {
   userId: string;
   displayName?: string | null;
+  /** Absent means a person. */
+  kind?: RoomOccupantKind;
 }
 
 export interface RoomSeat {
   userId: string;
   /** Empty when the roster has not named them yet — the surface labels those. */
   displayName: string;
+  kind: RoomOccupantKind;
   /** Ring index. Stable for a given roster order, which is what stops the
    *  circle reshuffling every time somebody's cursor moves. */
   index: number;
@@ -79,6 +85,13 @@ export interface RoomSeat {
   live: boolean;
   /** True for the viewer's own seat, so the renderer can mark it. */
   isSelf: boolean;
+  /**
+   * Whether this occupant is HERE rather than merely on the roster: a peer the relay
+   * has heard from, the viewer (who is reading the room, so is in it), or an agent —
+   * which has no browser to relay a body from; its card on the board is its presence.
+   * The one answer every count and every dimmed plate reads.
+   */
+  present: boolean;
 }
 
 /**
@@ -102,14 +115,18 @@ export function assignRoomSeats(
     const body = live.get(occupant.userId);
     const seatIndex = body?.seat !== undefined ? body.seat : index;
     const fallback = seatPlacement(seatIndex, count);
+    const kind = occupant.kind ?? 'human';
+    const isSelf = occupant.userId === currentUserId;
     return {
       userId: occupant.userId,
       displayName: occupant.displayName ?? '',
+      kind,
       index: seatIndex,
       position: body ? body.position : fallback.position,
       yaw: body ? body.yaw : fallback.yaw,
       live: !!body,
-      isSelf: occupant.userId === currentUserId,
+      isSelf,
+      present: !!body || isSelf || kind === 'agent',
     };
   });
 }

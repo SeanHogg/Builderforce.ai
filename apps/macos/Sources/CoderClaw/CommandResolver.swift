@@ -2,11 +2,16 @@ import Foundation
 
 enum CommandResolver {
     private static let projectRootDefaultsKey = "coderclaw.gatewayProjectRootPath"
-    private static let helperName = "coderclaw"
+    /// The CLI binary installed by the `@seanhogg/builderforce-agents` npm package.
+    private static let helperName = "builderforce"
+    /// Pre-rebrand binary name, still resolved so existing installs keep working.
+    private static let legacyHelperName = "coderclaw"
 
     static func gatewayEntrypoint(in root: URL) -> String? {
         let distEntry = root.appendingPathComponent("dist/index.js").path
         if FileManager().isReadableFile(atPath: distEntry) { return distEntry }
+        let builderforceEntry = root.appendingPathComponent("builderforce.mjs").path
+        if FileManager().isReadableFile(atPath: builderforceEntry) { return builderforceEntry }
         let coderclawEntry = root.appendingPathComponent("coderclaw.mjs").path
         if FileManager().isReadableFile(atPath: coderclawEntry) { return coderclawEntry }
         let binEntry = root.appendingPathComponent("bin/coderclaw.js").path
@@ -101,6 +106,7 @@ enum CommandResolver {
 
     private static func coderclawManagedPaths(home: URL) -> [String] {
         let bases = [
+            home.appendingPathComponent(".builderforce"),
             home.appendingPathComponent(".coderclaw"),
         ]
         var paths: [String] = []
@@ -195,13 +201,18 @@ enum CommandResolver {
 
     static func coderclawExecutable(searchPaths: [String]? = nil) -> String? {
         self.findExecutable(named: self.helperName, searchPaths: searchPaths)
+            ?? self.findExecutable(named: self.legacyHelperName, searchPaths: searchPaths)
     }
 
     static func projectCoderClawExecutable(projectRoot: URL? = nil) -> String? {
         #if DEBUG
         let root = projectRoot ?? self.projectRoot()
-        let candidate = root.appendingPathComponent("node_modules/.bin").appendingPathComponent(self.helperName).path
-        return FileManager().isExecutableFile(atPath: candidate) ? candidate : nil
+        let bin = root.appendingPathComponent("node_modules/.bin")
+        for name in [self.helperName, self.legacyHelperName] {
+            let candidate = bin.appendingPathComponent(name).path
+            if FileManager().isExecutableFile(atPath: candidate) { return candidate }
+        }
+        return nil
         #else
         return nil
         #endif
@@ -210,6 +221,7 @@ enum CommandResolver {
     static func nodeCliPath() -> String? {
         let root = self.projectRoot()
         let candidates = [
+            root.appendingPathComponent("builderforce.mjs").path,
             root.appendingPathComponent("coderclaw.mjs").path,
             root.appendingPathComponent("bin/coderclaw.js").path,
         ]
@@ -264,14 +276,14 @@ enum CommandResolver {
             }
             if let pnpm = self.findExecutable(named: "pnpm", searchPaths: searchPaths) {
                 // Use --silent to avoid pnpm lifecycle banners that would corrupt JSON outputs.
-                return [pnpm, "--silent", "coderclaw", subcommand] + extraArgs
+                return [pnpm, "--silent", self.helperName, subcommand] + extraArgs
             }
             if let coderclawPath = self.coderclawExecutable(searchPaths: searchPaths) {
                 return [coderclawPath, subcommand] + extraArgs
             }
 
             let missingEntry = """
-            coderclaw entrypoint missing (looked for dist/index.js or coderclaw.mjs); run pnpm build.
+            builderforce entrypoint missing (looked for dist/index.js or builderforce.mjs); run pnpm build.
             """
             return self.errorCommand(with: missingEntry)
 
@@ -301,7 +313,7 @@ enum CommandResolver {
         guard !settings.target.isEmpty else { return nil }
         guard let parsed = self.parseSSHTarget(settings.target) else { return nil }
 
-        // Run the real coderclaw CLI on the remote host.
+        // Run the real builderforce CLI on the remote host (falling back to the pre-rebrand binary).
         let exportedPath = [
             "/opt/homebrew/bin",
             "/usr/local/bin",
@@ -357,13 +369,23 @@ enum CommandResolver {
         CLI="";
         \(cliSection)
         \(projectSection)
-        if command -v coderclaw >/dev/null 2>&1; then
+        if command -v builderforce >/dev/null 2>&1; then
+          CLI="$(command -v builderforce)"
+          builderforce \(quotedArgs);
+        elif command -v coderclaw >/dev/null 2>&1; then
           CLI="$(command -v coderclaw)"
           coderclaw \(quotedArgs);
         elif [ -n "${PRJ:-}" ] && [ -f "$PRJ/dist/index.js" ]; then
           if command -v node >/dev/null 2>&1; then
             CLI="node $PRJ/dist/index.js"
             node "$PRJ/dist/index.js" \(quotedArgs);
+          else
+            echo "Node >=22 required on remote host"; exit 127;
+          fi
+        elif [ -n "${PRJ:-}" ] && [ -f "$PRJ/builderforce.mjs" ]; then
+          if command -v node >/dev/null 2>&1; then
+            CLI="node $PRJ/builderforce.mjs"
+            node "$PRJ/builderforce.mjs" \(quotedArgs);
           else
             echo "Node >=22 required on remote host"; exit 127;
           fi
@@ -382,10 +404,10 @@ enum CommandResolver {
             echo "Node >=22 required on remote host"; exit 127;
           fi
         elif command -v pnpm >/dev/null 2>&1; then
-          CLI="pnpm --silent coderclaw"
-          pnpm --silent coderclaw \(quotedArgs);
+          CLI="pnpm --silent builderforce"
+          pnpm --silent builderforce \(quotedArgs);
         else
-          echo "coderclaw CLI missing on remote host"; exit 127;
+          echo "builderforce CLI missing on remote host"; exit 127;
         fi
         """
         let options: [String] = [

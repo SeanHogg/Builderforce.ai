@@ -23,7 +23,7 @@ export interface TenantMember {
   displayName: string | null;
   mfaEnabled: boolean;
   mfaEnabledAt: string | null;
-  /** Workspace role: owner | manager | developer | viewer. */
+  /** Workspace role: owner | manager | developer | contributor | viewer. */
   role: string;
   joinedAt: string | null;
   activeSessions: number;

@@ -6,7 +6,6 @@ import {
   CANVAS_3D_MAX_ZOOM,
   CANVAS_3D_MIN_ZOOM,
   applyCanvas3DMoves,
-  canvas3dAxes,
   canvas3dCameraTransform,
   canvas3dDepthOffset,
   canvas3dLinkTransform,
@@ -16,7 +15,9 @@ import {
   canvas3dPanToCentre,
   canvas3dDepthFromDrag,
   canvas3dPerspectiveFactor,
+  canvas3dProject,
   canvas3dScene,
+  canvas3dScreenCorner,
   canvas3dUnprojectToPlane,
   canvas3dStageTransform,
   canvas3dZoomFactorFromWheel,
@@ -37,18 +38,11 @@ const node = (id: string, x: number, y: number, width = 200, height = 100): Canv
 const describe3D = (candidate: Canvas3DNode & { group: string }) => ({ label: candidate.id, group: candidate.group });
 
 /**
- * Where a point in the scene actually lands on screen — the CSS pipeline the
- * stage transform drives, written out so the drag solve can be checked against
- * the projection it claims to invert rather than against itself.
+ * Where a point in the scene actually lands on screen — the forward projection the
+ * CSS stage transform drives, so the drag solve is checked against the projection
+ * it claims to invert rather than against itself.
  */
-const project = (orbit: Canvas3DOrbit, point: Canvas3DPoint): { x: number; y: number } => {
-  const { u, v, w } = canvas3dAxes(orbit);
-  const foreshorten = canvas3dPerspectiveFactor(u.z * point.x + v.z * point.y + w.z * point.z);
-  return {
-    x: orbit.panX + foreshorten * (u.x * point.x + v.x * point.y + w.x * point.z),
-    y: orbit.panY + foreshorten * (u.y * point.x + v.y * point.y + w.y * point.z),
-  };
-};
+const project = (orbit: Canvas3DOrbit, point: Canvas3DPoint): { x: number; y: number } => canvas3dProject(orbit, point);
 
 describe('canvas3dScene', () => {
   it('stacks connected objects by dependency depth and centres the stack', () => {
@@ -352,5 +346,33 @@ describe('objects lifted off their layer', () => {
 
     expect(scene.cards.find((card) => card.id === 'a')!.locked).toBe(true);
     expect(scene.cards.find((card) => card.id === 'b')!.locked).toBe(false);
+  });
+});
+
+describe('canvas3dScreenCorner', () => {
+  const scene = canvas3dScene({ nodes: [node('a', 0, 0), node('b', 600, 300)], edges: [], describe: describe3D });
+  const corners = (orbit: Canvas3DOrbit) => ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sy]) =>
+    canvas3dProject(orbit, { x: (sx * scene.plane.width) / 2, y: (sy * scene.plane.height) / 2, z: 0 }));
+
+  it('is the corner of the planes that reads as top-right on screen, however the space is turned', () => {
+    for (const yaw of [-24, 0, 120, 180, -150]) {
+      const orbit = { ...CANVAS_3D_DEFAULT_ORBIT, yaw };
+      const corner = canvas3dScreenCorner(orbit, scene)!;
+      // No projected corner of the plane lies further up and to the right.
+      for (const at of corners(orbit)) expect(corner.x - corner.y).toBeGreaterThanOrEqual(at.x - at.y - 1e-9);
+      expect(corner.x).toBeGreaterThan(0);
+      expect(corner.y).toBeLessThan(0);
+    }
+  });
+
+  it('follows the camera as it travels', () => {
+    const still = canvas3dScreenCorner(CANVAS_3D_DEFAULT_ORBIT, scene)!;
+    const moved = canvas3dScreenCorner(canvas3dPanAfterDrag(CANVAS_3D_DEFAULT_ORBIT, 120, -40), scene)!;
+    expect(moved.x - still.x).toBeCloseTo(120);
+    expect(moved.y - still.y).toBeCloseTo(-40);
+  });
+
+  it('has no corner in an empty space', () => {
+    expect(canvas3dScreenCorner(CANVAS_3D_DEFAULT_ORBIT, canvas3dScene({ nodes: [], edges: [], describe: describe3D }))).toBeNull();
   });
 });

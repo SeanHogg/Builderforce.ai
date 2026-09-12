@@ -99,4 +99,19 @@ describe('assignRoomSeats', () => {
     const seats = assignRoomSeats([{ userId: 'u1' }], bodies({}), null);
     expect(seats[0]!.displayName).toBe('');
   });
+
+  /**
+   * "0 of 1 here" with only you in the room was the bug: the viewer is reading the
+   * room, so is in it, and an agent's card on the board is its presence.
+   */
+  it('counts the viewer and the agents on the board as here', () => {
+    const seats = assignRoomSeats(
+      [{ userId: 'me' }, { userId: 'peer' }, { userId: 'agent:cmo', displayName: 'CMO', kind: 'agent' }],
+      bodies({}),
+      'me',
+    );
+    expect(seats.map((seat) => [seat.kind, seat.present])).toEqual([
+      ['human', true], ['human', false], ['agent', true],
+    ]);
+  });
 });

@@ -2203,6 +2203,12 @@ export interface ManagerPolicy {
    * until an operator gives it. The gap is REPORTED either way.
    */
   allowAutoStaffLanes: boolean;
+  /**
+   * May the autonomous manager review and close a ticket through a human-gated review
+   * lane (1150)? Workspace-only, set by an account admin. When false a person closes every
+   * ticket on such a lane; the manager still reviews it.
+   */
+  managerMayCloseReviewedTickets: boolean;
 }
 
 /**
@@ -2227,6 +2233,8 @@ export interface ManagerTenantDefaults {
   allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
+  /** Review-and-close authority (1150) — workspace-only; `null` = the built-in `false`. */
+  managerMayCloseReviewedTickets: boolean | null;
 }
 
 /** GET/PATCH /api/manager/defaults. Every resolved value is server-computed. */

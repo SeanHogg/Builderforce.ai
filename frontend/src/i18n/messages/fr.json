@@ -1756,9 +1756,9 @@
     "typeProduct": "Produit",
     "typeDesign": "Design",
     "typeIncident": "Incident",
-    "requiresRoleHint": "{role, select, viewer {Nécessite le rôle Observateur} developer {Nécessite le rôle Développeur} manager {Nécessite le rôle Gestionnaire} owner {Nécessite le rôle Propriétaire} other {Nécessite le rôle {role}}}",
-    "tenantRoleLabel": "{role, select, viewer {Observateur} developer {Développeur} manager {Gestionnaire} owner {Propriétaire} other {{role}}}",
-    "tenantRoleDescription": "{role, select, viewer {Accès en lecture seule aux tableaux, au travail et à l’effectif.} developer {Créer et exécuter des agents, travailler le tableau et voir les analyses de livraison.} manager {Inviter des personnes, gérer les rôles et les intégrations, et voir toutes les vues d’analyse.} owner {Contrôle total, y compris la facturation, les clés d’API et la suppression de l’espace de travail.} other {}}",
+    "requiresRoleHint": "{role, select, viewer {Nécessite le rôle Observateur} contributor {Nécessite le rôle Contributeur} developer {Nécessite le rôle Développeur} manager {Nécessite le rôle Gestionnaire} owner {Nécessite le rôle Propriétaire} other {Nécessite le rôle {role}}}",
+    "tenantRoleLabel": "{role, select, viewer {Observateur} contributor {Contributeur} developer {Développeur} manager {Gestionnaire} owner {Propriétaire} other {{role}}}",
+    "tenantRoleDescription": "{role, select, viewer {Accès en lecture seule aux tableaux, au travail et à l’effectif.} contributor {Modifier les canevas partagés avec vous ; lecture seule partout ailleurs dans l’espace de travail.} developer {Créer et exécuter des agents, travailler le tableau et voir les analyses de livraison.} manager {Inviter des personnes, gérer les rôles et les intégrations, et voir toutes les vues d’analyse.} owner {Contrôle total, y compris la facturation, les clés d’API et la suppression de l’espace de travail.} other {}}",
     "requiresDeveloperRole": "Nécessite le rôle Développeur",
     "closePanel": "Fermer le panneau",
     "panel": "Panneau",
@@ -11089,7 +11089,9 @@
         "ceremoniesUnattended": "Peut mener des cérémonies sans personne",
         "ceremoniesNeedPeople": "Les cérémonies exigent une personne",
         "reassignGranted": "Peut réattribuer après {hours} h d’inactivité",
-        "reassignWithheld": "Les absents gardent leur travail"
+        "reassignWithheld": "Les absents gardent leur travail",
+        "reviewCloseGranted": "Le manager peut clôturer les tickets relus",
+        "reviewCloseHuman": "Une personne clôture les tickets relus"
       },
       "workspaceDefaultsHint": "Tout ce qui reste sur « Utiliser la valeur par défaut » suit les valeurs par défaut de votre espace de travail dans Paramètres → Manager IA.",
       "ceremonies": {
@@ -11107,6 +11109,10 @@
       "allowAutoStaffLanes": {
         "label": "Configurer une étape qui ne nomme personne",
         "help": "Certaines étapes n’autorisent aucun rôle : aucun rôle requis déclaré, aucun agent affecté — donc sur un tableau piloté par le cycle de vie, rien de ce qui s’y trouve ne pourra jamais être lancé. Le manager signale toujours ces étapes ; cette option décide s’il peut en plus en corriger une en y affectant un exécutant. L’accorder démarre tous les tickets qui y attendent déjà : une étape laissée vide volontairement (une colonne d’entrée que vous dépilez à la main) devrait donc le rester."
+      },
+      "managerMayCloseReviewedTickets": {
+        "label": "Laisser le manager relire et clôturer les tickets",
+        "help": "S’applique lorsque la colonne de revue d’un tableau exige l’approbation d’une personne. Désactivé : le manager relit toujours chaque ticket — il renvoie le travail inachevé et relance les validations — mais c’est une personne qui le clôture. Activé : lorsque la revue du manager est concluante, il clôture lui-même le ticket, et l’historique du ticket indique qu’il l’a fait en vertu de ce réglage. Seuls les administrateurs du compte peuvent le modifier."
       },
       "agentReassignIdleHours": {
         "label": "Seulement après une inactivité de",
@@ -22765,6 +22771,7 @@
         "you": "Vous",
         "inRoom": "Dans la salle",
         "onBoard": "Sur le tableau",
+        "agent": "Agent",
         "noWebglTitle": "La 3D n'est pas disponible sur cet appareil",
         "noWebglBody": "La salle nécessite WebGL, que ce navigateur ne parvient pas à démarrer. Toutes les personnes présentes dans la session sont listées ci-dessous, et le reste du canevas fonctionne normalement.",
         "navigateHint": "Glissez pour regarder autour · clic droit ou deux doigts pour vous déplacer · molette pour zoomer · glissez la session ou une création pour la déplacer",
@@ -24799,6 +24806,7 @@
     "roleTeammate": "coéquipier",
     "chipJoin": "Ajouter {name} ({role}) à ce tableau : faites-le glisser ou appuyez sur Entrée",
     "chipLocked": "{name} n’est pas encore configuré dans cet espace de travail",
+    "chipOnBoard": "{name} ({role}) est sur ce tableau : appuyez pour afficher sa carte",
     "inviteSignedOut": "Connectez-vous pour inviter",
     "moreSeats": "{count} sièges de plus"
   },

@@ -288,6 +288,35 @@ Public copy describes evidence available today; stronger promises become roadmap
 - ⛔ **P1 — video/image codebooks + generator are untrained, so output isn't coherent.** The full train path is exercised end to end (`video-train` Studio step; the api `generate-media` endpoint loads the artifact and returns frames), but watchable fidelity needs a real corpus + GPU training, or teacher distillation from a frontier media model. *Blocker: GPU training compute on a media corpus.*
 - ⛔ **Verify chat #55's actual `brainChats.projectId` vs the seeded project.** *Blocker: needs live data.*
 - ⛔ **Evermind as the model behind IDE coding turns (replace the frontier model, not just learn from it).** Requested 2026-09-07 while cutting VSIX run cost. Everything needed to ROUTE exists (`inference_enabled` → `evermind/<ref>` in `pickCloudModel`, constrained-decoding tool calls, the coherence auto-quarantine), so this is not a wiring gap. *Blocker: the head a project has today is the randomly-initialised STARTER base (`generateDefaultEvermindBase`) plus whatever its own runs have distilled; switching inference on for coding turns would serve incoherent replies until quarantine tripped, i.e. a quality regression dressed as a saving. Needs a trained checkpoint (teacher distillation over a real run corpus, or the WGSL training path above) and a measured coherence/eval bar before the default flips — an explicit operator decision, not a code change.* **DECIDED 2026-09-12 (operator): the bar is 90% quality** — Evermind becomes the IDE coding model once a trained checkpoint scores ≥90% of the frontier baseline on the coding eval; until then the default does not flip. Still blocked on the trained checkpoint itself.
+#### Evermind Knowledge & Learning Pipeline
+
+> The Evermind Knowledge & Learning Pipeline enables closed-loop knowledge extraction and learning-evaluation. The pipeline captures a BASELINE of what a model/agent knows, EXTRACTS newly learned content after online adaptation, provides a REVIEW/curation surface, and feeds curated learnings back into RETRAIN/transfer so future models inherit them.
+
+**Strategic Objectives (2026-Q3):**
+- **KR: Extraction Rate** — % of runs producing at least one candidate learning (target: 80%)
+- **KR: Review Throughput** — median hours from extraction to approved/rejected (target: 24 hours)
+- **KR: Transfer Uplift** — benchmark score improvement after learning transfer vs. baseline-only (target: 15%)
+- **KR: Contradiction Rate** — % of extracted learnings conflicting with baseline (target: ≤5%)
+
+**Relevant Abandoned Tickets (require re-implementation):**
+
+| Ticket | Title | PR | Commits | Status | Action Required |
+|--------|-------|-----|---------|--------|-----------------|
+| #161 | Learning Review Queue — Human Curation & Evaluation | #101 | 4 | Abandoned | Re-implement the curation/review surface |
+| #674 | Define Payload Structure | #332 | 133 | Abandoned | Re-implement the extraction delta format |
+| #675 | Implement Payload Generation Logic | #333 | 70 | Abandoned | Re-implement core extraction logic |
+
+**Notes:**
+- **#161** directly supports the Review Throughput KR — the human curation surface is needed to approve/reject extracted learnings
+- **#674** provides the foundation for the extraction delta format — defines how learnings are structured
+- **#675** implements the core extraction logic that generates the learning deltas from runs
+- The pipeline's primitives already exist: sparse weight deltas (`utils/delta.ts`), export/retrain seam (`export/index.ts`), import (`import/evermind.ts`), and bench harness (`bench/`)
+
+**Dependencies:**
+- Existing Evermind SSM implementation for memory primitives
+- Vector store integration (qdrant/pinecone/vertex-ai dialects)
+- On-prem/IDE context wiring for run outcome capture
+
 ### BYO usage attribution & workflow builder
 
 - **Orphaned usage rows vanish from every tenant surface.** `llm_usage_log.tenant_id` is nullable with `ON DELETE SET NULL`, so rows survive tenant deletion, match no `tenant_id = ?` filter, and still count in the untenanted admin rollup — so admin and tenant totals silently disagree. Unblocks: admin/tenant reconciliation.

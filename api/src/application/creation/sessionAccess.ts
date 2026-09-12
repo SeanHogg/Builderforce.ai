@@ -96,12 +96,16 @@ export async function resolveSessionAccess(
  * `developer` regardless of the board role — so inviting somebody to LOOK at one
  * canvas handed them write access to every project, ticket and agent in the
  * workspace. The board role is the ceiling: a viewer or commenter gets a
- * workspace `viewer`, and only a role that edits or runs the board gets
- * `developer`, which the canvas write paths need.
+ * workspace `viewer`, and a role that edits or runs the board gets `contributor`
+ * (operator decision 2026-09-12) — NOT `developer`. The canvas write paths gate on
+ * the BOARD role ({@link requireSessionRole}), so the edit grant already lives on
+ * `creation_session_members`; the workspace seat only has to let the board
+ * resolve. `contributor` ranks below `developer`, so every task, project, agent
+ * and run gate (`>= developer`) keeps refusing a person shared one canvas.
  */
 export function tenantRoleForSessionRole(role: SessionRole): TenantRole {
   return SESSION_ROLE_RANK[role] >= SESSION_ROLE_RANK.editor
-    ? TenantRole.DEVELOPER
+    ? TenantRole.CONTRIBUTOR
     : TenantRole.VIEWER;
 }
 

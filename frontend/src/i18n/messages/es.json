@@ -1756,9 +1756,9 @@
     "typeProduct": "Producto",
     "typeDesign": "Diseño",
     "typeIncident": "Incidente",
-    "requiresRoleHint": "{role, select, viewer {Requiere el rol de Observador} developer {Requiere el rol de Desarrollador} manager {Requiere el rol de Gerente} owner {Requiere el rol de Propietario} other {Requiere el rol {role}}}",
-    "tenantRoleLabel": "{role, select, viewer {Observador} developer {Desarrollador} manager {Gerente} owner {Propietario} other {{role}}}",
-    "tenantRoleDescription": "{role, select, viewer {Acceso de solo lectura a tableros, trabajo y plantilla.} developer {Crear y ejecutar agentes, trabajar el tablero y ver los análisis de entrega.} manager {Invitar personas, gestionar roles e integraciones y ver todas las vistas de análisis.} owner {Control total, incluida la facturación, las claves de API y la eliminación del espacio de trabajo.} other {}}",
+    "requiresRoleHint": "{role, select, viewer {Requiere el rol de Observador} contributor {Requiere el rol de Colaborador} developer {Requiere el rol de Desarrollador} manager {Requiere el rol de Gerente} owner {Requiere el rol de Propietario} other {Requiere el rol {role}}}",
+    "tenantRoleLabel": "{role, select, viewer {Observador} contributor {Colaborador} developer {Desarrollador} manager {Gerente} owner {Propietario} other {{role}}}",
+    "tenantRoleDescription": "{role, select, viewer {Acceso de solo lectura a tableros, trabajo y plantilla.} contributor {Editar los lienzos compartidos contigo; solo lectura en el resto del espacio de trabajo.} developer {Crear y ejecutar agentes, trabajar el tablero y ver los análisis de entrega.} manager {Invitar personas, gestionar roles e integraciones y ver todas las vistas de análisis.} owner {Control total, incluida la facturación, las claves de API y la eliminación del espacio de trabajo.} other {}}",
     "requiresDeveloperRole": "Requiere el rol de Desarrollador",
     "closePanel": "Cerrar el panel",
     "panel": "Panel",
@@ -11089,7 +11089,9 @@
         "ceremoniesUnattended": "Puede dirigir ceremonias sin nadie",
         "ceremoniesNeedPeople": "Las ceremonias necesitan una persona",
         "reassignGranted": "Puede reasignar trabajo inactivo {hours}h+",
-        "reassignWithheld": "Los ausentes conservan su trabajo"
+        "reassignWithheld": "Los ausentes conservan su trabajo",
+        "reviewCloseGranted": "El manager puede cerrar tickets revisados",
+        "reviewCloseHuman": "Una persona cierra los tickets revisados"
       },
       "workspaceDefaultsHint": "Todo lo que quede en «Usar el predeterminado» seguirá los valores de tu espacio de trabajo en Configuración → Manager IA.",
       "ceremonies": {
@@ -11107,6 +11109,10 @@
       "allowAutoStaffLanes": {
         "label": "Configurar una etapa que no nombra a nadie",
         "help": "Algunas etapas no autorizan ningún rol: no declaran un rol obligatorio ni tienen un agente asignado, así que en un tablero gestionado por ciclo de vida nada de lo que esté ahí podrá despacharse nunca. El manager siempre informa de estas etapas; esta opción decide si además puede arreglar una fijándole un ejecutor. Concederla pone en marcha todos los tickets que ya esperan ahí, de modo que una etapa dejada vacía a propósito (una columna de entrada de la que tiras a mano) debería seguir así."
+      },
+      "managerMayCloseReviewedTickets": {
+        "label": "Permitir que el manager revise y cierre tickets",
+        "help": "Se aplica cuando la columna de revisión de un tablero requiere la aprobación de una persona. Desactivado: el manager sigue revisando cada ticket —devuelve el trabajo inacabado y persigue las aprobaciones—, pero lo cierra una persona. Activado: cuando la revisión del manager es satisfactoria, cierra el ticket él mismo y el historial del ticket registra que lo hizo en virtud de este ajuste. Solo los administradores de la cuenta pueden cambiarlo."
       },
       "agentReassignIdleHours": {
         "label": "Solo tras estar inactiva",
@@ -22765,6 +22771,7 @@
         "you": "Tú",
         "inRoom": "En la sala",
         "onBoard": "En el tablero",
+        "agent": "Agente",
         "noWebglTitle": "El 3D no está disponible en este dispositivo",
         "noWebglBody": "La sala necesita WebGL y este navegador no puede iniciarlo. Abajo aparece todo el mundo que está en la sesión, y el resto del lienzo funciona con normalidad.",
         "navigateHint": "Arrastra para mirar alrededor · botón derecho o dos dedos para desplazarte · rueda para acercar · arrastra la sesión o una creación para moverla",
@@ -24799,6 +24806,7 @@
     "roleTeammate": "compañero",
     "chipJoin": "Añade a {name} ({role}) a este lienzo: arrástralo o pulsa Intro",
     "chipLocked": "{name} aún no está configurado en este espacio de trabajo",
+    "chipOnBoard": "{name} ({role}) está en este lienzo: pulsa para mostrar su tarjeta",
     "inviteSignedOut": "Inicia sesión para invitar",
     "moreSeats": "{count} puestos más"
   },

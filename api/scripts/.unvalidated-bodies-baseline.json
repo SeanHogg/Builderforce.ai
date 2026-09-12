@@ -1,4 +1,8 @@
 {
+  "src/application/publicApi/publicCanvasApiService.ts": 2,
+  "src/application/publicApi/publicExtensionApiService.ts": 2,
+  "src/application/publicApi/publicWebhookApiService.ts": 2,
+  "src/application/publicApi/publicWidgetApiService.ts": 2,
   "src/presentation/routes/accountBrainPreferenceRoutes.ts": 1,
   "src/presentation/routes/adSetRoutes.ts": 4,
   "src/presentation/routes/adminRoutes.ts": 44,

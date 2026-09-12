@@ -15,14 +15,25 @@ import type { Env } from '../../env';
  * as it is in the weights.
  */
 
-const mocks = vi.hoisted(() => ({ head: vi.fn(), buildDatabase: vi.fn(() => ({})) }));
+const mocks = vi.hoisted(() => ({
+  head: vi.fn(),
+  buildDatabase: vi.fn(() => ({})),
+  merge: vi.fn(),
+  fromBlob: vi.fn(),
+  fromLM: vi.fn(),
+  deserializeRowDelta: vi.fn(),
+  verifyCrcTrailer: vi.fn(),
+}));
 
 vi.mock('@seanhogg/builderforce-memory-engine', () => ({
-  EvermindModelPackage: { fromBlob: vi.fn() },
+  EvermindModelPackage: { fromBlob: mocks.fromBlob, fromLM: mocks.fromLM },
   EvermindLMTrainer: class {},
   BPETokenizer: class {},
   diffCheckpoints: vi.fn(),
+  deserializeRowDelta: mocks.deserializeRowDelta,
+  verifyCrcTrailer: mocks.verifyCrcTrailer,
 }));
+vi.mock('../../application/llm/evermindMerge', () => ({ mergeCheckpointDiffs: mocks.merge }));
 vi.mock('../database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
 vi.mock('../../application/llm/projectEvermind', () => ({
   getProjectEvermindHead: mocks.head,
@@ -461,28 +472,116 @@ describe('/contribution — the pollable teach status', () => {
   });
 });
 
-describe('/learn — the retired pre-diffed weight-delta door', () => {
+describe('/learn — the pre-diffed weight-delta door (on-prem runner) and its stale-baseVersion guard', () => {
+  // Restored 2026-09-12 (operator decision: wire the on-prem runner to push diffs).
+  // The producer is agent-runtime `project-evermind-delta.ts`; these pin the half of
+  // the contract it recovers on.
   const learn = (body: unknown) =>
     new Request('https://coordinator/learn', { method: 'POST', body: JSON.stringify(body) });
 
-  it('is gone: a delta push 404s and queues nothing', async () => {
-    // The door never had a caller — every real learning path posts raw text to
-    // /learn-text and is adapted+diffed inside drain(). Keeping a second, untested
-    // producer entry point alive is what let `kind: 'delta'` stay a shape the merge
-    // loop had to branch on forever. This asserts the retirement, so a future change
-    // that re-adds the route has to re-add the contract deliberately.
+  it('rejects a delta whose base no longer matches, names the current head, and queues nothing', async () => {
     const { doInstance, map } = makeDO();
     mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
 
-    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8 }));
+    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 7 }));
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(409);
+    // The head number is the whole point: a producer cannot rebase without being told
+    // what to rebase ONTO.
+    expect(await res.json()).toMatchObject({ ok: false, headVersion: 8 });
     expect(map.get('pending')).toBeUndefined();
   });
 
-  it('still routes /learn-text, whose path ends in the retired one', async () => {
-    // `endsWith('/learn')` would have matched '/learn-text' too had the checks been
-    // ordered the other way; removing one must not strand the other.
+  it('accepts the SAME delta once it is rebased onto the current head, and reports it pollable as a delta', async () => {
+    const { doInstance } = makeDO();
+    mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
+
+    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, label: 'ticket 12' }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, queued: 1, contributionId: 1, baseVersion: 8 });
+    const status = await doInstance.fetch(new Request('https://coordinator/contribution?id=1'));
+    expect(await status.json()).toMatchObject({ status: 'pending', kind: 'delta' });
+  });
+
+  it('refuses on an unseeded project and on a frozen one, and a malformed body, without queueing', async () => {
+    const { doInstance, map } = makeDO();
+
+    mocks.head.mockResolvedValue({ version: 0, ref: null, mode: 'connected' });
+    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 0 }))).status).toBe(409);
+
+    mocks.head.mockResolvedValue({ version: 3, ref: 'ref-3', mode: 'offline-frozen' });
+    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 3 }))).status).toBe(423);
+
+    mocks.head.mockResolvedValue({ version: 3, ref: 'ref-3', mode: 'connected' });
+    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'not base64!', baseVersion: 3 }))).status).toBe(400);
+    expect((await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA' }))).status).toBe(400);
+
+    expect(map.get('pending')).toBeUndefined();
+  });
+
+  /** A DO whose R2 store serves a head, and an engine that loads it. */
+  function mergingDO() {
+    const { state, map } = fakeState();
+    const store = {
+      get: async (key: string) => ({
+        arrayBuffer: async () => new ArrayBuffer(16),
+        text: async () => (key.endsWith('tokenizer.json') ? JSON.stringify({ vocab: {}, merges: [] }) : ''),
+      }),
+    };
+    const doInstance = new ProjectEvermindCoordinatorDO(state, { UPLOADS: store } as unknown as Env);
+    mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected', inferenceEnabled: false, teacherModel: null });
+    // A non-LM head: the delta branch needs no tokenizer/trainer, which keeps this
+    // test about the MERGE contract rather than the text-fit machinery.
+    mocks.fromBlob.mockReturnValue({
+      manifest: { modelType: 'evermind-test', name: 'n' },
+      checkpoint: new ArrayBuffer(16),
+      loadLM: () => ({ loadWeights: vi.fn() }),
+    });
+    mocks.fromLM.mockReturnValue({ toBlob: () => new ArrayBuffer(0) });
+    mocks.verifyCrcTrailer.mockReturnValue({ body: new ArrayBuffer(16) }); // 4 f32 elements
+    mocks.merge.mockReturnValue({ checkpoint: new ArrayBuffer(16), contributors: 1, mergedRows: 1, deltaNorm: 0.5 });
+    return { doInstance, map };
+  }
+
+  it('merges a queued delta into the NEXT version, weighted, with its label as provenance', async () => {
+    const { doInstance, map } = mergingDO();
+    mocks.deserializeRowDelta.mockReturnValue({ rowSize: 1, rows: [2], data: new Float32Array([0.25]) });
+
+    await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, weight: 0.7, label: 'ticket 12' }));
+    const flushed = await doInstance.fetch(new Request('https://coordinator/flush', { method: 'POST' }));
+
+    expect(await flushed.json()).toMatchObject({ ok: true, merged: 1, version: 9, pending: 0 });
+    // The pushed bytes reach FedAvg as-is (no server-side fit), with the producer's weight.
+    const [, diffs, weights] = mocks.merge.mock.calls[0]!;
+    expect(diffs).toHaveLength(1);
+    expect((diffs as ArrayBuffer[])[0]!.byteLength).toBe(3); // 'AAAA' → 3 bytes
+    expect(weights).toEqual([0.7]);
+    const pe = await import('../../application/llm/projectEvermind');
+    expect(pe.recordProjectEvermindMerge).toHaveBeenCalledWith(expect.anything(), expect.anything(), 1, 2, 9, 1);
+    expect(map.get('mem:000000000001')).toMatchObject({ id: 1, kind: 'delta', version: 9, fitted: true, prompt: 'ticket 12' });
+  });
+
+  it('a malformed delta costs only itself — the rest of the batch still merges', async () => {
+    const { doInstance, map } = mergingDO();
+    mocks.deserializeRowDelta
+      .mockImplementationOnce(() => { throw new Error('bad magic'); })
+      .mockReturnValueOnce({ rowSize: 1, rows: [99], data: new Float32Array([1]) }) // out of range
+      .mockReturnValue({ rowSize: 1, rows: [1], data: new Float32Array([0.5]) });
+
+    for (const label of ['broken', 'out-of-range', 'good']) {
+      await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, label }));
+    }
+    const flushed = await doInstance.fetch(new Request('https://coordinator/flush', { method: 'POST' }));
+
+    expect(await flushed.json()).toMatchObject({ merged: 1, version: 9, pending: 0 });
+    expect(mocks.merge.mock.calls[0]![1]).toHaveLength(1);
+    expect(map.get('mem:000000000003')).toMatchObject({ kind: 'delta', prompt: 'good' });
+    expect(map.get('mem:000000000001')).toBeUndefined();
+  });
+
+  it('still routes /learn-text, whose path also ends in /learn', async () => {
+    // `endsWith('/learn')` matches '/learn-text' too, so the text check must run first.
     const { doInstance } = makeDO();
     mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
 

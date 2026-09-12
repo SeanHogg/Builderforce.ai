@@ -26,6 +26,7 @@
  */
 import { z } from 'zod';
 import { RequestValidationError, type RequestValidationIssue } from '../../domain/shared/errors';
+import { boundedIntParam, limitParam, offsetParam, type BoundedIntOptions } from '../../domain/shared/boundedInt';
 
 export { z };
 
@@ -130,3 +131,20 @@ export const zOptionalString = z.preprocess(
   (value) => (typeof value === 'string' ? (value.trim() || undefined) : value == null ? undefined : value),
   z.string().optional(),
 );
+
+// ── Bounded integers ─────────────────────────────────────────────────────────
+// `domain/shared/boundedInt` semantics, NOT a second clamp: junk or absent is the
+// default, anything that parses is floored and clamped. These never REFUSE — a
+// `limit` of 10_000 is a page of `max`, exactly as `?limit=` already reads — so a
+// body field and a query param with the same name answer identically.
+
+/** Any integer band: `def` when absent/junk, floored and clamped into `[min, max]`. */
+export const zBoundedInt = (options: BoundedIntOptions) =>
+  z.unknown().transform((raw) => boundedIntParam(raw, options));
+
+/** A page size: at least 1, at most `max`, `def` when absent or junk. */
+export const zLimit = (def: number, max: number) =>
+  z.unknown().transform((raw) => limitParam(raw, def, max));
+
+/** A row offset: never negative, 0 when absent or junk. */
+export const zOffset = z.unknown().transform((raw) => offsetParam(raw));

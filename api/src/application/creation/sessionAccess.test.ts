@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SESSION_ROLE_RANK, tenantRoleForSessionRole, type SessionRole } from './sessionAccess';
-import { TenantRole } from '../../domain/shared/types';
+import { TenantRole, hasMinRole } from '../../domain/shared/types';
 
 describe('tenantRoleForSessionRole', () => {
   it('gives a board viewer or commenter no more than workspace viewer', () => {
@@ -11,15 +11,20 @@ describe('tenantRoleForSessionRole', () => {
     expect(tenantRoleForSessionRole('commenter')).toBe(TenantRole.VIEWER);
   });
 
-  it('gives a role that edits or runs the board the developer access those paths need', () => {
-    expect(tenantRoleForSessionRole('editor')).toBe(TenantRole.DEVELOPER);
-    expect(tenantRoleForSessionRole('runner')).toBe(TenantRole.DEVELOPER);
-    expect(tenantRoleForSessionRole('owner')).toBe(TenantRole.DEVELOPER);
+  it('seats a role that edits or runs the board as a contributor, never a developer', () => {
+    // Operator decision 2026-09-12: the edit grant is the BOARD role. The
+    // workspace seat only lets the board resolve, so it must not carry the
+    // `developer` tier that writes tasks, projects and agents.
+    expect(tenantRoleForSessionRole('editor')).toBe(TenantRole.CONTRIBUTOR);
+    expect(tenantRoleForSessionRole('runner')).toBe(TenantRole.CONTRIBUTOR);
+    expect(tenantRoleForSessionRole('owner')).toBe(TenantRole.CONTRIBUTOR);
   });
 
-  it('answers for every board role there is', () => {
+  it('answers for every board role there is, and never above contributor', () => {
     for (const role of Object.keys(SESSION_ROLE_RANK) as SessionRole[]) {
-      expect([TenantRole.VIEWER, TenantRole.DEVELOPER]).toContain(tenantRoleForSessionRole(role));
+      const seated = tenantRoleForSessionRole(role);
+      expect([TenantRole.VIEWER, TenantRole.CONTRIBUTOR]).toContain(seated);
+      expect(hasMinRole(seated, TenantRole.DEVELOPER)).toBe(false);
     }
   });
 });

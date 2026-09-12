@@ -60,6 +60,30 @@ import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfi
 import { coerceJsonArray } from '../../domain/shared/jsonColumn';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { normalizeEmail } from '../../application/shared/dnsVerification';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AcceptTermsBody,
+  AccountTypeBody,
+  ApiKeyBody,
+  ApiKeyRegisterBody,
+  ApiKeyTokenBody,
+  DeviceApproveBody,
+  DeviceCodeBody,
+  DeviceTokenBody,
+  EditorKeyBody,
+  MfaCodeBody,
+  MfaEnableBody,
+  MfaLoginBody,
+  OnboardingCompleteBody,
+  OnboardingProgressBody,
+  ResendVerificationBody,
+  RevokeKeyBody,
+  TenantTokenBody,
+  UpdateMeBody,
+  VerifyRegistrationBody,
+  WebLoginBody,
+  WebRegisterBody,
+} from './authRoutes.schemas';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -168,8 +192,8 @@ async function assertMfa(
   db: Db,
   env: Env,
   user: typeof users.$inferSelect,
-  code?: string,
-  recoveryCode?: string,
+  code?: string | null,
+  recoveryCode?: string | null,
 ): Promise<boolean> {
   if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
 
@@ -268,7 +292,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/legal/terms/accept (requires WebJWT)
   router.post('/legal/terms/accept', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ version?: string }>();
+    const body = await parseBody(c, AcceptTermsBody);
 
     const terms = await getActiveLegalDoc(db, 'terms');
     if (body.version && body.version !== terms.version) {
@@ -295,7 +319,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/register
   router.post('/register', async (c) => {
-    const body = await c.req.json<{ email: string; tenantId: number }>();
+    const body = await parseBody(c, ApiKeyRegisterBody);
     const result = await authService.register(body);
     return c.json({
       user:   result.user,
@@ -306,7 +330,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/token
   router.post('/token', async (c) => {
-    const body = await c.req.json<{ apiKey: string; tenantId: number }>();
+    const body = await parseBody(c, ApiKeyTokenBody);
     const result = await authService.login(body.apiKey, body.tenantId);
     return c.json({ token: result.token, expiresIn: result.expiresIn });
   });
@@ -318,21 +342,16 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/device/code — public; start a device login.
   router.post('/device/code', async (c) => {
-    const body = await c.req.json<{ client?: string }>().catch(() => ({} as { client?: string }));
+    const body = await parseOptionalBody(c, DeviceCodeBody);
     const appUrl = c.env.APP_URL || 'https://builderforce.ai';
-    const start = await deviceAuth.start(appUrl, body.client);
+    const start = await deviceAuth.start(appUrl, body.client ?? undefined);
     return c.json(start);
   });
 
   // POST /api/auth/device/approve — WebJWT; called by the /activate page.
   router.post('/device/approve', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{
-      userCode?: string;
-      user_code?: string;
-      tenantId?: number;
-      decision?: 'approve' | 'deny';
-    }>();
+    const body = await parseBody(c, DeviceApproveBody);
     const userCode = (body.userCode ?? body.user_code ?? '').trim();
     if (!userCode) return c.json({ error: 'user_code is required' }, 400);
 
@@ -344,7 +363,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     const res = await deviceAuth.approve({
       userCode,
       userId,
-      tenantId: body.tenantId,
+      tenantId: body.tenantId ?? undefined,
       envSecret: credentialSecret(c.env),
     });
     if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
@@ -355,17 +374,15 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // Not owner-gated: it's the signed-in member's own editor credential.
   router.post('/editor-key', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req
-      .json<{ tenantId?: number }>()
-      .catch(() => ({} as { tenantId?: number }));
-    const res = await deviceAuth.mintEditorKey({ userId, tenantId: body.tenantId });
+    const body = await parseOptionalBody(c, EditorKeyBody);
+    const res = await deviceAuth.mintEditorKey({ userId, tenantId: body.tenantId ?? undefined });
     if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
     return c.json({ access_key: res.key, tenant_id: res.tenantId, token_type: 'bearer' });
   });
 
   // POST /api/auth/device/token — public; polled by the extension.
   router.post('/device/token', async (c) => {
-    const body = await c.req.json<{ device_code?: string }>();
+    const body = await parseBody(c, DeviceTokenBody);
     if (!body.device_code) return c.json({ error: 'device_code is required' }, 400);
     const res = await deviceAuth.poll(body.device_code, credentialSecret(c.env), c.env.JWT_SECRET);
     switch (res.state) {
@@ -389,9 +406,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // Idempotent: unknown / malformed / already-revoked keys return { revoked: false }
   // with 200, never leaking whether the key existed.
   router.post('/keys/revoke', async (c) => {
-    const body = await c.req
-      .json<{ apiKey?: string; key?: string }>()
-      .catch(() => ({} as { apiKey?: string; key?: string }));
+    const body = await parseOptionalBody(c, RevokeKeyBody);
     const rawKey = (body.apiKey ?? body.key ?? '').trim();
     if (!rawKey) return c.json({ error: 'apiKey is required' }, 400);
     const revoked = await revokeTenantApiKeyByRawKey(db, { rawKey, env: c.env });
@@ -402,7 +417,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // tenant-scoped JWT so editor clients (VS Code) can call /api/projects, /api/tasks,
   // etc. The token is minted as the key's creator (human-in-the-loop identity).
   router.post('/tenant-api-key-token', async (c) => {
-    const body = await c.req.json<{ apiKey: string }>();
+    const body = await parseBody(c, ApiKeyBody);
     if (!body.apiKey) return c.json({ error: 'apiKey is required' }, 400);
 
     const keyHash = await hashSecret(body.apiKey);
@@ -447,16 +462,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/web/register
   router.post('/web/register', async (c) => {
-    const body = await c.req.json<{
-      email: string;
-      username?: string;
-      password: string;
-      agreeToTerms?: boolean;
-      accountType?: string;
-      anonId?: string;
-      referralCode?: string;
-      ageAttested?: boolean;
-    }>();
+    const body = await parseBody(c, WebRegisterBody);
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
@@ -575,12 +581,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // `trustDevice` extends the session to 30 days (vs 24h) so a verified user isn't
   // asked to sign in again on this device for a month.
   router.post('/web/register/verify', async (c) => {
-    const body = await c.req.json<{
-      email?: string;
-      code?: string;
-      trustDevice?: boolean;
-      sessionName?: string;
-    }>();
+    const body = await parseBody(c, VerifyRegistrationBody);
     const email = normalizeEmail(body.email ?? '');
     const code = (body.code ?? '').trim();
     if (!email || !code) return c.json({ error: 'email and code are required' }, 400);
@@ -681,7 +682,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // Always 200 with no detail so it can't be used to probe which emails exist / are
   // unverified.
   router.post('/web/register/resend', async (c) => {
-    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+    const body = await parseOptionalBody(c, ResendVerificationBody);
     const email = normalizeEmail(body.email ?? '');
     if (email) {
       const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
@@ -700,7 +701,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/web/login
   router.post('/web/login', async (c) => {
-    const body = await c.req.json<{ email: string; password: string; sessionName?: string }>();
+    const body = await parseBody(c, WebLoginBody);
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
@@ -789,12 +790,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/web/login/mfa
   router.post('/web/login/mfa', async (c) => {
-    const body = await c.req.json<{
-      mfaToken: string;
-      code?: string;
-      recoveryCode?: string;
-      sessionName?: string;
-    }>();
+    const body = await parseBody(c, MfaLoginBody);
 
     if (!body.mfaToken) return c.json({ error: 'mfaToken is required' }, 400);
     if (!body.code && !body.recoveryCode) {
@@ -913,7 +909,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // shell churn); returns the current account unchanged in that case.
   router.post('/me/account-type', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ accountType?: string; ageAttested?: boolean }>().catch(() => ({} as { accountType?: string; ageAttested?: boolean }));
+    const body = await parseOptionalBody(c, AccountTypeBody);
     const accountType = body.accountType === 'freelancer' ? 'freelancer' : body.accountType === 'sales' ? 'sales' : 'standard';
     if (body.ageAttested !== true) return c.json({ error: 'BuilderForce accounts require confirmation that you are at least 18 years old' }, 400);
 
@@ -986,7 +982,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // identically.
   router.patch('/me', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ psychometric?: unknown; displayName?: string }>().catch(() => ({} as { psychometric?: unknown; displayName?: string }));
+    const body = await parseOptionalBody(c, UpdateMeBody);
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.psychometric !== undefined) {
@@ -1010,7 +1006,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // Idempotent full-state write; validated so a malformed body can't poison the row.
   router.put('/me/onboarding/progress', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<Partial<OnboardingProgress>>().catch(() => ({} as Partial<OnboardingProgress>));
+    const body = await parseOptionalBody(c, OnboardingProgressBody);
     const progress = parseOnboardingProgress(JSON.stringify(body));
     if (!progress) return c.json({ error: 'Invalid onboarding progress' }, 400);
     await db
@@ -1023,7 +1019,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent
   router.post('/me/onboarding/complete', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ intent?: string[] }>().catch(() => ({} as { intent?: string[] }));
+    const body = await parseOptionalBody(c, OnboardingCompleteBody);
     const intentJson = Array.isArray(body.intent) ? JSON.stringify(body.intent) : null;
     await db
       .update(users)
@@ -1071,7 +1067,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/agentHost-token – a BuilderForce Agents instance authenticates with its API key
   // Returns a tenant-scoped JWT so the agentHost can call all tenant APIs.
   router.post('/agentHost-token', async (c) => {
-    const body = await c.req.json<{ apiKey: string }>();
+    const body = await parseBody(c, ApiKeyBody);
     if (!body.apiKey) return c.json({ error: 'apiKey is required' }, 400);
 
     const keyHash = await hashSecret(body.apiKey);
@@ -1110,7 +1106,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/tenant-token  (requires WebJWT + body: { tenantId })
   router.post('/tenant-token', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ tenantId: number }>();
+    const body = await parseBody(c, TenantTokenBody);
     if (!body.tenantId) return c.json({ error: 'tenantId is required' }, 400);
 
     const sessionId = c.get('sessionId') as string | undefined;
@@ -1193,7 +1189,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/mfa/enable
   router.post('/mfa/enable', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ code: string }>();
+    const body = await parseBody(c, MfaEnableBody);
     if (!body.code) return c.json({ error: 'code is required' }, 400);
 
     const [user] = await db
@@ -1242,7 +1238,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/mfa/disable
   router.post('/mfa/disable', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ code?: string; recoveryCode?: string }>();
+    const body = await parseBody(c, MfaCodeBody);
     if (!body.code && !body.recoveryCode) {
       return c.json({ error: 'A TOTP code or recovery code is required' }, 400);
     }
@@ -1279,7 +1275,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/mfa/recovery-codes/regenerate
   router.post('/mfa/recovery-codes/regenerate', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ code?: string; recoveryCode?: string }>();
+    const body = await parseBody(c, MfaCodeBody);
     if (!body.code && !body.recoveryCode) {
       return c.json({ error: 'A TOTP code or recovery code is required' }, 400);
     }

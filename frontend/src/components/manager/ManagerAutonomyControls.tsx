@@ -50,6 +50,9 @@ export interface ManagerAutonomyValue {
   /** May the manager configure a lane that authorises NO role (0386)? Withheld by
    *  default: staffing an unconfigured stage starts every ticket sitting in it. */
   allowAutoStaffLanes: TriState;
+  /** May the manager close a ticket through a human-gated review lane (1150)? WORKSPACE
+   *  tier only — an account-admin decision, so the project tier never carries it. */
+  managerMayCloseReviewedTickets?: TriState;
   /** null = inherit the tier below. */
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
@@ -284,6 +287,12 @@ export function ManagerEffectiveSummary({ effective }: { effective: ManagerPolic
         : t('policy.effective.reassignWithheld'),
       tone: effective.allowAgentReassignment ? 'on' : 'off',
     },
+    {
+      text: effective.managerMayCloseReviewedTickets
+        ? t('policy.effective.reviewCloseGranted')
+        : t('policy.effective.reviewCloseHuman'),
+      tone: effective.managerMayCloseReviewedTickets ? 'on' : 'off',
+    },
     { text: t(`policy.prMerge.${effective.prMergePolicy}.label`), tone: 'on' },
   ];
   return (
@@ -431,6 +440,20 @@ export function ManagerAutonomyControls({
         disabled={disabled}
         onChange={(v) => onChange({ allowAutoStaffLanes: v })}
       />
+      {/* Review-and-close authority (1150), beside lane staffing: both decide what the
+          manager may do on a board with nobody in the loop. WORKSPACE-ONLY — the operator
+          made it an account-admin decision, so the project tier never offers it. */}
+      {workspace && (
+        <TriStateRow
+          label={t('policy.managerMayCloseReviewedTickets.label')}
+          help={t('policy.managerMayCloseReviewedTickets.help')}
+          value={value.managerMayCloseReviewedTickets ?? null}
+          inheritable
+          inheritedAs={inheritHint(inherited.managerMayCloseReviewedTickets)}
+          disabled={disabled}
+          onChange={(v) => onChange({ managerMayCloseReviewedTickets: v })}
+        />
+      )}
 
       {/* CEREMONY AUTONOMY (0365) — the manager running a standup is the other thing it
           does without a person in the room, so it is governed here rather than in a

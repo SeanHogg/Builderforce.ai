@@ -196,6 +196,73 @@ export function frameCollapsePatch(box: FrameBox, collapsed: boolean): {
   };
 }
 
+/**
+ * A frame as it would be drawn OPEN. A collapsed frame is a chip, but the section it
+ * stands for still occupies its authored rectangle — which is where containment is
+ * decided (`toFrameBox` measures it the same way). Idempotent, so a caller that has
+ * already measured the expanded size is not double-corrected.
+ */
+function expandedBox(box: FrameBox): FrameBox {
+  if (!isFrame(box) || !isFrameCollapsed(box.data)) return box;
+  const width = Number(box.data.frameExpandedWidth);
+  const height = Number(box.data.frameExpandedHeight);
+  return {
+    ...box,
+    size: {
+      width: Number.isFinite(width) && width > 0 ? width : box.size.width,
+      height: Number.isFinite(height) && height > 0 ? height : box.size.height,
+    },
+  };
+}
+
+/**
+ * The collapsed frames a placement has to OPEN (operator decision 2026-09-12:
+ * "objects placed in a collapsed frame ⇒ auto-expand the frame").
+ *
+ * Membership is geometric, so an object dropped, pasted, imported or placed by Brain
+ * at coordinates inside a put-away section silently joins it — and a collapsed frame
+ * hides what it holds, so the object lands somewhere nobody can see and nobody can
+ * drag it back out of. The answer is to open the section, not to refuse the placement.
+ *
+ * Which frames: every collapsed frame in the placed object's ownership chain (the
+ * SAME chain `hiddenByCollapsedFrames` hides by), so after the expand the object is
+ * visible — an object dropped into a collapsed section nested inside another collapsed
+ * section opens both. Two exclusions keep this from fighting the person:
+ *
+ *  • A frame the object was ALREADY inside (in `before`) is not opened. That is the
+ *    collapsed frame being dragged with its hidden members carried along, or a hidden
+ *    member being moved within its own section — neither is a placement INTO it.
+ *  • A frame that was not collapsed in `before` is not opened. Collapsing it is then
+ *    part of the same change (a collaborator who added and then put the section away,
+ *    a Brain turn that places and collapses) — an intent to hide, not an accident.
+ *
+ * `before` and `after` are the whole board as rectangles; `placedIds` are the objects
+ * that were added or moved. Returned in board order so the result is deterministic.
+ */
+export function framesToExpandForPlacement(
+  before: readonly FrameBox[],
+  after: readonly FrameBox[],
+  placedIds: Iterable<string>,
+): string[] {
+  const placed = new Set(placedIds);
+  if (placed.size === 0) return [];
+  const collapsedBefore = new Set(before.filter((box) => isFrame(box) && isFrameCollapsed(box.data)).map((box) => box.id));
+  const candidates = new Set(
+    after.filter((box) => isFrame(box) && isFrameCollapsed(box.data) && collapsedBefore.has(box.id)).map((box) => box.id),
+  );
+  if (candidates.size === 0) return [];
+  const ownersBefore = frameOwners(before.map(expandedBox));
+  const ownersAfter = frameOwners(after.map(expandedBox));
+  const expand = new Set<string>();
+  for (const id of placed) {
+    const already = new Set(ownerChain(id, ownersBefore));
+    for (const frameId of ownerChain(id, ownersAfter)) {
+      if (candidates.has(frameId) && !already.has(frameId)) expand.add(frameId);
+    }
+  }
+  return after.filter((box) => expand.has(box.id)).map((box) => box.id);
+}
+
 /** The rectangle that encloses these boxes, plus breathing room. */
 export function boundingRect(boxes: readonly FrameBox[], padding: number): FrameRect {
   if (boxes.length === 0) return { x: 0, y: 0, width: FRAME_DEFAULT_SIZE.width, height: FRAME_DEFAULT_SIZE.height };

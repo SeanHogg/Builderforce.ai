@@ -166,7 +166,7 @@ export const ENFORCED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>
 
 // ---------------------------------------------------------------------------
 // Default role → permission matrix
-// viewer < developer < manager < owner
+// viewer < contributor < developer < manager < owner
 // ---------------------------------------------------------------------------
 
 const VIEWER_PERMS: Permission[] = [
@@ -219,8 +219,13 @@ const OWNER_PERMS: Permission[] = [
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
-  viewer:    VIEWER_PERMS,
-  developer: DEVELOPER_PERMS,
+  viewer:      VIEWER_PERMS,
+  // A canvas contributor's write authority is its BOARD role, resolved per canvas
+  // (`application/creation/sessionAccess.ts`) — none of it is a workspace
+  // permission. So the workspace sees them as a viewer: no `project:write`,
+  // `task:write` or `workflow:*`.
+  contributor: VIEWER_PERMS,
+  developer:   DEVELOPER_PERMS,
   manager:   MANAGER_PERMS,
   owner:     OWNER_PERMS,
 };

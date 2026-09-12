@@ -168,7 +168,7 @@ struct OnboardingView: View {
 
     var devLinkCommand: String {
         let version = GatewayEnvironment.expectedGatewayVersionString() ?? "latest"
-        return "npm install -g coderclaw@\(version)"
+        return "npm install -g @seanhogg/builderforce-agents@\(version)"
     }
 
     struct LocalGatewayProbe: Equatable {

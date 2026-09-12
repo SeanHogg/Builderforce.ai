@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CoderClaw CLI installer (non-interactive, no onboarding)
-# Usage: curl -fsSL --proto '=https' --tlsv1.2 https://coderclaw.ai/install-cli.sh | bash -s -- [--json] [--prefix <path>] [--version <ver>] [--node-version <ver>] [--onboard]
+# BuilderForce Agents CLI installer (non-interactive, no onboarding)
+# Installs the `@seanhogg/builderforce-agents` npm package (the `builderforce` CLI)
+# into a local prefix with its own Node.
+# Usage: curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install-cli.sh | bash -s -- [--json] [--prefix <path>] [--version <ver>] [--node-version <ver>] [--onboard]
 
-PREFIX="${CODERCLAW_PREFIX:-${HOME}/.coderclaw}"
+# The published npm package and the CLI binary it installs.
+PACKAGE_NAME="@seanhogg/builderforce-agents"
+BIN_NAME="builderforce"
+
+PREFIX="${CODERCLAW_PREFIX:-${HOME}/.builderforce}"
 CODERCLAW_VERSION="${CODERCLAW_VERSION:-latest}"
 NODE_VERSION="${CODERCLAW_NODE_VERSION:-22.22.0}"
 SHARP_IGNORE_GLOBAL_LIBVIPS="${SHARP_IGNORE_GLOBAL_LIBVIPS:-1}"
 NPM_LOGLEVEL="${CODERCLAW_NPM_LOGLEVEL:-error}"
 INSTALL_METHOD="${CODERCLAW_INSTALL_METHOD:-npm}"
-GIT_DIR="${CODERCLAW_GIT_DIR:-${HOME}/coderclaw}"
+GIT_DIR="${CODERCLAW_GIT_DIR:-${HOME}/builderforce}"
 GIT_UPDATE="${CODERCLAW_GIT_UPDATE:-1}"
 JSON=0
 RUN_ONBOARD=0
@@ -20,14 +26,14 @@ print_usage() {
   cat <<EOF
 Usage: install-cli.sh [options]
   --json                              Emit NDJSON events (no human output)
-  --prefix <path>                     Install prefix (default: ~/.coderclaw)
+  --prefix <path>                     Install prefix (default: ~/.builderforce)
   --install-method, --method npm|git  Install via npm (default) or from a git checkout
   --npm                               Shortcut for --install-method npm
   --git, --github                     Shortcut for --install-method git
-  --git-dir, --dir <path>             Checkout directory (default: ~/coderclaw)
-  --version <ver>                     CoderClaw version (default: latest)
+  --git-dir, --dir <path>             Checkout directory (default: ~/builderforce)
+  --version <ver>                     BuilderForce Agents version or npm dist-tag (default: latest)
   --node-version <ver>                Node version (default: 22.22.0)
-  --onboard                           Run "coderclaw onboard" after install
+  --onboard                           Run "builderforce onboard" after install
   --no-onboard                        Skip onboarding (default)
   --set-npm-prefix                    Force npm prefix to ~/.npm-global if current prefix is not writable (Linux)
 
@@ -74,7 +80,7 @@ download_file() {
 }
 
 cleanup_legacy_submodules() {
-  local repo_dir="${1:-${CODERCLAW_GIT_DIR:-${HOME}/coderclaw}}"
+  local repo_dir="${1:-${GIT_DIR}}"
   local legacy_dir="${repo_dir}/Peekaboo"
   if [[ -d "$legacy_dir" ]]; then
     emit_json "{\"event\":\"step\",\"name\":\"legacy-submodule\",\"status\":\"start\",\"path\":\"${legacy_dir//\"/\\\"}\"}"
@@ -401,43 +407,50 @@ fix_npm_prefix_if_needed() {
   log "Configured npm prefix to ${target}"
 }
 
-install_coderclaw() {
+# Writes <prefix>/bin/builderforce so the CLI always runs on the prefix's own Node.
+write_cli_wrapper() {
+  local entry="$1"
+  mkdir -p "${PREFIX}/bin"
+  rm -f "${PREFIX}/bin/${BIN_NAME}"
+  cat > "${PREFIX}/bin/${BIN_NAME}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${PREFIX}/tools/node/bin/node" "${entry}" "\$@"
+EOF
+  chmod +x "${PREFIX}/bin/${BIN_NAME}"
+}
+
+install_builderforce() {
   local requested="${CODERCLAW_VERSION:-latest}"
   local npm_args=(
     --loglevel "$NPM_LOGLEVEL"
     --no-fund
     --no-audit
   )
-  emit_json "{\"event\":\"step\",\"name\":\"coderclaw\",\"status\":\"start\",\"version\":\"${requested}\"}"
-  log "Installing CoderClaw (${requested})..."
+  emit_json "{\"event\":\"step\",\"name\":\"builderforce\",\"status\":\"start\",\"version\":\"${requested}\"}"
+  log "Installing BuilderForce Agents (${PACKAGE_NAME}@${requested})..."
   if [[ "$SET_NPM_PREFIX" -eq 1 ]]; then
     fix_npm_prefix_if_needed
   fi
 
   if [[ "${requested}" == "latest" ]]; then
-    if ! SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" "$(npm_bin)" install -g --prefix "$PREFIX" "${npm_args[@]}" "coderclaw@latest"; then
-      log "npm install coderclaw@latest failed; retrying coderclaw@next"
-      emit_json "{\"event\":\"step\",\"name\":\"coderclaw\",\"status\":\"retry\",\"version\":\"next\"}"
-      SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" "$(npm_bin)" install -g --prefix "$PREFIX" "${npm_args[@]}" "coderclaw@next"
+    if ! SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" "$(npm_bin)" install -g --prefix "$PREFIX" "${npm_args[@]}" "${PACKAGE_NAME}@latest"; then
+      log "npm install ${PACKAGE_NAME}@latest failed; retrying ${PACKAGE_NAME}@next"
+      emit_json "{\"event\":\"step\",\"name\":\"builderforce\",\"status\":\"retry\",\"version\":\"next\"}"
+      SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" "$(npm_bin)" install -g --prefix "$PREFIX" "${npm_args[@]}" "${PACKAGE_NAME}@next"
       requested="next"
     fi
   else
-    SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" "$(npm_bin)" install -g --prefix "$PREFIX" "${npm_args[@]}" "coderclaw@${requested}"
+    SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" "$(npm_bin)" install -g --prefix "$PREFIX" "${npm_args[@]}" "${PACKAGE_NAME}@${requested}"
   fi
 
-  rm -f "${PREFIX}/bin/coderclaw"
-  cat > "${PREFIX}/bin/coderclaw" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-exec "${PREFIX}/tools/node/bin/node" "${PREFIX}/lib/node_modules/coderclaw/dist/entry.js" "\$@"
-EOF
-  chmod +x "${PREFIX}/bin/coderclaw"
-  emit_json "{\"event\":\"step\",\"name\":\"coderclaw\",\"status\":\"ok\",\"version\":\"${requested}\"}"
+  write_cli_wrapper "${PREFIX}/lib/node_modules/${PACKAGE_NAME}/dist/entry.js"
+  emit_json "{\"event\":\"step\",\"name\":\"builderforce\",\"status\":\"ok\",\"version\":\"${requested}\"}"
 }
 
-install_coderclaw_from_git() {
+install_builderforce_from_git() {
   local repo_dir="$1"
-  local repo_url="https://github.com/coderclaw/coderclaw.git"
+  local repo_url="https://github.com/SeanHogg/Builderforce.ai.git"
 
   if [[ -z "$repo_dir" ]]; then
     fail "Git install dir cannot be empty"
@@ -448,11 +461,11 @@ install_coderclaw_from_git() {
   mkdir -p "$(dirname "$repo_dir")"
   repo_dir="$(cd "$(dirname "$repo_dir")" && pwd)/$(basename "$repo_dir")"
 
-  emit_json "{\"event\":\"step\",\"name\":\"coderclaw\",\"status\":\"start\",\"method\":\"git\",\"repo\":\"${repo_url//\"/\\\"}\"}"
+  emit_json "{\"event\":\"step\",\"name\":\"builderforce\",\"status\":\"start\",\"method\":\"git\",\"repo\":\"${repo_url//\"/\\\"}\"}"
   if [[ -d "$repo_dir/.git" ]]; then
-    log "Installing CoderClaw from git checkout: ${repo_dir}"
+    log "Installing BuilderForce Agents from git checkout: ${repo_dir}"
   else
-    log "Installing CoderClaw from GitHub (${repo_url})..."
+    log "Installing BuilderForce Agents from GitHub (${repo_url})..."
   fi
 
   ensure_git
@@ -480,27 +493,27 @@ install_coderclaw_from_git() {
 
   cleanup_legacy_submodules "$repo_dir"
 
-  SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" pnpm -C "$repo_dir" install
+  # The CLI is the monorepo's agent-runtime package.
+  local runtime_dir="${repo_dir}/agent-runtime"
+  if [[ ! -f "${runtime_dir}/package.json" ]]; then
+    fail "No agent-runtime package in checkout: ${repo_dir}"
+  fi
 
-  if ! pnpm -C "$repo_dir" ui:build; then
+  SHARP_IGNORE_GLOBAL_LIBVIPS="$SHARP_IGNORE_GLOBAL_LIBVIPS" pnpm -C "$runtime_dir" install
+
+  if ! pnpm -C "$runtime_dir" ui:build; then
     log "UI build failed; continuing (CLI may still work)"
   fi
-  pnpm -C "$repo_dir" build
+  pnpm -C "$runtime_dir" build
 
-  mkdir -p "${PREFIX}/bin"
-  cat > "${PREFIX}/bin/coderclaw" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-exec "${PREFIX}/tools/node/bin/node" "${repo_dir}/dist/entry.js" "\$@"
-EOF
-  chmod +x "${PREFIX}/bin/coderclaw"
-  emit_json "{\"event\":\"step\",\"name\":\"coderclaw\",\"status\":\"ok\",\"method\":\"git\"}"
+  write_cli_wrapper "${runtime_dir}/dist/entry.js"
+  emit_json "{\"event\":\"step\",\"name\":\"builderforce\",\"status\":\"ok\",\"method\":\"git\"}"
 }
 
-resolve_coderclaw_version() {
+resolve_builderforce_version() {
   local version=""
-  if [[ -x "${PREFIX}/bin/coderclaw" ]]; then
-    version="$("${PREFIX}/bin/coderclaw" --version 2>/dev/null | head -n 1 | tr -d '\r')"
+  if [[ -x "${PREFIX}/bin/${BIN_NAME}" ]]; then
+    version="$("${PREFIX}/bin/${BIN_NAME}" --version 2>/dev/null | head -n 1 | tr -d '\r')"
   fi
   echo "$version"
 }
@@ -519,29 +532,29 @@ main() {
 
   install_node
   if [[ "$INSTALL_METHOD" == "git" ]]; then
-    install_coderclaw_from_git "$GIT_DIR"
+    install_builderforce_from_git "$GIT_DIR"
   elif [[ "$INSTALL_METHOD" == "npm" ]]; then
     ensure_git
     if [[ "$SET_NPM_PREFIX" -eq 1 ]]; then
       fix_npm_prefix_if_needed
     fi
-    install_coderclaw
+    install_builderforce
   else
     fail "Unknown install method: ${INSTALL_METHOD} (use npm or git)"
   fi
 
   local installed_version
-  installed_version="$(resolve_coderclaw_version)"
+  installed_version="$(resolve_builderforce_version)"
   if [[ -n "$installed_version" ]]; then
     emit_json "{\"event\":\"done\",\"ok\":true,\"version\":\"${installed_version//\"/\\\"}\"}"
-    log "CoderClaw installed (${installed_version})."
+    log "BuilderForce Agents installed (${installed_version}). Run: ${PREFIX}/bin/${BIN_NAME}"
   else
     emit_json "{\"event\":\"done\",\"ok\":true}"
-    log "CoderClaw installed."
+    log "BuilderForce Agents installed. Run: ${PREFIX}/bin/${BIN_NAME}"
   fi
 
   if [[ "$RUN_ONBOARD" -eq 1 ]]; then
-    "${PREFIX}/bin/coderclaw" onboard
+    "${PREFIX}/bin/${BIN_NAME}" onboard
   fi
 }
 

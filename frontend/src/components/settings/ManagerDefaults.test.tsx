@@ -32,6 +32,7 @@ const policy = (enabled: boolean) => ({
   agentReassignIdleHours: 48,
   agentReassignMaxPerSession: 3,
   allowAutoStaffLanes: false,
+  managerMayCloseReviewedTickets: false,
 });
 
 const response = (enabled: boolean) => ({

@@ -12,19 +12,23 @@ enum CLIInstaller {
         searchPaths: [String],
         fileManager: FileManager) -> String?
     {
+        // `builderforce` is the current binary; the second name is the pre-rebrand
+        // binary of existing installs, still recognised.
         for basePath in searchPaths {
-            let candidate = URL(fileURLWithPath: basePath).appendingPathComponent("coderclaw").path
-            var isDirectory: ObjCBool = false
+            for name in ["builderforce", "coderclaw"] {
+                let candidate = URL(fileURLWithPath: basePath).appendingPathComponent(name).path
+                var isDirectory: ObjCBool = false
 
-            guard fileManager.fileExists(atPath: candidate, isDirectory: &isDirectory),
-                  !isDirectory.boolValue
-            else {
-                continue
+                guard fileManager.fileExists(atPath: candidate, isDirectory: &isDirectory),
+                      !isDirectory.boolValue
+                else {
+                    continue
+                }
+
+                guard fileManager.isExecutableFile(atPath: candidate) else { continue }
+
+                return candidate
             }
-
-            guard fileManager.isExecutableFile(atPath: candidate) else { continue }
-
-            return candidate
         }
 
         return nil
@@ -37,14 +41,14 @@ enum CLIInstaller {
     static func install(statusHandler: @escaping @MainActor @Sendable (String) async -> Void) async {
         let expected = GatewayEnvironment.expectedGatewayVersionString() ?? "latest"
         let prefix = Self.installPrefix()
-        await statusHandler("Installing coderclaw CLI…")
+        await statusHandler("Installing builderforce CLI…")
         let cmd = self.installScriptCommand(version: expected, prefix: prefix)
         let response = await ShellExecutor.runDetailed(command: cmd, cwd: nil, env: nil, timeout: 900)
 
         if response.success {
             let parsed = self.parseInstallEvents(response.stdout)
             let installedVersion = parsed.last { $0.event == "done" }?.version
-            let summary = installedVersion.map { "Installed coderclaw \($0)." } ?? "Installed coderclaw."
+            let summary = installedVersion.map { "Installed builderforce \($0)." } ?? "Installed builderforce."
             await statusHandler(summary)
             return
         }
@@ -62,7 +66,7 @@ enum CLIInstaller {
 
     private static func installPrefix() -> String {
         FileManager().homeDirectoryForCurrentUser
-            .appendingPathComponent(".coderclaw")
+            .appendingPathComponent(".builderforce")
             .path
     }
 
@@ -70,7 +74,7 @@ enum CLIInstaller {
         let escapedVersion = self.shellEscape(version)
         let escapedPrefix = self.shellEscape(prefix)
         let script = """
-        curl -fsSL https://coderclaw.bot/install-cli.sh | \
+        curl -fsSL https://builderforce.ai/install-cli.sh | \
         bash -s -- --json --no-onboard --prefix \(escapedPrefix) --version \(escapedVersion)
         """
         return ["/bin/bash", "-lc", script]

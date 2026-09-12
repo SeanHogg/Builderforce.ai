@@ -102,6 +102,9 @@ import {
 } from '../runtime/tickDispatchBudget';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { completeTaskOnMerge } from '../task/taskLifecycle';
+import {
+  decideReviewGate, loadReviewLaneGates, recordManagerReviewClose, recordReviewGateHeld, reviewCloseActor,
+} from './reviewGateAuthority';
 
 /** Statuses an agent could pick up (Blocked waits on a dependency, not an agent). */
 const RUNNABLE: string[] = [
@@ -1269,7 +1272,10 @@ export async function runManagerForProject(
         tenantId, projectId, tasks: managed, shared: censusSignals, env,
         // The pass's own effective policy — the census must classify by the same rules
         // triage remedies by, or the two halves of the same report disagree (0380).
-        policy: { requireSignoff: policy.requireSignoffToComplete },
+        policy: {
+          requireSignoff: policy.requireSignoffToComplete,
+          managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
+        },
       }).catch(() => null)
       : null;
 
@@ -1821,6 +1827,12 @@ async function coordinatePullRequests(
       ? await runtimeService.listActiveByTasks(reviewReady.map((t) => t.id))
       : [];
     const liveTaskIds = new Set<number>(liveExecs.map((e) => e.taskId as unknown as number));
+    // THE REVIEW LANE'S GATE (1150), one read for the whole cohort. Null when it cannot be
+    // read, and a null gate CLOSES NOTHING this pass: completing past a gate whose
+    // configuration is unknown is exactly the override the setting exists to govern.
+    const reviewLaneGates = reviewReady.length
+      ? await loadReviewLaneGates(db, tenantId, projectId).catch(() => null)
+      : new Map<string, string>();
     // Build statuses for the whole review cohort in ONE query rather than a poll per
     // ticket (this loop runs every 5 minutes across every project).
     const reviewPrBuild = reviewReady.length
@@ -2010,6 +2022,24 @@ async function coordinatePullRequests(
         // replaces was used to choose whether to OPEN a pull request and then reported as
         // if it also meant there was nothing to MERGE, which is how ticket -085 was
         // journalled "(no branch to merge)" 78ms before its own PR #103 was retired.
+        // ── WHO MAY CLOSE IT (1150) ───────────────────────────────────────────────
+        // The review verdict above is the manager's; whether the manager may ACT on it
+        // through a human-gated review lane is the workspace admin's decision, answered
+        // by `decideReviewGate` — the same module triage and the census ask, so the stage
+        // that closes tickets and the reports that count them cannot disagree. Held: say
+        // so once (a state, not a per-pass row) and leave the close to a person.
+        if (!reviewLaneGates) continue;
+        const reviewGate = decideReviewGate({
+          status: t.status, laneGate: reviewLaneGates.get(t.status),
+          managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
+        });
+        if (reviewGate === 'held_for_human') {
+          await recordReviewGateHeld(db, { tenantId, projectId, taskId: t.id, runTaskId, title: t.title, detail: readiness.detail });
+          continue;
+        }
+        const closeActor = reviewGate === 'manager_authorized'
+          ? reviewCloseActor(policy.managerRef, t)
+          : { actorAgentRef: t.assignedAgentRef, actorAgentHostId: t.assignedAgentHostId };
         const canOpenPr = readiness.completion === 'open_pr';
         // ── THROUGH THE ONE COMPLETION PATH, NOT A SECOND `db.update` ───────────────
         // This was `db.update(tasks).set({ status: DONE, completedAt: now })`, which
@@ -2032,10 +2062,19 @@ async function coordinatePullRequests(
           tenantId, taskId: t.id,
           // Named so the fallback does not have to guess; `resolveCompletionActor`
           // credits the ticket's most recent executor when this is absent, which is the
-          // right answer on a managed board where the assignee is the Coordinator.
-          actorAgentRef: t.assignedAgentRef,
-          actorAgentHostId: t.assignedAgentHostId,
+          // right answer on a managed board where the assignee is the Coordinator. A close
+          // through a delegated human gate credits the manager (see `reviewCloseActor`).
+          ...closeActor,
         });
+        if (reviewGate === 'manager_authorized') {
+          // Audited like every managed-board override: an activity row on the ticket (its
+          // ledger + the audit timeline) and a `managed.gate_override` row, both naming
+          // the manager and the workspace setting that authorized it.
+          await recordManagerReviewClose(env, db, {
+            tenantId, projectId, taskId: t.id, title: t.title, lane: t.status,
+            managerRef: policy.managerRef, actor: closeActor,
+          });
+        }
         if (canOpenPr) {
           await dispatchTaskFinalize(env as never, db, tenantId, t.id, {
             assignedAgentHostId: t.assignedAgentHostId,
@@ -2066,6 +2105,7 @@ async function coordinatePullRequests(
             requiredCount: signoff.requiredCount,
             satisfiedCount: signoff.satisfiedCount,
             openedPr: canOpenPr,
+            reviewGate,
           },
         });
       } catch (error) { /* skip */ 

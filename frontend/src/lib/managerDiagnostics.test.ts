@@ -61,6 +61,7 @@ const policy: ManagerPolicy = {
   allowAgentReassignment: false,
   agentReassignIdleHours: 48,
   agentReassignMaxPerSession: 3,
+  managerMayCloseReviewedTickets: false,
 };
 
 const runTasks: ManagerRunTask[] = [

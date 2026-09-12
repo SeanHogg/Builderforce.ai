@@ -182,6 +182,12 @@
 /* Disable, never hide — the band's rule, kept here. A seat with nothing provisioned
    behind it is dimmed and inert, and its title still explains why. */
 .compactChip:disabled { opacity: 0.45; cursor: default; }
+/* ON THIS BOARD. The ring every chip already wears, turned the green the agent card's
+   own "On this board" pill uses — so the strip says who is working here without a
+   second mark. `+N` wears it too when a seat on the board is among the rest. */
+.compactChip[data-on-board='true'],
+.compactMore[data-on-board='true'],
+.chip[data-on-board='true'] { border-color: var(--success); }
 /* Scaled off the same token, so the ring around a face stays 2px whether the bar is at
    its desktop height or at the 40px touch target a phone raises it to. */
 .compactChip .initials,

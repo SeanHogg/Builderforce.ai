@@ -12,6 +12,7 @@ import { signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
+import { ROLE_ORDER } from '@/lib/rbac';
 import { useEmulation } from '@/lib/EmulationContext';
 import ShoppingCart from './ShoppingCart';
 import { MessageHubPanel } from './messages/MessageHub';
@@ -23,7 +24,8 @@ import { CommandPalette } from './workspace/CommandPalette';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
 import { useOnboardingPrompt } from '@/lib/onboarding';
 
-const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
+// Highest authority first, from the ONE ladder — a new role appears here by itself.
+const PREVIEW_ROLES: PreviewRole[] = [...ROLE_ORDER].reverse();
 
 export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const t = useTranslations('topbar');
@@ -122,7 +124,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
               >
                 <option value="">{t('previewPlaceholder')}</option>
                 {PREVIEW_ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r} value={r}>{tc('tenantRoleLabel', { role: r })}</option>
                 ))}
               </Select>
             )}

@@ -619,6 +619,10 @@ export const tenantManagerDefaults = pgTable('tenant_manager_defaults', {
   agentReassignMaxPerSession: integer('agent_reassign_max_per_session'),
   /** Workspace CEILING for lane auto-staffing (0386) — see the project column. */
   allowAutoStaffLanes:        boolean('allow_auto_staff_lanes'),
+  /** May the autonomous manager review and close a ticket through a human-gated review
+   *  lane (1150)? WORKSPACE-ONLY — an account-admin decision with no project column.
+   *  NULL = no opinion = the built-in `false`. See `reviewGateAuthority.ts`. */
+  managerMayCloseReviewedTickets: boolean('manager_may_close_reviewed_tickets'),
   /** Who last changed the workspace autonomy posture — the governance question is
    *  "who granted the manager merge rights?", so the answer is stored. */
   updatedBy:         varchar('updated_by', { length: 36 }),

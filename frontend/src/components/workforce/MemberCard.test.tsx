@@ -7,7 +7,7 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 ));
 vi.mock('@/lib/rbac', () => ({
   useRole: () => 'owner',
-  ASSIGNABLE_ROLES: ['viewer', 'developer', 'manager', 'owner'],
+  ASSIGNABLE_ROLES: ['viewer', 'contributor', 'developer', 'manager', 'owner'],
 }));
 vi.mock('@/components/RoleGate', () => ({ RoleGate: ({ children }: { children: ReactNode }) => <>{children}</> }));
 

@@ -149,3 +149,40 @@ describe('Canvas3DView', () => {
     expect(onSelect).toHaveBeenCalledWith('alpha');
   });
 });
+
+describe('Canvas3DView — its own way out', () => {
+  function mountWithExit(exitLabel?: string, empty = false) {
+    const onExit = vi.fn();
+    render(<Canvas3DControlsProvider>
+      <Canvas3DView
+        nodes={empty ? [] : nodes}
+        edges={[]}
+        describe={describe3D}
+        onExit={onExit}
+        {...(exitLabel ? { exitLabel } : {})}
+      />
+    </Canvas3DControlsProvider>);
+    return { onExit };
+  }
+
+  it('wears no (X) unless the host asks for one, because a board rail already carries the exit', () => {
+    mountWithExit();
+    expect(screen.queryByTestId('canvas-3d-exit')).not.toBeInTheDocument();
+  });
+
+  it('pins the (X) to the corner of its planes, and leaves by it', () => {
+    const { onExit } = mountWithExit('Back to the room');
+    const exit = screen.getByRole('button', { name: 'Back to the room' });
+    expect(exit).toHaveAttribute('data-anchored', 'true');
+    // Up and to the right of the viewport's centre: on the space, not the frame.
+    expect(parseFloat(exit.style.getPropertyValue('--canvas-3d-exit-x'))).toBeGreaterThan(0);
+    expect(parseFloat(exit.style.getPropertyValue('--canvas-3d-exit-y'))).toBeLessThan(0);
+    fireEvent.click(exit);
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the (X) in the top-right corner of an empty space, where there is no plane to ride', () => {
+    mountWithExit('Back to the room', true);
+    expect(screen.getByRole('button', { name: 'Back to the room' })).toHaveAttribute('data-anchored', 'false');
+  });
+});

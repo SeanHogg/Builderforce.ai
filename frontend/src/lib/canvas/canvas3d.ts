@@ -510,15 +510,55 @@ function withColumn(m: Matrix3, index: number, column: readonly [number, number,
  * the canvas focuses on a chosen object without disturbing where anything sits.
  */
 export function canvas3dPanToCentre(orbit: Canvas3DOrbit, point: Canvas3DPoint): Canvas3DOrbit {
-  const { u, v, w } = canvas3dAxes(orbit);
-  const foreshorten = canvas3dPerspectiveFactor(u.z * point.x + v.z * point.y + w.z * point.z);
-  const panX = -foreshorten * (u.x * point.x + v.x * point.y + w.x * point.z);
-  const panY = -foreshorten * (u.y * point.x + v.y * point.y + w.y * point.z);
+  const at = canvas3dProject(orbit, point);
+  const panX = orbit.panX - at.x;
+  const panY = orbit.panY - at.y;
   return {
     ...orbit,
     panX: Number.isFinite(panX) ? panX : orbit.panX,
     panY: Number.isFinite(panY) ? panY : orbit.panY,
   };
+}
+
+/**
+ * Where a point in the scene lands on screen, measured from the viewport's centre.
+ *
+ * The forward half of `canvas3dUnprojectToPlane`: the stage basis, the perspective
+ * divide, then the camera's pan — the same order the CSS applies them in.
+ */
+export function canvas3dProject(orbit: Canvas3DOrbit, point: Canvas3DPoint): { x: number; y: number } {
+  const { u, v, w } = canvas3dAxes(orbit);
+  const foreshorten = canvas3dPerspectiveFactor(u.z * point.x + v.z * point.y + w.z * point.z);
+  return {
+    x: orbit.panX + foreshorten * (u.x * point.x + v.x * point.y + w.x * point.z),
+    y: orbit.panY + foreshorten * (u.y * point.x + v.y * point.y + w.y * point.z),
+  };
+}
+
+/**
+ * The top-right corner of the space as it appears on screen, measured from the
+ * viewport's centre — the corner of whichever depth plane reaches furthest up and
+ * to the right under the current orbit. Null for a space with no planes.
+ *
+ * A control that belongs to the space itself (its way out) is pinned here rather
+ * than to the viewport's corner, which on a wide surface is nowhere near the thing
+ * it acts on. Read on screen, not in board axes: turn the scene past 90° and the
+ * board's own top-right corner is on the left.
+ */
+export function canvas3dScreenCorner(
+  orbit: Canvas3DOrbit,
+  scene: Pick<Canvas3DScene, 'plane' | 'layers'>,
+): { x: number; y: number } | null {
+  const { width, height } = scene.plane;
+  if (!scene.layers.length || !width || !height) return null;
+  let corner: { x: number; y: number } | null = null;
+  for (const layer of scene.layers) {
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+      const at = canvas3dProject(orbit, { x: (sx * width) / 2, y: (sy * height) / 2, z: layer.z });
+      if (Number.isFinite(at.x) && Number.isFinite(at.y) && (!corner || at.x - at.y > corner.x - corner.y)) corner = at;
+    }
+  }
+  return corner;
 }
 
 /**

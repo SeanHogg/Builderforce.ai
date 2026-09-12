@@ -23,34 +23,15 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { tenantMembers } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { isTenantRole, type TenantRoleName } from '../../domain/shared/types';
 
 /**
- * Ascending. The INDEX is the authority, so a caller asks "at least manager?"
- * instead of listing which roles qualify — one comparison that cannot drift from
- * the list the way an enumeration at each call site does.
- *
- * Mirrors the `tenant_role` Postgres enum in `schema/kernel.ts`. It is not derived
- * from it because pgEnum preserves declaration order, not authority order, and the
- * two happening to match today is not a property worth depending on.
+ * The ladder itself (`ROLE_ORDER`), its gate (`hasMinRole`) and its guard
+ * (`isTenantRole`) live in `domain/shared/types.ts` — ONE declaration. This module
+ * used to keep a second `TENANT_ROLE_ORDER` / `tenantRoleAtLeast`, and two ladders
+ * is how a new role (e.g. `contributor`) lands in one and not the other.
  */
-export const TENANT_ROLE_ORDER = ['viewer', 'developer', 'manager', 'owner'] as const;
-export type TenantRole = (typeof TENANT_ROLE_ORDER)[number];
-
-export function isTenantRole(value: unknown): value is TenantRole {
-  return typeof value === 'string' && (TENANT_ROLE_ORDER as readonly string[]).includes(value);
-}
-
-/**
- * Is `role` at or above `minimum`?
- *
- * An unknown role is FALSE, never a lenient default. A row carrying a role this
- * build does not know about is either corruption or a deploy running behind a
- * migration, and both of those should refuse rather than admit.
- */
-export function tenantRoleAtLeast(role: string | null | undefined, minimum: TenantRole): boolean {
-  const have = TENANT_ROLE_ORDER.indexOf(role as TenantRole);
-  return have >= 0 && have >= TENANT_ROLE_ORDER.indexOf(minimum);
-}
+export type TenantRole = TenantRoleName;
 
 /**
  * The caller's active role in a workspace, or `null` when they are not in it.
@@ -80,7 +61,7 @@ export async function tenantRoleOf(db: Db, tenantId: number, userId: string): Pr
  * Both list projections (`AuthService.myTenants`, `TenantService.listTenantsForUser`)
  * used to write `member?.role ?? 'member'` — the same fallback, twice, naming a role
  * that does not exist on either side of the wire. `'member'` is not in
- * {@link TENANT_ROLE_ORDER} and not in the frontend's mirror of it, so a row that
+ * `ROLE_ORDER` and not in the frontend's mirror of it, so a row that
  * ever hit the fallback rendered with NO capabilities at all and no way to tell that
  * apart from a genuine viewer.
  *

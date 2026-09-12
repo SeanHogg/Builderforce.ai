@@ -765,8 +765,10 @@ export function coordinatorName(tenantId: number, projectId: number): string {
   return `proj:${tenantId}:${projectId}`;
 }
 
-/** Resolve the coordinator DO stub for a project, or null when the binding is unset. */
-function coordinatorStub(env: Env, tenantId: number, projectId: number): DurableObjectStub | null {
+/** Resolve the coordinator DO stub for a project, or null when the binding is unset.
+ *  Exported for the sibling dispatchers (e.g. `evermindDeltaDispatch`) so the ONE
+ *  binding lookup is shared rather than re-derived per door. */
+export function coordinatorStub(env: Env, tenantId: number, projectId: number): DurableObjectStub | null {
   const ns = env.PROJECT_EVERMIND;
   if (!ns) return null;
   return ns.get(ns.idFromName(coordinatorName(tenantId, projectId)));
@@ -975,7 +977,7 @@ export interface ProjectEvermindContributionStatus {
   contributionId: number;
   state: ProjectEvermindContributionState;
   /** 'text' = a run/exemplar — the only value written today. 'delta' (a pre-diffed
-   *  weight delta) is LEGACY-READ-ONLY; its producer door was retired. Absent when unknown. */
+   *  weight delta pushed through `/learn` by an on-prem runner that ran the fit itself). Absent when unknown. */
   kind?: 'text' | 'delta';
   /** The version this contribution merged INTO (present only when `merged`). */
   version?: number;

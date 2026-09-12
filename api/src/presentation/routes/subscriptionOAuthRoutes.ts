@@ -47,6 +47,10 @@ import {
   type SubscriptionOAuthTokens,
 } from '../../application/llm/tenantProviderKeyService';
 import { clearProviderAuthAlert } from '../../application/llm/providerAuthAlerts';
+import { parseOptionalBody, z } from './requestBody';
+
+/** Both optional: `state` may ride inside the paste, and a device grant has no paste. */
+const CompleteConnectBody = z.object({ code: z.string().nullish(), state: z.string().nullish() });
 
 /**
  * The caller's authentication, as the NARROWEST shape this flow needs: who is
@@ -306,7 +310,7 @@ export function mountSubscriptionOAuthRoutes(router: Hono<HonoEnv>, gate: Subscr
       const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
       if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
 
-      const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
+      const body = await parseOptionalBody(c, CompleteConnectBody);
       const parsed = parsePastedAuthorizationCode(body.code ?? '');
       // `state` may ride inside the paste or be sent explicitly by a client that
       // still holds the one `start` returned. A device grant always sends it explicitly —

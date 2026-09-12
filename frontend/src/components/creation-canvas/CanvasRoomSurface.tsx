@@ -20,7 +20,6 @@ import { roomSpotKey } from '@/lib/canvas/roomSpots';
 import { useRoomSpot } from '@/lib/canvas/useRoomSpot';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
-import { RoomSessionFrame } from './RoomSessionFrame';
 import { RoomCreationItem } from './world3d/RoomCreationItem';
 import { RoomScene } from './world3d/RoomScene';
 import { RoomSessionDiorama } from './world3d/RoomSessionDiorama';
@@ -37,8 +36,9 @@ import styles from './CanvasRoomSurface.module.css';
  * could not see the other. Now there is ONE spatial surface: the room, where the
  * session is a THING — a diorama of the board's projection that you drag anywhere in
  * the room, open at full size from its own button, and minimise back to where you
- * left it. The full-size projection is still `Canvas3DView`, unchanged; the host
- * hands it in through `renderSession` and this surface decides when it is up. See
+ * left it. The full-size projection is still `Canvas3DView`, wearing the room's
+ * (X) on the corner of its own planes; the host hands it in through
+ * `renderSession` and this surface decides when it is up. See
  * `lib/canvas/roomSession.ts` for the placement arithmetic.
  *
  * ── WHY 3D CREATIONS STAND IN IT ─────────────────────────────────────────────────
@@ -105,7 +105,7 @@ export interface CanvasRoomSurfaceProps<T extends Canvas3DNode> {
   /** Keys where THIS viewer left the session in THIS room. */
   sessionId: string;
   sessionTitle: string;
-  /** The session roster, in its own stable order. */
+  /** The session roster, in its own stable order, then the agents on the board. */
   members: readonly RoomOccupant[];
   currentUserId: string | null;
   /** The ephemeral presence map the host already holds. */
@@ -120,10 +120,14 @@ export interface CanvasRoomSurfaceProps<T extends Canvas3DNode> {
    */
   sceneInput: Canvas3DSceneInput<T>;
   /**
-   * The session at full size. Handed the frame's own way back so that Escape inside
-   * the projection minimises it into the room rather than leaving the surface.
+   * The session at full size, handed its way back into the room. Inside the room
+   * there is no rail entry to press — the session is a thing IN the room, not a
+   * surface beside it — so the session draws that way back itself: Escape calls
+   * `onMinimize`, and so does an (X) named `exitLabel`, pinned to the corner of the
+   * session's own planes. It used to be pinned to this frame's corner instead,
+   * which on a wide screen left it floating in empty space far from what it closes.
    */
-  renderSession: (frame: { onMinimize: () => void }) => ReactNode;
+  renderSession: (frame: { onMinimize: () => void; exitLabel: string }) => ReactNode;
   /**
    * Every 3D creation on the board — games, worlds, AI scenes, models — in board
    * order. Each stands in the room beside the session (see the header).
@@ -233,7 +237,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
     };
   }, [onPresence]);
 
-  const hereCount = seats.filter((seat) => seat.live || seat.isSelf).length;
+  const hereCount = seats.filter((seat) => seat.present).length;
   const objectCount = sceneInput.nodes.length;
   // Laid out only while the diorama is on screen: the open session computes its own
   // projection from the same input, and the room draws nothing of the board then.
@@ -252,9 +256,9 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   }), [hereCount, seats.length, t]);
 
   const session = sessionOpen ? (
-    <RoomSessionFrame onMinimize={minimizeSession}>
-      {renderSession({ onMinimize: minimizeSession })}
-    </RoomSessionFrame>
+    <div className={styles.sessionFrame} data-testid="room-session-frame">
+      {renderSession({ onMinimize: minimizeSession, exitLabel: t('session.back') })}
+    </div>
   ) : null;
 
   return (
@@ -280,7 +284,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
               <p>{t('noWebglBody')}</p>
               <div className={styles.ring}>
                 {seats.map((seat) => (
-                  <span key={seat.userId} className={styles.ringSeat} data-live={seat.live || seat.isSelf ? 'true' : 'false'}>
+                  <span key={seat.userId} className={styles.ringSeat} data-live={seat.present ? 'true' : 'false'}>
                     <span className={styles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
                     {seat.displayName || t('unknown')}
                   </span>
@@ -371,11 +375,11 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
         <div className={styles.roster}>
           <p className={styles.rosterHead}>{t('rosterHead', { count: seats.length })}</p>
           {seats.map((seat) => (
-            <div key={seat.userId} className={styles.seat} data-live={seat.live || seat.isSelf ? 'true' : 'false'}>
+            <div key={seat.userId} className={styles.seat} data-live={seat.present ? 'true' : 'false'} data-kind={seat.kind}>
               <span className={styles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
               <span className={styles.seatName}>{seat.displayName || t('unknown')}</span>
               <span className={styles.seatState}>
-                {seat.isSelf ? t('you') : seat.live ? t('inRoom') : t('onBoard')}
+                {seat.isSelf ? t('you') : seat.kind === 'agent' ? t('agent') : seat.live ? t('inRoom') : t('onBoard')}
               </span>
             </div>
           ))}

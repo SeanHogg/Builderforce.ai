@@ -35,7 +35,7 @@ enum LogLocator {
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles])) ?? []
 
-        let prefixes = ["coderclaw"]
+        let prefixes = ["builderforce", "coderclaw"]
         return files
             .filter { file in
                 prefixes.contains { file.lastPathComponent.hasPrefix($0) } && file.pathExtension == "log"

@@ -9,9 +9,9 @@ import { STALL_AFTER_MS } from './stallTriage';
 const STALE = STALL_AFTER_MS + 60_000;
 
 /** A project that HAS opted into required sign-off — the pre-0380 assumption. */
-const SIGNOFF_ON = { requireSignoff: true };
+const SIGNOFF_ON = { requireSignoff: true, managerMayCloseReviewedTickets: false };
 /** A project that has not. The default since 0380, and every project as of that migration. */
-const SIGNOFF_OFF = { requireSignoff: false };
+const SIGNOFF_OFF = { requireSignoff: false, managerMayCloseReviewedTickets: false };
 
 const facts = (over: Partial<CensusTicketFacts> = {}): CensusTicketFacts => ({
   taskId: 1,

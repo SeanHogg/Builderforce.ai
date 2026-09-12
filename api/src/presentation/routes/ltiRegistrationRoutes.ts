@@ -32,6 +32,10 @@ import {
   updateRegistration,
   type LtiRegistrationInput,
 } from '../../application/lti/ltiRegistrationAdmin';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `readInput` String()-coerces each field itself, so any JSON object is the shape. */
+const RegistrationBody = z.record(z.string(), z.unknown());
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -91,7 +95,7 @@ export function createLtiRegistrationRoutes(db: Db): Hono<HonoEnv> {
    *  the administrator to paste if their LMS wants the key inline rather than by
    *  URL; it is also permanently available at `/api/lti/jwks`. */
   router.post('/', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, RegistrationBody);
     const created = await createRegistration(
       c.env as Env,
       db,
@@ -103,7 +107,7 @@ export function createLtiRegistrationRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.put('/:id', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, RegistrationBody);
     const registration = await updateRegistration(c.env as Env, db, tenant(c), id(c), readInput(body));
     return Response.json({ registration });
   }));

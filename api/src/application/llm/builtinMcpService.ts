@@ -140,6 +140,7 @@ type Json = Record<string, unknown>;
 export type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 export { replayRoute, resolveReplayAuth } from './builtinToolContext';
 import { replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { taskCreatedHook } from '../task/taskCreationHook';
 import { forLane, laneAgentAssignments, laneAssignmentValues } from '../swimlane/laneAgentAssignments';
@@ -4218,6 +4219,8 @@ export async function callBuiltinTool(
 ): Promise<unknown> {
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
+  // Direct-write rows never pass a route gate — refuse a sub-developer caller here.
+  assertMayRunBuiltinTool(entry.tool, entry.mutates, args.role);
   const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx });
   const result = await entry.run(ctx, (args.arguments ?? {}) as Json);
   // Unified audit stream: record any mutating tool run (best-effort, off the result).

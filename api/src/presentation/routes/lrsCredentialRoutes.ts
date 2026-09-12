@@ -31,6 +31,17 @@ import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import {
   issueInboundCredential, listLrsCredentials, registerOutboundTarget, revokeLrsCredential,
 } from '../../application/learning/lrsCredentials';
+import { parseOptionalBody, z } from './requestBody';
+
+const IssueCredentialBody = z.object({ label: z.string().nullish() });
+
+/** Presence of endpoint/key/secret is checked by the handler, with its own message. */
+const OutboundTargetBody = z.object({
+  label: z.string().nullish(),
+  endpoint: z.string().nullish(),
+  key: z.string().nullish(),
+  secret: z.string().nullish(),
+});
 
 export function createLrsCredentialRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -53,7 +64,7 @@ export function createLrsCredentialRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/lrs/credentials', manager, async (c) => {
     const { env, tenantId, userId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as { label?: string };
+    const body = await parseOptionalBody(c, IssueCredentialBody);
 
     const result = await issueInboundCredential(db, env, {
       tenantId, userId, label: (body.label ?? '').trim(),
@@ -63,9 +74,7 @@ export function createLrsCredentialRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/lrs/targets', manager, async (c) => {
     const { env, tenantId, userId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as {
-      label?: string; endpoint?: string; key?: string; secret?: string;
-    };
+    const body = await parseOptionalBody(c, OutboundTargetBody);
 
     const endpoint = (body.endpoint ?? '').trim();
     const key = (body.key ?? '').trim();

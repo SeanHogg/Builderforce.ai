@@ -11,7 +11,7 @@ import {
   publishes,
   scopeUpgrade,
 } from './extensionContract';
-import { tenantRoleAtLeast } from '../tenant/tenantRoles';
+import { hasMinRole } from '../../domain/shared/types';
 import { deserializeScopes, hasScope, requireScope, serializeScopes, widenedScopes } from '../shared/scopeList';
 
 /** A minimal manifest that passes the connector parser. */
@@ -242,11 +242,13 @@ describe('ordered vocabularies', () => {
     // Migration 0472 deleted this context's own owner/admin/publisher ladder.
     // A publisher's staff are workspace members, so "may they ship a version?"
     // is answered by the ladder that already governs every other action.
-    expect(tenantRoleAtLeast('owner', 'developer')).toBe(true);
-    expect(tenantRoleAtLeast('manager', 'developer')).toBe(true);
-    expect(tenantRoleAtLeast('developer', 'manager')).toBe(false);
-    expect(tenantRoleAtLeast('viewer', 'developer')).toBe(false);
-    expect(tenantRoleAtLeast('nonsense', 'viewer')).toBe(false);
-    expect(tenantRoleAtLeast(null, 'viewer')).toBe(false);
+    expect(hasMinRole('owner', 'developer')).toBe(true);
+    expect(hasMinRole('manager', 'developer')).toBe(true);
+    expect(hasMinRole('developer', 'manager')).toBe(false);
+    expect(hasMinRole('viewer', 'developer')).toBe(false);
+    // A canvas contributor edits boards it was shared, never the workspace's listings.
+    expect(hasMinRole('contributor', 'developer')).toBe(false);
+    expect(hasMinRole('nonsense', 'viewer')).toBe(false);
+    expect(hasMinRole(null, 'viewer')).toBe(false);
   });
 });

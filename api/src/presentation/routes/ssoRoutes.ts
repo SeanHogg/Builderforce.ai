@@ -45,6 +45,14 @@ import {
   verifyDomain,
   type SsoConnectionInput,
 } from '../../application/auth/enterpriseSso';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `readInput` reads each connection field itself (String()-coerced or
+ *  typeof-checked), so any JSON object is the shape. */
+const ConnectionBody = z.record(z.string(), z.unknown());
+
+/** `String(body.domain ?? '')` — what that coercion took, the schema takes. */
+const DomainBody = z.object({ domain: z.union([z.string(), z.number()]).nullish() });
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -204,7 +212,7 @@ export function createSsoAdminRoutes(db: Db): Hono<HonoEnv> {
   })));
 
   router.post('/', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, ConnectionBody);
     const connection = await createConnection(
       c.env as Env, db, tenant(c), readInput(body), (c.get('userId') as string | undefined) ?? null,
     );
@@ -212,7 +220,7 @@ export function createSsoAdminRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.put('/:id', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, ConnectionBody);
     return Response.json({ connection: await updateConnection(c.env as Env, db, tenant(c), id(c), readInput(body)) });
   }));
 
@@ -225,7 +233,7 @@ export function createSsoAdminRoutes(db: Db): Hono<HonoEnv> {
    *  half-remembered record name is a verification that never succeeds and never
    *  says why. */
   router.post('/:id/domains', (c) => handle(async () => {
-    const body = await c.req.json<{ domain?: string }>().catch((): { domain?: string } => ({}));
+    const body = await parseOptionalBody(c, DomainBody);
     const added = await addDomain(db, tenant(c), id(c), String(body.domain ?? ''));
     return Response.json({
       domain: added.domain,

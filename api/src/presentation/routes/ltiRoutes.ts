@@ -32,6 +32,24 @@ import { LTI_MESSAGE_DEEP_LINK, canReturnGrades } from '../../domain/lti/ltiClai
 import { mintSessionExchangeCode } from '../../application/auth/sessionExchange';
 import type { Db } from '../../infrastructure/database/connection';
 import { decodeJwtPayload } from '@builderforce/hs256-jwt';
+import { parseOptionalBody, z } from './requestBody';
+
+/** The canvas's own service calls. `objectIds` is filtered to strings by the handler. */
+const DeepLinkResponseBody = z.object({ token: z.string().nullish(), objectIds: z.unknown() });
+
+const RosterBody = z.object({ issuer: z.string().nullish(), membershipsUrl: z.string().nullish() });
+
+/** Presence and the positive maximum are checked by the handler, with its own
+ *  message; `released` is read as `=== true`. */
+const ScoreBody = z.object({
+  issuer: z.string().nullish(),
+  lineItemUrl: z.string().nullish(),
+  userId: z.string().nullish(),
+  scoreGiven: z.number().nullish(),
+  scoreMaximum: z.number().nullish(),
+  comment: z.string().nullish(),
+  released: z.unknown(),
+});
 
 /** Read a form or query parameter, whichever binding the platform used. */
 async function param(request: Request, name: string): Promise<string> {
@@ -282,7 +300,7 @@ export function createLtiRoutes(db: Db) {
    * rejected — which is why the picker page renders a self-submitting form.
    */
   app.post('/deep-link/response', async (c) => {
-    const body = await c.req.json().catch(() => ({})) as { token?: string; objectIds?: unknown };
+    const body = await parseOptionalBody(c, DeepLinkResponseBody);
     const session = await readDeepLinkToken(c.env.JWT_SECRET, body.token ?? '');
     if (!session) {
       return c.json({ error: 'This content picker has expired. Close it and add the tool again from your LMS.' }, 401);
@@ -299,7 +317,7 @@ export function createLtiRoutes(db: Db) {
 
   /** Pull a roster, projected onto the canvas cohort shape. */
   app.post('/roster', async (c) => {
-    const body = await c.req.json().catch(() => ({})) as { issuer?: string; membershipsUrl?: string };
+    const body = await parseOptionalBody(c, RosterBody);
     if (!body.issuer || !body.membershipsUrl) return c.json({ error: 'issuer and membershipsUrl are required.' }, 400);
 
     const registration = await registrationFor(c.env, body.issuer, null);
@@ -312,10 +330,7 @@ export function createLtiRoutes(db: Db) {
 
   /** Push one mark back. `released` decides whether the student sees it. */
   app.post('/score', async (c) => {
-    const body = await c.req.json().catch(() => ({})) as {
-      issuer?: string; lineItemUrl?: string; userId?: string;
-      scoreGiven?: number; scoreMaximum?: number; comment?: string; released?: boolean;
-    };
+    const body = await parseOptionalBody(c, ScoreBody);
     if (!body.issuer || !body.lineItemUrl || !body.userId) {
       return c.json({ error: 'issuer, lineItemUrl and userId are required.' }, 400);
     }

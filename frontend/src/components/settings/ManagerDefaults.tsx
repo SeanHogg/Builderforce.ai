@@ -114,6 +114,9 @@ function ManagerDefaultsInner() {
     allowUnattendedCeremonies: stored?.allowUnattendedCeremonies ?? null,
     allowAgentReassignment: stored?.allowAgentReassignment ?? null,
     allowAutoStaffLanes: stored?.allowAutoStaffLanes ?? null,
+    // Workspace-only (1150): whether the manager may close tickets through a human-gated
+    // review lane. Rendered only at this tier; the PATCH requires the MANAGER role.
+    managerMayCloseReviewedTickets: stored?.managerMayCloseReviewedTickets ?? null,
     agentReassignIdleHours: stored?.agentReassignIdleHours ?? null,
     agentReassignMaxPerSession: stored?.agentReassignMaxPerSession ?? null,
   };

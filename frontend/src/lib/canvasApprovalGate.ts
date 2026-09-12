@@ -205,6 +205,14 @@ export interface ProvenanceEntry {
   /** Set once the change is approved. An entry with none is a change nobody stands behind. */
   approvedBy?: Actor;
   approvedAt?: string;
+  /**
+   * Set when a reviewer declines to stand behind it. A refused change is no longer
+   * WAITING — the inbox stops asking — but it is not approved either, so the gate
+   * still treats the object as having nothing signed off. Kept rather than deleted:
+   * "somebody looked at this and said no" is itself the record.
+   */
+  refusedBy?: Actor;
+  refusedAt?: string;
 }
 
 const MAX_SUMMARY = 160;
@@ -247,6 +255,7 @@ export function readProvenance(data: Record<string, unknown>): ProvenanceEntry[]
     const by = normalizeActor(entry.by);
     if (!by) return [];
     const approvedBy = normalizeActor(entry.approvedBy);
+    const refusedBy = approvedBy ? null : normalizeActor(entry.refusedBy);
     return [{
       id: typeof entry.id === 'string' && entry.id ? entry.id : `${field}:${at}`,
       field,
@@ -257,6 +266,8 @@ export function readProvenance(data: Record<string, unknown>): ProvenanceEntry[]
       ...(typeof entry.source === 'string' && entry.source.trim() ? { source: entry.source.trim().slice(0, 200) } : {}),
       ...(approvedBy ? { approvedBy } : {}),
       ...(typeof entry.approvedAt === 'string' && entry.approvedAt ? { approvedAt: entry.approvedAt } : {}),
+      ...(refusedBy ? { refusedBy } : {}),
+      ...(refusedBy && typeof entry.refusedAt === 'string' && entry.refusedAt ? { refusedAt: entry.refusedAt } : {}),
     }];
   }).slice(-200);
 }
@@ -382,7 +393,7 @@ export function evaluateGate(request: GateRequest): GateVerdict {
     return { allowed: true, reason: 'autonomous' };
   }
 
-  const pending = (request.provenance ?? []).filter((entry) => !entry.approvedBy);
+  const pending = (request.provenance ?? []).filter(isPending);
   if (!pending.length) {
     // Nothing outstanding to approve: the act is a fresh one, so it needs authority now.
     return {
@@ -392,26 +403,42 @@ export function evaluateGate(request: GateRequest): GateVerdict {
     };
   }
 
-  const approver = request.actor;
-  const isAgent = approver.kind === 'agent' || approver.kind === 'brain';
-  if (isAgent && !request.agentsMayApprove) {
-    return {
-      allowed: false,
-      reason: 'self-approval',
-      message: `"${request.action}" on this ${request.kind} needs a human approver. An agent cannot approve its own change — set the object's approval mode to "autonomous" if this act is genuinely delegated, and it will proceed and be recorded as delegated rather than reviewed.`,
-    };
-  }
-
-  const authored = pending.filter((entry) => entry.by.ref === approver.ref);
-  if (authored.length === pending.length && approver.kind === 'human') {
-    return {
-      allowed: false,
-      reason: 'self-approval',
-      message: `Every pending change on this ${request.kind} was made by ${approver.name ?? approver.ref}, so approving it would be self-approval. Ask a second person to approve, or set the approval mode to "open" if this object does not need separation of duties.`,
-    };
-  }
+  const refusal = selfApprovalRefusal(pending, request.actor, request.kind, request.action, request.agentsMayApprove);
+  if (refusal) return { allowed: false, reason: 'self-approval', message: refusal };
 
   return { allowed: true, reason: 'approved' };
+}
+
+/** Waiting on a signature: neither approved nor refused. */
+function isPending(entry: ProvenanceEntry): boolean {
+  return !entry.approvedBy && !entry.refusedBy;
+}
+
+/**
+ * Why THIS approver may not sign off THESE pending changes, or null when they may.
+ *
+ * The two separation-of-duties rules, stated once and read by both the act gate above
+ * and the approval inbox — an inbox that let somebody sign what the gate would refuse
+ * them would make the inbox the way round the gate.
+ *  • An agent may not approve (see rule 2 on {@link evaluateGate}).
+ *  • A person may not approve a set of changes that are ALL their own.
+ */
+export function selfApprovalRefusal(
+  pending: readonly ProvenanceEntry[],
+  approver: Actor,
+  kind: string,
+  action?: string,
+  agentsMayApprove = false,
+): string | null {
+  const isAgent = approver.kind === 'agent' || approver.kind === 'brain';
+  if (isAgent && !agentsMayApprove) {
+    return `${action ? `"${action}" on this ${kind}` : `A change on this ${kind}`} needs a human approver. An agent cannot approve its own change — set the object's approval mode to "autonomous" if this act is genuinely delegated, and it will proceed and be recorded as delegated rather than reviewed.`;
+  }
+  const authored = pending.filter((entry) => entry.by.ref === approver.ref);
+  if (pending.length && authored.length === pending.length && approver.kind === 'human') {
+    return `Every pending change on this ${kind} was made by ${approver.name ?? approver.ref}, so approving it would be self-approval. Ask a second person to approve, or set the approval mode to "open" if this object does not need separation of duties.`;
+  }
+  return null;
 }
 
 function gateMessage(kind: string, action: string, pending: number): string {
@@ -425,12 +452,28 @@ export function grantApproval(
   approver: Actor,
   at: string,
 ): ProvenanceEntry[] {
-  return entries.map((entry) => (entry.approvedBy ? entry : { ...entry, approvedBy: approver, approvedAt: at }));
+  return entries.map((entry) => (isPending(entry) ? { ...entry, approvedBy: approver, approvedAt: at } : entry));
 }
 
-/** Changes still waiting on a signature — what the card badge counts. */
+/**
+ * Stamp every waiting entry as REFUSED. The inbox's other answer.
+ *
+ * The figure is not rolled back — `from` is a display string, not a value, and a
+ * silent revert would be a second unattributed change. What changes is that nobody
+ * is being asked any more, and the gate still sees nothing approved, so the act the
+ * change was waiting on stays blocked until somebody makes a change they WILL sign.
+ */
+export function refuseApproval(
+  entries: readonly ProvenanceEntry[],
+  refuser: Actor,
+  at: string,
+): ProvenanceEntry[] {
+  return entries.map((entry) => (isPending(entry) ? { ...entry, refusedBy: refuser, refusedAt: at } : entry));
+}
+
+/** Changes still waiting on a signature — what the card badge and the inbox count. */
 export function pendingApprovals(data: Record<string, unknown>): ProvenanceEntry[] {
-  return readProvenance(data).filter((entry) => !entry.approvedBy);
+  return readProvenance(data).filter(isPending);
 }
 
 /**

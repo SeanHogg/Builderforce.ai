@@ -249,8 +249,7 @@ export async function listCanvasWidgets(
   );
 }
 
-/** Exported for the host: the predicate "may this frame speak to us at all". A
- *  disabled widget is not merely hidden — its messages are refused. */
-export function widgetAcceptsOrigin(widget: CanvasWidgetView, origin: string): boolean {
-  return widget.status === 'active' && Boolean(widget.entryOrigin) && widget.entryOrigin === origin;
-}
+/** The predicate "may this frame speak to us at all" moved into the shared protocol
+ *  package, because its caller is the BROWSER host and the two runtimes must agree
+ *  on it exactly. Re-exported so a server caller reads it from its usual place. */
+export { widgetAcceptsOrigin } from '@builderforce/canvas-widget-protocol';

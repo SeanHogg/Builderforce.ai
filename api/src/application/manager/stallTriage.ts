@@ -213,6 +213,14 @@ export interface StallInput {
    * See {@link holdWhilePoolRateLimited}.
    */
   poolRateLimited?: boolean;
+  /**
+   * The ticket sits in a human-gated REVIEW lane whose gate the workspace delegated to
+   * the manager (`managerMayCloseReviewedTickets`, 1150) — resolved by
+   * `reviewGateAuthority.managerHoldsReviewGate`, never re-derived here. When true a
+   * `human_gate` verdict is not escalated; see the `human_gate` case. Omitted = false,
+   * which is exactly the pre-1150 behaviour.
+   */
+  reviewGateDelegated?: boolean;
 }
 
 const NOT_STALLED = (cause: StallCause, detail: string): StallDiagnosis =>
@@ -386,6 +394,22 @@ function classifyStall(input: StallInput): StallDiagnosis {
         `Stuck ${age}: consecutive failed runs tripped the safety breaker — allowing one fresh attempt.`,
       );
     case 'human_gate':
+      // THE WORKSPACE HANDED THIS GATE TO THE MANAGER (1150). A human-gated REVIEW lane in
+      // a workspace whose admin enabled `managerMayCloseReviewedTickets` is not waiting on
+      // an approval nobody gave — the manager's own review stage is the approver. So it is
+      // not a standing escalation: with a review verdict in hand the review-side diagnosis
+      // below answers (a missing deliverable, a red build, owed sign-offs are all still
+      // stalls); a passing ticket, or a census row with no verdict to read, is the
+      // manager's next CONDUCT step, not a person's.
+      if (input.reviewGateDelegated) {
+        if (!input.readiness || input.readiness === 'complete') {
+          return NOT_STALLED(
+            'moving',
+            'The workspace lets the manager review and close tickets, so it holds this review gate — its next pass reviews this ticket and closes it if it passes.',
+          );
+        }
+        break;
+      }
       // A human-gated lane is stalled only because nobody approved it. That is a
       // legitimate configuration, so the manager escalates rather than overriding a
       // gate a human deliberately set.

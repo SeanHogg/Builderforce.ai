@@ -44,6 +44,7 @@ import {
 } from '../../domain/permissions/permissionRegistry';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { coerceStringArray } from '../../domain/shared/jsonColumn';
+import { ROLE_ORDER } from '../../domain/shared/types';
 
 /** Role-override sets are platform-global; a member's set is per (tenant, user, role). */
 const roleCacheKey = (role: string) => `perms:role:${role}`;
@@ -139,9 +140,9 @@ export async function invalidateMemberPermissions(
 ): Promise<void> {
   if (!env) return;
   // The role is part of the key and the caller may not know which one applies,
-  // so clear every tier — four cheap deletes beat threading the role through.
+  // so clear every tier — a handful of cheap deletes beat threading the role through.
   await Promise.all(
-    ['viewer', 'developer', 'manager', 'owner'].map((role) =>
+    ROLE_ORDER.map((role) =>
       invalidateCached(env, memberCacheKey(tenantId, userId, role)).catch((error) => {
         reportCaughtError(error, { source: "application/rbac/effectivePermissions.ts", operation: "invalidateMemberPermissions" });
       }),

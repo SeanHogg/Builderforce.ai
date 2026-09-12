@@ -17,6 +17,7 @@ import {
   canvas3dPanAfterDrag,
   canvas3dPanToCentre,
   canvas3dScene,
+  canvas3dScreenCorner,
   canvas3dStageTransform,
   canvas3dTranslate,
   canvas3dUnprojectToPlane,
@@ -57,8 +58,18 @@ export interface Canvas3DViewProps<T extends Canvas3DNode> {
    * gets, without the caller having to disable anything.
    */
   onMove?: (moves: readonly Canvas3DMove[]) => void;
-  /** Leave 3D. The visible control lives on the canvas rail; this is the Escape key. */
+  /**
+   * Leave 3D. On a board the visible control lives on the canvas rail and this is
+   * the Escape key; a host with no rail entry to press passes `exitLabel` as well.
+   */
   onExit: () => void;
+  /**
+   * Draw the way out ON the space: an (X), named by this label, pinned to the
+   * projected top-right corner of its planes and following them as the space
+   * turns. The room passes it (its session has no rail entry to leave by); the
+   * boards, whose rail already carries the exit, leave it off.
+   */
+  exitLabel?: string;
   /** Initial layer strategy for purpose-built scenes such as model comparisons. */
   initialDepthMode?: Canvas3DDepthMode;
 }
@@ -132,7 +143,9 @@ function twoFingerGrip(pointers: ReadonlyMap<number, PointerAt>): { x: number; y
  *
  * The scene owns no chrome. Depth, layers, zoom and reset are published to the
  * canvas command rail (see `canvas3dControls`), so 3D adds buttons to the bar the
- * board already has rather than stacking a second toolbar over it.
+ * board already has rather than stacking a second toolbar over it. The one
+ * exception is a host with no rail entry to leave by (`exitLabel`): the way out
+ * is then drawn on the space itself, at the corner of its planes.
  */
 export function Canvas3DView<T extends Canvas3DNode>({
   nodes,
@@ -143,6 +156,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
   onSelect,
   onMove,
   onExit,
+  exitLabel,
   initialDepthMode = 'flow',
 }: Canvas3DViewProps<T>) {
   const t = useTranslations('canvasCommands');
@@ -546,6 +560,12 @@ export function Canvas3DView<T extends Canvas3DNode>({
   }), [depthMode, dropToLayers, focusObjects, layersVisible, lifted, onMove, resetView, zoomBy]);
   usePublishCanvas3DControls(controls);
 
+  // Only projected when there is an (X) to pin — it moves with every orbit frame.
+  const exitCorner = useMemo(
+    () => (exitLabel ? canvas3dScreenCorner(orbit, scene) : null),
+    [exitLabel, orbit, scene],
+  );
+
   return (
     <section className={styles.scene} aria-label={t('threeD.title')} data-testid="canvas-3d-view">
       <div
@@ -643,6 +663,24 @@ export function Canvas3DView<T extends Canvas3DNode>({
               })}
             </div>
           </div>}
+
+        {exitLabel && <button
+          type="button"
+          className={styles.exit}
+          style={exitCorner ? {
+            ['--canvas-3d-exit-x' as string]: `${Math.round(exitCorner.x)}px`,
+            ['--canvas-3d-exit-y' as string]: `${Math.round(exitCorner.y)}px`,
+          } : undefined}
+          data-anchored={!!exitCorner}
+          aria-label={exitLabel}
+          title={exitLabel}
+          data-testid="canvas-3d-exit"
+          // Pressing the (X) is not the start of a turn of the space under it.
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={onExit}
+        >
+          <span aria-hidden="true">×</span>
+        </button>}
       </div>
 
       <footer className={styles.hint}>{t(onMove ? 'threeD.spaceHint' : 'threeD.hint')}</footer>

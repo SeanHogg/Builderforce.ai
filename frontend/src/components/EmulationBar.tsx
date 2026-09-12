@@ -8,8 +8,11 @@ import { useTranslations } from 'next-intl';
 import { useEmulation } from '@/lib/EmulationContext';
 import { usePermissionDebugger } from '@/lib/PermissionDebuggerContext';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { ROLE_ORDER } from '@/lib/rbac';
+import { useRoleText } from '@/lib/useRoleText';
 
-const ROLES = ['owner', 'manager', 'developer', 'viewer'] as const;
+// Highest authority first, from the ONE ladder.
+const ROLES = [...ROLE_ORDER].reverse();
 
 /** "mm:ss" since the session started — the shared clock reading. */
 function formatElapsed(startedAt: Date): string {
@@ -30,6 +33,7 @@ export default function EmulationBar() {
   const { emulation, endEmulation, switchRole } = useEmulation();
   const { debuggerActive, toggleDebugger } = usePermissionDebugger();
   const t = useTranslations('emulationBar');
+  const roleText = useRoleText();
   const router = useRouter();
   const [elapsed, setElapsed] = useState('');
   const [roleSwitching, setRoleSwitching] = useState(false);
@@ -142,7 +146,7 @@ export default function EmulationBar() {
                 className={`emulation-bar__role-option${r === emulation.role ? ' emulation-bar__role-option--active' : ''}`}
                 onClick={() => handleSwitchRole(r)}
               >
-                {r}
+                {roleText.label(r)}
               </li>
             ))}
           </ul>

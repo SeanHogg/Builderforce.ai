@@ -78,6 +78,8 @@ const DefaultsBody = z.object({
   agentReassignIdleHours: zTriNumber,
   agentReassignMaxPerSession: zTriNumber,
   allowAutoStaffLanes: zTriBool,
+  // Workspace-only (1150): deliberately absent from ConfigBody — no project may set it.
+  managerMayCloseReviewedTickets: zTriBool,
 });
 
 const ConfigBody = z.object({
@@ -216,6 +218,9 @@ export function createManagerRoutes(
       'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize', 'autoSchedule',
       'requireSignoffToComplete', 'allowAutoMerge',
       'allowUnattendedCeremonies', 'allowAgentReassignment', 'allowAutoStaffLanes',
+      // Review-and-close authority (1150) — an account-admin decision; this route's
+      // requireRole(MANAGER) is what makes it one.
+      'managerMayCloseReviewedTickets',
     ] as const;
     for (const key of bools) {
       const v = triStateBool(body[key]);
@@ -244,7 +249,7 @@ export function createManagerRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
       verb: 'manager.defaults.update',
       targetType: 'tenant', targetId: tenantId,
-      summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}).`,
+      summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}; review-and-close: ${payload.policy.managerMayCloseReviewedTickets ? 'granted' : 'withheld'}).`,
       metadata: { patch },
     }).catch((error) => { /* the timeline is best-effort — never fail the write */ 
       reportCaughtError(error, { source: "presentation/routes/managerRoutes.ts", operation: "createManagerRoutes" });

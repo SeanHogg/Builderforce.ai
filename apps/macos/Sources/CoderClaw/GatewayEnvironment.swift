@@ -133,7 +133,7 @@ enum GatewayEnvironment {
                     nodeVersion: runtime.version.description,
                     gatewayVersion: nil,
                     requiredGateway: expectedString,
-                    message: "coderclaw CLI not found in PATH; install the CLI.")
+                    message: "builderforce CLI not found in PATH; install the CLI.")
             }
 
             let installed = gatewayBin.flatMap { self.readGatewayVersion(binary: $0) }
@@ -247,18 +247,19 @@ enum GatewayEnvironment {
         let npm = CommandResolver.findExecutable(named: "npm")
         let pnpm = CommandResolver.findExecutable(named: "pnpm")
         let bun = CommandResolver.findExecutable(named: "bun")
+        let spec = "@seanhogg/builderforce-agents@\(target)"
         let (label, cmd): (String, [String]) =
             if let npm {
-                ("npm", [npm, "install", "-g", "coderclaw@\(target)"])
+                ("npm", [npm, "install", "-g", spec])
             } else if let pnpm {
-                ("pnpm", [pnpm, "add", "-g", "coderclaw@\(target)"])
+                ("pnpm", [pnpm, "add", "-g", spec])
             } else if let bun {
-                ("bun", [bun, "add", "-g", "coderclaw@\(target)"])
+                ("bun", [bun, "add", "-g", spec])
             } else {
-                ("npm", ["npm", "install", "-g", "coderclaw@\(target)"])
+                ("npm", ["npm", "install", "-g", spec])
             }
 
-        statusHandler("Installing coderclaw@\(target) via \(label)…")
+        statusHandler("Installing \(spec) via \(label)…")
 
         func summarize(_ text: String) -> String? {
             let lines = text
@@ -272,7 +273,7 @@ enum GatewayEnvironment {
 
         let response = await ShellExecutor.runDetailed(command: cmd, cwd: nil, env: ["PATH": preferred], timeout: 300)
         if response.success {
-            statusHandler("Installed coderclaw@\(target)")
+            statusHandler("Installed \(spec)")
         } else {
             if response.timedOut {
                 statusHandler("Install failed: timed out. Check your internet connection and try again.")

@@ -1412,8 +1412,10 @@ export const tenantStatusEnum = pgEnum('tenant_status', [
 ]);
 
 
+// `contributor` — migration 1150; authority order lives in `ROLE_ORDER`
+// (domain/shared/types.ts), not in this declaration order.
 export const tenantRoleEnum = pgEnum('tenant_role', [
-  'owner', 'manager', 'developer', 'viewer',
+  'owner', 'manager', 'developer', 'contributor', 'viewer',
 ]);
 
 

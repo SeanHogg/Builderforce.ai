@@ -67,6 +67,8 @@ import {
   generateDefaultEvermindBase,
 } from '../../application/llm/projectEvermind';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { MAX_DELTA_B64_CHARS, parseDeltaLearnRequest } from '../../application/llm/evermindDeltaLearn';
+import { dispatchProjectEvermindLearn } from '../../application/llm/evermindDeltaDispatch';
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
 async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
@@ -248,6 +250,37 @@ async function artifactCore(env: Env, db: Db, tenantId: number, projectId: numbe
   });
 }
 
+/** Bytes of JSON envelope allowed around the base64 delta before the body is refused
+ *  unread — the declared length is checked BEFORE parsing, so a runaway push costs a
+ *  header read, not an 8 MiB+ JSON parse on the request path. */
+const DELTA_ENVELOPE_BYTES = 64 * 1024;
+
+/**
+ * Delta-path learn — the ON-PREM RUNNER's door (agent-runtime `project-evermind-delta`).
+ * The host pulled the head PINNED to a version, fitted a private copy on its run, and
+ * pushes only the sparse diff `{ diff, baseVersion, weight?, label? }`; the coordinator
+ * merely FedAvg-merges it. Contract (shape, cap, unseeded/frozen/stale refusals) lives
+ * in `evermindDeltaLearn`; the coordinator's answer is returned verbatim so the
+ * producer can branch on 409 + `headVersion` (rebase) vs everything else.
+ *
+ * Single-target on BOTH front doors — never fanned out like the text door: a delta is
+ * only meaningful against the exact head it was diffed from, and a sibling Evermind has
+ * different weights.
+ */
+async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
+  if (inheritedBlock) return inheritedBlock;
+  const declared = Number(c.req.header('content-length') ?? 0);
+  if (Number.isFinite(declared) && declared > MAX_DELTA_B64_CHARS + DELTA_ENVELOPE_BYTES) {
+    return json({ error: `delta too large (max ${MAX_DELTA_B64_CHARS} base64 characters)` }, 413);
+  }
+  const parsed = parseDeltaLearnRequest(await c.req.json().catch(() => null));
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, parsed.request);
+  return json(result.body, result.status);
+}
+
 /**
  * Text-path learn — the UNIFIED producer door. A surface (IDE/cloud/on-prem) POSTs
  * raw run text; the coordinator adapts+diffs it IN ITS ALARM, so no caller pays
@@ -333,6 +366,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/recall', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
   router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
+  router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c));
   /** Import a batch of raw memories (VS Code "Import from builderforce-memory") + flush. */
   router.post('/:projectId/evermind/extract-memories', requireRole(TenantRole.MANAGER), (c) => extractMemoriesCore(c.env as Env, db, t(c), pid(c), c));
@@ -734,6 +768,12 @@ export function createProjectEvermindAgentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
     return artifactCore(c.env as Env, db, tenantId, pid(c), c.req.query('version'), 'tokenizer.json');
+  });
+  // On-prem RUNNER delta push (the host ran the fit itself) — see learnCore.
+  router.post('/:projectId/evermind/learn', async (c) => {
+    const tenantId = await auth(c);
+    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
+    return learnCore(c.env as Env, db, tenantId, pid(c), c);
   });
   router.post('/:projectId/evermind/learn-text', async (c) => {
     const tenantId = await auth(c);

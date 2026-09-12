@@ -243,6 +243,46 @@
   font-weight: 700;
 }
 
+/* The space's own way out, drawn only when a host asks for one (the room does: the
+   session is a thing IN the room, with no rail entry to press). It rides the
+   projected top-right corner of the planes — `--canvas-3d-exit-x/y`, measured from
+   the viewport's centre — so it sits ON the thing it closes and follows it as the
+   space turns, travels and zooms. Clamped inside the viewport and below the
+   floating top chrome, so a corner turned or panned off screen still leaves the
+   way out reachable; with no plane to ride (an empty space) the fallbacks resolve
+   to the top-right corner. Its movement matches the stage's own transition. */
+.exit {
+  --exit-inset: 25px;
+  position: absolute;
+  z-index: 3;
+  left: clamp(var(--exit-inset), calc(50% + var(--canvas-3d-exit-x, 100vw)), calc(100% - var(--exit-inset)));
+  top: clamp(
+    calc(var(--canvas-top-chrome-space, 64px) + var(--exit-inset)),
+    calc(50% + var(--canvas-3d-exit-y, -100vh)),
+    calc(100% - var(--exit-inset))
+  );
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--canvas-line, var(--border-subtle));
+  border-radius: 50%;
+  background: var(--canvas-panel, var(--bg-elevated));
+  color: var(--canvas-ink, var(--text-primary));
+  box-shadow: 0 6px 18px var(--canvas-shadow, rgba(0, 0, 0, .28));
+  /* The (X) is a glyph drawn at heading scale — the section role, whose floor is the 20px it was typed as. */
+  font-size: var(--font-size-section);
+  line-height: 1;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition: left .09s linear, top .09s linear;
+}
+
+.exit:hover { border-color: var(--canvas-accent); color: var(--canvas-accent); }
+
+.exit:focus-visible { outline: 2px solid var(--canvas-accent); outline-offset: 2px; }
+
 /* The one line of chrome the scene keeps. The command rail floats over this same
    bottom-left corner, so the text starts clear of it rather than underneath. */
 .hint {
@@ -261,5 +301,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .stage,
-  .card { transition: none; }
+  .card,
+  .exit { transition: none; }
 }

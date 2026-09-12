@@ -66,6 +66,7 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
+import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { CanvasChatSurface } from './CanvasChatSurface';
 import { CanvasAppSurface } from './CanvasAppSurface';
@@ -329,7 +330,9 @@ import { loadTemplateGraph } from '@/lib/evermindBuild';
 import { createFlowStepData, isStepChoice, parseStepChoice, stepConfigOf, stepKindOf } from '@/domains/workflow/domain/flowStepObject';
 import { outletForHandle } from '@/domains/workflow/domain/stepOutlets';
 import { nodeKindLabel } from '@/domains/workflow/domain/stepCatalog';
-import { boundingRect, frameCollapsePatch, frameMemberIds, isFrameCollapsed } from '@/domains/canvas/domain/canvasFrame';
+import { boundingRect, frameMemberIds, isFrameCollapsed } from '@/domains/canvas/domain/canvasFrame';
+import { withFrameCollapsed } from '@/domains/canvas/application/ExpandFramesOnPlacement';
+import { useExpandFramesOnPlacement } from '@/domains/canvas/presentation/useExpandFramesOnPlacement';
 import { toFrameBox, useFramedBoard } from './useFramedBoard';
 import { resolveCanvasFlowNode } from './canvasFlowTarget';
 import { FlowStepInspector } from './FlowStepInspector';
@@ -2880,12 +2883,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // that collapses a frame (the card, Brain, a keyboard shortcut) resizes it, and
       // so `frameExpandedWidth/Height` is written by exactly one piece of code.
       if (node.data.kind === 'frame' && 'frameCollapsed' in patch) {
-        const measured = canvasNodeDimensions(node);
-        const collapse = frameCollapsePatch(
-          { id: node.id, kind: 'frame', position: node.position, size: measured, data: node.data as unknown as Record<string, unknown> },
+        return withFrameCollapsed(
+          { ...node, data },
           patch.frameCollapsed === true,
+          { id: node.id, kind: 'frame', position: node.position, size: canvasNodeDimensions(node), data: node.data as unknown as Record<string, unknown> },
         );
-        return { ...node, style: { ...node.style, ...collapse.size }, data: { ...data, ...collapse.data } as CreationNodeData };
       }
       return { ...node, data };
     }));
@@ -3092,6 +3094,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     journal.current.record({ kind: 'user', label: 'redo' });
     undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice(t('noticeChangeRedone'));
   }, [edges, nodes, restoreGraphState]);
+
+  // Operator decision 2026-09-12: anything placed into a COLLAPSED frame — dropped,
+  // dragged, pasted, imported, applied from Brain, adopted from a collaborator — opens
+  // it. Diffed off the board state because that is the one path every placement shares.
+  useExpandFramesOnPlacement(nodes, setNodes, { toBox: toFrameBox, enabled: cardsEditable, suspended: historyApplying });
 
   const selectionIds = useCallback(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
 
@@ -11739,6 +11746,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]),
     [inRoom, members, persistence, sharedRoom.participants, t],
   );
+  /**
+   * Which roster row is the viewer — the same three branches `rosterMembers` takes.
+   * A local canvas's lone row is `local`, not an account id; a shared guest room's
+   * rows carry only names, so the viewer is the one row wearing theirs, and nobody
+   * when two guests chose the same name (a guess would mark the wrong person).
+   */
+  const rosterSelfId = useMemo(() => {
+    if (persistence !== 'local') return currentUserId;
+    if (rosterMembers.length === 1 && rosterMembers[0]!.userId === 'local') return 'local';
+    const mine = rosterMembers.filter((member) => member.displayName === sharedRoom.displayName);
+    return mine.length === 1 ? mine[0]!.userId : null;
+  }, [currentUserId, persistence, rosterMembers, sharedRoom.displayName]);
+
+  /**
+   * WHO IS WORKING ON THIS BOARD — the agent cards on it, read once (`boardAgents`).
+   * The bar's team strip rings those seats and the room stands them at the table, so
+   * the board, the strip and the room give one answer.
+   */
+  const seatedAgents = useMemo(() => boardAgents(nodes), [nodes]);
+  const roomOccupants = useMemo(
+    () => [...rosterMembers, ...boardAgentOccupants(seatedAgents)],
+    [rosterMembers, seatedAgents],
+  );
 
   const brainSurfaceOpen = !presentMode && brainDock.open;
   const brainCollaborators = useMemo(
@@ -12535,7 +12565,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // The always-on seats, folded out of the shell's footer band and into the one
         // bar. Same component, same roster endpoint, same drag-to-board payload — the
         // band simply stands down on a stage route and draws itself here instead.
-        team={<TeamBar variant="bar" />}
+        team={<TeamBar variant="bar" onBoard={seatedAgents} />}
         extras={canvasChromeShows('actions', barCollapsed) ? <>
           <TwilioCanvasSetup active={canvasUsesTwilio} />
           {/* Editor-only capture actions. Renders nothing on the web — it asks the
@@ -12835,17 +12865,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // the room owns no membership of its own, because the session already has
             // one and a second would be a second answer to "who is here" — and the
             // projection's input, which it draws small on the table and, when pressed,
-            // full size through `renderSession`. `Canvas3DView` is unchanged: its
-            // Escape is the frame's minimise, and its commands still ride the ONE bar.
+            // full size through `renderSession`. `Canvas3DView` wears the room's (X) on
+            // the corner of its own planes; that (X) and its Escape are the frame's
+            // minimise, and its commands still ride the ONE bar.
             room: <CanvasRoomSurface
               sessionId={sessionId}
               sessionTitle={title}
-              members={rosterMembers}
-              currentUserId={currentUserId}
+              members={roomOccupants}
+              currentUserId={rosterSelfId}
               live={livePresence}
               onPresence={sendPresence}
               sceneInput={roomSceneInput}
-              renderSession={({ onMinimize }) => <Canvas3DView
+              renderSession={({ onMinimize, exitLabel }) => <Canvas3DView
                 nodes={threeDNodes}
                 edges={edges}
                 describe={describeThreeD}
@@ -12854,6 +12885,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 onSelect={selectThreeDObject}
                 onMove={canEdit ? moveThreeDObjects : undefined}
                 onExit={onMinimize}
+                exitLabel={exitLabel}
                 initialDepthMode={roomSceneInput.depthMode}
               />}
               creations={roomCreations}

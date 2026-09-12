@@ -107,6 +107,8 @@ export async function getTenantManagerDefaults(
         agentReassignMaxPerSession: tenantManagerDefaults.agentReassignMaxPerSession,
         // Lane auto-staffing (0386) rides the same tier and the same fold.
         allowAutoStaffLanes: tenantManagerDefaults.allowAutoStaffLanes,
+        // Review-and-close authority (1150) — workspace-only, read by the same fold.
+        managerMayCloseReviewedTickets: tenantManagerDefaults.managerMayCloseReviewedTickets,
       })
       .from(tenantManagerDefaults)
       .where(eq(tenantManagerDefaults.tenantId, tenantId))
@@ -162,6 +164,7 @@ export async function upsertTenantManagerDefaults(
       agentReassignIdleHours: normalized.agentReassignIdleHours ?? null,
       agentReassignMaxPerSession: normalized.agentReassignMaxPerSession ?? null,
       allowAutoStaffLanes: normalized.allowAutoStaffLanes ?? null,
+      managerMayCloseReviewedTickets: normalized.managerMayCloseReviewedTickets ?? null,
       updatedBy: opts?.updatedBy ?? null,
       updatedAt: now,
     })
@@ -181,6 +184,7 @@ export async function upsertTenantManagerDefaults(
         ...(normalized.agentReassignIdleHours !== undefined ? { agentReassignIdleHours: normalized.agentReassignIdleHours } : {}),
         ...(normalized.agentReassignMaxPerSession !== undefined ? { agentReassignMaxPerSession: normalized.agentReassignMaxPerSession } : {}),
         ...(normalized.allowAutoStaffLanes !== undefined ? { allowAutoStaffLanes: normalized.allowAutoStaffLanes } : {}),
+        ...(normalized.managerMayCloseReviewedTickets !== undefined ? { managerMayCloseReviewedTickets: normalized.managerMayCloseReviewedTickets } : {}),
         ...(opts?.updatedBy !== undefined ? { updatedBy: opts.updatedBy } : {}),
         updatedAt: now,
       },

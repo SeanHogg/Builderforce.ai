@@ -1,3 +1,47 @@
+## ✅ RESOLVED 2026-09-12 — Cloudflare's managed challenge on the builderforce.ai zone is off (operator action)
+
+The zone served a `403` + `cf-mitigated: challenge` to every datacenter caller on every hostname
+(`api.`, apex, `www.`, `/gateway/*`), and from 2026-09-07 it was also catching real invitees: the
+first cross-site navigation out of the installed PWA to `GET api.builderforce.ai/api/auth/oauth/google`
+was challenged and rendered as a bare 403. The worker was healthy throughout; the fix was a zone
+setting only the dashboard owner could change. **The operator turned the challenge off 2026-09-12.**
+
+- Confirmation is the next release's `publish-mcp-registry` probe from a GitHub runner — it
+  refuses to publish while it sees the challenge, so a publish is the proof. If that probe still
+  reports `cf-mitigated`, one of the other three settings that emit the same header is on (Super Bot
+  Fight Mode, Security Level `high`, Browser Integrity Check): run
+  `scripts/cloudflare-bot-exception.mjs --apply` with a zone-scoped token.
+- `lib/errors/transportFailure.ts` keeps filing any recurrence as an `unreachable` transport report
+  in the product Quality feed, so a regression is visible without a user report.
+- The related same-origin OAuth entry (callback URL rebuilt wrong over `/gateway/*`) stays open on
+  the roadmap as optional hardening — it was the code-only alternative to this remedy.
+
+## ✅ RESOLVED 2026-09-12 — The room session's (X) sits ON the session, not on the frame's corner (UI 2026.9.27)
+
+Reported from a screenshot of `/create/local-…` in Room with the session open: the "Back to
+the room" (X) floated alone in empty space at the far right of the stage, nowhere near the
+layer plane it closes. `RoomSessionFrame` pinned it to its own top-right corner
+(`right: 14px`), and on a wide stage the projection's plane sits centred, hundreds of pixels
+away.
+
+- **The way out is drawn on the space.** `Canvas3DView` takes an optional `exitLabel`; when
+  set it draws an (X) (`data-testid="canvas-3d-exit"`) at the projected top-right corner of
+  its planes — `canvas3dScreenCorner(orbit, scene)`, the plane corner reaching furthest up
+  and right ON SCREEN, so it stays a top-right corner at any yaw — and it follows the
+  space as it orbits, pans and zooms (same `.09s` transition as the stage). CSS `clamp()`
+  keeps it inside the viewport and below `--canvas-top-chrome-space`, so a corner turned
+  off screen still leaves the way out reachable; an empty space falls back to the
+  top-right corner. Boards leave `exitLabel` off: their rail already carries the exit.
+- **ONE forward projection.** New `canvas3dProject(orbit, point)` is the forward half of
+  `canvas3dUnprojectToPlane`; `canvas3dPanToCentre` and the unit test's `project` helper
+  (a hand-copied duplicate) now both use it.
+- **`RoomSessionFrame` deleted.** With the (X) gone its only job was a styled div, now
+  inlined in `CanvasRoomSurface`; `renderSession` hands the host `{ onMinimize, exitLabel }`.
+  `.sessionClose` CSS removed.
+- Tests: `canvas3dScreenCorner` (top-right at five yaws, follows the pan, null when empty),
+  `Canvas3DView` (no (X) without `exitLabel`; anchored and exits with it; unanchored when
+  empty), `CreationCanvas` room flow now presses `canvas-3d-exit`.
+
 ## ✅ RESOLVED 2026-09-12 — A person directing the agent from chat is the authority; no tool-call limit (api 2026.9.23 · VSIX 2026.9.44 · agent-loop 2026.9.12 · brain-embedded 2026.9.12)
 
 Diagnosed from VS Code chat #103 (project 11), where the owner told the agent to assign the open

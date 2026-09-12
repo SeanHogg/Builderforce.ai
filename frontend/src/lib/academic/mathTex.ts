@@ -354,3 +354,39 @@ export function looksLikeTex(value: unknown): boolean {
     || /\$[^$]{2,}\$/.test(raw)
     || /\^\{?[A-Za-z0-9]/.test(raw) && /_\{?[A-Za-z0-9]/.test(raw);
 }
+
+/**
+ * HOW a piece of authored text should be drawn, decided once so every surface that
+ * shows course or knowledge prose agrees.
+ *
+ *   • `plain`      — no maths: the text as written, which is almost every string.
+ *   • `markdown`   — delimited maths (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`) inside prose:
+ *                    the platform's ONE markdown pipeline renders it (KaTeX).
+ *   • `expression` — the whole value IS an expression with no delimiters, e.g. a
+ *                    lesson objective of `\frac{dQ}{dt} = -kA\frac{dT}{dx}`: drawn as
+ *                    MathML by {@link renderTex}, which a screen reader speaks.
+ *
+ * An undelimited string with English words in it is left plain rather than guessed
+ * at: rendering prose as one expression italicises every word as a variable, which
+ * is worse than showing the source.
+ */
+export type TexRenderMode = 'plain' | 'markdown' | 'expression';
+
+const DELIMITED_TEX = /\$[^$]+\$|\\\(|\\\[/;
+/** Four letters in a row that are not a `\command` — a word, not a symbol. */
+const PROSE_WORD = /(^|[^\\A-Za-z])[A-Za-z]{4,}/;
+
+export function texRenderMode(value: unknown): TexRenderMode {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw || !looksLikeTex(raw)) return 'plain';
+  if (DELIMITED_TEX.test(raw)) return 'markdown';
+  if (raw.length <= 200 && !raw.includes('\n') && !PROSE_WORD.test(raw.replace(/\\[A-Za-z]+/g, ' '))) return 'expression';
+  return 'plain';
+}
+
+/** `\(…\)` and `\[…\]` as the `$`/`$$` spelling the markdown pipeline parses. */
+export function normalizeTexDelimiters(value: string): string {
+  return value
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_match, body: string) => `$$${body}$$`)
+    .replace(/\\\(([\s\S]+?)\\\)/g, (_match, body: string) => `$${body}$`);
+}

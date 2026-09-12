@@ -19,8 +19,11 @@
  * `--update` refuses to RAISE a count. A new raw read is a code change to argue
  * about in review, never a baseline edit.
  *
- * A "raw read" is any call `<expr>.req.json(...)` inside `src/presentation` that
- * is not lexically inside a `parseBody(...)` call. The scan is an AST walk
+ * A "raw read" is any call `<expr>.req.json(...)` anywhere under `src/` that is
+ * not lexically inside a `parseBody(...)` call. The scan covers all of `src/`,
+ * not just `src/presentation`: `application/publicApi/*Service.ts` read Hono
+ * contexts too (seeded at their counts when the scope widened), and a guard
+ * scoped to one layer is a guard a new site walks around by living in another. The scan is an AST walk
  * (borrowing the TypeScript loader from the repo's module-import scanner), so a
  * `c.req.json` inside a string or comment is not a read.
  */
@@ -31,7 +34,7 @@ import { collectSourceFiles, loadTypeScript, toPosix } from '../../scripts/lib/m
 
 const apiRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(apiRoot, '..');
-const targetDir = join(apiRoot, 'src', 'presentation');
+const targetDir = join(apiRoot, 'src');
 const baselinePath = join(apiRoot, 'scripts', '.unvalidated-bodies-baseline.json');
 
 /** The primitive itself performs the one raw read every validated site goes through. */

@@ -1756,9 +1756,9 @@
     "typeProduct": "Product",
     "typeDesign": "Design",
     "typeIncident": "Incident",
-    "requiresRoleHint": "{role, select, viewer {Requires Viewer role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
-    "tenantRoleLabel": "{role, select, viewer {Viewer} developer {Developer} manager {Manager} owner {Owner} other {{role}}}",
-    "tenantRoleDescription": "{role, select, viewer {Read-only access to boards, work, and the workforce.} developer {Build and run agents, work the board, and see delivery insights.} manager {Invite people, manage roles and integrations, and see every insight lens.} owner {Full control, including billing, API keys, and deleting the workspace.} other {}}",
+    "requiresRoleHint": "{role, select, viewer {Requires Viewer role} contributor {Requires Contributor role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
+    "tenantRoleLabel": "{role, select, viewer {Viewer} contributor {Contributor} developer {Developer} manager {Manager} owner {Owner} other {{role}}}",
+    "tenantRoleDescription": "{role, select, viewer {Read-only access to boards, work, and the workforce.} contributor {Edit the canvases shared with you; read-only everywhere else in the workspace.} developer {Build and run agents, work the board, and see delivery insights.} manager {Invite people, manage roles and integrations, and see every insight lens.} owner {Full control, including billing, API keys, and deleting the workspace.} other {}}",
     "requiresDeveloperRole": "Requires Developer role",
     "closePanel": "Close panel",
     "panel": "Panel",
@@ -11089,7 +11089,9 @@
         "ceremoniesUnattended": "May run ceremonies unattended",
         "ceremoniesNeedPeople": "Ceremonies need a person",
         "reassignGranted": "May reassign work idle {hours}h+",
-        "reassignWithheld": "Absent owners keep their work"
+        "reassignWithheld": "Absent owners keep their work",
+        "reviewCloseGranted": "Manager may close reviewed tickets",
+        "reviewCloseHuman": "A person closes reviewed tickets"
       },
       "workspaceDefaultsHint": "Anything left on “Use default” follows your workspace defaults in Settings → AI Manager.",
       "ceremonies": {
@@ -11107,6 +11109,10 @@
       "allowAutoStaffLanes": {
         "label": "Configure a stage that names nobody",
         "help": "Some stages authorise no role at all — no required role declared, no agent staffed — so on a lifecycle-managed board nothing sitting in them can ever be dispatched. The manager always reports these; this decides whether it may also fix one by pinning a producer to the stage. Granting it starts every ticket already waiting there, so a stage left empty on purpose (an intake column you pull from by hand) should stay that way."
+      },
+      "managerMayCloseReviewedTickets": {
+        "label": "Let the manager review and close tickets",
+        "help": "Applies where a board’s review column needs a person’s approval. Off: the manager still reviews each ticket — it sends unfinished work back and chases sign-offs — but a person closes it. On: when the manager’s review passes, it closes the ticket itself, and the ticket’s history records that it did so under this setting. Only account admins can change this."
       },
       "agentReassignIdleHours": {
         "label": "Only after the ticket is idle for",
@@ -22765,6 +22771,7 @@
         "you": "You",
         "inRoom": "In the room",
         "onBoard": "On the board",
+        "agent": "Agent",
         "noWebglTitle": "3D is not available on this device",
         "noWebglBody": "The room needs WebGL, which this browser cannot start. Everyone in the session is listed below, and the rest of the canvas works normally.",
         "navigateHint": "Drag to look around · right-drag or two fingers to move · scroll to zoom · drag the session or a creation to move it",
@@ -24799,6 +24806,7 @@
     "roleTeammate": "teammate",
     "chipJoin": "Add {name} ({role}) to this board — drag it on, or press Enter",
     "chipLocked": "{name} is not set up in this workspace yet",
+    "chipOnBoard": "{name} ({role}) is on this board — press to bring its card into view",
     "inviteSignedOut": "Sign in to invite",
     "moreSeats": "{count} more seats"
   },

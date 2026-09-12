@@ -106,11 +106,23 @@ export enum TenantStatus {
 }
 
 export enum TenantRole {
-  OWNER     = 'owner',
-  MANAGER   = 'manager',
-  DEVELOPER = 'developer',
-  VIEWER    = 'viewer',
+  OWNER       = 'owner',
+  MANAGER     = 'manager',
+  DEVELOPER   = 'developer',
+  /**
+   * Seated by a canvas share that grants EDIT on a board (operator decision
+   * 2026-09-12). A contributor reads the workspace like a viewer and writes only
+   * the canvases they hold a `creation_session_members` row on — canvas writes are
+   * gated by the BOARD role (`application/creation/sessionAccess.ts`), never by a
+   * tenant tier. Ranked below developer so every `>= developer` gate refuses it.
+   */
+  CONTRIBUTOR = 'contributor',
+  VIEWER      = 'viewer',
 }
+
+/** The role's wire/database spelling — accepted wherever a literal like `'manager'`
+ *  is the natural thing to write, so callers need not import the enum to name one. */
+export type TenantRoleName = `${TenantRole}`;
 
 export enum TenantPlan {
   FREE = 'free',
@@ -133,17 +145,38 @@ export enum TenantBillingStatus {
   CANCELLED = 'cancelled',
 }
 
-// Role hierarchy – higher index = more authority.
-export const ROLE_ORDER: TenantRole[] = [
+/**
+ * THE tenant role ladder — ascending, higher index = more authority. The ONE
+ * declaration: `application/tenant/tenantRoles.ts` used to carry a second copy
+ * (`TENANT_ROLE_ORDER`), which is how a new role gets added to one ladder and not
+ * the other. Callers ask "at least X?" via {@link hasMinRole} instead of listing
+ * which roles qualify.
+ *
+ * Mirrors the `tenant_role` Postgres enum in `schema/kernel.ts`. Not derived from
+ * it: pgEnum preserves declaration order, not authority order.
+ */
+export const ROLE_ORDER: readonly TenantRole[] = [
   TenantRole.VIEWER,
+  TenantRole.CONTRIBUTOR,
   TenantRole.DEVELOPER,
   TenantRole.MANAGER,
   TenantRole.OWNER,
 ];
 
-/** Returns true if `actual` meets or exceeds `required`. */
-export function hasMinRole(actual: TenantRole, required: TenantRole): boolean {
-  return ROLE_ORDER.indexOf(actual) >= ROLE_ORDER.indexOf(required);
+export function isTenantRole(value: unknown): value is TenantRole {
+  return typeof value === 'string' && (ROLE_ORDER as readonly string[]).includes(value);
+}
+
+/**
+ * Does `actual` meet or exceed `required`?
+ *
+ * An unknown or absent role is FALSE, never a lenient default: a row carrying a
+ * role this build does not know is corruption or a deploy running behind a
+ * migration, and both should refuse rather than admit.
+ */
+export function hasMinRole(actual: string | null | undefined, required: TenantRole | TenantRoleName): boolean {
+  const have = ROLE_ORDER.indexOf(actual as TenantRole);
+  return have >= 0 && have >= ROLE_ORDER.indexOf(required as TenantRole);
 }
 
 // ---------------------------------------------------------------------------

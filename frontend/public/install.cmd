@@ -1,14 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM CoderClaw Windows CMD installer
+REM BuilderForce Agents Windows CMD installer
+REM Installs the @seanhogg/builderforce-agents npm package (the `builderforce` CLI)
+REM by delegating to install.ps1.
 REM Usage:
-REM   curl -fsSL https://coderclaw.ai/install.cmd -o install.cmd && install.cmd --no-onboard && del install.cmd
+REM   curl -fsSL https://builderforce.ai/install.cmd -o install.cmd && install.cmd && del install.cmd
 
 set "TAG=latest"
-set "INSTALL_METHOD=npm"
-set "NO_ONBOARD=0"
-set "NO_GIT_UPDATE=0"
+set "NO_START=0"
 set "DRY_RUN=0"
 set "TAG_SET=0"
 set "INSTALL_PS1_URL="
@@ -17,11 +17,11 @@ set "INSTALL_PS1_URL="
 if "%~1"=="" goto :args_done
 
 if /i "%~1"=="--help" goto :usage
-if /i "%~1"=="--git" set "INSTALL_METHOD=git"
-if /i "%~1"=="--npm" set "INSTALL_METHOD=npm"
-if /i "%~1"=="--no-onboard" set "NO_ONBOARD=1"
-if /i "%~1"=="--no-git-update" set "NO_GIT_UPDATE=1"
+if /i "%~1"=="--no-start" set "NO_START=1"
+REM --no-onboard is the older spelling of --no-start.
+if /i "%~1"=="--no-onboard" set "NO_START=1"
 if /i "%~1"=="--dry-run" set "DRY_RUN=1"
+if /i "%~1"=="--git" echo --git is not supported by the Windows installer; installing from npm. 1>&2
 
 if /i "%~1"=="--tag" (
   if not "%~2"=="" (
@@ -60,10 +60,10 @@ if %ERRORLEVEL% neq 0 (
   exit /b 1
 )
 
-set "TMP=%TEMP%\coderclaw-install.ps1"
+set "TMP=%TEMP%\builderforce-install.ps1"
 REM TMP may include spaces; always quote "%TMP%" when used.
 if not "%CODERCLAW_INSTALL_PS1_URL%"=="" set "INSTALL_PS1_URL=%CODERCLAW_INSTALL_PS1_URL%"
-if "%INSTALL_PS1_URL%"=="" set "INSTALL_PS1_URL=https://coderclaw.ai/install.ps1"
+if "%INSTALL_PS1_URL%"=="" set "INSTALL_PS1_URL=https://builderforce.ai/install.ps1"
 
 if exist "%INSTALL_PS1_URL%" (
   copy /Y "%INSTALL_PS1_URL%" "%TMP%" >nul
@@ -75,12 +75,16 @@ if %ERRORLEVEL% neq 0 (
   exit /b 1
 )
 
-set "PS_ARGS=-Tag ""%TAG%"" -InstallMethod ""%INSTALL_METHOD%"""
-if "%NO_ONBOARD%"=="1" set "PS_ARGS=%PS_ARGS% -NoOnboard"
-if "%NO_GIT_UPDATE%"=="1" set "PS_ARGS=%PS_ARGS% -NoGitUpdate"
-if "%DRY_RUN%"=="1" set "PS_ARGS=%PS_ARGS% -DryRun"
+REM install.ps1 accepts -Tag, -ApiUrl and -NoStart.
+set "PS_ARGS=-Tag ""%TAG%"""
+if "%NO_START%"=="1" set "PS_ARGS=%PS_ARGS% -NoStart"
 
-if "%DRY_RUN%"=="1" echo [OK] Dry run ^(delegating to install.ps1^)
+if "%DRY_RUN%"=="1" (
+  echo [OK] Dry run: would run install.ps1 %PS_ARGS%
+  del /f "%TMP%" >nul 2>&1
+  exit /b 0
+)
+
 powershell -NoProfile -ExecutionPolicy Bypass -File "%TMP%" %PS_ARGS%
 set "RESULT=%ERRORLEVEL%"
 
@@ -92,11 +96,10 @@ exit /b 0
 :usage
 echo Usage: install.cmd [options] [tag]
 echo.
+echo Installs @seanhogg/builderforce-agents ^(the builderforce CLI^) via npm.
+echo.
 echo Options:
-echo   --git             Install from git checkout
-echo   --npm             Install via npm ^(default^)
-echo   --tag <ver>       Tag/version to install ^(default: latest^)
-echo   --no-onboard      Skip onboarding
-echo   --no-git-update   Skip git pull for existing checkout
+echo   --tag ^<ver^>       npm dist-tag or version to install ^(default: latest^)
+echo   --no-start        Install ^(and register, when BUILDERFORCE_TOKEN is set^) without starting the gateway
 echo   --dry-run         Print what would happen ^(no changes^)
 exit /b 0

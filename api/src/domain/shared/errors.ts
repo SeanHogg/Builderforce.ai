@@ -88,6 +88,12 @@ export interface RequestValidationIssue {
  * "field X is wrong" rather than one opaque sentence.
  */
 export class RequestValidationError extends ValidationError {
+  /**
+   * Machine-readable refusal, carried to the wire by `errorResponse` (which passes
+   * any string `.code` through): `{ error, code: 'invalid_request', issues }`.
+   * `error` stays the human sentence every other 4xx answers with.
+   */
+  readonly code = 'invalid_request';
   readonly issues: readonly RequestValidationIssue[];
   constructor(issues: readonly RequestValidationIssue[], message = 'Invalid request') {
     super(message);

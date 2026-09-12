@@ -253,6 +253,77 @@ export function parseWidgetMessage(raw: unknown, ctx: WidgetMessageContext): Wid
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// The origin a host may trust
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * "May this frame speak to us at all" — the host's first line, before a message
+ * is parsed. A disabled widget is not merely hidden: its messages are refused.
+ *
+ * Lives HERE rather than in the API's registry service because the browser host is
+ * its caller, and the server and the browser must agree on it exactly — the same
+ * reason the allowlist is in this package. Structural on purpose: it needs the two
+ * fields it reads, not the registry's whole row.
+ */
+export function widgetAcceptsOrigin(widget: { status: string; entryOrigin: string }, origin: string): boolean {
+  return widget.status === 'active' && Boolean(widget.entryOrigin) && widget.entryOrigin === origin;
+}
+
+/**
+ * The origin a message from a widget frame SPEAKS FOR, which is not always the one
+ * the browser printed on the event.
+ *
+ * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────────
+ * {@link CANVAS_WIDGET_SANDBOX} has no `allow-same-origin`, and that is the point of
+ * it — but a sandboxed document without it runs in an OPAQUE origin, so every message
+ * it posts arrives with `event.origin === 'null'`. Compared naively against the
+ * registered `https://…` origin, the sandbox would refuse every widget it was built
+ * to contain.
+ *
+ * The browser still gives the host something the sender cannot forge: `event.source`
+ * is the WINDOW that posted, and only our own frame's `contentWindow` is our frame.
+ * A frame that has loaded exactly one document is the registered entry URL, because
+ * the host set `src` and nothing else navigated it. So an opaque origin FROM OUR OWN
+ * FRAME, BEFORE IT HAS NAVIGATED, speaks for the registered origin. Anything else —
+ * another window, a second document in the frame, a real origin that is not ours —
+ * speaks for exactly what the browser says, and is then refused by the usual check.
+ *
+ * `navigated` is the half that keeps this honest: a sandboxed frame can navigate
+ * itself, and a document it navigated to would otherwise inherit the entry's trust.
+ * Once a second load is seen, the frame speaks for nobody until it is reloaded.
+ */
+export function effectiveWidgetOrigin(input: {
+  /** `event.origin`, verbatim. */
+  eventOrigin: string;
+  /** `event.source === frame.contentWindow`. */
+  fromOwnFrame: boolean;
+  /** The frame has loaded more than one document since the host set its `src`. */
+  navigated: boolean;
+  /** The registered entry origin. */
+  entryOrigin: string;
+}): string {
+  // Another window never speaks for a widget, even one on the widget's own origin (a
+  // popup it opened, a second tab) — only the frame the host mounted is the placement.
+  if (!input.fromOwnFrame || input.navigated) return 'null';
+  return input.eventOrigin === 'null' ? input.entryOrigin : input.eventOrigin;
+}
+
+/**
+ * Where the host posts a reply. An opaque-origin frame can only be addressed with
+ * `'*'` — a named target origin never matches `null` — which is safe ONLY because the
+ * host posts to its own frame's window and stops answering the moment that frame
+ * navigates (see {@link effectiveWidgetOrigin}).
+ */
+export const WIDGET_REPLY_TARGET_ORIGIN = '*';
+
+/** A widget's per-board key/value blob, serialised. Bounded, because it rides on the
+ *  board object itself and is saved with every autosave of that object. */
+export const WIDGET_STORAGE_MAX_BYTES = 16 * 1024;
+
+/** The tallest a widget may ask its frame to be, in CSS pixels. */
+export const WIDGET_MAX_FRAME_HEIGHT = 1600;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // The manifest
 // ─────────────────────────────────────────────────────────────────────────────
 

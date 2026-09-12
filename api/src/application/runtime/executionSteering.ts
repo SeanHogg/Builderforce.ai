@@ -23,10 +23,16 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export type ExecutionMessageRole = 'user' | 'assistant';
 
+/** What became of a steer that landed after its run's last turn (migration 1152). */
+export type LateSteerOutcomeKind = 'started' | 'awaiting_approval' | 'refused' | 'failed' | 'released';
+
 export interface ExecutionMessageRow {
   role: ExecutionMessageRole;
   text: string;
   ts: string;
+  /** Present on a user steer that arrived after the run's last turn: the follow-up run
+   *  it started, or why none did. See `lateSteerFollowUp.ts`. */
+  followUp?: { outcome: LateSteerOutcomeKind; executionId: number | null; detail: string | null };
 }
 
 /**
@@ -35,25 +41,30 @@ export interface ExecutionMessageRow {
  * steer); pass `pending: false` to record a display-only echo — e.g. the directive
  * that SEEDED a brand-new run (it is already in that run's prompt, so it must not
  * be re-injected as a steer). Assistant turns are always history-only.
+ *
+ * `sentBy` names the person who sent a user turn: a steer that lands after the run's
+ * last turn becomes a follow-up run submitted under that person. Returns the new row's
+ * id (the steer's idempotency key on the wire), or null on failure.
  */
 export async function enqueueExecutionMessage(
   db: Db,
-  args: { executionId: number; tenantId: number; role: ExecutionMessageRole; text: string; pending?: boolean },
-): Promise<boolean> {
+  args: { executionId: number; tenantId: number; role: ExecutionMessageRole; text: string; pending?: boolean; sentBy?: string | null },
+): Promise<number | null> {
   const text = args.text.trim();
-  if (!text) return false;
+  if (!text) return null;
   const pending = args.role === 'user' && (args.pending ?? true);
   try {
-    await db.insert(executionMessages).values({
+    const [row] = await db.insert(executionMessages).values({
       executionId: args.executionId,
       tenantId: args.tenantId,
       role: args.role,
       text,
       consumedAt: pending ? null : new Date(),
-    });
-    return true;
+      sentBy: args.role === 'user' ? args.sentBy ?? null : null,
+    }).returning({ id: executionMessages.id });
+    return row?.id ?? null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -107,7 +118,14 @@ export async function releasePendingSteers(db: Db, executionId: number): Promise
 export async function listExecutionMessages(db: Db, executionId: number): Promise<ExecutionMessageRow[]> {
   try {
     const rows = await db
-      .select({ role: executionMessages.role, text: executionMessages.text, ts: executionMessages.createdAt })
+      .select({
+        role: executionMessages.role,
+        text: executionMessages.text,
+        ts: executionMessages.createdAt,
+        lateOutcome: executionMessages.lateOutcome,
+        followUpExecutionId: executionMessages.followUpExecutionId,
+        lateDetail: executionMessages.lateDetail,
+      })
       .from(executionMessages)
       .where(eq(executionMessages.executionId, executionId))
       .orderBy(asc(executionMessages.createdAt))
@@ -116,6 +134,9 @@ export async function listExecutionMessages(db: Db, executionId: number): Promis
       role: r.role === 'assistant' ? 'assistant' : 'user',
       text: r.text,
       ts: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
+      ...(r.lateOutcome
+        ? { followUp: { outcome: r.lateOutcome as LateSteerOutcomeKind, executionId: r.followUpExecutionId ?? null, detail: r.lateDetail ?? null } }
+        : {}),
     }));
   } catch {
     return [];

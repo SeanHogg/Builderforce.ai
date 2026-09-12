@@ -257,10 +257,12 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     const scene = await enterThreeD();
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(scene).toBeInTheDocument();
-    // The session wears ONE way back — an (X) that puts it back in the room. The board
-    // is the surface switcher's job, so the frame carries no second "close".
+    // The session wears ONE way back — an (X) that puts it back in the room, drawn ON
+    // the space at the corner of its planes rather than on the frame's corner. The
+    // board is the surface switcher's job, so the frame carries no second "close".
     const frame = screen.getByTestId('room-session-frame');
     expect(within(frame).getAllByRole('button', { name: 'Back to the room' })).toHaveLength(1);
+    expect(within(scene).getByRole('button', { name: 'Back to the room' })).toHaveAttribute('data-anchored', 'true');
     expect(within(frame).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
     // The mini map is a map of the flat board, so it — and its button — stand
     // down in 3D. The toggle lives in the board sheet now and reports its
@@ -271,8 +273,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(namedButtons('Show mini map')).toHaveLength(0);
     openBoardMenu();
     // The command bar owns every 3D command, so the scene carries no toolbar at all —
-    // no exit, no depth control, no zoom. A second header stacked over the board
-    // is what this replaced.
+    // no depth control, no zoom; its only chrome is the (X) back to the room. A
+    // second header stacked over the board is what this replaced.
     expect(within(scene).queryByRole('button', { name: /3D/ })).not.toBeInTheDocument();
     expect(within(scene).queryByRole('combobox')).not.toBeInTheDocument();
     expect(within(scene).queryAllByRole('button', { name: 'Zoom in' })).toHaveLength(0);
@@ -292,7 +294,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
     // Minimising puts the session back in the room — the room is still up, the
     // projection and its commands are not.
-    fireEvent.click(screen.getByTestId('room-session-close'));
+    fireEvent.click(screen.getByTestId('canvas-3d-exit'));
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
     expect(screen.getByTestId('canvas-room-surface')).toHaveAttribute('data-session', 'placed');
     expect(toggle).toHaveAttribute('aria-pressed', 'true');

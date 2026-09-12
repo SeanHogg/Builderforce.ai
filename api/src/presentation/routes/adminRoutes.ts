@@ -1,6 +1,49 @@
 import { InternalError } from '../../domain/shared/errors';
+import { ROLE_ORDER, isTenantRole } from '../../domain/shared/types';
 import { failResponse, statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AdminTenantApiKeyBody,
+  BroadcastBody,
+  CronControlBody,
+  CronForceRunBody,
+  DiscountCodeCreateBody,
+  DiscountCodePatchBody,
+  FeedbackReviewBody,
+  ImageCreditsLimitBody,
+  ImpersonateBody,
+  ImpersonationStartBody,
+  LegalDocBody,
+  LegalEnhanceBody,
+  MaintenanceBody,
+  MemberRoleBody,
+  MfaChallengeBody,
+  MfaEnableBody,
+  ModuleAssignBody,
+  ModuleCreateBody,
+  ModulePatchBody,
+  NewsletterEventBody,
+  NewsletterTemplateBody,
+  PaidOverflowCapBody,
+  PartnerTrackBody,
+  PersonaCreateBody,
+  PersonaPatchBody,
+  PremiumCapBody,
+  PremiumOverrideBody,
+  PricingDraftBody,
+  PrivacyRequestPatchBody,
+  ProjectGovernanceBody,
+  PublisherStateBody,
+  PublisherSuspensionBody,
+  RolePermissionMatrixBody,
+  SalesLeadPatchBody,
+  SuspectRevokeBody,
+  SwitchRoleBody,
+  TokenLimitOverrideBody,
+  UserPermissionOverridesBody,
+  UserStatusBody,
+} from './adminRoutes.schemas';
 /**
  * Superadmin routes — /api/admin/*
  *
@@ -57,7 +100,6 @@ import { VisitorJourneyService, VISITOR_FLOW_WINDOWS } from '../../application/m
 import {
   broadcastVocabulary,
   PlatformBroadcastService,
-  type BroadcastInput,
 } from '../../application/marketing/PlatformBroadcastService';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import {
@@ -357,8 +399,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Draft saves never touch the public cache. Only the explicit publication
   // boundary below can make content visible and invalidate cached responses.
   router.put('/pricing/draft', async (c) => {
+    // Read above the try: an unreadable body is the shared 400, not this catch's message.
+    const document = await parseBody(c, PricingDraftBody);
     try {
-      return c.json({ draft: await savePricingDraft(requestDb(c), await c.req.json()) });
+      return c.json({ draft: await savePricingDraft(requestDb(c), document) });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Invalid pricing configuration' }, 400);
     }
@@ -403,9 +447,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-    const body = await c.req.json<{ version: string; title?: string; content: string }>();
+    const body = await parseBody(c, LegalDocBody);
     try {
-      const document = await publishLegalDoc(db, docType, body, actorUserId, c.env);
+      // The service owns "version is required" / "content is required".
+      const document = await publishLegalDoc(db, docType, { version: body.version ?? '', title: body.title, content: body.content ?? '' }, actorUserId, c.env);
       return c.json({ document }, 201);
     } catch (e) {
       if (e instanceof LegalDocError) return statusResponse(c, { error: e.message }, e.status, { source: 'presentation/routes/adminRoutes.ts', operation: 'legalDoc' }, e);
@@ -424,9 +469,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
     const actorUserId = c.get('userId') as string;
-    const body = await c.req.json<{ version?: string; title?: string; content: string }>();
+    const body = await parseBody(c, LegalDocBody);
     try {
-      const document = await amendActiveLegalDoc(db, docType, body, actorUserId, c.env);
+      const document = await amendActiveLegalDoc(db, docType, { version: body.version, title: body.title, content: body.content ?? '' }, actorUserId, c.env);
       return c.json({ document });
     } catch (e) {
       if (e instanceof LegalDocError) return statusResponse(c, { error: e.message }, e.status, { source: 'presentation/routes/adminRoutes.ts', operation: 'legalDoc' }, e);
@@ -445,7 +490,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-    const body = await c.req.json<{ content?: string; instruction?: string; title?: string }>();
+    const body = await parseBody(c, LegalEnhanceBody);
     try {
       const content = await enhanceLegalContent(c.env, c.executionCtx, {
         docType,
@@ -558,14 +603,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.post('/newsletter/templates', async (c) => {
     const db = requestDb(c);
     const actorUserId = c.get('userId') as string;
-    const body = await c.req.json<{
-      name?: string;
-      slug?: string;
-      subject?: string;
-      preheader?: string;
-      bodyMarkdown?: string;
-      isActive?: boolean;
-    }>();
+    const body = await parseBody(c, NewsletterTemplateBody);
 
     const name = body.name?.trim() ?? '';
     const subject = body.subject?.trim() ?? '';
@@ -622,14 +660,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'Invalid template id' }, 400);
     }
 
-    const body = await c.req.json<{
-      name?: string;
-      slug?: string;
-      subject?: string;
-      preheader?: string | null;
-      bodyMarkdown?: string;
-      isActive?: boolean;
-    }>();
+    const body = await parseBody(c, NewsletterTemplateBody);
 
     const patch: Partial<typeof newsletterTemplates.$inferInsert> = {
       updatedBy: actorUserId,
@@ -763,10 +794,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'Invalid request id' }, 400);
     }
 
-    const body = await c.req.json<{
-      status?: PrivacyRequestStatus;
-      resolution?: string | null;
-    }>();
+    const body = await parseBody(c, PrivacyRequestPatchBody);
 
     const patch: Partial<typeof privacyRequests.$inferInsert> = {
       updatedAt: new Date(),
@@ -803,12 +831,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.post('/newsletter/events', async (c) => {
     const db = requestDb(c);
-    const body = await c.req.json<{
-      subscriberEmail?: string;
-      templateId?: number | null;
-      eventType?: 'template_sent' | 'email_opened' | 'email_clicked';
-      metadata?: string;
-    }>();
+    const body = await parseBody(c, NewsletterEventBody);
 
     const email = body.subscriberEmail?.trim().toLowerCase();
     const eventType = body.eventType;
@@ -1042,7 +1065,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
-    const body = await c.req.json<{ code: string }>();
+    const body = await parseBody(c, MfaEnableBody);
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
     if (!userId) return c.json({ error: 'userId is required' }, 400);
     if (!body.code) return c.json({ error: 'code is required' }, 400);
@@ -1100,7 +1123,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
-    const body = await c.req.json<{ code?: string; recoveryCode?: string }>();
+    const body = await parseBody(c, MfaChallengeBody);
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
     if (!userId) return c.json({ error: 'userId is required' }, 400);
     if (!body.code && !body.recoveryCode) {
@@ -1141,7 +1164,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
-    const body = await c.req.json<{ code?: string; recoveryCode?: string }>();
+    const body = await parseBody(c, MfaChallengeBody);
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
     if (!userId) return c.json({ error: 'userId is required' }, 400);
     if (!body.code && !body.recoveryCode) {
@@ -1303,8 +1326,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/accounts/suspect/revoke', async (c) => {
-    const body = await c.req.json<{ userIds?: string[] }>().catch(() => ({} as { userIds?: string[] }));
-    const userIds = (body.userIds ?? []).filter((id) => typeof id === 'string' && id.length > 0).slice(0, 500);
+    const body = await parseOptionalBody(c, SuspectRevokeBody);
+    const userIds = (body.userIds ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, 500);
     if (userIds.length === 0) return c.json({ error: 'userIds is required' }, 400);
     const db = requestDb(c);
     // Clearing the stamp, not deleting the account: the person gets the ordinary
@@ -1486,7 +1509,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   router.patch('/sales-leads/:id', async (c) => {
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: string }>().catch(() => ({} as { status?: string }));
+    const body = await parseOptionalBody(c, SalesLeadPatchBody);
     const allowed = ['new', 'contacted', 'qualified', 'closed'];
     if (!body.status || !allowed.includes(body.status)) {
       return c.json({ error: `status must be one of ${allowed.join(', ')}` }, 400);
@@ -1525,7 +1548,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/broadcasts', async (c) => {
-    const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
+    const body = await parseOptionalBody(c, BroadcastBody);
     const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const created = await new PlatformBroadcastService(db).create(c.env as Env, body, actorId);
@@ -1539,7 +1562,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.patch('/broadcasts/:id', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid broadcast id' }, 400);
-    const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
+    const body = await parseOptionalBody(c, BroadcastBody);
     const db = requestDb(c);
     if (!await new PlatformBroadcastService(db).update(c.env as Env, id, body)) {
       return c.json({ error: 'Broadcast not found' }, 404);
@@ -1584,11 +1607,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/discount-codes', async (c) => {
-    type DiscountBody = {
-      code?: string; percentOff?: number; applicablePlan?: 'pro' | 'teams';
-      billingCycle?: 'monthly' | 'yearly'; durationYears?: number; isActive?: boolean;
-    };
-    const body = await c.req.json<DiscountBody>().catch(() => ({} as DiscountBody));
+    const body = await parseOptionalBody(c, DiscountCodeCreateBody);
     const code = normalizeDiscountCode(body.code ?? '');
     const percentOff = Number(body.percentOff);
     const durationYears = Number(body.durationYears);
@@ -1613,11 +1632,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.patch('/discount-codes/:id', async (c) => {
-    type DiscountBody = {
-      code?: string; percentOff?: number; applicablePlan?: 'pro' | 'teams';
-      billingCycle?: 'monthly' | 'yearly'; durationYears?: number; isActive?: boolean;
-    };
-    const body = await c.req.json<DiscountBody>().catch(() => ({} as DiscountBody));
+    const body = await parseOptionalBody(c, DiscountCodePatchBody);
     const updates: Partial<typeof discountCodes.$inferInsert> = { updatedAt: new Date() };
     if (body.code !== undefined) {
       const code = normalizeDiscountCode(body.code);
@@ -1707,7 +1722,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('id'));
     if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
 
-    const body = await c.req.json<{ tokenDailyLimitOverride?: number | null }>();
+    const body = await parseBody(c, TokenLimitOverrideBody);
     const value = body.tokenDailyLimitOverride;
     if (value !== null && value !== undefined) {
       if (!Number.isInteger(value) || value < -1) {
@@ -1754,7 +1769,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('id'));
     if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
 
-    const body = await c.req.json<{ paidOverflowDailyCap?: number | null }>();
+    const body = await parseBody(c, PaidOverflowCapBody);
     const value = body.paidOverflowDailyCap;
     if (value !== null && value !== undefined) {
       if (!Number.isInteger(value) || value < -1) {
@@ -1803,7 +1818,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('id'));
     if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
 
-    const body = await c.req.json<{ premiumDailyCap?: number | null }>();
+    const body = await parseBody(c, PremiumCapBody);
     const value = body.premiumDailyCap;
     if (value !== null && value !== undefined) {
       if (!Number.isInteger(value) || value < -1) {
@@ -1849,7 +1864,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('id'));
     if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
 
-    const body = await c.req.json<{ imageCreditsDailyLimit?: number | null }>();
+    const body = await parseBody(c, ImageCreditsLimitBody);
     const value = body.imageCreditsDailyLimit;
     if (value !== null && value !== undefined) {
       if (!Number.isInteger(value) || value < -1) {
@@ -1892,7 +1907,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('id'));
     if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
 
-    const body = await c.req.json<{ premiumOverride?: boolean }>();
+    const body = await parseBody(c, PremiumOverrideBody);
     if (typeof body.premiumOverride !== 'boolean') {
       return c.json({ error: 'premiumOverride must be a boolean' }, 400);
     }
@@ -2087,9 +2102,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // { action: 'vacuum_analyze', target, table? } is intentionally limited to
   // normal VACUUM ANALYZE (never VACUUM FULL / arbitrary SQL).
   router.post('/system-health/maintenance', async (c) => {
-    const body = await c.req.json().catch(() => ({})) as {
-      action?: string; target?: DatabaseTarget; table?: string;
-    };
+    const body = await parseOptionalBody(c, MaintenanceBody);
     const actorId = c.get('userId') as string | undefined;
     if (body.action === 'purge_expired') {
       await runRetentionPurge(c.env as Env);
@@ -2108,7 +2121,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     try {
       // Same statement builder the daily maintenance sweep uses, so the quoting rule
       // and the relation-name guard cannot diverge between the two callers.
-      await vacuumRelation(db, body.table);
+      await vacuumRelation(db, body.table ?? undefined);
     } catch (error) {
       return failResponse(c, new InternalError('VACUUM failed', { cause: error }), { source: 'presentation/routes/adminRoutes.ts', operation: 'vacuumAnalyze' });
     }
@@ -2196,7 +2209,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const target = c.req.param('target');
     const sweep = CRON_SWEEPS.find((candidate) => candidate.key === target);
     if (!sweep) return c.json({ error: `Unknown cron sweep '${target}'.` }, 404);
-    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({} as { enabled?: unknown }));
+    const body = await parseOptionalBody(c, CronControlBody);
     if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean.' }, 400);
     try {
       await writeCronControl(env, target, body.enabled);
@@ -2263,7 +2276,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (resolved.sweeps.length === 0) {
       return c.json({ error: `No sweeps are registered for '${target}'.` }, 404);
     }
-    const body = await c.req.json<{ timeoutMs?: number }>().catch(() => ({} as { timeoutMs?: number }));
+    const body = await parseOptionalBody(c, CronForceRunBody);
     const budget = createTickDispatchBudget();
     const started = Date.now();
     const controls = await readCronControls(env);
@@ -2401,7 +2414,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Issue a 1-hour tenant-scoped JWT for any user+tenant pair.
   // -------------------------------------------------------------------------
   router.post('/impersonate', async (c) => {
-    const { userId, tenantId } = await c.req.json<{ userId: string; tenantId: number }>();
+    const { userId, tenantId } = await parseBody(c, ImpersonateBody);
     if (!userId || !tenantId) {
       return c.json({ error: 'userId and tenantId are required' }, 400);
     }
@@ -2772,21 +2785,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.post('/personas', async (c) => {
     const db = requestDb(c);
-    const body = await c.req.json<{
-      name: string;
-      slug?: string;
-      description?: string | null;
-      voice?: string | null;
-      perspective?: string | null;
-      decisionStyle?: string | null;
-      outputPrefix?: string | null;
-      capabilities?: string[];
-      tags?: string[];
-      psychometric?: unknown; // PsychometricProfile object, or null
-      source?: string;
-      author?: string | null;
-      active?: boolean;
-    }>();
+    const body = await parseBody(c, PersonaCreateBody);
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
     const slug = (body.slug ?? name).trim().toLowerCase().replace(/\s+/g, '-');
@@ -2838,21 +2837,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
-    const body = await c.req.json<{
-      name?: string;
-      slug?: string;
-      description?: string | null;
-      voice?: string | null;
-      perspective?: string | null;
-      decisionStyle?: string | null;
-      outputPrefix?: string | null;
-      capabilities?: string[];
-      tags?: string[];
-      psychometric?: unknown; // PsychometricProfile object, or null to clear
-      source?: string;
-      author?: string | null;
-      active?: boolean;
-    }>();
+    const body = await parseBody(c, PersonaPatchBody);
     const [existing] = await db.select().from(platformPersonas).where(eq(platformPersonas.id, id)).limit(1);
     if (!existing) return c.json({ error: 'Persona not found' }, 404);
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -2946,7 +2931,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
-    const body = await c.req.json<{ governance?: string | null }>();
+    const body = await parseBody(c, ProjectGovernanceBody);
     const [updated] = await db
       .update(projects)
       .set({ governance: body.governance ?? null, updatedAt: new Date() })
@@ -2979,13 +2964,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null;
     const ua = c.req.header('User-Agent') ?? null;
 
-    const body = await c.req.json<{
-      userId: string;
-      tenantId: number;
-      role?: string;
-      reason: string;
-      enableDebugger?: boolean;
-    }>();
+    const body = await parseBody(c, ImpersonationStartBody);
 
     if (!body.userId || !body.tenantId || !body.reason?.trim()) {
       return c.json({ error: 'userId, tenantId, and reason are required' }, 400);
@@ -3143,7 +3122,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const adminId = c.get('userId') as string;
     const sessionId = c.req.param('id');
     const db = requestDb(c);
-    const { role } = await c.req.json<{ role: string }>();
+    const { role } = await parseBody(c, SwitchRoleBody);
 
     if (!role) return c.json({ error: 'role is required' }, 400);
 
@@ -3362,7 +3341,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.get('/permissions/matrix', async (c) => {
     const db = requestDb(c);
     const overrides = await db.select().from(rolePermissionOverrides);
-    const roles = ['viewer', 'developer', 'manager', 'owner'] as const;
+    const roles = ROLE_ORDER;
     const matrix: Record<string, string[]> = {};
     for (const role of roles) {
       const roleOverrides = overrides.filter((o) => o.role === role);
@@ -3385,11 +3364,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const role = c.req.param('role');
-    const validRoles = ['viewer', 'developer', 'manager', 'owner'];
-    if (!validRoles.includes(role)) {
+    if (!isTenantRole(role)) {
       return c.json({ error: 'Invalid role' }, 400);
     }
-    const body = await c.req.json<{ overrides: Array<{ permission: string; granted: boolean; reason?: string }> }>();
+    const body = await parseBody(c, RolePermissionMatrixBody);
     if (!Array.isArray(body.overrides)) return c.json({ error: 'overrides array required' }, 400);
 
     // ONE multi-row upsert for the whole matrix edit.
@@ -3420,7 +3398,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.get('/permissions/matrix/export', async (c) => {
     const db = requestDb(c);
     const overrides = await db.select().from(rolePermissionOverrides);
-    const roles = ['viewer', 'developer', 'manager', 'owner'];
+    const roles = ROLE_ORDER;
     const header = ['permission', ...roles].join(',');
     const rows = ALL_PERMISSIONS.map((perm) => {
       const cols = roles.map((role) => {
@@ -3461,13 +3439,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.post('/modules', async (c) => {
     const db = requestDb(c);
     const actorId = c.get('userId') as string;
-    const body = await c.req.json<{
-      name: string;
-      slug?: string;
-      description?: string;
-      baseRole?: string;
-      permissions?: string[];
-    }>();
+    const body = await parseBody(c, ModuleCreateBody);
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const slug = (body.slug?.trim() || body.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''));
     const [mod] = await db
@@ -3494,7 +3466,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; description?: string; baseRole?: string; permissions?: string[] }>();
+    const body = await parseBody(c, ModulePatchBody);
     const [mod] = await db
       .update(platformModules)
       .set({
@@ -3529,7 +3501,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const actorId = c.get('userId') as string;
     const tenantId = parseInt(c.req.param('tenantId'), 10);
     const userId = c.req.param('userId');
-    const body = await c.req.json<{ moduleId: string }>();
+    const body = await parseBody(c, ModuleAssignBody);
     if (!body.moduleId) return c.json({ error: 'moduleId is required' }, 400);
     await db.insert(tenantMemberModules).values({
       tenantId, userId, moduleId: body.moduleId, grantedBy: actorId,
@@ -3623,7 +3595,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const targetId = c.req.param('id');
-    const body = await c.req.json<{ suspended: boolean }>();
+    const body = await parseBody(c, UserStatusBody);
     await db
       .update(users)
       .set({ isSuspended: body.suspended, updatedAt: sql`now()` })
@@ -3645,18 +3617,15 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const targetId = c.req.param('id');
-    const body = await c.req.json<{
-      tenantId: number;
-      overrides: Array<{ permission: string; granted: boolean; expiresAt?: string }>;
-    }>();
-    if (!body.tenantId || !Array.isArray(body.overrides)) {
+    const { tenantId, overrides } = await parseBody(c, UserPermissionOverridesBody);
+    if (!tenantId || !Array.isArray(overrides)) {
       return c.json({ error: 'tenantId and overrides array required' }, 400);
     }
-    if (body.overrides.length) {
+    if (overrides.length) {
       await db
         .insert(userPermissionOverrides)
-        .values(body.overrides.map((o) => ({
-          tenantId: body.tenantId,
+        .values(overrides.map((o) => ({
+          tenantId,
           userId: targetId,
           permission: o.permission,
           granted: o.granted,
@@ -3668,11 +3637,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
           set: { granted: excluded(userPermissionOverrides.granted), expiresAt: excluded(userPermissionOverrides.expiresAt) },
         });
     }
-    await invalidateMemberPermissions(c.env, body.tenantId, targetId);
+    await invalidateMemberPermissions(c.env, tenantId, targetId);
     await writeAudit(db, 'USER_PERMISSION_OVERRIDE', actorId, {
       targetUserId: targetId,
-      tenantId: body.tenantId,
-      metadata: { overrides: body.overrides },
+      tenantId,
+      metadata: { overrides },
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });
     return c.json({ ok: true });
@@ -3684,12 +3653,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const actorId = c.get('userId') as string;
     const tenantId = parseInt(c.req.param('tenantId'), 10);
     const userId = c.req.param('userId');
-    const body = await c.req.json<{ role: string }>();
-    const validRoles = ['viewer', 'developer', 'manager', 'owner'];
-    if (!validRoles.includes(body.role)) return c.json({ error: 'Invalid role' }, 400);
+    const body = await parseBody(c, MemberRoleBody);
+    const nextRole = body.role;
+    if (!isTenantRole(nextRole)) return c.json({ error: 'Invalid role' }, 400);
     const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
-    await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(scopedToTenant(tenantMembers, tenantId, eq(tenantMembers.id, row.id)));
+    await db.update(tenantMembers).set({ role: nextRole }).where(scopedToTenant(tenantMembers, tenantId, eq(tenantMembers.id, row.id)));
     // The role is the label the footer roster renders beside the person (PRD 21
     // §4.1) AND the claim the gateway caches, so one announcement clears both —
     // this handler used to name each cache itself, which is precisely the drift
@@ -3863,8 +3832,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const adminUserId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
-      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
+    const body = await parseOptionalBody(c, AdminTenantApiKeyBody);
     const name = (body.name ?? '').trim() || 'Admin-issued tenant API key';
     const minted = await mintTenantApiKey(db, {
       tenantId,
@@ -3892,8 +3860,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const keyId = c.req.param('keyId');
-    const body = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
-      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
+    const body = await parseOptionalBody(c, AdminTenantApiKeyBody);
 
     const updated = await updateTenantApiKey(db, {
       tenantId,
@@ -3938,12 +3905,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
    */
   router.post('/feedback/:id/review', async (c) => {
     const db = requestDb(c);
-    const body = await c.req.json<{ decision?: string; tenantId?: number }>().catch(() => null);
-    const decision = body?.decision;
+    const body = await parseOptionalBody(c, FeedbackReviewBody);
+    const decision = body.decision;
     if (decision !== 'approved' && decision !== 'declined') {
       return c.json({ error: "decision must be 'approved' or 'declined'" }, 400);
     }
-    if (typeof body?.tenantId !== 'number') return c.json({ error: 'tenantId is required' }, 400);
+    if (typeof body.tenantId !== 'number') return c.json({ error: 'tenantId is required' }, 400);
 
     const result = await reviewFeedbackSubmission(db, c.env, {
       tenantId: body.tenantId,
@@ -3988,7 +3955,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const body = await c.req.json<{ state?: string; note?: string }>().catch(() => ({} as { state?: string; note?: string }));
+    const body = await parseOptionalBody(c, PublisherStateBody);
     const actorId = c.get('userId') as string;
     try {
       const publisher = await setPublisherState(db, c.env as Env, { tenantId, state: body.state ?? '' });
@@ -4009,7 +3976,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const body = await c.req.json<{ suspended?: boolean; reason?: string }>().catch(() => ({} as { suspended?: boolean; reason?: string }));
+    const body = await parseOptionalBody(c, PublisherSuspensionBody);
     if (typeof body.suspended !== 'boolean') return c.json({ error: 'suspended must be true or false' }, 400);
     const actorId = c.get('userId') as string;
     try {
@@ -4038,7 +4005,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const body = await c.req.json<{ track?: string; featured?: boolean }>().catch(() => ({} as { track?: string; featured?: boolean }));
+    const body = await parseOptionalBody(c, PartnerTrackBody);
     const actorId = c.get('userId') as string;
     try {
       const standing = await setPartnerTrack(db, c.env as Env, {

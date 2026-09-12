@@ -45,6 +45,7 @@ import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../runtime/d
 import { classifySignoffOwnership, resolveRequiredSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
+import { managerHoldsReviewGate } from './reviewGateAuthority';
 import { classifyDeliverablePaths, type DeliverableEvidence } from '../delivery/deliverableEvidence';
 import { coordinateTicket } from './coordinateTicket';
 import { staffUnfilledRole } from './staffUnfilledRole';
@@ -397,6 +398,8 @@ export interface TriagePolicy {
   allowAutoMerge: boolean;
   autoAssign: boolean;
   managerRef: string | null;
+  /** Workspace review-and-close authority (1150). Omitted = false = pre-1150 behaviour. */
+  managerMayCloseReviewedTickets?: boolean;
 }
 
 export interface TriageOutcome {
@@ -785,6 +788,12 @@ export async function runStallTriage(
         // escalation still happen — a throttled provider must not stop the manager
         // from managing.
         poolRateLimited: poolHealth.rateLimited,
+        // A human-gated review lane the workspace handed to the manager (1150) is the
+        // manager's to close, not a standing escalation — the census asks the same module.
+        reviewGateDelegated: managerHoldsReviewGate({
+          status: task.status, laneGate: autoRun.laneGate,
+          managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets ?? false,
+        }),
       });
 
       if (!diagnosis.stalled) {

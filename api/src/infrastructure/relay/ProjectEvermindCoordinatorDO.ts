@@ -47,6 +47,12 @@ import { ingestErrorEvents } from '../../application/quality/ingestEngine';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
 import { meanEvalLoss, type EvalExample } from '../../application/llm/evermindEval';
+import {
+  admitDeltaAgainstHead,
+  decodeDeltaB64,
+  deltaUnusableReason,
+  parseDeltaLearnRequest,
+} from '../../application/llm/evermindDeltaLearn';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
@@ -108,15 +114,21 @@ const EVAL_POINTS_MAX = 40;
 
 interface PendingEntry {
   id: number;
-  /** The head version this text was taken against (must match at merge time). */
+  /** The head version this delta/text was taken against (must match at merge time). */
   baseVersion: number;
-  /** Raw run text the coordinator adapts+diffs IN THE ALARM; the unified producer
-   *  path so IDE/cloud/on-prem never pay training CPU themselves. */
+  /** base64 serialized RowDelta — a PRE-DIFFED contribution from the `/learn` door
+   *  (the on-prem runner fitted it locally). Undefined for a text-path entry. */
+  diffB64?: string;
+  /** Raw run text the coordinator adapts+diffs IN THE ALARM; the default producer
+   *  path so IDE/cloud never pay training CPU themselves. */
   text?: string;
   /** Optional task prompt (the ticket) the run addressed. When present AND a teacher
    *  is pinned, the teacher ANSWERS this prompt so the SSM learns (task → ideal
    *  answer) rather than refining the raw output. */
   prompt?: string;
+  /** Provenance for a DELTA entry (the run's ticket). A pre-diffed weight delta has no
+   *  text, so this is the only thing that makes its merged row inspectable. */
+  label?: string;
   /** Optional sample weight (e.g. tokens learned) for the FedAvg merge. */
   weight: number;
   /** The Brain chat this contribution came from. Carried through the queue so the
@@ -158,10 +170,9 @@ interface RecentEntry {
   /** Stable unique id (the source contribution's sequence id) — lets the console
    *  target a specific learned memory (e.g. highlight it on a Validate recall). */
   id: number;
-  /** 'text' = a run/exemplar adapted here — the ONLY value written today.
-   *  'delta' (a pre-diffed weight delta) is LEGACY-READ-ONLY: the door that produced
-   *  it was retired, so nothing writes it, but ring rows are never rewritten and the
-   *  console still has to render any that a live DO carries. */
+  /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta pushed
+   *  through `/learn` by an on-prem runner that ran the fit itself (its `prompt` slot
+   *  carries the push's label, since a diff has no text). */
   kind: 'text' | 'delta';
   /** The version this contribution was merged INTO (head.version + 1 at merge time). */
   version: number;
@@ -339,6 +350,8 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname.endsWith('/learn-text')) return this.handleLearnText(request);
+    // Checked AFTER '/learn-text' deliberately: that path also ends in '/learn'.
+    if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
     if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent(request);
     if (request.method === 'GET' && url.pathname.endsWith('/contribution')) return this.handleContribution(request);
@@ -612,7 +625,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     const queued = pending.find((e) => e.id === id);
     if (queued) {
-      return this.json({ status: 'pending', contributionId: id, kind: 'text', queued: pending.length });
+      return this.json({ status: 'pending', contributionId: id, kind: queued.diffB64 ? 'delta' : 'text', queued: pending.length });
     }
     // Neither queued nor stored. A merge consumed it and it never became a memory —
     // reported as its own state rather than folded into `pending` (which would leave a
@@ -801,6 +814,36 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   }
 
   /**
+   * Delta-path learn — the on-prem runner pushes a weight delta it FITTED ITSELF
+   * (a diff of its locally-adapted copy vs the exact head version it pulled). The
+   * contract — shape, size cap, and the unseeded/frozen/stale-base refusals — lives in
+   * `evermindDeltaLearn` so the gateway route and this single writer cannot disagree.
+   * A stale base answers 409 + `headVersion` and queues NOTHING: a diff taken against
+   * another version can't be element-merged safely, and the producer rebases on it.
+   */
+  private async handleLearn(request: Request): Promise<Response> {
+    const raw = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!raw || typeof raw.tenantId !== 'number' || typeof raw.projectId !== 'number') {
+      return this.json({ ok: false, error: 'tenantId, projectId, diff, baseVersion required' }, 400);
+    }
+    const parsed = parseDeltaLearnRequest(raw);
+    if (!parsed.ok) return this.json({ ok: false, error: parsed.error }, parsed.status);
+    const tenantId = raw.tenantId;
+    const projectId = raw.projectId;
+
+    const head = await getProjectEvermindHead(this.env, this.db, tenantId, projectId);
+    const refusal = admitDeltaAgainstHead(parsed.request, head);
+    if (refusal) return this.json(refusal.body, refusal.status);
+
+    const { queued, dropped, contributionId } = await this.enqueue(tenantId, projectId, head.version, {
+      diffB64: parsed.request.diff,
+      ...(parsed.request.label ? { label: parsed.request.label } : {}),
+      weight: parsed.request.weight ?? 1,
+    });
+    return this.json({ ok: true, queued, contributionId, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
+  }
+
+  /**
    * Text-path learn — the UNIFIED producer entry point. Enqueue raw run text; the
    * ALARM adapts the base on it and merges the delta, so the fit runs HERE in the
    * DO (off the caller's request/tick) and IDE/cloud/on-prem are all cheap text
@@ -838,7 +881,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     tenantId: number,
     projectId: number,
     baseVersion: number,
-    entry: { text?: string; prompt?: string; weight: number; chatId?: number },
+    entry: { diffB64?: string; text?: string; prompt?: string; label?: string; weight: number; chatId?: number },
   ): Promise<{ queued: number; dropped: number; contributionId: number }> {
     await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
@@ -849,8 +892,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       id: seq,
       baseVersion,
       weight: entry.weight,
+      ...(entry.diffB64 ? { diffB64: entry.diffB64 } : {}),
       ...(entry.text ? { text: entry.text } : {}),
       ...(entry.prompt ? { prompt: entry.prompt } : {}),
+      ...(entry.label ? { label: entry.label } : {}),
       ...(entry.chatId != null ? { chatId: entry.chatId } : {}),
     });
     // Cost guard: cap the queue, dropping the OLDEST contributions if a project is
@@ -935,10 +980,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const tok = new BPETokenizer();
       if (isLM) tok.loadFromObjects(tokenizer.vocab, tokenizer.merges);
 
-      // Build the batch of weight deltas to FedAvg. Entries are ADAPTED here (fresh
-      // base copy → fit → diff) — the fit that IDE/cloud/on-prem deliberately don't
-      // run on their own. This is the ONLY way a contribution becomes weights: the
-      // pre-diffed delta door was retired, so nothing arrives already differenced.
+      // Build the batch of weight deltas to FedAvg. Delta entries (the `/learn` door —
+      // an on-prem runner already ran the fit) decode directly; text entries are
+      // ADAPTED here (fresh base copy → fit → diff) — the fit IDE/cloud deliberately
+      // don't run on their own. Both land in the SAME FedAvg batch.
       // Per-alarm fit cap — env-tunable (EVERMIND_MAX_FITS_PER_ALARM) so the DO's
       // per-alarm CPU envelope can be lowered without a code change.
       const maxFits = Math.max(1, Math.trunc(Number(this.env.EVERMIND_MAX_FITS_PER_ALARM)) || MAX_FITS_PER_ALARM);
@@ -952,7 +997,36 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const weights: number[] = [];
       let textFits = 0;
       for (const e of usable) {
-        if (e.text && isLM) {
+        if (e.diffB64) {
+          processedIds.push(e.id); // consumed whether or not it proves usable
+          // Validated ONE AT A TIME before it joins the batch: `mergeCheckpointDiffs`
+          // throws on a malformed diff, and a throw here would drop every entry this
+          // alarm already consumed — text fits included. A bad push costs only itself.
+          let delta: ArrayBuffer;
+          try {
+            delta = decodeDeltaB64(e.diffB64);
+          } catch (error) {
+            console.warn(`[evermind] dropped undecodable delta tenant=${tenantId} project=${projectId} id=${e.id}: ${String(error)}`);
+            continue;
+          }
+          const unusable = deltaUnusableReason(delta, basePkg.checkpoint);
+          if (unusable) {
+            console.warn(`[evermind] dropped unusable delta tenant=${tenantId} project=${projectId} id=${e.id}: ${unusable}`);
+            continue;
+          }
+          diffs.push(delta);
+          weights.push(e.weight);
+          // A pre-diffed delta has no text; its label (run/ticket provenance) takes the
+          // `prompt` slot text entries use, so the console renders it without a special
+          // case. `fitted` — its weights are in the batch, so it moved the neocortex.
+          mergedMeta.push({
+            id: e.id,
+            kind: 'delta',
+            weight: e.weight,
+            fitted: true,
+            ...(e.label ? { prompt: e.label.slice(0, RECENT_PROMPT_CHARS) } : {}),
+          });
+        } else if (e.text && isLM) {
           if (textFits >= maxFits) continue; // defer — leave queued for next alarm
           processedIds.push(e.id); // consumed even if it yields no trainable window
           // Teacher distillation: when a (budget-gated) frontier teacher is in effect,

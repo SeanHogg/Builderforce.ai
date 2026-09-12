@@ -726,6 +726,14 @@ export const executionMessages = pgTable('execution_messages', {
   text:        text('text').notNull(),
   consumedAt:  timestamp('consumed_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
+  /** Late-steer follow-up (migration 1152). A steer that lands after the run's last
+   *  turn starts a follow-up run: `sentBy` is who directed it, `lateClaimedAt` is the
+   *  one-shot idempotency claim, and the rest record what became of it. */
+  sentBy:              varchar('sent_by', { length: 128 }),
+  lateClaimedAt:       timestamp('late_claimed_at'),
+  lateOutcome:         varchar('late_outcome', { length: 32 }),
+  followUpExecutionId: integer('follow_up_execution_id').references(() => executions.id, { onDelete: 'set null' }),
+  lateDetail:          text('late_detail'),
 });
 
 

@@ -15,6 +15,7 @@ import { oauthAccounts, tenantMembers, users } from '../../infrastructure/databa
 import { ensureStarterWorkspace } from '../tenant/starterWorkspace';
 import type { Env } from '../../env';
 import type { SsoIdentity } from './enterpriseSso';
+import { TenantRole, isTenantRole } from '../../domain/shared/types';
 
 /**
  * `oauth_accounts.provider` for an SSO identity.
@@ -29,14 +30,11 @@ const SSO_PROVIDER = 'sso';
 const ssoAccountId = (connectionId: number, subject: string): string =>
   `${connectionId}|${subject}`.slice(0, 255);
 
-/** The four roles `tenant_role` declares. A connection's `defaultRole` is
- *  operator-typed, so it is validated against the enum rather than cast into it —
- *  an invalid value would otherwise fail at INSERT time, mid-login. */
-const TENANT_ROLES = ['owner', 'manager', 'developer', 'viewer'] as const;
-type TenantRoleValue = typeof TENANT_ROLES[number];
-
-const asTenantRole = (value: string): TenantRoleValue =>
-  (TENANT_ROLES as readonly string[]).includes(value) ? value as TenantRoleValue : 'developer';
+/** A connection's `defaultRole` is operator-typed, so it is validated against the
+ *  ONE role ladder (`domain/shared/types.ts`) rather than cast into the enum — an
+ *  invalid value would otherwise fail at INSERT time, mid-login. */
+const asTenantRole = (value: string): TenantRole =>
+  isTenantRole(value) ? value : TenantRole.DEVELOPER;
 
 export type SsoSignInResult =
   | { ok: true; userId: string }

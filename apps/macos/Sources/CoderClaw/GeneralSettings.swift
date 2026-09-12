@@ -177,7 +177,7 @@ struct GeneralSettings: View {
                                 .frame(width: 280)
                         }
                         LabeledContent("CLI path") {
-                            TextField("/Applications/CoderClaw.app/.../coderclaw", text: self.$state.remoteCliPath)
+                            TextField("~/.builderforce/bin/builderforce", text: self.$state.remoteCliPath)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 280)
                         }

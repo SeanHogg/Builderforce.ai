@@ -31,7 +31,8 @@ import type { Env } from '../../env';
 import { connections, tenants } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { tenantRoleOf, tenantRoleAtLeast, type TenantRole } from '../tenant/tenantRoles';
+import { tenantRoleOf, type TenantRole } from '../tenant/tenantRoles';
+import { hasMinRole } from '../../domain/shared/types';
 import { isPublisherState, publishes, type PublisherState } from './extensionContract';
 
 export class PublisherError extends Error {
@@ -165,7 +166,7 @@ export async function requirePublisherRole(
   const tenant = await loadTenant(db, tenantId);
   const role = await tenantRoleOf(db, tenantId, userId);
   if (!role) throw new PublisherError('you are not a member of this workspace', 403);
-  if (!tenantRoleAtLeast(role, minimum)) {
+  if (!hasMinRole(role, minimum)) {
     throw new PublisherError(`this action requires the ${minimum} role`, 403);
   }
   if (tenant.publisherSuspendedAt && minimum !== 'owner') {

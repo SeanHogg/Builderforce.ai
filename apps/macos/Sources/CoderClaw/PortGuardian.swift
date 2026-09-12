@@ -267,7 +267,7 @@ actor PortGuardian {
     {
         let expectedDesc: String
         let okPredicate: (Listener) -> Bool
-        let expectedCommands = ["node", "coderclaw", "tsx", "pnpm", "bun"]
+        let expectedCommands = ["node", "builderforce", "coderclaw", "tsx", "pnpm", "bun"]
 
         switch mode {
         case .remote:
@@ -361,10 +361,11 @@ actor PortGuardian {
             if port == GatewayEnvironment.gatewayPort() { return cmd.contains("ssh") }
             return false
         case .local:
-            // The gateway daemon may listen as `coderclaw` or as its runtime (`node`, `bun`, etc).
+            // The gateway daemon may listen as `builderforce` (or its pre-rebrand binary name)
+            // or as its runtime (`node`, `bun`, etc).
             if full.contains("gateway-daemon") { return true }
             // If args are unavailable, treat a CLI listener as expected.
-            if cmd.contains("coderclaw"), full == cmd { return true }
+            if cmd.contains("builderforce") || cmd.contains("coderclaw"), full == cmd { return true }
             return false
         case .unconfigured:
             return false

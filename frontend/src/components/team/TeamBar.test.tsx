@@ -83,3 +83,19 @@ describe('the canvas team strip overflow', () => {
     expect(screen.queryByRole('button', { name: /more seats/i })).toBeNull();
   });
 });
+
+describe('the canvas team strip on a board', () => {
+  /**
+   * Three agents on the board and nothing on the strip said which: the ring marks the
+   * seats with a card here, and they come first so none is buried in the overflow.
+   */
+  it('rings the seats that are on the board and draws them first', () => {
+    roster.members = ['CEO', 'CFO', 'CTO', 'CMO', 'CRO', 'HR', 'Security'].map(seat);
+    render(<TeamBar variant="bar" onBoard={[{ objectId: 'n1', ref: null, name: 'Security', seat: null }]} />);
+
+    const security = screen.getByRole('button', { name: /Security agent .* is on this board/i });
+    expect(security.getAttribute('data-on-board')).toBe('true');
+    expect(screen.getAllByRole('button')[0]).toBe(security);
+    expect(screen.getByRole('button', { name: /Add CEO agent/i }).getAttribute('data-on-board')).toBe('false');
+  });
+});

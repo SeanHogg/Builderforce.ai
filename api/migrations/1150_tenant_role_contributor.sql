@@ -1,0 +1,21 @@
+-- 1150 — `contributor`: the workspace seat a canvas share grants.
+--
+-- Operator decision 2026-09-12. A canvas invite (addressed email or forwardable
+-- link) that grants EDIT on a board used to seat the invitee as a workspace
+-- `developer`, because the tenant role was the only lever and `viewer` looked
+-- read-only. But the canvas write paths gate on the BOARD role
+-- (`creation_session_members.role`, see `application/creation/sessionAccess.ts`),
+-- so the developer tier bought the canvas nothing and handed the invitee write
+-- access to every task, project, workflow and agent run in the workspace.
+--
+-- `contributor` ranks between `viewer` and `developer` (the ladder is
+-- `ROLE_ORDER` in `domain/shared/types.ts`; the enum's declaration order is not
+-- authority order). It reads the workspace like a viewer and writes only the
+-- canvases it is a member of.
+--
+-- `ADD VALUE IF NOT EXISTS` is idempotent. PostgreSQL 12+ permits it inside the
+-- runner's per-file transaction as long as nothing in the SAME transaction uses
+-- the new value — which is why the re-grade of existing collaborators is its own
+-- migration (1151), applied in the next transaction.
+
+ALTER TYPE tenant_role ADD VALUE IF NOT EXISTS 'contributor' BEFORE 'viewer';

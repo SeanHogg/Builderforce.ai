@@ -78,7 +78,7 @@ import Testing
 
         let cmd = CommandResolver.coderclawCommand(subcommand: "rpc", defaults: defaults, configRoot: [:])
 
-        #expect(cmd.prefix(4).elementsEqual([pnpmPath.path, "--silent", "coderclaw", "rpc"]))
+        #expect(cmd.prefix(4).elementsEqual([pnpmPath.path, "--silent", "builderforce", "rpc"]))
     }
 
     @Test func pnpmKeepsExtraArgsAfterSubcommand() async throws {
@@ -97,7 +97,7 @@ import Testing
             defaults: defaults,
             configRoot: [:])
 
-        #expect(cmd.prefix(5).elementsEqual([pnpmPath.path, "--silent", "coderclaw", "health", "--json"]))
+        #expect(cmd.prefix(5).elementsEqual([pnpmPath.path, "--silent", "builderforce", "health", "--json"]))
         #expect(cmd.suffix(2).elementsEqual(["--timeout", "5"]))
     }
 
@@ -133,7 +133,7 @@ import Testing
         if let script = cmd.last {
             #expect(script.contains("PRJ='/srv/coderclaw'"))
             #expect(script.contains("cd \"$PRJ\""))
-            #expect(script.contains("coderclaw"))
+            #expect(script.contains("command -v builderforce"))
             #expect(script.contains("status"))
             #expect(script.contains("--json"))
             #expect(script.contains("CLI="))
