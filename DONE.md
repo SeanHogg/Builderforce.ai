@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-09-12 — Chat diagnostics flag the same call repeated BACK-TO-BACK
+
+A run that called `git_status {}` three times running — each time answered with the same
+"not a git repository … re-run with `repo`" error — read as `Likely CONTEXT EXHAUSTION` because the
+revisit-ratio loop detector needs ≥6 targeted calls and the exact-duplicate counter only reports a
+number. The tightest loop there is (same call, same answer, same call again with nothing tried in
+between) had no signal of its own.
+
+- **`computeRunProgress` now tracks consecutive identical calls** (`brain-embedded/src/runProgress.ts`):
+  `longestStreak` (`{ label, count, failed }`), `streaks` (how many runs of ≥2), and `stuckOnCall`
+  (a streak of `BACK_TO_BACK_AT` = 3 or more). A streak folds into `spinning` with NO minimum run
+  size, so it reaches the `no-progress` verdict and outranks context/model verdicts.
+- **Reported on the Progress line** (`` `git_status` ×3 BACK-TO-BACK (all 3 failed)``) and **leads the
+  "Likely cause" verdict**, with a remedy that differs by outcome: a streak of FAILURES means the model
+  ignored the error it was given (check the result reached it un-truncated and the repeated-failure
+  advisory fired; if so, switch models); a streak of SUCCESSES means it is not retaining the answer
+  (shrink/page that result, not the transcript).
+- **One fingerprint.** `callSignature` now uses `stableStringify`, the same key `readCoverage.ts` and
+  `repeatedFailure.ts` use in the live loop, so the report and the in-run advisories agree on what
+  "identical" means (argument key order no longer splits a duplicate).
+- Tests: `runProgress.test.ts` "back-to-back repeats" (streak counting, single retry is not a stall,
+  key order, multiple streaks, report line, verdict text, outranks context exhaustion).
+
 ## ✅ RESOLVED 2026-09-12 — The release workflow publishes `@seanhogg/builderforce-agents` (operator go-ahead)
 
 Every CLI installer (`install.sh` / `install.ps1` / `install-cli.sh`, the macOS app) installs

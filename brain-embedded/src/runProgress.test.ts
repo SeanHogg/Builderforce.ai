@@ -149,6 +149,112 @@ describe('computeRunProgress', () => {
   });
 });
 
+/**
+ * The shape the 2026-09-12 capture had: `git_status {}` answered "not a git
+ * repository … re-run with `repo`" three times running, and the model made the
+ * same bare call each time. Only 4 targeted calls, so the revisit-ratio loop
+ * detector stays silent — the streak is the whole signal.
+ */
+function backToBackRun(): { events: BrainTraceEvent[]; messages: BrainMessage[] } {
+  clock = 0;
+  const notARepo = { ok: false, error: 'not a git repository at the workspace root — re-run with `repo` set' };
+  const events: BrainTraceEvent[] = [];
+  for (let i = 0; i < 3; i += 1) events.push(llm(), tool('git_status', {}, { result: notARepo, isError: true }));
+  events.push(llm(), tool('list_files', { path: '' }));
+  return { events, messages: [msg('user', 'Review the open tickets and merge the applicable ones to main.')] };
+}
+
+describe('back-to-back repeats', () => {
+  it('records the longest streak of consecutive identical calls, with its failures', () => {
+    const { events, messages } = backToBackRun();
+    const p = computeRunProgress(events, messages);
+    expect(p.longestStreak).toEqual({ label: 'git_status', count: 3, failed: 3 });
+    expect(p.streaks).toBe(1);
+    expect(p.stuckOnCall).toBe(true);
+    // The streak alone makes it a loop — there are too few calls for the ratio to.
+    expect(p.targetedCalls).toBeLessThan(6);
+    expect(p.spinning).toBe(true);
+  });
+
+  it('treats a single immediate retry as a retry, not a stall', () => {
+    clock = 0;
+    const events = [
+      llm(), tool('git_status', {}, { result: { ok: false, error: 'flake' }, isError: true }),
+      llm(), tool('git_status', {}),
+      llm(), tool('read_file', { path: 'a.ts' }),
+    ];
+    const p = computeRunProgress(events, [msg('user', 'fix it')]);
+    expect(p.longestStreak).toEqual({ label: 'git_status', count: 2, failed: 1 });
+    expect(p.stuckOnCall).toBe(false);
+    expect(p.spinning).toBe(false);
+  });
+
+  it('is not fooled by argument key order, and closes the streak on a different call', () => {
+    clock = 0;
+    const events = [
+      llm(), tool('search_code', { query: 'x', path: 'src' }),
+      llm(), tool('search_code', { path: 'src', query: 'x' }),
+      llm(), tool('read_file', { path: 'a.ts' }),
+      llm(), tool('search_code', { query: 'x', path: 'src' }),
+    ];
+    const p = computeRunProgress(events, []);
+    // Same call twice in a row (keys reordered), then broken by the read: one
+    // streak of 2, and the later repeat is a duplicate but not a streak.
+    expect(p.longestStreak).toEqual({ label: 'search_code', count: 2, failed: 0 });
+    expect(p.streaks).toBe(1);
+    expect(p.duplicateCalls).toBe(2);
+  });
+
+  it('counts every streak, and keeps the longest', () => {
+    clock = 0;
+    const events = [
+      llm(), tool('a', {}), llm(), tool('a', {}),
+      llm(), tool('b', {}),
+      llm(), tool('c', {}), llm(), tool('c', {}), llm(), tool('c', {}), llm(), tool('c', {}),
+    ];
+    const p = computeRunProgress(events, []);
+    expect(p.streaks).toBe(2);
+    expect(p.longestStreak).toEqual({ label: 'c', count: 4, failed: 0 });
+  });
+
+  it('is null for a run that never repeated a call immediately', () => {
+    const { events, messages } = spinningRun();
+    // Seven reads of one file at DIFFERENT offsets are not identical calls.
+    const p = computeRunProgress(events, messages);
+    expect(p.longestStreak).toEqual({ label: 'search_code', count: 2, failed: 0 });
+    clock = 0;
+    const fresh = [llm(), tool('read_file', { path: 'a' }), llm(), tool('read_file', { path: 'b' })];
+    expect(computeRunProgress(fresh, []).longestStreak).toBeNull();
+  });
+
+  it('names the streak on the Progress line', () => {
+    const { events, messages } = backToBackRun();
+    const line = formatRunProgress(computeRunProgress(events, messages))[0]!;
+    expect(line).toContain('`git_status` ×3 BACK-TO-BACK (all 3 failed)');
+  });
+
+  it('leads the verdict with the streak and blames the ignored error, not context', () => {
+    const { events, messages } = backToBackRun();
+    const verdict = runProgressVerdict(computeRunProgress(events, messages))!;
+    expect(verdict).toMatch(/^NO PROGRESS — it made the same call 3 times in a row/);
+    expect(verdict).toContain('`git_status` ×3 BACK-TO-BACK (all 3 failed)');
+    expect(verdict).toMatch(/ignoring the error it was given/);
+    expect(verdict).not.toMatch(/Widen the read/);
+  });
+
+  it('outranks context exhaustion in the full diagnostics', () => {
+    const { events, messages } = backToBackRun();
+    const withPressure = events.map((e) =>
+      e.category === 'llm' ? { ...e, usage: { prompt: 46_228, completion: 160 } } : { ...e, truncated: true, resultBytes: 19_000 },
+    );
+    const d = computeBrainDiagnostics(withPressure, undefined, messages);
+    expect(d.likelyCause).toBe('no-progress');
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain('BACK-TO-BACK');
+    expect(report).not.toContain('Likely CONTEXT EXHAUSTION');
+  });
+});
+
 describe('runProgressVerdict', () => {
   it('names the loop and steers AWAY from the context/model remedies', () => {
     const { events, messages } = spinningRun();

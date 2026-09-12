@@ -352,8 +352,17 @@ export function runProgressVerdict(p: RunProgress): string | null {
   if (!p.spinning && !p.noEffect) return null;
 
   const worst = p.repeatedTargets[0];
+  // A back-to-back streak is named FIRST: it is the tightest loop there is — the
+  // same call, the same answer, and another identical call with nothing tried in
+  // between — and it stands on its own even when the revisit ratio is low.
+  const streak = p.stuckOnCall && p.longestStreak
+    ? `it made the same call ${p.longestStreak.count} times in a row — ${formatStreak(p.longestStreak)} — with nothing else attempted between them${p.longestStreak.failed === p.longestStreak.count ? ', re-asking a question it had already been answered the same way each time' : ''}`
+    : null;
+  const revisit = p.repeatedTargets.length
+    ? `${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` ×${worst.count}` : ''}`
+    : null;
   const loop = p.spinning
-    ? `NO PROGRESS — the run kept going back over ground it had already covered: ${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` ×${worst.count}` : ''}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ''}. `
+    ? `NO PROGRESS — ${streak ? `${streak}${revisit ? `; ${revisit}` : ''}` : `the run kept going back over ground it had already covered: ${revisit}`}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ''}. `
     : 'NO EFFECT — ';
   const effect = p.noEffect
     ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : ' — it never attempted one'}, so nothing was actually modified. `
@@ -362,7 +371,13 @@ export function runProgressVerdict(p: RunProgress): string | null {
   // one has to outrank them: shrinking context or swapping models does nothing to
   // a run that is re-reading the same file.
   const remedy = p.spinning
-    ? 'This is a LOOP, not context pressure and not a model that "won\'t call tools" — the numbers on those signals are a consequence of the re-reading, not its cause. Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.'
+    ? `This is a LOOP, not context pressure and not a model that "won't call tools" — the numbers on those signals are a consequence of the repetition, not its cause. ${
+      streak && p.longestStreak && p.longestStreak.failed > 0
+        ? 'A call repeated back-to-back after FAILING is the model ignoring the error it was given: the failure text usually names the exact change to make (a `repo`, a path, a missing argument). Check that the tool result reached the model un-truncated, and that the repeated-failure advisory fired; if it did and the model still repeated the call, the model is not reading tool results — switch models for this run.'
+        : streak
+          ? 'A call repeated back-to-back after SUCCEEDING is the model not retaining the answer it already has: the result was truncated, or too large to keep in the transcript. Check the truncated-results count above, and shrink or page that result rather than the transcript.'
+          : 'Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.'
+    }`
     : 'Check the "Answered from memory" line first — a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
 
   return `${loop}${effect}${remedy}`;

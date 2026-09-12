@@ -198,8 +198,8 @@ export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, BrainD
 // separate "every turn succeeded and nothing got done" from a real context or model
 // failure. Folded into the diagnostics verdict; exported for surfaces that show them
 // on their own.
-export { computeRunProgress, formatRunProgress, runProgressVerdict, hasEditIntent, isMutationTool, progressDuration } from './runProgress';
-export type { RunProgress, RepeatedTarget } from './runProgress';
+export { computeRunProgress, formatRunProgress, runProgressVerdict, hasEditIntent, isMutationTool, progressDuration, BACK_TO_BACK_AT } from './runProgress';
+export type { RunProgress, RepeatedTarget, RepeatStreak } from './runProgress';
 
 // Live, in-flight activity — what the run is doing RIGHT NOW, so a surface can animate
 // the CURRENT step instead of only rendering settled ones.
