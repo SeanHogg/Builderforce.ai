@@ -41,15 +41,16 @@ export default defineConfig({
     passWithNoTests: true,
     // The default worker count is the runner's CPU count (4 on the release job's
     // `ubuntu-latest`). Each worker independently re-imports this suite's aliased
-    // source packages, and that set keeps growing (brain-ui, studio, transformers,
-    // onnxruntime-web, mermaid, xlsx, and now creation-canvas-contract +
-    // canvas-widget-protocol) — 2 concurrent workers already pushed a single one
-    // past its `NODE_OPTIONS=--max-old-space-size=6144` ceiling mid-run. Rather
-    // than keep chasing that ceiling up as the alias set grows, run one worker at
-    // a time: it is the only setting that scales with the IMPORT graph instead of
-    // the runner's core count, and the release job's own heap ceiling below scales
-    // with it (one worker may use what two used to split). (`poolOptions.forks.maxForks`
+    // source packages (brain-ui, studio, transformers, onnxruntime-web, mermaid,
+    // xlsx, creation-canvas-contract, canvas-widget-protocol, …), so more than a
+    // couple of concurrent workers can overcommit the runner. Capping at 2 keeps
+    // the worst case bounded WITHOUT masking the actual OOM: `harness/scenarios.test.ts`
+    // grows heap unboundedly on its own (confirmed 2026-09-12 — it is the one file
+    // that never finishes, at 1 worker or 2, at a 6 GiB or 10 GiB ceiling; see the
+    // Consolidated Gap Register). Serializing to 1 worker was tried and only bought
+    // that one file more rope before hitting the same wall, at roughly double the
+    // wall-clock — real fix is in that file, not here. (`poolOptions.forks.maxForks`
     // was vitest 3; vitest 4 moved this to a top-level option.)
-    maxWorkers: 1,
+    maxWorkers: 2,
   },
 });

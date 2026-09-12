@@ -59,7 +59,7 @@ describe('statusOf', () => {
 describe('errorResponseBody', () => {
   it('renders a 4xx with its message, issues, details and code', () => {
     const validation = errorResponseBody(new RequestValidationError([{ path: 'id', message: 'bad' }], 'Invalid'));
-    expect(validation).toEqual({ status: 400, body: { error: 'Invalid', issues: [{ path: 'id', message: 'bad' }] } });
+    expect(validation).toEqual({ status: 400, body: { error: 'Invalid', code: 'invalid_request', issues: [{ path: 'id', message: 'bad' }] } });
     const carried = errorResponseBody(new PublisherLikeError('nope', 409, { field: 'slug' }, 'slug_taken'));
     expect(carried).toEqual({ status: 409, body: { error: 'nope', details: { field: 'slug' }, code: 'slug_taken' } });
   });
@@ -119,7 +119,7 @@ describe('errorHandler + failResponse', () => {
     expect(await conflict.json()).toEqual({ error: 'taken' });
     const invalid = await a.request('/throw-400');
     expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toEqual({ error: 'Invalid request body', issues: [{ path: 'name', message: 'Required' }] });
+    expect(await invalid.json()).toEqual({ error: 'Invalid request body', code: 'invalid_request', issues: [{ path: 'name', message: 'Required' }] });
     expect(sink).not.toHaveBeenCalled();
   });
 

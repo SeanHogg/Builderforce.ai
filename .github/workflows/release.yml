@@ -133,19 +133,23 @@ jobs:
       - name: Build and package the VSIX
         working-directory: clients/vscode
         env:
-          # vitest's default fork inherits Node's default old-space ceiling, which
-          # this suite's many source-package aliases (brain-ui, studio, transformers,
-          # onnxruntime-web, mermaid, xlsx, creation-canvas-contract, …) run past
-          # mid-run — it OOM'd after 30/31 files with "Ineffective mark-compacts
-          # near heap limit" first around 4 GiB, then again at 6 GiB once the alias
-          # set grew further. Same fix as the API job above: raise the ceiling to
-          # what the runner can spare — `vitest.config.ts`'s `maxWorkers: 1` means
-          # this ceiling is no longer split across concurrent workers, so it can
-          # take most of what a single worker needs instead of chasing the alias
-          # set up one crash at a time. A forked child process inherits
-          # NODE_OPTIONS from its own env at spawn, unlike a worker thread, so
-          # setting it here reaches vitest's worker too.
-          NODE_OPTIONS: --max-old-space-size=10240
+          # vitest's default fork inherits Node's default old-space ceiling. The
+          # suite OOM'd after 30/31 files with "Ineffective mark-compacts near heap
+          # limit" at 4 GiB, then again at 6 GiB — NOT the many source-package
+          # aliases (brain-ui, studio, transformers, onnxruntime-web, mermaid,
+          # xlsx, …), which was the original theory here, but `harness/scenarios.test.ts`
+          # growing heap without bound on its own (confirmed 2026-09-12 — it is the
+          # one file that never finishes, at 6 GiB or 10 GiB, at 1 worker or 2; see
+          # the Consolidated Gap Register). Raising this ceiling only buys that file
+          # more rope before the same crash, so it stays at the API job's proven-safe
+          # value rather than chasing it up: `vitest.config.ts`'s `maxWorkers: 2`
+          # means 2 concurrent forks can each reserve this much, and this runner has
+          # historically been sized for 16 GiB (2 × 6 GiB leaves headroom; 2 × 10 GiB
+          # would not — see the removed-then-restored `maxWorkers: 1` experiment in
+          # git history for why serializing was tried and reverted). A forked child
+          # process inherits NODE_OPTIONS from its own env at spawn, unlike a worker
+          # thread, so setting it here reaches vitest's workers too.
+          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile || pnpm install
           npm run type-check

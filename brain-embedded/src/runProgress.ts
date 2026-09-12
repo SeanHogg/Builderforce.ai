@@ -33,6 +33,7 @@ import { asksForChange } from '@builderforce/agent-stall';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { activityTarget } from './runActivity';
+import { stableStringify } from './stableStringify';
 import type { BrainMessage } from './types';
 
 /** One target the run went back to more than once. */
@@ -41,6 +42,30 @@ export interface RepeatedTarget {
   label: string;
   count: number;
 }
+
+/**
+ * The same call made again IMMEDIATELY — back to back, with no other tool call in
+ * between. The exact-duplicate counter above catches a call repeated anywhere in
+ * the run; this catches the tighter and more damning shape: `git_status` → same
+ * error → `git_status` → same error → `git_status`. Nothing was learned between
+ * the attempts because nothing else was tried.
+ */
+export interface RepeatStreak {
+  /** The tool name, e.g. `git_status`. */
+  label: string;
+  /** Consecutive identical calls, including the first. */
+  count: number;
+  /** How many of those calls failed — a streak of failures is a stall on a known
+   *  error; a streak of successes is a stall on an answer it already has. */
+  failed: number;
+}
+
+/**
+ * Consecutive identical calls at which the streak becomes a verdict on its own.
+ * Two in a row is a retry; three is the model asking the same question a third time
+ * after hearing the same answer twice, whatever the rest of the run looks like.
+ */
+export const BACK_TO_BACK_AT = 3;
 
 /** Tools that MUTATE something — the run's "did it have an effect" evidence.
  *  Covers the IDE workspace writers (`isCodeChangeTool`) plus the gateway's
@@ -67,11 +92,16 @@ export function hasEditIntent(messages: BrainMessage[]): boolean {
   return messages.some((m) => m.role === 'user' && asksForChange(m.content));
 }
 
-/** The structural signature of a call — what makes two calls "the same call". */
+/**
+ * The structural signature of a call — what makes two calls "the same call". Same
+ * fingerprint the live loop-breakers use (`readCoverage.ts`, `repeatedFailure.ts`):
+ * same tool, same arguments in any key order — so the report and the in-run
+ * advisories always agree on what "identical" means.
+ */
 function callSignature(ev: BrainTraceEvent): string {
   let args = '';
   try {
-    args = JSON.stringify(ev.args ?? null);
+    args = stableStringify(ev.args ?? null);
   } catch {
     args = String(ev.args ?? '');
   }
@@ -94,6 +124,19 @@ function targetSignature(ev: BrainTraceEvent): string | null {
 export interface RunProgress {
   /** Tool calls whose label AND arguments exactly repeated an earlier call. */
   duplicateCalls: number;
+  /**
+   * The longest run of CONSECUTIVE identical calls, or null when no call was ever
+   * repeated back to back. See {@link RepeatStreak}.
+   */
+  longestStreak: RepeatStreak | null;
+  /** How many distinct back-to-back streaks (two or more in a row) the run had. */
+  streaks: number;
+  /**
+   * True when some call was repeated {@link BACK_TO_BACK_AT} or more times in a
+   * row. Unlike `spinning` this needs no minimum run size — three identical calls
+   * in a row is a stall in a 3-call run as surely as in a 300-call one.
+   */
+  stuckOnCall: boolean;
   /** Targets hit more than once, most-repeated first. */
   repeatedTargets: RepeatedTarget[];
   /** Distinct targets the run touched (calls with no discernible target excluded). */
@@ -142,10 +185,26 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
   let mutationsAttempted = 0;
   let mutationsSucceeded = 0;
 
+  // Back-to-back repeats: the current streak of identical calls, and the longest
+  // one seen. A streak closes the moment a DIFFERENT call is made.
+  let streaks = 0;
+  let longestStreak: RepeatStreak | null = null;
+  let current: { sig: string; streak: RepeatStreak } | null = null;
+
   for (const ev of tools) {
     const sig = callSignature(ev);
     if (seenCalls.has(sig)) duplicateCalls += 1;
     else seenCalls.add(sig);
+
+    const failed = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    if (current && current.sig === sig) {
+      current.streak.count += 1;
+      if (failed) current.streak.failed += 1;
+      if (current.streak.count === 2) streaks += 1;
+      if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
+    } else {
+      current = { sig, streak: { label: ev.label, count: 1, failed: failed ? 1 : 0 } };
+    }
 
     const target = targetSignature(ev);
     if (target) {
@@ -195,10 +254,15 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
   // Enough calls to have a shape, and most of them retreading. 6 is the smallest
   // run where "went back over old ground four times" is a pattern and not a
   // coincidence; 0.4 means revisits outnumber every second call.
-  const spinning = targetedCalls >= 6 && revisitRatio >= 0.4;
+  // A back-to-back streak needs no such floor: it IS the pattern, at any run size.
+  const stuckOnCall = longestStreak !== null && longestStreak.count >= BACK_TO_BACK_AT;
+  const spinning = (targetedCalls >= 6 && revisitRatio >= 0.4) || stuckOnCall;
 
   return {
     duplicateCalls,
+    longestStreak,
+    streaks,
+    stuckOnCall,
     repeatedTargets,
     distinctTargets,
     targetedCalls,
@@ -228,6 +292,12 @@ export function progressDuration(ms: number): string {
 /** How many repeated targets to name before summarizing the tail. */
 const MAX_NAMED_TARGETS = 4;
 
+/** `git_status ×3 BACK-TO-BACK (all 3 failed)` — one phrasing for the report line and the verdict. */
+function formatStreak(s: RepeatStreak): string {
+  const outcome = s.failed === 0 ? '' : s.failed === s.count ? ` (all ${s.count} failed)` : ` (${s.failed} of ${s.count} failed)`;
+  return `\`${s.label}\` ×${s.count} BACK-TO-BACK${outcome}`;
+}
+
 /**
  * Render the progress picture as report lines. Emitted only when there is
  * something to say — a run that advanced cleanly adds a single "Progress:" line
@@ -241,7 +311,8 @@ export function formatRunProgress(p: RunProgress): string[] {
     : 'no targeted calls';
   lines.push(
     `Progress: ${reach}${p.repeatedTargets.length ? ` · ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : ' · no repeats'}`
-    + `${p.duplicateCalls ? ` · ${p.duplicateCalls} EXACT duplicate call(s)` : ''}`,
+    + `${p.duplicateCalls ? ` · ${p.duplicateCalls} EXACT duplicate call(s)` : ''}`
+    + `${p.longestStreak ? ` · ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ''}` : ''}`,
   );
 
   if (p.repeatedTargets.length) {
