@@ -134,7 +134,7 @@ export function TicketObjectiveLinkPicker({ taskId, projectId, onLinked }: Ticke
     <div style={{ ...contextCard, gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={contextLabel}>{t('objective')}</span>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 200px', minWidth: 0 }}>{t('noObjective')}</span>
+        <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', flex: '1 1 200px', minWidth: 0 }}>{t('noObjective')}</span>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <Select
@@ -142,7 +142,7 @@ export function TicketObjectiveLinkPicker({ taskId, projectId, onLinked }: Ticke
           onChange={(e) => setChoice(e.target.value)}
           disabled={selectDisabled}
           aria-label={t('linkObjectiveLabel')}
-          style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12 }}
+          style={{ flex: '1 1 200px', minWidth: 0, fontSize: 'var(--font-size-small)' }}
         >
           <option value="">{list.status === 'loading' ? t('loadingObjectives') : t('chooseObjective')}</option>
           {optionRows}
@@ -153,7 +153,7 @@ export function TicketObjectiveLinkPicker({ taskId, projectId, onLinked }: Ticke
             onClick={link}
             disabled={linkDisabled}
             style={{
-              padding: '6px 12px', borderRadius: 'var(--radius-md)', border: 'none', fontSize: 12, fontWeight: 700,
+              padding: '6px 12px', borderRadius: 'var(--radius-md)', border: 'none', fontSize: 'var(--font-size-small)', fontWeight: 700,
               background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
               cursor: linkDisabled ? 'default' : 'pointer',
               opacity: linkDisabled ? 0.6 : 1,
@@ -163,14 +163,14 @@ export function TicketObjectiveLinkPicker({ taskId, projectId, onLinked }: Ticke
           </button>
         </RoleGate>
       </div>
-      {empty && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noObjectivesYet')}</span>}
+      {empty && <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('noObjectivesYet')}</span>}
       {list.status === 'failed' && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span role="alert" title={list.detail ?? undefined}style={{ fontSize: 11, color: 'var(--danger-text)' }}>{t('loadObjectivesFailed')}</span>
-          <button type="button" onClick={retry} style={{ ...contextLinkButton, fontSize: 11 }}>{t('retryLoadObjectives')}</button>
+          <span role="alert" title={list.detail ?? undefined} style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--danger-text)' }}>{t('loadObjectivesFailed')}</span>
+          <button type="button" onClick={retry} style={{ ...contextLinkButton, fontSize: 'var(--font-size-eyebrow)' }}>{t('retryLoadObjectives')}</button>
         </div>
       )}
-      {error && <span role="alert" style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</span>}
+      {error && <span role="alert" style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--danger-text)' }}>{error}</span>}
     </div>
   );
 }

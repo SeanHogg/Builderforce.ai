@@ -16,6 +16,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
+import { formatElapsedBetween } from '@/lib/duration';
 type DrawerTab = 'profile' | 'permissions' | 'sessions' | 'security' | 'access';
 
 interface Props {
@@ -422,16 +423,13 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                       </thead>
                       <tbody>
                         {adminAccess.map((s) => {
-                          const dur = s.endedAt
-                            ? Math.floor((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 1000)
-                            : null;
                           return (
                             <tr key={s.id}>
                               <td>{s.adminUserId.slice(0, 8)}…</td>
                               <td>{s.tenantName}</td>
                               <td>{s.roleOverride}</td>
                               <td>{fmtDateTime(fmt, s.startedAt)}</td>
-                              <td>{dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : t('users.drawer.durationActive')}</td>
+                              <td>{formatElapsedBetween(s.startedAt, s.endedAt) ?? t('users.drawer.durationActive')}</td>
                             </tr>
                           );
                         })}

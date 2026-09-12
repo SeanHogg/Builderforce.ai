@@ -159,6 +159,7 @@ export function WorkspaceCanvas({
     (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
     [setNodes],
   );
+  const panelsContext = useMemo(() => ({ panels, onRemovePanel }), [panels, onRemovePanel]);
 
   // A phone has no room to pan a board, so it gets the PAGE rendering — the same
   // one `/dashboard` uses (`WorkspacePanelList`). It used to be a private copy of
@@ -170,7 +171,7 @@ export function WorkspaceCanvas({
 
   return (
     <div ref={boardRef} className={`${styles.canvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas" data-layout="spatial">
-      <WorkspacePanelsContext.Provider value={{ panels, onRemovePanel }}>
+      <WorkspacePanelsContext.Provider value={panelsContext}>
         <ReactFlowProvider>
           <Canvas3DControlsProvider>
           <ReactFlow

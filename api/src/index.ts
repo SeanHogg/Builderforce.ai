@@ -321,7 +321,7 @@ import { createEmpMetricsRoutes } from './presentation/routes/empMetricsRoutes';
 import { createForecastRoutes } from './presentation/routes/forecastRoutes';
 
 // Middleware
-import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS, resolveAllowedOrigin, reportRefusedOrigin } from './presentation/middleware/cors';
+import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS, ALLOWED_METHODS, resolveAllowedOrigin, reportRefusedOrigin } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
 import { cachedApp } from './presentation/appCache';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
@@ -1369,7 +1369,7 @@ export default {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': allow,
-          'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+          'Access-Control-Allow-Methods': ALLOWED_METHODS,
           // SDK-emitted custom headers must be in this list or the browser
           // will block the preflight: `Idempotency-Key` (cron retries),
           // `X-Emulation-Token` (admin emulation flow), `X-AgentHost-Signature`

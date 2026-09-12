@@ -44,6 +44,9 @@ export const EXPOSED_HEADERS = [
 export const ALLOWED_REQUEST_HEADERS =
   'Content-Type,Authorization,Idempotency-Key,If-Match,X-Emulation-Token,X-AgentHost-Signature,X-Builderforce-Locale';
 
+/** Methods the preflight admits — shared with index.ts's OPTIONS short-circuit. */
+export const ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
+
 /**
  * VS Code (and other editor) webviews load from an opaque, per-session origin
  * (`vscode-webview://<uuid>` / `vscode-file://`) that can't be enumerated in an
@@ -182,7 +185,7 @@ export const corsMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
     }
     return c.newResponse(null, 204, {
       'Access-Control-Allow-Origin': allowOriginValue!,
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+      'Access-Control-Allow-Methods': ALLOWED_METHODS,
       'Access-Control-Allow-Headers': ALLOWED_REQUEST_HEADERS,
       'Access-Control-Expose-Headers': EXPOSED_HEADERS,
       'Access-Control-Max-Age': '86400',

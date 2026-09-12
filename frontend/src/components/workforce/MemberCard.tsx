@@ -13,7 +13,7 @@ import { useWorkforceMetrics } from './WorkforceMetricsContext';
 import PersonalitySummary from '@/components/PersonalitySummary';
 
 const roleBadgeStyle: CSSProperties = {
-  fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
+  fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
   background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', letterSpacing: 0.3,
 };
 
@@ -54,7 +54,7 @@ export function RoleSelect({
           aria-label={t('roleSelect')}
           title={description || undefined}
           style={{
-            padding: compact ? '4px 8px' : '6px 10px', fontSize: 12,
+            padding: compact ? '4px 8px' : '6px 10px', fontSize: 'var(--font-size-small)',
             background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', cursor: busy ? 'not-allowed' : 'pointer',
             opacity: busy ? 0.6 : 1,
@@ -66,7 +66,7 @@ export function RoleSelect({
         </Select>
       </RoleGate>
       {!compact && description && (
-        <span data-testid="role-description" style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--text-muted)' }}>
+        <span data-testid="role-description" style={{ fontSize: 'var(--font-size-eyebrow)', lineHeight: 1.4, color: 'var(--text-muted)' }}>
           {description}
         </span>
       )}
@@ -82,13 +82,13 @@ export function RoleSelect({
  */
 
 const mfaBadgeStyle: CSSProperties = {
-  fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
-  background: 'rgba(34,197,94,0.15)', color: 'var(--success-text)', letterSpacing: 0.3,
+  fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
+  background: 'var(--success-bg)', color: 'var(--success-text)', letterSpacing: 0.3,
 };
 
 // Coral-outline destructive action, matching the old MembersView Remove button.
 const dangerBtnStyle = (busy: boolean): CSSProperties => ({
-  padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)',
+  padding: '6px 12px', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--coral-bright)',
   background: 'transparent', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)',
   cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
 });
@@ -131,7 +131,7 @@ export function MemberCard({
           <MemberStatsStrip scorecard={scorecard} engagement={engagement} />
           {/* This person's personality — self-hides when they haven't taken the test. */}
           <PersonalitySummary profile={member.psychometric ?? undefined} />
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>
             {t('activeSessions', { count: member.activeSessions })}
           </div>
         </div>
@@ -166,7 +166,7 @@ export function PendingInviteCard({
       subtitle={t('invitedAs', { role: roleText.label(invite.role) })}
       pill={{ kind: 'pending' }}
       body={
-        <div style={{ fontSize: 12, color: 'var(--muted)', flex: 1 }}>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', flex: 1 }}>
           {t('joinsOnSignup')}
         </div>
       }

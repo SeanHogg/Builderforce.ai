@@ -19,7 +19,7 @@ export const contextCard: CSSProperties = {
 };
 
 export const contextLabel: CSSProperties = {
-  fontSize: 10,
+  fontSize: 'var(--font-size-field-label)',
   fontWeight: 700,
   letterSpacing: 0.6,
   textTransform: 'uppercase',

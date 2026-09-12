@@ -1,3 +1,30 @@
+## ✅ RESOLVED 2026-09-12 — Codebase review 2026-09-05 residuals: four duplicates closed
+
+### Session durations — ONE `formatElapsedBetween`
+- `lib/duration.ts` gained `formatElapsedBetween(startedAt, endedAt)` — `null` while the span
+  is open, otherwise `formatDuration` of the gap. `ImpersonationSessionsPanel`,
+  `AccountSecurityPanel` and `UserDetailDrawer` each hand-rolled the date math and printed
+  `"${m}m ${s}s"` (so an hour read as "60m 0s"); all three now read the shared helper and
+  fall back to their own "Active" key. Tested in `lib/duration.test.ts`.
+
+### The byte-identical private `Field` pair → `ui/Field` `LabelField`
+- `reliability/MonitoringSections.tsx` and `app/incidents/IncidentsPageClient.tsx` each
+  declared the same wrapping-label `Field` with inline styles. `ui/Field.tsx` now exports
+  `LabelField` (a label wrapping its control, on the canonical `.ui-field` /
+  `.ui-field__label` tokens), and both files use it (18 + 33 sites); the private copies
+  are deleted.
+
+### Provider values no longer rebuilt every render
+- `EmulationLauncher` (`{ startEmulation }`) and `WorkspaceCanvas` (`{ panels, onRemovePanel }`)
+  passed a fresh object literal to their context Provider, re-rendering every consumer on
+  each parent render; both are `useMemo`'d (the canvas one above its mobile early return).
+
+### CORS method list — one constant
+- `ALLOWED_METHODS` exported from `presentation/middleware/cors.ts` beside
+  `ALLOWED_REQUEST_HEADERS`/`EXPOSED_HEADERS`; the middleware's preflight and `index.ts`'s
+  OPTIONS short-circuit both read it, so the two preflight paths cannot advertise different
+  methods.
+
 ## ✅ RESOLVED 2026-09-10 — Roadmap sweep, second pass: four entries closed, three bugs found and fixed on the way
 
 ### A ticket can be linked to an objective from the ticket

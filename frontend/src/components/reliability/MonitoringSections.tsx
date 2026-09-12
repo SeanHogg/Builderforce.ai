@@ -15,6 +15,7 @@
  */
 
 import { Icon } from '@/components/ui/Icon';
+import { LabelField } from '@/components/ui/Field';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
@@ -105,17 +106,6 @@ export function MonitorsSection() {
 export function MonitoringReporting() {
   const t = useTranslations('monitoring');
   return <ReportingSection t={t} />;
-}
-
-/* ─────────────────────────── Shared bits ─────────────────────────── */
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
-      {children}
-    </label>
-  );
 }
 
 /* ─────────────────────────── Boards ─────────────────────────── */
@@ -721,94 +711,94 @@ function MonitorPanel({
         <SectionError error={error} />
         {loading ? <SectionLoading label={t('loading')} /> : (
           <>
-            <Field label={t('fieldLabel')}>
+            <LabelField label={t('fieldLabel')}>
               <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('labelPlaceholder')} />
-            </Field>
-            <Field label={t('fieldDescription')}>
+            </LabelField>
+            <LabelField label={t('fieldDescription')}>
               <textarea className="input" style={{ minHeight: 60 }} value={description} onChange={(e) => setDescription(e.target.value)} />
-            </Field>
-            <Field label={t('fieldType')}>
+            </LabelField>
+            <LabelField label={t('fieldType')}>
               <Select className="input" value={monitorType} onChange={(e) => setMonitorType(e.target.value as MonitorType)}>
                 {MONITOR_TYPES.map((mt) => <option key={mt} value={mt}>{t(`type.${mt}`)}</option>)}
               </Select>
-            </Field>
+            </LabelField>
 
             {monitorType === 'heartbeat' && (
-              <Field label={t('fieldIntervalSeconds')}>
+              <LabelField label={t('fieldIntervalSeconds')}>
                 <input className="input" type="number" value={intervalSeconds} onChange={(e) => setIntervalSeconds(e.target.value)} />
-              </Field>
+              </LabelField>
             )}
             {monitorType === 'http_check' && (
               <div style={{ display: 'grid', gap: 10 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-                  <Field label={t('fieldUrl')}>
+                  <LabelField label={t('fieldUrl')}>
                     <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
-                  </Field>
-                  <Field label={t('fieldMethod')}>
+                  </LabelField>
+                  <LabelField label={t('fieldMethod')}>
                     <Select className="input" value={httpMethod} onChange={(e) => setHttpMethod(e.target.value)}>
                       {['GET', 'HEAD', 'POST', 'PUT'].map((mm) => <option key={mm} value={mm}>{mm}</option>)}
                     </Select>
-                  </Field>
-                  <Field label={t('fieldExpectedStatus')}>
+                  </LabelField>
+                  <LabelField label={t('fieldExpectedStatus')}>
                     <input className="input" type="number" value={expectedStatus} onChange={(e) => setExpectedStatus(e.target.value)} />
-                  </Field>
+                  </LabelField>
                 </div>
-                <Field label={t('fieldHeaders')}>
+                <LabelField label={t('fieldHeaders')}>
                   <textarea className="input" style={{ minHeight: 60 }} value={httpHeadersText}
                     onChange={(e) => setHttpHeadersText(e.target.value)} placeholder={t('headersPlaceholder')} />
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('headersHint')}</div>
-                </Field>
-                <Field label={t('fieldBodyMatch')}>
+                </LabelField>
+                <LabelField label={t('fieldBodyMatch')}>
                   <input className="input" value={httpBodyMatch} onChange={(e) => setHttpBodyMatch(e.target.value)} placeholder={t('bodyMatchPlaceholder')} />
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('bodyMatchHint')}</div>
-                </Field>
+                </LabelField>
               </div>
             )}
             {monitorType === 'metric_threshold' && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-                <Field label={t('fieldMetric')}>
+                <LabelField label={t('fieldMetric')}>
                   <Select className="input" value={metric} onChange={(e) => setMetric(e.target.value as MonitorMetric)}>
                     {METRICS.map((mm) => <option key={mm} value={mm}>{t(`metric.${mm}`)}</option>)}
                   </Select>
-                </Field>
-                <Field label={t('fieldComparator')}>
+                </LabelField>
+                <LabelField label={t('fieldComparator')}>
                   <Select className="input" value={comparator} onChange={(e) => setComparator(e.target.value as MonitorComparator)}>
                     {COMPARATORS.map((c) => <option key={c} value={c}>{t(`comparator.${c}`)}</option>)}
                   </Select>
-                </Field>
-                <Field label={t('fieldThreshold')}>
+                </LabelField>
+                <LabelField label={t('fieldThreshold')}>
                   <input className="input" type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} />
-                </Field>
-                <Field label={t('fieldWindowDays')}>
+                </LabelField>
+                <LabelField label={t('fieldWindowDays')}>
                   <input className="input" type="number" value={windowDays} onChange={(e) => setWindowDays(e.target.value)} />
-                </Field>
+                </LabelField>
               </div>
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-              <Field label={t('fieldSystem')}>
+              <LabelField label={t('fieldSystem')}>
                 <input className="input" value={affectedSystem} onChange={(e) => setAffectedSystem(e.target.value)} placeholder={t('systemPlaceholder')} />
-              </Field>
-              <Field label={t('fieldSeverity')}>
+              </LabelField>
+              <LabelField label={t('fieldSeverity')}>
                 <Select className="input" value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}>
                   {SEVERITIES.map((s) => <option key={s} value={s}>{t(`severity.${s}`)}</option>)}
                 </Select>
-              </Field>
-              <Field label={t('fieldEscalation')}>
+              </LabelField>
+              <LabelField label={t('fieldEscalation')}>
                 <Select className="input" value={escalationPolicyId} onChange={(e) => setEscalationPolicyId(e.target.value)}>
                   <option value="">{t('noEscalation')}</option>
                   {policies.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </Select>
-              </Field>
+              </LabelField>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
-              <Field label={`${t('position')} X`}>
+              <LabelField label={`${t('position')} X`}>
                 <input className="input" type="number" step="0.01" min="0" max="1" value={posX} onChange={(e) => setPosX(Number(e.target.value))} />
-              </Field>
-              <Field label={`${t('position')} Y`}>
+              </LabelField>
+              <LabelField label={`${t('position')} Y`}>
                 <input className="input" type="number" step="0.01" min="0" max="1" value={posY} onChange={(e) => setPosY(Number(e.target.value))} />
-              </Field>
+              </LabelField>
             </div>
 
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>

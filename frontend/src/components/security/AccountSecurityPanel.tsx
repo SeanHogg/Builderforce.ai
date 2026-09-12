@@ -21,6 +21,7 @@ import { SessionList } from '@/components/security/SessionList';
 import PasskeysPanel from '@/components/security/PasskeysPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { formatElapsedBetween } from '@/lib/duration';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -96,10 +97,7 @@ export default function AccountSecurityPanel() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {adminAccess.map((s) => {
-              const dur = s.endedAt
-                ? Math.floor((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 1000)
-                : null;
-              const durStr = dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : t('active');
+              const durStr = formatElapsedBetween(s.startedAt, s.endedAt) ?? t('active');
               return (
                 <div
                   key={s.id}

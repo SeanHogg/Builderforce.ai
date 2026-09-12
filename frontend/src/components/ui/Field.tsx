@@ -25,6 +25,20 @@ export function FieldFrame({ id, label, hint, error, optional, children }: Field
   );
 }
 
+/**
+ * A label WRAPPING a caller-supplied control — the association is implicit, so no
+ * `id` is needed. For compact create/edit flows; use {@link FieldFrame} or
+ * {@link TextField} when a hint or error needs `aria-describedby`.
+ */
+export function LabelField({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return (
+    <label className="ui-field">
+      <span className="ui-field__label">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 export const TextField = forwardRef<HTMLInputElement, Omit<FieldFrameProps, 'children'> & InputHTMLAttributes<HTMLInputElement>>(
   function TextField({ id, label, hint, error, optional, className, ...props }, ref) {
     const descriptionId = error ? `${id}-error` : hint ? `${id}-hint` : undefined;

@@ -103,8 +103,14 @@ const BASELINE = {
    * "usable" status greens (one predating this baseline, one added with the Ollama
    * local-provider card) named `--success-text`, the family every other tone in the
    * same conditional (`--warning-text` / `--error`) already used.
+   *
+   * 169 -> 168 (2026-09-12) — `workforce/MemberCard.tsx`'s MFA badge ground was
+   * `rgba(34,197,94,0.15)`, the dark theme's `--success-bg` typed out by value, so on
+   * paper it kept the dark wash under a label that had already switched to the light
+   * `--success-text`. It names `--success-bg` now, found while that file's type ramp
+   * was being put on the scale (see `offScaleFontSizes`).
    */
-  themeLockedColours: 169,
+  themeLockedColours: 168,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -222,8 +228,18 @@ const BASELINE = {
    * and `.identity small` in `StepConfigForm.module.css`, which name
    * `--font-size-small` and `--font-size-eyebrow` — the inline copies had simply
    * drifted off the roles they were written to mirror.
+   *
+   * 3,487 -> 3,475 (2026-09-12): the ticket-context / run-reasoning / room-close pass
+   * had taken the tally to 3,494 (+7) and turned the frontend deploy red. Every file
+   * that added a literal now names its roles, and so do the ones it had inherited:
+   * `TicketObjectiveLinkPicker` (7) and the strip's shared `ticketContextStyles`
+   * uppercase label (10 = field-label), `RunThinkingPanel` (3), all seven in
+   * `workforce/MemberCard` (10 badges = field-label, 12 = small, 11 = eyebrow), and
+   * the room's (X) glyph (20px = the floor of `--font-size-section`). Same four-way
+   * mapping every entry above records; with `TicketContextStrip`'s own -6 it is a
+   * net -12 below the old floor, and the floor follows it down.
    */
-  offScaleFontSizes: 3487,
+  offScaleFontSizes: 3475,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

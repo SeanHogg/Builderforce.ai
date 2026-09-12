@@ -88,7 +88,8 @@
   background: var(--surface-raised, var(--surface));
   color: var(--text-primary);
   box-shadow: 0 6px 18px color-mix(in srgb, var(--text-primary) 18%, transparent);
-  font-size: 20px;
+  /* The (X) is a glyph drawn at heading scale — the section role, whose floor is the 20px it was typed as. */
+  font-size: var(--font-size-section);
   line-height: 1;
   cursor: pointer;
 }

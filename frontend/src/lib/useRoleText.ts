@@ -1,8 +1,13 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 
 /**
+ * NO `'use client'`, deliberately. A hook module is not a component, so the directive
+ * marks no boundary here — a hook runs inside whichever component calls it (the
+ * `lib/useTheme.ts` / `lib/useFounderJourney.ts` convention). This one reads only
+ * next-intl's `useTranslations`, which works in a Server Component too, so without
+ * the directive a server-rendered roster can name roles through the same vocabulary;
+ * with it, the hook would become a client reference no server surface could call.
+ *
  * The ONE localized vocabulary for a workspace role: its name, and what it lets a
  * person do.
  *

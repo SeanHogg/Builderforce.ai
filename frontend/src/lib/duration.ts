@@ -15,6 +15,15 @@ export function formatDuration(ms: number): string {
 }
 
 /**
+ * The length of a span between two timestamps, or `null` while it is still open —
+ * the admin-access and impersonation session lists read that as "Active".
+ */
+export function formatElapsedBetween(startedAt: string, endedAt: string | null | undefined): string | null {
+  if (!endedAt) return null;
+  return formatDuration(new Date(endedAt).getTime() - new Date(startedAt).getTime());
+}
+
+/**
  * Day-scale elapsed formatting: "7d 04h" / "1h 04m" / "45s".
  *
  * {@link formatDuration} is right for timers and cooldowns but degrades past a day

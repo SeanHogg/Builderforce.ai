@@ -10,6 +10,7 @@
  */
 
 import { Icon } from '@/components/ui/Icon';
+import { LabelField } from '@/components/ui/Field';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
@@ -109,15 +110,6 @@ export default function IncidentsPageClient() {
 
 type T = ReturnType<typeof useTranslations>;
 interface SectionProps { t: T; tc: T; canManage: boolean; }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
-      {children}
-    </label>
-  );
-}
 
 
 /* ─────────────────────────── Incidents ─────────────────────────── */
@@ -252,21 +244,21 @@ function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: Sec
     <SlideOutPanel open={open} onClose={onClose} title={t('newIncident')} widthStorageKey="incidents-new">
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <SectionError error={error} />
-        <Field label={t('fieldTitle')}>
+        <LabelField label={t('fieldTitle')}>
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('titlePlaceholder')} />
-        </Field>
-        <Field label={t('fieldDescription')}>
+        </LabelField>
+        <LabelField label={t('fieldDescription')}>
           <textarea className="input" style={{ minHeight: 80 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('descriptionPlaceholder')} />
-        </Field>
+        </LabelField>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-          <Field label={t('fieldSeverity')}>
+          <LabelField label={t('fieldSeverity')}>
             <Select className="input" value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}>
               {SEVERITIES.map((s) => <option key={s} value={s}>{t(`severity.${s}`)}</option>)}
             </Select>
-          </Field>
-          <Field label={t('fieldSystem')}>
+          </LabelField>
+          <LabelField label={t('fieldSystem')}>
             <input className="input" value={affectedSystem} onChange={(e) => setAffectedSystem(e.target.value)} placeholder={t('systemPlaceholder')} />
-          </Field>
+          </LabelField>
         </div>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
           <input type="checkbox" checked={openWarRoom} onChange={(e) => setOpenWarRoom(e.target.checked)} />
@@ -397,9 +389,9 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
             {/* Classify */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 180 }}>
-                <Field label={t('classifySystem')}>
+                <LabelField label={t('classifySystem')}>
                   <input className="input" value={classifyValue} onChange={(e) => setClassifyValue(e.target.value)} placeholder={t('systemPlaceholder')} />
-                </Field>
+                </LabelField>
               </div>
               {actionBtn(t('classify'), () => incidentsApi.classify(incident.id, classifyValue.trim()))}
             </div>
@@ -407,9 +399,9 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
             {/* Add note */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 180 }}>
-                <Field label={t('addNote')}>
+                <LabelField label={t('addNote')}>
                   <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('notePlaceholder')} />
-                </Field>
+                </LabelField>
               </div>
               {actionBtn(t('addNoteBtn'), async () => { if (note.trim()) { await incidentsApi.addNote(incident.id, note.trim()); setNote(''); } })}
             </div>
@@ -600,34 +592,34 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('rca.formTitle')}</div>
       <SectionError error={error} />
 
-      <Field label={t('rca.docType.label')}>
+      <LabelField label={t('rca.docType.label')}>
         <Select className="input" value={docType} onChange={(e) => setDocType(e.target.value as PostmortemDocType)}>
           {RCA_DOC_TYPES.map((d) => <option key={d} value={d}>{t(`rca.docType.${d}`)}</option>)}
         </Select>
-      </Field>
+      </LabelField>
 
-      <Field label={t('rca.summary')}>
+      <LabelField label={t('rca.summary')}>
         <textarea className="input" style={{ minHeight: 60 }} value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t('rca.summaryPlaceholder')} />
-      </Field>
+      </LabelField>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-        <Field label={t('rca.rootCause')}>
+        <LabelField label={t('rca.rootCause')}>
           <textarea className="input" style={{ minHeight: 60 }} value={rootCause} onChange={(e) => setRootCause(e.target.value)} />
-        </Field>
-        <Field label={t('rca.impact')}>
+        </LabelField>
+        <LabelField label={t('rca.impact')}>
           <textarea className="input" style={{ minHeight: 60 }} value={impact} onChange={(e) => setImpact(e.target.value)} />
-        </Field>
-        <Field label={t('rca.contributingFactors')}>
+        </LabelField>
+        <LabelField label={t('rca.contributingFactors')}>
           <textarea className="input" style={{ minHeight: 60 }} value={contributingFactors} onChange={(e) => setContributingFactors(e.target.value)} />
-        </Field>
-        <Field label={t('rca.resolution')}>
+        </LabelField>
+        <LabelField label={t('rca.resolution')}>
           <textarea className="input" style={{ minHeight: 60 }} value={resolution} onChange={(e) => setResolution(e.target.value)} />
-        </Field>
-        <Field label={t('rca.whatWentWell')}>
+        </LabelField>
+        <LabelField label={t('rca.whatWentWell')}>
           <textarea className="input" style={{ minHeight: 60 }} value={whatWentWell} onChange={(e) => setWhatWentWell(e.target.value)} />
-        </Field>
-        <Field label={t('rca.whatWentWrong')}>
+        </LabelField>
+        <LabelField label={t('rca.whatWentWrong')}>
           <textarea className="input" style={{ minHeight: 60 }} value={whatWentWrong} onChange={(e) => setWhatWentWrong(e.target.value)} />
-        </Field>
+        </LabelField>
       </div>
 
       {/* Live "why did this occur?" fishbone — updates as the RCA is written */}
@@ -722,12 +714,12 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
       {canManage && defs.length > 0 && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 180 }}>
-            <Field label={t('workflows.pick')}>
+            <LabelField label={t('workflows.pick')}>
               <Select className="input" value={selectedDef} onChange={(e) => setSelectedDef(e.target.value)}>
                 <option value="">{t('workflows.pickPlaceholder')}</option>
                 {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </Select>
-            </Field>
+            </LabelField>
           </div>
           <button type="button" className="btn btn-primary btn-sm" onClick={runWorkflow} disabled={busy || !selectedDef}>
             {busy ? tc('saving') : t('workflows.run')}
@@ -862,14 +854,14 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
                   {canManage && (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div style={{ flex: 1, minWidth: 140 }}>
-                        <Field label={t('memberDisplayName')}>
+                        <LabelField label={t('memberDisplayName')}>
                           <input className="input" value={d.displayName} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, displayName: e.target.value } }))} />
-                        </Field>
+                        </LabelField>
                       </div>
                       <div style={{ flex: 1, minWidth: 140 }}>
-                        <Field label={t('memberRef')}>
+                        <LabelField label={t('memberRef')}>
                           <input className="input" value={d.memberRef} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, memberRef: e.target.value } }))} placeholder={t('memberRefPlaceholder')} />
-                        </Field>
+                        </LabelField>
                       </div>
                       <button type="button" className="btn btn-secondary btn-sm" onClick={() => addMember(r)}>{t('addMember')}</button>
                     </div>
@@ -884,17 +876,17 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
 
       <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newRotation')} widthStorageKey="incidents-rotation">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label={t('rotationName')}>
+          <LabelField label={t('rotationName')}>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field label={t('rotationDescription')}>
+          </LabelField>
+          <LabelField label={t('rotationDescription')}>
             <textarea className="input" style={{ minHeight: 60 }} value={description} onChange={(e) => setDescription(e.target.value)} />
-          </Field>
-          <Field label={t('rotationKindLabel')}>
+          </LabelField>
+          <LabelField label={t('rotationKindLabel')}>
             <Select className="input" value={rotationKind} onChange={(e) => setRotationKind(e.target.value as RotationKind)}>
               {ROTATION_KINDS.map((k) => <option key={k} value={k}>{t(`rotationKind.${k}`)}</option>)}
             </Select>
-          </Field>
+          </LabelField>
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button type="button" className="btn btn-primary" onClick={createRotation} disabled={saving || !canManage}>{saving ? tc('saving') : t('createRotation')}</button>
             <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{tc('cancel')}</button>
@@ -1032,21 +1024,21 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
                   {canManage && (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
                       <div style={{ width: 110 }}>
-                        <Field label={t('afterMinutes')}>
+                        <LabelField label={t('afterMinutes')}>
                           <input className="input" type="number" min={0} value={d.afterMinutes} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, afterMinutes: e.target.value } }))} />
-                        </Field>
+                        </LabelField>
                       </div>
                       <div style={{ minWidth: 150 }}>
-                        <Field label={t('targetKind_')}>
+                        <LabelField label={t('targetKind_')}>
                           <Select className="input" value={d.targetKind} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, targetKind: e.target.value as EscalationTargetKind } }))}>
                             {TARGET_KINDS.map((k) => <option key={k} value={k}>{t(`targetKind.${k}`)}</option>)}
                           </Select>
-                        </Field>
+                        </LabelField>
                       </div>
                       <div style={{ flex: 1, minWidth: 140 }}>
-                        <Field label={t('targetRef')}>
+                        <LabelField label={t('targetRef')}>
                           <input className="input" value={d.targetRef} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, targetRef: e.target.value } }))} />
-                        </Field>
+                        </LabelField>
                       </div>
                       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: 'var(--text-secondary)' }}>
                         <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={d.notifyTeams} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, notifyTeams: e.target.checked } }))} />{t('notifyTeams')}</label>
@@ -1065,18 +1057,18 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
 
       <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPolicy')} widthStorageKey="incidents-policy">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label={t('policyName')}>
+          <LabelField label={t('policyName')}>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field label={t('policyDescription')}>
+          </LabelField>
+          <LabelField label={t('policyDescription')}>
             <textarea className="input" style={{ minHeight: 60 }} value={description} onChange={(e) => setDescription(e.target.value)} />
-          </Field>
-          <Field label={t('matchSeverity')}>
+          </LabelField>
+          <LabelField label={t('matchSeverity')}>
             <Select className="input" value={matchSeverity} onChange={(e) => setMatchSeverity(e.target.value)}>
               <option value="">{t('anySeverity')}</option>
               {SEVERITIES.map((s) => <option key={s} value={s}>{t(`severity.${s}`)}</option>)}
             </Select>
-          </Field>
+          </LabelField>
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button type="button" className="btn btn-primary" onClick={createPolicy} disabled={saving || !canManage}>{saving ? tc('saving') : t('createPolicy')}</button>
             <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{tc('cancel')}</button>
@@ -1169,31 +1161,31 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
       <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editing ? t('editContact') : t('newContact')} widthStorageKey="incidents-contact">
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <SectionError error={error} />
-          <Field label={t('contactName')}>
+          <LabelField label={t('contactName')}>
             <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          </Field>
+          </LabelField>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            <Field label={t('contactRole')}>
+            <LabelField label={t('contactRole')}>
               <input className="input" value={draft.roleTitle} onChange={(e) => setDraft({ ...draft, roleTitle: e.target.value })} />
-            </Field>
-            <Field label={t('contactCompany')}>
+            </LabelField>
+            <LabelField label={t('contactCompany')}>
               <input className="input" value={draft.company} onChange={(e) => setDraft({ ...draft, company: e.target.value })} />
-            </Field>
+            </LabelField>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            <Field label={t('contactEmail')}>
+            <LabelField label={t('contactEmail')}>
               <input className="input" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
-            </Field>
-            <Field label={t('contactPhone')}>
+            </LabelField>
+            <LabelField label={t('contactPhone')}>
               <input className="input" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
-            </Field>
+            </LabelField>
           </div>
-          <Field label={t('contactTeamsId')}>
+          <LabelField label={t('contactTeamsId')}>
             <input className="input" value={draft.teamsId} onChange={(e) => setDraft({ ...draft, teamsId: e.target.value })} />
-          </Field>
-          <Field label={t('contactNotes')}>
+          </LabelField>
+          <LabelField label={t('contactNotes')}>
             <textarea className="input" style={{ minHeight: 70 }} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
-          </Field>
+          </LabelField>
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button type="button" className="btn btn-primary" onClick={save} disabled={saving || !canManage}>{saving ? tc('saving') : tc('save')}</button>
             <button type="button" className="btn btn-secondary" onClick={() => setPanelOpen(false)}>{tc('cancel')}</button>

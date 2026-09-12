@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { adminApi, type ImpersonationSession } from '@/lib/adminApi';
 import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';
 import { useAdminFormat } from '@/components/admin/adminShared';
+import { formatElapsedBetween } from '@/lib/duration';
 
 export default function ImpersonationSessionsPanel() {
   const { fmtDateTime } = useAdminFormat();
@@ -58,10 +59,7 @@ export default function ImpersonationSessionsPanel() {
         </thead>
         <tbody>
           {impSessions.map((s) => {
-            const dur = s.endedAt
-              ? Math.floor((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 1000)
-              : null;
-            const durStr = dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : t('impsessions.active');
+            const durStr = formatElapsedBetween(s.startedAt, s.endedAt) ?? t('impsessions.active');
             return (
               <tr key={s.id}>
                 <td style={{ fontSize: 13 }}>{s.targetEmail}</td>

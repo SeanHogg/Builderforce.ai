@@ -30,6 +30,29 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   974 → 975 (`useClientFiles`, 2026-09-12) — three files gained the directive
+ *   after 974 was recorded (commits 6d8ce0064..929a68acb), and the frontend deploy
+ *   went red at 977. Each was judged on its own terms, not on its importers:
+ *
+ *     - `components/task/TicketObjectiveLinkPicker.tsx` STAYS, and is the +1. It is
+ *       the ticket drawer's "link this ticket to an objective" card, and it loads
+ *       the objective list in an effect, holds the choice, the busy flag and the
+ *       retry counter in `useState`, and posts the link on click. None of that
+ *       could be a Server Component.
+ *     - `components/agent/RunThinkingPanel.tsx` and `lib/useRoleText.ts` LOST it,
+ *       argued in each file's header. Neither has state, an effect, a handler or a
+ *       browser API; their one hook is next-intl's `useTranslations`, which renders
+ *       on the server too. That makes them isomorphic, so the directive did not
+ *       declare a runtime they need; it took one away (turning `thinkingEventsOf`
+ *       and `useRoleText` into client references a server surface could not call).
+ *       This is the `ResumeDocumentView` shape ("the directive is sometimes the
+ *       bug"), not the "every importer is already client" argument the 808 → 868
+ *       entry rules out.
+ *
+ *   The guard's own delta listed ~54 files because `.frontend-architecture-tally.json`
+ *   was last written on an older green run; `git diff` against the commit that
+ *   recorded 974 names exactly the three above.
+ *
  *   973 → 974 (`useClientFiles`, 2026-09-10) — `components/creation-canvas/CanvasMenuSheet.tsx`,
  *   THE popover the canvas bar opens and the ONE way out of it. Both bar sheets were
  *   dismissed only by pressing the button that opened them — which the sheet itself

@@ -11,7 +11,7 @@
  * own visibility and behaviour.
  */
 
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEmulation } from '@/lib/EmulationContext';
@@ -83,8 +83,10 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
     }
   }, [workspaces, target, reason, debuggerEnabled, beginSession, close, router]);
 
+  const value = useMemo(() => ({ startEmulation }), [startEmulation]);
+
   return (
-    <Ctx.Provider value={{ startEmulation }}>
+    <Ctx.Provider value={value}>
       {children}
       <SlideOutPanel
         open={target != null}

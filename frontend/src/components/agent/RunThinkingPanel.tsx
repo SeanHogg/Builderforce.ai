@@ -1,9 +1,17 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { ExecutionTraceToolEvent } from '@/lib/builderforceApi';
 
 /**
+ * NO `'use client'`, and that is a judgement about THIS file, not about its callers.
+ * It is props in, markup out: no state, no effect, no handler, no browser API. Its one
+ * hook is next-intl's `useTranslations`, which renders in a Server Component as well
+ * as a client one. So the component is isomorphic, and a directive would only take
+ * that away — it would turn `thinkingEventsOf` into a client reference a server
+ * surface could not call, and force a client boundary on a run transcript that a
+ * server-rendered report could otherwise print. A client host pulls it into its
+ * bundle by importing it, the `ResumeDocumentView` shape in the architecture ratchet's
+ * changelog. Put the directive back only when this file gains state or a handler.
+ *
  * THE REASONING A RUN RECORDED.
  *
  * A reasoning-capable model's thought for each turn is persisted as an
@@ -59,19 +67,19 @@ export function thinkingEventsOf(events: readonly ExecutionTraceToolEvent[]): Ru
 export function RunThinkingPanel({ thoughts }: { thoughts: readonly RunThought[] }) {
   const t = useTranslations('agentExecution');
   if (thoughts.length === 0) {
-    return <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>{t('noThinking')}</div>;
+    return <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', padding: 8 }}>{t('noThinking')}</div>;
   }
   return (
     <div data-testid="run-thinking" style={{ minHeight: 80, maxHeight: 360, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
       {thoughts.map((thought) => (
         <section key={thought.id} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
           {(thought.step != null || thought.model) && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginBottom: 4 }}>
               {thought.step != null && <span>{t('thinkingStep', { step: thought.step })}</span>}
               {thought.model && <span style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>{thought.model}</span>}
             </div>
           )}
-          <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          <div style={{ fontSize: 'var(--font-size-small)', lineHeight: 1.55, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {thought.text}
           </div>
         </section>
