@@ -163,11 +163,14 @@ describe("runGatewayUpdate", () => {
     });
   }
 
-  async function seedGlobalPackageRoot(pkgRoot: string, version = "1.0.0") {
+  // The published package; a global install lives at <root>/@seanhogg/builderforce-agents.
+  const CORE_PACKAGE = "@seanhogg/builderforce-agents";
+
+  async function seedGlobalPackageRoot(pkgRoot: string, version = "1.0.0", name = CORE_PACKAGE) {
     await fs.mkdir(pkgRoot, { recursive: true });
     await fs.writeFile(
       path.join(pkgRoot, "package.json"),
-      JSON.stringify({ name: "builderforce", version }),
+      JSON.stringify({ name, version }),
       "utf-8",
     );
   }
@@ -300,10 +303,12 @@ describe("runGatewayUpdate", () => {
     expectedInstallCommand: string;
     channel?: "stable" | "beta";
     tag?: string;
+    packageName?: string;
   }): Promise<{ calls: string[]; result: Awaited<ReturnType<typeof runGatewayUpdate>> }> {
+    const packageName = params.packageName ?? CORE_PACKAGE;
     const nodeModules = path.join(tempDir, "node_modules");
-    const pkgRoot = path.join(nodeModules, "builderforce");
-    await seedGlobalPackageRoot(pkgRoot);
+    const pkgRoot = path.join(nodeModules, ...packageName.split("/"));
+    await seedGlobalPackageRoot(pkgRoot, "1.0.0", packageName);
 
     const { calls, runCommand } = createGlobalInstallHarness({
       pkgRoot,
@@ -312,7 +317,7 @@ describe("runGatewayUpdate", () => {
       onInstall: async () => {
         await fs.writeFile(
           path.join(pkgRoot, "package.json"),
-          JSON.stringify({ name: "builderforce", version: "2.0.0" }),
+          JSON.stringify({ name: packageName, version: "2.0.0" }),
           "utf-8",
         );
       },
@@ -361,23 +366,29 @@ describe("runGatewayUpdate", () => {
   it.each([
     {
       title: "updates global npm installs when detected",
-      expectedInstallCommand: "npm i -g builderforce@latest",
+      expectedInstallCommand: "npm i -g @seanhogg/builderforce-agents@latest",
     },
     {
       title: "uses update channel for global npm installs when tag is omitted",
-      expectedInstallCommand: "npm i -g builderforce@beta",
+      expectedInstallCommand: "npm i -g @seanhogg/builderforce-agents@beta",
       channel: "beta" as const,
     },
     {
       title: "updates global npm installs with tag override",
-      expectedInstallCommand: "npm i -g builderforce@beta",
+      expectedInstallCommand: "npm i -g @seanhogg/builderforce-agents@beta",
       tag: "beta",
     },
-  ])("$title", async ({ expectedInstallCommand, channel, tag }) => {
+    {
+      title: "keeps updating a global install under the legacy package name",
+      expectedInstallCommand: "npm i -g builderforce@latest",
+      packageName: "builderforce",
+    },
+  ])("$title", async ({ expectedInstallCommand, channel, tag, packageName }) => {
     const { calls, result } = await runNpmGlobalUpdateCase({
       expectedInstallCommand,
       channel,
       tag,
+      packageName,
     });
 
     expect(result.status).toBe("ok");
@@ -389,8 +400,9 @@ describe("runGatewayUpdate", () => {
 
   it("cleans stale npm rename dirs before global update", async () => {
     const nodeModules = path.join(tempDir, "node_modules");
-    const pkgRoot = path.join(nodeModules, "builderforce");
-    const staleDir = path.join(nodeModules, ".builderforce-stale");
+    const pkgRoot = path.join(nodeModules, "@seanhogg", "builderforce-agents");
+    // npm's rename dir for a scoped package sits inside the scope directory.
+    const staleDir = path.join(nodeModules, "@seanhogg", ".builderforce-agents-stale");
     await fs.mkdir(staleDir, { recursive: true });
     await seedGlobalPackageRoot(pkgRoot);
 
@@ -406,7 +418,7 @@ describe("runGatewayUpdate", () => {
       if (key === "pnpm root -g") {
         return { stdout: "", stderr: "", code: 1 };
       }
-      if (key === "npm i -g builderforce@latest") {
+      if (key === "npm i -g @seanhogg/builderforce-agents@latest") {
         stalePresentAtInstall = await pathExists(staleDir);
         return { stdout: "ok", stderr: "", code: 0 };
       }
@@ -427,16 +439,16 @@ describe("runGatewayUpdate", () => {
 
     try {
       const bunGlobalRoot = path.join(bunInstall, "install", "global", "node_modules");
-      const pkgRoot = path.join(bunGlobalRoot, "builderforce");
+      const pkgRoot = path.join(bunGlobalRoot, "@seanhogg", "builderforce-agents");
       await seedGlobalPackageRoot(pkgRoot);
 
       const { calls, runCommand } = createGlobalInstallHarness({
         pkgRoot,
-        installCommand: "bun add -g builderforce@latest",
+        installCommand: "bun add -g @seanhogg/builderforce-agents@latest",
         onInstall: async () => {
           await fs.writeFile(
             path.join(pkgRoot, "package.json"),
-            JSON.stringify({ name: "builderforce", version: "2.0.0" }),
+            JSON.stringify({ name: CORE_PACKAGE, version: "2.0.0" }),
             "utf-8",
           );
         },
@@ -448,7 +460,9 @@ describe("runGatewayUpdate", () => {
       expect(result.mode).toBe("bun");
       expect(result.before?.version).toBe("1.0.0");
       expect(result.after?.version).toBe("2.0.0");
-      expect(calls.some((call) => call === "bun add -g builderforce@latest")).toBe(true);
+      expect(calls.some((call) => call === "bun add -g @seanhogg/builderforce-agents@latest")).toBe(
+        true,
+      );
     } finally {
       if (oldBunInstall === undefined) {
         delete process.env.BUN_INSTALL;

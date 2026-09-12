@@ -153,11 +153,19 @@ export type ProviderForBoard = (externalBoardId: string | null) => BoardProvider
 /** Bounded pages drained per project when staging items (mirrors boardsync MAX_SYNC_PAGES). */
 const MAX_STAGE_PAGES = 20;
 
-/** Derive a heuristic BF task type from a discovered item type's category/name. */
+/** Derive a heuristic BF task type from a discovered item type's category/name.
+ *  A bug/defect lands as `bug` (migration 1160) rather than a plain `task`, so an
+ *  imported defect keeps its kind — the BurnRateOS/Jira ItemType BUG has an owner. */
 function defaultTaskType(category: string | null | undefined, name: string): string {
   const hint = (category ?? name).toLowerCase();
-  return hint.includes('epic') || hint.includes('feature') ? 'epic' : 'task';
+  if (hint.includes('epic') || hint.includes('feature')) return 'epic';
+  if (hint.includes('bug') || hint.includes('defect')) return 'bug';
+  return 'task';
 }
+
+/** The task types an import may target — the board kinds a person maps an
+ *  external type onto. Anything else is coerced to `task`. */
+const IMPORTABLE_TASK_TYPES: ReadonlySet<string> = new Set(['task', 'epic', 'bug']);
 
 /** Slugify a project name into a candidate uppercase key (letters/digits only). */
 function keyCandidate(name: string): string {
@@ -224,7 +232,7 @@ export class MigrationService {
     if (input.types) {
       await this.store.replaceTypeMappings(runId, tenantId, input.types.map((t) => ({
         externalType: t.externalType,
-        targetTaskType: t.targetTaskType === 'epic' ? 'epic' : 'task',
+        targetTaskType: IMPORTABLE_TASK_TYPES.has(t.targetTaskType) ? t.targetTaskType : 'task',
         targetStatus: t.targetStatus || 'backlog',
       })));
     }

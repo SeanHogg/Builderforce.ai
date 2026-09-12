@@ -65,6 +65,34 @@ import {
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { taskCreatedHook } from '../../application/task/taskCreationHook';
+import { parseBody, parseOptionalBody, z, zJsonObject, zNumberLike } from './requestBody';
+
+// Fields a handler answers its own "X is required / must be …" message for stay
+// loosely typed here so that message still wins over a generic 400.
+const ProjectLinkBody = z.object({ initiativeId: z.string().nullish() });
+const DependencyBody = z.object({
+  fromInitiativeId: z.string().nullish(),
+  toInitiativeId: z.string().nullish(),
+});
+const CostClassBody = z.object({
+  kind: z.string().nullish(),
+  // A task/epic id is `Number(...)`-ed; the portfolio/objective/initiative ids are uuids.
+  id: zNumberLike.nullish(),
+  costClass: z.unknown().optional(),
+  source: z.string().nullish(),
+});
+/** An absent body means "apply", as it always did. */
+const ClassifyBody = z.object({ apply: z.boolean().nullish() });
+const ObjectiveLinkBody = z.object({
+  linkKind: z.string().nullish(),
+  initiativeId: z.string().nullish(),
+  taskId: z.number().nullish(),
+});
+const ConvertObjectiveBody = z.object({
+  target: z.string().nullish(),
+  projectId: z.number().nullish(),
+});
+const PromoteOrphansBody = z.object({ projectId: z.number().nullish() });
 
 /** Re-exported for the routes/tests that already import it from here. The ONE
  *  definition lives in `application/pmo/pmoCacheKeys` so application services can use
@@ -129,7 +157,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isFinite(projectId) || projectId <= 0) return c.json({ error: 'invalid projectId' }, 400);
-    const body = await c.req.json<{ initiativeId?: string | null }>();
+    const body = await parseBody(c, ProjectLinkBody);
     const initiativeId = body.initiativeId ?? null;
 
     // Validate the target initiative belongs to this tenant/segment before linking.
@@ -155,7 +183,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   // ── Initiative dependency edges (blocker → blocked; critical-path input) ────
   router.post('/dependencies', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ fromInitiativeId?: string; toInitiativeId?: string }>();
+    const body = await parseBody(c, DependencyBody);
     const from = body.fromInitiativeId;
     const to = body.toInitiativeId;
     if (!from || !to) return c.json({ error: 'fromInitiativeId and toInitiativeId are required' }, 400);
@@ -249,12 +277,12 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/cost-class', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ kind?: string; id?: string; costClass?: CostClass | null; source?: string }>();
+    const body = await parseBody(c, CostClassBody);
     const kind = body.kind;
     if (!kind || !COST_KINDS.has(kind)) return c.json({ error: 'kind must be portfolio|objective|initiative|epic|task' }, 400);
     if (body.id == null) return c.json({ error: 'id is required' }, 400);
-    if (!isCostClassValue(body.costClass ?? null)) return c.json({ error: 'costClass must be capex|opex|null' }, 400);
     const costClass = body.costClass ?? null;
+    if (!isCostClassValue(costClass)) return c.json({ error: 'costClass must be capex|opex|null' }, 400);
     // A human PM verifying/recategorising is 'manual' (and verifies the row); an
     // agent-applied class is 'agent' (still needs PM verification).
     const src = body.source === 'agent' ? 'agent' : 'manual';
@@ -271,7 +299,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       const table = kind === 'portfolio' ? portfolios : kind === 'objective' ? objectives : initiatives;
       const rows = await db.update(table)
         .set({ costClass, costClassSource: src, updatedAt: new Date() })
-        .where(and(eq(table.id, body.id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
+        .where(and(eq(table.id, String(body.id)), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
         .returning({ id: table.id });
       if (!rows[0]) return c.json({ error: 'not found' }, 404);
     }
@@ -283,7 +311,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   // that have no manual/verified class yet. Never overwrites a PM decision.
   router.post('/cost-class/classify', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ apply?: boolean }>().catch(() => ({ apply: true }));
+    const body = await parseOptionalBody(c, ClassifyBody);
     const apply = body.apply !== false;
     const taskRows = await db
       .select({ id: tasks.id, title: tasks.title, description: tasks.description, taskType: tasks.taskType, actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified })
@@ -309,7 +337,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   router.post('/objectives/:id/links', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const objectiveId = c.req.param('id');
-    const body = await c.req.json<{ linkKind?: string; initiativeId?: string; taskId?: number }>();
+    const body = await parseBody(c, ObjectiveLinkBody);
     const linkKind = body.linkKind;
     if (linkKind !== 'initiative' && linkKind !== 'epic' && linkKind !== 'task') {
       return c.json({ error: 'linkKind must be initiative|epic|task' }, 400);
@@ -351,7 +379,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   // linked tasks; key results are dropped. Shared logic in convertWorkItemType.
   router.post('/objectives/:id/convert-type', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ target?: 'task' | 'epic'; projectId?: number | null }>();
+    const body = await parseBody(c, ConvertObjectiveBody);
     const target = body.target;
     if (target !== 'task' && target !== 'epic') return c.json({ error: 'target must be task|epic' }, 400);
     try {
@@ -371,7 +399,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   // Optional projectId scopes the sweep to one board. Shared logic in convertWorkItemType.
   router.post('/objectives/promote-orphans', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const body = await c.req.json<{ projectId?: number | null }>().catch(() => ({} as { projectId?: number | null }));
+    const body = await parseOptionalBody(c, PromoteOrphansBody);
     const result = await promoteOrphanOkrEpics(
       { db, tasks: new TaskService(new TaskRepository(db), new ProjectRepository(db)), env: c.env as Env },
       { tenantId, projectId: body.projectId ?? undefined },
@@ -397,7 +425,9 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
 
   router.put('/working-calendar', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const saved = await saveWorkingCalendarSettings(c.env as Env, db, tenantId, await c.req.json());
+    // `normalizeWorkingCalendarSettings` owns every per-field rule; the route only
+    // insists the body is an object rather than silently saving the defaults.
+    const saved = await saveWorkingCalendarSettings(c.env as Env, db, tenantId, await parseBody(c, zJsonObject));
     // Every dated surface derives from this, so the plan caches must not outlive it.
     await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
     return c.json(saved);

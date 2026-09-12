@@ -1,5 +1,6 @@
 import { InternalError } from '../../domain/shared/errors';
 import { ROLE_ORDER, isTenantRole } from '../../domain/shared/types';
+import { resolveImpersonationRole } from '../../application/admin/impersonationRole';
 import { failResponse, statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseBody, parseOptionalBody } from './requestBody';
@@ -3003,17 +3004,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
     if (!tenantRow) return c.json({ error: 'Tenant not found' }, 404);
 
-    const [memberRow] = await db
-      .select({ role: tenantMembers.role })
-      .from(tenantMembers)
-      .where(and(
-        eq(tenantMembers.userId, body.userId),
-        eq(tenantMembers.tenantId, body.tenantId),
-        eq(tenantMembers.isActive, true),
-      ))
-      .limit(1);
-
-    const resolvedRole = (body.role ?? memberRow?.role ?? 'viewer') as Parameters<typeof signEmulationJwt>[0]['role'];
+    // A known role, never above the target's own (application/admin/impersonationRole).
+    const roleDecision = await resolveImpersonationRole(db, body.tenantId, body.userId, body.role);
+    if (!roleDecision.ok) return c.json({ error: roleDecision.error }, roleDecision.status);
+    const resolvedRole = roleDecision.role;
     const expiresAt = new Date(Date.now() + 3600_000); // 1 hour
 
     // Create session record
@@ -3122,9 +3116,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const adminId = c.get('userId') as string;
     const sessionId = c.req.param('id');
     const db = requestDb(c);
-    const { role } = await parseBody(c, SwitchRoleBody);
+    const { role: requestedRole } = await parseBody(c, SwitchRoleBody);
 
-    if (!role) return c.json({ error: 'role is required' }, 400);
+    if (!requestedRole) return c.json({ error: 'role is required' }, 400);
 
     const [session] = await db
       .select()
@@ -3134,6 +3128,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
     if (!session) return c.json({ error: 'Active session not found' }, 404);
 
+    const roleDecision = await resolveImpersonationRole(db, session.tenantId, session.targetUserId, requestedRole);
+    if (!roleDecision.ok) return c.json({ error: roleDecision.error }, roleDecision.status);
+    const role = roleDecision.role;
     const fromRole = session.roleOverride;
 
     // Log the role switch

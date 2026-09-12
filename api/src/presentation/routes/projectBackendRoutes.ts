@@ -46,6 +46,19 @@ import {
 import { verifySecretNameFor } from '../../application/backend/webhookVerification';
 import { HOSTING_APEX } from '../../application/ide/siteHosting';
 import { siteForProject } from '../../application/ide/siteTraffic';
+import { parseOptionalBody, z } from './requestBody';
+
+// Every field is type-guarded by its handler (with its own worded 400), and a handler
+// `document` is parsed by `saveHandler` — so these only refuse a non-object body.
+const BackendPatchBody = z.object({
+  strategy: z.unknown().optional(),
+  status: z.unknown().optional(),
+});
+const HandlerDocumentBody = z.object({ document: z.unknown().optional() });
+const SecretBody = z.object({
+  value: z.unknown().optional(),
+  description: z.unknown().optional(),
+});
 
 /** Resolve + authorise the project in the path. A miss is reported as 404 rather
  *  than 403 — the existence of another tenant's project is itself information. */
@@ -180,7 +193,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
     const env = c.env as Env;
-    const body = await c.req.json<{ strategy?: unknown; status?: unknown }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, BackendPatchBody);
 
     // Both fields are optional, but a PATCH that names NEITHER is a caller bug
     // rather than a no-op worth pretending succeeded.
@@ -238,7 +251,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env & { UPLOADS?: R2Bucket };
     if (!env.UPLOADS) return c.json({ error: 'Storage is not configured' }, 503);
 
-    const body = await c.req.json<{ document?: unknown }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, HandlerDocumentBody);
     const saved = await saveHandler(env, env.UPLOADS, project.id, c.req.param('name'), body.document);
     if (!saved.ok) return statusResponse(c, { error: saved.reason }, saved.status, { source: 'presentation/routes/projectBackendRoutes.ts', operation: 'saveHandler' });
 
@@ -299,7 +312,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
     const project = await assertProject(db, tenantId, c.req.param('projectId'));
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    const body = await c.req.json<{ value?: unknown; description?: unknown }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, SecretBody);
     if (typeof body.value !== 'string') return c.json({ error: 'value is required' }, 400);
 
     const result = await setProjectSecret(db, c.env as Env, {

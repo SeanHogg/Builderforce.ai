@@ -162,12 +162,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    * Body: { email, password, username?, display_name? } — username defaults to email
    */
   router.post('/auth/register', async (c) => {
-    const body = await c.req.json<{
-      email: string;
-      username?: string;
-      password: string;
-      display_name?: string;
-    }>();
+    const body = await parseBody(c, RegisterBody);
     const email = (body.email ?? '').toLowerCase().trim();
     const username = (body.username && body.username.trim())
       ? body.username.trim().toLowerCase()
@@ -244,7 +239,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    * Body: { email, password }
    */
   router.post('/auth/login', async (c) => {
-    const { email, password } = await c.req.json<{ email: string; password: string }>();
+    const { email, password } = await parseBody(c, LoginBody);
     if (!email || !password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
@@ -348,11 +343,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    */
   router.put('/users/me', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{
-      display_name?: string;
-      bio?: string;
-      avatar_url?: string;
-    }>();
+    const body = await parseBody(c, ProfileBody);
 
     const [updated] = await db
       .update(schema.users)
@@ -526,20 +517,8 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    */
   router.post('/skills', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{
-      name: string;
-      slug: string;
-      description: string;
-      category: string;
-      tags?: string[];
-      version?: string;
-      readme?: string;
-      icon_url?: string;
-      repo_url?: string;
-      price?: number;
-      pricing_model?: 'flat_fee' | 'consumption';
-      price_unit?: string;
-    }>();
+    // Read BEFORE the insert's try: its catch answers 500, and a bad body is a 400.
+    const body = await parseBody(c, CreateSkillBody);
     const { name, slug, description, category } = body;
     if (!name || !slug || !description || !category) {
       return c.json({ error: 'name, slug, description, and category are required' }, 400);
@@ -559,7 +538,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
           readme:       body.readme  ?? null,
           iconUrl:      body.icon_url ?? null,
           repoUrl:      body.repo_url ?? null,
-          priceCents:   body.price != null ? Math.round(body.price * 100) : 0,
+          priceCents:   body.price != null ? Math.round(Number(body.price) * 100) : 0,
           pricingModel: body.pricing_model ?? 'flat_fee',
           priceUnit:    body.price_unit ?? null,
         })
@@ -591,11 +570,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     if (!existing) return c.json({ error: 'Not found' }, 404);
     if (existing.authorId !== userId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<Partial<{
-      name: string; description: string; category: string;
-      tags: string[]; version: string; readme: string;
-      icon_url: string; repo_url: string; published: boolean;
-    }>>();
+    const body = await parseBody(c, UpdateSkillBody);
 
     const [updated] = await db
       .update(schema.marketplaceSkills)
@@ -685,11 +660,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    */
   router.post('/purchase', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{
-      artifactType: 'skill' | 'persona';
-      artifactSlug: string;
-      stripePaymentIntentId?: string;
-    }>();
+    const body = await parseBody(c, PurchaseBody);
     if (!body.artifactType || !body.artifactSlug) {
       return c.json({ error: 'artifactType and artifactSlug are required' }, 400);
     }

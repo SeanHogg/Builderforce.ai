@@ -40,6 +40,35 @@ import {
 } from '../../application/advertising/adsService';
 import { readAdInsightsLedger, syncTenantAdInsights } from '../../application/advertising/adInsightsSync';
 import { isAdObjective, isAdNetwork, AD_STATUSES, type AdStatus } from '../../application/advertising/adsProviders';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
+
+/** Which connected ad account a write targets — either coordinate may be absent. */
+const adAccountFields = {
+  connectionId: z.string().nullish(),
+  network: z.string().nullish(),
+};
+
+/** Budgets arrive as a decimal (number or numeric string) and `budgetCents` reads
+ *  null / "" as "clear", so both stay admitted. `objective` stays a plain string so
+ *  the handler's own "Say what the campaign is for" message still answers. */
+const CreateAdCampaignBody = z.object({
+  ...adAccountFields,
+  name: z.string().nullish(),
+  objective: z.string().nullish(),
+  dailyBudget: zNumberLike.nullish(),
+  totalBudget: zNumberLike.nullish(),
+  startsAt: z.string().nullish(),
+  endsAt: z.string().nullish(),
+  launch: z.boolean().nullish(),
+});
+
+const UpdateAdCampaignBody = z.object({
+  ...adAccountFields,
+  name: z.string().nullish(),
+  status: z.string().nullish(),
+  dailyBudget: zNumberLike.nullish(),
+  totalBudget: zNumberLike.nullish(),
+});
 
 /** A budget arrives as a decimal in the account currency and is stored in cents. */
 function budgetCents(value: unknown): number | null | undefined {
@@ -100,11 +129,7 @@ export function createAdsRoutes(db: Db): Hono<HonoEnv> {
   // down is never the same act as starting to spend.
   r.post('/campaigns', manager, async (c) => {
     const { env, tenantId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as {
-      connectionId?: string; network?: string; name?: string; objective?: string;
-      dailyBudget?: number | string; totalBudget?: number | string;
-      startsAt?: string; endsAt?: string; launch?: boolean;
-    };
+    const body = await parseOptionalBody(c, CreateAdCampaignBody);
 
     const name = (body.name ?? '').trim();
     if (!name) return c.json({ error: 'A campaign needs a name.' }, 400);
@@ -142,10 +167,7 @@ export function createAdsRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/campaigns/:externalId', manager, async (c) => {
     const { env, tenantId } = ctx(c);
     const externalId = c.req.param('externalId');
-    const body = await c.req.json().catch(() => ({})) as {
-      connectionId?: string; network?: string; name?: string; status?: string;
-      dailyBudget?: number | string; totalBudget?: number | string;
-    };
+    const body = await parseOptionalBody(c, UpdateAdCampaignBody);
 
     const resolved = await resolveAdAccount(db, env, tenantId, {
       connectionId: body.connectionId ?? null,

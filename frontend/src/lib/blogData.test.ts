@@ -63,6 +63,13 @@ describe('getPostBySlug', () => {
     }
   });
 
+  it('never renders YAML quoting as part of a title or description', () => {
+    // 29 posts quote their title (a `: ` in a YAML scalar requires it); the quote
+    // marks rendered as copy until the front-matter reader learned to strip them.
+    const quoted = BLOG_POSTS.filter((post) => /^["']|["']$/.test(post.title) || /^["'].*["']$/.test(post.description)).map((post) => post.slug);
+    expect(quoted).toEqual([]);
+  });
+
   it('tags is an array of non-empty strings', () => {
     for (const post of BLOG_POSTS) {
       for (const tag of post.tags) {

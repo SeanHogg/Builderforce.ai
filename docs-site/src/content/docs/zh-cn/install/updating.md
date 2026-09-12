@@ -30,7 +30,7 @@ curl -fsSL https://builderforce.ai/install.sh | bash
 - 如果你不想再次运行新手引导向导，添加 `--no-onboard`。
 - 对于**源码安装**，使用：
   ```bash
-  curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git --no-onboard
+  curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
   ```
   安装程序**仅**在仓库干净时才会执行 `git pull --rebase`。
 - 对于**全局安装**，脚本底层使用 `npm install -g @seanhogg/builderforce-agents@latest`。

@@ -28,6 +28,29 @@ import { BOARD_PROVIDERS, BOARD_PROVIDER_IDS } from '../../application/boardsync
 import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, z } from './requestBody';
+
+/** `projectId` / `provider` stay optional so "projectId and provider are required"
+ *  and the provider-catalog message still answer. */
+const CreateBoardConnectionBody = z.object({
+  projectId: z.number().optional(),
+  provider: z.string().optional(),
+  credentialId: z.string().nullish(),
+  externalBoardId: z.string().nullish(),
+  webhookSecret: z.string().nullish(),
+  webhookEnabled: z.boolean().nullish(),
+  pollIntervalSec: z.number().nullish(),
+});
+
+/** Each key is written only when present; `null` clears the nullable ones. */
+const UpdateBoardConnectionBody = z.object({
+  credentialId: z.string().nullable().optional(),
+  externalBoardId: z.string().nullable().optional(),
+  status: z.string().optional(),
+  webhookSecret: z.string().nullable().optional(),
+  webhookEnabled: z.boolean().optional(),
+  pollIntervalSec: z.number().optional(),
+});
 
 export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -42,15 +65,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
-    const body = await c.req.json<{
-      projectId: number;
-      provider: string;
-      credentialId?: string | null;
-      externalBoardId?: string | null;
-      webhookSecret?: string | null;
-      webhookEnabled?: boolean;
-      pollIntervalSec?: number;
-    }>();
+    const body = await parseBody(c, CreateBoardConnectionBody);
 
     if (!body.projectId || !body.provider) {
       return c.json({ error: 'projectId and provider are required' }, 400);
@@ -126,14 +141,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(boardConnections.id, id), eq(boardConnections.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Connection not found' }, 404);
 
-    const body = await c.req.json<{
-      credentialId?: string | null;
-      externalBoardId?: string | null;
-      status?: string;
-      webhookSecret?: string | null;
-      webhookEnabled?: boolean;
-      pollIntervalSec?: number;
-    }>();
+    const body = await parseBody(c, UpdateBoardConnectionBody);
 
     const [updated] = await db
       .update(boardConnections)

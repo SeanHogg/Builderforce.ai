@@ -32,3 +32,7 @@ next-env.d.ts
 # next-intl catalogs published by scripts/publish-message-catalogs.mjs (prebuild).
 # Minified copies of src/i18n/messages/ — that directory is the source of truth.
 /public/i18n/
+
+# Translated blog bodies published by scripts/publish-blog-translations.mjs
+# (dev + prebuild). src/content/blog/<slug>.<locale>.md is the source of truth.
+/public/blog-i18n/

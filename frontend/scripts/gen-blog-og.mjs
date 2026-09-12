@@ -129,7 +129,10 @@ async function main() {
     return;
   }
   mkdirSync(OUT_DIR, { recursive: true });
-  const posts = readdirSync(CONTENT_DIR).filter((name) => name.endsWith('.md'));
+  // English originals only: `<slug>.<locale>.md` is a TRANSLATED BODY of the same
+  // post (see src/lib/blogLocale.ts), not a post of its own, and has no
+  // front-matter to draw a card from. Slugs never contain a dot.
+  const posts = readdirSync(CONTENT_DIR).filter((name) => /^[^.]+\.md$/.test(name));
   let written = 0;
   let skipped = 0;
 

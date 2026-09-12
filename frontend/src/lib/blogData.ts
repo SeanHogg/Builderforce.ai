@@ -192,10 +192,21 @@ function parseFrontmatter(raw: string): { meta: Record<string, string>; body: st
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
-    const value = line.slice(colonIdx + 1).trim();
+    // A YAML scalar may be quoted — and must be whenever it contains `: `, which
+    // is every "Title: Subtitle" headline. The quotes are syntax, not copy: kept,
+    // they rendered on the page as `"Create Before You Sign Up: …"` in 29 titles
+    // (the OG card script already stripped them, so the share card and the page
+    // disagreed about the title).
+    const value = unquote(line.slice(colonIdx + 1).trim());
     if (key) meta[key] = value;
   }
   return { meta, body };
+}
+
+/** Strip one pair of matching surrounding YAML quotes from a scalar. */
+function unquote(value: string): string {
+  const quoted = value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")));
+  return quoted ? value.slice(1, -1) : value;
 }
 
 /** Parse a YAML array like `[a, b, c]` or `- a\n- b` into a string array. */

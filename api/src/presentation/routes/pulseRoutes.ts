@@ -25,6 +25,20 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { computePulseAggregate, computePulseTrend } from '../../application/insights/pulseSurvey';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
+
+/** `score` is `Math.round(Number(...))`-ed and range-checked against the survey's
+ *  own scale by the handler, which answers that 400 itself. */
+const PulseResponseBody = z.object({
+  score: zNumberLike.nullish(),
+  comment: z.string().nullish(),
+});
+
+/** An out-of-band `scale` falls back to 5, as it always did. */
+const OpenPulseBody = z.object({
+  question: z.string().nullish(),
+  scale: z.number().nullish(),
+});
 
 function userIdOf(c: unknown): string | null {
   return (c as { get(k: string): string | undefined }).get('userId') ?? null;
@@ -72,8 +86,7 @@ export function createPulseRoutes(db: Db): Hono<HonoEnv> {
     if (!survey) return c.json({ error: 'survey not found' }, 404);
     if (!survey.active) return c.json({ error: 'survey is closed' }, 409);
 
-    type Body = { score?: number; comment?: string };
-    const body = await c.req.json<Body>().catch(() => ({} as Body));
+    const body = await parseOptionalBody(c, PulseResponseBody);
     const score = Math.round(Number(body.score));
     if (!Number.isInteger(score) || score < 1 || score > survey.scale) {
       return c.json({ error: `score must be an integer 1..${survey.scale}` }, 400);
@@ -115,8 +128,7 @@ export function createPulseRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    type Body = { question?: string; scale?: number };
-    const body = await c.req.json<Body>().catch(() => ({} as Body));
+    const body = await parseOptionalBody(c, OpenPulseBody);
     const question = typeof body.question === 'string' ? body.question.trim().slice(0, 255) : '';
     if (!question) return c.json({ error: 'question is required' }, 400);
     const scale = Number.isInteger(body.scale) && body.scale! >= 2 && body.scale! <= 10 ? body.scale! : 5;

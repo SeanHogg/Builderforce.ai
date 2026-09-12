@@ -25,6 +25,19 @@ import { approvalRules } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+/** The rule's matchers. `null` is meaningful ("match any") and PATCH tests key
+ *  PRESENCE (`'actionType' in body`), which z.object preserves: an absent optional
+ *  key stays absent. `name` stays optional so "name is required" still answers. */
+const ruleFields = {
+  name: z.string().nullish(),
+  actionType: z.string().nullish(),
+  maxEstimatedCost: z.number().nullish(),
+  maxFilesChanged: z.number().nullish(),
+  isEnabled: z.boolean().nullish(),
+};
+const ApprovalRuleBody = z.object(ruleFields);
 
 export function createApprovalRuleRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -36,13 +49,7 @@ export function createApprovalRuleRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/approval-rules
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      name: string;
-      actionType?: string | null;
-      maxEstimatedCost?: number | null;
-      maxFilesChanged?: number | null;
-      isEnabled?: boolean;
-    }>();
+    const body = await parseBody(c, ApprovalRuleBody);
 
     if (!body.name?.trim()) {
       return c.json({ error: 'name is required' }, 400);
@@ -84,13 +91,7 @@ export function createApprovalRuleRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(approvalRules.id, id), eq(approvalRules.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Rule not found' }, 404);
 
-    const body = await c.req.json<{
-      name?: string;
-      actionType?: string | null;
-      maxEstimatedCost?: number | null;
-      maxFilesChanged?: number | null;
-      isEnabled?: boolean;
-    }>();
+    const body = await parseBody(c, ApprovalRuleBody);
 
     const [updated] = await db
       .update(approvalRules)

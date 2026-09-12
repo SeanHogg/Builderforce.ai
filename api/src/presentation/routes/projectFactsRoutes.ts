@@ -21,6 +21,20 @@ import { recallProjectFacts, upsertProjectFact } from '../../application/llm/pro
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
 import { evermindGenerate, type ArtifactStore } from '../../application/llm/evermindRuntime';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseOptionalBody, z } from './requestBody';
+
+/** Every field is type-guarded by the handler, which answers its own
+ *  "… are required" — the schema only refuses a non-object body. */
+const RememberFactBody = z.object({
+  key: z.unknown().optional(),
+  content: z.unknown().optional(),
+  source: z.unknown().optional(),
+});
+
+const CacheAnswerBody = z.object({
+  question: z.unknown().optional(),
+  answer: z.unknown().optional(),
+});
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
 async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
@@ -47,9 +61,7 @@ async function recallCore(env: Env, db: Db, tenantId: number, projectId: number,
 
 async function rememberCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const body = (await c.req.json<{ key?: unknown; content?: unknown; source?: unknown }>().catch(() => ({}))) as {
-    key?: unknown; content?: unknown; source?: unknown;
-  };
+  const body = await parseOptionalBody(c, RememberFactBody);
   const key = typeof body.key === 'string' ? body.key : '';
   const content = typeof body.content === 'string' ? body.content : '';
   if (!key.trim() || !content.trim()) return json({ error: 'key and content are required' }, 400);
@@ -97,9 +109,7 @@ async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: 
  *  short-circuits (no LLM). Best-effort — never fails the caller's reply. */
 async function cacheAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const body = (await c.req.json<{ question?: unknown; answer?: unknown }>().catch(() => ({}))) as {
-    question?: unknown; answer?: unknown;
-  };
+  const body = await parseOptionalBody(c, CacheAnswerBody);
   const question = typeof body.question === 'string' ? body.question : '';
   const answer = typeof body.answer === 'string' ? body.answer : '';
   if (!question.trim() || !answer.trim()) return json({ error: 'question and answer are required' }, 400);

@@ -24,9 +24,34 @@ export const FAQ_SETS = ['homepage', 'pricing', 'login', 'register', 'freelancer
 
 export type FaqSet = (typeof FAQ_SETS)[number];
 
+/**
+ * How many entries each set holds — the structure {@link faqEntryKeys} addresses,
+ * pinned against all five catalogs by `messages.test.ts`.
+ */
+export const FAQ_SET_SIZES: Record<FaqSet, number> = {
+  homepage: 33,
+  pricing: 5,
+  login: 3,
+  register: 4,
+  freelancer: 4,
+  blog: 3,
+  projectsTasks: 5,
+};
+
 /** Catalog key of a marketing FAQ set. */
 export function faqKey(set: FaqSet): string {
   return contentKey(`faq.${set}`);
+}
+
+/**
+ * Per-entry catalog keys of a set, for a registry that resolves its FAQ through
+ * a key-in/string-out translator (`lib/routeMarketing.ts`) rather than `raw`.
+ */
+export function faqEntryKeys(set: FaqSet): { question: string; answer: string }[] {
+  return Array.from({ length: FAQ_SET_SIZES[set] }, (_, i) => ({
+    question: `${faqKey(set)}.${i}.question`,
+    answer: `${faqKey(set)}.${i}.answer`,
+  }));
 }
 
 /** A marketing FAQ set, localized by the reader it is resolved through. */

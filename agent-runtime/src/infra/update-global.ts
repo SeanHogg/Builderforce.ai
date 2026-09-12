@@ -54,6 +54,13 @@ export async function resolveGlobalPackageRoot(
   if (!root) {
     return null;
   }
+  // Prefer an existing install under any recognised package name; default to the current one.
+  for (const name of ALL_PACKAGE_NAMES) {
+    const candidate = path.join(root, name);
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
   return path.join(root, PRIMARY_PACKAGE_NAME);
 }
 
@@ -143,7 +150,9 @@ export async function cleanupGlobalRenameDirs(params: {
 }): Promise<{ removed: string[] }> {
   const removed: string[] = [];
   const root = params.globalRoot.trim();
-  const name = params.packageName.trim();
+  // npm leaves `.<name>-<suffix>` rename dirs beside the package; for a scoped package that is
+  // the unscoped name inside the scope directory (the `globalRoot` callers pass).
+  const name = params.packageName.trim().split("/").pop() ?? "";
   if (!root || !name) {
     return { removed };
   }

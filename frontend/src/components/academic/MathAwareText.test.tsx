@@ -17,10 +17,13 @@ describe('MathAwareText', () => {
   });
 
   it('draws a bare expression as MathML a screen reader can speak', () => {
-    render(<MathAwareText text="\frac{dQ}{dt} = -kA\frac{dT}{dx}" />);
-    const math = screen.getByRole('math');
+    // Queried by attribute: jsdom's getComputedStyle cannot walk a MathML subtree, so
+    // `getByRole` crashes on it — a harness limit, not what a browser does.
+    const { container } = render(<MathAwareText text="\frac{dQ}{dt} = -kA\frac{dT}{dx}" />);
+    const math = container.querySelector('[role="math"]')!;
     expect(math.getAttribute('aria-label')).toContain('the fraction');
     expect(math.querySelector('mfrac')).not.toBeNull();
+    expect(screen.queryByText('\\frac{dQ}{dt} = -kA\\frac{dT}{dx}')).toBeNull();
   });
 
   it('sends delimited maths in prose through the one markdown pipeline', () => {

@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, type ReactNode } from 'react';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import { normalizeTexDelimiters, renderTex, texRenderMode } from '@/lib/academic/mathTex';

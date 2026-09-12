@@ -137,28 +137,28 @@ export default function BlogPageClient() {
   // readout of the search box rather than of the blog.
   const insightItems: CatalogInsightsItem[] = useMemo(
     () =>
-      BLOG_POSTS.map((post) => ({
+      posts.map((post) => ({
         key: post.slug,
         name: post.title,
         group: t(`topic.${topicOf(post)}` as never),
       })),
-    [t],
+    [posts, t],
   );
 
   const tagBars = useMemo(() => {
     const counted = new Map<string, number>();
-    for (const post of BLOG_POSTS) {
+    for (const post of posts) {
       for (const postTag of post.tags) counted.set(postTag, (counted.get(postTag) ?? 0) + 1);
     }
     return [...counted.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 6)
-      .map(([label, value]) => ({ key: label, label, value }));
-  }, []);
+      .map(([id, value]) => ({ key: id, label: blogTagLabel(id, text), value }));
+  }, [posts, text]);
 
   const distinctTags = useMemo(
-    () => new Set(BLOG_POSTS.flatMap((post) => post.tags)).size,
-    [],
+    () => new Set(posts.flatMap((post) => post.tags)).size,
+    [posts],
   );
 
   return (
@@ -254,7 +254,7 @@ export default function BlogPageClient() {
         }
       `}</style>
 
-      <JsonLd data={blogIndexSchema(BLOG_POSTS)} />
+      <JsonLd data={blogIndexSchema(posts)} />
 
       <div className="blog-page">
         {/* ── Hero ── */}

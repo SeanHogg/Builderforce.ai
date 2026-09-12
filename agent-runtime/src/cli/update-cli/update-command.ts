@@ -642,7 +642,7 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
       );
       defaultRuntime.log(
         theme.muted(
-          `Examples: \`${replaceCliName("npm i -g builderforce@latest", CLI_NAME)}\` or \`${replaceCliName("pnpm add -g builderforce@latest", CLI_NAME)}\``,
+          `Examples: \`npm i -g ${DEFAULT_PACKAGE_NAME}@latest\` or \`pnpm add -g ${DEFAULT_PACKAGE_NAME}@latest\``,
         ),
       );
     }

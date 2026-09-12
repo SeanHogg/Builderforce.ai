@@ -26,7 +26,7 @@ Notes:
 - For **source installs**, use:
 
   ```bash
-  curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git --no-onboard
+  curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
   ```
 
   The installer will `git pull --rebase` **only** if the repo is clean.

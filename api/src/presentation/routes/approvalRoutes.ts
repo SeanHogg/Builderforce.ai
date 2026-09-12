@@ -67,6 +67,27 @@ import {
   sendMailboxAutomationExecution,
 } from '../../application/mailbox/mailboxAutomationService';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+/** `actionType` / `description` stay optional so the handler's own
+ *  "actionType and description are required" still answers; `metadata` is stored
+ *  as JSON verbatim, so it keeps every key. */
+const CreateApprovalBody = z.object({
+  kind: z.string().nullish(),
+  actionType: z.string().optional(),
+  description: z.string().optional(),
+  metadata: zJsonObject.nullish(),
+  expiresAt: z.string().nullish(),
+  requestedBy: z.string().nullish(),
+});
+
+/** `status` is a plain string so an unknown verb still gets the handler's own
+ *  `status must be "approved", "rejected", or "answered"` message. */
+const ResolveApprovalBody = z.object({
+  status: z.string().optional(),
+  reviewNote: z.string().nullish(),
+  responseText: z.string().nullish(),
+});
 
 /** The role a `task.execution` approval was created for (set on the metadata when
  *  the gated run is role-attributed), or null. Drives the §5.8 approvals→sign-off bridge. */
@@ -161,14 +182,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       return c.json({ error: `Requires at least '${TenantRole.DEVELOPER}' role to raise an approval request` }, 403);
     }
 
-    const body = await c.req.json<{
-      kind?:        string;
-      actionType:   string;
-      description:  string;
-      metadata?:    Record<string, unknown>;
-      expiresAt?:   string;
-      requestedBy?: string;
-    }>();
+    const body = await parseBody(c, CreateApprovalBody);
 
     if (!body.actionType || !body.description) {
       return c.json({ error: 'actionType and description are required' }, 400);
@@ -297,11 +311,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     const id        = c.req.param('id');
     const env       = c.env;
 
-    const body = await c.req.json<{
-      status:        'approved' | 'rejected' | 'answered';
-      reviewNote?:   string;
-      responseText?: string;
-    }>();
+    const body = await parseBody(c, ResolveApprovalBody);
 
     if (body.status !== 'approved' && body.status !== 'rejected' && body.status !== 'answered') {
       return c.json({ error: 'status must be "approved", "rejected", or "answered"' }, 400);

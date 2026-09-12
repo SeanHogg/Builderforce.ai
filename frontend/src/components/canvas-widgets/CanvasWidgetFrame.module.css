@@ -1,6 +1,6 @@
 /*
- * The widget frame and its stopped state. Every colour is a token with a fallback,
- * so a third party's rectangle sits in both themes the way the rest of the canvas does.
+ * The widget frame and its stopped state. Every colour is a design token, so a third
+ * party's rectangle sits in both themes the way the rest of the canvas does.
  */
 
 .frame {
@@ -8,8 +8,8 @@
   width: 100%;
   min-height: 80px;
   border: 0;
-  border-radius: var(--radius-sm, 6px);
-  background: var(--surface-raised, var(--surface, #fff));
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised, var(--surface));
 }
 
 .frame[data-sizing='fill'] {
@@ -25,11 +25,11 @@
   min-height: 80px;
   height: 100%;
   padding: 12px;
-  border: 1px dashed var(--border, #ccc);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--surface, #fff);
-  color: var(--text-secondary, #555);
-  font-size: var(--font-size-small, 13px);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
   line-height: 1.45;
 }
 
@@ -40,17 +40,17 @@
 .restart {
   min-height: 32px;
   padding: 0 12px;
-  border: 1px solid var(--accent, #6d5dfc);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--surface, #fff);
-  color: var(--text-primary, #111);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
 
 .restart:focus-visible {
-  outline: 2px solid var(--accent, #6d5dfc);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -63,6 +63,6 @@
 .status {
   margin: 0;
   padding: 12px;
-  color: var(--text-secondary, #555);
-  font-size: var(--font-size-small, 13px);
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
 }

@@ -10,6 +10,7 @@
  * board cannot resolve its widgets either.
  */
 
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { apiRequest } from './apiClient';
 
 export interface CanvasWidgetRecord {
@@ -38,23 +39,22 @@ export const canvasWidgetApi = {
     ),
 };
 
-const cache = new Map<string, Promise<CanvasWidgetRecord | null>>();
+/** A registration changes when its integrator re-publishes it — rarely, and never mid-board. */
+const WIDGET_RESOLVE_TTL_MS = 5 * 60_000;
 
 /**
- * Resolve once per page for every surface that shows the placement — the flat card
- * and the room's stand draw the same widget and must not fetch it twice. A failure
- * resolves to null and is forgotten, so the next mount asks again.
+ * Resolve once for every surface that shows the placement — the flat card and the
+ * room's stand draw the same widget and must not fetch it twice — through the ONE
+ * client read-through cache. A failure resolves to null and is dropped from the
+ * cache, so the next mount asks again rather than remembering an outage.
  */
 export function resolveCanvasWidget(sessionId: string, widgetId: string): Promise<CanvasWidgetRecord | null> {
-  const key = `${sessionId}:${widgetId}`;
-  const known = cache.get(key);
-  if (known) return known;
-  const pending = canvasWidgetApi.resolve(sessionId, widgetId)
-    .then(({ widget }) => (widget && widget.status === 'active' ? widget : null))
-    .catch(() => {
-      cache.delete(key);
-      return null;
-    });
-  cache.set(key, pending);
-  return pending;
+  const key = `canvas-widget:${sessionId}:${widgetId}`;
+  return getOrSetClientCached(key, async () => {
+    const { widget } = await canvasWidgetApi.resolve(sessionId, widgetId);
+    return widget && widget.status === 'active' ? widget : null;
+  }, { ttlMs: WIDGET_RESOLVE_TTL_MS }).catch(() => {
+    invalidateClientCache(key);
+    return null;
+  });
 }

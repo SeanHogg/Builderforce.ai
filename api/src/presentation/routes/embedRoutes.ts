@@ -19,6 +19,18 @@ import { TenantRole } from '../../domain/shared/types';
 import { tenants } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+/** Both flags are read as `=== true`, so `null` / absent both mean "no". */
+const FeatureToggleBody = z.object({
+  enabled: z.boolean().nullish(),
+  consentAcknowledged: z.boolean().nullish(),
+});
+
+/** `capabilities` is filtered through `isCapability`, so unknown entries are dropped, not refused. */
+const EmbedConfigBody = FeatureToggleBody.extend({
+  capabilities: z.unknown().optional(),
+});
 
 // Mirror of the package's EmbedCapability set (single source of truth lives in
 // @seanhogg/builderforce-embedded views.ts; duplicated here only to validate the
@@ -171,7 +183,7 @@ export function createEmbedRoutes(db: Db): Hono<HonoEnv> {
 
     const tenantId = c.get('tenantId');
     const userId = c.get('userId');
-    const body = await c.req.json<{ enabled?: boolean; consentAcknowledged?: boolean }>();
+    const body = await parseBody(c, FeatureToggleBody);
     const enabled = body.enabled === true;
 
     const [row] = await db
@@ -230,7 +242,7 @@ export function createEmbedRoutes(db: Db): Hono<HonoEnv> {
   router.put('/config', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
     const userId = c.get('userId');
-    const body = await c.req.json<{ enabled?: boolean; capabilities?: unknown; consentAcknowledged?: boolean }>();
+    const body = await parseBody(c, EmbedConfigBody);
     const capabilities = Array.isArray(body.capabilities) ? body.capabilities.filter(isCapability) : [];
     const enabled = body.enabled === true;
 

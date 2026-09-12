@@ -83,6 +83,7 @@ __export(src_exports, {
   askUserAnchorId: () => askUserAnchorId,
   askUserBlock: () => askUserBlock,
   attachEvermindLearn: () => attachEvermindLearn,
+  attemptedPublish: () => attemptedPublish,
   brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
   buildComposerDirectives: () => buildComposerDirectives,
@@ -92,6 +93,7 @@ __export(src_exports, {
   byoUnresolvedSummary: () => byoUnresolvedSummary,
   byoVendorLabel: () => byoVendorLabel,
   canChangeCodeHere: () => canChangeCodeHere,
+  canShipHere: () => canShipHere,
   catalogToolNamesMentionedIn: () => catalogToolNamesMentionedIn,
   chatActivityText: () => chatActivityText,
   chatConversationDirective: () => chatConversationDirective,
@@ -112,12 +114,14 @@ __export(src_exports, {
   countReconciledMemories: () => countReconciledMemories,
   createBrainRestPersistence: () => createBrainRestPersistence,
   createPayloadBudget: () => createPayloadBudget,
+  declinesShipping: () => declinesShipping,
   deriveChatTitle: () => deriveChatTitle,
   describeLiveStep: () => describeLiveStep,
   describeTool: () => describeTool,
   detectAnnouncedButUnmadeToolCall: () => detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim: () => detectUnbackedTicketClaim,
   detectUnbackedWriteClaim: () => detectUnbackedWriteClaim,
+  dirtyPathsOf: () => dirtyPathsOf,
   displayModelName: () => displayModelName,
   effortProfile: () => effortProfile,
   extractXmlToolCalls: () => extractXmlToolCalls,
@@ -164,6 +168,7 @@ __export(src_exports, {
   isUnscopedMutationTool: () => isUnscopedMutationTool,
   isUserConfiguredModelRef: () => isUserConfiguredModelRef,
   lastConsolidationIndex: () => lastConsolidationIndex,
+  leftChangeUnshipped: () => leftChangeUnshipped,
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
   linkedTicketsToComplete: () => linkedTicketsToComplete,
   localStorageConfirmationPersistence: () => localStorageConfirmationPersistence,
@@ -217,6 +222,7 @@ __export(src_exports, {
   scopeToConsolidation: () => scopeToConsolidation,
   selectPendingAskUser: () => selectPendingAskUser,
   selectToolsForTurn: () => selectToolsForTurn,
+  selfReviewShipDirective: () => selfReviewShipDirective,
   serializeAskUser: () => serializeAskUser,
   setLastResolvedModel: () => setLastResolvedModel,
   setMcpToolStatus: () => setMcpToolStatus,
@@ -242,6 +248,7 @@ __export(src_exports, {
   trimToolResult: () => trimToolResult,
   turnInterruption: () => turnInterruption,
   turnOptimizationDirective: () => turnOptimizationDirective,
+  unshippedChangeNudge: () => unshippedChangeNudge,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
   useBrainConfig: () => useBrainConfig,
@@ -1480,7 +1487,7 @@ function chatWorkLinkingDirective(chatId) {
 \u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
 \u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
 \u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
-\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
+\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer \u2014 self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
 }
 
@@ -2257,6 +2264,9 @@ function isUnscopedMutationTool(name) {
 }
 function canChangeCodeHere(toolNames) {
   return toolNames.some(isCodeChangeTool);
+}
+function canShipHere(toolNames) {
+  return toolNames.includes("git_commit") && toolNames.includes("git_push");
 }
 function localToolsIn(toolNames) {
   return toolNames.filter(isLocalWorkspaceTool);
@@ -3290,12 +3300,14 @@ function splitReasoningSegments(text) {
   const cleaned = unwrapFinalTags(text);
   const segments = segmentsOf(cleaned, scanReasoning(cleaned));
   if (segments.length === 0) return [{ kind: "answer", content: text }];
-  return promoteSwallowedAnswer(segments);
+  return stitchSplitSentence(promoteSwallowedAnswer(segments));
 }
+var EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
 function segmentsOf(text, spans) {
   const out = [];
   for (const span of spans) {
-    const content = text.slice(span.contentStart, span.contentEnd).trim();
+    const raw = text.slice(span.contentStart, span.contentEnd);
+    const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
     if (content) out.push({ kind: span.kind, content });
   }
   return out;
@@ -3614,8 +3626,11 @@ function parseGitShortStatus(output) {
     behind: behind ? Number(behind[1]) : 0
   };
 }
-var GIT_PUSH = /\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*push\b/i;
-var GIT_STATUS_CMD = /\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*status\b/i;
+function gitCommandPattern(verbs) {
+  return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
+}
+var GIT_PUSH = gitCommandPattern("push");
+var GIT_STATUS_CMD = gitCommandPattern("status");
 function commandOf(ev) {
   const a = ev.args;
   if (typeof a?.command === "string") return a.command;
@@ -3638,23 +3653,67 @@ function succeeded(ev) {
 function isPush(ev) {
   return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
 }
-function shippedToBaseBranch(events) {
+function dirtyPathsOf(output) {
+  const out = [];
+  for (const raw of output.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (line.length < 4 || line.startsWith("##")) continue;
+    let path = line.slice(3);
+    const arrow = path.indexOf(" -> ");
+    if (arrow >= 0) path = path.slice(arrow + 4);
+    path = path.trim().replace(/^"(.*)"$/, "$1");
+    if (path) out.push(path);
+  }
+  return out;
+}
+function touchedStillDirty(touched, dirty) {
+  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const d = dirty.map(norm);
+  return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
+}
+function shippedToBaseBranch(events, opts) {
   const steps = events.filter((e) => e.category === "tool");
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
     if (succeeded(steps[i]) && isPush(steps[i])) pushedAt = i;
   }
   if (pushedAt < 0) return false;
-  for (let i = pushedAt + 1; i < steps.length; i += 1) {
+  const touched = opts?.touchedFiles ?? [];
+  for (let i = pushedAt; i < steps.length; i += 1) {
     const ev = steps[i];
     if (!succeeded(ev)) continue;
-    const isStatus = ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
+    const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
     if (!isStatus) continue;
-    const status2 = parseGitShortStatus(outputOf(ev));
+    const output = outputOf(ev);
+    const status2 = parseGitShortStatus(output);
     if (!status2) continue;
-    if (status2.branch && BASE_BRANCHES.has(status2.branch) && status2.upstream && status2.ahead === 0) return true;
+    if (!(status2.branch && BASE_BRANCHES.has(status2.branch) && status2.upstream && status2.ahead === 0)) continue;
+    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
+    return true;
   }
   return false;
+}
+
+// src/selfReviewShip.ts
+function selfReviewShipDirective(chatId) {
+  return 'SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n1. VERIFY \u2014 run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n2. SELF-REVIEW \u2014 read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 builtin_chats_list_tickets with chatId=' + chatId + ' lists it; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
+}
+var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
+var RAW_PUBLISH = gitCommandPattern("commit|push");
+function attemptedPublish(events) {
+  return events.some(
+    (e) => e.category === "tool" && (PUBLISH_TOOLS.has(e.label) || RAW_PUBLISH.test(commandOf(e)))
+  );
+}
+var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
+function declinesShipping(text) {
+  return DECLINES_SHIPPING.test(text ?? "");
+}
+function leftChangeUnshipped(input) {
+  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && !declinesShipping(input.requestText) && !attemptedPublish(input.events);
+}
+function unshippedChangeNudge() {
+  return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
 // src/readCoverage.ts
@@ -3994,6 +4053,7 @@ function makeCell() {
     touchedFiles: [],
     deltaTicketId: null,
     deltaRecordedFiles: [],
+    runStartedAt: "",
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT
   };
@@ -4056,6 +4116,10 @@ function pushTrace(c, ev) {
   c.trace.push(ev);
   if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
   emit(c);
+}
+function runTrace(c) {
+  const from = c.runStartedAt;
+  return from ? c.trace.filter((e) => e.ts >= from) : c.trace;
 }
 var STEP_RESULT_CAP = 4e3;
 function persistStep(chatId, persistence, ev) {
@@ -4364,6 +4428,7 @@ async function startRun(chatId, req) {
   c.touchedFiles = [];
   c.deltaTicketId = null;
   c.deltaRecordedFiles = [];
+  c.runStartedAt = nowIso();
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
@@ -4393,7 +4458,7 @@ async function startRun(chatId, req) {
       await advanceLinkedTickets(chatId, c, req).catch(() => {
       });
     }
-    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(c.trace)) {
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles })) {
       await completeShippedTickets(chatId, c, req).catch(() => {
       });
     }
@@ -4628,6 +4693,10 @@ ${extra}`;
 ${chatModeDirective(runMode, chatId, { canEditHere })}
 
 ${turnOptimizationDirective()}`;
+  const canShip = canShipHere(catalogToolNames);
+  if (canShip) systemPrompt = `${systemPrompt}
+
+${selfReviewShipDirective(chatId)}`;
   const userRequest = latestUserText(convo);
   if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
     systemPrompt = `${systemPrompt}
@@ -4657,6 +4726,7 @@ ${continuationDirective()}`;
     return advisory;
   };
   let announcementRecoveries = 0;
+  let shipRecoveryUsed = false;
   let activeModel = model;
   const triedModels = [];
   let modelFailovers = 0;
@@ -4869,9 +4939,7 @@ ${revisit}` : replayNote });
         requestText: userRequest
       };
       const shape = stallShape(stallInput);
-      if (runTool && shouldRecoverStalledTurn(stallInput)) {
-        announcementRecoveries += 1;
-        const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+      const requeueWithNudge = async (nudge) => {
         const narration = canonicalTurnText(result.text);
         if (narration) {
           const meta = provenanceMetadata(result);
@@ -4879,13 +4947,37 @@ ${revisit}` : replayNote });
           recordAppended(c, narrationMsg);
         }
         convo.push({ role: "assistant", content: result.text });
-        convo.push({ role: "user", content: stallRecoveryNudge(lastChance, shape) });
+        convo.push({ role: "user", content: nudge });
+      };
+      if (runTool && shouldRecoverStalledTurn(stallInput)) {
+        announcementRecoveries += 1;
+        const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+        await requeueWithNudge(stallRecoveryNudge(lastChance, shape));
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "message",
           label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
           args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised, shape },
           result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+        });
+        c.streamingText = "";
+        emit(c);
+        return { action: "continue" };
+      }
+      if (runTool && !shipRecoveryUsed && leftChangeUnshipped({
+        codeChanged: c.codeChanged,
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c)
+      })) {
+        shipRecoveryUsed = true;
+        await requeueWithNudge(unshippedChangeNudge());
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "message",
+          label: "loop.recover_unshipped_change",
+          args: { step: iter, files: c.touchedFiles.slice(0, 20) },
+          result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)."
         });
         c.streamingText = "";
         emit(c);
@@ -6542,6 +6634,7 @@ function PromptInput({
   askUserAnchorId,
   askUserBlock,
   attachEvermindLearn,
+  attemptedPublish,
   brainRequestError,
   buildBrainTriageReport,
   buildComposerDirectives,
@@ -6551,6 +6644,7 @@ function PromptInput({
   byoUnresolvedSummary,
   byoVendorLabel,
   canChangeCodeHere,
+  canShipHere,
   catalogToolNamesMentionedIn,
   chatActivityText,
   chatConversationDirective,
@@ -6571,12 +6665,14 @@ function PromptInput({
   countReconciledMemories,
   createBrainRestPersistence,
   createPayloadBudget,
+  declinesShipping,
   deriveChatTitle,
   describeLiveStep,
   describeTool,
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
+  dirtyPathsOf,
   displayModelName,
   effortProfile,
   extractXmlToolCalls,
@@ -6623,6 +6719,7 @@ function PromptInput({
   isUnscopedMutationTool,
   isUserConfiguredModelRef,
   lastConsolidationIndex,
+  leftChangeUnshipped,
   linkedTicketsToAdvance,
   linkedTicketsToComplete,
   localStorageConfirmationPersistence,
@@ -6676,6 +6773,7 @@ function PromptInput({
   scopeToConsolidation,
   selectPendingAskUser,
   selectToolsForTurn,
+  selfReviewShipDirective,
   serializeAskUser,
   setLastResolvedModel,
   setMcpToolStatus,
@@ -6701,6 +6799,7 @@ function PromptInput({
   trimToolResult,
   turnInterruption,
   turnOptimizationDirective,
+  unshippedChangeNudge,
   useBrainActions,
   useBrainChats,
   useBrainConfig,

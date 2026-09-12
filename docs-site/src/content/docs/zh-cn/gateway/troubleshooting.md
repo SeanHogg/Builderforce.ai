@@ -545,7 +545,7 @@ builderforce gateway restart
 切换**到 git 安装**：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git --no-onboard
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 切换**到 npm 全局**：

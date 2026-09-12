@@ -33,6 +33,7 @@ import type { TeamRosterService } from '../../application/kernel/TeamRoster';
 import { EntityError, type EntityService } from '../../application/domains/EntityService';
 import { isEntityScope, type EntityScope } from '../../application/domains/entityDefinition';
 import type { HonoEnv } from '../../env';
+import { parseBody, zJsonObject } from './requestBody';
 
 function parseLimit(raw: string | undefined): number | undefined {
   const n = Number(raw);
@@ -203,8 +204,10 @@ export function createDomainRoutes(
     const target = resolveScope(c.req.param('domain'));
     if (!target) return c.json({ error: 'unknown scope' }, 404);
     const { tenantId } = scope(c);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => null);
-    if (!body || typeof body !== 'object') return c.json({ error: 'body must be an object' }, 400);
+    // The entity definition owns the per-field rules; the route only insists on an
+    // OBJECT (absent, unparseable, array or scalar → 400), which is what the
+    // hand-written `typeof body !== 'object'` check used to half-say.
+    const body = await parseBody(c, zJsonObject);
     return handle(async () =>
       Response.json(
         await entities.create(tenantId, target, c.req.param('entity'), body, actorOf(c)),
@@ -227,8 +230,7 @@ export function createDomainRoutes(
     const target = resolveScope(c.req.param('domain'));
     if (!target) return c.json({ error: 'unknown scope' }, 404);
     const { tenantId } = scope(c);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => null);
-    if (!body || typeof body !== 'object') return c.json({ error: 'body must be an object' }, 400);
+    const body = await parseBody(c, zJsonObject);
     return handle(async () =>
       Response.json(
         await entities.update(tenantId, target, c.req.param('entity'), c.req.param('id'), body, actorOf(c)),

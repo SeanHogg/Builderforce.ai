@@ -36,6 +36,27 @@ import {
 import { buildPrdWorkflowSpec } from '../../application/prd/generatePrd';
 import { buildSpecAuditRecord } from '../../application/prd/audit';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, parseOptionalBody, z } from './requestBody';
+
+const CreateVersionBody = z.object({
+  origin: z.string().optional(),
+  createdBy: z.string().nullish(),
+});
+const GenerateBody = z.object({
+  ticketDescription: z.string().nullish(),
+  agentHostId: z.number().nullish(),
+});
+/** `action` stays optional so `buildSpecAuditRecord`'s refusal → "action is required" wins;
+ *  `detail` is stored as JSON exactly as sent. */
+const AuditBody = z.object({
+  specVersion: z.number().nullish(),
+  sectionId: z.string().nullish(),
+  agentRole: z.string().nullish(),
+  action: z.string().nullish(),
+  swimlane: z.string().nullish(),
+  taskId: z.number().nullish(),
+  detail: z.unknown().optional(),
+});
 
 export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -61,9 +82,7 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
 
-    const body = await c.req
-      .json<{ origin?: string; createdBy?: string }>()
-      .catch(() => ({} as { origin?: string; createdBy?: string }));
+    const body = await parseOptionalBody(c, CreateVersionBody);
 
     const existing = await db
       .select({ version: specVersions.version })
@@ -151,9 +170,7 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
 
-    const body = await c.req
-      .json<{ ticketDescription?: string; agentHostId?: number }>()
-      .catch(() => ({} as { ticketDescription?: string; agentHostId?: number }));
+    const body = await parseOptionalBody(c, GenerateBody);
 
     // workflows.agentHostId is NOT NULL — resolve from body, the spec, or the tenant default.
     let agentHostId = body.agentHostId ?? spec.agentHostId ?? null;
@@ -243,15 +260,7 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
     const spec = await loadSpec(specId, tenantId);
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
 
-    const body = await c.req.json<{
-      specVersion?: number;
-      sectionId?:   string;
-      agentRole?:   string;
-      action:       string;
-      swimlane?:    string;
-      taskId?:      number;
-      detail?:      unknown;
-    }>();
+    const body = await parseBody(c, AuditBody);
 
     let payload;
     try {
@@ -262,7 +271,7 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
         specVersion: body.specVersion ?? null,
         sectionId:   body.sectionId ?? null,
         agentRole:   body.agentRole ?? null,
-        action:      body.action,
+        action:      body.action ?? '',
         swimlane:    body.swimlane ?? null,
         taskId:      body.taskId ?? null,
         detail:      body.detail,

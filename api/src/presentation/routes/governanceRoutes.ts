@@ -43,7 +43,6 @@ import {
 import {
   createPolicyGate, createPolicyPack, deletePolicyGate, deletePolicyPack,
   listPolicyPacks, resolvePolicyGates, updatePolicyGate, updatePolicyPack,
-  type PolicyGateInput, type PolicyPackInput,
 } from '../../application/governance/policyPackService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -178,7 +177,7 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/soc2/controls/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: string; ownerId?: string; notes?: string }>();
+    const body = await parseBody(c, ControlPatchBody);
     if (body.status !== undefined && !isControlStatus(body.status)) {
       return c.json({ error: `status must be one of ${CONTROL_STATUSES.join(', ')}` }, 400);
     }
@@ -242,7 +241,7 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   router.post('/soc2/controls/:id/evidence', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const controlId = c.req.param('id');
-    const body = await c.req.json<{ title?: string; evidenceType?: string; url?: string; note?: string }>();
+    const body = await parseBody(c, EvidenceBody);
     if (!body.title?.trim() || !body.evidenceType?.trim()) {
       return c.json({ error: 'title and evidenceType are required' }, 400);
     }
@@ -294,7 +293,7 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/policy-packs', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<PolicyPackInput>();
+    const body = await parseBody(c, PolicyPackBody);
     const res = await createPolicyPack(c.env, db, tenantId, segmentId ?? null, {
       ...body, createdBy: c.get('userId'),
     });
@@ -302,7 +301,7 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.patch('/policy-packs/:id', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<PolicyPackInput>();
+    const body = await parseBody(c, PolicyPackBody);
     const res = await updatePolicyPack(c.env, db, c.get('tenantId'), c.req.param('id'), body);
     if ('error' in res) return c.json(res, res.error === 'pack not found' ? 404 : 400);
     return c.json(res);
@@ -315,14 +314,14 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/policy-packs/:id/gates', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<PolicyGateInput>();
+    const body = await parseBody(c, PolicyGateBody);
     const res = await createPolicyGate(c.env, db, c.get('tenantId'), c.req.param('id'), body);
     if ('error' in res) return c.json(res, res.error === 'pack not found' ? 404 : 400);
     return c.json(res, 201);
   });
 
   router.patch('/policy-gates/:gateId', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<PolicyGateInput>();
+    const body = await parseBody(c, PolicyGateBody);
     const res = await updatePolicyGate(c.env, db, c.get('tenantId'), c.req.param('gateId'), body);
     if ('error' in res) return c.json(res, res.error === 'gate not found' ? 404 : 400);
     return c.json(res);

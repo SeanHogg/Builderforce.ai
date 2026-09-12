@@ -11,6 +11,9 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { ReferenceService, type ReferenceInput, type ReferenceStatus } from '../../application/career/references';
+// `readInput` and the share handler read every field defensively, so a body is any
+// JSON object; an absent one stays `{}` as before.
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
 const STATUSES: readonly ReferenceStatus[] = ['draft', 'requested', 'confirmed', 'declined'];
 
@@ -75,11 +78,7 @@ export function createReferenceRoutes(db: Db): Hono<HonoEnv> {
   router.get('/shares', async (c) => c.json({ shares: await service.listShares(userId(c)) }));
 
   router.post('/shares', async (c) => {
-    // The fallback is typed, or `.catch` widens the result to a union and every
-    // field read below becomes an error on the empty branch.
-    const body = await c.req
-      .json<Record<string, unknown>>()
-      .catch((): Record<string, unknown> => ({}));
+    const body = await parseOptionalBody(c, zJsonObject);
     const referenceIds = Array.isArray(body.referenceIds) ? body.referenceIds.map(String) : [];
     if (referenceIds.length === 0) return c.json({ error: 'Choose at least one reference to share' }, 400);
     const share = await service.createShare(userId(c), {

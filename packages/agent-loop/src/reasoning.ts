@@ -165,14 +165,24 @@ export function splitReasoningSegments(text: string): ReasoningSegment[] {
   const cleaned = unwrapFinalTags(text);
   const segments = segmentsOf(cleaned, scanReasoning(cleaned));
   if (segments.length === 0) return [{ kind: "answer", content: text }];
-  return promoteSwallowedAnswer(segments);
+  return stitchSplitSentence(promoteSwallowedAnswer(segments));
 }
+
+/**
+ * An EMPTY vendor tool-call wrapper (`<minimax:tool_call></minimax:tool_call>`) — the
+ * husk a model leaves in its reasoning when the call itself went out structurally. It
+ * carries nothing, and rendered as-is it reads as markup the parser failed on.
+ */
+const EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
 
 /** Spans → trimmed, non-empty segments. */
 function segmentsOf(text: string, spans: readonly ReasoningSpan[]): ReasoningSegment[] {
   const out: ReasoningSegment[] = [];
   for (const span of spans) {
-    const content = text.slice(span.contentStart, span.contentEnd).trim();
+    const raw = text.slice(span.contentStart, span.contentEnd);
+    // Thoughts only: an answer is the user's to read verbatim, including a message
+    // that is ABOUT these tags.
+    const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
     if (content) out.push({ kind: span.kind, content });
   }
   return out;
@@ -323,6 +333,56 @@ function promoteSwallowedAnswer(segments: ReasoningSegment[]): ReasoningSegment[
   // Any OTHER thought blocks stay thoughts — only the one carrying the reply moves.
   for (const s of thoughts) if (s !== richest) promoted.unshift(s);
   return promoted;
+}
+
+/** A thought that stops mid-sentence: its last character is a word character or a
+ *  comma, never closing punctuation. */
+const UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
+/** A reply never opens in lower case (see {@link REPLY_OPENER}); a sentence's tail does. */
+const LOWERCASE_OPENER = /^\p{Ll}/u;
+
+/** Where the thought's last, unfinished sentence begins: after the last sentence end or
+ *  line break, whichever is later. */
+function lastSentenceStart(text: string): number {
+  let cut = text.lastIndexOf("\n") + 1;
+  for (const match of text.matchAll(/[.!?](?=\s)/g)) {
+    const after = (match.index ?? 0) + 1;
+    if (after > cut) cut = after;
+  }
+  return cut;
+}
+
+/**
+ * Re-join ONE sentence the closing tag cut in two.
+ *
+ * Observed verbatim (MiniMax-M1, VS Code chat #103): the reasoning ended "…I'll start by
+ * listing the" and the reply began "tickets linked to this chat to see what open tickets
+ * we're working with." The model closed its block mid-sentence, so the chat's first
+ * visible line opened on a lower-case fragment whose subject stayed hidden. It is too
+ * long to be a {@link promoteSwallowedAnswer} fragment, so nothing rescued it.
+ *
+ * Both sides must agree, which keeps this narrow: the answer OPENS in lower case AND the
+ * thought right before it ends without closing punctuation. Only that trailing
+ * unfinished sentence moves; the reasoning before it stays reasoning.
+ */
+function stitchSplitSentence(segments: ReasoningSegment[]): ReasoningSegment[] {
+  const out = [...segments];
+  for (let i = 1; i < out.length; i++) {
+    const prev = out[i - 1]!;
+    const cur = out[i]!;
+    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
+    const cut = lastSentenceStart(prev.content);
+    const head = prev.content.slice(0, cut).trim();
+    out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };
+    if (head) {
+      out[i - 1] = { kind: "thought", content: head };
+    } else {
+      out.splice(i - 1, 1);
+      i -= 1;
+    }
+  }
+  return out;
 }
 
 /**

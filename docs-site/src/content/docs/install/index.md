@@ -29,7 +29,7 @@ The **installer script** is the recommended way to install BuilderForce Agents. 
 
 <AccordionGroup>
   <Accordion title="Installer script" icon="rocket" defaultOpen>
-    Downloads the CLI, installs it globally via npm, and launches the onboarding wizard.
+    Installs the `@seanhogg/builderforce-agents` npm package (the `builderforce` CLI) globally. With a workspace token from [builderforce.ai/workforce](https://builderforce.ai/workforce), it also registers this machine and starts the gateway.
 
     <Tabs>
       <Tab title="macOS / Linux / WSL2">
@@ -44,19 +44,19 @@ The **installer script** is the recommended way to install BuilderForce Agents. 
       </Tab>
     </Tabs>
 
-    That's it — the script handles Node detection, installation, and onboarding.
+    The script needs Node.js 20+ and npm already on your `PATH`. Without a workspace token it stops after installing; run `builderforce onboard --install-daemon` next.
 
-    To skip onboarding and just install the binary:
+    To register with a token but not start the gateway yet:
 
     <Tabs>
       <Tab title="macOS / Linux / WSL2">
         ```bash
-        curl -fsSL https://builderforce.ai/install.sh | bash -s -- --no-onboard
+        curl -fsSL https://builderforce.ai/install.sh | BUILDERFORCE_NO_START=1 bash
         ```
       </Tab>
       <Tab title="Windows (PowerShell)">
         ```powershell
-        & ([scriptblock]::Create((iwr -useb https://builderforce.ai/install.ps1))) -NoOnboard
+        & ([scriptblock]::Create((iwr -useb https://builderforce.ai/install.ps1))) -NoStart
         ```
       </Tab>
     </Tabs>
@@ -71,7 +71,7 @@ The **installer script** is the recommended way to install BuilderForce Agents. 
     <Tabs>
       <Tab title="npm">
         ```bash
-        npm install -g builderforce@latest
+        npm install -g @seanhogg/builderforce-agents@latest
         builderforce onboard --install-daemon
         ```
 
@@ -79,7 +79,7 @@ The **installer script** is the recommended way to install BuilderForce Agents. 
           If you have libvips installed globally (common on macOS via Homebrew) and `sharp` fails, force prebuilt binaries:
 
           ```bash
-          SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g builderforce@latest
+          SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g @seanhogg/builderforce-agents@latest
           ```
 
           If you see `sharp: Please add node-gyp to your dependencies`, either install build tooling (macOS: Xcode CLT + `npm install -g node-gyp`) or use the env var above.
@@ -87,8 +87,8 @@ The **installer script** is the recommended way to install BuilderForce Agents. 
       </Tab>
       <Tab title="pnpm">
         ```bash
-        pnpm add -g builderforce@latest
-        pnpm approve-builds -g        # approve builderforce, node-llama-cpp, sharp, etc.
+        pnpm add -g @seanhogg/builderforce-agents@latest
+        pnpm approve-builds -g        # approve @seanhogg/builderforce-agents, node-llama-cpp, sharp, etc.
         builderforce onboard --install-daemon
         ```
 

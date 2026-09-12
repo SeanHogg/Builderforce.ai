@@ -15,6 +15,25 @@ import { recordVisitorEvent } from '../../application/marketing/VisitorEventServ
 import { mintWebSessionToken } from '../../infrastructure/auth/webSessionToken';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
+import { parseOptionalBody, z, zOptionalString } from './requestBody';
+
+/** `isDemoPersona` / `isValidVisitorId` answer their own 400s, so both stay optional. */
+const DemoSessionBody = z.object({
+  persona: z.string().nullish(),
+  visitorId: z.string().nullish(),
+});
+
+/** Every free-text field was trimmed and `null` read as absent — `zOptionalString`
+ *  is exactly that, so a form posting `company: null` still lands its lead. */
+const DemoLeadBody = z.object({
+  name: zOptionalString,
+  email: zOptionalString,
+  company: zOptionalString,
+  interest: zOptionalString,
+  message: zOptionalString,
+  source: zOptionalString,
+  visitorId: z.string().nullish(),
+});
 
 /**
  * Sales-cycle demo accounts (migration 0360) — PUBLIC routes for the marketing
@@ -82,9 +101,7 @@ export function createDemoRoutes(): Hono<HonoEnv> {
     if (!demoAccountsEnabled(c.env)) {
       return c.json({ error: 'Demo accounts are disabled.', code: 'demo_disabled' }, 503);
     }
-    const body = await c.req
-      .json<{ persona?: string; visitorId?: string }>()
-      .catch((): { persona?: string; visitorId?: string } => ({}));
+    const body = await parseOptionalBody(c, DemoSessionBody);
     if (!isDemoPersona(body.persona)) return c.json({ error: 'Unknown demo persona' }, 400);
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
 
@@ -154,9 +171,7 @@ export function createDemoRoutes(): Hono<HonoEnv> {
 
   // "Book a demo" / sales-contact capture.
   router.post('/leads', async (c) => {
-    const body = await c.req
-      .json<{ name?: string; email?: string; company?: string; interest?: string; message?: string; source?: string; visitorId?: string }>()
-      .catch(() => ({} as Record<string, never>));
+    const body = await parseOptionalBody(c, DemoLeadBody);
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : '';
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase().slice(0, 320) : '';
     if (!name) return c.json({ error: 'Name is required' }, 400);

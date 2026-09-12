@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { rendersAppShell } from '@/lib/shellRouting';
-import { assessmentGate, type AssessmentGate, type AssessmentMode } from '@/lib/academic/assessment';
+import type { AssessmentMode } from '@/lib/academic/assessment';
 
 /**
  * WHICH board is on the stage — shell state, so the board is no longer owned by
@@ -52,20 +52,18 @@ export interface ActiveCanvasValue {
   /** Canonical project ids referenced by the board, published by the canvas. */
   projectIds: number[];
   /**
-   * Whether the assistant may answer on the board on stage — the live assessment
-   * mode that board published, run through THE evaluator (`assessmentGate`). Held
-   * here because every composer in the shell must obey it, not only the ones drawn
-   * inside the board: a closed-book exam that the floating Brain could still answer
-   * is not closed. Open when no board is on stage or nothing on it is being sat.
+   * The strictest assessment being SAT on the board on stage, as that board published
+   * it. Held here because every composer in the shell must obey it, not only the ones
+   * drawn inside the board: a closed-book exam that the floating Brain could still
+   * answer is not closed. Composers read it through `useAssistantGate`, which runs it
+   * through THE evaluator. `open` when no board is on stage or nothing is being sat.
    */
-  assistantGate: AssessmentGate;
+  assessmentMode: AssessmentMode;
   open: (canvas: ActiveCanvas) => void;
   close: () => void;
   publishProjectIds: (sessionId: string, ids: number[]) => void;
   publishAssessmentMode: (sessionId: string, mode: AssessmentMode) => void;
 }
-
-const OPEN_GATE: AssessmentGate = assessmentGate('open');
 
 const ActiveCanvasContext = createContext<ActiveCanvasValue | null>(null);
 
@@ -149,8 +147,7 @@ export function ActiveCanvasProvider({
   }, []);
 
   const projectIds = active ? (projectIdsBySession[active.sessionId] ?? []) : [];
-  const activeMode = active ? (assessmentModeBySession[active.sessionId] ?? 'open') : 'open';
-  const assistantGate = useMemo(() => (activeMode === 'open' ? OPEN_GATE : assessmentGate(activeMode)), [activeMode]);
+  const assessmentMode: AssessmentMode = active ? (assessmentModeBySession[active.sessionId] ?? 'open') : 'open';
 
   /**
    * Once this shell HAS a board, it keeps hosting it.
@@ -165,8 +162,8 @@ export function ActiveCanvasProvider({
   const hosted = stageHosted || active != null;
 
   const value = useMemo<ActiveCanvasValue>(
-    () => ({ active, opened, stageHosted: hosted, projectIds, assistantGate, open, close, publishProjectIds, publishAssessmentMode }),
-    [active, assistantGate, close, hosted, open, opened, projectIds, publishAssessmentMode, publishProjectIds],
+    () => ({ active, opened, stageHosted: hosted, projectIds, assessmentMode, open, close, publishProjectIds, publishAssessmentMode }),
+    [active, assessmentMode, close, hosted, open, opened, projectIds, publishAssessmentMode, publishProjectIds],
   );
 
   return <ActiveCanvasContext.Provider value={value}>{children}</ActiveCanvasContext.Provider>;

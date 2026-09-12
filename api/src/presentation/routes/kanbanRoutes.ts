@@ -7,7 +7,8 @@
  */
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
-import { authMiddleware, isManager } from '../middleware/authMiddleware';
+import { authMiddleware, isManager, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import { projects, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { HonoEnv, Env } from '../../env';
@@ -360,14 +361,17 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     return c.json({ audit });
   });
 
-  router.post('/tasks/:taskId/audit/recompute', async (c) => {
+  // Recompute and sign-off WRITE the ticket's audit ledger, so they take the same
+  // tier as the board's other working-team writes (lanes: requireRole(DEVELOPER)).
+  // A viewer or a canvas contributor reads the audit; it does not move the ticket.
+  router.post('/tasks/:taskId/audit/recompute', requireRole(TenantRole.DEVELOPER), async (c) => {
     try {
       const audit = await auditService.computeAudit(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')));
       return c.json({ audit });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
 
-  router.post('/tasks/:taskId/signoff', async (c) => {
+  router.post('/tasks/:taskId/signoff', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
     const body = await parseBody(c, SignoffBody);

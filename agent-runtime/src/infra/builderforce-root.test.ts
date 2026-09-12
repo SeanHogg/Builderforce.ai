@@ -128,6 +128,21 @@ describe("resolveBuilderForceAgentsPackageRoot", () => {
     expect(resolveBuilderForceAgentsPackageRootSync({ cwd: pkgRoot })).toBeNull();
   });
 
+  it("resolves the published scoped package root", async () => {
+    const { resolveBuilderForceAgentsPackageRootSync } = await import("./builderforce-root.js");
+
+    const project = fx("scoped-scenario");
+    const argv1 = path.join(project, "node_modules", ".bin", "builderforce");
+    const pkgRoot = path.join(project, "node_modules", "@seanhogg", "builderforce-agents");
+    setFile(
+      path.join(pkgRoot, "package.json"),
+      JSON.stringify({ name: "@seanhogg/builderforce-agents" }),
+    );
+    state.realpaths.set(abs(argv1), abs(path.join(pkgRoot, "builderforce.mjs")));
+
+    expect(resolveBuilderForceAgentsPackageRootSync({ argv1 })).toBe(pkgRoot);
+  });
+
   it("async resolver matches sync behavior", async () => {
     const { resolveBuilderForceAgentsPackageRoot } = await import("./builderforce-root.js");
 

@@ -25,6 +25,16 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { DirectMessageService, dmThreadRoomName, dmUserRoomName } from '../../application/messaging/DirectMessageService';
 import { relayToRoom } from './realtimeRelay';
+import { parseBody, z } from './requestBody';
+
+/** `userId` stays optional so "A recipient is required." still answers. */
+const OpenThreadBody = z.object({
+  userId: z.string().nullish(),
+  subject: z.string().nullish(),
+});
+
+/** An empty message is the service's to refuse ("Message could not be sent."). */
+const SendMessageBody = z.object({ body: z.string().nullish() });
 
 export function createMessageRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -41,7 +51,7 @@ export function createMessageRoutes(db: Db): Hono<HonoEnv> {
   });
 
   r.post('/threads', async (c) => {
-    const body = await c.req.json<{ userId?: string; subject?: string }>();
+    const body = await parseBody(c, OpenThreadBody);
     const other = typeof body.userId === 'string' ? body.userId : '';
     if (!other) return c.json({ error: 'A recipient is required.' }, 400);
     const thread = await service(c).open(userId(c), other, body.subject ?? '');
@@ -54,7 +64,7 @@ export function createMessageRoutes(db: Db): Hono<HonoEnv> {
   });
 
   r.post('/threads/:id', async (c) => {
-    const body = await c.req.json<{ body?: string }>();
+    const body = await parseBody(c, SendMessageBody);
     const message = await service(c).send(c.req.param('id'), userId(c), body.body ?? '');
     return message ? c.json(message, 201) : c.json({ error: 'Message could not be sent.' }, 400);
   });

@@ -163,7 +163,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     const validationToken = c.req.query('validationToken');
     if (validationToken) return c.text(validationToken, 200, { 'Content-Type': 'text/plain' });
     const token = c.req.param('token');
-    const body = await c.req.json<unknown>().catch(() => ({}));
+    const body = await parseOptionalBody(c, ProviderPushBody);
     const result = await handleGraphPush(db, c.env as Env, token, body);
     if (!result.ok) return c.json({ error: result.error }, result.status === 202 ? 202 : result.status);
     return c.json({ ok: true });
@@ -178,7 +178,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
    * a non-2xx for days, and there is nothing here to retry for.
    */
   r.post('/push/google/:token', async (c) => {
-    const body = await c.req.json<unknown>().catch(() => ({}));
+    const body = await parseOptionalBody(c, ProviderPushBody);
     const result = await handleGmailPush(db, c.env as Env, c.req.param('token'), body);
     if (!result.ok) {
       return result.status === 202
@@ -292,7 +292,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/connections/:id', manager, async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
-    const body = await c.req.json<{ allowSending?: boolean }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, MailboxSendingBody);
     if (typeof body.allowSending !== 'boolean') return c.json({ error: 'allowSending must be a boolean.' }, 400);
     const updated = await setMailboxSending(db, c.get('tenantId') as number, id, body.allowSending);
     if (!updated) return c.json({ error: 'Mailbox connection not found.' }, 404);
@@ -422,7 +422,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/connections/:id/messages/:messageId', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
-    const body = await c.req.json<{ unread?: boolean }>().catch(() => ({} as { unread?: boolean }));
+    const body = await parseOptionalBody(c, MessageReadBody);
     if (typeof body.unread !== 'boolean') return c.json({ error: 'unread must be a boolean.' }, 400);
     const result = await setMailboxMessageRead(
       db, c.env as Env, c.get('tenantId') as number, id, c.req.param('messageId'), !body.unread,
@@ -437,8 +437,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   r.post('/connections/:id/send', manager, async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
-    const body = await c.req.json<{ to?: string; subject?: string; html?: string; replyTo?: string }>()
-      .catch(() => ({} as { to?: string; subject?: string; html?: string; replyTo?: string }));
+    const body = await parseOptionalBody(c, MailboxSendBody);
     if (!body.to?.trim() || !body.subject?.trim() || !body.html?.trim()) {
       return c.json({ error: 'to, subject, and html are required.' }, 400);
     }
@@ -458,13 +457,15 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   r.post('/connections/:id/rules', manager, async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
-    const body = await c.req.json<MailboxAutomationRuleInput>().catch(() => ({} as MailboxAutomationRuleInput));
-    if (!body.name?.trim()) return c.json({ error: 'Rule name is required.' }, 400);
+    const body = await parseOptionalBody(c, MailboxRuleBody);
+    const name = body.name;
+    if (!name?.trim()) return c.json({ error: 'Rule name is required.' }, 400);
     if (!body.agentRef?.trim()) return c.json({ error: 'An AI agent is required.' }, 400);
-    if (body.responseMode && !MAILBOX_RESPONSE_MODES.includes(body.responseMode)) {
+    const responseMode = body.responseMode || undefined;
+    if (responseMode !== undefined && !isResponseMode(responseMode)) {
       return c.json({ error: 'Invalid response mode.' }, 400);
     }
-    const rule = await createMailboxAutomationRule(db, c.get('tenantId') as number, id, body);
+    const rule = await createMailboxAutomationRule(db, c.get('tenantId') as number, id, { ...body, name, responseMode });
     if (rule?.enabled) c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
     return rule ? c.json(rule, 201) : c.json({ error: 'Mailbox connection not found.' }, 404);
   });
@@ -472,12 +473,12 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/rules/:ruleId', manager, async (c) => {
     const ruleId = Number(c.req.param('ruleId'));
     if (!Number.isInteger(ruleId)) return c.json({ error: 'Invalid rule id.' }, 400);
-    const body = await c.req.json<Partial<MailboxAutomationRuleInput>>()
-      .catch(() => ({} as Partial<MailboxAutomationRuleInput>));
-    if (body.responseMode && !MAILBOX_RESPONSE_MODES.includes(body.responseMode)) {
+    const body = await parseOptionalBody(c, MailboxRuleBody);
+    const responseMode = body.responseMode || undefined;
+    if (responseMode !== undefined && !isResponseMode(responseMode)) {
       return c.json({ error: 'Invalid response mode.' }, 400);
     }
-    const rule = await updateMailboxAutomationRule(db, c.get('tenantId') as number, ruleId, body);
+    const rule = await updateMailboxAutomationRule(db, c.get('tenantId') as number, ruleId, { ...body, responseMode });
     if (rule?.enabled) c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
     return rule ? c.json(rule) : c.json({ error: 'Rule not found.' }, 404);
   });

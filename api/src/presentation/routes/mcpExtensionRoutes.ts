@@ -41,6 +41,30 @@ import {
 } from '../../application/llm/mcp/mcpOAuthConnect';
 import { clearGrant } from '../../application/llm/mcp/mcpExtensionAuth';
 
+import { parseOptionalBody, z } from './requestBody';
+
+/** `name` / `serverUrl` stay optional so "name and serverUrl are required" answers. */
+const CreateMcpExtensionBody = z.object({
+  name: z.string().nullish(),
+  serverUrl: z.string().nullish(),
+  secret: z.string().nullish(),
+});
+
+/**
+ * Each key is applied only when it has the right type (the handler's own guards),
+ * so `null` for name/serverUrl/enabled still means "leave it". `allowedTools` is
+ * `normalizeAllowedTools`'s to judge (it answers its own 400, and `null` = all
+ * tools); `protocol` keeps its own "must be one of" message.
+ */
+const UpdateMcpExtensionBody = z.object({
+  name: z.string().nullish(),
+  serverUrl: z.string().nullish(),
+  enabled: z.boolean().nullish(),
+  secret: z.string().nullable().optional(),
+  allowedTools: z.unknown().optional(),
+  protocol: z.string().nullish(),
+});
+
 const DEFAULT_RETURN_TO = '/settings/integrations';
 const VALID_PROTOCOLS: readonly McpProtocol[] = ['auto', 'mcp', 'legacy'];
 
@@ -64,9 +88,7 @@ export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const body = await c.req
-      .json<{ name?: string; serverUrl?: string; secret?: string | null }>()
-      .catch(() => ({} as { name?: string; serverUrl?: string; secret?: string | null }));
+    const body = await parseOptionalBody(c, CreateMcpExtensionBody);
     const name = (body.name ?? '').trim();
     const serverUrl = (body.serverUrl ?? '').trim();
     if (!name || !serverUrl) {
@@ -99,16 +121,7 @@ export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req
-      .json<{
-        name?: string;
-        serverUrl?: string;
-        enabled?: boolean;
-        secret?: string | null;
-        allowedTools?: string[] | null;
-        protocol?: string;
-      }>()
-      .catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, UpdateMcpExtensionBody);
     let allowedTools: string[] | null | undefined;
     try {
       if (body.allowedTools !== undefined) allowedTools = normalizeAllowedTools(body.allowedTools);

@@ -44,3 +44,8 @@
 # NEXT_PUBLIC_APP_VERSION, so a deploy asks for a different path.
 /i18n/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Translated blog bodies (scripts/publish-blog-translations.mjs). Same contract as
+# the catalogs: `blogBodyUrl()` versions the URL with NEXT_PUBLIC_APP_VERSION.
+/blog-i18n/*
+  Cache-Control: public, max-age=31536000, immutable

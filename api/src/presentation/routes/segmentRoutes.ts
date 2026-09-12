@@ -27,6 +27,23 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, z } from './requestBody';
+
+/** `displayName` stays optional so "displayName is required" still answers. */
+const CreateSegmentBody = z.object({
+  externalAccountId: z.string().nullish(),
+  externalCompanyId: z.string().nullish(),
+  displayName: z.string().nullish(),
+  slug: z.string().nullish(),
+  plan: z.string().nullish(),
+});
+
+/** `status` is a plain string so an unknown one still gets "status must be one of". */
+const UpdateSegmentBody = z.object({
+  status: z.string().optional(),
+  plan: z.string().optional(),
+  displayName: z.string().optional(),
+});
 
 const SEGMENT_STATUSES = ['active', 'suspended', 'archived'] as const;
 type SegmentStatus = (typeof SEGMENT_STATUSES)[number];
@@ -53,13 +70,7 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
   // Provision an end-client segment.
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
-    const body = await c.req.json<{
-      externalAccountId?: string;
-      externalCompanyId?: string;
-      displayName?: string;
-      slug?: string;
-      plan?: string;
-    }>();
+    const body = await parseBody(c, CreateSegmentBody);
 
     if (!body.displayName?.trim()) {
       return c.json({ error: 'displayName is required' }, 400);
@@ -94,7 +105,7 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: string; plan?: string; displayName?: string }>();
+    const body = await parseBody(c, UpdateSegmentBody);
 
     const patch: Partial<{ status: SegmentStatus; plan: string; displayName: string; updatedAt: Date }> = {};
     if (body.status !== undefined) {

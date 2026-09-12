@@ -127,7 +127,7 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
   router.post('/collectors', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ projectId?: number; name?: string }>();
+    const body = await parseBody(c, CreateCollectorBody);
     if (typeof body.projectId !== 'number') return c.json({ error: 'projectId is required' }, 400);
 
     const projectName = await ownedProjectName(db, tenantId, body.projectId);
@@ -164,9 +164,7 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/collectors/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      name?: string; enabled?: boolean; autoCreateTask?: boolean; dailyLimit?: number; allowedOrigins?: string;
-    }>();
+    const body = await parseBody(c, UpdateCollectorBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) patch.name = body.name;
     if (body.enabled !== undefined) patch.enabled = body.enabled;
@@ -249,13 +247,13 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
     const id = c.req.param('id');
     if (!(await ownedCollector(db, tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
 
-    const body = await c.req.json<{ provider?: string; secret?: string }>().catch(() => null);
-    const adapter = body?.provider ? getFeedbackProvider(body.provider) : null;
+    const body = await parseOptionalBody(c, ConnectIntegrationBody);
+    const adapter = body.provider ? getFeedbackProvider(body.provider) : null;
     if (!adapter) {
       return c.json({ error: `provider must be one of: ${listFeedbackProviders().map((p) => p.id).join(', ')}` }, 400);
     }
 
-    const supplied = typeof body?.secret === 'string' ? body.secret.trim() : '';
+    const supplied = typeof body.secret === 'string' ? body.secret.trim() : '';
     // A short secret is worse than no secret, because it LOOKS configured. 16 chars
     // is the floor for a hand-typed value; a minted one is far longer.
     if (supplied && supplied.length < 16) {
@@ -288,8 +286,8 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
   /** Pause or resume imports without discarding the secret. */
   router.patch('/collectors/:id/integrations/:provider', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ enabled?: boolean }>().catch(() => null);
-    if (typeof body?.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean' }, 400);
+    const body = await parseOptionalBody(c, IntegrationToggleBody);
+    if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean' }, 400);
 
     const [row] = await db
       .update(feedbackCollectorIntegrations)
@@ -330,8 +328,8 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
   router.post('/submissions', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ projectId?: number }>().catch(() => null);
-    if (!body || typeof body.projectId !== 'number') return c.json({ error: 'projectId is required' }, 400);
+    const body = await parseOptionalBody(c, InAppSubmissionBody);
+    if (typeof body.projectId !== 'number') return c.json({ error: 'projectId is required' }, 400);
     if (!(await ownedProjectName(db, tenantId, body.projectId))) return c.json({ error: 'Project not found' }, 404);
 
     const normalized = normalizeFeedback(body);
@@ -393,8 +391,8 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
   router.post('/submissions/:id/review', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ decision?: string }>().catch(() => null);
-    const decision = body?.decision;
+    const body = await parseOptionalBody(c, ReviewBody);
+    const decision = body.decision;
     if (decision !== 'approved' && decision !== 'declined') {
       return c.json({ error: "decision must be 'approved' or 'declined'" }, 400);
     }

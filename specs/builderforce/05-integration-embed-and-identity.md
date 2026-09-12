@@ -245,4 +245,10 @@ capability is the platform's own route over its own rows (doc 01 §4–§7).
 |-------|----------------|------------------------------|
 | Identity/admin | `POST/PUT/DELETE /v1/admin/segments`, `resolveSegment` (internal) | `/api/segments` (`segments`) |
 | Product Mgmt | `/v1/ideas*`, `/v1/mvp*`, `/v1/roadmap*`, `/v1/validation*`, `/v1/backlog*`, `/v1/business-value-config*`, `/v1/feature-roi*`, `/v1/ab-tests*` | `/api/product/{mvp,validation,roadmap,release-planning,changelog,feature-flags,business-value,feature-roi}`, `/api/releases`, `/api/specs`, `/api/pmo`; the backlog is `/api/tasks` + `/api/kanban` |
-| Agile | `/v1/poker*`, `/v1/retros*`, `/v1/kanban*`, `/v1/sprints*`, `/v1/velocity*`, `/v1/feature-scoring*`, `/v1/capacity*`, `
+| Agile | `/v1/poker*`, `/v1/retros*`, `/v1/kanban*`, `/v1/sprints*`, `/v1/velocity*`, `/v1/feature-scoring*`, `/v1/capacity*`, `/v1/agile/*` (cost), `/v1/action-items*` | `/api/agile/{sprints,velocity,capacity,cost,feature-scoring,poker,retros,ceremonies}`, `/api/boards`, `/api/kanban`, `/api/delivery-flow/{action-items,estimates,sprints/:sprintId/cost}` |
+| Agentic | `/v1/repos*`, `/v1/work-items/:id/agent-run`, `/v1/agent-runs*`, `/v1/orchestrations*`, `/v1/pull-requests/:ref/review`, `/v1/findings*` | `/api/repos`, `/api/integrations`, `POST /api/tasks/:id/run-now`, `/api/runtime/executions*`, `/api/workflows`, `/api/qa`, SCM `/api/webhooks` |
+| Seams | `/v1/ingest/feedback`, `/v1/validation/engagements` (proxy), outbound webhooks | `POST /v1/ingest/feedback`, `GET/POST/DELETE /v1/webhooks` (`seamRoutes.ts`); the engagements proxy is not built |
+| Realtime | poker/retro rooms + `agent-runs/:id` stream (WebSocket/SSE, Segment-authorized) | ceremony rooms (`/api/agile/ceremonies`); run progress through `/api/runtime/executions/:id/coordination` |
+
+All `/v1` require a Segment-scoped JWT (end-user) or a tenant service token (S2S); all are
+Segment-isolated and rate-limited per Segment.

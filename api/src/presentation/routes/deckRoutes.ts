@@ -24,6 +24,22 @@ import { listTemplates, createTemplateFromUpload, deleteTemplate } from '../../a
 import { generateDeck, loadDeckWarnings, loadGeneratedDeck } from '../../application/deck/DeckService';
 import type { DeckMode } from '../../application/deck/types';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
+import { parseBody, z } from './requestBody';
+
+/** `name` / `sourceKey` stay optional so "name and sourceKey are required" still
+ *  answers. (`archetype` is not read: a promoted upload is always 'custom'.) */
+const PromoteTemplateBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  sourceKey: z.string().optional(),
+});
+
+/** Any `mode` other than 'fill' is generative, so it stays a free string. */
+const GenerateDeckBody = z.object({
+  mode: z.string().nullish(),
+  templateId: z.string().nullish(),
+  quarter: z.string().nullish(),
+});
 
 const PPTX_CT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
@@ -53,13 +69,13 @@ export function createDeckRoutes(db: Db): Hono<HonoEnv> {
   router.post('/templates', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = (c.get('userId') as string | undefined) ?? null;
-    const body = await c.req.json<{ name?: string; description?: string; sourceKey?: string; archetype?: string }>();
+    const body = await parseBody(c, PromoteTemplateBody);
     if (!body.name || !body.sourceKey) return c.json({ error: 'name and sourceKey are required' }, 400);
     if (!isKeyOwnedByTenant(body.sourceKey, tenantId)) return c.json({ error: 'sourceKey not owned by tenant' }, 403);
     try {
       const rec = await createTemplateFromUpload(db, c.env as Env, tenantId, userId, {
         name: body.name,
-        description: body.description,
+        description: body.description ?? undefined,
         sourceKey: body.sourceKey,
         archetype: 'custom',
       });
@@ -79,10 +95,12 @@ export function createDeckRoutes(db: Db): Hono<HonoEnv> {
   router.post('/generate', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = (c.get('userId') as string | undefined) ?? null;
-    const body = await c.req.json<{ mode?: string; templateId?: string; quarter?: string }>();
+    const body = await parseBody(c, GenerateDeckBody);
     const mode: DeckMode = body.mode === 'fill' ? 'fill' : 'generative';
     try {
-      const result = await generateDeck(db, c.env as Env, { tenantId, userId, mode, templateId: body.templateId, quarter: body.quarter });
+      const result = await generateDeck(db, c.env as Env, {
+        tenantId, userId, mode, templateId: body.templateId ?? undefined, quarter: body.quarter ?? undefined,
+      });
       return c.json({ deckId: result.deckId, filename: result.filename, warnings: result.warnings, downloadUrl: `/api/decks/${result.deckId}/download` }, 201);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'generation failed' }, 400);

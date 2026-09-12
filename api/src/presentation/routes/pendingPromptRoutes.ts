@@ -18,6 +18,17 @@ import { PendingPromptService, MAX_ANON_LEN } from '../../application/marketing/
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `anonId` / `prompt` stay optional so "anonId required" / "prompt required" answer. */
+const RecordPromptBody = z.object({
+  anonId: z.string().nullish(),
+  prompt: z.string().nullish(),
+  path: z.string().nullish(),
+});
+
+/** No `anonId` is a normal "nothing to claim" (`{ prompt: null }`), not an error. */
+const ClaimPromptBody = z.object({ anonId: z.string().nullish() });
 
 export function createPendingPromptRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -27,8 +38,7 @@ export function createPendingPromptRoutes(db: Db): Hono<HonoEnv> {
   // Public — runs before the visitor has any auth. Records the prompt for later
   // claim. Bounded input; one row per save (claim reads the most recent).
   router.post('/', async (c) => {
-    const body = await c.req.json<{ anonId?: string; prompt?: string; path?: string }>()
-      .catch(() => ({}) as { anonId?: string; prompt?: string; path?: string });
+    const body = await parseOptionalBody(c, RecordPromptBody);
     const anonId = (body.anonId ?? '').trim();
     const prompt = (body.prompt ?? '').trim();
     if (!anonId || anonId.length > MAX_ANON_LEN) return c.json({ error: 'anonId required' }, 400);
@@ -44,7 +54,7 @@ export function createPendingPromptRoutes(db: Db): Hono<HonoEnv> {
   // claimed rows are skipped on subsequent claims (kept for funnel analytics).
   router.post('/claim', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ anonId?: string }>().catch(() => ({}) as { anonId?: string });
+    const body = await parseOptionalBody(c, ClaimPromptBody);
     const anonId = (body.anonId ?? '').trim();
     if (!anonId) return c.json({ prompt: null });
 

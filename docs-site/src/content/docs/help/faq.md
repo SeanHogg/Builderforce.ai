@@ -276,12 +276,12 @@ setup (PATH, services, permissions, auth files). Give them the **full source che
 the hackable (git) install:
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 This installs BuilderForce Agents **from a git checkout**, so the agent can read the code + docs and
 reason about the exact version you are running. You can always switch back to stable later
-by re-running the installer without `--install-method git`.
+by re-running `install.sh` (the npm install).
 
 Tip: ask the agent to **plan and supervise** the fix (step-by-step), then execute only the
 necessary commands. That keeps changes small and easier to audit.
@@ -472,11 +472,11 @@ See what changed:
 One-liners (macOS/Linux):
 
 ```bash
-curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install.sh | bash -s -- --beta
+curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install.sh | BUILDERFORCE_TAG=beta bash
 ```
 
 ```bash
-curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 Windows installer (PowerShell):
@@ -509,7 +509,7 @@ This switches to the `main` branch and updates from source.
 2. **Hackable install (from the installer site):**
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 That gives you a local repo you can edit, then update via git.
@@ -531,19 +531,19 @@ Docs: [Update](/cli/update), [Development channels](/install/development-channel
 Re-run the installer with **verbose output**:
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --verbose
+curl -fsSL https://builderforce.ai/install.sh | bash -x
 ```
 
 Beta install with verbose:
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --beta --verbose
+curl -fsSL https://builderforce.ai/install.sh | BUILDERFORCE_TAG=beta bash -x
 ```
 
 For a hackable (git) install:
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git --verbose
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -x -s -- --install-method git
 ```
 
 Windows (PowerShell) equivalent:
@@ -551,7 +551,7 @@ Windows (PowerShell) equivalent:
 ```powershell
 # install.ps1 has no dedicated -Verbose flag yet.
 Set-PSDebug -Trace 1
-& ([scriptblock]::Create((iwr -useb https://builderforce.ai/install.ps1))) -NoOnboard
+& ([scriptblock]::Create((iwr -useb https://builderforce.ai/install.ps1))) -NoStart
 Set-PSDebug -Trace 0
 ```
 
@@ -587,7 +587,7 @@ Use the **hackable (git) install** so you have the full source and docs locally,
 your bot (or Claude/Codex) _from that folder_ so it can read the repo and answer precisely.
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 More detail: [Install](/install) and [Installer flags](/install/installer).

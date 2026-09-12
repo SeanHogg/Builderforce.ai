@@ -277,7 +277,7 @@ x-i18n:
 这些工具可以读取仓库、运行命令、检查日志，并帮助修复你的机器级别设置（PATH、服务、权限、认证文件）。通过可编辑（git）安装提供**完整源代码**：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 这会从 **git checkout** 安装 BuilderForce Agents，这样智能体可以读取代码 + 文档，并推理你正在运行的确切版本。你可以随时通过不带 `--install-method git` 重新运行安装程序切回稳定版。
@@ -453,11 +453,11 @@ https://github.com/SeanHogg/Builderforce.ai/blob/main/CHANGELOG.md
 一行命令（macOS/Linux）：
 
 ```bash
-curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install.sh | bash -s -- --beta
+curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install.sh | BUILDERFORCE_TAG=beta bash
 ```
 
 ```bash
-curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL --proto '=https' --tlsv1.2 https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 Windows 安装程序（PowerShell）：
@@ -489,7 +489,7 @@ builderforce update --channel dev
 2. **可编辑安装（从安装程序网站）：**
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 这会给你一个可编辑的本地仓库，然后通过 git 更新。
@@ -511,19 +511,19 @@ pnpm build
 使用**详细输出**重新运行安装程序：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --verbose
+curl -fsSL https://builderforce.ai/install.sh | bash -x
 ```
 
 带详细输出的 Beta 安装：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --beta --verbose
+curl -fsSL https://builderforce.ai/install.sh | BUILDERFORCE_TAG=beta bash -x
 ```
 
 可编辑（git）安装：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git --verbose
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -x -s -- --install-method git
 ```
 
 更多选项：[安装程序标志](/install/installer)。
@@ -555,7 +555,7 @@ curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git 
 使用**可编辑（git）安装**，这样你在本地拥有完整的源码和文档，然后从该文件夹向你的机器人（或 Claude/Codex）提问，这样它可以读取仓库并精确回答。
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 更多详情：[安装](/install)和[安装程序标志](/install/installer)。

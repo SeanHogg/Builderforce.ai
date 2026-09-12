@@ -46,16 +46,16 @@ builderforce status --deep
 以详细模式重新运行安装程序以查看完整跟踪和 npm 输出：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --verbose
+curl -fsSL https://builderforce.ai/install.sh | bash -x
 ```
 
 对于 beta 安装：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --beta --verbose
+curl -fsSL https://builderforce.ai/install.sh | BUILDERFORCE_TAG=beta bash -x
 ```
 
-你也可以设置 `BUILDERFORCE_AGENTS_VERBOSE=1` 代替标志。
+`install.sh` 没有详细模式开关；`bash -x` 会打印脚本执行的每条命令。
 
 ### Gateway 网关“unauthorized”、无法连接或持续重连
 

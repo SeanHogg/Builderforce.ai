@@ -55,6 +55,58 @@ import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { upgradeRequiredBody } from '../../domain/tenant/paymentRequired';
+import { parseBody, parseOptionalBody, z } from './requestBody';
+
+/** Stored as JSON on the repo row, so keys beyond the three hint lists are KEPT. */
+const MatchHintsBody = z.looseObject({
+  labels: z.array(z.string()).optional(),
+  keywords: z.array(z.string()).optional(),
+  pathGlobs: z.array(z.string()).optional(),
+});
+
+/** Exactly what `RepoService.recordPrResult` accepts. */
+const PrResultBody = z.object({
+  number: z.number().nullish(),
+  url: z.string().nullish(),
+  status: z.string().nullish(),
+});
+
+/** provider/owner/repo stay optional so the handler's own "required" answer wins. */
+const AddRepoBody = z.object({
+  provider: z.string().nullish(),
+  owner: z.string().nullish(),
+  repo: z.string().nullish(),
+  host: z.string().nullish(),
+  defaultBranch: z.string().nullish(),
+  cloneUrlHttps: z.string().nullish(),
+  isDefault: z.boolean().nullish(),
+  matchHints: MatchHintsBody.nullish(),
+  credentialId: z.string().nullish(),
+});
+
+/** Each field is written only when present; the identity columns refuse `null`. */
+const UpdateRepoBody = z.object({
+  host: z.string().optional(),
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  provider: z.string().optional(),
+  defaultBranch: z.string().nullish(),
+  cloneUrlHttps: z.string().nullish(),
+  isDefault: z.boolean().optional(),
+  matchHints: MatchHintsBody.nullish(),
+  credentialId: z.string().nullish(),
+});
+
+/** Optional pin + board labels for hint matching; an absent body resolves the default. */
+const DispatchPrBody = z.object({
+  repoId: z.string().nullish(),
+  labels: z.array(z.string()).nullish(),
+});
+
+/** An absent or null list clears the task's repo set, as before. */
+const TaskRepoSetBody = z.object({ repoIds: z.array(z.string()).nullish() });
+
+const MergePrBody = z.object({ method: z.string().nullish() });
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
@@ -166,11 +218,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const tenantId = c.get('tenantId') as number;
 
     const id = c.req.param('id');
-    const body = await c.req.json<{
-      number?: number | null;
-      url?: string | null;
-      status?: string | null;
-    }>();
+    const body = await parseBody(c, PrResultBody);
 
     const service = new RepoService(db, makeAgentHostDispatcher(c.env));
     const row = await service.recordPrResult(id, tenantId, body);
@@ -192,17 +240,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const project = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    const body = await c.req.json<{
-      provider: string;
-      owner: string;
-      repo: string;
-      host?: string;
-      defaultBranch?: string | null;
-      cloneUrlHttps?: string | null;
-      isDefault?: boolean;
-      matchHints?: { labels?: string[]; keywords?: string[]; pathGlobs?: string[] } | null;
-      credentialId?: string | null;
-    }>();
+    const body = await parseBody(c, AddRepoBody);
 
     if (!body.provider?.trim() || !body.owner?.trim() || !body.repo?.trim()) {
       return c.json({ error: 'provider, owner and repo are required' }, 400);
@@ -256,17 +294,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
-    const body = await c.req.json<{
-      host?: string;
-      owner?: string;
-      repo?: string;
-      provider?: string;
-      defaultBranch?: string | null;
-      cloneUrlHttps?: string | null;
-      isDefault?: boolean;
-      matchHints?: { labels?: string[]; keywords?: string[]; pathGlobs?: string[] } | null;
-      credentialId?: string | null;
-    }>();
+    const body = await parseBody(c, UpdateRepoBody);
 
     await db
       .update(projectRepositories)
@@ -445,9 +473,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
 
-    const body = await c.req
-      .json<{ repoId?: string | null; labels?: string[] | null }>()
-      .catch(() => ({} as { repoId?: string | null; labels?: string[] | null }));
+    const body = await parseOptionalBody(c, DispatchPrBody);
 
     const service = new RepoService(db, makeAgentHostDispatcher(c.env));
     const result = await service.dispatchPrCreation(taskId, tenantId, {
@@ -535,8 +561,8 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
-    const body = await c.req.json<{ repoIds?: string[] }>().catch(() => ({} as { repoIds?: string[] }));
-    const result = await setTaskRepoBindings(db, tenantId, taskId, Array.isArray(body.repoIds) ? body.repoIds : []);
+    const body = await parseOptionalBody(c, TaskRepoSetBody);
+    const result = await setTaskRepoBindings(db, tenantId, taskId, body.repoIds ?? []);
     if (!result.ok) return c.json({ error: result.reason }, 404);
     const bindings = await listTaskRepoBindings(db, tenantId, taskId);
     return c.json({
@@ -624,13 +650,13 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
-    const body = await c.req.json<{ method?: string }>().catch(() => ({} as { method?: string }));
+    const body = await parseOptionalBody(c, MergePrBody);
 
     // Shared with the AI Manager's autonomous PR coordination so the human "Approve
     // & Merge" and the manager merge never drift (resolve credential → provider
     // merge → mark merged → bust cache).
     const result = await mergeRecordedPullRequest(db, c.env as Env, {
-      tenantId, prId: id, method: body.method, mergedBy: userId ?? null,
+      tenantId, prId: id, method: body.method ?? undefined, mergedBy: userId ?? null,
     });
     if (!result.ok) {
       return statusResponse(c, { error: result.error, code: result.code }, result.httpStatus, { source: 'presentation/routes/repoRoutes.ts', operation: 'mergePullRequest' });

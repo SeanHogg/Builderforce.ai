@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo } from 'react';
 import { assessmentGate, liveAssessmentMode, type AssessmentGate } from '@/lib/academic/assessment';
 import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';

@@ -24,11 +24,17 @@ import {
 } from '../../application/rbac/memberPersonaService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseOptionalBody, z } from './requestBody';
 
-interface PersonaBody {
-  personas?: string[];
-  primary?: string | null;
-}
+/** Unknown persona keys are dropped by `normalizePersonas`, and a primary that is
+ *  not in the list falls back to the first — so only the SHAPE is checked here. */
+const PersonaBody = z.object({
+  personas: z.array(z.string()).nullish(),
+  primary: z.string().nullish(),
+});
+
+/** `userId` stays optional so "userId is required" still answers. */
+const AssignPersonaBody = PersonaBody.extend({ userId: z.string().nullish() });
 
 export function createMemberPersonaRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -57,17 +63,17 @@ export function createMemberPersonaRoutes(db: Db): Hono<HonoEnv> {
   router.put('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const raw = await c.req.json<PersonaBody>().catch(() => ({} as PersonaBody));
-    return c.json(await assignPersonas(db, tenantId, userId, raw.personas, raw.primary));
+    const raw = await parseOptionalBody(c, PersonaBody);
+    return c.json(await assignPersonas(db, tenantId, userId, raw.personas ?? undefined, raw.primary));
   });
 
   // ── POST /assign — manager assigns a user's personas ──────────────────────
   router.post('/assign', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const raw = await c.req.json<PersonaBody & { userId?: string }>().catch(() => ({} as PersonaBody & { userId?: string }));
+    const raw = await parseOptionalBody(c, AssignPersonaBody);
     const targetUserId = raw.userId;
     if (!targetUserId) return c.json({ error: 'userId is required' }, 400);
-    const result = await assignPersonas(db, tenantId, targetUserId, raw.personas, raw.primary);
+    const result = await assignPersonas(db, tenantId, targetUserId, raw.personas ?? undefined, raw.primary);
     return c.json({ userId: targetUserId, ...result });
   });
 

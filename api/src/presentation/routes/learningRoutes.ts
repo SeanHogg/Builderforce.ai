@@ -123,9 +123,7 @@ export function createLearningRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/paths', manager, async (c) => {
     const { env, tenantId, userId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as {
-      slug?: string; title?: string; summary?: string; level?: string;
-    };
+    const body = await parseOptionalBody(c, CreatePathBody);
 
     const title = (body.title ?? '').trim();
     if (!title) return c.json({ error: 'A path needs a title.' }, 400);
@@ -159,7 +157,7 @@ export function createLearningRoutes(db: Db): Hono<HonoEnv> {
     const id = idParam(c.req.param('id'));
     if (id === null) return c.json({ error: 'Unknown path.' }, 404);
 
-    const body = await c.req.json().catch(() => ({})) as { courseIds?: unknown };
+    const body = await parseOptionalBody(c, PathCoursesBody);
     if (!Array.isArray(body.courseIds) || body.courseIds.some((v) => !Number.isInteger(v))) {
       return c.json({ error: 'Send courseIds as an array of course ids, in the order they should be taken.' }, 400);
     }
@@ -174,7 +172,7 @@ export function createLearningRoutes(db: Db): Hono<HonoEnv> {
     const id = idParam(c.req.param('id'));
     if (id === null) return c.json({ error: 'Unknown path.' }, 404);
 
-    const body = await c.req.json().catch(() => ({})) as { status?: unknown };
+    const body = await parseOptionalBody(c, PathStatusBody);
     if (!isStatus(body.status)) {
       return c.json({ error: `Status must be one of: ${STATUSES.join(', ')}.` }, 400);
     }
@@ -188,7 +186,7 @@ export function createLearningRoutes(db: Db): Hono<HonoEnv> {
     const id = idParam(c.req.param('id'));
     if (id === null) return c.json({ error: 'Unknown path.' }, 404);
 
-    const body = await c.req.json().catch(() => ({})) as { learner?: string; dueAt?: string };
+    const body = await parseOptionalBody(c, EnrollBody);
     const learnerRef = learnerFor(c, body.learner);
     if (!learnerRef) return c.json({ error: 'Only a manager can enrol somebody else.' }, 403);
 
@@ -257,7 +255,7 @@ export function createLearningRoutes(db: Db): Hono<HonoEnv> {
     const id = idParam(c.req.param('id'));
     if (id === null) return c.json({ error: 'Unknown course.' }, 404);
 
-    const body = await c.req.json().catch(() => ({})) as { prerequisiteId?: unknown };
+    const body = await parseOptionalBody(c, PrerequisiteBody);
     if (!Number.isInteger(body.prerequisiteId)) {
       return c.json({ error: 'Send prerequisiteId — the course that must be completed first.' }, 400);
     }
@@ -286,7 +284,7 @@ export function createLearningRoutes(db: Db): Hono<HonoEnv> {
     const id = idParam(c.req.param('id'));
     if (id === null) return c.json({ error: 'Unknown course.' }, 404);
 
-    const body = await c.req.json().catch(() => ({})) as { learner?: string };
+    const body = await parseOptionalBody(c, CompleteCourseBody);
     const learnerRef = learnerFor(c, body.learner);
     if (!learnerRef) return c.json({ error: 'Only a manager can complete a course for somebody else.' }, 403);
 

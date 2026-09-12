@@ -26,8 +26,43 @@ import { createMigrationStore } from '../../application/migration/migrationStore
 import { buildMigrationProviderFactory } from '../../application/migration/buildProviderFactory';
 import { DISCOVERY_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
 import { getMigrationRuns, getMigrationDetail, invalidateMigrations } from '../../application/migration/migrationReads';
+import { parseBody, z } from './requestBody';
 
 const MODES: readonly ImportMode[] = ['migrate', 'sync', 'both'];
+
+/** `provider` / `credentialId` stay optional so "provider and credentialId are
+ *  required" still answers; an unknown `mode` falls back to 'migrate', as it did. */
+const StartMigrationBody = z.object({
+  provider: z.string().optional(),
+  credentialId: z.string().optional(),
+  mode: z.string().nullish(),
+});
+
+/**
+ * The operator's staging decisions — `MappingInput`, field for field. The service
+ * reads exactly these fields (it never iterates keys), so extra keys are dropped.
+ * `targetTaskType` / `targetStatus` were always tolerated when blank (`=== 'epic'`
+ * else 'task'; `|| 'backlog'`), so an absent one defaults rather than refusing.
+ */
+const MappingsBody = z.object({
+  projects: z.array(z.object({
+    id: z.string(),
+    action: z.enum(['create', 'map', 'skip']).optional(),
+    targetProjectId: z.number().nullish(),
+    targetProjectName: z.string().nullish(),
+  })).optional(),
+  types: z.array(z.object({
+    externalType: z.string(),
+    targetTaskType: z.string().default('task'),
+    targetStatus: z.string().default(''),
+  })).optional(),
+  users: z.array(z.object({
+    id: z.string(),
+    action: z.enum(['invite', 'map', 'skip']).optional(),
+    targetUserId: z.string().nullish(),
+  })).optional(),
+  items: z.array(z.object({ id: z.string(), include: z.boolean() })).optional(),
+});
 
 export function createMigrationRoutes(db: Db, env: Env): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -46,7 +81,7 @@ export function createMigrationRoutes(db: Db, env: Env): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
     const userId = (c.get('userId') as string | undefined) ?? null;
-    const body = await c.req.json<{ provider: string; credentialId: string; mode?: ImportMode }>();
+    const body = await parseBody(c, StartMigrationBody);
 
     if (!body.provider || !body.credentialId) return c.json({ error: 'provider and credentialId are required' }, 400);
     if (!DISCOVERY_PROVIDER_IDS.includes(body.provider)) {
@@ -88,7 +123,9 @@ export function createMigrationRoutes(db: Db, env: Env): Hono<HonoEnv> {
   router.patch('/:id/mappings', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json();
+    // Validated ABOVE the try: its catch answers every failure as a 400 with the
+    // error's message, which would bury the per-field issues.
+    const body = await parseBody(c, MappingsBody);
     try {
       const detail = await service.setMappings(id, tenantId, body);
       await bump(c, tenantId);

@@ -132,6 +132,22 @@ describe('MigrationService', () => {
     expect(detail.users[0]!.action).toBe('invite');
   });
 
+  it('seeds a Bug type to task_type bug rather than flattening it to task (migration 1160)', async () => {
+    const { store } = makeStore();
+    const svc = new MigrationService(store);
+    const base = makeProvider();
+    const withBug: BoardProvider = {
+      ...base,
+      async discover() {
+        const d = await base.discover();
+        return { ...d, itemTypes: [...d.itemTypes, { externalType: 'Bug', name: 'Bug', category: 'bug' }] };
+      },
+    };
+    const detail = await svc.startRun(meta, withBug);
+    expect(detail.itemTypes.find((t) => t.externalType === 'Bug')?.targetTaskType).toBe('bug');
+    expect(detail.itemTypes.find((t) => t.externalType === 'Story')?.targetTaskType).toBe('task');
+  });
+
   it('combines two external projects into one BF project and imports tasks with type mapping', async () => {
     const { store, inserts } = makeStore();
     const svc = new MigrationService(store);

@@ -84,6 +84,35 @@ import type { Env, HonoEnv } from '../../env';
 import { limitParam } from './queryParams';
 import { clamp, clamp01 } from '../../domain/shared/numbers';
 import { parseJsonOr } from '../../domain/shared/json';
+import { parseBody, z } from './requestBody';
+
+/** Every delta is `Number()`d, clamped and re-capped by the handler, so values stay loose. */
+const zDeltas = z.record(z.string(), z.unknown()).nullish();
+const ApplyReinforcementBody = z.object({
+  deltas: zDeltas,
+  rationale: z.array(z.string()).nullish(),
+  basedOnRuns: z.number().nullish(),
+  windowDays: z.number().nullish(),
+  autoApply: z.boolean().nullish(),
+});
+const DismissReinforcementBody = z.object({
+  deltas: zDeltas,
+  rationale: z.array(z.string()).nullish(),
+});
+/** `agentRef` stays optional so the handler's own "agentRef required" wins. */
+const RecordEventBody = z.object({
+  agentRef: z.string().nullish(),
+  executionId: z.number().nullish(),
+  runId: z.string().nullish(),
+  sessionKey: z.string().nullish(),
+  profileSource: z.string().optional(),
+  personaIds: z.array(z.string()).optional(),
+  directivesSummary: z.string().nullish(),
+  directiveCount: z.number().optional(),
+  thinkLevel: z.string().nullish(),
+  reasoningLevel: z.string().nullish(),
+  temperature: z.number().nullish(),
+});
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -372,13 +401,7 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
     const gate = await requireFeature(c, 'psychometricPersona');
     if (gate) return gate;
 
-    const body = await c.req.json<{
-      deltas?: Record<string, number>;
-      rationale?: string[];
-      basedOnRuns?: number;
-      windowDays?: number;
-      autoApply?: boolean;
-    }>();
+    const body = await parseBody(c, ApplyReinforcementBody);
 
     // NEVER trust client deltas — re-validate: known dims only, per-dim cap, and the
     // weekly cumulative cap using what has already been applied this period.
@@ -457,7 +480,7 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
     const agent = await ownedAgentProfile(tenantId, agentRef);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
-    const body = await c.req.json<{ deltas?: Record<string, number>; rationale?: string[] }>();
+    const body = await parseBody(c, DismissReinforcementBody);
     const cleanDeltas: Record<string, number> = {};
     for (const [dim, v] of Object.entries(body.deltas ?? {})) {
       if (VALID_DIMENSION_IDS.has(dim)) cleanDeltas[dim] = clamp(Math.round(Number(v) || 0), -MAX_DELTA_PER_DIM, MAX_DELTA_PER_DIM);
@@ -483,19 +506,7 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
   // ── POST record a personality application (durable producer seam) ────────────────
   router.post('/events', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      agentRef?: string;
-      executionId?: number | null;
-      runId?: string | null;
-      sessionKey?: string | null;
-      profileSource?: string;
-      personaIds?: string[];
-      directivesSummary?: string;
-      directiveCount?: number;
-      thinkLevel?: string | null;
-      reasoningLevel?: string | null;
-      temperature?: number | null;
-    }>();
+    const body = await parseBody(c, RecordEventBody);
     const agentRef = body.agentRef?.trim();
     if (!agentRef) return c.json({ error: 'agentRef required' }, 400);
     const agent = await ownedAgentProfile(tenantId, agentRef);

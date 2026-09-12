@@ -27,6 +27,7 @@ import {
 } from '../../application/legal/documentTemplates';
 import { sendTemplatedDocument } from '../../application/legal/templateSigning';
 import { SignatureError } from '../../application/signature/signatureEngine';
+import { parseBody, zJsonObject } from './requestBody';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -52,13 +53,15 @@ export function createDocumentTemplateRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/', (c) => Response.json({ templates: documentTemplateCatalog() }));
 
+  // Both bodies are read field-by-field below (and `values` is the template's own
+  // job), so the schema is "a JSON object" — `handle` rethrows the 400 it raises.
   router.post('/:key/render', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return Response.json({ document: renderDocumentTemplate(c.req.param('key'), values(body)) });
   }));
 
   router.post('/:key/send', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const result = await sendTemplatedDocument(db, c.env as Env, c.get('tenantId') as number, {
       templateKey: c.req.param('key'),
       values: values(body),

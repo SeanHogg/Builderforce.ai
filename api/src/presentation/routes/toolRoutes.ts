@@ -13,6 +13,20 @@ import { toolLocaleFromHeaders, type ToolLocale } from '../../application/tools/
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
 import { daysParam } from './queryParams';
+import { parseBody, parseOptionalBody, z, zNumberLike } from './requestBody';
+
+/** `projectId` is `Number()`d and answered with the handler's own "projectId is required". */
+const RunAuditBody = z.object({ projectId: zNumberLike.nullish() });
+/** The scored answers: question / field id → the number picked. */
+const zScoreInput = z.record(z.string(), z.number());
+const ComputeBody = z.object({ input: zScoreInput.nullish() });
+/** Analyzer documents — non-string values are skipped by the handler, as before. */
+const AnalyzeBody = z.object({ input: z.record(z.string(), z.unknown()).nullish() });
+const SaveRunBody = z.object({
+  input: zScoreInput.nullish(),
+  kind: z.enum(['self', 'data']).nullish(),
+  projectId: z.number().nullish(),
+});
 
 /**
  * Diagnostics & Tools routes.
@@ -88,7 +102,7 @@ export function createToolRoutes(
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const auditId = c.req.param('auditId');
-    const body = await c.req.json<{ projectId?: number }>().catch(() => ({} as { projectId?: number }));
+    const body = await parseOptionalBody(c, RunAuditBody);
     const projectId = Number(body.projectId);
     if (!Number.isFinite(projectId)) return c.json({ error: 'projectId is required' }, 400);
 
@@ -134,7 +148,7 @@ export function createToolRoutes(
 
   // Public free compute — no tenant data, pure scoring.
   router.post('/:id/compute', async (c) => {
-    const body = await c.req.json<{ input?: Record<string, number> }>().catch(() => ({ input: {} }));
+    const body = await parseOptionalBody(c, ComputeBody);
     // `framework` re-lenses a maturity scorecard (COBIT / ITIL). An unknown value
     // degrades to the default lens rather than 400-ing: it changes how one result
     // is GROUPED, and refusing to score at all over a bad grouping helps nobody.
@@ -157,7 +171,7 @@ export function createToolRoutes(
    * Documents are capped so a paste cannot turn into a CPU-time denial of service.
    */
   router.post('/:id/analyze', async (c) => {
-    const body = await c.req.json<{ input?: Record<string, string> }>().catch(() => ({ input: {} }));
+    const body = await parseOptionalBody(c, AnalyzeBody);
     const input: Record<string, string> = {};
     for (const [key, value] of Object.entries(body.input ?? {})) {
       if (typeof value === 'string') input[key] = value.slice(0, MAX_DOCUMENT_CHARS);
@@ -181,7 +195,7 @@ export function createToolRoutes(
   router.post('/:id/save', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ input?: Record<string, number>; kind?: 'self' | 'data'; projectId?: number | null }>();
+    const body = await parseBody(c, SaveRunBody);
     const saved = await toolService.saveRun(c.env as Env, {
       tenantId,
       toolId: c.req.param('id'),

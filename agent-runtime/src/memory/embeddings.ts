@@ -268,7 +268,7 @@ function formatLocalSetupError(err: unknown): string {
     "To enable local embeddings:",
     "1) Use Node 22 LTS (recommended for installs/updates)",
     missing
-      ? "2) Reinstall BuilderForceAgents (this should install node-llama-cpp): npm i -g builderforce@latest"
+      ? "2) Reinstall BuilderForceAgents (this should install node-llama-cpp): npm i -g @seanhogg/builderforce-agents@latest"
       : null,
     "3) If you use pnpm: pnpm approve-builds (select node-llama-cpp), then pnpm rebuild node-llama-cpp",
     ...REMOTE_EMBEDDING_PROVIDER_IDS.map(

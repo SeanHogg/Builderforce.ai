@@ -19,6 +19,18 @@ import type { Db } from '../../infrastructure/database/connection';
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
 import { isCeremonySessionStatus } from '../../domain/agile/ceremonySession';
+import { parseBody, z } from './requestBody';
+
+// Required fields stay nullish here: each handler answers its own "X is required"
+// message, and a wrong TYPE (which used to reach `.trim()` as a TypeError) is now a 400.
+const PokerSessionBody = z.object({ name: z.string().nullish(), votingSystem: z.string().nullish() });
+const PokerStoryBody = z.object({ title: z.string().nullish(), description: z.string().nullish() });
+const PokerVoteBody = z.object({ value: z.string().nullish() });
+const PokerStoryPatchBody = z.object({ finalEstimate: z.string().nullish(), status: z.string().nullish() });
+/** `isCeremonySessionStatus` owns the check and its message. */
+const CeremonyStatusBody = z.object({ status: z.unknown().optional() });
+const RetroBody = z.object({ name: z.string().nullish(), template: z.string().nullish() });
+const RetroItemBody = z.object({ category: z.string().nullish(), content: z.string().nullish() });
 
 /** Resolve a story's parent session (to know which room to broadcast to). */
 async function sessionIdForStory(db: Db, storyId: string, tenantId: number, segmentId: string): Promise<string | null> {
@@ -41,7 +53,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/sessions', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ name?: string; votingSystem?: string }>();
+    const body = await parseBody(c, PokerSessionBody);
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const [row] = await db.insert(pokerSessions).values({
       tenantId, segmentId, name: body.name.trim(),
@@ -81,7 +93,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
   r.post('/sessions/:id/stories', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const sessionId = c.req.param('id');
-    const body = await c.req.json<{ title?: string; description?: string }>();
+    const body = await parseBody(c, PokerStoryBody);
     if (!body.title?.trim()) return c.json({ error: 'title is required' }, 400);
     const counted = await db.select({ count: sql<number>`count(*)::int` }).from(pokerStories)
       .where(and(eq(pokerStories.sessionId, sessionId), eq(pokerStories.tenantId, tenantId), eq(pokerStories.segmentId, segmentId)));
@@ -97,7 +109,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const storyId = c.req.param('id');
     const userId = c.get('userId');
-    const body = await c.req.json<{ value?: string }>();
+    const body = await parseBody(c, PokerVoteBody);
     if (!body.value?.trim()) return c.json({ error: 'value is required' }, 400);
     await db.insert(pokerVotes).values({ tenantId, segmentId, storyId, userId, value: body.value.trim() })
       .onConflictDoUpdate({ target: [pokerVotes.storyId, pokerVotes.userId], set: { value: body.value.trim(), updatedAt: new Date() } });
@@ -121,7 +133,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/stories/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
-    const body = await c.req.json<{ finalEstimate?: string; status?: string }>();
+    const body = await parseBody(c, PokerStoryPatchBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.finalEstimate !== undefined) { patch.finalEstimate = body.finalEstimate; patch.status = 'estimated'; }
     if (body.status !== undefined) patch.status = body.status;
@@ -142,7 +154,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/sessions/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: unknown }>();
+    const body = await parseBody(c, CeremonyStatusBody);
     if (!isCeremonySessionStatus(body.status)) {
       return c.json({ error: 'status must be one of: active, completed, cancelled' }, 400);
     }
@@ -172,7 +184,7 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ name?: string; template?: string }>();
+    const body = await parseBody(c, RetroBody);
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const [row] = await db.insert(retrospectives).values({
       tenantId, segmentId, name: body.name.trim(), template: body.template ?? 'start_stop_continue',
@@ -195,7 +207,7 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
   r.post('/:id/items', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const retroId = c.req.param('id');
-    const body = await c.req.json<{ category?: string; content?: string }>();
+    const body = await parseBody(c, RetroItemBody);
     if (!body.category?.trim() || !body.content?.trim()) return c.json({ error: 'category and content are required' }, 400);
     const [row] = await db.insert(retroItems).values({
       tenantId, segmentId, retroId, category: body.category.trim(), content: body.content.trim(), authorId: c.get('userId'),
@@ -234,7 +246,7 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: unknown }>();
+    const body = await parseBody(c, CeremonyStatusBody);
     if (!isCeremonySessionStatus(body.status)) {
       return c.json({ error: 'status must be one of: active, completed, cancelled' }, 400);
     }

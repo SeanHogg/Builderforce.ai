@@ -53,6 +53,27 @@ import { ingressForPlanning, realize } from '../../application/realization/reali
 import { REALIZATION_TARGETS, realizationTargetByKey, recommendRealizations } from '../../application/realization/targets';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { parseOptionalBody, z } from './requestBody';
+
+// Each handler type-guards every field with its own worded 400 (and `sessionId` is
+// resolved, not believed, by `resolveOutcomeSession`), so these only refuse a
+// non-object body. Read ABOVE the `/plan` try, whose catch answers 502.
+const PlanBody = z.object({
+  idea: z.unknown().optional(),
+  sessionId: z.unknown().optional(),
+});
+const CreateRealizationBody = z.object({
+  idea: z.unknown().optional(),
+  challengeId: z.unknown().optional(),
+  projectId: z.unknown().optional(),
+  targetKey: z.unknown().optional(),
+  strategy: z.unknown().optional(),
+  sessionId: z.unknown().optional(),
+});
+const VerdictBody = z.object({
+  verdict: z.unknown().optional(),
+  note: z.unknown().optional(),
+});
 
 /** Ideas longer than this are a brief, and belong in the challenge pipeline. */
 const MAX_IDEA_CHARS = 20_000;
@@ -122,7 +143,7 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
    * the fact from a call that left no trace.
    */
   router.post('/plan', async (c) => {
-    const body = await c.req.json<{ idea?: unknown; sessionId?: unknown }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, PlanBody);
     const idea = typeof body.idea === 'string' ? body.idea.trim() : '';
     if (!idea) return c.json({ error: 'idea is required' }, 400);
     if (idea.length > MAX_IDEA_CHARS) {
@@ -179,9 +200,7 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
    */
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req
-      .json<{ idea?: unknown; challengeId?: unknown; projectId?: unknown; targetKey?: unknown; strategy?: unknown; sessionId?: unknown }>()
-      .catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, CreateRealizationBody);
 
     const target = realizationTargetByKey(typeof body.targetKey === 'string' ? body.targetKey : null);
     if (!target) return c.json({ error: 'targetKey must name a realization target' }, 400);
@@ -273,7 +292,7 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
    */
   router.patch('/:id/verdict', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ verdict?: unknown; note?: unknown }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, VerdictBody);
     if (body.verdict !== 'abandoned') {
       return c.json(
         { error: 'Only "abandoned" may be set here — met and missed are recorded from the proof\'s own console.' },

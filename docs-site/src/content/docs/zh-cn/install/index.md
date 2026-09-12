@@ -45,24 +45,18 @@ builderforce onboard --install-daemon
 
 ### 1）安装器脚本（推荐）
 
-通过 npm 全局安装 `builderforce` 并运行新手引导。
+通过 npm 全局安装 `@seanhogg/builderforce-agents`（即 `builderforce` CLI）。如果提供了工作区令牌，还会注册本机并启动 Gateway 网关；否则安装后请运行 `builderforce onboard --install-daemon`。需要 `PATH` 中已有 Node.js 20+ 和 npm。
 
 ```bash
 curl -fsSL https://builderforce.ai/install.sh | bash
 ```
 
-安装器标志：
+安装器不接受命令行参数，通过环境变量配置。详情：[安装器内部原理](/install/installer)。
+
+注册但暂不启动 Gateway 网关：
 
 ```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --help
-```
-
-详情：[安装器内部原理](/install/installer)。
-
-非交互式（跳过新手引导）：
-
-```bash
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --no-onboard
+curl -fsSL https://builderforce.ai/install.sh | BUILDERFORCE_NO_START=1 bash
 ```
 
 ### 2）全局安装（手动）
@@ -70,13 +64,13 @@ curl -fsSL https://builderforce.ai/install.sh | bash -s -- --no-onboard
 如果你已经有 Node：
 
 ```bash
-npm install -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
 ```
 
 如果你全局安装了 libvips（macOS 上通过 Homebrew 安装很常见）且 `sharp` 安装失败，请强制使用预构建二进制文件：
 
 ```bash
-SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g builderforce@latest
+SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g @seanhogg/builderforce-agents@latest
 ```
 
 如果你看到 `sharp: Please add node-gyp to your dependencies`，要么安装构建工具（macOS：Xcode CLT + `npm install -g node-gyp`），要么使用上面的 `SHARP_IGNORE_GLOBAL_LIBVIPS=1` 变通方法来跳过原生构建。
@@ -84,9 +78,9 @@ SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g builderforce@latest
 或使用 pnpm：
 
 ```bash
-pnpm add -g builderforce@latest
-pnpm approve-builds -g                # 批准 builderforce、node-llama-cpp、sharp 等
-pnpm add -g builderforce@latest           # 重新运行以执行 postinstall 脚本
+pnpm add -g @seanhogg/builderforce-agents@latest
+pnpm approve-builds -g                # 批准 @seanhogg/builderforce-agents、node-llama-cpp、sharp 等
+pnpm add -g @seanhogg/builderforce-agents@latest   # 重新运行以执行 postinstall 脚本
 ```
 
 pnpm 需要显式批准带有构建脚本的包。在首次安装显示"Ignored build scripts"警告后，运行 `pnpm approve-builds -g` 并选择列出的包，然后重新运行安装以执行 postinstall 脚本。
@@ -126,19 +120,17 @@ builderforce onboard --install-daemon
 
 ## 安装方式：npm vs git（安装器）
 
-安装器支持两种方式：
+- `install.sh` / `install.ps1` 只支持 npm：`npm install -g @seanhogg/builderforce-agents@latest`
+- `install-cli.sh` 支持 `npm`（默认）和 `git`（从 GitHub 克隆/构建并从源代码 checkout 运行）
 
-- `npm`（默认）：`npm install -g builderforce@latest`
-- `git`：从 GitHub 克隆/构建并从源代码 checkout 运行
-
-### CLI 标志
+### CLI 标志（install-cli.sh）
 
 ```bash
 # 显式 npm
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method npm
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method npm
 
 # 从 GitHub 安装（源代码 checkout）
-curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
+curl -fsSL https://builderforce.ai/install-cli.sh | bash -s -- --install-method git
 ```
 
 常用标志：
@@ -146,21 +138,20 @@ curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git
 - `--install-method npm|git`
 - `--git-dir <path>`（默认：`~/builderforce`）
 - `--no-git-update`（使用现有 checkout 时跳过 `git pull`）
-- `--no-prompt`（禁用提示；CI/自动化中必需）
-- `--dry-run`（打印将要执行的操作；不做任何更改）
-- `--no-onboard`（跳过新手引导）
+- `--prefix <path>`（默认：`~/.builderforce`）
+- `--onboard` / `--no-onboard`（默认跳过新手引导）
 
 ### 环境变量
 
-等效的环境变量（对自动化有用）：
+`install-cli.sh` 读取的环境变量（名称沿用改名之前的写法）：
 
-- `BUILDERFORCE_AGENTS_INSTALL_METHOD=git|npm`
-- `BUILDERFORCE_AGENTS_GIT_DIR=...`
-- `BUILDERFORCE_AGENTS_GIT_UPDATE=0|1`
-- `BUILDERFORCE_AGENTS_NO_PROMPT=1`
-- `BUILDERFORCE_AGENTS_DRY_RUN=1`
-- `BUILDERFORCE_AGENTS_NO_ONBOARD=1`
+- `CODERCLAW_INSTALL_METHOD=npm|git`
+- `CODERCLAW_GIT_DIR=...`
+- `CODERCLAW_GIT_UPDATE=0|1`
+- `CODERCLAW_NO_ONBOARD=1`
 - `SHARP_IGNORE_GLOBAL_LIBVIPS=0|1`（默认：`1`；避免 `sharp` 针对系统 libvips 构建）
+
+`install.sh` 读取的环境变量：`BUILDERFORCE_TAG`、`BUILDERFORCE_TOKEN`、`BUILDERFORCE_WORKSPACE`、`BUILDERFORCE_URL`、`BUILDERFORCE_NO_START`。
 
 ## 故障排除：找不到 `builderforce`（PATH）
 

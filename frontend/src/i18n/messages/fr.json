@@ -5890,7 +5890,971 @@
     "ctaGetStartedFree": "Commencer gratuitement",
     "ctaStartBuildingFree": "Créez gratuitement",
     "ctaTourPlatform": "Découvrir la plateforme",
-    "ctaSeePricing": "Voir les tarifs"
+    "ctaSeePricing": "Voir les tarifs",
+    "content": {
+      "brand": {
+        "tagline": "Le canevas créatif des humains et des agents IA"
+      },
+      "quotable": {
+        "creativeCanvas": "Transformez n’importe quelle idée en réalité avec Builderforce.ai. C’est un canevas créatif unique où votre équipe et des agents IA conçoivent, construisent, relisent et livrent sites web, workflows, modèles, récits de données et produits, sans multiplier les outils.",
+        "evermind": "Evermind est le modèle de projet et le système de mémoire de Builderforce.ai. Ses mises à jour write-through par clé sont conçues pour remplacer les faits de projet dépassés dans les workflows navigateur et agents pris en charge.",
+        "systemOfRecord": "Builderforce.ai maintient le parcours créatif connecté, de la première idée jusqu’à la revue et à la livraison, et offre aux équipes un registre partagé de ce que les humains et les agents IA ont créé, modifié, approuvé et livré.",
+        "defineANeed": "Builderforce.ai permet à chacun de définir un besoin sous n’importe quelle forme — langage courant, jeu de données, schéma de processus ou persona — et le compile en un agent qui s’exécute sur le Canvas, sur le poste de travail ou dans le cloud : une seule colonne AgentSpec, compilée à partir de multiples entrées et déployée sur de multiples surfaces.",
+        "enterpriseInnovation": "Builderforce.ai relie le travail créatif à la livraison : les équipes peuvent façonner une idée avec l’IA, l’organiser en projets et en workflows, puis ajouter gouvernance et mesure à mesure que le travail prend de l’ampleur.",
+        "roleBasedInsight": "Builderforce.ai rassemble le contexte créatif, l’activité de livraison, l’usage des modèles, les approbations et les données de coût disponibles dans des vues opérationnelles adaptées à chaque rôle, pour les équipes comme pour les dirigeants.",
+        "humanInLoopAgentic": "Builderforce.ai est un canevas créatif avec humain dans la boucle, où votre équipe et des agents IA transforment les idées en travail connecté, vérifiable et prêt à livrer.",
+        "trainAndUseLoop": "Entraînez un agent personnalisé, publiez-le dans le Workforce Registry, puis recrutez-le et appelez-le depuis votre propre agent : vos spécialistes entraînés deviennent des outils auxquels votre agent principal délègue.",
+        "neverLeaveVsCode": "Les équipes d’ingénierie peuvent ouvrir Builderforce.ai dans VS Code pour faire entrer dans l’éditeur le contexte du dépôt, les diagnostics, le travail des agents, les revues et les approbations.",
+        "aiExecutiveTeam": "Builderforce.ai offre aux dirigeants des vues connectées de la création, de la livraison, des systèmes, des coûts et de l’activité gouvernée des agents, sans prétendre que l’IA remplace des responsables qui rendent des comptes.",
+        "freeForever": "Une offre gratuite est disponible ; vérifiez les tarifs et droits en vigueur sur la page des tarifs.",
+        "agenticTester": "L’Agentic Tester est un agent d’assurance qualité autonome : pointez-le vers votre application, fournissez-lui des identifiants, et il pilote un vrai navigateur à travers vos parcours les plus fréquentés selon un calendrier défini, en consignant les bugs trouvés directement sur votre tableau.",
+        "collaboration": "Builderforce.ai est une plateforme de collaboration en temps réel pour une main-d’œuvre mixte d’humains et d’agents IA : ils partagent un tableau Kanban, discutent dans des fils multipartites adressables à une personne ou à un @agent, se réunissent en vidéo WebRTC en direct et se coordonnent sur des calendriers partagés, depuis le web ou dans VS Code.",
+        "teamChat": "Le chat d’équipe de Builderforce.ai est multipartite : les fils sont partagés à l’échelle du projet, vous invitez des humains par e-mail et des agents IA dans la conversation, et vous adressez chaque message à un participant précis ; un message à une personne reste une simple conversation, tandis qu’une mention @agent pousse cet agent à répondre et à agir sur le tableau dans la limite de vos propres permissions.",
+        "meetings": "Builderforce.ai propose des réunions vidéo en direct via WebRTC maillé directement sur votre tableau de projet — caméras pour les dailies et les rétros, calendrier d’équipe réservable avec les disponibilités de chacun et « Trouver un créneau », synchronisation Google/Microsoft Calendar —, accessibles depuis le web ou directement dans VS Code, les flux circulant de pair à pair sans jamais passer par le serveur.",
+        "vsCodeCommandCenter": "L’extension BuilderForce pour VS Code est un centre de commande pour une main-d’œuvre d’humains et d’agents IA : chat d’équipe multipartite, statut de session en direct indiquant quelles exécutions tournent ou attendent votre réponse, réunions vidéo natives, console d’entraînement Evermind et approbations avec humain dans la boucle, le tout sans quitter l’éditeur.",
+        "zeroGpuBills": "Les étapes d’entraînement WebGPU prises en charge s’exécutent sur un appareil local compatible ; les étapes hébergées et connectées sont indiquées séparément.",
+        "browserNative": "Affinez des modèles jusqu’à 2 milliards de paramètres directement dans Chrome grâce à WebGPU.",
+        "datasetSpeed": "Générez un jeu de données d’instruction en moins de 30 secondes à partir d’un seul prompt de capacité.",
+        "privacy": "L’entraînement pris en charge s’exécute localement via WebGPU ; la publication, la collaboration et les services cloud connectés peuvent transmettre les données nécessaires à ces fonctionnalités."
+      },
+      "statValues": [
+        "Un seul",
+        "En direct",
+        "Humain + IA",
+        "Vérifiable"
+      ],
+      "faq": {
+        "homepage": [
+          {
+            "question": "Qu’est-ce qu’Evermind ?",
+            "answer": "Evermind est le cerveau de Builderforce.ai : un modèle auto-actualisé régi par la Write-Through Cognition. Au lieu de figer ses connaissances au moment de l’entraînement comme un modèle de pointe classique, Evermind écrit les nouvelles connaissances directement dans le modèle : une mise à jour remplace ce qui précédait, sans étape de réconciliation, et les lectures reflètent toujours la vérité la plus récente. Il s’appuie sur un générateur hybride à experts partagés (un tronc dense qui apprend en continu, plus des experts SSM routés chargés à la demande), une mémoire de connaissances write-through qui fait des upserts par clé stable, et une couche limbique entraînable pour la dynamique. Il tourne sur WebGPU dans le navigateur, sur l’appareil ou au sein de chaque agent, et il est conçu pour l’emporter sur l’actualité, l’empreinte et la maîtrise, plutôt que sur la taille brute."
+          },
+          {
+            "question": "Qu’est-ce que Builderforce.ai ?",
+            "answer": "Builderforce.ai est un canevas créatif où les équipes et les agents IA transforment des idées en résultats concrets. Vous pouvez créer des sites web, des workflows, des prototypes, des récits de données, des modèles, des documents et des plans de livraison dans un même espace visuel, préserver les liens entre eux et faire passer le travail approuvé en exécution gouvernée."
+          },
+          {
+            "question": "Builderforce.ai est-il une plateforme pour l’entreprise ?",
+            "answer": "Oui. Les équipes peuvent démarrer avec un canevas privé, puis ajouter des espaces partagés, un contrôle d’accès par rôle, des circuits d’approbation, le suivi de la livraison, la visibilité des coûts et des preuves d’audit à mesure que le travail prend de l’ampleur. Les équipes créatives et opérationnelles partagent un seul registre connecté, au lieu de reconstituer les décisions à partir de tableaux blancs, de documents, d’outils de projet et de conversations avec des agents éparpillés."
+          },
+          {
+            "question": "Puis-je entraîner mes propres agents et les utiliser au sein de mon propre agent ?",
+            "answer": "Oui, c’est la boucle centrale. Entraînez un agent personnalisé dans le navigateur grâce au fine-tuning WebGPU LoRA et au moteur d’évaluation par IA, publiez-le dans le Workforce Registry, puis recrutez-le et appelez-le depuis votre propre agent. Vos spécialistes entraînés deviennent des outils auxquels votre agent principal délègue : vous construisez et orchestrez une main-d’œuvre entièrement agentique qui vous appartient."
+          },
+          {
+            "question": "Dois-je quitter VS Code pour gérer mes agents ?",
+            "answer": "Non. Builderforce.ai est un canevas créatif pensé d’abord pour le web. Les équipes d’ingénierie peuvent aussi utiliser l’extension BuilderForce pour VS Code afin de rapprocher du code le contexte du dépôt, les diagnostics, le travail des agents, les revues et les approbations."
+          },
+          {
+            "question": "Builderforce propose-t-il un tableau Kanban et de la gestion de projet ?",
+            "answer": "Oui. Les projets organisent votre travail et le tableau des tâches le suit sur un Kanban en direct, avec des couloirs par statut ou par agent, ainsi que des vues tableau, calendrier et Gantt. Humains et agents IA partagent le même tableau : vous planifiez, assignez et voyez le travail passer du backlog à « terminé » en temps réel."
+          },
+          {
+            "question": "Le tableau Kanban peut-il fonctionner tout seul avec des agents IA ?",
+            "answer": "Oui, c’est l’exécution autonome par couloirs. Assignez un agent (cloud ou sur site) à un couloir du tableau : les tickets de ce couloir lui sont automatiquement confiés, et le tableau avance de couloir en couloir à mesure que les agents terminent, en ne s’arrêtant qu’aux points d’approbation que vous avez choisis. Vous pilotez des résultats sur un tableau au lieu d’envoyer des prompts un par un."
+          },
+          {
+            "question": "Comment Builderforce réduit-il le coût des tokens LLM ?",
+            "answer": "Un cache sémantique commun à toutes les surfaces réutilise une réponse précédente lorsqu’un nouveau prompt a le même sens qu’une question déjà traitée : le modèle de pointe n’est jamais facturé deux fois pour le même travail. Il fonctionne sur deux niveaux — une couche gratuite sur l’appareil utilisant des embeddings SSM (dans le navigateur et dans chaque agent) et une couche de passerelle partagée cloisonnée par locataire — et se combine à un routage qui épuise les modèles les moins chers avant de solliciter les modèles premium."
+          },
+          {
+            "question": "Puis-je planifier et chiffrer le travail du portefeuille jusqu’à la tâche ?",
+            "answer": "Oui, c’est la Planning Spine. Portefeuille, initiative, epic et tâche vivent sur une seule hiérarchie datée (les objectifs et résultats clés pouvant s’y rattacher à n’importe quel niveau), affichée dans un Gantt unique. Comme chaque tâche est instrumentée, son coût — les dépenses LLM valorisées au moment de l’écriture plus l’effort humain — remonte vers chaque niveau supérieur et se répartit entre CAPEX et OPEX, avec des alertes d’anomalie lorsqu’une décision de capitalisation doit être validée. L’ingénierie, le PMO et la finance lisent les mêmes chiffres, et toute la hiérarchie s’exporte en CSV."
+          },
+          {
+            "question": "Builderforce peut-il corriger les erreurs qu’il surveille ?",
+            "answer": "Oui. Le pilier Qualité ingère les erreurs d’exécution provenant d’un SDK navigateur, d’OpenTelemetry, de Sentry, de PostHog ou de LogRocket, les regroupe par empreinte en groupes d’erreurs dédoublonnés, puis transforme n’importe quel groupe en tâche de correction qu’un agent cloud prend en charge et livre sous forme de pull request. Contrairement à un tableau de bord de supervision qui s’arrête à la stack trace, la plateforme qui détecte le crash l’assigne, le corrige et ouvre la PR."
+          },
+          {
+            "question": "Mon équipe peut-elle se réunir en vidéo dans Builderforce ?",
+            "answer": "Oui. Builderforce propose des réunions audio et vidéo en direct via WebRTC maillé, directement sur votre tableau de projet : allumez les caméras pour un daily, une planification ou une rétro, ou lancez des appels improvisés et directs. Les flux circulent de pair à pair et ne transitent jamais par le serveur. Un calendrier d’équipe partagé superpose vos réunions et les événements Google ou Microsoft Calendar connectés, grise les indisponibilités de chacun, et « Trouver un créneau » propose des plages où tous les invités sont réellement libres. Vous pouvez rejoindre une réunion depuis le web ou directement dans VS Code."
+          },
+          {
+            "question": "Puis-je discuter avec des humains et des agents IA dans le même fil ?",
+            "answer": "Oui, c’est le chat d’équipe multipartite. Les fils sont partagés à l’échelle du projet : vous invitez des personnes par e-mail et des agents IA dans la conversation, puis vous adressez chaque message à un participant précis. Un message à une personne reste une simple conversation (la boucle de l’agent reste inactive) ; une mention @agent pousse cet agent à répondre en son nom et à exécuter une boucle d’outils bornée et limitée par les permissions pour créer une tâche, mettre à jour un OKR ou lire le tableau, sans jamais dépasser vos propres droits. La même conversation fonctionne sur le web et dans VS Code."
+          },
+          {
+            "question": "Dois-je quitter Jira ou Linear pour utiliser Builderforce ?",
+            "answer": "Non. Les connecteurs de tableaux synchronisent le travail dans les deux sens avec les outils que vous utilisez déjà : Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty et GitHub. Les agents prennent en charge un ticket ou un incident là où il naît, et les modifications remontent vers le système de référence. Vous disposez d’une vue unique pour tout orchestrer, sans migration et sans dépendance."
+          },
+          {
+            "question": "Builderforce est-il gratuit ?",
+            "answer": "Une offre gratuite est disponible. Les prix en vigueur, les quotas appliqués et la disponibilité des fonctionnalités par offre sont générés à partir de la configuration des droits de la plateforme et affichés sur la page des tarifs."
+          },
+          {
+            "question": "Comment entraîner un modèle dans mon navigateur ?",
+            "answer": "Créez un projet, générez ou importez un jeu de données, puis lancez l’assistant d’entraînement LoRA dans le navigateur sur un appareil compatible WebGPU. L’étape d’entraînement local reste dans le navigateur ; l’évaluation distante, la collaboration et la publication sont des opérations distinctes, chacune avec ses propres limites."
+          },
+          {
+            "question": "Qu’est-ce que le Workforce Registry ?",
+            "answer": "Le Workforce Registry est une place de marché publique où les agents IA entraînés peuvent être référencés avec un profil, des compétences et des scores d’évaluation. D’autres équipes et applications peuvent découvrir et recruter des agents instantanément."
+          },
+          {
+            "question": "Qu’est-ce que le fine-tuning WebGPU LoRA ?",
+            "answer": "LoRA (Low-Rank Adaptation) entraîne un ensemble réduit de poids d’adaptation au lieu du modèle complet. Builderforce prend en charge l’entraînement WebGPU dans le navigateur pour les modèles et appareils compatibles ; les limites matérielles et les éventuelles étapes distantes sont indiquées séparément."
+          },
+          {
+            "question": "Comment fonctionne le moteur d’évaluation par IA ?",
+            "answer": "Après l’entraînement, un juge IA indépendant note les sorties de votre modèle selon des métriques de qualité structurées, dont l’exactitude, la qualité du raisonnement et le taux d’hallucination. Vous obtenez ainsi des scores d’évaluation objectifs avant de publier dans le Workforce Registry."
+          },
+          {
+            "question": "Quels modèles puis-je affiner ?",
+            "answer": "Builderforce prend en charge le fine-tuning LoRA d’architectures transformer et SSM (State Space Model) jusqu’à 2 milliards de paramètres. L’entraînement s’exécute sur votre GPU local via l’API WebGPU dans Chrome, Edge ou tout navigateur compatible WebGPU."
+          },
+          {
+            "question": "Builderforce peut-il gérer les incidents et les astreintes ?",
+            "answer": "Oui. Builderforce gère les incidents de bout en bout : un agent Help Desk / Gestionnaire d’incidents fait le tri, les rotations d’astreinte déterminent qui est appelé, l’escalade temporisée remonte la chaîne, et les alertes par Teams, Slack ou e-mail atteignent la personne d’astreinte, avec un fil de salle de crise par incident pour les humains et les agents. Les sondes épinglées sur votre schéma d’architecture sont vérifiées toutes les cinq minutes, et un dépassement déclenche automatiquement l’investigation. Une fois l’incident résolu, son analyse des causes profondes est publiée dans votre base de connaissances et transmise à l’Evermind du projet, pour que la main-d’œuvre apprenne et cesse de reproduire la même panne."
+          },
+          {
+            "question": "Comment Builderforce prouve-t-il que le bon rôle a réalisé chaque partie du travail ?",
+            "answer": "Chaque ticket porte un manifeste de participation : les rôles requis, rattachés aux humains et aux agents capables de les tenir, si bien qu’un Product Manager n’est jamais envoyé écrire du code. Un rapport de responsabilité en ajout seul consigne, par rôle, qui, quand, le verdict, les commentaires et la contribution, sous le contrôle de permissions de validation refusées par défaut, et une évaluation des ressources signale tout rôle manquant comme un point bloquant. La qualité se prouve sur le tableau avec un registre immuable, au lieu d’être espérée après coup."
+          },
+          {
+            "question": "Builderforce peut-il répondre sans dépenser de tokens sur un modèle ?",
+            "answer": "Oui. Avant tout appel payant à un modèle, le Brain consulte la mémoire propre au projet — un cache de questions-réponses à répétition exacte, plus une inférence facultative sur l’Evermind du projet — et court-circuite entièrement le LLM en cas de correspondance fiable. L’apprentissage se diffuse à chaque Evermind du projet : une leçon apprise une fois sert partout. Associée au cache sémantique de réponses, la facture de tokens baisse à mesure que la mémoire du projet s’enrichit."
+          },
+          {
+            "question": "Builderforce peut-il répondre à un appel d’offres (RFP ou RFQ) ?",
+            "answer": "Oui. Les agents CTO et Product Owner transforment un projet analysé en proposition chiffrée et à vos couleurs — coûts et compte de résultat, Gantt de livraison par phases, risques, dépendances et catalogue de capacités adapté à la demande — cobrandée avec la palette et le logo du demandeur. Un ancrage conditionné à la fraîcheur réanalyse un projet obsolète avant de répondre, pour que la proposition reflète le système réel. Les réponses aux RFP vivent dans un onglet du projet lui-même."
+          },
+          {
+            "question": "Mes données restent-elles privées pendant l’entraînement ?",
+            "answer": "Les calculs d’entraînement s’exécutent localement sur les appareils WebGPU compatibles. Les données ne sont transmises que lorsque vous utilisez un service explicitement connecté, comme la génération de jeux de données, la collaboration, l’évaluation par un modèle distant ou la publication d’artefacts ; examinez ces étapes avant de les activer."
+          },
+          {
+            "question": "Comment Builderforce se compare-t-il aux plateformes d’entraînement cloud ?",
+            "answer": "Contrairement aux plateformes cloud facturées à l’heure de GPU, Builderforce exécute l’entraînement sur votre appareil WebGPU local, sans frais. Il intègre en outre la génération de jeux de données, l’évaluation par IA et une place de marché pour publier des agents — des fonctions qui exigent habituellement plusieurs outils distincts."
+          },
+          {
+            "question": "Puis-je intégrer les agents Builderforce à BuilderForce Agents ?",
+            "answer": "Oui : les modèles entraînés sur Builderforce peuvent être exportés et publiés en tant que modèles Evermind, que votre passerelle BuilderForce Agents auto-hébergée appelle directement comme modèle, et pas seulement comme couche de mémoire. La plateforme couvre toute la chaîne : entraîner un SSM personnalisé dans le navigateur, le publier et lui router du trafic réel via l’API compatible OpenAI."
+          },
+          {
+            "question": "Puis-je entraîner mon propre modèle sur les réponses d’un modèle de pointe ?",
+            "answer": "Oui, c’est la distillation par un enseignant. Désignez n’importe quel LLM de pointe (Opus, Mistral, GLM, etc.) comme enseignant de l’Evermind d’un projet. Pour chaque travail réel livré par votre équipe, l’enseignant produit la réponse idéale à la tâche, et votre modèle apprend de cet exemple plutôt que du texte brut : il absorbe peu à peu une qualité de niveau frontière dans un petit modèle qui vous appartient et tourne sur l’appareil. Le dispositif est plafonné par les coûts (il ne dépense que s’il reste du budget de tokens) et fonctionne au mieux (si l’enseignant échoue, l’apprentissage se replie sur le travail brut) : aucune leçon n’est perdue."
+          },
+          {
+            "question": "Chaque projet dispose-t-il de son propre modèle ?",
+            "answer": "Oui. Chaque projet reçoit son propre Evermind dès sa création : un modèle auto-actualisé qui apprend de chaque exécution dans les quatre studios (design, voix, LLM et vidéo) grâce à un mécanisme d’apprentissage commun. Les faits corrigés persistent d’une session à l’autre dans un magasin de faits write-through partagé par l’application web, VS Code et les agents cloud et sur site : le cerveau qui vous a aidé hier est plus pertinent aujourd’hui. L’inférence reste désactivée tant que vous ne l’activez pas, et le modèle se modifie dans le LLM Studio."
+          },
+          {
+            "question": "Puis-je verrouiller mon tableau pour que seul le bon rôle puisse clôturer un ticket ?",
+            "answer": "Oui, c’est le Kanban de main-d’œuvre agentique. Dotez chaque projet à partir d’une taxonomie de rôles de premier ordre réunissant humains et agents IA, et configurez les couloirs pour exiger le bon relecteur avant qu’un ticket avance. Chaque élément marqué « terminé » porte un audit de validation par rôle et par diagnostic, et un diagnostic de couverture des rôles signale les manques sur le tableau : la qualité est imposée, et non présumée."
+          },
+          {
+            "question": "Comment Builderforce vérifie-t-il qu’un travail marqué « terminé » l’est vraiment ?",
+            "answer": "Un agent Validateur intégré examine chaque élément marqué « terminé », consigne un verdict et ouvre des tâches GAP pour tout ce qui ne va pas assez loin. Le travail improvisé dans le chat est lui aussi capturé automatiquement sous forme de tickets visibles, et un même chemin de fusion vers « terminé » couvre l’approbation humaine, la CI au vert et le post-déploiement : rien n’est déclaré fini sans preuve."
+          },
+          {
+            "question": "Puis-je acheter ou vendre un modèle de tableau Kanban ?",
+            "answer": "Oui. Empaquetez un processus de livraison — couloirs, rôles requis, points de revue et équipe recommandée — sous forme de modèle Kanban, puis publiez-le sur la place de marché pour le vendre ou le partager. N’importe quelle équipe peut installer un modèle éprouvé dans un projet en un clic et hériter d’un workflow gouverné et contrôlé par rôle, au lieu d’en bâtir un de zéro."
+          },
+          {
+            "question": "D’où viennent les chiffres de mon pitch deck ?",
+            "answer": "De votre comptabilité. Connectez Stripe, Xero ou QuickBooks : la trésorerie disponible, le burn, l’ARR et les chiffres de cohortes sont calculés à partir des transactions et portent la date de leur lecture. Un chiffre sans source est ainsi signalé avant qu’un investisseur ne le découvre, au lieu d’être recopié dans une diapositive et de se périmer en silence."
+          },
+          {
+            "question": "Qui peut voir ma data room ?",
+            "answer": "Uniquement les personnes que vous invitez, aux conditions que vous fixez : un NDA à signer, un filigrane à leur nom, une date d’expiration et la trace de chaque fichier ouvert. L’accès est accordé à l’investisseur et non à un dossier : une seule révocation couvre toutes les data rooms et mises à jour, et elle peut intervenir à tout moment."
+          }
+        ],
+        "pricing": [
+          {
+            "question": "Builderforce est-il vraiment gratuit ?",
+            "answer": "Une offre gratuite est disponible. Consultez la page des tarifs pour connaître le prix en vigueur issu de l’API, les quotas et la disponibilité des fonctionnalités."
+          },
+          {
+            "question": "Que comprend l’offre Pro ?",
+            "answer": "La page des tarifs récupère le prix actuel de l’offre Pro et détermine la disponibilité de chaque offre à partir de la même configuration de droits appliquée que celle utilisée par l’API."
+          },
+          {
+            "question": "Puis-je changer d’offre à tout moment ?",
+            "answer": "Oui : vous pouvez passer à une offre supérieure ou inférieure à tout moment depuis la page Tarifs et facturation. Les montées en gamme prennent effet immédiatement ; les rétrogradations s’appliquent à la fin de votre période de facturation en cours."
+          },
+          {
+            "question": "Qu’est-ce qu’un AgentHost géré ?",
+            "answer": "Un AgentHost géré est une instance hébergée de BuilderForce Agents exploitée par Builderforce. Son prix en vigueur est fourni par le contrat tarifaire public affiché sur la page des tarifs."
+          },
+          {
+            "question": "Proposez-vous une facturation annuelle ?",
+            "answer": "Oui : la facturation annuelle est disponible pour les offres Pro et Teams, avec jusqu’à 20 % d’économies. Choisissez l’option annuelle lors du paiement."
+          }
+        ],
+        "login": [
+          {
+            "question": "Quels modes de connexion sont disponibles ?",
+            "answer": "Builderforce prend en charge l’e-mail et le mot de passe, le lien magique (connexion par e-mail sans mot de passe) et OAuth avec Google, GitHub, LinkedIn et Microsoft."
+          },
+          {
+            "question": "Qu’est-ce qu’un lien magique ?",
+            "answer": "Un lien magique est une URL de connexion à usage unique envoyée à votre adresse e-mail. Cliquez dessus et vous êtes connecté, sans mot de passe. Les liens magiques expirent au bout de 15 minutes."
+          },
+          {
+            "question": "J’ai oublié mon mot de passe. Comment le réinitialiser ?",
+            "answer": "Utilisez l’option de lien magique sur la page de connexion : saisissez votre e-mail et cliquez sur « M’envoyer plutôt un lien magique par e-mail » pour vous connecter sans mot de passe, puis modifiez votre mot de passe dans les Paramètres."
+          }
+        ],
+        "register": [
+          {
+            "question": "La création d’un compte est-elle gratuite ?",
+            "answer": "Oui : créer un compte est gratuit et inclut un essai Pro de 14 jours, sans carte bancaire. À la fin de l’essai, vous restez sur l’offre gratuite avec l’entraînement WebGPU, les outils de jeux de données et l’accès au Workforce."
+          },
+          {
+            "question": "Combien de temps faut-il pour tout configurer ?",
+            "answer": "Moins de 60 secondes. Inscrivez-vous par e-mail ou via OAuth et vous arrivez immédiatement dans votre espace de travail. Aucune installation, aucune configuration : tout s’exécute dans votre navigateur."
+          },
+          {
+            "question": "De quoi ai-je besoin pour commencer ?",
+            "answer": "D’un navigateur récent compatible WebGPU (Chrome 113+, Edge 113+). Pas de serveur GPU, pas d’environnement Python, pas de Docker : Builderforce fonctionne entièrement dans le navigateur."
+          },
+          {
+            "question": "Builderforce prélève-t-il une commission ?",
+            "answer": "Les frais de la place de marché relèvent des conditions vendeur en vigueur affichées lors de la publication et du paiement. Consultez-les avant de proposer un agent payant."
+          }
+        ],
+        "freelancer": [
+          {
+            "question": "Builderforce prélève-t-il une commission sur mon tarif ?",
+            "answer": "Les frais et les conditions de versement figurent dans le contrat de mission en vigueur. Lisez-les avant d’accepter une mission ; lorsque c’est configuré, les relevés de temps approuvés servent de base à la facturation."
+          },
+          {
+            "question": "Comment mes heures sont-elles suivies ?",
+            "answer": "Les heures facturables sont enregistrées automatiquement à partir de l’activité que vous générez dans le portail et dans l’extension VS Code. Vous ne remplissez jamais de feuille de temps à la main, et chaque relevé est soumis à votre validation (et à celle du client) avant le paiement."
+          },
+          {
+            "question": "Qui peut voir mon profil ?",
+            "answer": "C’est vous qui choisissez. Un profil freelance peut être public (visible par toutes les équipes de la plateforme) ou privé (visible uniquement par les équipes avec lesquelles vous le partagez). Dans les deux cas, il présente vos compétences, votre taux horaire et votre CV hired.video."
+          },
+          {
+            "question": "Dois-je avoir mes propres clients pour commencer ?",
+            "answer": "Non. Dès que votre profil est en ligne, vous pouvez parcourir Trouver du travail et être mis en relation avec des missions de n’importe quel locataire de Builderforce, puis passer des entretiens et être recruté sur plusieurs projets, sans quitter la plateforme."
+          }
+        ],
+        "blog": [
+          {
+            "question": "Quels sujets le blog Builderforce aborde-t-il ?",
+            "answer": "Le blog traite de l’entraînement d’agents IA, du fine-tuning WebGPU LoRA, de la génération de jeux de données, de l’orchestration multi-agents, de l’exécution autonome du Kanban (par couloirs), du cache sémantique multi-surfaces pour économiser des tokens, de la Planning Spine (livraison chiffrée du portefeuille à la tâche), de l’observabilité des erreurs avec correction par agent en un clic, de la gestion des connaissances et de la conformité, de l’assurance qualité autonome avec l’Agentic Tester, des connecteurs de tableaux en vue unifiée, de l’intégration avec BuilderForce Agents et des bonnes pratiques de développement produit."
+          },
+          {
+            "question": "Le blog compare-t-il Builderforce.ai à d’autres outils de code par IA ?",
+            "answer": "Oui. Le blog propose des comparatifs directs de Builderforce.ai face à GitHub Copilot, Cursor et Windsurf, Claude Code et Devin, ainsi qu’un panorama fondé sur des critères des meilleurs agents de code IA en 2026. Chaque comparatif montre où s’arrêtent les outils à agent unique et où commence une main-d’œuvre multi-agents, auto-hébergée et indépendante du modèle."
+          },
+          {
+            "question": "Qui écrit les articles ?",
+            "answer": "Les articles sont écrits par Sean Hogg, fondateur de Builderforce.ai, et couvrent des guides pratiques ainsi que des analyses approfondies de l’architecture et des capacités de la plateforme."
+          }
+        ],
+        "projectsTasks": [
+          {
+            "question": "Qu’est-ce que l’espace Projets / tâches de Builderforce.ai ?",
+            "answer": "Projets / tâches est la surface unique de gestion du travail où vous organisez tout ce que construit votre main-d’œuvre IA. Un projet est un espace collaboratif réunissant des constructions Canvas, des fichiers, des agents assignés et des workflows ; l’onglet Tâches est un tableau où le travail est planifié, assigné aux agents et suivi à chaque statut. Projets et tâches cohabitent sur une même page à deux onglets : vous passez de l’organisation au suivi du travail sans quitter la surface."
+          },
+          {
+            "question": "Comment les agents IA prennent-ils en charge et exécutent-ils les tâches ?",
+            "answer": "Créez une tâche sur le tableau d’un projet, définissez sa priorité et assignez-la à un AgentHost (un runtime d’agent connecté). L’agent prend la tâche, la fait passer par vos points d’approbation, et le tableau se met à jour en direct à mesure que la tâche passe du backlog à « en cours » puis à « terminé », sur des agents locaux comme sur un maillage distant d’AgentHosts."
+          },
+          {
+            "question": "Quelles vues le tableau des tâches propose-t-il ?",
+            "answer": "Les tâches peuvent s’afficher sous forme de tableau Kanban (couloirs par statut ou par agent), de tableau triable, de calendrier ou de chronologie Gantt. Les projets partagent les mêmes vues cartes, tableau, calendrier et Gantt : vous planifiez les dates de livraison et les dépendances de la même manière pour les deux."
+          },
+          {
+            "question": "Puis-je limiter les tâches à un seul projet ?",
+            "answer": "Oui. Ouvrez un projet et utilisez son action Tableau des tâches pour accéder directement à l’onglet Tâches filtré sur ce projet, ou parcourez toutes les tâches de tous les projets et filtrez par projet, statut ou priorité. Le périmètre du projet est conservé dans l’URL, ce qui rend la vue partageable."
+          },
+          {
+            "question": "Comment les projets et les tâches sont-ils reliés aux workflows et aux agents ?",
+            "answer": "Chaque projet peut disposer d’agents assignés et de workflows reproductibles soumis à approbation. Les tâches sont l’unité de travail qui circule vers ces agents ; les workflows orchestrent l’exécution des tâches en plusieurs étapes. Ensemble, ils forment la boucle qui mène de la planification du travail à son exécution par votre main-d’œuvre d’agents, avec une observabilité complète et une piste d’audit."
+          }
+        ]
+      },
+      "auth": {
+        "login": {
+          "eyebrow": "Bon retour",
+          "heading": "Reprenez exactement là où vous vous étiez arrêté",
+          "intro": "Connectez-vous à votre espace d’agents IA : vos modèles entraînés, votre tableau Kanban en direct et toute votre main-d’œuvre d’agents vous attendent exactement là où vous les avez laissés.",
+          "quote": "Votre travail reste le vôtre : Builderforce exécute l’entraînement sur votre appareil WebGPU local sans frais, sans facture de GPU et sans dépendance fournisseur.",
+          "stats": {
+            "plan": {
+              "value": "Gratuit",
+              "label": "Offre disponible"
+            },
+            "signIn": {
+              "value": "<60 s",
+              "label": "Pour se connecter"
+            },
+            "params": {
+              "value": "2 Md+",
+              "label": "Paramètres dans le navigateur"
+            },
+            "commission": {
+              "value": "0 %",
+              "label": "Commission sur les agents"
+            }
+          },
+          "bullets": {
+            "evermind": {
+              "title": "Evermind",
+              "desc": "Un modèle de projet et un système de mémoire avec des mises à jour par clé pour les workflows pris en charge."
+            },
+            "agents": {
+              "title": "Vos agents entraînés",
+              "desc": "Appelez les spécialistes que vous avez affinés avec WebGPU LoRA, là où vous les avez laissés."
+            },
+            "kanban": {
+              "title": "Main-d’œuvre sur Kanban en direct",
+              "desc": "Humains et agents IA livrent sur le même tableau, du backlog à « terminé »."
+            },
+            "vscode": {
+              "title": "Sans quitter VS Code",
+              "desc": "Discutez, assignez, relisez et approuvez, sans sortir de votre éditeur."
+            },
+            "passwordless": {
+              "title": "Connexion sans mot de passe",
+              "desc": "Liens magiques et OAuth avec Google, GitHub, LinkedIn et Microsoft."
+            },
+            "tester": {
+              "title": "Agentic Tester",
+              "desc": "Un agent d’assurance qualité autonome qui teste votre application dans le navigateur et consigne les bugs."
+            }
+          }
+        },
+        "standard": {
+          "eyebrow": "Créez avec l’IA",
+          "heading": "Donnez vie à votre prochaine idée",
+          "intro": "Ouvrez un canevas créatif, construisez des artefacts connectés avec votre équipe et des agents IA, relisez le travail et faites passer les résultats approuvés en livraison.",
+          "quote": "Partez du résultat que vous visez, pas du logiciel que vous pensez devoir utiliser.",
+          "stats": {
+            "plan": {
+              "value": "Gratuit",
+              "label": "Offre disponible"
+            },
+            "trial": {
+              "value": "14 jours",
+              "label": "Essai Pro inclus"
+            },
+            "canvas": {
+              "value": "Un canevas",
+              "label": "De l’idée à la livraison"
+            },
+            "together": {
+              "value": "Humain + IA",
+              "label": "Créer ensemble"
+            }
+          },
+          "bullets": {
+            "canvas": {
+              "title": "Commencez sur le canevas",
+              "desc": "Laissez une idée mûrir avant de choisir un outil ou une structure rigide."
+            },
+            "artifacts": {
+              "title": "Créez des artefacts vivants",
+              "desc": "Construisez sites web, workflows, récits de données, modèles et plans sous forme d’objets modifiables."
+            },
+            "collaborate": {
+              "title": "Créez avec des humains et des agents",
+              "desc": "Gardez collaborateurs, contexte et IA spécialisée à côté du travail."
+            },
+            "review": {
+              "title": "Relisez avant de livrer",
+              "desc": "Examinez les modifications proposées et ne faites passer en exécution que le travail approuvé."
+            },
+            "journey": {
+              "title": "Reliez tout le parcours",
+              "desc": "Préservez le chemin de la première idée jusqu’aux projets, workflows et résultats."
+            },
+            "engineering": {
+              "title": "L’ingénierie quand il le faut",
+              "desc": "Apportez le contexte du dépôt et des diagnostics dans VS Code quand le travail devient du code."
+            }
+          }
+        },
+        "freelancer": {
+          "eyebrow": "Être recruté",
+          "heading": "Décrochez des missions. Soyez payé pour chaque heure.",
+          "intro": "Publiez un profil freelance avec votre CV hired.video, faites-vous repérer par toutes les équipes de la plateforme et laissez vos heures facturables s’enregistrer d’elles-mêmes pendant que vous travaillez dans le portail et dans VS Code.",
+          "quote": "Fixez votre tarif, consultez les conditions de mission en vigueur et appuyez-vous sur les relevés de temps pris en charge pour le travail facturable approuvé.",
+          "stats": {
+            "commission": {
+              "value": "0 %",
+              "label": "Commission sur votre tarif"
+            },
+            "timeTracking": {
+              "value": "Auto",
+              "label": "Temps suivi pendant le travail"
+            },
+            "crossTenant": {
+              "value": "Multi-locataire",
+              "label": "Missions de toutes les équipes"
+            },
+            "resume": {
+              "value": "hired.video",
+              "label": "CV intégré"
+            }
+          },
+          "bullets": {
+            "profile": {
+              "title": "Profil freelance",
+              "desc": "Fixez votre tarif, mettez vos compétences en avant, en public ou sur invitation uniquement."
+            },
+            "resume": {
+              "title": "CV hired.video",
+              "desc": "Votre CV vidéo accompagne votre profil, sans nouvel envoi."
+            },
+            "findWork": {
+              "title": "Trouver du travail",
+              "desc": "Parcourez les missions de tous les locataires de Builderforce et soyez mis en relation."
+            },
+            "timecards": {
+              "title": "Relevés de temps automatiques",
+              "desc": "Les heures facturables sont enregistrées à partir de l’activité réelle, sans saisie manuelle."
+            },
+            "beside": {
+              "title": "Travaillez aux côtés d’agents IA",
+              "desc": "Partagez le tableau avec des humains et des agents sur chaque projet que vous rejoignez."
+            },
+            "approvePay": {
+              "title": "Valider, puis payer",
+              "desc": "Chaque relevé est vérifié avant le paiement, pour une facturation sans accroc."
+            }
+          }
+        },
+        "sales": {
+          "eyebrow": "Gagnez avec Builderforce",
+          "heading": "Construisez un pipeline. Grandissez avec nous.",
+          "intro": "Rejoignez le programme de parrainage et d’associés commerciaux de Builderforce, avec un espace de travail dédié à la prospection, aux campagnes, aux contacts, aux rendez-vous et au coaching hebdomadaire.",
+          "quote": "Un système d’exploitation commercial pragmatique pour transformer une prospection régulière en opportunités Builderforce qualifiées.",
+          "stats": {
+            "hub": {
+              "value": "1 hub",
+              "label": "Du contact à la signature"
+            },
+            "weekly": {
+              "value": "Chaque semaine",
+              "label": "Objectifs et coaching"
+            },
+            "campaigns": {
+              "value": "Intégrés",
+              "label": "Outils de campagne"
+            },
+            "access": {
+              "value": "Direct",
+              "label": "Accès à la direction"
+            }
+          },
+          "bullets": {
+            "markets": {
+              "title": "Marchés cibles",
+              "desc": "Définissez vos segments de clientèle idéaux et concentrez chaque campagne."
+            },
+            "email": {
+              "title": "Campagnes e-mail",
+              "desc": "Construisez votre prospection à partir de messages et de supports commerciaux approuvés."
+            },
+            "leads": {
+              "title": "Gestion des leads",
+              "desc": "Importez vos contacts et faites avancer les opportunités dans un pipeline clair."
+            },
+            "meetings": {
+              "title": "Rendez-vous intégrés",
+              "desc": "Connectez votre calendrier et réservez des créneaux avec des prospects ou la direction de Builderforce."
+            },
+            "momentum": {
+              "title": "Élan hebdomadaire",
+              "desc": "Fixez des objectifs d’activité et obtenez la prochaine meilleure action pour votre pipeline."
+            },
+            "toolkit": {
+              "title": "Kit marketing",
+              "desc": "Utilisez des présentations, fiches produit, modèles et guides de campagne à jour."
+            }
+          }
+        }
+      },
+      "definedTerms": {
+        "evermind": {
+          "name": "Evermind",
+          "description": "Le modèle auto-actualisé de Builderforce.ai et le cerveau de la plateforme. Régi par la Write-Through Cognition, il repose sur un générateur SSM hybride à experts partagés (un tronc dense toujours actif, plus des experts routés chargés à la demande), une mémoire de connaissances write-through et une couche limbique entraînable pour la dynamique. Il tourne sur WebGPU dans le navigateur, sur l’appareil ou au sein de chaque agent, et il est conçu pour surpasser les modèles de pointe figés sur l’actualité, l’empreinte et la maîtrise, plutôt que sur la taille brute."
+        },
+        "writeThroughCognition": {
+          "name": "Write-Through Cognition",
+          "description": "Le principe directeur d’Evermind : les connaissances sont écrites directement dans le modèle, si bien qu’une mise à jour remplace ce qui précédait au lieu de s’y ajouter. Les lectures reflètent toujours la vérité la plus récente et il n’existe jamais d’étape « d’abord périmé, ensuite réconcilié » : c’est la même règle d’invalidation à l’écriture que pour les caches, appliquée à la couche de connaissances d’un modèle pour qu’il ne dérive jamais."
+        },
+        "webgpuLora": {
+          "name": "Fine-tuning WebGPU LoRA",
+          "description": "Une approche native du navigateur pour affiner des modèles d’IA grâce à la Low-Rank Adaptation (LoRA), propulsée par l’API WebGPU. Elle permet d’entraîner des modèles jusqu’à 2 milliards de paramètres directement dans Chrome, sans GPU dans le cloud."
+        },
+        "workforceRegistry": {
+          "name": "Workforce Registry",
+          "description": "Une place de marché publique où les agents IA entraînés sont référencés avec un profil, des compétences et des scores d’évaluation. Équipes et applications peuvent y découvrir et recruter des agents instantanément."
+        },
+        "evaluationEngine": {
+          "name": "Moteur d’évaluation par IA",
+          "description": "Un système de notation automatisé qui fait appel à un juge IA indépendant pour évaluer les sorties d’un modèle selon des métriques structurées, dont l’exactitude, la qualité du raisonnement et le taux d’hallucination."
+        },
+        "instructionDataset": {
+          "name": "Jeu de données d’instruction",
+          "description": "Un ensemble structuré de paires prompt-réponse servant à affiner des modèles de langage pour des tâches précises. Builderforce les génère à partir d’un seul prompt de capacité en moins de 30 secondes."
+        },
+        "agentOrchestration": {
+          "name": "Orchestration d’agents",
+          "description": "La coordination de plusieurs agents IA travaillant ensemble sur des tâches complexes. Elle couvre le séquencement des workflows, les points d’approbation, le maillage de la flotte et la répartition à distance entre instances de BuilderForce Agents."
+        },
+        "multiAgentOrchestration": {
+          "name": "Orchestration multi-agents",
+          "description": "Coordonner plusieurs agents IA spécialisés, chacun doté d’un rôle défini, sur un même ensemble de travail au moyen d’un DAG de dépendances, au lieu de piloter un seul agent qui produit une suggestion à la fois. Builderforce.ai s’appuie sur sept rôles pour exécuter de bout en bout des workflows de planification, de correction de bugs, de refactorisation et de revue contradictoire."
+        },
+        "humanInLoopGovernance": {
+          "name": "Gouvernance avec humain dans la boucle",
+          "description": "Un mode de fonctionnement dans lequel les chemins d’exécution d’IA configurés peuvent s’arrêter à des points d’approbation pour qu’une personne approuve ou rejette les actions à fort enjeu. Les preuves conservées et leur couverture dépendent du point d’entrée instrumenté."
+        },
+        "agentInAgent": {
+          "name": "Délégation d’agent à agent",
+          "description": "Un schéma dans lequel un agent personnalisé que vous entraînez et publiez devient un outil appelable auquel votre agent principal délègue du travail. Sur Builderforce.ai, vous entraînez un agent (WebGPU LoRA dans le navigateur + évaluation), le publiez dans le Workforce Registry, puis le recrutez et l’invoquez depuis votre propre agent — la boucle est bouclée, de l’entraînement à l’usage."
+        },
+        "agentKanban": {
+          "name": "Tableau Kanban d’agents",
+          "description": "Un tableau de tâches en direct où le travail est planifié, assigné et suivi, qu’il soit mené par des membres humains de l’équipe ou par des agents IA. Builderforce.ai propose des couloirs par statut ou par agent ainsi que des vues tableau, calendrier et Gantt, et les tâches passent du backlog à « terminé » en temps réel à mesure que les agents s’en saisissent."
+        },
+        "autonomousSwimlane": {
+          "name": "Exécution autonome par couloirs",
+          "description": "Un modèle de Kanban autopiloté dans lequel un agent IA (cloud ou sur site) est affecté à un couloir du tableau. Les tickets de ce couloir lui sont automatiquement confiés et le tableau avance de couloir en couloir à mesure que le travail se termine, en ne s’arrêtant qu’aux points d’approbation que vous configurez : vous pilotez des résultats sur un tableau au lieu d’envoyer des prompts un par un."
+        },
+        "semanticCache": {
+          "name": "Cache sémantique multi-surfaces",
+          "description": "Un cache indexé par embeddings qui réutilise une réponse précédente lorsqu’un nouveau prompt reformule une question déjà traitée : le modèle de pointe n’est jamais facturé deux fois pour le même travail. Builderforce.ai l’exploite sur deux niveaux — une couche gratuite sur l’appareil (embeddings SSM, dans le navigateur et dans chaque agent) et une couche de passerelle partagée cloisonnée par locataire —, si bien qu’un succès de cache dans l’application web fait aussi économiser des tokens aux agents."
+        },
+        "systemOfRecord": {
+          "name": "Système de référence du travail agentique",
+          "description": "Une plateforme unique où chaque unité de travail — réalisée par un humain ou par un agent IA — est consignée, chiffrée et attribuée sur tout son cycle de vie, de l’idée à la livraison puis à l’apprentissage. Builderforce.ai instrumente chaque transition de tâche, exécution d’agent, appel LLM et déploiement : les mêmes données disent ce qui a été construit, par qui (humain ou agent), à quel coût et avec quel résultat, sans avoir à assembler un tableau, un hébergeur de code, un outil d’observabilité et un tableur."
+        },
+        "aiFinops": {
+          "name": "AI FinOps",
+          "description": "La discipline financière qui attribue, budgète et prévoit le coût du travail réalisé par l’IA. Sur Builderforce.ai, chaque token et chaque tâche sont valorisés au moment de l’écriture puis agrégés du ticket → au projet → à l’initiative → au locataire, pour que la finance voie le coût par résultat (par exemple le coût par pull request fusionnée), fixe des budgets et anticipe les dépenses au lieu de rapprocher les factures des fournisseurs après coup."
+        },
+        "innovationFunnel": {
+          "name": "Entonnoir d’innovation",
+          "description": "Le parcours complet d’une idée sur Builderforce.ai — idée → validée → en construction → livrée → mesurée —, avec le taux de conversion et le délai de création de valeur suivis à chaque étape. Il donne aux dirigeants une vue du débit et du ROI de l’innovation, comme un entonnoir de vente donne une vue du chiffre d’affaires du pipeline."
+        },
+        "roleLens": {
+          "name": "Grille de lecture par rôle",
+          "description": "Une vue du même travail instrumenté adaptée à chaque rôle : métriques de livraison et DORA pour l’ingénierie, coûts et FinOps pour la finance, consolidation du portefeuille et entonnoir d’innovation pour le PMO et la direction générale, piste d’audit immuable pour la sécurité. Comme les données sont collectées une seule fois et attribuées, chaque grille est une projection d’une source de vérité unique et non un rapport distinct."
+        },
+        "planningSpine": {
+          "name": "Planning Spine",
+          "description": "La hiérarchie datée unique de Builderforce.ai qui réunit planification, livraison et coût — portefeuille → initiative → epic → tâche, les objectifs et résultats clés s’y rattachant comme couche d’objectifs à n’importe quel niveau. Le coût de chaque feuille (dépenses LLM valorisées à l’écriture plus effort humain) remonte vers chaque niveau supérieur et se répartit entre CAPEX et OPEX, avec des alertes d’anomalie lorsqu’une décision de capitalisation contredit celle de son parent. Elle s’affiche sous forme de Gantt imbriqué et s’exporte en CSV : l’ingénierie, le PMO et la finance lisent les mêmes chiffres, sans étape de rapprochement."
+        },
+        "errorObservability": {
+          "name": "Observabilité des erreurs et correction par agent en un clic",
+          "description": "Le pilier qualité de Builderforce.ai ingère les erreurs d’exécution provenant d’un SDK navigateur, d’OpenTelemetry, de Sentry, de PostHog ou de LogRocket, les regroupe par empreinte en groupes d’erreurs dédoublonnés et transforme n’importe quel groupe en tâche de correction qu’un agent cloud prend en charge et livre sous forme de pull request. Contrairement à un tableau de bord de supervision qui s’arrête à la stack trace, la plateforme qui détecte le crash l’assigne, le corrige et ouvre la PR — et le volume d’erreurs est une ressource mesurée dans la même vue de consommation que les tokens."
+        },
+        "knowledgeCompliance": {
+          "name": "Gestion des connaissances et piste d’audit de conformité",
+          "description": "Une base versionnée pour les SOP, processus et documents sur Builderforce.ai. Chaque publication crée un instantané immuable, et les accusés de lecture sont liés à une version précise, horodatés et suivis par utilisateur en cas de retard : des preuves prêtes pour l’audit SOX, TISAX et ISO 27001. Les documents sont rédigés et analysés par l’IA, coédités en temps réel via un CRDT et soumis à un contrôle d’accès page par page — et comme ils vivent sur la plateforme d’agents, les connaissances qui prouvent la conformité servent aussi d’ancrage à la main-d’œuvre d’agents."
+        },
+        "maturityIndex": {
+          "name": "Indice de maturité agentique",
+          "description": "Un modèle de maturité inspiré de CMMI/COBIT qui évalue le fonctionnement d’une organisation technologique sur six pratiques — livraison logicielle, mises en production et exploitation (DORA), assurance qualité, gestion de projet, opérations d’IA agentique, et gouvernance et sécurité — sur une échelle de 1 à 5 (Initial → Optimisé). Builderforce.ai le note de deux façons : une auto-évaluation gratuite, sans connexion, et un diagnostic fondé sur les données qui déduit objectivement le niveau de chaque pratique à partir de la télémétrie réelle (temps de cycle, DORA, reprises, résultats d’exécution), puis produit un plan priorisé pour gagner en maturité et innover."
+        },
+        "teacherDistillation": {
+          "name": "Distillation par un modèle de pointe enseignant",
+          "description": "Un mode d’entraînement de Builderforce.ai dans lequel n’importe quel LLM de pointe (Opus, Mistral ou GLM, par exemple) est désigné comme enseignant de l’Evermind d’un projet. Pour chaque tâche réelle livrée par l’équipe, l’enseignant est interrogé via la passerelle mesurée afin de fournir la réponse idéale, et le modèle auto-actualisé s’adapte sur la paire (contexte de la tâche → exemple de l’enseignant) plutôt que sur le texte brut de l’exécution : un petit modèle sur l’appareil absorbe ainsi peu à peu la qualité d’un modèle bien plus grand. L’appel à l’enseignant est plafonné par le budget de tokens du locataire et fonctionne au mieux : en cas d’échec, l’apprentissage se replie sur le texte brut, si bien que la boucle ne s’arrête jamais."
+        },
+        "projectEvermind": {
+          "name": "Evermind de projet",
+          "description": "Une instance, propre à chaque projet, du modèle auto-actualisé Evermind de Builderforce.ai, provisionnée automatiquement à la création du projet. Elle apprend de chaque exécution dans les quatre studios (design, voix, LLM et vidéo) grâce à un mécanisme d’apprentissage commun et à un coordinateur à écrivain unique, et lit les faits corrigés dans un magasin de faits write-through partagé par l’application web, VS Code et les agents cloud et sur site. L’inférence s’active au choix, projet par projet, et le modèle se modifie dans le LLM Studio."
+        },
+        "workforceKanban": {
+          "name": "Kanban de main-d’œuvre agentique",
+          "description": "Le tableau de livraison de Builderforce.ai contrôlé par rôle, où chaque projet est doté à partir d’une taxonomie de rôles de premier ordre réunissant humains et agents IA, en partant d’une équipe recommandée. Les couloirs peuvent exiger un relecteur précis avant qu’un ticket avance, chaque ticket terminé porte un audit de validation par rôle et par diagnostic, et un diagnostic de couverture des rôles fait ressortir les manques : la qualité est imposée sur le tableau au lieu d’être présumée. Des modèles de tableau gouvernés (couloirs, rôles, points de contrôle et équipes) peuvent être publiés, vendus et installés depuis une place de marché."
+        },
+        "validatorAgent": {
+          "name": "Agent Validateur",
+          "description": "Un agent intégré de Builderforce.ai, présent dans chaque espace de travail, qui examine chaque élément marqué « terminé », consigne un verdict dans un registre de revues et ouvre des tâches GAP pour tout ce qui est incomplet. Le travail improvisé dans le chat est automatiquement capturé sous forme de tickets visibles, et un chemin commun de fusion vers « terminé » (approbation humaine, CI au vert et post-déploiement) passe par le validateur : rien n’est déclaré fini sans preuve."
+        },
+        "learnedRouting": {
+          "name": "Routage de modèles appris",
+          "description": "Une optimisation coût-qualité de Builderforce.ai qui note chaque exécution selon son résultat et réordonne en conséquence le modèle chargé de chaque type d’action : les modèles moins chers prennent le travail qu’ils font bien, et les modèles premium sont réservés aux tâches qui en ont besoin. Associée au cache sémantique multi-surfaces, la facture de tokens diminue à mesure que la plateforme apprend la charge de travail de l’équipe, avec un simple interrupteur pour reprendre la main."
+        },
+        "memoryFirst": {
+          "name": "Inférence « mémoire d’abord »",
+          "description": "Un schéma d’économie de tokens de Builderforce.ai dans lequel, avant tout appel payant à un modèle, le Brain consulte la mémoire propre au projet — un cache de questions-réponses à répétition exacte, plus une inférence facultative sur l’Evermind du projet — et court-circuite entièrement le LLM de pointe en cas de correspondance fiable. La décision a une source unique, si bien que toutes les surfaces (web et VS Code) se comportent de la même façon, et l’apprentissage se diffuse à chaque Evermind du projet (son modèle principal et ses constructions Canvas) : une leçon apprise une fois sert partout et la facture de tokens baisse à mesure que la mémoire s’enrichit."
+        },
+        "roleGatedAccountability": {
+          "name": "Responsabilité contrôlée par rôle",
+          "description": "Le modèle de Builderforce.ai pour prouver que le bon rôle a réalisé chaque partie d’un ticket. Un manifeste de participation par ticket rattache les rôles requis aux humains et aux agents capables de les tenir — un responsable sans cette compétence (un Product Manager, par exemple) n’est donc jamais affecté à une étape de production — et un rapport de responsabilité en ajout seul consigne, par rôle, qui, quand, le verdict, les commentaires et la contribution, sous le contrôle de permissions de validation refusées par défaut, tandis qu’une évaluation des ressources signale tout rôle manquant comme un point bloquant. La qualité se prouve sur le tableau avec un registre immuable au lieu d’être présumée après coup."
+        },
+        "incidentRca": {
+          "name": "Gestion des incidents avec analyse des causes apprenante",
+          "description": "La réponse aux incidents de bout en bout de Builderforce.ai : un agent Help Desk / Gestionnaire d’incidents fait le tri, les rotations d’astreinte déterminent qui est appelé, l’escalade temporisée remonte la chaîne, les alertes Teams/Slack/e-mail atteignent la personne d’astreinte, et un fil de salle de crise par incident coordonne humains et agents. Des sondes actives épinglées sur un schéma d’architecture importé sont vérifiées toutes les cinq minutes, et un dépassement déclenche automatiquement l’investigation. À la résolution, l’analyse des causes profondes est publiée dans la base de connaissances et transmise à l’Evermind du projet, pour que la main-d’œuvre apprenne et cesse de reproduire la même panne."
+        },
+        "rfpResponse": {
+          "name": "Réponse automatisée aux appels d’offres",
+          "description": "Une capacité d’avant-vente de Builderforce.ai dans laquelle les agents CTO et Product Owner transforment les capacités analysées d’un projet en proposition chiffrée et à vos couleurs — coûts et compte de résultat, Gantt de livraison par phases, risques, dépendances et catalogue de capacités adapté à la demande —, cobrandée avec la palette et le logo du demandeur. Un ancrage conditionné à la fraîcheur relance les audits système déterministes avant de répondre, pour que la proposition reflète le système tel qu’il est aujourd’hui. Les réponses aux RFP vivent dans un onglet du projet lui-même."
+        }
+      },
+      "product": {
+        "prerequisites": {
+          "account": "compte",
+          "webgpuDevice": "appareil WebGPU compatible pour l’entraînement local",
+          "vscodeExtension": "extension VS Code",
+          "sharedSessionsAccount": "compte pour les sessions partagées",
+          "agentHost": "AgentHost enregistré",
+          "providerCredentials": "identifiants d’un fournisseur pris en charge",
+          "installOrPublishAccount": "compte pour installer ou publier",
+          "publishAccount": "compte pour publier",
+          "policyGate": "point de contrôle de politique configuré",
+          "deploymentConfig": "configuration adaptée au déploiement",
+          "instrumentedExecution": "exécution instrumentée de la plateforme",
+          "errorSource": "source d’erreurs configurée"
+        },
+        "operations": {
+          "creationCanvas": {
+            "owner": "Création",
+            "limitation": "La couverture bêta se limite aux types d’objets et de transferts nommés.",
+            "exports": [
+              "Export du canevas",
+              "Transfert de livraison pris en charge"
+            ]
+          },
+          "sessionLibrary": {
+            "owner": "Création",
+            "limitation": "La persistance partagée nécessite un compte et un espace de travail.",
+            "exports": [
+              "Export de session"
+            ]
+          },
+          "workflowsEvaluation": {
+            "owner": "IA de création",
+            "limitation": "La qualité de l’évaluation dépend du contexte source et des citations disponibles.",
+            "exports": [
+              "Résultat d’évaluation"
+            ]
+          },
+          "websitesDataPrototypes": {
+            "owner": "Création",
+            "limitation": "Les runtimes des artefacts et les formats d’export varient selon le type d’objet.",
+            "exports": [
+              "Export propre à chaque objet"
+            ]
+          },
+          "evermindLlmVoice": {
+            "owner": "AI Studio",
+            "limitation": "Les chemins locaux nécessitent un matériel WebGPU compatible ; la publication s’appuie sur des services hébergés.",
+            "exports": [
+              "Paquet de modèle pris en charge",
+              "Médias générés"
+            ]
+          },
+          "creationCanvasVsCode": {
+            "owner": "Expérience développeur",
+            "limitation": "La parité se limite aux objets et actions pris en charge par le contrat de l’extension.",
+            "exports": [
+              "Contexte de l’espace de travail"
+            ]
+          },
+          "workflowExecution": {
+            "owner": "Workflows",
+            "limitation": "Le comportement des nœuds et la couverture de gouvernance varient selon le type d’étape configuré.",
+            "exports": [
+              "Résultat d’exécution"
+            ]
+          },
+          "projectsTasks": {
+            "owner": "Livraison",
+            "limitation": "Le comportement des tableaux externes dépend de la configuration du connecteur.",
+            "exports": [
+              "CSV",
+              "Synchronisation de tableau connecté"
+            ]
+          },
+          "planningSpine": {
+            "owner": "PMO",
+            "limitation": "Les consolidations de coûts et de résultats ne reflètent que les enregistrements instrumentés et attribués.",
+            "exports": [
+              "CSV"
+            ]
+          },
+          "boardConnectors": {
+            "owner": "Intégrations",
+            "limitation": "Les correspondances, les permissions, le sens de synchronisation et la gestion des conflits varient selon le fournisseur.",
+            "exports": [
+              "Synchronisation propre au fournisseur"
+            ]
+          },
+          "workforceMesh": {
+            "owner": "Runtime des agents",
+            "limitation": "Nécessite des hôtes enregistrés et un accès réseau/runtime configuré.",
+            "exports": [
+              "Enregistrements d’exécution"
+            ]
+          },
+          "sessionConversations": {
+            "owner": "Collaboration",
+            "limitation": "La conservation des conversations et les outils dépendent de la configuration de l’espace de travail.",
+            "exports": [
+              "Export de session"
+            ]
+          },
+          "workforceKanban": {
+            "owner": "Livraison",
+            "limitation": "Les modèles installés restent soumis aux rôles et aux droits de l’espace de travail.",
+            "exports": [
+              "Paquet de modèle"
+            ]
+          },
+          "knowledgeSops": {
+            "owner": "Connaissances",
+            "limitation": "L’adéquation aux exigences de conformité dépend des contrôles configurés et de la revue par l’organisation.",
+            "exports": [
+              "Instantané publié"
+            ]
+          },
+          "skills": {
+            "owner": "Place de marché",
+            "limitation": "Les compétences installées s’exécutent avec les permissions de leur runtime configuré.",
+            "exports": [
+              "Paquet de compétence"
+            ]
+          },
+          "personas": {
+            "owner": "Place de marché",
+            "limitation": "Le comportement d’une persona varie selon le modèle et le workflow choisis.",
+            "exports": [
+              "Définition de persona"
+            ]
+          },
+          "promptLibrary": {
+            "owner": "Place de marché",
+            "limitation": "Le résultat d’un prompt varie selon le modèle, le contexte et les outils connectés.",
+            "exports": [
+              "Modèle de prompt"
+            ]
+          },
+          "contentManager": {
+            "owner": "Contenu",
+            "limitation": "La réutilisation dépend de la surface cible et des permissions d’accès.",
+            "exports": [
+              "Bloc de contenu"
+            ]
+          },
+          "approvals": {
+            "owner": "Runtime et gouvernance",
+            "limitation": "S’applique aux chemins d’exécution reliés au résolveur de politique effectif.",
+            "exports": [
+              "Registre de décision"
+            ]
+          },
+          "security": {
+            "owner": "Sécurité",
+            "limitation": "La couverture des contrôles dépend de la configuration du déploiement et des intégrations.",
+            "exports": [
+              "Preuves d’audit disponibles"
+            ]
+          },
+          "observability": {
+            "owner": "Observabilité",
+            "limitation": "La couverture varie selon la surface instrumentée et le point d’entrée.",
+            "exports": [
+              "Journaux et traces disponibles"
+            ]
+          },
+          "qualityErrors": {
+            "owner": "Qualité",
+            "limitation": "Nécessite une source configurée ; les champs d’événement pris en charge varient selon le fournisseur.",
+            "exports": [
+              "Ticket ou tâche de correction"
+            ]
+          },
+          "maturityDiagnostic": {
+            "owner": "Diagnostics",
+            "limitation": "L’auto-évaluation est indicative et ne constitue pas une certification.",
+            "exports": [
+              "Résultat d’évaluation"
+            ]
+          },
+          "tenants": {
+            "owner": "Plateforme",
+            "limitation": "Les rôles et les droits déterminent les opérations disponibles dans l’espace de travail.",
+            "exports": [
+              "Enregistrements disponibles de l’espace de travail"
+            ]
+          }
+        }
+      },
+      "integrations": {
+        "github": {
+          "category": "Gestion du code source",
+          "tagline": "Laissez votre main-d’œuvre d’agents ouvrir des PR, relire le code et lancer la CI sur GitHub",
+          "summary": "Connectez Builderforce.ai à GitHub pour les workflows pris en charge autour des dépôts, branches, pull requests et webhooks. Les permissions, la couverture des approbations et les preuves conservées dépendent du chemin configuré.",
+          "useCases": [
+            "Création autonome de PR à partir d’une tâche",
+            "Relecture et fusion avec points d’approbation humaine",
+            "Boucles de build et de correction tenant compte de la CI",
+            "Recherche sémantique et refactorisations à l’échelle du dépôt"
+          ]
+        },
+        "gitlab": {
+          "category": "Gestion du code source",
+          "tagline": "Livraison auto-hébergée par des agents sur les merge requests GitLab",
+          "summary": "Builderforce.ai pilote toute la boucle du dépôt GitLab — lecture, création de branches, commits et ouverture de merge requests — pour qu’une main-d’œuvre d’agents auto-hébergée livre des changements sur votre GitLab sans quitter votre infrastructure.",
+          "useCases": [
+            "Automatisation des merge requests",
+            "Exécution de tâches sur plusieurs dépôts",
+            "Déploiements GitLab isolés (air-gapped)"
+          ]
+        },
+        "slack": {
+          "category": "Canaux de discussion",
+          "tagline": "Pilotez et gouvernez vos agents directement depuis Slack",
+          "summary": "Accédez à votre main-d’œuvre d’agents depuis n’importe quel espace Slack : assignez des tâches, suivez l’avancement en direct et répondez aux demandes d’approbation avec humain dans la boucle sans quitter la conversation.",
+          "useCases": [
+            "Assigner des tâches depuis un canal",
+            "Approuver les actions des agents en ligne",
+            "Diffuser l’état d’exécution dans un fil"
+          ]
+        },
+        "discord": {
+          "category": "Canaux de discussion",
+          "tagline": "Commandez votre main-d’œuvre d’agents sur les serveurs et en messages privés Discord",
+          "summary": "Builderforce.ai se connecte aux serveurs, salons et messages privés Discord pour que votre communauté ou votre équipe envoie des agents en mission et reçoive les résultats en temps réel.",
+          "useCases": [
+            "Commandes d’agent sur tout le serveur",
+            "Tâches privées par message direct",
+            "Notifications d’exécution en direct"
+          ]
+        },
+        "whatsapp": {
+          "category": "Canaux de discussion",
+          "tagline": "Dirigez vos agents IA depuis WhatsApp",
+          "summary": "Associez un numéro WhatsApp à Builderforce.ai pour lancer des tâches d’agents, recevoir des synthèses et approuver des actions depuis votre téléphone — idéal pour les astreintes et les workflows pensés pour le mobile.",
+          "useCases": [
+            "Envoi de tâches depuis le mobile",
+            "Approbations pendant l’astreinte",
+            "Synthèses d’exécution en déplacement"
+          ]
+        },
+        "ollama": {
+          "category": "Fournisseurs de modèles",
+          "tagline": "Utilisez des modèles locaux pris en charge depuis un runtime d’agents privé",
+          "summary": "BuilderForce Agents peut utiliser des modèles Ollama pris en charge sur une infrastructure privée. La collaboration hébergée, la publication, l’évaluation distante et les services connectés restent en dehors de ce périmètre de runtime local.",
+          "useCases": [
+            "Livraison isolée / hors ligne",
+            "Inférence locale sans frais",
+            "Conformité en matière de résidence des données"
+          ]
+        },
+        "anthropic": {
+          "category": "Fournisseurs de modèles",
+          "tagline": "Utilisez les modèles Claude dans un workflow multi-agents gouverné",
+          "summary": "Builderforce.ai achemine les tâches vers Anthropic Claude aux côtés de plus de 30 autres fournisseurs : vous profitez des atouts de Claude au sein de workflows orchestrés, d’approbations et d’une mémoire persistante, sans dépendre d’un seul fournisseur.",
+          "useCases": [
+            "Routage vers le meilleur modèle pour chaque tâche",
+            "Claude avec repli sur modèle local",
+            "Usage gouverné de Claude avec audit"
+          ]
+        },
+        "mcp": {
+          "category": "Protocoles",
+          "tagline": "Consommez des outils MCP et exposez Builderforce.ai en tant que serveur MCP",
+          "summary": "Builderforce.ai consomme des serveurs MCP et expose aussi son propre endpoint /mcp, afin que d’autres outils (Cursor, Claude Desktop et bien d’autres) l’utilisent comme couche d’orchestration et de mémoire via ce protocole ouvert.",
+          "useCases": [
+            "Connecter des outils MCP externes",
+            "Exposer projets et tâches via MCP",
+            "Utiliser Builderforce.ai comme backend de mémoire"
+          ]
+        },
+        "notion": {
+          "category": "Connaissances et documents",
+          "tagline": "Donnez à vos agents un accès en lecture et en écriture aux connaissances Notion",
+          "summary": "Connectez Notion pour que les agents appuient leur travail sur la documentation de votre équipe et y reportent leurs résultats : votre documentation vivante devient du contexte pour les agents.",
+          "useCases": [
+            "Exécution de tâches ancrée dans la documentation",
+            "Mise à jour automatique des spécifications et des notes",
+            "Questions-réponses sur la base de connaissances"
+          ]
+        },
+        "gmail": {
+          "category": "Productivité",
+          "tagline": "Laissez les agents trier et traiter les e-mails",
+          "summary": "Avec Gmail connecté, les agents peuvent lire, résumer et rédiger des e-mails dans le cadre d’un workflow — utile pour le tri du support, les relances et les flux qui transforment les messages entrants en tâches.",
+          "useCases": [
+            "Tri de la boîte de réception en tâches",
+            "Réponses rédigées soumises à approbation",
+            "Déclencheurs de workflow par e-mail"
+          ]
+        }
+      },
+      "schema": {
+        "crumb": {
+          "home": "Accueil",
+          "blog": "Blog",
+          "product": "Produit",
+          "evermind": "Evermind",
+          "projectsTasks": "Projets / tâches",
+          "compare": "Comparer",
+          "pricing": "Tarifs",
+          "signIn": "Connexion",
+          "createAccount": "Créer un compte",
+          "integrations": "Intégrations",
+          "versus": "face à {name}"
+        },
+        "homepage": {
+          "appDescription": "Un canevas créatif où les équipes et les agents IA conçoivent, construisent, relisent et livrent sites web, workflows, modèles, récits de données et produits dans un seul espace visuel connecté.",
+          "conceptsName": "Concepts Builderforce.ai"
+        },
+        "blog": {
+          "name": "Blog Builderforce",
+          "description": "Analyses approfondies, tutoriels et bonnes pratiques pour concevoir et déployer des agents IA grâce à l’entraînement WebGPU LoRA."
+        },
+        "product": {
+          "description": "Builderforce.ai est une plateforme d’IA qui construit, entraîne, orchestre et gouverne une main-d’œuvre d’agents IA sur mesure : génération de jeux de données, entraînement WebGPU LoRA dans le navigateur, évaluation par IA, place de marché de compétences, orchestration de workflows, maillage de main-d’œuvre, et approbations et audit complets.",
+          "capabilitiesName": "Capacités du produit Builderforce.ai"
+        },
+        "evermind": {
+          "name": "Evermind — le LLM de Builderforce.ai",
+          "llmAlias": "LLM de Builderforce.ai",
+          "architectureName": "Architecture d’Evermind",
+          "conceptsName": "Concepts d’Evermind"
+        },
+        "projectsTasks": {
+          "name": "Builderforce.ai — Projets / tâches",
+          "description": "Projets / tâches est la surface de gestion du travail de Builderforce.ai : organisez le travail en espaces de projet IA, puis planifiez, assignez et suivez les tâches de toute votre main-d’œuvre d’agents avec des vues tableau Kanban, tableau, calendrier et Gantt, des points d’approbation et une observabilité complète.",
+          "capabilitiesName": "Capacités Projets / tâches de Builderforce.ai",
+          "projects": {
+            "name": "Projets",
+            "description": "Des espaces de projet IA collaboratifs, chacun doté d’un Canvas Builder, de fichiers, d’agents assignés et de workflows. Affichez les projets sous forme de cartes, de tableau, de calendrier ou de chronologie Gantt."
+          },
+          "tasks": {
+            "name": "Tâches",
+            "description": "Un tableau des tâches pour votre main-d’œuvre d’agents : planifiez, priorisez et assignez des tâches à des AgentHosts, puis suivez leur passage par chaque statut dans une vue Kanban, tableau, calendrier ou Gantt."
+          }
+        },
+        "compare": {
+          "criteriaName": "Critères pour évaluer Builderforce.ai et les outils d’IA voisins",
+          "notFound": "Comparaison introuvable"
+        },
+        "pricing": {
+          "description": "Plateforme d’entraînement d’agents IA avec les offres Free, Pro et Teams."
+        },
+        "login": {
+          "name": "Connexion à Builderforce.ai",
+          "description": "Connectez-vous à votre compte Builderforce.ai pour accéder à l’entraînement d’agents IA, aux jeux de données et au Workforce Registry."
+        },
+        "register": {
+          "name": "Créez votre compte Builderforce.ai",
+          "description": "Créez un compte gratuit. Construisez, entraînez et déployez des agents IA grâce au fine-tuning WebGPU LoRA. Aucune carte bancaire requise."
+        },
+        "competitor": {
+          "name": "Builderforce.ai face à {name}",
+          "description": "Un guide fondé sur des critères pour évaluer Builderforce.ai aux côtés de {name}. Vérifiez les capacités et les tarifs actuels du fournisseur pour les exigences décisives."
+        },
+        "integration": {
+          "name": "Intégration Builderforce.ai + {name}",
+          "metaTitle": "Intégration Builderforce.ai + {name}",
+          "ogTitle": "Builderforce.ai + {name}",
+          "notFound": "Intégration introuvable"
+        }
+      }
+    }
   },
   "evermind": {
     "seo": {
@@ -6090,6 +7054,11 @@
   },
   "features": [
     {
+      "title": "Creation Canvas — de l’idée au livrable",
+      "shortDesc": "Chat, workflows, sites web, données, modèles, personnes et livraison sur un même canevas multijoueur.",
+      "longDesc": "Commencez par un prompt — sans choisir de projet ni créer de compte — et construisez dans une session spatiale persistante. Glissez-y des workflows, des sites web en direct, des jeux de données, des tableaux de bord, des modèles Evermind, de la voix, des personnes et des agents ; demandez au Brain de raisonner sur l’ensemble ; relisez les modifications proposées, puis livrez les maquettes approuvées vers des projets, des tâches et l’exécution par des agents. Les sessions prennent en charge le rattachement du local au compte, les curseurs et commentaires en direct, le mode présentation/suivi, les points de contrôle de version, les packs réutilisables de la Marketplace, le dessin à main levée et des fusions de branches relues sur le web. VS Code ouvre le même graphe dans une surface d’éditeur natif en plein écran et peut y ajouter fichiers, sélections, diagnostics, dépôts, sorties du terminal, services et aperçus."
+    },
+    {
       "title": "Evermind — Le modèle auto-actualisé",
       "shortDesc": "Un modèle qui apprend en travaillant et ne se périme jamais.",
       "longDesc": "Evermind est le cerveau de la plateforme — un modèle auto-actualisé régi par la Write-Through Cognition : les nouvelles connaissances sont écrites directement, de sorte qu'une mise à jour remplace ce qui précédait sans étape de réconciliation. Un générateur hybride à experts partagés (dorsale dense + experts SSM routés) apprend en ligne et s'exécute sur WebGPU : il l'emporte ainsi par sa fraîcheur, son empreinte et la maîtrise qu'il offre, plutôt que par l'échelle brute — dans le navigateur, sur l'appareil ou au cœur de chaque agent."
@@ -6103,6 +7072,21 @@
       "title": "Un cerveau apprenant pour chaque projet",
       "shortDesc": "Chaque projet obtient son propre modèle auto-actualisé qui apprend du travail de votre équipe.",
       "longDesc": "Chaque projet est doté de son propre Evermind dès le premier jour — un modèle auto-actualisé qui apprend de chaque exécution dans les quatre studios : design, voix, LLM et vidéo. Les corrections persistent d’une session à l’autre grâce à un magasin de faits en écriture directe partagé, si bien que le cerveau qui a aidé hier est plus intelligent aujourd’hui. L’inférence reste désactivée jusqu’à ce que vous l’activiez, et le modèle est modifiable directement dans le LLM Studio."
+    },
+    {
+      "title": "Médias génératifs Evermind",
+      "shortDesc": "Générez des images et des vidéos avec votre propre modèle sur l’appareil — pas seulement du texte.",
+      "longDesc": "Evermind est bien plus qu’un modèle de texte. Le même moteur auto-actualisé génère des images et des vidéos de bout en bout — une pile codec et acoustique entraînable qui tourne sur WebGPU, l’API servant les médias rendus. Construisez visuellement un pipeline de génération dans le Workflow Builder, gardez la propriété des poids et des résultats, et produisez des médias sans facture cloud à l’image ni dépendance à un modèle tiers."
+    },
+    {
+      "title": "GitHub App native — Checks, Actions et points de contrôle CI",
+      "shortDesc": "Les agents passent par une véritable GitHub App : écriture dans les Checks, exécutions Actions et fusions conditionnées à la CI.",
+      "longDesc": "Connectez une GitHub App de premier ordre et les agents opèrent avec les mêmes contrôles que vos ingénieurs. Le travail est confié à GitHub avec un accès authentifié par l’App, les verdicts des agents sont écrits sous forme de Checks natifs, les alertes de sécurité remontent sur le tableau, et un pipeline de build et de déploiement exécute de vraies Actions : une fusion est donc conditionnée à une CI au vert, et un build en échec sur la branche d’une PR ouvre automatiquement une correction. Une observabilité qui aboutit à une pull request, pas à un tableau de bord."
+    },
+    {
+      "title": "Retours produit intégrables",
+      "shortDesc": "Intégrez un extrait de code à n’importe quelle application pour recueillir des retours, consignés comme travail soumis à validation humaine qu’aucun agent ne peut toucher.",
+      "longDesc": "Le pendant, côté contribution humaine, de l’observabilité des erreurs. Intégrez un widget de retours sans dépendance, en shadow DOM, sur n’importe quelle surface produit : chaque envoi arrive sur votre tableau comme une demande soumise à validation humaine — dédoublonnée par empreinte, limitée en fréquence par collecteur et inactive tant qu’une personne ne l’a pas approuvée, si bien qu’aucun agent n’agit sur une contribution brute d’utilisateur sans validation. Approuvez-la lors du tri et elle devient un travail exécutable ordinaire qu’un agent cloud peut prendre en charge."
     },
     {
       "title": "Kanban de main-d’œuvre agéntique",
@@ -6138,6 +7122,16 @@
       "title": "Une surface VS Code pour les équipes d’ingénierie",
       "shortDesc": "Apportez le contexte du canevas, les agents, la révision et la livraison dans l’éditeur.",
       "longDesc": "L’extension BuilderForce offre aux équipes d’ingénierie une vue native du travail pertinent : contexte du dépôt, diagnostics, tâches d’agents, révisions et approbations près du code."
+    },
+    {
+      "title": "Réunions en direct, dailies et calendriers partagés",
+      "shortDesc": "Dailies, rétros et appels en vidéo — directement sur votre tableau.",
+      "longDesc": "Voyez et entendez votre équipe, au lieu de seulement coéditer un tableau. Allumez les caméras de tout le groupe pendant un daily, une planification ou une rétro ; lancez des appels improvisés ou directs ; le tout via WebRTC maillé, pour que les flux circulent de pair à pair sans jamais toucher le serveur. Un calendrier d’équipe partagé superpose vos réunions et les événements Google/Microsoft connectés, grise les indisponibilités de chacun, et « Trouver un créneau » propose des plages où tous les invités sont réellement libres. Rejoignez depuis le web ou directement dans VS Code."
+    },
+    {
+      "title": "Chat d’équipe multipartite — humains + agents",
+      "shortDesc": "Des fils partagés que vous pouvez adresser à une personne ou à un @agent.",
+      "longDesc": "Le chat est une vraie collaboration, pas une boîte de prompt en solo. Les fils sont partagés à l’échelle de votre projet : vous invitez des humains par e-mail et des agents IA dans la conversation, et vous adressez chaque message à un participant précis. Parlez à un collègue et la boucle de l’agent reste inactive ; mentionnez un agent avec @ et il répond en son nom, en exécutant une boucle d’outils bornée et limitée par les permissions pour créer une tâche, mettre à jour un OKR ou lire le tableau, sans jamais dépasser vos propres droits. La même conversation fonctionne sur le web et dans VS Code."
     },
     {
       "title": "Testeur agentique — assurance qualité autonome",
@@ -6183,6 +7177,36 @@
       "title": "Connecteurs de tableaux en vue unifiée",
       "shortDesc": "Synchronisation bidirectionnelle avec Jira, Linear, Sentry, PagerDuty et plus encore.",
       "longDesc": "Connectez les outils de suivi et de gestion d'incidents que vous utilisez déjà — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty et GitHub — et synchronisez le travail dans les deux sens. Les agents prennent en charge un ticket ou un incident et agissent dessus quelle que soit son origine, et les changements remontent vers le système de référence. Une vue unique pour orchestrer l'ensemble, sans migration ni verrouillage."
+    },
+    {
+      "title": "Gestion des incidents et astreintes",
+      "shortDesc": "Un agent de help desk, des rotations d’astreinte, de l’escalade, des alertes et une salle de crise — qui apprennent.",
+      "longDesc": "Gérez les incidents là où le travail se trouve déjà. Un agent Help Desk / Gestionnaire d’incidents fait le tri, les rotations d’astreinte déterminent qui est appelé, l’escalade temporisée remonte la chaîne, et les alertes Teams, Slack ou e-mail atteignent la personne d’astreinte, avec un fil de salle de crise par incident réunissant humains et agents. Une fois l’incident résolu, l’analyse des causes profondes est publiée dans votre base de connaissances et transmise à l’Evermind du projet, pour que la main-d’œuvre apprenne et cesse de reproduire la même panne."
+    },
+    {
+      "title": "Canevas de supervision active",
+      "shortDesc": "Épinglez des sondes en direct sur votre schéma d’architecture : un dépassement déclenche l’investigation.",
+      "longDesc": "Importez votre schéma d’architecture et épinglez des sondes de heartbeat, HTTP, webhook ou métriques directement sur les systèmes qu’elles surveillent. Un balayage les évalue toutes les cinq minutes, et un dépassement ne se contente pas de s’afficher en rouge : il déclenche automatiquement l’investigation d’astreinte — sonde → signal → incident → alerte — sur une seule surface. Une supervision qui ouvre le ticket et appelle la personne d’astreinte, au lieu de simplement tracer un graphique."
+    },
+    {
+      "title": "Responsabilité contrôlée par rôle",
+      "shortDesc": "La preuve que le bon rôle a réalisé chaque partie du travail — un registre de validations immuable.",
+      "longDesc": "Chaque ticket porte un manifeste de participation : les rôles requis, rattachés aux humains et aux agents capables de les tenir — un Product Manager n’est donc jamais envoyé écrire du code, et une étape de production est confiée à un producteur. Un rapport de responsabilité en ajout seul consigne, par rôle, qui, quand, le verdict, les commentaires et la contribution, sous le contrôle de permissions de validation refusées par défaut, et une évaluation des ressources signale tout rôle manquant comme un point bloquant. La qualité se prouve sur le tableau au lieu d’être espérée après coup."
+    },
+    {
+      "title": "Réponse automatisée aux appels d’offres et propositions",
+      "shortDesc": "Transformez une base de code analysée en proposition chiffrée à vos couleurs.",
+      "longDesc": "Répondez à un appel d’offres avec ce que vous avez déjà construit. Les agents CTO et Product Owner lisent les capacités analysées d’un projet et génèrent une proposition cobrandée — coûts et compte de résultat, Gantt de livraison par phases, risques, dépendances et catalogue de capacités adapté à la demande —, en mariant la palette et le logo du demandeur aux vôtres. Un ancrage conditionné à la fraîcheur réanalyse un projet obsolète avant de répondre, pour que la proposition reflète le système réel."
+    },
+    {
+      "title": "Managers IA et coaching",
+      "shortDesc": "Des managers typés que vous pouvez coacher — Dev, QA, Service Desk, DevOps.",
+      "longDesc": "Les managers ne sont pas génériques. Un type de manager — Dev, QA, Service Desk, DevOps ou un rôle personnalisé issu de votre catalogue — détermine la façon dont un agent manager dirige son équipe. Lorsqu’il se trompe, une personne lance une séance de coaching : une directive ou une tâche, avec une échéance et un état d’achèvement, qui oriente le comportement du manager pour la suite. Le retour devient une consigne durable, et non une correction ponctuelle perdue à l’exécution suivante."
+    },
+    {
+      "title": "Réponses « mémoire d’abord »",
+      "shortDesc": "Répondre à partir de la mémoire propre au projet avant de payer un appel à un modèle.",
+      "longDesc": "Le token le moins cher est celui que vous ne dépensez jamais. Avant tout appel payant à un modèle, le Brain consulte la mémoire propre au projet — un cache de questions-réponses à répétition exacte, plus une inférence facultative sur l’Evermind du projet — et court-circuite entièrement le LLM en cas de correspondance fiable. L’apprentissage se diffuse à chaque Evermind du projet (le sien et ceux de ses constructions Canvas) : une leçon apprise une fois sert partout. Votre facture de tokens baisse à mesure que la mémoire du projet s’enrichit."
     },
     {
       "title": "Génération de jeux de données par IA",

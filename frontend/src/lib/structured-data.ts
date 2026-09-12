@@ -3,28 +3,20 @@
  *
  * Each function returns a plain object suitable for JSON.stringify()
  * inside a <script type="application/ld+json"> tag.
+ *
+ * Builders for marketing pages take a {@link CopyReader} — the ROOT translator
+ * the page already holds (`await getTranslations()` on the server,
+ * `useTranslations()` in a Client Component) — so the graph a crawler receives
+ * is in the language the page is rendered in, and every FAQPage is the list the
+ * reader actually sees. None of them carries English of its own.
  */
 
-import {
-  BRAND,
-  STATS,
-  HOMEPAGE_FAQ,
-  PRICING_FAQ,
-  LOGIN_FAQ,
-  REGISTER_FAQ,
-  BLOG_FAQ,
-  COMPARE_FAQ,
-  EVERMIND,
-  EVERMIND_FAQ,
-  COMPARE,
-  FEATURES,
-  DEFINED_TERMS,
-  PRODUCT_SECTIONS,
-  PROJECTS_TASKS_FAQ,
-  type FaqItem,
-  type CompetitorSeo,
-  type IntegrationSeo,
-} from './content';
+import { BRAND, QUOTABLE_IDS } from './content/brand';
+import { COMPARE_ARENAS, type CompetitorSeo } from './content/compare';
+import { contentKey, rawList, type CopyReader } from './content/copy';
+import { faqAt, faqItems, type FaqItem } from './content/faq';
+import { featuresCopy, productSectionsCopy } from './content/product';
+import { definedTerms, integrationCopy, type IntegrationSeo } from './content/seo';
 
 /* ════════ Helpers ════════ */
 
@@ -50,6 +42,16 @@ function breadcrumbs(...items: { name: string; url: string }[]) {
     })),
   };
 }
+
+/** A `marketing.content.schema.*` string. */
+const schemaCopy = (t: CopyReader, path: string, values?: Record<string, string | number>) =>
+  t(contentKey(`schema.${path}`), values);
+
+/** The localized "Home" crumb every marketing trail starts from. */
+const homeCrumb = (t: CopyReader) => ({ name: schemaCopy(t, 'crumb.home'), url: BRAND.url });
+
+/** An absolute URL for a site path; an already-absolute href passes through. */
+const absoluteUrl = (href: string) => (/^https?:\/\//.test(href) ? href : `${BRAND.url}${href}`);
 
 const organization = {
   '@type': 'Organization',
@@ -82,23 +84,25 @@ const authorPerson = {
 
 /* ════════ Page-level schema graphs ════════ */
 
-/** Homepage: Organization + SoftwareApplication + WebSite + Pricing + FAQ + DefinedTerms */
-export function homepageSchema() {
+/** Homepage: Organization + SoftwareApplication + WebSite + FAQ + DefinedTerms */
+export function homepageSchema(t: CopyReader) {
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      organization,
+      { ...organization, slogan: t(contentKey('brand.tagline')) },
       {
         '@type': 'SoftwareApplication',
         '@id': `${BRAND.url}/#app`,
         name: BRAND.name,
-        description:
-          'A creative canvas where teams and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products in one connected visual workspace.',
+        description: schemaCopy(t, 'homepage.appDescription'),
         url: BRAND.url,
         applicationCategory: 'DesignApplication',
         operatingSystem: 'Web',
         author: { '@id': `${BRAND.url}/#organization` },
         dateModified: BRAND.dateModified,
+        // The quotable one-liners are the citable statements of what the
+        // product does — the homepage graph is where an answer engine reads them.
+        featureList: QUOTABLE_IDS.map((id) => t(contentKey(`quotable.${id}`))),
       },
       {
         '@type': 'WebSite',
@@ -112,33 +116,32 @@ export function homepageSchema() {
           'query-input': 'required name=search_term_string',
         },
       },
-      faqSchema(HOMEPAGE_FAQ),
+      faqSchema(faqItems(t, 'homepage')),
       {
         '@type': 'DefinedTermSet',
-        name: 'Builderforce.ai Concepts',
+        name: schemaCopy(t, 'homepage.conceptsName'),
         url: BRAND.url,
-        hasDefinedTerm: DEFINED_TERMS.map((term) => ({
+        hasDefinedTerm: definedTerms(t).map((term) => ({
           '@type': 'DefinedTerm',
           name: term.name,
           description: term.description,
           inDefinedTermSet: `${BRAND.url}/#concepts`,
         })),
       },
-      breadcrumbs({ name: 'Home', url: BRAND.url }),
+      breadcrumbs(homeCrumb(t)),
     ],
   };
 }
 
 /** Blog index: CollectionPage + ItemList + BreadcrumbList + FAQ */
-export function blogIndexSchema(posts: { slug: string; title: string; date: string }[]) {
+export function blogIndexSchema(t: CopyReader, posts: { slug: string; title: string; date: string }[]) {
   return {
     '@context': 'https://schema.org',
     '@graph': [
       {
         '@type': 'CollectionPage',
-        name: 'Builderforce Blog',
-        description:
-          'Deep dives, tutorials, and best practices for building and deploying AI agents with WebGPU LoRA training.',
+        name: schemaCopy(t, 'blog.name'),
+        description: schemaCopy(t, 'blog.description'),
         url: `${BRAND.url}/blog`,
         dateModified: BRAND.dateModified,
         publisher: { '@id': `${BRAND.url}/#organization` },
@@ -155,10 +158,10 @@ export function blogIndexSchema(posts: { slug: string; title: string; date: stri
           name: post.title,
         })),
       },
-      faqSchema(BLOG_FAQ),
+      faqSchema(faqItems(t, 'blog')),
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Blog', url: `${BRAND.url}/blog` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.blog'), url: `${BRAND.url}/blog` },
       ),
     ],
   };
@@ -285,8 +288,8 @@ export function blogPostSchema(post: {
 }
 
 /** Product tour page: SoftwareApplication + ItemList of capabilities + BreadcrumbList */
-export function productSchema() {
-  const surfaces = PRODUCT_SECTIONS.flatMap((s) => s.surfaces);
+export function productSchema(t: CopyReader) {
+  const surfaces = productSectionsCopy(t).flatMap((s) => s.surfaces);
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -295,8 +298,7 @@ export function productSchema() {
         '@type': 'SoftwareApplication',
         '@id': `${BRAND.url}/#app`,
         name: BRAND.name,
-        description:
-          'Builderforce.ai is an AI platform that builds, trains, orchestrates, and governs a custom AI agent workforce — dataset generation, in-browser WebGPU LoRA training, AI evaluation, a skills marketplace, workflow orchestration, a workforce mesh, and full approvals + audit.',
+        description: schemaCopy(t, 'product.description'),
         url: `${BRAND.url}/product`,
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'Web',
@@ -306,26 +308,27 @@ export function productSchema() {
       },
       {
         '@type': 'ItemList',
-        name: 'Builderforce.ai product capabilities',
+        name: schemaCopy(t, 'product.capabilitiesName'),
         itemListElement: surfaces.map((f, i) => ({
           '@type': 'ListItem',
           position: i + 1,
           name: f.title,
           description: f.desc,
-          url: `${BRAND.url}${f.href}`,
+          url: absoluteUrl(f.href),
         })),
       },
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Product', url: `${BRAND.url}/product` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.product'), url: `${BRAND.url}/product` },
       ),
     ],
   };
 }
 
 /** Evermind page: the Builderforce.ai LLM as a SoftwareApplication + ItemList of its layers + FAQ + DefinedTerms + BreadcrumbList */
-export function evermindSchema() {
+export function evermindSchema(t: CopyReader) {
   const url = `${BRAND.url}/evermind`;
+  const pillars = rawList<{ title: string; desc: string }>(t, 'evermind.architecture.pillars');
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -333,20 +336,20 @@ export function evermindSchema() {
       {
         '@type': 'SoftwareApplication',
         '@id': `${BRAND.url}/#evermind`,
-        name: `${EVERMIND.name} — the ${BRAND.name} LLM`,
-        alternateName: [EVERMIND.name, `${BRAND.name} LLM`, 'Builderforce LLM'],
-        description: EVERMIND.seo.description,
+        name: schemaCopy(t, 'evermind.name'),
+        alternateName: ['Evermind', schemaCopy(t, 'evermind.llmAlias'), 'Builderforce LLM'],
+        description: t('evermind.seo.description'),
         url,
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'Web (WebGPU)',
         author: { '@id': `${BRAND.url}/#organization` },
         dateModified: BRAND.dateModified,
-        featureList: EVERMIND.pillars.map((p) => p.title),
+        featureList: pillars.map((p) => p.title),
       },
       {
         '@type': 'ItemList',
-        name: 'Evermind architecture',
-        itemListElement: EVERMIND.pillars.map((p, i) => ({
+        name: schemaCopy(t, 'evermind.architectureName'),
+        itemListElement: pillars.map((p, i) => ({
           '@type': 'ListItem',
           position: i + 1,
           name: p.title,
@@ -354,12 +357,13 @@ export function evermindSchema() {
           url,
         })),
       },
-      faqSchema(EVERMIND_FAQ),
+      // The FAQ the page renders — a FAQPage has to describe visible content.
+      faqSchema(faqAt(t, 'evermind.faq')),
       {
         '@type': 'DefinedTermSet',
-        name: 'Evermind concepts',
+        name: schemaCopy(t, 'evermind.conceptsName'),
         url,
-        hasDefinedTerm: DEFINED_TERMS.filter((t) => t.name === 'Evermind' || t.name === 'Write-Through Cognition').map((term) => ({
+        hasDefinedTerm: definedTerms(t, ['evermind', 'writeThroughCognition']).map((term) => ({
           '@type': 'DefinedTerm',
           name: term.name,
           description: term.description,
@@ -367,8 +371,8 @@ export function evermindSchema() {
         })),
       },
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Evermind', url },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.evermind'), url },
       ),
     ],
   };
@@ -427,19 +431,11 @@ export function soc2Schema() {
 }
 
 /** Projects / Tasks page: SoftwareApplication feature + ItemList of the two capabilities + FAQ + BreadcrumbList */
-export function projectsTasksSchema() {
-  const capabilities = [
-    {
-      name: 'Projects',
-      description:
-        'Collaborative AI project workspaces — each with a Canvas Builder, files, assigned agents, and workflows. View projects as cards, a table, a calendar, or a Gantt timeline.',
-    },
-    {
-      name: 'Tasks',
-      description:
-        'A task board for your agent workforce — plan, prioritize, and assign tasks to AgentHosts, then watch them flow through every status across a board, table, calendar, or Gantt view.',
-    },
-  ];
+export function projectsTasksSchema(t: CopyReader) {
+  const capabilities = (['projects', 'tasks'] as const).map((id) => ({
+    name: schemaCopy(t, `projectsTasks.${id}.name`),
+    description: schemaCopy(t, `projectsTasks.${id}.description`),
+  }));
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -447,9 +443,8 @@ export function projectsTasksSchema() {
       {
         '@type': 'SoftwareApplication',
         '@id': `${BRAND.url}/#projects-tasks`,
-        name: `${BRAND.name} — Projects / Tasks`,
-        description:
-          'Projects / Tasks is the work-management surface of Builderforce.ai: organize work into AI project workspaces, then plan, assign, and track tasks across your agent workforce with board, table, calendar, and Gantt views, approval gates, and full observability.',
+        name: schemaCopy(t, 'projectsTasks.name'),
+        description: schemaCopy(t, 'projectsTasks.description'),
         url: `${BRAND.url}/projects`,
         applicationCategory: 'BusinessApplication',
         operatingSystem: 'Web',
@@ -459,7 +454,7 @@ export function projectsTasksSchema() {
       },
       {
         '@type': 'ItemList',
-        name: 'Builderforce.ai Projects / Tasks capabilities',
+        name: schemaCopy(t, 'projectsTasks.capabilitiesName'),
         itemListElement: capabilities.map((c, i) => ({
           '@type': 'ListItem',
           position: i + 1,
@@ -468,18 +463,21 @@ export function projectsTasksSchema() {
           url: `${BRAND.url}/projects`,
         })),
       },
-      faqSchema(PROJECTS_TASKS_FAQ),
+      faqSchema(faqItems(t, 'projectsTasks')),
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Projects / Tasks', url: `${BRAND.url}/projects` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.projectsTasks'), url: `${BRAND.url}/projects` },
       ),
     ],
   };
 }
 
 /** Compare page: SoftwareApplication + ItemList of compared capabilities + FAQ + BreadcrumbList */
-export function compareSchema() {
-  const features = FEATURES.map((feature) => feature.title);
+export function compareSchema(t: CopyReader) {
+  const pillars = rawList<{ title: string; desc: string }>(t, 'compare.pillars');
+  // Every arena's FAQ, in tab order — the page renders one per tab, so the
+  // FAQPage spans all six markets rather than only the coding-agent tab.
+  const faq = COMPARE_ARENAS.flatMap((arena) => faqAt(t, `compare.arenas.${arena.key}.faq`));
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -488,35 +486,35 @@ export function compareSchema() {
         '@type': 'SoftwareApplication',
         '@id': `${BRAND.url}/#app`,
         name: BRAND.name,
-        description: COMPARE.seo.description,
+        description: t('compare.seo.description'),
         url: `${BRAND.url}/compare`,
         applicationCategory: 'DesignApplication',
         operatingSystem: 'Web',
         author: { '@id': `${BRAND.url}/#organization` },
         dateModified: BRAND.dateModified,
-        featureList: features,
+        featureList: featuresCopy(t).map((feature) => feature.title),
       },
       {
         '@type': 'ItemList',
-        name: 'Criteria for evaluating Builderforce.ai and adjacent AI tools',
-        itemListElement: COMPARE.pillars.map((criterion, i) => ({
+        name: schemaCopy(t, 'compare.criteriaName'),
+        itemListElement: pillars.map((criterion, i) => ({
           '@type': 'ListItem',
           position: i + 1,
           name: criterion.title,
           description: criterion.desc,
         })),
       },
-      faqSchema(COMPARE_FAQ),
+      faqSchema(faq),
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Compare', url: `${BRAND.url}/compare` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.compare'), url: `${BRAND.url}/compare` },
       ),
     ],
   };
 }
 
 /** Pricing page: Product with Offers + FAQ + BreadcrumbList */
-export function pricingSchema(pricing?: {
+export function pricingSchema(t: CopyReader, pricing?: {
   currency: string;
   plans: Array<{ id: 'free' | 'pro' | 'teams'; name: string; monthly: number; minimumSeats: number; ctaHref: string }>;
 }) {
@@ -534,59 +532,57 @@ export function pricingSchema(pricing?: {
       {
         '@type': 'Product',
         name: BRAND.name,
-        description: 'AI agent training platform with Free, Pro, and Teams plans.',
+        description: schemaCopy(t, 'pricing.description'),
         url: `${BRAND.url}/pricing`,
         brand: { '@id': `${BRAND.url}/#organization` },
         ...(offers ? { offers } : {}),
       },
-      faqSchema(PRICING_FAQ),
+      faqSchema(faqItems(t, 'pricing')),
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Pricing', url: `${BRAND.url}/pricing` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.pricing'), url: `${BRAND.url}/pricing` },
       ),
     ],
   };
 }
 
 /** Login page: WebPage + FAQ + BreadcrumbList */
-export function loginSchema() {
+export function loginSchema(t: CopyReader) {
   return {
     '@context': 'https://schema.org',
     '@graph': [
       {
         '@type': 'WebPage',
-        name: 'Sign In to Builderforce.ai',
-        description:
-          'Sign in to your Builderforce.ai account. Access AI agent training, datasets, and the Workforce Registry.',
+        name: schemaCopy(t, 'login.name'),
+        description: schemaCopy(t, 'login.description'),
         url: `${BRAND.url}/login`,
         dateModified: BRAND.dateModified,
       },
-      faqSchema(LOGIN_FAQ),
+      faqSchema(faqItems(t, 'login')),
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Sign In', url: `${BRAND.url}/login` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.signIn'), url: `${BRAND.url}/login` },
       ),
     ],
   };
 }
 
 /** Register page: WebPage + FAQ + BreadcrumbList */
-export function registerSchema() {
+export function registerSchema(t: CopyReader) {
   return {
     '@context': 'https://schema.org',
     '@graph': [
       {
         '@type': 'WebPage',
-        name: 'Create Your Builderforce.ai Account',
-        description:
-          'Create a free account. Build, train, and deploy AI agents with WebGPU LoRA fine-tuning. No credit card required.',
+        name: schemaCopy(t, 'register.name'),
+        description: schemaCopy(t, 'register.description'),
         url: `${BRAND.url}/register`,
         dateModified: BRAND.dateModified,
       },
-      faqSchema(REGISTER_FAQ),
+      faqSchema(faqItems(t, 'register')),
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Create Account', url: `${BRAND.url}/register` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.createAccount'), url: `${BRAND.url}/register` },
       ),
     ],
   };
@@ -597,19 +593,20 @@ export function registerSchema() {
 
 /**
  * Per-competitor `/compare/{slug}` JSON-LD: a WebPage scoped to the rivalry, the
- * Builderforce SoftwareApplication entity, the competitor-intent FAQ, and a
- * breadcrumb trail. Mirrors `compareSchema()` but narrowed to a single rival so
- * each leaf page carries its own structured data.
+ * Builderforce SoftwareApplication entity, and a breadcrumb trail. Mirrors
+ * `compareSchema()` but narrowed to a single rival so each leaf page carries its
+ * own structured data.
  */
-export function competitorCompareSchema(seo: CompetitorSeo) {
+export function competitorCompareSchema(t: CopyReader, seo: CompetitorSeo) {
+  const url = `${BRAND.url}/compare/${seo.slug}`;
   return {
     '@context': 'https://schema.org',
     '@graph': [
       {
         '@type': 'WebPage',
-        name: `Builderforce.ai vs ${seo.name}`,
-        description: `A criteria-based guide for evaluating Builderforce.ai alongside ${seo.name}. Verify current vendor capabilities and pricing for decision-critical requirements.`,
-        url: `${BRAND.url}/compare/${seo.slug}`,
+        name: schemaCopy(t, 'competitor.name', { name: seo.name }),
+        description: schemaCopy(t, 'competitor.description', { name: seo.name }),
+        url,
         dateModified: BRAND.dateModified,
         about: { '@type': 'Thing', name: seo.name },
       },
@@ -618,13 +615,13 @@ export function competitorCompareSchema(seo: CompetitorSeo) {
         name: BRAND.name,
         applicationCategory: 'DesignApplication',
         operatingSystem: 'Web',
-        description: STATS.quotable.creativeCanvas,
+        description: t(contentKey('quotable.creativeCanvas')),
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
       },
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Compare', url: `${BRAND.url}/compare` },
-        { name: `vs ${seo.name}`, url: `${BRAND.url}/compare/${seo.slug}` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.compare'), url: `${BRAND.url}/compare` },
+        { name: schemaCopy(t, 'crumb.versus', { name: seo.name }), url },
       ),
     ],
   };
@@ -634,15 +631,17 @@ export function competitorCompareSchema(seo: CompetitorSeo) {
  * Per-integration `/integrations/{slug}` JSON-LD: a WebPage describing the
  * integration plus the Builderforce SoftwareApplication entity and a breadcrumb.
  */
-export function integrationSchema(seo: IntegrationSeo) {
+export function integrationSchema(t: CopyReader, seo: IntegrationSeo) {
+  const url = `${BRAND.url}/integrations/${seo.slug}`;
+  const copy = integrationCopy(t, seo.slug);
   return {
     '@context': 'https://schema.org',
     '@graph': [
       {
         '@type': 'WebPage',
-        name: `Builderforce.ai + ${seo.name} integration`,
-        description: seo.summary,
-        url: `${BRAND.url}/integrations/${seo.slug}`,
+        name: schemaCopy(t, 'integration.name', { name: seo.name }),
+        description: copy.summary,
+        url,
         dateModified: BRAND.dateModified,
         about: { '@type': 'Thing', name: seo.name },
       },
@@ -651,13 +650,13 @@ export function integrationSchema(seo: IntegrationSeo) {
         name: BRAND.name,
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'Web, Self-hosted',
-        description: seo.tagline,
+        description: copy.tagline,
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
       },
       breadcrumbs(
-        { name: 'Home', url: BRAND.url },
-        { name: 'Integrations', url: `${BRAND.url}/integrations` },
-        { name: seo.name, url: `${BRAND.url}/integrations/${seo.slug}` },
+        homeCrumb(t),
+        { name: schemaCopy(t, 'crumb.integrations'), url: `${BRAND.url}/integrations` },
+        { name: seo.name, url },
       ),
     ],
   };

@@ -28,6 +28,11 @@ import {
 } from '../../application/collection/formPublishing';
 import { deliverFormInvitations } from '../../application/collection/formInvitations';
 import { headerHints } from '../../application/email/emailLocaleResolver';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+/** A response is keyed by question id; every per-answer rule (required, choice,
+ *  audience) belongs to `submitFormResponse`, so this only insists on the map shape. */
+const FormResponseBody = z.object({ answers: zJsonObject.nullish() });
 
 /** One translation of a refusal into a status, shared by every handler — so a
  *  new endpoint cannot invent a different code for the same rejection. */
@@ -60,7 +65,9 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
    * delivered none must not report the same thing as one that delivered ten.
    */
   router.post('/publish', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    // Read field-by-field below and `questions` is the form DEFINITION, validated by
+    // `publishForm` — so the schema keeps every key. `handle` rethrows the 400.
+    const body = await parseBody(c, zJsonObject);
     const result = await publishForm(db, tenant(c), {
       questionSetId: typeof body.questionSetId === 'string' ? body.questionSetId : undefined,
       title: String(body.title ?? ''),
@@ -136,7 +143,7 @@ export function createPublicFormRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:slug', (c) => handle(async () => {
     const resolved = await resolvePublicForm(db, c.req.param('slug'), c.req.query('t'));
     if (!resolved) return Response.json({ error: 'No form at that address.' }, { status: 404 });
-    const body = await c.req.json<{ answers?: Record<string, unknown> }>();
+    const body = await parseBody(c, FormResponseBody);
     const result = await submitFormResponse(db, resolved, {
       answers: body.answers ?? {},
       // The signed-in responder, when there is one. A `workspace` form needs it;

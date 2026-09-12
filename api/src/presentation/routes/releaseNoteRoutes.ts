@@ -59,6 +59,29 @@ import {
 } from '../../application/product/releaseNoteBetas';
 import { runReleaseDigest } from '../../application/email/releaseDigest';
 import { limitParam } from './queryParams';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
+
+/** `action` is type-guarded with its own "action must be one of" answer. */
+const BetaActionBody = z.object({
+  action: z.unknown().optional(),
+  agreed: z.boolean().nullish(),
+});
+/**
+ * Create and update take the same fields. `version` / `title` accept a number too,
+ * because update has always `String()`ed them; the beta fields are parsed by
+ * `parseBetaFields`, and `category` is checked against its own worded 400.
+ */
+const ReleaseNoteBody = z.object({
+  version: zNumberLike.optional(),
+  title: zNumberLike.optional(),
+  body: z.string().nullish(),
+  category: z.string().optional(),
+  publish: z.boolean().nullish(),
+  stage: z.unknown().optional(),
+  betaOptIn: z.unknown().optional(),
+  betaTerms: z.unknown().optional(),
+  stageEndsAt: z.unknown().optional(),
+});
 
 /** What a join/leave/dismiss request may ask for, and the enrolment status each
  *  one lands on. Declaring it as data keeps the route free of a three-branch
@@ -138,7 +161,7 @@ export function createReleaseNoteRoutes(db: Db) {
   // -------------------------------------------------------------------------
   router.post('/:id/beta', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ action?: string; agreed?: boolean }>().catch(() => ({}) as Record<string, never>);
+    const body = await parseOptionalBody(c, BetaActionBody);
     if (!isBetaAction(body.action)) {
       return c.json({ error: `action must be one of: ${Object.keys(ACTION_STATUS).join(', ')}` }, 400);
     }
@@ -175,11 +198,7 @@ export function createReleaseNoteRoutes(db: Db) {
   });
 
   router.post('/', superAdminMiddleware, async (c) => {
-    const body = await c.req.json<{
-      version?: string; title?: string; body?: string | null;
-      category?: string; publish?: boolean;
-      stage?: unknown; betaOptIn?: unknown; betaTerms?: unknown; stageEndsAt?: unknown;
-    }>().catch(() => ({}) as Record<string, never>);
+    const body = await parseOptionalBody(c, ReleaseNoteBody);
 
     const version = typeof body.version === 'string' ? body.version.trim() : '';
     const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -202,11 +221,7 @@ export function createReleaseNoteRoutes(db: Db) {
   });
 
   router.put('/:id', superAdminMiddleware, async (c) => {
-    const body = await c.req.json<{
-      version?: string; title?: string; body?: string | null;
-      category?: string; publish?: boolean;
-      stage?: unknown; betaOptIn?: unknown; betaTerms?: unknown; stageEndsAt?: unknown;
-    }>().catch(() => ({}) as Record<string, never>);
+    const body = await parseOptionalBody(c, ReleaseNoteBody);
 
     if (body.category !== undefined && !isReleaseNoteCategory(body.category)) {
       return c.json({ error: `category must be one of: ${RELEASE_NOTE_CATEGORIES.join(', ')}` }, 400);

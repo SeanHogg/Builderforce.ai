@@ -24,6 +24,33 @@ import { linkSpecToTask } from '../../application/prd/taskPrd';
 import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+const SPEC_STATUSES = ['draft', 'ready', 'in_progress', 'complete'] as const;
+
+/** `goal` stays optional so the handler's own "goal is required" wins; `taskList` is
+ *  stored as JSON exactly as sent. */
+const UpsertSpecBody = z.object({
+  id: z.string().nullish(),
+  projectId: z.number().nullish(),
+  goal: z.string().nullish(),
+  status: z.enum(SPEC_STATUSES).nullish(),
+  kind: z.string().optional(),
+  prd: z.string().nullish(),
+  archSpec: z.string().nullish(),
+  taskList: z.unknown().optional(),
+  /** When present, link this spec to the task as its primary PRD (agent write-back). */
+  taskId: z.number().nullish(),
+});
+const PatchSpecBody = z.object({
+  goal: z.string().optional(),
+  status: z.enum(SPEC_STATUSES).optional(),
+  prd: z.string().nullish(),
+  archSpec: z.string().nullish(),
+  taskList: z.unknown().optional(),
+});
+/** `workflowId` stays optional so the handler's own "workflowId is required" wins. */
+const LinkWorkflowBody = z.object({ workflowId: z.string().nullish() });
 
 type SpecsHonoEnv = HonoEnv;
 
@@ -37,18 +64,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = requestAgentHostId(c);
 
-    const body = await c.req.json<{
-      id?:        string;
-      projectId?: number;
-      goal:       string;
-      status?:    'draft' | 'ready' | 'in_progress' | 'complete';
-      kind?:      string;
-      prd?:       string;
-      archSpec?:  string;
-      taskList?:  unknown;
-      /** When present, link this spec to the task as its primary PRD (agent write-back). */
-      taskId?:    number;
-    }>();
+    const body = await parseBody(c, UpsertSpecBody);
 
     if (!body.goal?.trim()) return c.json({ error: 'goal is required' }, 400);
 
@@ -142,13 +158,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
-    const body = await c.req.json<{
-      goal?:     string;
-      status?:   'draft' | 'ready' | 'in_progress' | 'complete';
-      prd?:      string;
-      archSpec?: string;
-      taskList?: unknown;
-    }>();
+    const body = await parseBody(c, PatchSpecBody);
 
     await db
       .update(specs)
@@ -196,7 +206,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
     const [spec] = await db.select({ id: specs.id }).from(specs).where(and(eq(specs.id, specId), eq(specs.tenantId, tenantId)));
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
 
-    const body = await c.req.json<{ workflowId: string }>();
+    const body = await parseBody(c, LinkWorkflowBody);
     if (!body.workflowId) return c.json({ error: 'workflowId is required' }, 400);
 
     await db

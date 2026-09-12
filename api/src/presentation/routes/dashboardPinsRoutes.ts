@@ -22,6 +22,13 @@ import {
 } from '../../application/dashboards/dashboardPins';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `cleanWidgetKey` owns the key rule (trim, 1..96) and answers "widgetKey is required". */
+const PinBody = z.object({ widgetKey: z.string().nullish() });
+
+/** The handler keeps only the entries `cleanWidgetKey` admits, so the elements stay untyped. */
+const ReorderBody = z.object({ order: z.unknown().optional() });
 
 export function createDashboardPinsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -40,7 +47,7 @@ export function createDashboardPinsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const uid = c.get('userId') as string | undefined;
     if (!uid) return c.json({ error: 'no user' }, 401);
-    const body = await c.req.json<{ widgetKey?: string }>().catch(() => ({}) as { widgetKey?: string });
+    const body = await parseOptionalBody(c, PinBody);
     const widgetKey = cleanWidgetKey(body.widgetKey);
     if (!widgetKey) return c.json({ error: 'widgetKey is required' }, 400);
     return c.json(await addPin(db, c.env as Env, tenantId, uid, widgetKey), 201);
@@ -62,7 +69,7 @@ export function createDashboardPinsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const uid = c.get('userId') as string | undefined;
     if (!uid) return c.json({ error: 'no user' }, 401);
-    const body = await c.req.json<{ order?: unknown }>().catch(() => ({}) as { order?: unknown });
+    const body = await parseOptionalBody(c, ReorderBody);
     const order = Array.isArray(body.order)
       ? body.order.map((k) => cleanWidgetKey(k)).filter((k): k is string => k !== null)
       : [];

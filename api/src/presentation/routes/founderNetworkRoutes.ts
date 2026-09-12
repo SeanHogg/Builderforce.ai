@@ -72,7 +72,7 @@ export function createCofounderRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ profile: await myCofounderProfile(db, tenant(c), actor(c)) })));
 
   router.put('/profile', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const result = await upsertCofounderProfile(db, tenant(c), actor(c), {
       headline: String(body.headline ?? ''),
       bio: typeof body.bio === 'string' ? body.bio : null,
@@ -104,7 +104,7 @@ export function createCofounderRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/introductions/:id/respond', (c) => handle(async () => {
-    const body = await c.req.json<{ decision?: unknown }>();
+    const body = await parseBody(c, IntroductionResponseBody);
     const decision = body.decision === 'accepted' ? 'accepted' : 'declined';
     // Only the RECIPIENT may answer, enforced inside the service by matching the
     // introduction's target against the caller's own profile — not by trusting a
@@ -153,7 +153,7 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
    * complaint, and the reason this is not just an insert into `deals`.
    */
   router.post('/deals', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const result = await openDeal(db, tenant(c), {
       family: c.req.query('family') ?? body.family,
       counterparty: String(body.counterparty ?? ''),
@@ -179,7 +179,7 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
    * family is a caller that could name the wrong one.
    */
   router.post('/deals/:id/stage', (c) => handle(async () => {
-    const body = await c.req.json<{ stage?: unknown }>();
+    const body = await parseBody(c, MoveDealBody);
     const { family: _family, pipelineRef: _pipelineRef, ...moveOptions } = options(c);
     const pipeline = await moveDeal(db, tenant(c), Number(c.req.param('id')), String(body.stage ?? ''), moveOptions);
     return Response.json({ pipeline });
@@ -204,7 +204,7 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
   /** Plan a round, or change the plan. Idempotent on the NAME, because the name is
    *  what every allocation joins to through `deals.pipeline_ref`. */
   router.post('/rounds', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const num = (value: unknown): number | null | undefined =>
       value === undefined ? undefined : value === null || value === '' ? null : Number(value);
     const round = await upsertFundingRound(db, tenant(c), {
@@ -230,7 +230,7 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
   /** Log a touch, and get the thread back. Same one-call shape as the move, so a
    *  surface renders what it just wrote rather than what it wrote a moment ago. */
   router.post('/deals/:id/touchpoints', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const thread = await logDealTouch(db, tenant(c), Number(c.req.param('id')), {
       summary: String(body.summary ?? ''),
       ...(typeof body.channel === 'string' ? { channel: body.channel } : {}),
@@ -261,7 +261,7 @@ export function createInvestorUpdateRoutes(db: Db): Hono<HonoEnv> {
    * renderer, not a second sender.
    */
   router.post('/send', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const content = body.content as Record<string, unknown> | undefined;
     if (!content || typeof content.title !== 'string') {
       return Response.json({ error: 'Send the update itself — at minimum a title.' }, { status: 400 });

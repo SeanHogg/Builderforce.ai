@@ -5890,7 +5890,971 @@
     "ctaGetStartedFree": "免费开始使用",
     "ctaStartBuildingFree": "免费开始构建",
     "ctaTourPlatform": "了解平台",
-    "ctaSeePricing": "查看定价"
+    "ctaSeePricing": "查看定价",
+    "content": {
+      "brand": {
+        "tagline": "人类与 AI 智能体共用的创意画布"
+      },
+      "quotable": {
+        "creativeCanvas": "在 Builderforce.ai 上，把任何想法变成现实。这是一块创意画布，你的团队与 AI 智能体在这里设计、构建、审阅并交付网站、工作流、模型、数据故事和产品——无需在一堆工具之间来回切换。",
+        "evermind": "Evermind 是 Builderforce.ai 的项目模型与记忆系统。基于键的写穿式更新，旨在为受支持的浏览器与智能体工作流替换已被取代的项目事实。",
+        "systemOfRecord": "Builderforce.ai 让创意历程从最初的想法一路连贯到评审与交付，为团队留下一份共享记录：人类与 AI 智能体创建了什么、修改了什么、批准了什么、交付了什么。",
+        "defineANeed": "在 Builderforce.ai 上，任何人都可以用任何形式定义一项需求——自然语言、数据集、流程图或人设——并把它编译成一个可以在 Canvas、桌面或云端运行的智能体：同一条 AgentSpec 主干，由多种输入编译而成，部署到多个界面。",
+        "enterpriseInnovation": "Builderforce.ai 把创意工作与交付连接起来：团队可以借助 AI 打磨想法，把它组织成项目和工作流，并随着工作规模扩大，逐步加入治理与度量。",
+        "roleBasedInsight": "Builderforce.ai 把创意上下文、交付活动、模型用量、审批以及可获得的成本数据，汇集到面向团队与领导者的、按角色划分的运营视图中。",
+        "humanInLoopAgentic": "Builderforce.ai 是一块人在回路的创意画布，你的团队与 AI 智能体在这里把想法变成互联、可审阅、可交付的工作。",
+        "trainAndUseLoop": "训练一个定制智能体，把它发布到 Workforce Registry，然后雇用它，并在你自己的智能体内部调用它——你训练的专家会成为主智能体可以委派任务的工具。",
+        "neverLeaveVsCode": "工程团队可以在 VS Code 中打开 Builderforce.ai，把代码仓库上下文、诊断信息、智能体工作、评审与审批带进编辑器。",
+        "aiExecutiveTeam": "Builderforce.ai 为领导者提供关于创作、交付、系统、成本以及受治理智能体活动的互联视图，同时不假装 AI 能取代负责任的管理者。",
+        "freeForever": "提供免费套餐；请在定价页面核实当前的价格与权益。",
+        "agenticTester": "Agentic Tester 是一个自主 QA 智能体：把它指向你的应用、提供登录凭据，它就会按计划驱动真实浏览器走完你流量最高的流程——并把发现的缺陷直接提交到你的看板上。",
+        "collaboration": "Builderforce.ai 是一个面向人类与 AI 智能体混合工作队的实时协作平台：大家共用一块看板，在可以指定给某个人或 @某个智能体的多方对话串中聊天，通过实时 WebRTC 视频开会，并在共享日历上协调——无论在 Web 端还是 VS Code 中。",
+        "teamChat": "Builderforce.ai 的团队聊天是多方参与的：对话串在整个项目内共享，你可以通过邮件邀请人类成员、把 AI 智能体拉进来，并把每条消息发给指定的参与者——发给人类的消息就是普通对话，而 @提及某个智能体，它就会在你本人的权限范围内回复并在看板上采取行动。",
+        "meetings": "Builderforce.ai 基于网状 WebRTC，直接在你的项目看板上进行实时视频会议——站会和复盘时打开摄像头，可预约的团队日历显示每位用户的空闲状态并支持“找个时间”，还能与 Google/Microsoft 日历同步——可在 Web 端或 VS Code 中加入，媒体点对点传输，从不经过服务器。",
+        "vsCodeCommandCenter": "BuilderForce VS Code 扩展是面向人类与 AI 智能体工作队的指挥中心：多方团队聊天、显示哪些运行正在执行或需要你回答的实时会话状态、原生视频会议、Evermind 训练控制台，以及人在回路的审批——全都无需离开编辑器。",
+        "zeroGpuBills": "受支持的 WebGPU 训练步骤在兼容的本地设备上运行；托管步骤和连接服务的步骤会单独说明。",
+        "browserNative": "借助 WebGPU，直接在 Chrome 中微调最多 20 亿参数的模型。",
+        "datasetSpeed": "只需一条能力提示词，不到 30 秒即可生成一个指令微调数据集。",
+        "privacy": "受支持的训练工作通过 WebGPU 在本地运行；发布、协作以及连接的云服务可能会传输这些功能所需的数据。"
+      },
+      "statValues": [
+        "一块",
+        "实时",
+        "人 + AI",
+        "可审核"
+      ],
+      "faq": {
+        "homepage": [
+          {
+            "question": "什么是 Evermind？",
+            "answer": "Evermind 是 Builderforce.ai 的大脑——一个受写穿认知（Write-Through Cognition）治理的自我更新模型。与传统前沿模型在训练时就冻结知识不同，Evermind 会把新知识直接写穿进模型：一次更新会替换之前的内容，无需任何协调对齐步骤，读取始终反映最新的真实状态。它由共享专家混合生成器（一个在线学习的稠密主干，加上按需调入的路由 SSM 专家）、按稳定键执行 upsert 的写穿式知识记忆，以及可训练的边缘系统动态层构成。它通过 WebGPU 运行在浏览器中、设备端或每一个智能体内部，其设计目标是在时效性、占用和所有权上胜出，而不是比拼原始规模。"
+          },
+          {
+            "question": "什么是 Builderforce.ai？",
+            "answer": "Builderforce.ai 是一块创意画布，团队与 AI 智能体在这里把想法变成可落地的成果。你可以在同一个可视化工作区里创建网站、工作流、原型、数据故事、模型、文档和交付计划，保留它们之间的关联，并把已批准的工作推进到受治理的执行中。"
+          },
+          {
+            "question": "Builderforce.ai 是企业级平台吗？",
+            "answer": "是的。团队可以从一块私有画布起步，随着工作规模扩大，再逐步加入共享工作区、基于角色的访问控制、审批流程、交付跟踪、成本可视化和审计证据。创意团队与运营团队共用一份互联的记录，不必再在分散的白板、文档、项目工具和智能体对话之间拼凑决策过程。"
+          },
+          {
+            "question": "我可以训练自己的智能体，并在自己的智能体内部调用它们吗？",
+            "answer": "可以——这正是核心闭环。借助 WebGPU LoRA 微调和 AI 评估引擎，在浏览器中训练一个定制智能体，把它发布到 Workforce Registry，然后雇用它，并在你自己的智能体内部调用它。你训练出的专家会成为主智能体可以委派任务的工具，让你构建并编排一支完全属于你自己的智能体工作队。"
+          },
+          {
+            "question": "管理智能体必须离开 VS Code 吗？",
+            "answer": "不必。Builderforce.ai 是一块以 Web 为先的创意画布。工程团队也可以使用 BuilderForce VS Code 扩展，把代码仓库上下文、诊断信息、智能体工作、评审与审批带到离代码更近的地方。"
+          },
+          {
+            "question": "Builderforce 有看板和项目管理功能吗？",
+            "answer": "有。项目负责组织你的工作，任务看板则在实时看板上跟踪它：泳道可以按状态或按智能体划分，还提供表格、日历和甘特图视图。人类与 AI 智能体共用同一块看板，你可以实时规划、分派并看着工作从待办一路流转到完成。"
+          },
+          {
+            "question": "看板能靠 AI 智能体自己运转吗？",
+            "answer": "能——这就是自主泳道执行。把一个智能体（云端或本地部署）分配到某条看板泳道，该泳道中的工单就会自动派发给它；智能体完成后，看板会一条泳道接一条泳道地自动推进，只在你选定的审批关口暂停。你在看板上管理成果，而不是一次次地发出提示词。"
+          },
+          {
+            "question": "Builderforce 如何压低 LLM token 成本？",
+            "answer": "跨界面的语义缓存会在新提示与某个已回答问题含义相同时，直接复用之前的答案，因此同一份工作永远不会被前沿模型计费两次。它分为两层——一层是使用 SSM 嵌入的免费设备端缓存（在浏览器和每个智能体中），另一层是按租户隔离的共享网关缓存——并与模型路由相结合：先用尽更便宜的模型，再动用高端模型。"
+          },
+          {
+            "question": "我能从项目组合一直到任务来规划并核算工作成本吗？",
+            "answer": "能——这就是 Planning Spine。项目组合、举措、史诗和任务位于同一条带日期的层级之上（目标与关键成果可挂接在任意层级），并呈现在一张甘特图中。由于每个任务都有埋点，它的成本——写入时即定价的 LLM 花费加上人力投入——会汇总到每一个上级，并拆分为 CAPEX 与 OPEX；当某项资本化决策需要签批时，系统会标记异常。工程、PMO 和财务看到的是同一组数字，整条层级还可以导出为 CSV。"
+          },
+          {
+            "question": "Builderforce 能修复它监控到的错误吗？",
+            "answer": "能。质量支柱会从浏览器 SDK、OpenTelemetry、Sentry、PostHog 或 LogRocket 摄取运行时错误，按指纹归并为去重后的错误组，然后把任意错误组转成修复任务，由云端智能体接手并以拉取请求的形式交付。不同于止步于堆栈跟踪的监控仪表盘，发现崩溃的同一个平台还会分派它、修复它，并提交 PR。"
+          },
+          {
+            "question": "我的团队能在 Builderforce 里开视频会议吗？",
+            "answer": "能。Builderforce 基于网状 WebRTC，直接在你的项目看板上进行实时音视频会议——在站会、规划会或复盘会上为全员打开摄像头，也可以随时发起临时通话或一对一通话。媒体点对点传输，从不经过服务器。共享的团队日历会叠加显示你的会议以及已连接的 Google 或 Microsoft 日历事件，标出每个人的空闲状态，“找个时间”功能会提议所有受邀者都真正有空的时段。你可以在 Web 端加入会议，也可以直接在 VS Code 中加入。"
+          },
+          {
+            "question": "我能在同一个对话串里同时和人类与 AI 智能体聊天吗？",
+            "answer": "能——这就是多方团队聊天。对话串在整个项目内共享，你可以通过邮件邀请人类成员，也可以把 AI 智能体拉进来，并把每条消息发给指定的参与者。发给人类的消息就是普通对话（智能体循环保持空闲）；@提及某个智能体，它就会以自己的身份回复，并运行一个有边界、受权限约束的工具循环来创建任务、更新 OKR 或读取看板——绝不会超出你本人的权限。同一段对话在 Web 端和 VS Code 中都能继续。"
+          },
+          {
+            "question": "使用 Builderforce 必须迁离 Jira 或 Linear 吗？",
+            "answer": "不必。看板连接器会与你已经在用的工具双向同步工作——Jira、Linear、monday、Asana、ClickUp、ServiceNow、Freshservice、Sentry、PagerDuty 和 GitHub。无论工单或事件起源于哪里，智能体都能接手处理，变更也会回写到原有的记录系统。你获得一个统一视图来编排一切，无需迁移，也不会被锁定。"
+          },
+          {
+            "question": "Builderforce 免费吗？",
+            "answer": "提供免费套餐。当前价格、强制执行的配额以及各套餐的功能可用性，均由平台的权益配置生成，并展示在定价页面上。"
+          },
+          {
+            "question": "如何在浏览器中训练模型？",
+            "answer": "新建一个项目，生成或上传数据集，然后在兼容 WebGPU 的设备上启动浏览器内 LoRA 训练向导。本地训练步骤始终留在浏览器中；远程评估、协作和发布是独立的操作，各有其边界。"
+          },
+          {
+            "question": "什么是 Workforce Registry？",
+            "answer": "Workforce Registry 是一个公开市场，训练好的 AI 智能体可以附带简介、技能和评估分数在此上架。其他团队和应用可以即时发现并雇用这些智能体。"
+          },
+          {
+            "question": "什么是 WebGPU LoRA 微调？",
+            "answer": "LoRA（低秩适配）训练的是一组较小的适配器权重，而不是整个模型。Builderforce 支持在兼容的模型和设备上进行基于浏览器的 WebGPU 训练；硬件限制以及任何远程步骤都会单独说明。"
+          },
+          {
+            "question": "AI 评估引擎如何工作？",
+            "answer": "训练完成后，一个独立的 AI 评审会按结构化质量指标为你的模型输出打分，包括正确性、推理质量和幻觉率。这样，在发布到 Workforce Registry 之前，你就能拿到客观的评估分数。"
+          },
+          {
+            "question": "我可以微调哪些模型？",
+            "answer": "Builderforce 支持对最多 20 亿参数的 Transformer 和 SSM（状态空间模型）架构进行 LoRA 微调。训练通过 Chrome、Edge 或任何支持 WebGPU 的浏览器中的 WebGPU API，在你的本地 GPU 上运行。"
+          },
+          {
+            "question": "Builderforce 能管理事件响应和值班吗？",
+            "answer": "能。Builderforce 可以端到端地处理事件：服务台/事件经理智能体负责分诊，值班轮换决定该呼叫谁，定时升级沿着升级链逐级推进，Teams、Slack 或邮件呼叫会触达响应人员——每个事件还有一个供人类与智能体协同的作战室信息流。钉在你的架构图上的监控每五分钟巡检一次，一旦越界就会自动启动调查。事件解决后，其根因分析会发布到你的知识库，并输入项目的 Evermind，让整支工作队从中学习，不再重复同样的故障。"
+          },
+          {
+            "question": "Builderforce 如何证明每部分工作都由正确的角色完成？",
+            "answer": "每个工单都带有一份参与清单——列出它所需的角色，并对应到能胜任每个角色的人类和智能体，因此绝不会把写代码的工作派给产品经理。一份只追加的问责报告会按角色记录谁、何时、结论、评论和贡献，并受默认拒绝的签批权限把关；资源评估会把缺失的角色标记为阻塞性缺口。质量靠看板上不可篡改的记录来证明，而不是事后寄望。"
+          },
+          {
+            "question": "Builderforce 能不花 token 调用模型就给出答案吗？",
+            "answer": "能。在付费调用模型之前，Brain 会先查询项目自己的记忆——一个精确重复问答缓存，外加可选开启的项目 Evermind 推理——一旦命中且置信度足够，就完全跳过 LLM。学习成果会扩散到该项目下的每一个 Evermind，因此一堂课教一次，处处都能作答。再结合语义响应缓存，随着项目记忆的增长，token 账单会不断下降。"
+          },
+          {
+            "question": "Builderforce 能响应 RFP 或 RFQ 吗？",
+            "answer": "能。CTO 与产品负责人智能体会把一个已分析的项目转化为带品牌、附成本的方案书——成本与损益、分阶段交付甘特图、风险、依赖，以及与需求相匹配的能力清单——并与需求方的配色和标志联合署名。基于新鲜度把关的依据检查会在作答前重新扫描过时的项目，确保方案反映真实系统。RFP 响应就作为一个标签页存放在项目本身之中。"
+          },
+          {
+            "question": "训练期间我的数据是私密的吗？",
+            "answer": "训练计算在受支持的 WebGPU 设备上本地运行。只有当你使用明确连接的服务时——例如数据集生成、协作、使用远程模型进行评估或发布工件——数据才会被传输；启用这些步骤前请先加以审阅。"
+          },
+          {
+            "question": "Builderforce 与云端训练平台相比如何？",
+            "answer": "云端训练平台按 GPU 小时计费，而 Builderforce 在你本地的 WebGPU 设备上运行训练，零成本。它还内置了数据集生成、AI 评估以及发布智能体的市场——这些功能通常需要多个独立工具才能实现。"
+          },
+          {
+            "question": "我能把 Builderforce 智能体与 BuilderForce Agents 集成吗？",
+            "answer": "能——在 Builderforce 上训练的模型可以导出并发布为 Evermind 模型，你自托管的 BuilderForce Agents 网关会直接把它当作模型来调用，而不仅仅是记忆层。平台支持完整流程：在浏览器中训练定制 SSM、发布它，并通过兼容 OpenAI 的 API 把线上流量路由给它。"
+          },
+          {
+            "question": "我能用前沿模型的答案来训练自己的模型吗？",
+            "answer": "能——这就是教师蒸馏。把任意前沿 LLM（Opus、Mistral、GLM 等）指定为项目 Evermind 的教师。团队每交付一项真实工作，教师都会为该任务给出理想答案，你自己的模型从这个范例中学习，而不是从原始文本中学习——从而把前沿级的质量稳步吸收进一个你拥有并在设备端运行的小模型。它受成本约束（只在有 token 预算时才花费），并采取尽力而为的策略（教师未能作答时退回到从原始工作中学习），因此不会丢失任何一课。"
+          },
+          {
+            "question": "每个项目都有自己的模型吗？",
+            "answer": "是的。每个项目在创建时都会配备自己的 Evermind——一个自我更新的模型，通过同一套共享学习机制，从全部四个工作室（设计、语音、LLM 和视频）的每一次运行中学习。纠正过的事实会保存在写穿式事实库中，并在各会话间持久化；这个事实库由 Web 应用、VS Code、云端和本地部署的智能体共享，所以昨天帮过你的大脑，今天会更聪明。推理默认关闭，需你主动开启，模型也可以在 LLM Studio 中编辑。"
+          },
+          {
+            "question": "我能给看板设卡，让只有正确的角色才能完成工单吗？",
+            "answer": "能——这就是智能体工作队看板。从一套一等公民的岗位角色体系为每个项目配备人类与 AI 智能体，并把泳道配置为工单推进前必须经过合适的审阅者。每个标记为完成的事项都附带逐单的角色与诊断签批审计，角色覆盖诊断会在看板上标出缺口，因此质量是被强制保证的，而不是被假定的。"
+          },
+          {
+            "question": "Builderforce 如何核实标记为完成的工作是否真的完成了？",
+            "answer": "内置的验证智能体会审查每一个标记为完成的事项，记录结论，并为任何不达标之处开出 GAP 任务。临时的聊天工作也会被自动记录为可见的工单；同一条合并到完成的共享路径涵盖人工审批、CI 通过和部署后验证——因此，没有证据就不会有任何事项被报告为已完成。"
+          },
+          {
+            "question": "我能买卖看板模板吗？",
+            "answer": "能。把一套交付流程——泳道、必需角色、评审关口和推荐名单——打包成看板模板，发布到市场上出售或分享。任何团队都可以一键把经过验证的模板安装到项目中，直接继承一套受治理、按角色把关的工作流，而不必从零搭建。"
+          },
+          {
+            "question": "我的融资演示文稿里的数字从哪里来？",
+            "answer": "来自你的账本。连接 Stripe、Xero 或 QuickBooks 后，跑道、烧钱率、ARR 和同期群数据都会根据交易计算得出，并标注读取日期——因此，任何没有来源支撑的数字都会在投资人发现之前被标记出来，而不是被手动敲进幻灯片、在不知不觉中过时。"
+          },
+          {
+            "question": "谁能看到我的数据室？",
+            "answer": "只有你邀请的人，而且按你设定的条件：需要签署的 NDA、带有其姓名的水印、到期日期，以及他们打开过的每个文件的记录。访问权限授予的是投资人本人而不是某个文件夹，因此一次撤销即可覆盖所有数据室和更新——而且可以随时撤销。"
+          }
+        ],
+        "pricing": [
+          {
+            "question": "Builderforce 真的免费吗？",
+            "answer": "提供免费套餐。当前由 API 得出的价格、配额和功能可用性，请以定价页面为准。"
+          },
+          {
+            "question": "Pro 套餐包含什么？",
+            "answer": "定价页面会获取当前的 Pro 价格，并依据 API 所使用的同一套强制执行的权益配置得出各套餐的可用功能。"
+          },
+          {
+            "question": "我可以随时更换套餐吗？",
+            "answer": "可以——你可以随时在“定价与账单”页面升级或降级。升级立即生效；降级在当前计费周期结束时生效。"
+          },
+          {
+            "question": "什么是托管 AgentHost？",
+            "answer": "托管 AgentHost 是由 Builderforce 运营的托管版 BuilderForce Agents 实例。其当前价格由定价页面上的公开定价约定提供。"
+          },
+          {
+            "question": "你们提供按年计费吗？",
+            "answer": "提供——Pro 和 Teams 套餐均支持按年计费，最多可节省 20%。结账时选择按年即可。"
+          }
+        ],
+        "login": [
+          {
+            "question": "有哪些登录方式？",
+            "answer": "Builderforce 支持邮箱加密码、魔法链接（无密码邮件登录），以及通过 Google、GitHub、LinkedIn 和 Microsoft 进行 OAuth 登录。"
+          },
+          {
+            "question": "什么是魔法链接？",
+            "answer": "魔法链接是发送到你邮箱的一次性登录网址。点击即可登录，无需密码。魔法链接在 15 分钟后失效。"
+          },
+          {
+            "question": "我忘记了密码，如何重置？",
+            "answer": "在登录页面使用魔法链接选项：输入邮箱并点击“改为向我发送登录链接”，即可无需密码登录，然后在“设置”中更新密码。"
+          }
+        ],
+        "register": [
+          {
+            "question": "创建账户免费吗？",
+            "answer": "免费——创建账户不收费，并包含 14 天 Pro 试用，无需信用卡。试用结束后，你将保留在免费套餐，继续使用 WebGPU 训练、数据集工具和 Workforce 浏览。"
+          },
+          {
+            "question": "设置需要多长时间？",
+            "answer": "不到 60 秒。用邮箱或 OAuth 注册后，你会立即进入自己的工作区。无需安装，无需配置——一切都在浏览器中运行。"
+          },
+          {
+            "question": "开始使用需要准备什么？",
+            "answer": "一个支持 WebGPU 的现代浏览器（Chrome 113+、Edge 113+）。不需要 GPU 服务器、Python 环境或 Docker——Builderforce 完全在浏览器中运行。"
+          },
+          {
+            "question": "Builderforce 会收取佣金吗？",
+            "answer": "市场费用以发布和结账时显示的现行卖家条款为准。上架付费智能体前，请先查看这些条款。"
+          }
+        ],
+        "freelancer": [
+          {
+            "question": "Builderforce 会从我的费率中抽成吗？",
+            "answer": "费用和付款条款以当前的合作协议为准。接单前请先查看；在已配置的情况下，经批准的工时记录可用于计费。"
+          },
+          {
+            "question": "我的工时如何记录？",
+            "answer": "计费工时会根据你在门户和 VS Code 扩展中产生的活动自动记录。你永远不必手动填写工时表，每张工时卡在付款前都由你（以及客户）审核。"
+          },
+          {
+            "question": "谁能看到我的个人资料？",
+            "answer": "由你决定。接单资料可以设为公开（平台上的任何团队都能发现），也可以设为私密（仅对你分享的团队可见）。无论哪种方式，都会展示你的技能、时薪和 hired.video 简历。"
+          },
+          {
+            "question": "我需要自带客户才能开始吗？",
+            "answer": "不需要。资料上线后，你就可以浏览“寻找工作”，与 Builderforce 上任何租户的零工需求匹配，然后跨项目面试并获得雇用——全程无需离开平台。"
+          }
+        ],
+        "blog": [
+          {
+            "question": "Builderforce 博客涵盖哪些主题？",
+            "answer": "博客涵盖 AI 智能体训练、WebGPU LoRA 微调、数据集生成、多智能体编排、自主看板（泳道）执行、用于节省 token 的跨界面语义缓存、Planning Spine（承载成本的从项目组合到任务的交付）、带一键智能体修复的错误可观测性、知识管理与合规、借助 Agentic Tester 的自主 QA、单一界面看板连接器、BuilderForce Agents 集成，以及产品开发最佳实践。"
+          },
+          {
+            "question": "博客会把 Builderforce.ai 与其他 AI 编程工具进行比较吗？",
+            "answer": "会。博客收录了 Builderforce.ai 与 GitHub Copilot、Cursor 和 Windsurf、Claude Code 以及 Devin 的正面对比，还有一篇以评估标准为先的 2026 年最佳 AI 编程智能体综述。每篇对比都会说明单智能体工具止步于何处，以及自托管、不绑定模型的多智能体工作队从何处开始。"
+          },
+          {
+            "question": "文章由谁撰写？",
+            "answer": "文章由 Builderforce.ai 创始人 Sean Hogg 撰写，内容包括实用指南，以及对平台架构与能力的深度解析。"
+          }
+        ],
+        "projectsTasks": [
+          {
+            "question": "Builderforce.ai 中的“项目 / 任务”工作区是什么？",
+            "answer": "“项目 / 任务”是一个统一的工作管理界面，用来组织你的 AI 工作队所构建的一切。项目是一个协作工作区，包含 Canvas 构建、文件、已分配的智能体和工作流；“任务”标签页则是一块任务看板，用于规划工作、把工作分派给智能体，并跟踪它经历的每个状态。项目和任务位于同一页面的两个标签页中，让你在组织工作与跟踪工作之间切换时无需离开这个界面。"
+          },
+          {
+            "question": "AI 智能体如何接手并运行任务？",
+            "answer": "在项目看板上创建任务、设置优先级，并把它分配给一个 AgentHost（已连接的智能体运行时）。智能体接手任务后，会让它经过你的审批关口；随着任务从待办流转到进行中再到完成，看板会实时更新——覆盖本地智能体和远程 AgentHost 网格。"
+          },
+          {
+            "question": "任务看板支持哪些视图？",
+            "answer": "任务可以以看板（按状态或按智能体划分泳道）、可排序表格、日历或甘特时间线的形式查看。项目也提供同样的卡片、表格、日历和甘特视图，因此你可以用相同的方式为两者规划交付日期和依赖关系。"
+          },
+          {
+            "question": "我能把任务限定在单个项目内吗？",
+            "answer": "能。打开一个项目，使用它的“任务看板”操作，即可直接跳转到已按该项目筛选的“任务”标签页；也可以浏览所有项目中的全部任务，并按项目、状态或优先级筛选。项目范围会保存在 URL 中，因此该视图可以分享。"
+          },
+          {
+            "question": "项目和任务如何与工作流和智能体关联？",
+            "answer": "每个项目都可以有已分配的智能体，以及可重复、带审批关口的工作流。任务是流向这些智能体的工作单元；工作流则编排多步骤的任务执行。二者共同构成从规划工作到在智能体工作队上运行它的闭环，并具备完整的可观测性和审计轨迹。"
+          }
+        ]
+      },
+      "auth": {
+        "login": {
+          "eyebrow": "欢迎回来",
+          "heading": "从上次离开的地方继续",
+          "intro": "登录你的 AI 智能体工作区——你训练的模型、实时看板和整支智能体工作队，都原样等着你。",
+          "quote": "你的工作始终属于你——Builderforce 在你本地的 WebGPU 设备上零成本运行训练，没有 GPU 账单，也不会被供应商锁定。",
+          "stats": {
+            "plan": {
+              "value": "免费",
+              "label": "套餐可用"
+            },
+            "signIn": {
+              "value": "<60 秒",
+              "label": "即可登录"
+            },
+            "params": {
+              "value": "20 亿+",
+              "label": "浏览器内参数规模"
+            },
+            "commission": {
+              "value": "0%",
+              "label": "智能体佣金"
+            }
+          },
+          "bullets": {
+            "evermind": {
+              "title": "Evermind",
+              "desc": "一个项目模型与记忆系统，为受支持的工作流提供基于键的更新。"
+            },
+            "agents": {
+              "title": "你训练的智能体",
+              "desc": "调用你用 WebGPU LoRA 微调出的专家，一切都在你离开时的位置。"
+            },
+            "kanban": {
+              "title": "实时看板工作队",
+              "desc": "人类与 AI 智能体在同一块看板上交付，从待办到完成。"
+            },
+            "vscode": {
+              "title": "无需离开 VS Code",
+              "desc": "聊天、分派、评审与审批——全都在编辑器里完成。"
+            },
+            "passwordless": {
+              "title": "无密码登录",
+              "desc": "魔法链接，以及通过 Google、GitHub、LinkedIn 和 Microsoft 的 OAuth 登录。"
+            },
+            "tester": {
+              "title": "Agentic Tester",
+              "desc": "一个自主 QA 智能体，会在浏览器中测试你的应用并提交缺陷。"
+            }
+          }
+        },
+        "standard": {
+          "eyebrow": "用 AI 创作",
+          "heading": "把你的下一个想法变成现实",
+          "intro": "打开一块创意画布，与团队和 AI 智能体一起构建互联的成果，审阅工作，并把已批准的成果推进到交付。",
+          "quote": "从你想要的成果出发，而不是从你以为必须使用的软件出发。",
+          "stats": {
+            "plan": {
+              "value": "免费",
+              "label": "套餐可用"
+            },
+            "trial": {
+              "value": "14 天",
+              "label": "含 Pro 试用"
+            },
+            "canvas": {
+              "value": "一块画布",
+              "label": "从想法到交付"
+            },
+            "together": {
+              "value": "人 + AI",
+              "label": "协同创作"
+            }
+          },
+          "bullets": {
+            "canvas": {
+              "title": "从画布开始",
+              "desc": "先给想法成长的空间，再决定用哪种固定的工具或结构。"
+            },
+            "artifacts": {
+              "title": "创建实时成果",
+              "desc": "把网站、工作流、数据故事、模型和计划构建为可编辑的对象。"
+            },
+            "collaborate": {
+              "title": "与人和智能体一起创作",
+              "desc": "让协作者、上下文和专家 AI 始终陪在工作旁边。"
+            },
+            "review": {
+              "title": "交付前先审阅",
+              "desc": "检查拟议的变更，只把已批准的工作推进到执行。"
+            },
+            "journey": {
+              "title": "串联整个历程",
+              "desc": "保留从最初想法到项目、工作流和成果的完整路径。"
+            },
+            "engineering": {
+              "title": "需要时接入工程",
+              "desc": "当工作变成代码时，把代码仓库和诊断上下文带进 VS Code。"
+            }
+          }
+        },
+        "freelancer": {
+          "eyebrow": "获得雇用",
+          "heading": "接到工作，每一小时都有回报。",
+          "intro": "发布附带 hired.video 简历的接单资料，被平台上的每个团队发现，并让你在门户和 VS Code 中工作时，计费工时自动记录。",
+          "quote": "设定你的费率，查看当前的合作条款，并用受支持的工时记录来计费已批准的工作。",
+          "stats": {
+            "commission": {
+              "value": "0%",
+              "label": "费率零抽成"
+            },
+            "timeTracking": {
+              "value": "自动",
+              "label": "工作时自动计时"
+            },
+            "crossTenant": {
+              "value": "跨租户",
+              "label": "来自任何团队的零工"
+            },
+            "resume": {
+              "value": "hired.video",
+              "label": "内置简历"
+            }
+          },
+          "bullets": {
+            "profile": {
+              "title": "接单资料",
+              "desc": "设定费率、展示技能，选择公开或仅限邀请。"
+            },
+            "resume": {
+              "title": "hired.video 简历",
+              "desc": "你的视频简历随资料同行，无需重复上传。"
+            },
+            "findWork": {
+              "title": "寻找工作",
+              "desc": "浏览 Builderforce 上所有租户的零工，并获得匹配。"
+            },
+            "timecards": {
+              "title": "自动工时卡",
+              "desc": "计费工时根据真实活动记录，无需手动登记。"
+            },
+            "beside": {
+              "title": "与 AI 智能体并肩工作",
+              "desc": "在你加入的任何项目中，与人类和智能体同处一块看板。"
+            },
+            "approvePay": {
+              "title": "先审批后付款",
+              "desc": "每张工时卡在付款前都经过审核，账目始终清晰。"
+            }
+          }
+        },
+        "sales": {
+          "eyebrow": "与 Builderforce 一起赚取收入",
+          "heading": "建立销售管线，与我们共同成长。",
+          "intro": "加入 Builderforce 推荐与销售合作伙伴计划，获得一个专注的工作区，用于客户开发、营销活动、联系人、会议和每周辅导。",
+          "quote": "一套务实的销售运营系统，把持续的触达转化为合格的 Builderforce 商机。",
+          "stats": {
+            "hub": {
+              "value": "一个中心",
+              "label": "从联系人到成交"
+            },
+            "weekly": {
+              "value": "每周",
+              "label": "目标与辅导"
+            },
+            "campaigns": {
+              "value": "内置",
+              "label": "营销活动工具"
+            },
+            "access": {
+              "value": "直达",
+              "label": "管理层对接"
+            }
+          },
+          "bullets": {
+            "markets": {
+              "title": "目标市场",
+              "desc": "定义理想客户细分，让每一场营销活动都聚焦。"
+            },
+            "email": {
+              "title": "邮件营销活动",
+              "desc": "基于已批准的话术和销售素材构建外联内容。"
+            },
+            "leads": {
+              "title": "线索管理",
+              "desc": "导入联系人，推动商机沿清晰的管线向前推进。"
+            },
+            "meetings": {
+              "title": "内置会议",
+              "desc": "连接你的日历，预约潜在客户或 Builderforce 管理层。"
+            },
+            "momentum": {
+              "title": "每周推进",
+              "desc": "设定活动目标，获取推进管线的下一步最佳行动。"
+            },
+            "toolkit": {
+              "title": "营销工具包",
+              "desc": "使用最新的演示文稿、单页资料、模板和营销活动指南。"
+            }
+          }
+        }
+      },
+      "definedTerms": {
+        "evermind": {
+          "name": "Evermind",
+          "description": "Builderforce.ai 的自我更新模型，也是平台的大脑。它受写穿认知（Write-Through Cognition）治理，由共享专家混合 SSM 生成器（一个始终在线的稠密主干，加上按需懒加载的路由专家）、写穿式知识记忆，以及可训练的边缘系统动态层构成。它通过 WebGPU 运行在浏览器中、设备端或每一个智能体内部，设计目标是在时效性、占用和所有权上胜过冻结的前沿模型，而不是比拼原始规模。"
+        },
+        "writeThroughCognition": {
+          "name": "写穿认知（Write-Through Cognition）",
+          "description": "Evermind 的治理原则：知识被直接写穿进模型，因此一次更新会替换之前的内容，而不是与之并列追加。读取始终反映最新的真实状态，永远没有先过时再协调对齐的步骤——这与用于缓存的写时失效规则相同，只是被应用到了模型的知识层，使其永远不会漂移过时。"
+        },
+        "webgpuLora": {
+          "name": "WebGPU LoRA 微调",
+          "description": "一种浏览器原生的 AI 模型微调方法，基于 WebGPU API 驱动的低秩适配（LoRA）。无需云端 GPU，即可直接在 Chrome 中训练最多 20 亿参数的模型。"
+        },
+        "workforceRegistry": {
+          "name": "Workforce Registry",
+          "description": "一个公开市场，训练好的 AI 智能体会附带简介、技能和评估分数在此上架。团队和应用可以从中即时发现并雇用智能体。"
+        },
+        "evaluationEngine": {
+          "name": "AI 评估引擎",
+          "description": "一套自动评分系统，由独立的 AI 评审按结构化指标评估模型输出，包括正确性、推理质量和幻觉率。"
+        },
+        "instructionDataset": {
+          "name": "指令微调数据集",
+          "description": "由提示词与回复配对组成的结构化集合，用于针对特定任务微调语言模型。Builderforce 只需一条能力提示词，就能在 30 秒内生成这样的数据集。"
+        },
+        "agentOrchestration": {
+          "name": "智能体编排",
+          "description": "协调多个 AI 智能体共同完成复杂任务，包括工作流排序、审批关口、集群网状组网，以及跨 BuilderForce Agents 实例的远程派发。"
+        },
+        "multiAgentOrchestration": {
+          "name": "多智能体编排",
+          "description": "通过依赖 DAG，让多个各有明确角色的专家 AI 智能体围绕同一项工作协同运转，而不是驱动单个智能体一次只给出一条建议。Builderforce.ai 用七种角色端到端地运行规划、缺陷修复、重构和对抗式评审工作流。"
+        },
+        "humanInLoopGovernance": {
+          "name": "人在回路治理",
+          "description": "一种运营模式：已配置的 AI 执行路径可以在审批关口暂停，由人来批准或拒绝具有重大影响的操作。留存的证据及其覆盖范围取决于已埋点的入口。"
+        },
+        "agentInAgent": {
+          "name": "智能体内委派",
+          "description": "一种模式：你训练并发布的定制智能体，会成为主智能体可以调用、委派工作的工具。在 Builderforce.ai 上，你先训练一个智能体（浏览器内 WebGPU LoRA + 评估），把它发布到 Workforce Registry，然后在自己的智能体内部雇用并调用它——从训练到使用形成闭环。"
+        },
+        "agentKanban": {
+          "name": "智能体看板",
+          "description": "一块实时任务看板，人类团队成员与 AI 智能体的工作都在上面规划、分派和跟踪。Builderforce.ai 支持按状态或按智能体划分泳道，并提供表格、日历和甘特图视图；随着智能体接手任务，任务会实时从待办流转到完成。"
+        },
+        "autonomousSwimlane": {
+          "name": "自主泳道执行",
+          "description": "一种自动驾驶式看板模式：把一个 AI 智能体（云端或本地部署）分配到某条看板泳道，该泳道中的工单会自动派发给它；工作完成后，看板一条泳道接一条泳道地推进，只在你配置的审批关口暂停——让你在看板上管理成果，而不是一次次发出提示词。"
+        },
+        "semanticCache": {
+          "name": "跨界面语义缓存",
+          "description": "一种以嵌入为键的缓存：当新提示是某个已回答问题的改写时，直接复用之前的答案，因此同一份工作永远不会被前沿模型计费两次。Builderforce.ai 将其分为两层运行——一层是免费的设备端缓存（SSM 嵌入，位于浏览器和每个智能体中），另一层是按租户隔离的共享网关缓存——因此在 Web 应用中命中缓存，也能为智能体节省 token。"
+        },
+        "systemOfRecord": {
+          "name": "智能体工作的记录系统",
+          "description": "一个统一平台：每一个工作单元——无论由人类还是 AI 智能体完成——都会在从构想、交付到复盘学习的整个生命周期中被记录、核算成本并归属到人。Builderforce.ai 为每一次任务流转、智能体运行、LLM 调用和部署埋点，因此同一份数据就能回答：做了什么、由谁完成（人类还是智能体）、花了多少、是否奏效——无需把看板、代码托管、可观测性工具和电子表格拼接在一起。"
+        },
+        "aiFinops": {
+          "name": "AI FinOps",
+          "description": "对 AI 工作的成本进行归属、预算和预测的财务运营实践。在 Builderforce.ai 上，每一个 token 和任务都在写入时定价，并沿着工单 → 项目 → 举措 → 租户逐级汇总，让财务团队看到单位成果成本（例如每个合并的拉取请求的成本）、设定预算并预测支出，而不必事后去核对供应商账单。"
+        },
+        "innovationFunnel": {
+          "name": "创新漏斗",
+          "description": "一个想法在 Builderforce.ai 上经历的端到端流程——构想 → 已验证 → 构建中 → 已交付 → 已度量——并在每个阶段跟踪转化率和价值实现时间。它为高管提供创新的吞吐量与 ROI 视图，就像销售漏斗为销售管线提供收入视图一样。"
+        },
+        "roleLens": {
+          "name": "按角色划分的洞察视角",
+          "description": "针对不同角色、面向同一批已埋点工作的定制视图：工程看交付与 DORA 指标，财务看成本与 FinOps，PMO 和 CEO 看项目组合汇总与创新漏斗，安全团队看不可篡改的审计轨迹。由于数据只采集一次并完成归属，每个视角都是同一真实来源的投影，而不是一份单独的报告。"
+        },
+        "planningSpine": {
+          "name": "Planning Spine",
+          "description": "Builderforce.ai 统一规划、交付与成本的单一带日期层级——项目组合 → 举措 → 史诗 → 任务，目标与关键成果可作为目标层挂接在任意层级。每个叶子节点的成本（写入时定价的 LLM 花费加上人力投入）会汇总到每一个上级，并拆分为 CAPEX 与 OPEX；当某项资本化决策与其上级相矛盾时，系统会标记异常。它呈现为一张嵌套甘特图，并可导出为 CSV，让工程、PMO 和财务无需任何对账步骤就能看到同一组数字。"
+        },
+        "errorObservability": {
+          "name": "错误可观测性与一键智能体修复",
+          "description": "Builderforce.ai 的质量支柱会从浏览器 SDK、OpenTelemetry、Sentry、PostHog 或 LogRocket 摄取运行时错误，按指纹归并为去重后的错误组，并把任意错误组转成修复任务，由云端智能体接手并以拉取请求的形式交付。不同于止步于堆栈跟踪的监控仪表盘，发现崩溃的同一个平台还会分派它、修复它并提交 PR——错误量也和 token 一样，作为计量资源显示在同一个用量视图中。"
+        },
+        "knowledgeCompliance": {
+          "name": "知识管理与合规审计轨迹",
+          "description": "Builderforce.ai 上用于 SOP、流程和文档的版本化知识库。每次发布都会生成不可篡改的快照，阅读确认绑定到具体版本并带有时间戳，还能按用户跟踪逾期情况，为 SOX、TISAX 和 ISO 27001 提供可直接用于审计的证据。文档可由 AI 撰写和分析，基于 CRDT 实时协同编辑，并按页面控制访问权限——而且由于它们就存放在智能体平台上，用来证明合规的同一批知识，也在为智能体工作队提供依据。"
+        },
+        "maturityIndex": {
+          "name": "智能体成熟度指数",
+          "description": "一套 CMMI/COBIT 风格的成熟度模型，按 1–5 级（初始级 → 优化级）评估技术组织在六项实践上的运作水平——软件交付、发布与运维（DORA）、质量保障、项目管理、智能体 AI 运营，以及治理与安全。Builderforce.ai 提供两种评分方式：一份无需登录的免费自评，以及一项数据驱动的诊断——根据真实遥测数据（周期时间、DORA、返工、运行结果）客观推导每项实践的等级，并输出一份按优先级排序的成熟与创新计划。"
+        },
+        "teacherDistillation": {
+          "name": "前沿模型教师蒸馏",
+          "description": "Builderforce.ai 上的一种训练模式：把任意前沿 LLM（例如 Opus、Mistral 或 GLM）指定为项目 Evermind 的教师。团队每交付一项真实任务，系统都会通过计量网关向教师请求理想答案，自我更新的模型则基于（任务上下文 → 教师范例）这组配对进行适配，而不是基于原始运行文本——让一个小型的设备端模型稳步吸收大得多的模型的质量。教师调用受租户 token 预算约束，并采取尽力而为的策略：未能获得答案时退回到基于原始文本学习，因此学习循环永不停滞。"
+        },
+        "projectEvermind": {
+          "name": "项目 Evermind",
+          "description": "Builderforce.ai 自我更新的 Evermind 模型的项目级实例，在项目创建时自动配备。它通过同一套共享学习机制和单一写入协调器，从全部四个工作室（设计、语音、LLM 和视频）的每一次运行中学习，并从一个由 Web 应用、VS Code、云端和本地部署智能体共享的写穿式事实库中读取纠正后的事实。推理按项目可选开启，模型可在 LLM Studio 中编辑。"
+        },
+        "workforceKanban": {
+          "name": "智能体工作队看板",
+          "description": "Builderforce.ai 按角色把关的交付看板：每个项目都从一套一等公民的岗位角色体系中配备人类与 AI 智能体，从推荐名单起步。泳道可以要求特定审阅者通过后工单才能推进，每个完成的工单都附带角色与诊断签批审计，角色覆盖诊断则会暴露缺口——因此质量在看板上被强制保证，而不是被假定。受治理的看板模板（泳道、角色、关口和名单）可以发布到市场、在市场上出售，也可以从市场安装。"
+        },
+        "validatorAgent": {
+          "name": "验证智能体",
+          "description": "Builderforce.ai 的内置智能体，预置在每个工作区中。它会审查每个标记为完成的工作项，在评审台账中记录结论，并为任何未完成之处开出 GAP 任务。临时的聊天工作会被自动记录为可见的工单；同一条合并到完成的共享路径（人工审批、CI 通过和部署后验证）都会经过验证智能体，因此没有证据就不会有任何事项被报告为已完成。"
+        },
+        "learnedRouting": {
+          "name": "学习型模型路由",
+          "description": "Builderforce.ai 上一项兼顾成本与质量的优化：根据结果为每次运行打分，并据此重新排序由哪个模型处理每类操作——便宜的模型承担它们擅长的工作，高端模型则留给真正需要它们的任务。再结合跨界面语义缓存，随着平台逐渐了解团队的工作负载，token 账单会不断下降；同时提供一个开关标志，随时切回手动控制。"
+        },
+        "memoryFirst": {
+          "name": "记忆优先推理",
+          "description": "Builderforce.ai 上一种节省 token 的模式：在任何付费模型调用之前，Brain 会先查询项目自己的记忆——一个精确重复问答缓存，外加可选开启的项目 Evermind 推理——一旦命中且置信度足够，就完全跳过前沿 LLM。这一决策只有单一来源，因此每个界面（Web 和 VS Code）的行为完全一致；学习成果会扩散到该项目下的每一个 Evermind（它自己的主模型及其 Canvas 构建），一堂课教一次，处处都能作答，token 账单也会随记忆的增长而下降。"
+        },
+        "roleGatedAccountability": {
+          "name": "按角色把关的问责",
+          "description": "Builderforce.ai 用来证明工单的每一部分都由正确角色完成的模型。每个工单的参与清单会把所需角色对应到能胜任的人类与智能体——因此不具备相应能力的负责人（例如产品经理）绝不会被派到产出阶段——一份只追加的问责报告则会按角色记录谁、何时、结论、评论和贡献，并受默认拒绝的签批权限把关；资源评估会把缺失的角色显示为阻塞性缺口。质量通过看板上不可篡改的记录来证明，而不是事后假定。"
+        },
+        "incidentRca": {
+          "name": "带学习型根因分析的事件管理",
+          "description": "Builderforce.ai 的端到端事件响应：服务台/事件经理智能体负责分诊，值班轮换决定该呼叫谁，定时升级沿升级链逐级推进，Teams/Slack/邮件呼叫触达响应人员，每个事件的作战室信息流则协调人类与智能体。钉在上传的架构图上的主动监控每五分钟巡检一次，一旦越界就会自动启动调查。事件解决后，根因分析会发布到知识库并输入项目的 Evermind，让整支工作队从中学习，不再重复同样的故障。"
+        },
+        "rfpResponse": {
+          "name": "自动化 RFP 响应",
+          "description": "Builderforce.ai 上的一项售前能力：CTO 与产品负责人智能体把项目已分析的能力转化为带品牌、附成本的方案书——成本与损益、分阶段交付甘特图、风险、依赖，以及与需求相匹配的能力清单——并与需求方的配色和标志联合署名。基于新鲜度把关的依据检查会在作答前重新运行确定性的系统审计，确保方案反映系统当下的真实状态。RFP 响应就作为一个标签页存放在项目本身之中。"
+        }
+      },
+      "product": {
+        "prerequisites": {
+          "account": "账户",
+          "webgpuDevice": "用于本地训练的受支持 WebGPU 设备",
+          "vscodeExtension": "VS Code 扩展",
+          "sharedSessionsAccount": "用于共享会话的账户",
+          "agentHost": "已注册的 AgentHost",
+          "providerCredentials": "受支持的服务商凭据",
+          "installOrPublishAccount": "用于安装或发布的账户",
+          "publishAccount": "用于发布的账户",
+          "policyGate": "已配置的策略关口",
+          "deploymentConfig": "与部署相适应的配置",
+          "instrumentedExecution": "已埋点的平台执行",
+          "errorSource": "已配置的错误来源"
+        },
+        "operations": {
+          "creationCanvas": {
+            "owner": "创作",
+            "limitation": "Beta 覆盖范围仅限已列明的对象类型和移交类型。",
+            "exports": [
+              "画布导出",
+              "受支持的交付移交"
+            ]
+          },
+          "sessionLibrary": {
+            "owner": "创作",
+            "limitation": "共享持久化需要账户和工作区。",
+            "exports": [
+              "会话导出"
+            ]
+          },
+          "workflowsEvaluation": {
+            "owner": "创作 AI",
+            "limitation": "评估质量取决于可用的源上下文和引用。",
+            "exports": [
+              "评估结果"
+            ]
+          },
+          "websitesDataPrototypes": {
+            "owner": "创作",
+            "limitation": "成果的运行时和导出格式因对象类型而异。",
+            "exports": [
+              "按对象类型导出"
+            ]
+          },
+          "evermindLlmVoice": {
+            "owner": "AI 工作室",
+            "limitation": "本地路径需要兼容的 WebGPU 硬件；发布使用托管服务。",
+            "exports": [
+              "受支持的模型包",
+              "生成的媒体"
+            ]
+          },
+          "creationCanvasVsCode": {
+            "owner": "开发者体验",
+            "limitation": "功能对等仅限扩展约定所支持的对象和操作。",
+            "exports": [
+              "工作区上下文"
+            ]
+          },
+          "workflowExecution": {
+            "owner": "工作流",
+            "limitation": "节点行为和治理覆盖范围因所配置的步骤类型而异。",
+            "exports": [
+              "执行结果"
+            ]
+          },
+          "projectsTasks": {
+            "owner": "交付",
+            "limitation": "外部看板的行为取决于连接器配置。",
+            "exports": [
+              "CSV",
+              "已连接看板同步"
+            ]
+          },
+          "planningSpine": {
+            "owner": "PMO",
+            "limitation": "成本和成果汇总仅反映已埋点并已归属的记录。",
+            "exports": [
+              "CSV"
+            ]
+          },
+          "boardConnectors": {
+            "owner": "集成",
+            "limitation": "映射、权限、同步方向和冲突处理因服务商而异。",
+            "exports": [
+              "按服务商同步"
+            ]
+          },
+          "workforceMesh": {
+            "owner": "智能体运行时",
+            "limitation": "需要已注册的主机以及已配置的网络/运行时访问。",
+            "exports": [
+              "执行记录"
+            ]
+          },
+          "sessionConversations": {
+            "owner": "协作",
+            "limitation": "对话保留期限和可用工具取决于工作区配置。",
+            "exports": [
+              "会话导出"
+            ]
+          },
+          "workforceKanban": {
+            "owner": "交付",
+            "limitation": "已安装的模板仍受工作区角色和权益约束。",
+            "exports": [
+              "模板包"
+            ]
+          },
+          "knowledgeSops": {
+            "owner": "知识",
+            "limitation": "是否适用于合规，取决于已配置的控制措施和组织审查。",
+            "exports": [
+              "已发布快照"
+            ]
+          },
+          "skills": {
+            "owner": "市场",
+            "limitation": "已安装的技能以其所配置运行时的权限执行。",
+            "exports": [
+              "技能包"
+            ]
+          },
+          "personas": {
+            "owner": "市场",
+            "limitation": "人格行为因所选模型和工作流而异。",
+            "exports": [
+              "人格定义"
+            ]
+          },
+          "promptLibrary": {
+            "owner": "市场",
+            "limitation": "提示词输出因模型、上下文和已连接的工具而异。",
+            "exports": [
+              "提示词模板"
+            ]
+          },
+          "contentManager": {
+            "owner": "内容",
+            "limitation": "能否复用取决于目标界面和访问权限。",
+            "exports": [
+              "内容块"
+            ]
+          },
+          "approvals": {
+            "owner": "运行时与治理",
+            "limitation": "适用于接入生效策略解析器的执行路径。",
+            "exports": [
+              "决策记录"
+            ]
+          },
+          "security": {
+            "owner": "安全",
+            "limitation": "控制覆盖范围取决于部署和集成配置。",
+            "exports": [
+              "可用的审计证据"
+            ]
+          },
+          "observability": {
+            "owner": "可观测性",
+            "limitation": "覆盖范围因已埋点的界面和入口而异。",
+            "exports": [
+              "可用的日志和追踪"
+            ]
+          },
+          "qualityErrors": {
+            "owner": "质量",
+            "limitation": "需要已配置的来源；受支持的事件字段因服务商而异。",
+            "exports": [
+              "问题或修复任务"
+            ]
+          },
+          "maturityDiagnostic": {
+            "owner": "诊断",
+            "limitation": "自评仅具方向性参考，并非认证。",
+            "exports": [
+              "评估结果"
+            ]
+          },
+          "tenants": {
+            "owner": "平台",
+            "limitation": "角色和权益决定可用的工作区操作。",
+            "exports": [
+              "可用的工作区记录"
+            ]
+          }
+        }
+      },
+      "integrations": {
+        "github": {
+          "category": "源代码管理",
+          "tagline": "让你的智能体工作队在 GitHub 上提交 PR、评审代码并运行 CI",
+          "summary": "将 Builderforce.ai 连接到 GitHub，用于受支持的代码仓库、分支、拉取请求和 webhook 工作流。权限、审批覆盖范围和留存的证据取决于所配置的路径。",
+          "useCases": [
+            "从任务自动创建 PR",
+            "带人工审批关口的评审与合并",
+            "感知 CI 的构建/修复循环",
+            "全仓库语义搜索与重构"
+          ]
+        },
+        "gitlab": {
+          "category": "源代码管理",
+          "tagline": "基于 GitLab 合并请求的自托管智能体交付",
+          "summary": "Builderforce.ai 可驱动完整的 GitLab 仓库循环——读取、建分支、提交并发起合并请求——让自托管的智能体工作队在你的 GitLab 上交付变更，而无需离开你的基础设施。",
+          "useCases": [
+            "合并请求自动化",
+            "跨仓库任务执行",
+            "气隙隔离的 GitLab 部署"
+          ]
+        },
+        "slack": {
+          "category": "聊天渠道",
+          "tagline": "直接在 Slack 中运行和管控你的智能体",
+          "summary": "从任意 Slack 工作区触达智能体工作队：分派任务、推送进度，并直接在聊天中回应人在回路的审批请求。",
+          "useCases": [
+            "在频道中分派任务",
+            "在消息内审批智能体操作",
+            "将运行状态推送到话题串"
+          ]
+        },
+        "discord": {
+          "category": "聊天渠道",
+          "tagline": "在 Discord 服务器和私信中指挥你的智能体工作队",
+          "summary": "Builderforce.ai 可连接 Discord 服务器、频道和私信，让你的社区或团队派发智能体并实时接收结果。",
+          "useCases": [
+            "服务器范围的智能体指令",
+            "基于私信的私密任务",
+            "实时运行通知"
+          ]
+        },
+        "whatsapp": {
+          "category": "聊天渠道",
+          "tagline": "在 WhatsApp 上指挥你的 AI 智能体",
+          "summary": "将一个 WhatsApp 号码与 Builderforce.ai 配对，即可在手机上运行智能体任务、获取摘要并审批操作——非常适合值班和移动优先的工作流。",
+          "useCases": [
+            "移动端任务派发",
+            "值班审批",
+            "随时随地查看运行摘要"
+          ]
+        },
+        "ollama": {
+          "category": "模型服务商",
+          "tagline": "在私有智能体运行时中使用受支持的本地模型",
+          "summary": "BuilderForce Agents 可以在私有基础设施上使用受支持的 Ollama 模型。托管协作、发布、远程评估和连接服务仍处于该本地运行时边界之外。",
+          "useCases": [
+            "气隙隔离/离线交付",
+            "零成本本地推理",
+            "数据驻留合规"
+          ]
+        },
+        "anthropic": {
+          "category": "模型服务商",
+          "tagline": "在受治理的多智能体工作流中使用 Claude 模型",
+          "summary": "Builderforce.ai 会将任务路由到 Anthropic Claude 以及 30 多家其他服务商，让你在编排好的工作流、审批和持久记忆中发挥 Claude 的长处——而不被单一供应商锁定。",
+          "useCases": [
+            "按任务选择最佳模型的路由",
+            "Claude + 本地模型回退",
+            "带审计的受治理 Claude 使用"
+          ]
+        },
+        "mcp": {
+          "category": "协议",
+          "tagline": "使用 MCP 工具，并将 Builderforce.ai 作为 MCP 服务器对外开放",
+          "summary": "Builderforce.ai 既能调用 MCP 服务器，也会开放自己的 /mcp 端点，因此其他工具（Cursor、Claude Desktop 等）可以通过这一开放协议把它用作编排层和记忆层。",
+          "useCases": [
+            "连接外部 MCP 工具",
+            "通过 MCP 开放项目/任务",
+            "将 Builderforce.ai 用作记忆后端"
+          ]
+        },
+        "notion": {
+          "category": "知识与文档",
+          "tagline": "让你的智能体读写 Notion 知识",
+          "summary": "连接 Notion，让智能体以团队文档为依据开展工作并把结果写回——把活文档变成智能体的上下文。",
+          "useCases": [
+            "以文档为依据执行任务",
+            "自动更新规格说明和笔记",
+            "知识库问答"
+          ]
+        },
+        "gmail": {
+          "category": "效率工具",
+          "tagline": "让智能体分拣并处理邮件",
+          "summary": "连接 Gmail 后，智能体可以在工作流中阅读、总结和起草邮件——适用于支持工单分拣、跟进以及从来信到任务的流程。",
+          "useCases": [
+            "从收件箱分拣为任务",
+            "起草回复待审批",
+            "由邮件触发工作流"
+          ]
+        }
+      },
+      "schema": {
+        "crumb": {
+          "home": "首页",
+          "blog": "博客",
+          "product": "产品",
+          "evermind": "Evermind",
+          "projectsTasks": "项目 / 任务",
+          "compare": "对比",
+          "pricing": "定价",
+          "signIn": "登录",
+          "createAccount": "创建账户",
+          "integrations": "集成",
+          "versus": "对比 {name}"
+        },
+        "homepage": {
+          "appDescription": "一块创意画布，团队与 AI 智能体在一个互联的可视化工作区中设计、构建、审阅并交付网站、工作流、模型、数据故事和产品。",
+          "conceptsName": "Builderforce.ai 核心概念"
+        },
+        "blog": {
+          "name": "Builderforce 博客",
+          "description": "关于借助 WebGPU LoRA 训练构建和部署 AI 智能体的深度解析、教程与最佳实践。"
+        },
+        "product": {
+          "description": "Builderforce.ai 是一个 AI 平台，用于构建、训练、编排和治理一支定制的 AI 智能体工作队——涵盖数据集生成、浏览器内 WebGPU LoRA 训练、AI 评估、技能市场、工作流编排、工作队网格，以及完整的审批与审计。",
+          "capabilitiesName": "Builderforce.ai 产品能力"
+        },
+        "evermind": {
+          "name": "Evermind——Builderforce.ai 的 LLM",
+          "llmAlias": "Builderforce.ai LLM",
+          "architectureName": "Evermind 架构",
+          "conceptsName": "Evermind 核心概念"
+        },
+        "projectsTasks": {
+          "name": "Builderforce.ai——项目 / 任务",
+          "description": "“项目 / 任务”是 Builderforce.ai 的工作管理界面：把工作组织到 AI 项目工作区中，再通过看板、表格、日历和甘特视图、审批关口以及完整的可观测性，在整支智能体工作队中规划、分派和跟踪任务。",
+          "capabilitiesName": "Builderforce.ai 项目 / 任务能力",
+          "projects": {
+            "name": "项目",
+            "description": "协作式 AI 项目工作区——每个都包含 Canvas Builder、文件、已分配的智能体和工作流。可以以卡片、表格、日历或甘特时间线的形式查看项目。"
+          },
+          "tasks": {
+            "name": "任务",
+            "description": "面向智能体工作队的任务看板——规划任务、设定优先级并分配给 AgentHost，然后在看板、表格、日历或甘特视图中看着它们流经每个状态。"
+          }
+        },
+        "compare": {
+          "criteriaName": "评估 Builderforce.ai 及相关 AI 工具的标准",
+          "notFound": "未找到该对比"
+        },
+        "pricing": {
+          "description": "提供免费、Pro 和 Teams 套餐的 AI 智能体训练平台。"
+        },
+        "login": {
+          "name": "登录 Builderforce.ai",
+          "description": "登录你的 Builderforce.ai 账户，使用 AI 智能体训练、数据集和 Workforce Registry。"
+        },
+        "register": {
+          "name": "创建你的 Builderforce.ai 账户",
+          "description": "免费创建账户。借助 WebGPU LoRA 微调构建、训练并部署 AI 智能体，无需信用卡。"
+        },
+        "competitor": {
+          "name": "Builderforce.ai 对比 {name}",
+          "description": "一份基于评估标准的指南，帮助你将 Builderforce.ai 与 {name} 放在一起评估。对于影响决策的关键需求，请核实供应商当前的能力与价格。"
+        },
+        "integration": {
+          "name": "Builderforce.ai + {name} 集成",
+          "metaTitle": "Builderforce.ai + {name} 集成",
+          "ogTitle": "Builderforce.ai + {name}",
+          "notFound": "未找到该集成"
+        }
+      }
+    }
   },
   "evermind": {
     "seo": {
@@ -6090,6 +7054,11 @@
   },
   "features": [
     {
+      "title": "创作画布——从想法到可交付成果",
+      "shortDesc": "对话、工作流、网站、数据、模型、人员与交付，尽在一块多人协作画布上。",
+      "longDesc": "从一条提示词开始——无需先选项目，也无需先注册账户——在一个持久的空间化会话中进行构建。把工作流、实时网站、数据集、仪表盘、Evermind 模型、语音、人员和智能体拖进来；让 Brain 跨对象进行推理；审阅拟议的变更；再把已批准的样稿交付到项目、任务和智能体执行中。会话支持从本地认领到账户、实时光标与评论、演示/跟随模式、版本检查点、可复用的市场资源包、手绘，以及在 Web 端经审阅的分支合并。VS Code 会在原生全编辑器界面中打开同一张图，并可加入文件、选中内容、诊断信息、代码仓库、终端输出、服务和预览。"
+    },
+    {
       "title": "Evermind —— 自我更新的模型",
       "shortDesc": "一个在工作中持续学习、永不过时的模型。",
       "longDesc": "Evermind 是平台的大脑——一个由 Write-Through Cognition（写穿认知）治理的自我更新模型：新知识被直接写穿进去，因此一次更新会替换此前的内容，无需任何对账步骤。一个共享专家混合生成器（稠密骨干网络 + 路由式 SSM 专家）在线学习并在 WebGPU 上运行，因此它依靠时效性、占用空间和所有权取胜，而非单纯依赖规模——无论是在浏览器中、设备本地，还是嵌入每一个智能体之内。"
@@ -6103,6 +7072,21 @@
       "title": "为每个项目配备一个学习大脑",
       "shortDesc": "每个项目都拥有自己的自更新模型，从团队的工作中学习。",
       "longDesc": "每个项目从创建之日起就拥有自己的 Evermind——一个自更新模型，从四个工作室（设计、语音、LLM 和视频）的每次运行中学习。通过共享的写穿式事实存储，修正会跨会话保留，所以昨天帮过你的大脑今天更聪明。推理在你选择启用前保持关闭，而且模型可直接在 LLM Studio 中编辑。"
+    },
+    {
+      "title": "Evermind 生成式媒体",
+      "shortDesc": "用你自己的设备端模型生成图像和视频——而不只是文本。",
+      "longDesc": "Evermind 不只是一个文本模型。同一个自我更新的引擎可以端到端地生成图像和视频——一套运行在 WebGPU 上的可训练编解码器与声学栈，由 API 提供渲染好的媒体。在工作流构建器中可视化地搭建生成管线，权重和产出都归你所有，制作媒体既没有按帧计费的云账单，也不依赖第三方模型。"
+    },
+    {
+      "title": "原生 GitHub App——Checks、Actions 与 CI 关口",
+      "shortDesc": "智能体通过真正的 GitHub App 工作：Checks 回写、Actions 运行，以及由 CI 把关的合并。",
+      "longDesc": "连接一个一流的 GitHub App，智能体就能通过与你的工程师相同的控制手段来操作。工作以 App 身份认证的方式交给 GitHub，智能体的结论以原生 Checks 回写，安全告警会汇入看板，构建与部署管线运行真实的 Actions——因此合并以 CI 通过为前提，PR 分支构建失败时会自动发起修复。可观测性的终点是一个拉取请求，而不是一块仪表盘。"
+    },
+    {
+      "title": "可嵌入的产品反馈",
+      "shortDesc": "在任意应用中嵌入一段代码即可收集反馈——并作为需人工把关、任何智能体都无法触碰的工作提交。",
+      "longDesc": "这是错误可观测性在人工输入侧的孪生能力。在任意产品界面嵌入一个无依赖、基于 Shadow DOM 的反馈组件，每条提交都会作为需人工把关的请求出现在你的看板上——按指纹去重、按收集器限流，并在有人批准之前保持惰性，因此没有任何智能体会在未经签批的情况下处理原始用户输入。在分诊中批准后，它就会变成云端智能体可以接手的普通可执行工作。"
     },
     {
       "title": "智能体工作队看板",
@@ -6138,6 +7122,16 @@
       "title": "面向工程团队的 VS Code 界面",
       "shortDesc": "将画布上下文、智能体、审阅和交付带入编辑器。",
       "longDesc": "BuilderForce 扩展为工程团队提供相关平台工作的编辑器原生视图，包括代码库和诊断上下文、智能体任务、审阅与审批。"
+    },
+    {
+      "title": "实时会议、站会与共享日历",
+      "shortDesc": "视频站会、复盘和通话——就在你的看板上。",
+      "longDesc": "不仅是一起编辑看板，还能看见并听见你的团队。在站会、规划会或复盘会中为全员打开摄像头；随时发起临时通话或一对一通话；全部基于网状 WebRTC，媒体点对点传输，从不经过服务器。共享的团队日历会叠加显示你的会议以及已连接的 Google/Microsoft 事件，标出每个人的空闲状态，“找个时间”会提议所有受邀者都真正有空的时段。可在 Web 端加入，也可直接在 VS Code 中加入。"
+    },
+    {
+      "title": "多方团队聊天——人类 + 智能体",
+      "shortDesc": "可以发给某个人或 @某个智能体的共享对话串。",
+      "longDesc": "聊天是真正的协作，而不是一个人对着提示框。对话串在整个项目内共享，你可以通过邮件邀请人类成员、把 AI 智能体拉进来，并把每条消息发给指定的参与者。和队友交谈时，智能体循环保持空闲；@提及某个智能体，它就会以自己的身份回复——运行一个有边界、受权限约束的工具循环来创建任务、更新 OKR 或读取看板，绝不超出你本人的权限。同一段对话在 Web 端和 VS Code 中都能继续。"
     },
     {
       "title": "Agentic Tester —— 自主 QA",
@@ -6183,6 +7177,36 @@
       "title": "单一界面看板连接器",
       "shortDesc": "与 Jira、Linear、Sentry、PagerDuty 等双向同步。",
       "longDesc": "连接你已在使用的跟踪与事件工具——Jira、Linear、monday、Asana、ClickUp、ServiceNow、Freshservice、Sentry、PagerDuty 和 GitHub——并双向同步工作。智能体可在工单或事件的源头处接手并处理，变更则回流到记录系统。一块界面即可跨一切进行编排，无需迁移、无需锁定。"
+    },
+    {
+      "title": "事件管理与值班",
+      "shortDesc": "服务台智能体、值班轮换、升级、呼叫与作战室——而且会不断学习。",
+      "longDesc": "在工作所在之处处理事件。服务台/事件经理智能体负责分诊，值班轮换决定该呼叫谁，定时升级沿升级链逐级推进，Teams、Slack 或邮件呼叫触达响应人员——每个事件都有供人类与智能体协同的作战室信息流。事件解决后，根因分析会发布到你的知识库并输入项目的 Evermind，让整支工作队从中学习，不再重复同样的故障。"
+    },
+    {
+      "title": "主动监控画布",
+      "shortDesc": "把实时监控钉在你的架构图上——一旦越界，调查随即启动。",
+      "longDesc": "上传你的架构图，把心跳、HTTP、webhook 或指标监控直接钉在它们所监视的系统上。系统每五分钟巡检一次，一旦越界，不只是亮起红灯——还会自动启动值班调查：监控 → 信号 → 事件 → 呼叫，全在一个界面上完成。这样的监控会主动开工单、呼叫响应人员，而不只是画一张图表。"
+    },
+    {
+      "title": "按角色把关的问责",
+      "shortDesc": "证明每部分工作都由正确的角色完成——一份不可篡改的签批记录。",
+      "longDesc": "每个工单都带有一份参与清单：它所需的角色，对应到能胜任每个角色的人类和智能体——因此绝不会把写代码的工作派给产品经理，产出阶段也一定由产出者执行。一份只追加的问责报告按角色记录谁、何时、结论、评论和贡献，受默认拒绝的签批权限把关；资源评估会把缺失的角色标记为阻塞性缺口。质量在看板上被证明，而不是事后寄望。"
+    },
+    {
+      "title": "自动化 RFP 与方案响应",
+      "shortDesc": "把一个已分析的代码库变成带品牌、附成本的方案书。",
+      "longDesc": "用你已经构建好的东西来回应征求方案书。CTO 与产品负责人智能体读取项目已分析的能力，生成联合署名的方案书——成本与损益、分阶段交付甘特图、风险、依赖，以及与需求相匹配的能力清单——把需求方的品牌配色和标志与你的融为一体。基于新鲜度把关的依据检查会在作答前重新扫描过时的项目，确保方案反映真实系统。"
+    },
+    {
+      "title": "AI 经理与辅导",
+      "shortDesc": "可以辅导的类型化经理——开发、QA、服务台、DevOps。",
+      "longDesc": "经理并非千篇一律。经理类型——开发、QA、服务台、DevOps，或来自你角色目录的自定义角色——决定了经理智能体如何管理其下属。一旦它出错，由人来发起一次辅导会话：一条指令或一项任务，带有到期时间和完成状态，用来引导经理此后的行为。反馈会成为持久的指导，而不是在下一次运行中就被遗忘的一次性纠正。"
+    },
+    {
+      "title": "记忆优先作答",
+      "shortDesc": "先用项目自己的记忆作答，再考虑付费的模型调用。",
+      "longDesc": "最便宜的 token 是你从未花掉的那一个。在付费调用模型之前，Brain 会先查询项目自己的记忆——一个精确重复问答缓存，外加可选开启的项目 Evermind 推理——一旦命中且置信度足够，就完全跳过 LLM。学习成果会扩散到该项目下的每一个 Evermind（它自己的以及它的 Canvas 构建），一堂课教一次，处处都能作答。随着项目记忆的增长，你的 token 账单会不断下降。"
     },
     {
       "title": "AI 数据集生成",

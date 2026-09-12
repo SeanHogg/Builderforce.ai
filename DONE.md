@@ -1,3 +1,116 @@
+## ✅ RESOLVED 2026-09-12 — `allowAutoStaffLanes` granted on the operator's workspace (operator decision)
+
+The 309-ticket unconfigured-lane cohort (`backlog` 299, `blocked` 10) authorised no role, and
+`lane_unconfigured` + `allowAutoStaffLanes` (0386) named it; nobody had thrown the switch. Decision
+2026-09-12: grant it.
+
+- The admin toggle already existed at workspace and project level, so the grant is data:
+  `1154_grant_auto_staff_lanes_operator_workspace.sql` turns tenant 1's workspace setting on and
+  resets any project-level explicit "off" in tenant 1 to "inherit". Idempotent, and guarded to
+  apply only when project 11 belongs to tenant 1, so a fresh database whose first tenant is a seed
+  is untouched. No other tenant's default changes.
+- Takes effect when the migration is applied. Measure: the manager census's `lane_unconfigured`
+  count on tenant 1 should fall as lanes are auto-staffed (the 429 capacity/routing fix of
+  2026-08-19 means the pool no longer rejects them).
+
+## ✅ RESOLVED 2026-09-12 — Whether the autonomous Manager may close a reviewed ticket is an account-admin setting (operator decision)
+
+With `in_review.gate='human'` on every board, stall triage escalated `human_gate` tickets as a
+standing backlog — yet the manager's review step (`coordinatePullRequests`) never read the lane
+gate and closed review-ready tickets through `completeTaskOnMerge` regardless. Decision
+2026-09-12: the account admin decides.
+
+- **The setting:** `managerMayCloseReviewedTickets`, a column on `tenant_manager_defaults` (the
+  existing workspace settings row — a project can neither grant nor withhold it), default OFF,
+  changed through `PATCH /api/manager/defaults` (MANAGER role). Toggle on Settings → AI Manager,
+  beside `allowAutoStaffLanes`, disabled-not-hidden for non-admins, with an "in effect" chip;
+  five catalogs. Migration `1153_manager_may_close_reviewed_tickets.sql`.
+- **ONE decision:** `application/manager/reviewGateAuthority.ts` answers `open` (not a human-gated
+  review lane), `held_for_human` (setting off) or `manager_authorized` (setting on). The review
+  step reads the lane gate once per pass (unreadable gate ⇒ closes nothing that pass). Held: it
+  still reviews, returns unfinished work and chases sign-offs, and logs "reviewed, waiting for a
+  person to close" once per ticket. Authorized: it closes, credits the manager-agent (or the doing
+  agent, never a human) in the lifecycle ledger, and writes an activity row naming the setting plus
+  a `managed.gate_override` audit entry. Stall triage and the census consult the same module, so a
+  review-lane ticket stops counting as a standing `human_gate` escalation when the setting is on;
+  real problems (missing deliverable, failing build, owed sign-offs) and human gates on other lanes
+  still escalate.
+- **Behaviour change:** with the setting OFF the manager now STOPS closing tickets on human-gated
+  review lanes (it silently did before). On tenant 1 every board is human-gated, so after deploy the
+  manager closes nothing there until an admin turns the setting on.
+- Tests: api 210/210 (policy, triage, census, triage stages, new gate tests incl. source checks
+  that the gate is decided before any close), frontend 47/47.
+
+## ✅ RESOLVED 2026-09-12 — A steer that misses its run continues as a follow-up run (operator decision: spend the tokens)
+
+A steer arriving after the run's last turn was refused (the SDK runner closes its steering channel
+when a turn returns with nothing queued) and, since the API had already marked it consumed, only
+a `steer.dropped` row said it had happened. Decision 2026-09-12: spend the tokens.
+
+- **ONE use case, every surface.** `dispatchLateSteerFollowUp` (`application/runtime/lateSteerFollowUp.ts`,
+  with `lateSteerStore.ts` and `followUpRun.ts`) starts a follow-up on the same agent, repo pin and
+  ticket branch with the steer text as the instruction, submitted as the person who sent the
+  steer (steer rows now record their sender). Sources routed to it: the on-prem SDK runner
+  (`run_finishing` / `no_live_run` → new `POST /api/agent-hosts/:id/late-steers`, old visible drop
+  kept as the fallback if that call fails), host end-of-run reports on both the agent-host and
+  runtime routes (the agent-host route never settled leftover steers before), cloud durable
+  cleanup + container/Actions finalize and crash (settled AFTER the terminal status is written;
+  the early release inside `finalizeCloudRun` removed), and the orphan sweep (timed-out runs'
+  steers used to sit pending forever). Manual cancel still releases silently.
+- **Idempotent:** one atomic claim per steer — a retried frame or a second terminal hook starts
+  nothing. A steer reported while its run is still live goes back to the queue; steers relayed to
+  a live host are marked delivered so ones the run already applied do not spawn follow-ups.
+- **Refusals:** token allowance / cloud-run cap → visible `steer.dropped` with the reason;
+  approval-gated ticket → the follow-up waits for approval; cancelled run → visible release.
+- **Timeline + UI:** new `steer.followed_up` row naming the run (old `steer.dropped` rows unchanged);
+  `LateSteerNote` in the execution Output tab ("continued as run #N" / awaiting approval / not
+  continued + reason / cancelled), localized in all five catalogs.
+- **Behaviour change:** Send on a finished run (also what `chats.execute_as_agent` replays) now
+  checks the token allowance and cloud-run cap BEFORE creating the run and answers 402, instead of
+  creating a run that then failed on the cap; the panel shows the refusal.
+- Migration `1152_execution_messages_late_steer.sql` — apply with `db:migrate` before the api deploy.
+- Tests: api 73/73 (one follow-up per late steer, duplicate frames sequential + racing, entitlement
+  refusal), agent-runtime 15/15, frontend panel + catalogs 116/116; agent-runtime typecheck clean.
+
+## ✅ RESOLVED 2026-09-12 — Canvas edit invitations seat a `contributor`, not a `developer` (operator decision)
+
+An edit-granting canvas invite link (or email invite) seated its holder as a workspace
+`developer` — write access to every project, ticket and agent — because `developer` was the
+floor for a canvas write. A link travels further than an addressed email, so the grant did too.
+Decision 2026-09-12: a new `contributor` workspace role.
+
+- **ONE role ladder.** `contributor` ranks between `viewer` and `developer` in `ROLE_ORDER`
+  (`api/src/domain/shared/types.ts`), now the only ladder — the duplicate `TENANT_ROLE_ORDER` /
+  `tenantRoleAtLeast` in `application/tenant/tenantRoles.ts` is deleted and its callers
+  (`publishers.ts`, `ssoSignIn.ts`, `effectivePermissions.ts`, four hand-written role lists in
+  `adminRoutes.ts`) migrated. `hasMinRole` refuses unknown roles; `isTenantRole` added.
+  `permissionRegistry.ts` gives a contributor a viewer's permission set (no `task:write`,
+  `project:write`, `workflow:*`).
+- **Mapping.** `tenantRoleForSessionRole`: board editor/runner/owner → `contributor`,
+  viewer/commenter → `viewer`, never developer or above.
+- **Gate audit.** Canvas write paths gate on the BOARD role only, so a contributor already writes
+  a board it is an editor on — no route change needed. All `TenantRole.DEVELOPER` gates (runtime
+  dispatch, QA, ATS, RFP, facts, knowledge, insights, lanes, repos, templates, workflows,
+  machine-minted tokens) already refuse a contributor by rank.
+- **Real gap closed on the way:** the built-in chat tools (`tasks.create`, `projects.create`, …)
+  wrote the database with no role check, so any viewer could create tickets from Brain or the
+  canvas chat. `application/llm/builtinToolAuthority.ts`, called from `callBuiltinTool`, refuses
+  mutating tools below developer, except an explicit list that only touches the caller's own
+  chats/sessions (`chats.dispatch_agent` and `attachments.write` deliberately excluded). Agents
+  (no member role) are unaffected.
+- **Migrations:** `1155_tenant_role_contributor.sql` (enum value) and
+  `1156_canvas_collaborators_are_contributors.sql` (re-grades `seat_kind='collaborator'`
+  developers and pending collaborator invitations; paid-seat developers untouched) — separate
+  because a new enum value cannot be used in the transaction that adds it.
+- **Frontend:** `lib/rbac.ts` carries the role; `RolePreviewContext`, the TopBar preview and
+  EmulationBar derive from the shared order and show localized labels (they showed raw strings);
+  `common.tenantRoleLabel/Description/requiresRoleHint` in all five catalogs.
+- **Tests:** api `sessionAccess`, `contributorAccess` (new), `builtinToolAuthority` (new),
+  `builtinMcpService`, `packageReview`, `permissionEnforcement` — 82 green; frontend `MemberCard`,
+  `RoleGate`, catalog tests — 113 green.
+- `contributor` is deliberately NOT offered in the workspace-invite or SSO default-role pickers:
+  without a canvas membership it behaves exactly like `viewer`.
+
 ## ✅ RESOLVED 2026-09-12 — The VSIX agent reviews its own change, ships it, and closes the ticket (no more 75% parking)
 
 Reported on chat #103: a local VS Code run edited code, `tickets.from_delta` opened its ticket in
