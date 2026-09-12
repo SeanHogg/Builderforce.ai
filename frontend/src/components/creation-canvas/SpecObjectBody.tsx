@@ -4,8 +4,8 @@
 import { useTranslations } from 'next-intl';
 import type { Formatter } from '@/i18n/format';
 import {
-  EMPTY_SPEC_BOARD, specFieldValue, specObjectNamespace, specObjectSpec,
-  type SpecDeriveBoard, type SpecField,
+  EMPTY_SPEC_BOARD, formatSpecVerdict, isSpecVerdictResult, specFieldValue, specObjectNamespace, specObjectSpec,
+  type SpecDeriveBoard, type SpecField, type SpecVerdictResult, type SpecVerdictTranslate,
 } from '@/lib/specObjects';
 // The vocabularies register themselves as an import SIDE EFFECT, so this component only
 // renders a kind whose set has already been imported by SOMEONE. In the app that
@@ -110,6 +110,20 @@ function statText(fmt: Formatter, value: unknown): string {
   return String(value).trim();
 }
 
+/** Formats a computed verdict descriptor in the viewer's language — see `SpecVerdict`. */
+type VerdictText = (value: SpecVerdictResult) => string;
+
+/**
+ * The text a `stat`, `text` or `verdict` section draws.
+ *
+ * A worded derivation returns a descriptor rather than a sentence, so it is translated
+ * here, through the one verdict formatter the AI snapshot also uses (in English). Every
+ * other value is a literal and reads exactly as before.
+ */
+function fieldText(fmt: Formatter, value: unknown, verdict: VerdictText): string {
+  return isSpecVerdictResult(value) ? verdict(value) : statText(fmt, value);
+}
+
 /**
  * A `matrix`: columns that are DATA rather than declared.
  *
@@ -142,12 +156,22 @@ function matrixValue(fmt: Formatter, value: unknown): MatrixData | null {
 
 /** A `bars` distribution. Zero-valued entries are KEPT: "nobody got a distinction"
  *  is the most informative bar on the chart, and dropping it hides it. */
-function barValues(fmt: Formatter, value: unknown): Array<{ label: string; value: number }> {
+function barValues(
+  fmt: Formatter,
+  value: unknown,
+  t?: ReturnType<typeof useTranslations>,
+): Array<{ label: string; value: number }> {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 14).flatMap((raw) => {
     if (!raw || typeof raw !== 'object') return [];
     const row = raw as Record<string, unknown>;
-    const label = statText(fmt, row.label ?? row.choice ?? row.grade);
+    // A bar the SPEC names (not authored data — a poll choice, a grade) carries a
+    // `labelKey` resolved under `<namespace>.bar.<key>`; its `label` is the English
+    // identifier the model reads in the snapshot.
+    const labelKey = typeof row.labelKey === 'string' ? row.labelKey : '';
+    const label = labelKey && t?.has(`bar.${labelKey}`)
+      ? t(`bar.${labelKey}`)
+      : statText(fmt, row.label ?? row.choice ?? row.grade);
     const numeric = Number(row.value ?? row.count ?? 0);
     return label ? [{ label, value: Number.isFinite(numeric) ? numeric : 0 }] : [];
   });
@@ -207,11 +231,12 @@ function referenceLines(data: CreationNodeData): Array<{ marker: string; text: s
   return [{ marker: '', text: formatReference(record, style).text }];
 }
 
-function FieldSection({ field, data, board, t }: {
+function FieldSection({ field, data, board, t, verdict }: {
   field: SpecField;
   data: CreationNodeData;
   board: SpecDeriveBoard;
   t: ReturnType<typeof useTranslations>;
+  verdict: VerdictText;
 }) {
   const fmt = useFormat();
   const raw = specFieldValue(field, data, board);
@@ -233,7 +258,7 @@ function FieldSection({ field, data, board, t }: {
 
   switch (field.render) {
     case 'stat': {
-      const text = statText(fmt, raw);
+      const text = fieldText(fmt, raw, verdict);
       if (!text) return null;
       // An instant field is only ever interesting as an age.
       const age = AGE_FIELDS.has(field.name) ? staleness(fmt, raw, t) : null;
@@ -241,7 +266,7 @@ function FieldSection({ field, data, board, t }: {
     }
 
     case 'text': {
-      const text = statText(fmt, raw);
+      const text = fieldText(fmt, raw, verdict);
       return text ? <p className={styles.founderText}><small>{label}</small>{text}</p> : null;
     }
 
@@ -296,7 +321,7 @@ function FieldSection({ field, data, board, t }: {
     }
 
     case 'verdict': {
-      const text = statText(fmt, raw);
+      const text = fieldText(fmt, raw, verdict);
       return text ? <div className={styles.founderVerdict}><small>{label}</small><strong>{text}</strong></div> : null;
     }
 
@@ -331,7 +356,7 @@ function FieldSection({ field, data, board, t }: {
     }
 
     case 'bars': {
-      const bars = barValues(fmt, raw);
+      const bars = barValues(fmt, raw, t);
       if (!bars.length) return null;
       const peak = Math.max(1, ...bars.map((bar) => bar.value));
       const total = bars.reduce((sum, bar) => sum + bar.value, 0);
@@ -408,7 +433,9 @@ function sectionHasContent(fmt: Formatter, field: SpecField, data: CreationNodeD
     case 'stat':
     case 'text':
     case 'verdict':
-      return statText(fmt, value).length > 0;
+      // A verdict descriptor always says something — it is present exactly when its
+      // derivation chose to speak, which is the same rule an authored string follows.
+      return isSpecVerdictResult(value) || statText(fmt, value).length > 0;
     case 'chips':
       return chipValues(value).length > 0;
     case 'list':
@@ -444,14 +471,20 @@ export function SpecObjectBody({ data, board = EMPTY_SPEC_BOARD }: { data: Creat
   // `useTranslations` must be called unconditionally, so the namespace falls back
   // rather than the hook being skipped for a non-spec kind.
   const t = useTranslations(namespace ?? 'creationCanvas.founder');
+  // The ROOT translator, for verdicts: a descriptor may resolve under a vocabulary other
+  // than this kind's (the shared counterparty resolver keeps its sentences under the
+  // founder catalog), so it is looked up by full path. See `SpecVerdict.namespace`.
+  const tRoot = useTranslations();
   if (!spec || !namespace) return null;
+  const verdict: VerdictText = (value) =>
+    formatSpecVerdict(value, namespace, tRoot as unknown as SpecVerdictTranslate, fmt.locale);
 
   const sections = spec.fields
     // A field a bespoke body already draws is skipped here rather than drawn twice —
     // see `SpecField.bodyOwned`. The check is on the FIELD, so no kind is named.
     .filter((field) => !field.bodyOwned)
     .filter((field) => sectionHasContent(fmt, field, data, board))
-    .map((field) => ({ field, node: <FieldSection key={field.name} field={field} data={data} board={board} t={t} /> }));
+    .map((field) => ({ field, node: <FieldSection key={field.name} field={field} data={data} board={board} t={t} verdict={verdict} /> }));
 
   if (!sections.length) {
     return (

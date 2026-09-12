@@ -21,6 +21,7 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { KpiGrid } from './LensShell';
 import { pct } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /** Compact hours → "Xd Yh" / "Yh" / "Zm" for lifecycle phase durations. */
 function fmtDur(hours: number): string {
@@ -32,9 +33,8 @@ function fmtDur(hours: number): string {
   return h ? `${d}d ${h}h` : `${d}d`;
 }
 
-const STATUS_TONE: Record<DeliveryStatus, string> = {
-  on_track: 'var(--success)', at_risk: 'var(--warning)', late: 'var(--danger)',
-  done: 'var(--info)', no_signal: 'var(--text-muted)',
+const STATUS_TONE: StatusToneMap<DeliveryStatus> = {
+  on_track: 'success', at_risk: 'warning', late: 'danger', done: 'info', no_signal: 'neutral',
 };
 
 const inputStyle: React.CSSProperties = {
@@ -164,8 +164,8 @@ function ScopeEffortChart({ points, hasEffort }: { points: ScopeEffortPoint[]; h
 }
 
 const UPDATE_STATUSES: DeliverableUpdateStatus[] = ['note', 'on_track', 'at_risk', 'blocked', 'done'];
-const UPDATE_TONE: Record<DeliverableUpdateStatus, string> = {
-  note: 'var(--text-muted)', on_track: 'var(--success)', at_risk: 'var(--warning)', blocked: 'var(--danger)', done: 'var(--info)',
+const UPDATE_TONE: StatusToneMap<DeliverableUpdateStatus> = {
+  note: 'neutral', on_track: 'success', at_risk: 'warning', blocked: 'danger', done: 'info',
 };
 
 /** Qualitative update/comment stream for the selected deliverable (EMP-11). */
@@ -201,10 +201,10 @@ function UpdatesFeed({ scope, id }: { scope: DeliverableScope; id: string }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {data.map((u) => (
-            <div key={u.id} style={{ display: 'flex', flexDirection: 'column', gap: 2, borderLeft: `3px solid ${u.statusLabel ? UPDATE_TONE[u.statusLabel] : 'var(--border-subtle)'}`, paddingLeft: 10 }}>
+            <div key={u.id} style={{ display: 'flex', flexDirection: 'column', gap: 2, borderLeft: `3px solid ${u.statusLabel ? statusColor(UPDATE_TONE, u.statusLabel, 'solid') : 'var(--border-subtle)'}`, paddingLeft: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 <span>
-                  {u.statusLabel && <span style={{ color: UPDATE_TONE[u.statusLabel], fontWeight: 600 }}>{t(`deliv.updateStatusLabel.${u.statusLabel}`)} · </span>}
+                  {u.statusLabel && <span style={{ color: statusColor(UPDATE_TONE, u.statusLabel), fontWeight: 600 }}>{t(`deliv.updateStatusLabel.${u.statusLabel}`)} · </span>}
                   {u.authorName ?? t('deliv.someone')} · {u.createdAt.slice(0, 10)}
                 </span>
                 <button type="button" disabled={busy} title={t('common.delete')} onClick={() => run(() => insightsApi.deliverableUpdates.remove(u.id))}
@@ -288,7 +288,7 @@ function ScenarioPlanner({ scope, id, baseline }: { scope: DeliverableScope; id:
           sub={s?.projectedWeeks != null ? t('deliv.scenario.weeksRemaining', { n: s.projectedWeeks.toFixed(1) }) : '—'} />
       </KpiGrid>
       {s && (
-        <div style={{ marginTop: 10, fontSize: '0.8rem', color: STATUS_TONE[s.status], fontWeight: 600 }}>
+        <div style={{ marginTop: 10, fontSize: '0.8rem', color: statusColor(STATUS_TONE, s.status), fontWeight: 600 }}>
           {t(`deliv.scenario.verdict.${s.status}`)}
         </div>
       )}
@@ -426,7 +426,7 @@ export function DeliveryLens() {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 0, borderTop: '1.5px dashed var(--text-muted)', display: 'inline-block' }} /> {t('deliv.legendScope')}</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 2, background: 'var(--info)', display: 'inline-block' }} /> {t('deliv.legendDone')}</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 0, borderTop: `2px dashed ${PROJECTION_COLOR}`, display: 'inline-block' }} /> {t('deliv.legendProjected')}</span>
-              <span style={{ color: STATUS_TONE[data.status], fontWeight: 600 }}>{t(`deliv.statusLabel.${data.status}`)}</span>
+              <span style={{ color: statusColor(STATUS_TONE, data.status), fontWeight: 600 }}>{t(`deliv.statusLabel.${data.status}`)}</span>
             </div>
             <BurnChart series={data.series} projection={data.projection} targetDate={data.targetDate} />
           </PmCard>

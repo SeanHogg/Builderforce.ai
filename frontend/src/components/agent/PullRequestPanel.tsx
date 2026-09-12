@@ -14,7 +14,8 @@ import {
 } from '@/lib/builderforceApi';
 import { getMergeBlockReason } from './pullRequestMergeState';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /**
  * In-product Pull Request review for a task's run. Shows the recorded PR + its
  * LIVE provider state (status, mergeability, CI checks, diff stat) and an
@@ -25,17 +26,17 @@ import { faultMessage } from '@/lib/apiClient';
  * caller can mount it unconditionally without prop-drilling a "hasPr" flag.
  */
 
-const STATUS_COLOR: Record<string, string> = {
-  open: 'var(--coral-bright)',
-  merged: 'var(--success)',
-  closed: 'var(--text-muted)',
-  draft: 'var(--text-muted)',
+const STATUS_TONE: StatusToneMap = {
+  open: 'accent',
+  merged: 'success',
+  closed: 'neutral',
+  draft: 'neutral',
 };
 
-const CHECK_COLOR: Record<string, string> = {
-  success: 'var(--success)',
-  failure: 'var(--danger)',
-  pending: 'var(--warning)',
+const CHECK_TONE: StatusToneMap = {
+  success: 'success',
+  failure: 'danger',
+  pending: 'warning',
 };
 
 const MERGE_METHODS: MergeMethod[] = ['squash', 'merge', 'rebase'];
@@ -67,8 +68,8 @@ function BuildStatus({ status, error, phase, showValidating }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap' }}>
         <span style={{ color: 'var(--text-muted)' }}>{phase === 'pre-merge' ? 'PR build:' : 'Build:'}</span>
-        {status === 'success' && <Badge label="passing" color={CHECK_COLOR.success} />}
-        {status === 'failure' && <Badge label="failing" color={CHECK_COLOR.failure} />}
+        {status === 'success' && <Badge label="passing" color={statusColor(CHECK_TONE, 'success')} />}
+        {status === 'failure' && <Badge label="failing" color={statusColor(CHECK_TONE, 'failure')} />}
         {validating && <span style={{ color: 'var(--text-muted)' }}><Icon source="⏳" size="1em" /> validating…</span>}
         {status === 'failure' && (
           <span style={{ color: 'var(--warning)' }}>
@@ -114,7 +115,7 @@ function RepoPullRequestSet({ repos }: { repos: TaskRepoPullRequest[] }) {
                 <a href={r.prUrl} className="ui-text-small" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600, color: 'var(--coral-bright)' }}>
                   {t('prLink', { number: r.prNumber ?? 0 })}
                 </a>
-                {r.prStatus && <Badge label={r.prStatus} color={STATUS_COLOR[r.prStatus] ?? 'var(--text-muted)'} />}
+                {r.prStatus && <Badge label={r.prStatus} color={statusColor(STATUS_TONE, r.prStatus)} />}
               </>
             ) : (
               <span className="ui-text-small" style={{ color: 'var(--text-muted)' }}>
@@ -132,6 +133,7 @@ function RepoPullRequestSet({ repos }: { repos: TaskRepoPullRequest[] }) {
 }
 
 export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerged?: () => void }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [data, setData] = useState<TaskPullRequest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -177,7 +179,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       load();
       onMerged?.();
     } catch (e) {
-      setError(faultMessage(e, 'Merge failed'));
+      setError(errorMessage(e));
     } finally {
       setMerging(false);
     }
@@ -202,7 +204,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
           {pr.number != null ? `PR #${pr.number}` : 'Pull request'}
         </span>
-        <Badge label={isMerged ? 'merged' : pr.status} color={STATUS_COLOR[isMerged ? 'merged' : pr.status] ?? 'var(--text-muted)'} />
+        <Badge label={isMerged ? 'merged' : pr.status} color={statusColor(STATUS_TONE, isMerged ? 'merged' : pr.status)} />
         {pr.branchName && (
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
             {pr.branchName} → {pr.baseBranch ?? 'main'}
@@ -213,7 +215,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       {/* Live detail: mergeability, checks, diff stat */}
       {detail?.supported && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-          {checks && <span style={{ color: CHECK_COLOR[checks] }}>● CI {checks}{detail.checksTotal ? ` (${detail.checksTotal})` : ''}</span>}
+          {checks && <span style={{ color: statusColor(CHECK_TONE, checks) }}>● CI {checks}{detail.checksTotal ? ` (${detail.checksTotal})` : ''}</span>}
           {mergeBlockReason && !isMerged && <span style={{ color: 'var(--danger)' }}>not mergeable{detail.mergeableState ? ` · ${detail.mergeableState}` : ''}</span>}
           {(detail.changedFiles != null) && (
             <span style={{ color: 'var(--text-muted)' }}>

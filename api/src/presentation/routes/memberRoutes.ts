@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
@@ -210,7 +211,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
         reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
       });
     }
-    return c.json(result, result.ok ? 200 : 502);
+    return result.ok ? c.json(result) : statusResponse(c, result, 502, { source: 'presentation/routes/memberRoutes.ts', operation: 'syncCalendar' });
   });
 
   // ── GET /api/members/metrics?days=7[&discipline=][&projectId=] — scorecards ──

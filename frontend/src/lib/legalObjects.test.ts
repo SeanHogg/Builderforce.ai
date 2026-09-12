@@ -5,7 +5,7 @@ import {
 } from './legalObjects';
 import {
   isSpecObjectKind, makeSpecDeriveBoard, specDeadlineFields, specFieldValue, specMutableFields,
-  specObjectNamespace,
+  specObjectNamespace, specValueInEnglish,
 } from './specObjects';
 import {
   ipAssetFieldsFrom, legalEntityFieldsFrom, legalMatterFieldsFrom, registrationRowsFor,
@@ -143,20 +143,25 @@ describe('exactly one deadline per record kind, and the server can resolve it', 
 });
 
 describe('the derivations', () => {
+  // A worded derivation returns a verdict DESCRIPTOR; these read it as the model does —
+  // formatted in English through the one formatter the card also uses.
+  const english = (field: Parameters<typeof specFieldValue>[0], data: Record<string, unknown>, board?: Parameters<typeof specFieldValue>[2]) =>
+    specValueInEnglish(specFieldValue(field, data, board), LEGAL_NAMESPACE);
+
   it('reports unassigned IP as the finding it is', () => {
     const field = spec('ipAsset').fields.find((entry) => entry.name === 'assignment')!;
     const unassigned = { kind: 'ipAsset', title: 'BUILDERFORCE word mark' };
-    expect(String(specFieldValue(field, unassigned))).toContain('NOT ASSIGNED');
-    expect(String(specFieldValue(field, { ...unassigned, assignedFrom: 'Sean Hogg', assignedAt: '2026-02-01' })))
+    expect(english(field, unassigned)).toContain('NOT ASSIGNED');
+    expect(english(field, { ...unassigned, assignedFrom: 'Sean Hogg', assignedAt: '2026-02-01' }))
       .toBe('Assigned from Sean Hogg on 2026-02-01.');
-    expect(String(specFieldValue(field, { ...unassigned, assignedFrom: 'Sean Hogg' })))
+    expect(english(field, { ...unassigned, assignedFrom: 'Sean Hogg' }))
       .toContain('NO execution date recorded');
   });
 
   it('sets a matter\'s spend against what it could cost', () => {
     const field = spec('legalMatter').fields.find((entry) => entry.name === 'spendAgainstExposure')!;
-    expect(String(specFieldValue(field, { spendToDate: '15000', exposureAmount: '60000' }))).toBe('Spend to date is 25% of the estimated exposure.');
-    expect(String(specFieldValue(field, { spendToDate: '70000', exposureAmount: '60000' }))).toContain('settlement conversation');
+    expect(english(field, { spendToDate: '15000', exposureAmount: '60000' })).toBe('Spend to date is 25% of the estimated exposure.');
+    expect(english(field, { spendToDate: '70000', exposureAmount: '60000' })).toContain('settlement conversation');
     // No denominator is not a rate. Nothing is drawn rather than a fabricated 0%.
     expect(specFieldValue(field, { spendToDate: '15000' })).toBeUndefined();
   });
@@ -165,9 +170,28 @@ describe('the derivations', () => {
     const field = spec('legalMatter').fields.find((entry) => entry.name === 'counterpartyAccount')!;
     const acme = { kind: 'account', title: 'Acme Holdings Ltd', relationship: 'customer', owner: 'Jane Lee' };
     const matter = { kind: 'legalMatter', title: 'Acme MSA dispute', counterparty: 'Acme Holdings Ltd' };
-    expect(String(specFieldValue(field, matter, makeSpecDeriveBoard([acme, matter])))).toContain('Acme Holdings Ltd');
-    expect(String(specFieldValue(field, matter, makeSpecDeriveBoard([matter])))).toContain('No `account` matches');
+    expect(english(field, matter, makeSpecDeriveBoard([acme, matter]))).toContain('Acme Holdings Ltd');
+    expect(english(field, matter, makeSpecDeriveBoard([matter]))).toContain('No `account` matches');
     expect(specMutableFields('legalMatter')).not.toContain('counterpartyAccount');
+  });
+
+  /** The shared resolver's words live in the FOUNDER catalog, once, whichever vocabulary
+   *  carries the field — a legal key for the same sentence would be a second copy. */
+  it('resolves the shared counterparty sentence under the founder catalog', () => {
+    const field = spec('legalMatter').fields.find((entry) => entry.name === 'counterpartyAccount')!;
+    const matter = { kind: 'legalMatter', title: 'Acme MSA dispute', counterparty: 'Acme Holdings Ltd' };
+    expect(specFieldValue(field, matter, makeSpecDeriveBoard([matter]))).toMatchObject({
+      key: 'boardRef.notFound', namespace: 'creationCanvas.founder',
+    });
+  });
+
+  it('has a verdict sentence in every locale for every legal verdict key', () => {
+    for (const key of ['none', 'dated', 'undated']) {
+      for (const catalog of Object.values(CATALOGS)) expect(at(catalog, ['creationCanvas', 'legal', 'verdict', 'assignment', key])).toBeTruthy();
+    }
+    for (const key of ['over', 'under']) {
+      for (const catalog of Object.values(CATALOGS)) expect(at(catalog, ['creationCanvas', 'legal', 'verdict', 'spend', key])).toBeTruthy();
+    }
   });
 });
 

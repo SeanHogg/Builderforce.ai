@@ -30,7 +30,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketParticipantsService } from './ticketParticipants';
 import { buildProducerRequestPayload, buildSignoffRequestPayload } from './signoffRequest';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
-import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
+import { dispatchCloudRunForTask, dispatchError, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
 
 /** Whether the role is being asked to REVIEW the work or to PRODUCE it. */
 export type RoleRunKind = 'reviewer' | 'producer';
@@ -119,7 +119,15 @@ export async function requestRoleRun(
       ...(req.agentHostId != null ? { agentHostId: req.agentHostId } : {}),
       ...(req.force ? { force: true } : {}),
     },
-  ).catch(() => ({ executionId: null }) as CloudDispatchOutcome);
+  ).catch((error: unknown) => {
+    // A THROW is a refusal with a reason, not a reasonless null. This used to swallow the
+    // error into `{ executionId: null }`, and the Run-now route — which reports the
+    // dispatcher's own verdict — then had nothing to report: measured on task 2395, a
+    // person directing the run from chat was told "the dispatcher gave no reason", coded
+    // `no_agent`, for a ticket whose agent was resolved and whose dispatch had thrown.
+    reportCaughtError(error, { source: 'application/kanban/requestRoleRun.ts', operation: 'dispatch', context: { logMessage: '[role-run] dispatcher threw', details: { taskId: req.taskId, roleKey: req.roleKey } } });
+    return dispatchError(error);
+  });
   await Promise.allSettled(deferred);
   const executionId = outcome.executionId;
   if (executionId == null) return { executionId: null, ...(outcome.refusal ? { refusal: outcome.refusal } : {}) };

@@ -25,6 +25,7 @@ import {
   type RowValidationError,
 } from '@/lib/importHelpers';
 import { useBulkImportSubmit } from '@/lib/useBulkImportSubmit';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { BulkDropzone } from './BulkDropzone';
 import { BulkMappingTable } from './BulkMappingTable';
 import { BulkDryRunReport } from './BulkDryRunReport';
@@ -52,6 +53,7 @@ const FORMATS_LABEL = ACCEPTED_EXTENSIONS.map((ext) => ext.toUpperCase()).join('
 export default function BulkImport({ kind, onDirtyChange, onCancel }: BulkImportProps) {
   const t = useTranslations('import');
   const tCommon = useTranslations('common');
+  const errorMessage = useErrorMessage();
   const toast = useToast();
   const bulk = useBulkImportSubmit(kind.kind);
 
@@ -85,6 +87,7 @@ export default function BulkImport({ kind, onDirtyChange, onCancel }: BulkImport
       return;
     }
     const result = await parseFile(file);
+    if (result.parseFailure) { setFileError(errorMessage(result.parseFailure.cause) ?? tCommon('actionFailed')); return; }
     if (result.error) { setFileError(result.error); return; }
     setFileError(null);
     setParsed(result);
@@ -92,7 +95,7 @@ export default function BulkImport({ kind, onDirtyChange, onCancel }: BulkImport
     setMappingError(null);
     onDirtyChange?.(true);
     setStep('mapping');
-  }, [t, kind.fields, onDirtyChange]);
+  }, [t, tCommon, errorMessage, kind.fields, onDirtyChange]);
 
   const handleDownloadTemplate = useCallback(() => {
     downloadText(generateCSVTemplate(kind.fields), `import-template-${kind.kind}.csv`, 'text/csv;charset=utf-8;');

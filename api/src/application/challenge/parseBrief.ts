@@ -15,6 +15,7 @@
  * is no case where a pasted brief yields an empty spec.
  */
 
+import { asJsonObject } from '../../domain/shared/json';
 import type { LlmComplete } from '../compile';
 import { completeJson } from '../llm/completeJson';
 import { normalizeCapabilities, type Capability } from './blueprint';
@@ -142,10 +143,6 @@ export function heuristicSpec(brief: string): ChallengeSpec {
 const asStrings = (v: unknown, cap = 12): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((s) => s.trim()).slice(0, cap) : [];
 
-/** The extraction must be an object; an array or scalar reply is refused. */
-const asObject = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-
 /**
  * Extract a {@link ChallengeSpec}. The heuristic reading is computed first and
  * the model's answer merged over it — UNION for the lists, model-wins for the
@@ -166,7 +163,7 @@ export async function parseBrief(brief: string, llm?: LlmComplete): Promise<Chal
     // Budget and slug are informational for a `text` dispatch — the injected
     // completion owns its own limits.
     { system: SYSTEM, user: brief.slice(0, 12_000), maxTokens: 2000, useCase: 'challenge_parse_brief' },
-    asObject,
+    asJsonObject,
   );
   if (!out.ok) return base;
   const extracted = out.value;

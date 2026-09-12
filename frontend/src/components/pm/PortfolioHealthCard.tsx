@@ -3,7 +3,8 @@ import { useTranslations } from 'next-intl';
 import type { CSSProperties } from 'react';
 import { ProjectHealthBadge } from '@/components/ProjectHealth';
 import { useProjectStatusLabel } from '@/lib/projectStatus';
-import { RAG_COLOR, type PortfolioHealthItem } from '@/lib/pm/portfolioHealth';
+import { RAG_TONE, type PortfolioHealthItem } from '@/lib/pm/portfolioHealth';
+import { statusColor, statusPillStyle } from '@/lib/statusTone';
 
 /**
  * One project's health card on the Portfolio → Health grid (FR-1): its RAG band, how
@@ -62,7 +63,8 @@ const sentenceStyle: CSSProperties = {
 export function PortfolioHealthCard({ item }: PortfolioHealthCardProps) {
   const t = useTranslations('pmo');
   const statusLabel = useProjectStatusLabel();
-  const color = RAG_COLOR[item.rag];
+  // The top rule and the dot are marks (`solid`); the band pill is one tone trio.
+  const color = statusColor(RAG_TONE, item.rag, 'solid');
   const ragLabel = t(`health.rag.${item.rag}`);
 
   return (
@@ -72,8 +74,9 @@ export function PortfolioHealthCard({ item }: PortfolioHealthCardProps) {
         <span
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontSize: 'var(--font-size-small)', fontWeight: 700, color,
-            border: `1px solid ${color}`, borderRadius: 'var(--radius-full)', padding: '2px 10px',
+            fontSize: 'var(--font-size-small)', fontWeight: 700,
+            borderWidth: 1, borderStyle: 'solid', ...statusPillStyle(RAG_TONE, item.rag),
+            borderRadius: 'var(--radius-full)', padding: '2px 10px',
             whiteSpace: 'nowrap',
           }}
         >

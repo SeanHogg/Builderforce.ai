@@ -35,6 +35,7 @@
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
 import { documentTemplates, renderDocumentTemplate, type DocumentTemplateSummary, type RenderedDocument } from '@/lib/founderOpsApi';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 const NO_TENANT = 'This needs a signed-in, saved canvas session: drafting from the workspace\'s document templates reaches a real workspace. Say so in one sentence and keep building what this canvas can hold; never claim it ran.';
 
@@ -121,7 +122,7 @@ export function canvasDocumentTemplateActions(ctx: CanvasFounderOpsContext): Bra
           // so the model asks for the right thing rather than filling a formation
           // document with a placeholder.
           return {
-            error: error instanceof Error ? error.message : 'The document could not be drafted.',
+            error: toolErrorMessage(error, 'The document could not be drafted.'),
             needs: template.variables.filter((variable) => variable.required).map((variable) => ({ name: variable.name, label: variable.label, hint: variable.hint })),
             instruction: 'Ask the user for the missing detail in one short question. Never fill a formation document with a placeholder.',
           };

@@ -22,6 +22,8 @@ import {
 } from '@/lib/feedbackApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
+import { usePanelTask } from '@/hooks/usePanelTask';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
@@ -36,6 +38,13 @@ const btnSubtle: React.CSSProperties = {
 const chip: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em',
   padding: '2px 8px', borderRadius: 'var(--radius-full)', whiteSpace: 'nowrap',
+};
+
+/** Anything not yet decided reads as awaiting a person (the fallback, too). */
+const STATUS_TONE: StatusToneMap<FeedbackStatus> = {
+  new: 'warning',
+  approved: 'success',
+  declined: 'neutral',
 };
 
 /** Narrow a stored kind/status to a key that definitely exists in the catalogs,
@@ -64,8 +73,10 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
   const [queue, setQueue] = useState<FeedbackQueue>({ submissions: [], counts: {} });
   const [status, setStatus] = useState<FeedbackStatus | null>('new');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // The approve/decline in flight, and which card it is about.
+  const task = usePanelTask();
+  const [decidingId, setDecidingId] = useState<string | null>(null);
 
   /**
    * Reload plumbing, in three parts, so no dependency list has to lie.
@@ -110,23 +121,19 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
     let active = true;
     setLoading(true);
     loadRef.current(status)
-      .then((q) => { if (active) { setQueue(q); setError(null); } })
-      .catch((e) => { if (active) setError(faultMessage(e, t('triage.loadFailed'))); })
+      .then((q) => { if (active) { setQueue(q); setLoadError(null); } })
+      .catch((e) => { if (active) setLoadError(faultMessage(e, t('triage.loadFailed'))); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [status, reloadNonce, t]);
 
   const decide = async (s: FeedbackSubmission, decision: 'approved' | 'declined') => {
     if (decision === 'declined' && !(await confirm(t('triage.confirmDecline')))) return;
-    setBusyId(s.id); setError(null);
-    try {
-      await review(s, decision);
-      refresh();
-    } catch (e) {
-      setError(faultMessage(e, t('triage.reviewFailed')));
-    } finally {
-      setBusyId(null);
-    }
+    setDecidingId(s.id);
+    // `review` may resolve to nothing, so success is marked explicitly — `run` resolves
+    // to `undefined` only when the decision failed.
+    const recorded = await task.run(async () => { await review(s, decision); return true; }, { failure: t('triage.reviewFailed') });
+    if (recorded) refresh();
   };
 
   return (
@@ -139,7 +146,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
           {t('triage.filter')}
           <Select
             value={status ?? ''}
-            onChange={(e) => setStatus((e.target.value || null) as FeedbackStatus | null)}
+            onChange={(e) => { task.clear(); setStatus((e.target.value || null) as FeedbackStatus | null); }}
             style={{
               padding: '6px 10px', fontSize: 13, borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)',
@@ -153,7 +160,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
         </label>
       </div>
 
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
+      {(task.error ?? loadError) && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{task.error ?? loadError}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('triage.loading')}</div>
@@ -165,7 +172,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
             key={s.id}
             submission={s}
             showTenant={showTenant}
-            busy={busyId === s.id}
+            busy={task.busy && decidingId === s.id}
             onDecide={decide}
           />
         ))
@@ -186,11 +193,6 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
   const pending = s.status === 'new';
   const gated = isGated(s);
 
-  const statusColour = s.status === 'approved'
-    ? { background: 'var(--success-soft, rgba(22,163,74,.14))', color: 'var(--success)' }
-    : s.status === 'declined'
-      ? { background: 'var(--bg-elevated)', color: 'var(--text-muted)' }
-      : { background: 'var(--warning-soft, rgba(217,119,6,.14))', color: 'var(--warning)' };
 
   return (
     <div style={card}>
@@ -198,7 +200,7 @@ function SubmissionCard({ submission: s, showTenant, busy, onDecide }: {
         <span style={{ ...chip, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
           {t(`kind.${safeKind(s.kind)}`)}
         </span>
-        <span style={{ ...chip, ...statusColour }}>{t(`status.${safeStatus(s.status)}`)}</span>
+        <span style={{ ...chip, ...statusPillStyle(STATUS_TONE, s.status, 'warning') }}>{t(`status.${safeStatus(s.status)}`)}</span>
         <div style={{ flex: '1 1 200px', minWidth: 0, fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
           {s.title}
         </div>

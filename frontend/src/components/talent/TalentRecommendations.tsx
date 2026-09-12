@@ -24,6 +24,7 @@ import { MatchScore, MatchSkills } from './MatchScore';
 import { inviteToJob, listSavedTalent, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
 import { listJobRecommendations, type TalentMatch } from '@/lib/freelance/matching';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 14, minWidth: 0,
@@ -50,12 +51,14 @@ export function TalentRecommendations({ jobId }: { jobId: string }) {
   const [messageFor, setMessageFor] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  // WHICH card's action is in flight — disabling is per card, so the key stays local;
+  // the error slot (shared with the ranked read) is the task's.
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { error, run, fail, clear } = usePanelTask();
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    clear();
     try {
       // The shortlist rides along: the toggle state for twenty cards is ONE query, not one
       // per card, which is the N+1 the performance rule forbids.
@@ -66,45 +69,43 @@ export function TalentRecommendations({ jobId }: { jobId: string }) {
       setMatches(ranked);
       setShortlisted(new Set(saved.items.map((row) => row.freelancerUserId)));
     } catch (e) {
-      setError(faultMessage(e, t('match.loadError')));
+      const loadError = faultMessage(e, t('match.loadError'));
+      if (loadError) fail(loadError);
     } finally {
       setLoading(false);
     }
-  }, [jobId, t]);
+  }, [jobId, t, clear, fail]);
 
   useEffect(() => { void load(); }, [load]);
 
   const toggleShortlist = async (userId: string) => {
+    const wasShortlisted = shortlisted.has(userId);
     setBusy(`save:${userId}`);
-    setError(null);
-    try {
-      if (shortlisted.has(userId)) {
-        await unsaveTalent(userId);
-        setShortlisted((prev) => { const next = new Set(prev); next.delete(userId); return next; });
-      } else {
-        await saveTalent({ freelancerUserId: userId });
-        setShortlisted((prev) => new Set(prev).add(userId));
-      }
-    } catch (e) {
-      setError(faultMessage(e, t('shortlist.failed')));
-    } finally {
-      setBusy(null);
-    }
+    const result = await run(async () => {
+      if (wasShortlisted) await unsaveTalent(userId);
+      else await saveTalent({ freelancerUserId: userId });
+      return true;
+    }, { failure: t('shortlist.failed') });
+    setBusy(null);
+    if (result === undefined) return;
+    setShortlisted((prev) => {
+      const next = new Set(prev);
+      if (wasShortlisted) next.delete(userId); else next.add(userId);
+      return next;
+    });
   };
 
   const invite = async (userId: string) => {
     setBusy(`invite:${userId}`);
-    setError(null);
-    try {
+    const result = await run(async () => {
       await inviteToJob(jobId, { freelancerUserId: userId, message: message.trim() || undefined });
-      setInvitedNow((prev) => new Set(prev).add(userId));
-      setMessageFor(null);
-      setMessage('');
-    } catch (e) {
-      setError(faultMessage(e, t('invite.failed')));
-    } finally {
-      setBusy(null);
-    }
+      return true;
+    }, { failure: t('invite.failed') });
+    setBusy(null);
+    if (result === undefined) return;
+    setInvitedNow((prev) => new Set(prev).add(userId));
+    setMessageFor(null);
+    setMessage('');
   };
 
   if (loading) return <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('match.loading')}</p>;

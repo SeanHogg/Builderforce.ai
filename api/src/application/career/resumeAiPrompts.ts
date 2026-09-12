@@ -36,6 +36,7 @@
  * lets the whole verification story be unit-tested without a model.
  */
 
+import { extractJsonObject } from '../../domain/shared/json';
 import { STRONG_VERBS, parseResume, type ResumeBullet } from '@builderforce/creation-canvas-contract';
 import { consolidateResumes, scoreResume, type ResumeConsolidation, type ResumeScore, type ScoreCategory } from './resumeAnalysis';
 
@@ -636,24 +637,13 @@ type JsonRecord = Record<string, unknown>;
  * deterministic half, which needed no model in the first place.
  */
 function readObject(raw: string): JsonRecord | null {
-  const trimmed = raw.trim();
-  const body = trimmed.startsWith('```')
-    ? trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
-    : trimmed;
-  const start = body.indexOf('{');
-  const end = body.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    const parsed = JSON.parse(body.slice(start, end + 1)) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as JsonRecord) : null;
-  } catch {
-    // A malformed reply is a REFUSAL, not a crash — and not a silent one either: `null`
-    // makes the caller's verification pass mark every candidate `not_answered`, which is
-    // surfaced to the person as "the model returned nothing for this line" rather than as
-    // an empty result. There is nothing to report to an error channel; a model writing
-    // prose where JSON was asked for is a routine outcome this layer exists to absorb.
-    return null;
-  }
+  // THE one fence-and-brace reader (domain/shared/json). A malformed reply is a REFUSAL,
+  // not a crash — and not a silent one either: `null` makes the caller's verification
+  // pass mark every candidate `not_answered`, which is surfaced to the person as "the
+  // model returned nothing for this line" rather than as an empty result. There is
+  // nothing to report to an error channel; a model writing prose where JSON was asked
+  // for is a routine outcome this layer exists to absorb.
+  return extractJsonObject(raw);
 }
 
 function readArray(raw: string, field: string): JsonRecord[] {

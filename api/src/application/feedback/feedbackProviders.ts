@@ -31,6 +31,7 @@
  * storm into an error budget we spend on their schema change.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import { verifyHmacHex } from '../../infrastructure/crypto/webhookHmac';
 import { normalizeFeedback, type FeedbackKind, type NormalizedFeedback } from './feedbackSpec';
 
@@ -61,9 +62,6 @@ export interface FeedbackProviderAdapter {
 // Small tolerant readers (providers are untyped JSON over the wire)
 // ---------------------------------------------------------------------------
 
-function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
 function str(v: unknown): string | undefined {
   if (typeof v === 'string') return v.trim() || undefined;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
@@ -129,10 +127,10 @@ export const sentryFeedbackAdapter: FeedbackProviderAdapter = {
     return verifyHmacHex(rawBody, sig, secret);
   },
   eventId(payload, getHeader) {
-    const root = asRecord(payload);
-    const data = asRecord(root.data);
-    const fb = asRecord(data.feedback ?? root.feedback);
-    const issue = asRecord(data.issue ?? root.issue);
+    const root = asJsonRecord(payload);
+    const data = asJsonRecord(root.data);
+    const fb = asJsonRecord(data.feedback ?? root.feedback);
+    const issue = asJsonRecord(data.issue ?? root.issue);
     // Sentry stamps every delivery with a uuid header; prefer it, because it is
     // stable across the retries of ONE delivery and distinct between two genuine
     // deliveries that happen to describe the same issue.
@@ -144,9 +142,9 @@ export const sentryFeedbackAdapter: FeedbackProviderAdapter = {
       ?? null;
   },
   normalize(payload) {
-    const root = asRecord(payload);
-    const data = asRecord(root.data);
-    const fb = asRecord(data.feedback ?? root.feedback);
+    const root = asJsonRecord(payload);
+    const data = asJsonRecord(root.data);
+    const fb = asJsonRecord(data.feedback ?? root.feedback);
 
     // A User Feedback payload is a PERSON writing prose — the highest-value import.
     if (Object.keys(fb).length > 0) {
@@ -169,8 +167,8 @@ export const sentryFeedbackAdapter: FeedbackProviderAdapter = {
 
     // An issue alert carries no human prose, so the issue itself becomes the
     // request: a triager still wants it on the board, clearly marked as imported.
-    const issue = asRecord(data.issue ?? root.issue);
-    const title = str(issue.title) ?? str(asRecord(issue.metadata).value);
+    const issue = asJsonRecord(data.issue ?? root.issue);
+    const title = str(issue.title) ?? str(asJsonRecord(issue.metadata).value);
     if (!title) return [];
     const culprit = str(issue.culprit);
     return toSubmission(
@@ -207,20 +205,20 @@ export const posthogFeedbackAdapter: FeedbackProviderAdapter = {
       : verifyHmacHex(rawBody, sig, secret);
   },
   eventId(payload) {
-    const root = asRecord(payload);
-    const ev = asRecord(root.event ?? root);
+    const root = asJsonRecord(payload);
+    const ev = asJsonRecord(root.event ?? root);
     return str(ev.uuid)
       ?? str(root.uuid)
-      ?? str(asRecord(ev.properties).$insert_id)
-      ?? str(asRecord(root.properties).$insert_id)
+      ?? str(asJsonRecord(ev.properties).$insert_id)
+      ?? str(asJsonRecord(root.properties).$insert_id)
       ?? null;
   },
   normalize(payload) {
-    const root = asRecord(payload);
+    const root = asJsonRecord(payload);
     // PostHog wraps the event under `event` on newer destinations and sends it
     // flat on older ones; tolerate both rather than guessing from the payload.
-    const ev = asRecord(root.event ?? root);
-    const props = asRecord(ev.properties ?? root.properties);
+    const ev = asJsonRecord(root.event ?? root);
+    const props = asJsonRecord(ev.properties ?? root.properties);
     const name = (str(ev.event) ?? str(root.event_name) ?? '').toLowerCase();
 
     // A survey response arrives as `survey sent` with the answers on

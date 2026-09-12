@@ -49,6 +49,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv, Env } from '../../env';
 import { TenantRole } from '../../domain/shared/types';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requireTenantId } from '../middleware/tenantContext';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
 import { admitCandidate, candidateRefForUser } from '../../application/hiring/candidateIntake';
 import {
@@ -207,7 +208,6 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
   r.use('*', authMiddleware);
 
-  const scope = (c: { get: (key: 'tenantId') => number | undefined }) => c.get('tenantId') ?? 0;
 
   // ── The vocabulary, so the UI never hardcodes a stage name ──────────────────────
   r.get('/vocabulary', async (c) => c.json({
@@ -235,7 +235,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
    * board somebody may later share.
    */
   r.get('/postings', requireRole(TenantRole.DEVELOPER), async (c) => c.json({
-    postings: await listCanvasPostings(db, scope(c as never), {
+    postings: await listCanvasPostings(db, requireTenantId(c), {
       status: c.req.query('status') || null,
     }),
   }));
@@ -257,7 +257,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   r.post('/postings', requireRole(TenantRole.MANAGER), async (c) => {
     const input = await parseBody(c, PostingBody);
     const result = await syncCanvasPosting(db, c.env as Env, {
-      tenantId: scope(c as never),
+      tenantId: requireTenantId(c),
       actorUserId: c.get('userId') ?? '',
       postingId: input.postingId ?? null,
       draft: (input.draft ?? {}) as Parameters<typeof syncCanvasPosting>[2]['draft'],
@@ -268,7 +268,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   // ── Applications ───────────────────────────────────────────────────────────────
 
   r.get('/applications', requireRole(TenantRole.DEVELOPER), async (c) => c.json({
-    applications: await listApplications(db, scope(c as never), {
+    applications: await listApplications(db, requireTenantId(c), {
       jobPostingId: c.req.query('jobPostingId') || null,
       status: c.req.query('status') || null,
       candidateRef: c.req.query('candidateRef') || null,
@@ -285,7 +285,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
    * for the other three.
    */
   r.get('/applications/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     const applicationId = Number(c.req.param('id'));
     if (!Number.isInteger(applicationId)) return c.json({ error: 'Unknown application.' }, 400);
     const application = await readApplication(db, tenantId, applicationId);
@@ -308,7 +308,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
    * from. Both end in the same row and the same pipeline entry.
    */
   r.post('/applications', requireRole(TenantRole.MANAGER), async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     const input = await parseBody(c, ApplicationBody);
 
     const userId = input.userId ?? null;
@@ -345,7 +345,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
    * outcomes people later ask about.
    */
   r.post('/applications/:id/reject', requireRole(TenantRole.MANAGER), async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     const applicationId = Number(c.req.param('id'));
     if (!Number.isInteger(applicationId)) return c.json({ error: 'Unknown application.' }, 400);
     const input = await parseBody(c, RejectBody);
@@ -366,10 +366,10 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   /** Every pipeline with candidates in it, so the board's picker is a list of real
    *  requisitions rather than uuids somebody has to paste. */
   r.get('/pipelines', requireRole(TenantRole.DEVELOPER), async (c) =>
-    c.json({ pipelines: await listPipelines(c.env as Env, db, scope(c as never)) }));
+    c.json({ pipelines: await listPipelines(c.env as Env, db, requireTenantId(c)) }));
 
   r.get('/pipelines/:ref/board', requireRole(TenantRole.DEVELOPER), async (c) =>
-    c.json(await pipelineBoard(c.env as Env, db, scope(c as never), c.req.param('ref'))));
+    c.json(await pipelineBoard(c.env as Env, db, requireTenantId(c), c.req.param('ref'))));
 
   /**
    * Move a candidate, or reorder them within their column.
@@ -382,7 +382,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   r.post('/pipelines/:ref/move', requireRole(TenantRole.MANAGER), async (c) => {
     const input = await parseBody(c, MoveBody);
     return c.json(await moveCandidate(db, c.env as Env, {
-      tenantId: scope(c as never),
+      tenantId: requireTenantId(c),
       pipelineRef: c.req.param('ref'),
       candidateRef: input.candidateRef,
       toStage: input.toStage,
@@ -394,18 +394,18 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   // ── Interview kits ─────────────────────────────────────────────────────────────
 
   r.get('/kits', requireRole(TenantRole.DEVELOPER), async (c) =>
-    c.json({ kits: await listInterviewKits(c.env as Env, db, scope(c as never)) }));
+    c.json({ kits: await listInterviewKits(c.env as Env, db, requireTenantId(c)) }));
 
   /** Seed (or return) the tenant's default loop. A template surface that opens empty is
    *  a template surface nobody uses. */
   r.post('/kits/default', requireRole(TenantRole.MANAGER), async (c) => {
-    const kit = await ensureDefaultKit(db, c.env as Env, scope(c as never), c.get('userId') ?? null);
+    const kit = await ensureDefaultKit(db, c.env as Env, requireTenantId(c), c.get('userId') ?? null);
     return c.json({ kit });
   });
 
   r.post('/kits', requireRole(TenantRole.MANAGER), async (c) => {
     const input = await parseBody(c, CreateKitBody);
-    const kit = await createInterviewKit(db, c.env as Env, scope(c as never), {
+    const kit = await createInterviewKit(db, c.env as Env, requireTenantId(c), {
       name: input.name,
       roleFamily: input.roleFamily ?? null,
       description: input.description ?? null,
@@ -420,7 +420,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
     const kitId = Number(c.req.param('id'));
     if (!Number.isInteger(kitId)) return c.json({ error: 'Unknown kit.' }, 400);
     const input = await parseBody(c, UpdateKitBody);
-    const kit = await updateInterviewKit(db, c.env as Env, scope(c as never), kitId, {
+    const kit = await updateInterviewKit(db, c.env as Env, requireTenantId(c), kitId, {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.roleFamily !== undefined ? { roleFamily: cleared(input.roleFamily) } : {}),
       ...(input.description !== undefined ? { description: cleared(input.description) } : {}),
@@ -433,7 +433,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   r.delete('/kits/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const kitId = Number(c.req.param('id'));
     if (!Number.isInteger(kitId)) return c.json({ error: 'Unknown kit.' }, 400);
-    await deleteInterviewKit(db, c.env as Env, scope(c as never), kitId);
+    await deleteInterviewKit(db, c.env as Env, requireTenantId(c), kitId);
     return c.json({ ok: true });
   });
 
@@ -442,7 +442,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   r.get('/applications/:id/decisions', requireRole(TenantRole.DEVELOPER), async (c) => {
     const applicationId = Number(c.req.param('id'));
     if (!Number.isInteger(applicationId)) return c.json({ error: 'Unknown application.' }, 400);
-    return c.json({ decisions: await listDecisions(db, scope(c as never), { applicationId }) });
+    return c.json({ decisions: await listDecisions(db, requireTenantId(c), { applicationId }) });
   });
 
   r.post('/applications/:id/decisions', requireRole(TenantRole.MANAGER), async (c) => {
@@ -451,7 +451,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
     const input = await parseBody(c, DecisionBody);
     const actor = await resolveActorFromContext(c.env as Env, db, c);
     return c.json(await recordDecision(db, c.env as Env, {
-      tenantId: scope(c as never),
+      tenantId: requireTenantId(c),
       applicationId,
       decision: input.decision,
       rationale: input.rationale ?? null,
@@ -465,7 +465,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   r.get('/offers', requireRole(TenantRole.DEVELOPER), async (c) => {
     const applicationId = Number(c.req.query('applicationId'));
     return c.json({
-      offers: await listOffers(db, scope(c as never), {
+      offers: await listOffers(db, requireTenantId(c), {
         applicationId: Number.isInteger(applicationId) ? applicationId : null,
         candidateRef: c.req.query('candidateRef') || null,
         status: c.req.query('status') || null,
@@ -476,7 +476,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   r.post('/offers', requireRole(TenantRole.MANAGER), async (c) => {
     const input = await parseBody(c, DraftOfferBody);
     const offer = await draftOffer(db, c.env as Env, {
-      tenantId: scope(c as never),
+      tenantId: requireTenantId(c),
       applicationId: input.applicationId ?? null,
       candidateRef: input.candidateRef ?? null,
       title: input.title,
@@ -494,7 +494,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
     const offerId = Number(c.req.param('id'));
     if (!Number.isInteger(offerId)) return c.json({ error: 'Unknown offer.' }, 400);
     const input = await parseBody(c, UpdateOfferBody);
-    const offer = await updateOffer(db, scope(c as never), offerId, {
+    const offer = await updateOffer(db, requireTenantId(c), offerId, {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.baseSalary !== undefined ? { baseSalary: input.baseSalary } : {}),
       ...(input.currency !== undefined ? { currency: cleared(input.currency) } : {}),
@@ -510,7 +510,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
   r.get('/offers/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const offerId = Number(c.req.param('id'));
     if (!Number.isInteger(offerId)) return c.json({ error: 'Unknown offer.' }, 400);
-    const offer = await readOffer(db, scope(c as never), offerId);
+    const offer = await readOffer(db, requireTenantId(c), offerId);
     if (!offer) return c.json({ error: 'No such offer in this workspace.' }, 404);
     return c.json({ offer });
   });
@@ -528,7 +528,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
     const input = await parseBody(c, SendOfferBody);
     const actor = await resolveActorFromContext(c.env as Env, db, c);
     const sent = await sendOffer(db, c.env as Env, {
-      tenantId: scope(c as never),
+      tenantId: requireTenantId(c),
       offerId,
       parties: input.parties,
       ...(input.remindAfterDays !== undefined ? { remindAfterDays: input.remindAfterDays } : {}),
@@ -544,7 +544,7 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
     const input = await parseBody(c, RespondBody);
     const actor = await resolveActorFromContext(c.env as Env, db, c);
     return c.json(await respondToOffer(db, c.env as Env, {
-      tenantId: scope(c as never),
+      tenantId: requireTenantId(c),
       offerId,
       response: input.response,
       note: input.note ?? null,

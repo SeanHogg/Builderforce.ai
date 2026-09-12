@@ -104,7 +104,7 @@ export function CanvasFilesPanel({
               {visible.map((file) => <li key={file.id} className={styles.fileRow}>
                 <button type="button" className={styles.fileOpen} onClick={() => onOpen(file.nodeId)} title={t('openOnCanvas')}>
                   {file.previewImageUrl
-                    ? <img src={file.previewImageUrl} alt="" aria-hidden />
+                    ? <img src={file.previewImageUrl} alt="" aria-hidden width={30} height={30} />
                     : <span className={styles.fileIcon} aria-hidden><Icon source={CATEGORY_ICON[file.category]} size={18} /></span>}
                   <span className={styles.fileText}>
                     <b>{file.name}</b>

@@ -27,6 +27,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -81,7 +82,7 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
 
     // The agent leg is tenant-scoped, so pass the caller's tenant: an authenticated
     // member must not be able to read another workspace's agent personality by id.
-    const tenantId = (c.get('tenantId') as number | undefined) ?? null;
+    const tenantId = optionalTenantId(c);
     const profile = await resolvePsychometricProfile(c.env as Env, db, tenantId, body).catch(() => undefined);
     // Personality = homeostatic setpoints: seed the appraisal from the profile's derived
     // setpoints so the affect reflects personality; neutral resting state when none.

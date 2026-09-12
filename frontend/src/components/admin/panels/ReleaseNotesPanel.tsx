@@ -162,7 +162,6 @@ export default function ReleaseNotesPanel() {
         ? t('releaseNotes.resendNoteConfirm', { title: note.title })
         : t('releaseNotes.sendNoteConfirm', { title: note.title }),
       confirmLabel: t('releaseNotes.sendNote'),
-      destructive: false,
     }))) return;
     setBusy(true);
     setError('');
@@ -182,7 +181,6 @@ export default function ReleaseNotesPanel() {
     if (!(await confirm({
       message: t('releaseNotes.sendDigestConfirm'),
       confirmLabel: t('releaseNotes.sendDigest'),
-      destructive: false,
     }))) return;
     setBusy(true);
     setError('');

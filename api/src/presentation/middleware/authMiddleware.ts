@@ -178,8 +178,10 @@ export const optionalAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next
  * Predicate: does the request's caller hold MANAGER role or higher? The one
  * spelling of the manager gate — use in a route body where `requireRole` (which
  * throws) isn't the right shape, e.g. a per-field or "own-or-manager" check.
+ * Takes any context that can answer `get('role')`, so a router whose env extends
+ * `HonoEnv` passes its own context without a cast.
  */
-export function isManager(c: Context<HonoEnv>): boolean {
+export function isManager(c: { get(key: 'role'): unknown }): boolean {
   return hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER);
 }
 
@@ -211,8 +213,14 @@ export function requestActor(c: Context<HonoEnv>): TransitionActorInput {
  *
  * Usage:
  *   router.delete('/:id', authMiddleware, requireRole(TenantRole.MANAGER), handler)
+ *
+ * Generic over the router's env so a router that EXTENDS `HonoEnv` (extra
+ * bindings such as `AGENT_HOST_RELAY`, extra variables) takes the gate as-is —
+ * a `MiddlewareHandler<HonoEnv>` is not assignable there, which is what used to
+ * force an `as never` onto every such call site. It only reads `role`, which
+ * every `E extends HonoEnv` carries.
  */
-export function requireRole(minimum: TenantRole): MiddlewareHandler<HonoEnv> {
+export function requireRole<E extends HonoEnv = HonoEnv>(minimum: TenantRole): MiddlewareHandler<E> {
   return async (c, next) => {
     const role = c.get('role') as TenantRole;
     if (!hasMinRole(role, minimum)) {

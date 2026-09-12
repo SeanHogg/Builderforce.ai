@@ -23,10 +23,11 @@
  * Money is the MAJOR currency unit throughout — `Amount: 50` is fifty dollars.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import { unzipSync, strFromU8 } from 'fflate';
 
 import {
-  AdsProviderError, ask, count, fromCents, isRetryableAdStatus, list, mapObjective, rec, requireField,
+  AdsProviderError, ask, count, fromCents, isRetryableAdStatus, list, mapObjective, requireField,
   text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
@@ -103,7 +104,7 @@ const wrap = <T>(element: string, values: readonly T[]): Record<string, readonly
 
 /** A SOAP typed array out: `{Campaign: […]}` → `[…]`, and a single element → `[it]`. */
 const unwrap = (value: unknown, element: string): Record<string, unknown>[] =>
-  list(rec(value)[element] ?? value).map(rec);
+  list(asJsonRecord(value)[element] ?? value).map(asJsonRecord);
 
 function toStatus(raw: unknown): AdStatus {
   switch (text(raw)) {
@@ -126,7 +127,7 @@ function fromStatus(status: AdStatus | undefined): string | undefined {
 
 /** Microsoft returns `{Amount: 50}` for money and a bare number in places. */
 const amountCents = (value: unknown): number | null =>
-  toCents(rec(value).Amount ?? value, MAJOR);
+  toCents(asJsonRecord(value).Amount ?? value, MAJOR);
 
 /**
  * The criterion rows a Microsoft ad group targets with.
@@ -169,7 +170,7 @@ function readCriterions(rows: readonly Record<string, unknown>[]): AdTargeting {
     countries?: string[]; ageMin?: number; ageMax?: number;
     genders?: AdGender[]; interests?: string[]; placements?: AdPlacement[]; devices?: AdDevice[];
   } = {};
-  const criteria = rows.map((row) => rec(row.Criterion));
+  const criteria = rows.map((row) => asJsonRecord(row.Criterion));
 
   const window = ageFromBuckets(AGE_BUCKETS, criteria.map((c) => text(c.AgeRange)).filter(Boolean));
   if (window) {
@@ -316,20 +317,20 @@ export const microsoftAdsProvider: AdsProvider = {
      * developer token raises a SOAP fault here rather than at the first write.
      */
     const result = await ask(call, 'get_campaigns', { AccountId: accountId, CampaignType: 'Search Audience' });
-    const first = unwrap(rec(result.data).Campaigns, 'Campaign')[0];
+    const first = unwrap(asJsonRecord(result.data).Campaigns, 'Campaign')[0];
     return {
       externalId: accountId,
       name: `Account ${accountId}`,
       // Every campaign on an account bills in the account's currency, so the first one
       // that names it answers for all of them.
-      currency: first ? text(rec(first.DailyBudget).CurrencyCode) || 'USD' : 'USD',
+      currency: first ? text(asJsonRecord(first.DailyBudget).CurrencyCode) || 'USD' : 'USD',
     };
   },
 
   async listCampaigns(call, fields, identity) {
     const accountId = requireField(fields, 'adAccountId', 'the account ID');
     const result = await ask(call, 'get_campaigns', { AccountId: accountId, CampaignType: 'Search Audience DynamicSearchAds' });
-    return unwrap(rec(result.data).Campaigns, 'Campaign').map((c) => {
+    return unwrap(asJsonRecord(result.data).Campaigns, 'Campaign').map((c) => {
       const native = text(c.CampaignType) || null;
       return {
         externalId: text(c.Id),
@@ -367,9 +368,9 @@ export const microsoftAdsProvider: AdsProvider = {
       }]),
     });
     // `AddCampaigns` answers with a parallel array of ids and one of per-item errors.
-    const id = list(rec(rec(result.data).CampaignIds).long ?? rec(result.data).CampaignIds).map(text).find(Boolean) ?? '';
+    const id = list(asJsonRecord(asJsonRecord(result.data).CampaignIds).long ?? asJsonRecord(result.data).CampaignIds).map(text).find(Boolean) ?? '';
     if (!id) {
-      const reason = text(rec(unwrap(rec(result.data).PartialErrors, 'BatchError')[0]).Message);
+      const reason = text(asJsonRecord(unwrap(asJsonRecord(result.data).PartialErrors, 'BatchError')[0]).Message);
       throw new AdsProviderError(
         reason || 'Microsoft Advertising accepted the campaign but did not return its id.',
         reason ? 400 : 502,
@@ -423,12 +424,12 @@ export const microsoftAdsProvider: AdsProvider = {
     const sets: AdSetRemote[] = [];
     for (const campaignId of campaignIds) {
       const result = await ask(call, 'get_ad_groups', { CampaignId: campaignId });
-      const groups = unwrap(rec(result.data).AdGroups, 'AdGroup');
+      const groups = unwrap(asJsonRecord(result.data).AdGroups, 'AdGroup');
       for (const group of groups) {
         const id = text(group.Id);
         // Targeting is a SEPARATE collection per group — see `criterionsFor`.
         const criterionResult = await ask(call, 'get_ad_group_criterions', { AdGroupId: id, CriterionType: 'Targets' });
-        const criterions = unwrap(rec(criterionResult.data).AdGroupCriterions, 'AdGroupCriterion');
+        const criterions = unwrap(asJsonRecord(criterionResult.data).AdGroupCriterions, 'AdGroupCriterion');
         sets.push({
           externalId: id,
           externalCampaignId: campaignId,
@@ -436,8 +437,8 @@ export const microsoftAdsProvider: AdsProvider = {
           status: toStatus(group.Status),
           targeting: readCriterions(criterions),
           nativeTargeting: criterions.length ? criterions : null,
-          bidStrategy: text(rec(group.BiddingScheme).Type) || null,
-          bidCents: amountCents(rec(group.CpcBid).Amount ?? group.CpcBid),
+          bidStrategy: text(asJsonRecord(group.BiddingScheme).Type) || null,
+          bidCents: amountCents(asJsonRecord(group.CpcBid).Amount ?? group.CpcBid),
           // The budget is on the CAMPAIGN on Microsoft; an ad group carries a bid.
           dailyBudgetCents: null,
           currency: identity.currency,
@@ -464,9 +465,9 @@ export const microsoftAdsProvider: AdsProvider = {
         ...(draft.endsAtISO ? { EndDate: draft.endsAtISO } : {}),
       }]),
     });
-    const id = list(rec(rec(result.data).AdGroupIds).long ?? rec(result.data).AdGroupIds).map(text).find(Boolean) ?? '';
+    const id = list(asJsonRecord(asJsonRecord(result.data).AdGroupIds).long ?? asJsonRecord(result.data).AdGroupIds).map(text).find(Boolean) ?? '';
     if (!id) {
-      const reason = text(rec(unwrap(rec(result.data).PartialErrors, 'BatchError')[0]).Message);
+      const reason = text(asJsonRecord(unwrap(asJsonRecord(result.data).PartialErrors, 'BatchError')[0]).Message);
       throw new AdsProviderError(
         reason || 'Microsoft Advertising accepted the ad group but did not return its id.',
         reason ? 400 : 502,
@@ -526,7 +527,7 @@ export const microsoftAdsProvider: AdsProvider = {
      * Microsoft has no "replace" — the existing rows are read and deleted first.
      */
     const existing = unwrap(
-      rec((await ask(call, 'get_ad_group_criterions', { AdGroupId: externalId, CriterionType: 'Targets' })).data).AdGroupCriterions,
+      asJsonRecord((await ask(call, 'get_ad_group_criterions', { AdGroupId: externalId, CriterionType: 'Targets' })).data).AdGroupCriterions,
       'AdGroupCriterion',
     );
     const ids = existing.map((row) => text(row.Id)).filter(Boolean);
@@ -558,9 +559,9 @@ export const microsoftAdsProvider: AdsProvider = {
         AdGroupId: adGroupId,
         AdTypes: wrap('AdType', ['ResponsiveSearch', 'ExpandedText']),
       });
-      for (const ad of unwrap(rec(result.data).Ads, 'Ad')) {
-        const headlines = unwrap(ad.Headlines, 'AssetLink').map((link) => text(rec(link.Asset).Text)).filter(Boolean);
-        const descriptions = unwrap(ad.Descriptions, 'AssetLink').map((link) => text(rec(link.Asset).Text)).filter(Boolean);
+      for (const ad of unwrap(asJsonRecord(result.data).Ads, 'Ad')) {
+        const headlines = unwrap(ad.Headlines, 'AssetLink').map((link) => text(asJsonRecord(link.Asset).Text)).filter(Boolean);
+        const descriptions = unwrap(ad.Descriptions, 'AssetLink').map((link) => text(asJsonRecord(link.Asset).Text)).filter(Boolean);
         ads.push({
           externalId: text(ad.Id),
           externalAdSetId: adGroupId,
@@ -572,7 +573,7 @@ export const microsoftAdsProvider: AdsProvider = {
           body: descriptions.join('\n') || text(ad.Text) || null,
           callToAction: null,
           destinationUrl: unwrap(ad.FinalUrls, 'string').map(text).find(Boolean)
-            ?? list(rec(ad.FinalUrls).string).map(text).find(Boolean)
+            ?? list(asJsonRecord(ad.FinalUrls).string).map(text).find(Boolean)
             ?? null,
         });
       }
@@ -608,9 +609,9 @@ export const microsoftAdsProvider: AdsProvider = {
         Descriptions: wrap('AssetLink', descriptions.slice(0, 4).map((value) => ({ Asset: { 'i:type': 'TextAsset', Text: value.slice(0, 90) } }))),
       }]),
     });
-    const id = list(rec(rec(result.data).AdIds).long ?? rec(result.data).AdIds).map(text).find(Boolean) ?? '';
+    const id = list(asJsonRecord(asJsonRecord(result.data).AdIds).long ?? asJsonRecord(result.data).AdIds).map(text).find(Boolean) ?? '';
     if (!id) {
-      const reason = text(rec(unwrap(rec(result.data).PartialErrors, 'BatchError')[0]).Message);
+      const reason = text(asJsonRecord(unwrap(asJsonRecord(result.data).PartialErrors, 'BatchError')[0]).Message);
       throw new AdsProviderError(
         reason || 'Microsoft Advertising accepted the ad but did not return its id.',
         reason ? 400 : 502,
@@ -675,7 +676,7 @@ export const microsoftAdsProvider: AdsProvider = {
         },
       },
     });
-    const requestId = text(rec(submitted.data).ReportRequestId);
+    const requestId = text(asJsonRecord(submitted.data).ReportRequestId);
     if (!requestId) {
       throw new AdsProviderError('Microsoft Advertising accepted the report request but did not return its id.', 502, true);
     }
@@ -683,7 +684,7 @@ export const microsoftAdsProvider: AdsProvider = {
     // ── 2. POLL ────────────────────────────────────────────────────────────
     let downloadUrl = '';
     for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
-      const polled = rec(rec((await ask(call, 'poll_report', { ReportRequestId: requestId })).data).ReportRequestStatus);
+      const polled = asJsonRecord(asJsonRecord((await ask(call, 'poll_report', { ReportRequestId: requestId })).data).ReportRequestStatus);
       const status = text(polled.Status);
       if (status === 'Success') {
         downloadUrl = text(polled.ReportDownloadUrl);

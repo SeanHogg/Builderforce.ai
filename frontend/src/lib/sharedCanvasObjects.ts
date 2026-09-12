@@ -156,11 +156,13 @@ export const SHARED_OBJECT_SPECS: readonly SpecObjectSpec[] = [
           const progress = sequenceProgress({ steps: data.steps, enrolments: data.enrolments });
           if (progress.enrolled === 0) return undefined;
           const inFlight = progress.enrolled - progress.replied - progress.stopped - progress.completed;
+          // `labelKey` is what the card translates (`creationCanvas.shared.bar.*`);
+          // `label` stays the identifier the model reads in the snapshot.
           return [
-            { label: 'replied', value: progress.replied },
-            { label: 'completed', value: progress.completed },
-            { label: 'stopped', value: progress.stopped },
-            { label: 'inFlight', value: Math.max(0, inFlight) },
+            { label: 'replied', labelKey: 'replied', value: progress.replied },
+            { label: 'completed', labelKey: 'completed', value: progress.completed },
+            { label: 'stopped', labelKey: 'stopped', value: progress.stopped },
+            { label: 'inFlight', labelKey: 'inFlight', value: Math.max(0, inFlight) },
           ].filter((bar) => bar.value > 0);
         },
       },

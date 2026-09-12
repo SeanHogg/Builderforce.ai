@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { knowledgeApi, type CreateDocInput } from '@/lib/knowledgeApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * One place that turns "I picked a template" into a created draft + a jump into
  * the editor. Shared by the Knowledge home's gap list and the /knowledge/new
@@ -13,6 +13,7 @@ import { faultMessage } from '@/lib/apiClient';
  */
 export function useCreateKnowledge(projectId: number | null = null) {
   const router = useRouter();
+  const errorMessage = useErrorMessage();
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,11 +27,11 @@ export function useCreateKnowledge(projectId: number | null = null) {
         const doc = await knowledgeApi.create({ projectId, ...payload });
         router.push(`/knowledge/${doc.id}`);
       } catch (e) {
-        setError(faultMessage(e, 'Failed to create document'));
+        setError(errorMessage(e));
         setCreatingKey(null);
       }
     },
-    [projectId, router],
+    [projectId, router, errorMessage],
   );
 
   return { create, creatingKey, error };

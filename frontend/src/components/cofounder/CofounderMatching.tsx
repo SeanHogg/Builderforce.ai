@@ -32,7 +32,7 @@ import {
 } from '@/lib/founderOpsApi';
 import { FounderPaperwork } from './FounderPaperwork';
 import styles from './CofounderMatching.module.css';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 const EMPTY_PROFILE = {
   headline: '',
   bio: '',
@@ -58,13 +58,12 @@ export function CofounderMatching() {
   const [profile, setProfile] = useState<CofounderProfile | null>(null);
   const [matches, setMatches] = useState<CofounderMatch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy: saving, error, run: runTask, clear: clearTask } = usePanelTask();
   const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    clearTask();
     try {
       const result = await cofounderMatches();
       setProfile(result.profile);
@@ -78,7 +77,7 @@ export function CofounderMatching() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearTask]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -100,10 +99,9 @@ export function CofounderMatching() {
     });
   }, [profile]);
 
+  // The re-read runs inside the task so "Saving…" holds until the matches reflect it.
   const save = async () => {
-    setSaving(true);
-    setError(null);
-    try {
+    await runTask(async () => {
       await saveCofounderProfile({
         headline: draft.headline,
         bio: draft.bio,
@@ -119,11 +117,7 @@ export function CofounderMatching() {
         visibility: draft.visibility,
       } as never);
       await load();
-    } catch (saveError) {
-      setError(faultMessage(saveError, t('saveFailed')));
-    } finally {
-      setSaving(false);
-    }
+    }, { failure: t('saveFailed') });
   };
 
   return (
@@ -296,20 +290,13 @@ function MatchCard({
 }) {
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run: runTask } = usePanelTask();
 
   const ask = async () => {
-    setBusy(true);
-    setError(null);
-    try {
+    await runTask(async () => {
       await requestIntroduction(match.profileId, message);
       await onAsked();
-    } catch (askError) {
-      setError(faultMessage(askError, t('askFailed')));
-    } finally {
-      setBusy(false);
-    }
+    }, { failure: t('askFailed') });
   };
 
   return (

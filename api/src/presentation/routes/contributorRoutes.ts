@@ -21,6 +21,7 @@
 import { Hono } from 'hono';
 import { and, asc, between, desc, eq, gte, lte, sum, count, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import {
   contributors,
   contributorIdentities,
@@ -120,7 +121,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   // its connected repo. See application/contributors/activityIngest.ts.
   router.post('/activity', async (c) => {
     await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
-    const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number | undefined;
+    const tenantId = optionalTenantId(c);
     if (!tenantId) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, ActivityIngestBody);

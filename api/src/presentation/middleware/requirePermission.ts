@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { ForbiddenError } from '../../domain/shared/errors';
+import { optionalTenantId } from './tenantContext';
 import { memberHasPermission } from '../../application/rbac/effectivePermissions';
 import type { Permission } from '../../domain/permissions/permissionRegistry';
 
@@ -23,7 +24,7 @@ import type { Permission } from '../../domain/permissions/permissionRegistry';
  */
 export function requirePermission(permission: Permission): MiddlewareHandler<HonoEnv> {
   return async (c, next) => {
-    const tenantId = c.get('tenantId') as number | undefined;
+    const tenantId = optionalTenantId(c);
     const userId = c.get('userId') as string | undefined;
     const role = c.get('role') as string | undefined;
 

@@ -27,9 +27,6 @@ export function isRetryableAdStatus(status: number): boolean {
 }
 
 
-export const rec = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 export const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
 export const text = (value: unknown): string => (value == null ? '' : String(value));

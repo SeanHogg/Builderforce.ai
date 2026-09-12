@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { TenantRole } from '../../domain/shared/types';
 /**
@@ -641,7 +642,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     );
     if ('error' in result) {
       const notFound = result.error === 'Chat not found';
-      return c.json({ error: result.error }, notFound ? 404 : result.error === 'LLM not configured' ? 503 : 400);
+      return statusResponse(c, { error: result.error }, notFound ? 404 : result.error === 'LLM not configured' ? 503 : 400, { source: 'presentation/routes/brainRoutes.ts', operation: 'chatReply' });
     }
     return c.json({ message: result }, 201);
   });

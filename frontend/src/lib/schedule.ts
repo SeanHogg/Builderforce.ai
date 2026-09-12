@@ -7,6 +7,8 @@
  * components and these helpers are reused unchanged across both pages.
  */
 
+import type { StatusToneMap } from '@/lib/statusTone';
+
 /** Anything that can be placed on a timeline: a start and a deadline (either may be absent). */
 export interface Schedulable {
   /** Earliest start, ISO string or null/absent. */
@@ -23,12 +25,16 @@ export interface ItemSchedule {
   status: DeadlineStatus;
 }
 
-/** Color tokens per deadline status, reused by both views for a single legend. */
-export const DEADLINE_COLORS: Record<DeadlineStatus, string> = {
-  overdue: 'var(--coral-bright)',
-  soon: 'var(--warning)',
-  upcoming: 'var(--coral-bright)',
-  none: 'var(--text-muted)',
+/**
+ * Tone per deadline status, reused by both views for a single legend. `overdue` and
+ * `upcoming` used to share one coral, so the legend drew two identical swatches for
+ * opposite states; overdue is now `danger` and upcoming the brand `accent`.
+ */
+export const DEADLINE_TONE: StatusToneMap<DeadlineStatus> = {
+  overdue: 'danger',
+  soon: 'warning',
+  upcoming: 'accent',
+  none: 'neutral',
 };
 
 /** "Due soon" window, in days, ahead of today. */

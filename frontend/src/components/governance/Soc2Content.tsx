@@ -2,8 +2,10 @@
 
 import { Select } from '@/components/Select';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { governanceApi, type SocControl } from '@/lib/builderforceApi';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * SOC 2 Control Tracker (doc 07 SEC-1). Lists the CC1–CC9 controls for the active
@@ -11,18 +13,13 @@ import { governanceApi, type SocControl } from '@/lib/builderforceApi';
  * set per-control status. The real Security-pillar embed surface for `soc2`.
  */
 
-const STATUS_LABELS: Record<SocControl['status'], string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  ready: 'Ready',
-  out_of_scope: 'Out of scope',
-};
+/** Status order. Labels resolve under `soc2Tracker.status.<status>`. */
 const STATUS_ORDER: SocControl['status'][] = ['not_started', 'in_progress', 'ready', 'out_of_scope'];
-const STATUS_COLOR: Record<SocControl['status'], string> = {
-  not_started: 'var(--text-muted)',
-  in_progress: 'var(--warning)',
-  ready: 'var(--success)',
-  out_of_scope: 'var(--text-secondary)',
+const STATUS_TONE: StatusToneMap<SocControl['status']> = {
+  not_started: 'neutral',
+  in_progress: 'warning',
+  ready: 'success',
+  out_of_scope: 'neutral',
 };
 
 /** Readiness = ready / (controls not marked out_of_scope). Shared by overall + per-category. */
@@ -33,20 +30,21 @@ function readiness(controls: SocControl[]): { ready: number; inScope: number; pc
 }
 
 export function Soc2Content() {
+  const t = useTranslations('soc2Tracker');
   const [controls, setControls] = useState<SocControl[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     governanceApi.soc2
       .listControls()
       .then(setControls)
-      .catch(() => setError('Could not load SOC 2 controls.'))
+      .catch(() => setError(t('loadFailed')))
       .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+  }, [t]);
+  useEffect(load, [load]);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, SocControl[]>();
@@ -65,7 +63,7 @@ export function Soc2Content() {
       await governanceApi.soc2.seed();
       load();
     } catch {
-      setError('Seeding failed (manager role required).');
+      setError(t('seedFailed'));
     } finally {
       setBusy(false);
     }
@@ -76,19 +74,19 @@ export function Soc2Content() {
     try {
       await governanceApi.soc2.patchControl(id, { status });
     } catch {
-      setError('Update failed.');
+      setError(t('updateFailed'));
       load();
     }
   };
 
-  if (loading) return <div style={{ color: 'var(--text-secondary)' }}>Loading SOC 2 controls…</div>;
+  if (loading) return <div style={{ color: 'var(--text-secondary)' }}>{t('loading')}</div>;
 
   if (controls.length === 0) {
     return (
       <div>
-        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>SOC 2 Control Tracker</div>
-        <div style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>No controls yet. Seed the SOC 2 Common Criteria (CC1–CC9) baseline to start tracking readiness.</div>
-        <button onClick={seed} disabled={busy} style={btnStyle}>{busy ? 'Seeding…' : 'Seed SOC 2 baseline'}</button>
+        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>{t('title')}</div>
+        <div style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{t('emptyBody')}</div>
+        <button onClick={seed} disabled={busy} style={btnStyle}>{busy ? t('seeding') : t('seed')}</button>
         {error && <div role="alert" style={{ color: 'var(--error-text)', marginTop: 8 }}>{error}</div>}
       </div>
     );
@@ -97,9 +95,14 @@ export function Soc2Content() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>SOC 2 Control Tracker</div>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>{t('title')}</div>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          Readiness <strong style={{ color: 'var(--text-primary)' }}>{overall.pct}%</strong> ({overall.ready}/{overall.inScope} in scope)
+          {t.rich('readiness', {
+            pct: overall.pct,
+            ready: overall.ready,
+            inScope: overall.inScope,
+            strong: (chunks) => <strong style={{ color: 'var(--text-primary)' }}>{chunks}</strong>,
+          })}
         </div>
       </div>
       {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
@@ -109,17 +112,17 @@ export function Soc2Content() {
         return (
           <div key={category} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-              {category} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>· {r.pct}% ready</span>
+              {category} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{t('categoryReady', { pct: r.pct })}</span>
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {items.map((c) => (
                 <div key={c.id} style={rowStyle}>
                   <span style={{ fontWeight: 600, minWidth: 52 }}>{c.controlRef}</span>
                   <span style={{ flex: 1 }}>{c.name}</span>
-                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: 'var(--radius-md)', background: STATUS_COLOR[c.status] }} />
+                  <span aria-hidden style={{ width: 8, height: 8, borderRadius: 'var(--radius-md)', background: statusColor(STATUS_TONE, c.status, 'solid') }} />
                   <Select value={c.status} onChange={(e) => setStatus(c.id, e.target.value as SocControl['status'])} style={selectStyle}>
                     {STATUS_ORDER.map((s) => (
-                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                      <option key={s} value={s}>{t(`status.${s}`)}</option>
                     ))}
                   </Select>
                 </div>

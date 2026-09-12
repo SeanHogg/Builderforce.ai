@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { approvalsApi, type Approval, type ResolvedApproval } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * The canonical resolve UI for a human-in-the-loop request: approve/reject an
  * action, or answer a question/feedback with free text. Self-contained — it owns
@@ -32,6 +32,7 @@ export function ApprovalResolveControl({ approval, onResolved, compact = false }
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const errorMessage = useErrorMessage();
 
   // Visibility is the component's own call — only a pending request is resolvable.
   if (approval.status !== 'pending') return null;
@@ -43,7 +44,7 @@ export function ApprovalResolveControl({ approval, onResolved, compact = false }
       const updated = await approvalsApi.decide(approval.id, body);
       onResolved?.(updated);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to update request'));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

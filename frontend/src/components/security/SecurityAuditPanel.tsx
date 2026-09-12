@@ -14,6 +14,8 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { SEVERITY_COLOR } from './securitySeverity';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -21,10 +23,6 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
-
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: 'var(--error)', high: 'var(--orange-bright)', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
-};
 
 function SeverityChip({ severity, count }: { severity: string; count: number }) {
   const color = SEVERITY_COLOR[severity] ?? 'var(--text-muted)';
@@ -42,6 +40,7 @@ function SeverityChip({ severity, count }: { severity: string; count: number }) 
 export function SecurityAuditPanel() {
   const fmt = useFormat();
   const t = useTranslations('security');
+  const errorMessage = useErrorMessage();
   const [audits, setAudits] = useState<SecurityAudit[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -64,7 +63,7 @@ export function SecurityAuditPanel() {
       await securityAgentApi.runAudit();
       load();
     } catch (e) {
-      setError(faultMessage(e, 'Failed to start audit'));
+      setError(errorMessage(e));
     } finally {
       setRunning(false);
     }
@@ -78,7 +77,7 @@ export function SecurityAuditPanel() {
       const res = await securityAgentApi.getAudit(id);
       setFindings((prev) => ({ ...prev, [id]: res.findings }));
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load findings'));
+      setError(errorMessage(e));
     }
   };
 

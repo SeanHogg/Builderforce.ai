@@ -6,7 +6,7 @@ import { tasksApi, agentHosts as agentHostsApi, type Task, type AgentHost } from
 import { RunAgentControl } from '@/components/task/RunAgentControl';
 import { AgentExecutionPanel } from '@/components/agent/AgentExecutionPanel';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * BuilderAgentPanel — run a cloud agent / AI prompt against this project from inside
  * the Designer, exactly like the VS Code plugin: pick (or create from a prompt) a
@@ -16,6 +16,7 @@ import { faultMessage } from '@/lib/apiClient';
  * so Builder never forks the agent loop — the same branch/PR/Changes flow as the board.
  */
 export function BuilderAgentPanel({ projectId }: { projectId: number }) {
+  const errorMessage = useErrorMessage();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [hosts, setHosts] = useState<AgentHost[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -46,7 +47,7 @@ export function BuilderAgentPanel({ projectId }: { projectId: number }) {
       setTasks((prev) => [task, ...prev]);
       setSelectedId(task.id);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to create task'));
+      setError(errorMessage(e));
     } finally {
       setCreating(false);
     }

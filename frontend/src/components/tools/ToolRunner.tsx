@@ -36,6 +36,7 @@ import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } f
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { faultMessage, faultText } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const fieldInput: React.CSSProperties = {
   padding: '9px 12px', fontSize: 'var(--font-size-body)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
@@ -70,6 +71,7 @@ export default function ToolRunner({
   onInputChange, onRunComplete, onDefinitionLoad,
 }: ToolRunnerProps) {
   const t = useTranslations('tools');
+  const errorMessage = useErrorMessage();
   const searchParams = useSearchParams();
   // Attribute the run to a project: the global TopBar scope param `?project=` wins,
   // the legacy `?projectId=` is still honoured for old links, and when neither is
@@ -134,7 +136,7 @@ export default function ToolRunner({
       // their result and we can target them with a sign-up. Authed users are known.
       if (!isAuthed) trackToolRun(toolId, input, res);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to run'));
+      setError(errorMessage(e));
     } finally {
       setComputing(false);
     }

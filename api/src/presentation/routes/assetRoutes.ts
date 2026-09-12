@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono, type Context } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -61,7 +62,7 @@ function assetRejectionMessage(rejection: AssetRejection): string {
 
 /** Turn a rejection from the store into the response shape a client expects. */
 export function assetErrorResponse(c: Context<HonoEnv>, rejection: AssetRejection) {
-  return c.json({ error: assetRejectionMessage(rejection) }, ASSET_REJECTION_STATUS[rejection.error]);
+  return statusResponse(c, { error: assetRejectionMessage(rejection) }, ASSET_REJECTION_STATUS[rejection.error], { source: 'presentation/routes/assetRoutes.ts', operation: 'assetRejection' });
 }
 
 /** POST an upload. Shared by `/api/assets` and the legacy `/api/brain/upload`. */

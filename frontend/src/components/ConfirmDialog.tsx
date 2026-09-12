@@ -17,16 +17,15 @@ export interface ConfirmDialogProps {
   title?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  /** Destructive actions (default) get the coral button; neutral confirmations
-   *  (e.g. "convert", "downgrade") get the accent button. */
-  destructive?: boolean;
 }
 
 /**
  * The canonical in-app confirmation modal — the replacement for the browser's
  * native `window.confirm()`. Per the app-wide overlay convention (see
  * SlideOutPanel) a centered modal is reserved for exactly this: terminal /
- * destructive approvals. Most callers should NOT render this directly — use the
+ * destructive approvals, so its confirm button is always the danger variant; a
+ * non-destructive action uses a toast or `InlineConfirmButton` instead of a modal.
+ * Most callers should NOT render this directly — use the
  * promise-based `useConfirm()` hook (ConfirmProvider), which mounts a single
  * shared instance and returns `Promise<boolean>` so an imperative
  * `if (!(await confirm(...))) return;` reads just like the old `confirm()`.
@@ -39,7 +38,6 @@ export function ConfirmDialog({
   title,
   confirmLabel,
   cancelLabel,
-  destructive = true,
 }: ConfirmDialogProps) {
   const t = useTranslations('common');
   const titleId = useId();
@@ -74,7 +72,7 @@ export function ConfirmDialog({
           <Button type="button" variant="secondary" onClick={(e) => { e.stopPropagation(); onCancel(); }}>
             {cancelLabel ?? t('cancel')}
           </Button>
-          <Button type="button" variant={destructive ? 'danger' : 'primary'} autoFocus onClick={(e) => { e.stopPropagation(); onConfirm(); }}>
+          <Button type="button" variant="danger" autoFocus onClick={(e) => { e.stopPropagation(); onConfirm(); }}>
             {confirmLabel ?? t('delete')}
           </Button>
         </div>

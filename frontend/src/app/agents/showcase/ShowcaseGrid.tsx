@@ -106,7 +106,7 @@ export default function ShowcaseGrid({
             >
               <div className="cc-tweet-header">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`https://unavatar.io/x/${tweet.author}`} alt={tweet.author} className="cc-avatar" loading="lazy" />
+                <img src={`https://unavatar.io/x/${tweet.author}`} alt={tweet.author} className="cc-avatar" width={36} height={36} loading="lazy" />
                 <div className="cc-author-info">
                   <span className="cc-author-name">@{tweet.author}</span>
                   <span className="cc-likes"><Icon source="♥" size="1em" /> {tweet.likes}</span>
@@ -117,7 +117,7 @@ export default function ShowcaseGrid({
                 <div className="cc-tweet-images">
                   {tweet.images.map((img, i) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img key={i} src={img} alt={t('screenshotAlt')} className="cc-tweet-image" loading="lazy" />
+                    <img key={i} src={img} alt={t('screenshotAlt')} className="cc-tweet-image" width={1200} height={675} loading="lazy" />
                   ))}
                 </div>
               )}
@@ -211,6 +211,9 @@ export default function ShowcaseGrid({
         }
         .cc-tweet-image {
           width: 100%;
+          /* The width/height attributes only reserve a 16:9 box until the screenshot
+             loads; its own aspect (capped below) takes over from there. */
+          height: auto;
           border-radius: var(--radius-lg);
           object-fit: cover;
           max-height: 280px;

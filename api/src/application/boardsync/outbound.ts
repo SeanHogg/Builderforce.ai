@@ -33,6 +33,7 @@
  * owns delivery, including its failures; this only records the intent.
  */
 
+import { parseJsonObject } from '../../domain/shared/json';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { boardSyncOutbox, externalTicketLinks } from '../../infrastructure/database/schema';
@@ -89,7 +90,9 @@ export async function enqueueBoardPush(
     if (existing) {
       // Last-write-wins per field: the newest severity IS the severity, and
       // replaying the intermediate ones helps nobody.
-      const before = parseChangeSet(existing.changeSet);
+      // A stored change set we cannot read is not a reason to drop the new intent —
+      // the fresh one replaces it wholesale.
+      const before = parseJsonObject<ChangeSet>(existing.changeSet);
       await db
         .update(boardSyncOutbox)
         .set({
@@ -119,16 +122,4 @@ export async function enqueueBoardPush(
   }
 
   return { queued, merged };
-}
-
-function parseChangeSet(raw: string | null): ChangeSet {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as ChangeSet) : {};
-  } catch {
-    // A row whose JSON we cannot read is not a reason to drop the new intent —
-    // the fresh change set replaces it wholesale.
-    return {};
-  }
 }

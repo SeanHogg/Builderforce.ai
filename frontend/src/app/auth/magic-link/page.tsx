@@ -6,10 +6,11 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 export default function MagicLinkVerifyPage() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  const errorText = useErrorText();
 
   // Derive initial state from URL so no synchronous setState inside the effect
   const [status, setStatus] = useState<'loading' | 'error'>(!token ? 'error' : 'loading');
@@ -32,11 +33,11 @@ export default function MagicLinkVerifyPage() {
       })
       .catch((err: unknown) => {
         setErrorMsg(
-          faultText(err, 'This magic link is invalid or has expired.'),
+          errorText(err),
         );
         setStatus('error');
       });
-  }, [searchParams, token]);
+  }, [searchParams, token, errorText]);
 
   if (status === 'error') {
     return (

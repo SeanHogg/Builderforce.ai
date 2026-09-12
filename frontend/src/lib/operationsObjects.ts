@@ -33,7 +33,7 @@
 import { type OperationsObjectKind } from '@builderforce/creation-canvas-contract';
 import { formatMoney, sumRowColumn, type MoneyTotal } from './canvasMoney';
 import {
-  deriveDaysBetween, deriveNumber, derivePercent, registerSpecObjectSet, sumColumn,
+  deriveDaysBetween, deriveNumber, derivePercent, registerSpecObjectSet, specVerdict, sumColumn,
   SOURCES_FIELD, SUMMARY_FIELD,
   type SpecField, type SpecObjectSpec,
 } from './specObjects';
@@ -396,9 +396,9 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         derive: (data) => {
           const days = deriveDaysBetween(new Date().toISOString(), data.expiresAt);
           if (days == null) return undefined;
-          if (days < 0) return `expired ${Math.abs(days)}d ago`;
-          if (days <= 30) return `expires in ${days}d`;
-          return `valid · ${days}d remaining`;
+          if (days < 0) return specVerdict('validity.expired', { days: Math.abs(days) });
+          if (days <= 30) return specVerdict('validity.expiresSoon', { days });
+          return specVerdict('validity.valid', { days });
         },
       },
       { name: 'verifiedAt', render: 'stat', label: 'verifiedAt', hint: 'ISO instant somebody actually checked it against the issuing register. Distinct from the issue date, because a certificate can be revoked without expiring.', derived: true },
@@ -432,9 +432,9 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
           const point = deriveNumber(data.reorderPoint);
           if (onHand == null || point == null) return undefined;
           const incoming = deriveNumber(data.onOrder) ?? 0;
-          if (onHand <= 0) return 'out of stock';
-          if (onHand + incoming <= point) return incoming > 0 ? 'below reorder point even with stock on order' : 'at or below reorder point — order now';
-          return onHand <= point ? 'covered by stock on order' : 'in stock';
+          if (onHand <= 0) return specVerdict('stock.out');
+          if (onHand + incoming <= point) return specVerdict(incoming > 0 ? 'stock.belowWithOrder' : 'stock.orderNow');
+          return specVerdict(onHand <= point ? 'stock.coveredByOrder' : 'stock.inStock');
         },
       },
       {

@@ -90,13 +90,17 @@ function recordFor(
   handled: boolean,
 ): CaughtErrorRecord {
   const normalized = normalizeError(error);
+  // An error that wraps another (`new InternalError('Failed to save', { cause })`) keeps
+  // the wrapped one in the record — the authored message is for the caller, the cause
+  // is the diagnosis.
+  const cause = error instanceof Error && error.cause !== undefined ? error.cause : undefined;
   return {
     error,
     message: normalized.message,
     stack: normalized.stack,
     source: details.source,
     operation: details.operation,
-    context: sanitizeContext(details.context),
+    context: sanitizeContext(cause === undefined ? details.context : { ...details.context, cause }),
     level: details.level ?? 'error',
     handled,
   };

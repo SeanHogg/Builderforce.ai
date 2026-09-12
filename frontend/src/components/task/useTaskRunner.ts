@@ -10,7 +10,7 @@ import { llmApi } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { computeModelRecallBias, seedModelRecallMemory } from '@/lib/modelRecallBias';
 import { trackActivity } from '@/lib/activity/tracker';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * The run target a task defaults to — derived from its assignee, so "Run" reflects
  * who actually owns/executes it. A cloud agent (the swimlane's assigned agent) wins,
@@ -49,6 +49,7 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
   const [cloudAgents, setCloudAgents] = useState<PoolAgent[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorMessage = useErrorMessage();
 
   useEffect(() => {
     loadAgentPool()
@@ -104,12 +105,12 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
         }
         onRan?.(result.id);
       } catch (e) {
-        setError(faultMessage(e, 'Failed to run'));
+        setError(errorMessage(e));
       } finally {
         setRunning(false);
       }
     },
-    [task, cloudAgents, onRan, onAwaitingApproval],
+    [task, cloudAgents, onRan, onAwaitingApproval, errorMessage],
   );
 
   return { run, running, error, cloudAgents };

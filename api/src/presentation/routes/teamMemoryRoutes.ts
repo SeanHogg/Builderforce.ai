@@ -13,6 +13,7 @@
  * GET  /api/teams/memory  – retrieve recent entries (tenant JWT)
  */
 
+import { InternalError } from '../../domain/shared/errors';
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
@@ -76,7 +77,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
     const stored = await remember(c.env, db, { tenantId, origin: 'on-prem' }, {
       key: teamMemoryKey(agentHostId, runId), content: summary, tags, scope: 'tenant',
     });
-    if (!stored.ok) return c.json({ error: stored.error }, 500);
+    if (!stored.ok) throw new InternalError(stored.error ?? 'Failed to store team memory');
     const entry: TeamMemoryEntry = { tenantId, agentHostId, runId, summary, tags, timestamp: new Date().toISOString() };
     return c.json(entry, 201);
   });

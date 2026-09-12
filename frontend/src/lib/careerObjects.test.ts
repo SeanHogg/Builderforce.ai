@@ -4,10 +4,10 @@ import {
   CREATION_OBJECT_KINDS, HIRING_OBJECT_KINDS, isCareerObjectKind, isOpenApplicationStage,
   isTimecardOutstanding,
 } from '@builderforce/creation-canvas-contract';
-import { CAREER_AUTHORED_MONEY_FIELDS, CAREER_LABELS, CAREER_OBJECT_SPECS, CAREER_STATUSES } from './careerObjects';
+import { CAREER_AUTHORED_MONEY_FIELDS, CAREER_LABELS, CAREER_NAMESPACE, CAREER_OBJECT_SPECS, CAREER_STATUSES } from './careerObjects';
 import './specObjectSets';
 import {
-  makeSpecDeriveBoard, specFieldValue, specMutableFields, specObjectNamespace, specReadableFields,
+  makeSpecDeriveBoard, specFieldValue, specMutableFields, specObjectNamespace, specReadableFields, specValueInEnglish,
 } from './specObjects';
 
 /** The one spec lookup every case below needs. Throws rather than returning undefined so
@@ -24,6 +24,10 @@ const value = (kind: string, field: string, data: Record<string, unknown>, board
   if (!declared) throw new Error(`no field ${kind}.${field}`);
   return specFieldValue(declared, data, board);
 };
+
+/** The runway's pressure band as the MODEL reads it: the derivation returns a verdict
+ *  descriptor, and the English catalog keeps each band as its token. */
+const pressure = (data: Record<string, unknown>) => specValueInEnglish(value('runway', 'pressure', data), CAREER_NAMESPACE);
 
 describe('career vocabulary', () => {
   it('declares one spec per contract kind, and no more', () => {
@@ -214,7 +218,7 @@ describe('the runway', () => {
     // A runway that never runs out and one that ran out this morning are the two answers
     // a single number cannot tell apart, so the safe one is silence.
     expect(value('runway', 'weeksRemaining', { savings: 5_000, monthlyExpenses: 1_000, monthlyIncome: 1_400 })).toBeUndefined();
-    expect(value('runway', 'pressure', { savings: 5_000, monthlyExpenses: 1_000, monthlyIncome: 1_400 })).toBe('none');
+    expect(pressure({ savings: 5_000, monthlyExpenses: 1_000, monthlyIncome: 1_400 })).toBe('none');
   });
 
   it('grades the same band the server would', () => {
@@ -229,8 +233,8 @@ describe('the runway', () => {
   it('grades the card from the same arithmetic it prints', () => {
     // The one inconsistency this card cannot survive: a band computed from a different
     // sum than the weeks shown above it.
-    expect(value('runway', 'pressure', MONEY)).toBe('planning');
-    expect(value('runway', 'pressure', { savings: 1_500, monthlyExpenses: 2_600 })).toBe('critical');
+    expect(pressure(MONEY)).toBe('planning');
+    expect(pressure({ savings: 1_500, monthlyExpenses: 2_600 })).toBe('critical');
   });
 
   it('says nothing at all when the money is not there to compute from', () => {

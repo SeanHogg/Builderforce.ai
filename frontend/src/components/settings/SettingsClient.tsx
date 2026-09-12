@@ -43,6 +43,7 @@ import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 import NavigationFeaturesSettings from '@/components/settings/NavigationFeaturesSettings';
 import { faultMessage, faultText } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Self-gating nav link to the API Keys page. Per product rule we don't hide the
  * link from non-owners — RoleGate shows it disabled with a "Requires Owner role"
@@ -88,6 +89,7 @@ const OAUTH_PROVIDERS = [
 
 export default function SettingsClient() {
   const t = useTranslations('settings');
+  const errorMessage = useErrorMessage();
   const router = useRouter();
   const sub = useSearchParams().get('sub') ?? '';
   const user = getStoredUser();
@@ -150,7 +152,7 @@ export default function SettingsClient() {
       await unlinkProvider(token, provider);
       setLinkedAccounts((prev) => prev.filter((a) => a.provider !== provider));
     } catch (e) {
-      setAccountsError(faultMessage(e, 'Failed to disconnect'));
+      setAccountsError(errorMessage(e));
     } finally {
       setUnlinking(null);
     }

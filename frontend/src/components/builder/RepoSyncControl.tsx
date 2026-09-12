@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { ideRepoApi, type RepoSyncStatus } from '@/lib/api';
 import { integrationsApi, type IntegrationCredential } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * RepoSyncControl — Builder's repo bridge UI. R2 is always the working store; this
  * adds optional git sync on top:
@@ -27,10 +28,19 @@ const input: React.CSSProperties = {
 };
 
 export function RepoSyncControl({ projectId, onChanged }: { projectId: number; onChanged?: () => void }) {
+  const t = useTranslations('repoSync');
+  const tc = useTranslations('common');
   const [status, setStatus] = useState<RepoSyncStatus | null>(null);
-  const [busy, setBusy] = useState<'import' | 'commit' | 'create' | null>(null);
+  // `usePanelTask` already reduces a rejection to the reader's-language sentence
+  // (`useErrorMessage`), so no call here re-translates it.
+  const { busy, error: err, run: runTask } = usePanelTask();
+  // Which action the in-flight task is — only so the right button says "…ing".
+  const [pending, setPending] = useState<'import' | 'commit' | 'create' | null>(null);
+  const busyAs = busy ? pending : null;
+  // Every success line here names what the call RETURNED (file counts, the PR, the new
+  // repo), which `run`'s up-front `success` cannot carry — so the notice stays local and
+  // is cleared at the same moment `run` clears the error.
   const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   // Create-repo form (shown only when no repo is linked).
   const [creds, setCreds] = useState<IntegrationCredential[]>([]);
@@ -47,89 +57,94 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
   }, [projectId]);
 
   const runImport = async () => {
-    if (!status?.repoId) return;
-    setBusy('import'); setErr(null); setMsg(null);
-    try {
-      const r = await ideRepoApi.import(projectId, status.repoId);
-      setMsg(`Imported ${r.imported} file(s) from ${r.ref}.`);
-      onChanged?.();
-      reload();
-    } catch (e) { setErr(faultMessage(e, 'Import failed')); }
-    finally { setBusy(null); }
+    const repoId = status?.repoId;
+    if (!repoId) return;
+    setPending('import'); setMsg(null);
+    const r = await runTask(() => ideRepoApi.import(projectId, repoId));
+    if (r === undefined) return;
+    setMsg(t('imported', { count: r.imported, ref: r.ref }));
+    onChanged?.();
+    reload();
   };
 
   const runCommit = async () => {
-    if (!status?.repoId) return;
-    setBusy('commit'); setErr(null); setMsg(null);
-    try {
-      const r = await ideRepoApi.commit(projectId, status.repoId);
-      setMsg(r.prUrl ? `Pushed ${r.committed} file(s) — PR #${r.prNumber} opened.` : `Committed ${r.committed} file(s) to ${r.branch}.`);
-      reload();
-    } catch (e) { setErr(faultMessage(e, 'Commit failed')); }
-    finally { setBusy(null); }
+    const repoId = status?.repoId;
+    if (!repoId) return;
+    setPending('commit'); setMsg(null);
+    const r = await runTask(() => ideRepoApi.commit(projectId, repoId));
+    if (r === undefined) return;
+    setMsg(r.prUrl
+      ? t('pushedPr', { count: r.committed, pr: r.prNumber ?? '' })
+      : t('committed', { count: r.committed, branch: r.branch }));
+    reload();
   };
 
   const runCreate = async () => {
     if (!repoName.trim() || !credId) return;
-    setBusy('create'); setErr(null); setMsg(null);
-    try {
-      const r = await ideRepoApi.createRepo(projectId, { name: repoName.trim(), credentialId: credId, private: isPrivate });
-      setMsg(`Created ${r.owner}/${r.repo} and pushed ${r.committed} file(s).`);
-      setShowCreate(false); setRepoName('');
-      onChanged?.();
-      reload();
-    } catch (e) { setErr(faultMessage(e, 'Create failed')); }
-    finally { setBusy(null); }
+    setPending('create'); setMsg(null);
+    const r = await runTask(
+      () => ideRepoApi.createRepo(projectId, { name: repoName.trim(), credentialId: credId, private: isPrivate }),
+    );
+    if (r === undefined) return;
+    setMsg(t('created', { repo: `${r.owner}/${r.repo}`, count: r.committed }));
+    setShowCreate(false); setRepoName('');
+    onChanged?.();
+    reload();
   };
 
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 10 }}>
-        Repository sync
+        {t('title')}
       </div>
 
       {status?.linked ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Linked to <strong style={{ color: 'var(--text-primary)' }}>{status.owner}/{status.repo}</strong>
-            {status.lastSyncedRef ? <> · last synced <code>{status.lastSyncedRef}</code></> : <> · not yet imported</>}
+            {t.rich('linkedTo', {
+              repo: `${status.owner}/${status.repo}`,
+              strong: (chunks) => <strong style={{ color: 'var(--text-primary)' }}>{chunks}</strong>,
+            })}
+            {status.lastSyncedRef
+              ? t.rich('lastSynced', { ref: status.lastSyncedRef, code: (chunks) => <code>{chunks}</code> })
+              : t('notImported')}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" style={btn} onClick={runImport} disabled={busy !== null}>
-              {busy === 'import' ? 'Importing…' : 'Import from repo'}
+            <button type="button" style={btn} onClick={runImport} disabled={busy}>
+              {busyAs === 'import' ? t('importing') : t('import')}
             </button>
-            <button type="button" style={btnPrimary} onClick={runCommit} disabled={busy !== null}>
-              {busy === 'commit' ? 'Committing…' : 'Commit & open PR'}
+            <button type="button" style={btnPrimary} onClick={runCommit} disabled={busy}>
+              {busyAs === 'commit' ? t('committing') : t('commit')}
             </button>
           </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            No repo linked — your files live in the Canvas Builder workspace. Create a clean repo to go live, or connect an existing one below.
+            {t('noRepo')}
           </div>
           {!showCreate ? (
-            <button type="button" style={btnPrimary} onClick={() => setShowCreate(true)}>+ Create repo</button>
+            <button type="button" style={btnPrimary} onClick={() => setShowCreate(true)}>{t('createRepo')}</button>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
-              <input style={input} placeholder="repository name" value={repoName} onChange={(e) => setRepoName(e.target.value)} />
+              <input style={input} placeholder={t('repoNamePlaceholder')} value={repoName} onChange={(e) => setRepoName(e.target.value)} />
               {creds.length > 0 ? (
                 <Select style={input} value={credId} onChange={(e) => setCredId(e.target.value)}>
-                  <option value="">Select a GitHub credential…</option>
+                  <option value="">{t('selectCredential')}</option>
                   {creds.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               ) : (
-                <div style={{ fontSize: 12, color: 'var(--warning, var(--warning))' }}>
-                  No GitHub credential found. Add one under Integrations first.
+                <div style={{ fontSize: 12, color: 'var(--warning)' }}>
+                  {t('noCredential')}
                 </div>
               )}
               <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> Private repository
+                <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} /> {t('private')}
               </label>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button type="button" style={btn} onClick={() => setShowCreate(false)}>Cancel</button>
-                <button type="button" style={btnPrimary} onClick={runCreate} disabled={busy !== null || !repoName.trim() || !credId}>
-                  {busy === 'create' ? 'Creating…' : 'Create & push'}
+                <button type="button" style={btn} onClick={() => setShowCreate(false)}>{tc('cancel')}</button>
+                <button type="button" style={btnPrimary} onClick={runCreate} disabled={busy || !repoName.trim() || !credId}>
+                  {busyAs === 'create' ? t('creating') : t('createAndPush')}
                 </button>
               </div>
             </div>

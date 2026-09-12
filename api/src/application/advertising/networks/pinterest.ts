@@ -10,8 +10,9 @@
  * (`SPEND_IN_MICRO_DOLLAR`) while the resource fields are not.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   ageFromBuckets, bucketedAgeKeys, mapTargetingValues, readNativeValues, requireTargetingSupport,
@@ -112,7 +113,7 @@ function targetingSpec(targeting: AdTargeting): Record<string, unknown> {
 
 /** Pinterest's spec → as much of our vocabulary as it holds. Never throws. */
 function readPinterestTargeting(raw: unknown): AdTargeting {
-  const spec = rec(raw);
+  const spec = asJsonRecord(raw);
   const targeting: {
     countries?: string[]; ageMin?: number; ageMax?: number;
     genders?: AdGender[]; interests?: string[]; placements?: AdPlacement[]; devices?: AdDevice[];
@@ -158,7 +159,7 @@ export const pinterestAdsProvider: AdsProvider = {
 
   async identity(call, fields) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const accounts = list((await ask(call, 'list_ad_accounts', { page_size: 100 })).data).map(rec);
+    const accounts = list((await ask(call, 'list_ad_accounts', { page_size: 100 })).data).map(asJsonRecord);
     const match = accounts.find((a) => text(a.id) === accountId);
     return {
       externalId: accountId,
@@ -169,7 +170,7 @@ export const pinterestAdsProvider: AdsProvider = {
 
   async listCampaigns(call, fields, identity) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const rows = list((await ask(call, 'list_campaigns', { ad_account_id: accountId, page_size: 250 })).data).map(rec);
+    const rows = list((await ask(call, 'list_campaigns', { ad_account_id: accountId, page_size: 250 })).data).map(asJsonRecord);
     return rows.map((c) => {
       const native = text(c.objective_type) || null;
       return {
@@ -206,10 +207,10 @@ export const pinterestAdsProvider: AdsProvider = {
     });
     // A batch endpoint reports per-item outcomes, so a 200 is not proof this item
     // succeeded — the created object has to be found in the response.
-    const item = rec(list(result.data)[0]);
-    const id = text(rec(item.data).id) || text(item.id);
+    const item = asJsonRecord(list(result.data)[0]);
+    const id = text(asJsonRecord(item.data).id) || text(item.id);
     if (!id) {
-      const reason = text(rec(item).exceptions ?? item.error) || 'Pinterest did not return the created campaign.';
+      const reason = text(asJsonRecord(item).exceptions ?? item.error) || 'Pinterest did not return the created campaign.';
       throw new AdsProviderError(reason.slice(0, 300), 502, false);
     }
     return {
@@ -250,7 +251,7 @@ export const pinterestAdsProvider: AdsProvider = {
       ad_account_id: accountId,
       page_size: 250,
       ...(externalCampaignId ? { campaign_ids: externalCampaignId } : {}),
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     return rows.map((row) => ({
       externalId: text(row.id),
       externalCampaignId: text(row.campaign_id) || null,
@@ -273,7 +274,7 @@ export const pinterestAdsProvider: AdsProvider = {
     const daily = fromCents(draft.dailyBudgetCents, MICROS);
     const bid = fromCents(draft.bidCents, MICROS);
 
-    const created = rec(list((await ask(call, 'create_ad_groups', {
+    const created = asJsonRecord(list((await ask(call, 'create_ad_groups', {
       ad_account_id: accountId,
       // One element: `createAdSet` makes ONE ad group, which is the contract every other
       // network here honours — see this file's header on Pinterest's array bodies.
@@ -293,9 +294,9 @@ export const pinterestAdsProvider: AdsProvider = {
     })).data)[0]);
     // Pinterest answers a batch write with per-item outcomes, so a 200 is not a success:
     // the element carries its own `data`/`exceptions` pair.
-    const id = text(rec(created.data ?? created).id);
+    const id = text(asJsonRecord(created.data ?? created).id);
     if (!id) {
-      const reason = text(rec(list(created.exceptions)[0]).message);
+      const reason = text(asJsonRecord(list(created.exceptions)[0]).message);
       throw new AdsProviderError(
         reason || 'Pinterest accepted the ad group request but did not return its id.',
         reason ? 400 : 502,
@@ -349,7 +350,7 @@ export const pinterestAdsProvider: AdsProvider = {
       ad_account_id: accountId,
       page_size: 250,
       ...(externalAdSetId ? { ad_group_ids: externalAdSetId } : {}),
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     return rows.map((row) => ({
       externalId: text(row.id),
       externalAdSetId: text(row.ad_group_id) || null,
@@ -375,7 +376,7 @@ export const pinterestAdsProvider: AdsProvider = {
       );
     }
 
-    const created = rec(list((await ask(call, 'create_ads', {
+    const created = asJsonRecord(list((await ask(call, 'create_ads', {
       ad_account_id: accountId,
       ads: [{
         ad_group_id: draft.externalAdSetId,
@@ -386,9 +387,9 @@ export const pinterestAdsProvider: AdsProvider = {
         ...(draft.destinationUrl ? { destination_url: draft.destinationUrl } : {}),
       }],
     })).data)[0]);
-    const id = text(rec(created.data ?? created).id);
+    const id = text(asJsonRecord(created.data ?? created).id);
     if (!id) {
-      const reason = text(rec(list(created.exceptions)[0]).message);
+      const reason = text(asJsonRecord(list(created.exceptions)[0]).message);
       throw new AdsProviderError(
         reason || 'Pinterest accepted the ad request but did not return its id.',
         reason ? 400 : 502,
@@ -439,7 +440,7 @@ export const pinterestAdsProvider: AdsProvider = {
       columns: 'CAMPAIGN_ID,SPEND_IN_MICRO_DOLLAR,IMPRESSION_1,CLICKTHROUGH_1,TOTAL_CONVERSIONS',
       granularity: 'DAY',
     });
-    return list(result.data).map(rec).flatMap((row) => {
+    return list(result.data).map(asJsonRecord).flatMap((row) => {
       const externalCampaignId = text(row.CAMPAIGN_ID);
       const date = toDay(row.DATE);
       if (!externalCampaignId || !date) return [];

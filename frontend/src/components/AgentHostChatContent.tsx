@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { agentHosts, dispatchApi } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 interface ChatEntry {
   id: string;
@@ -25,11 +26,11 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  connected: 'var(--cyan-bright, var(--cyan-bright))',
-  connecting: 'var(--text-muted)',
-  offline: 'var(--text-muted)',
-  error: 'var(--coral-bright)',
+const STATUS_TONE: StatusToneMap<'connecting' | 'connected' | 'offline' | 'error'> = {
+  connected: 'info',
+  connecting: 'neutral',
+  offline: 'neutral',
+  error: 'danger',
 };
 
 export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostChatContentProps) {
@@ -155,7 +156,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: STATUS_COLORS[connStatus] ?? 'var(--text-muted)',
+            background: statusColor(STATUS_TONE, connStatus, 'solid'),
             flexShrink: 0,
           }}
         />

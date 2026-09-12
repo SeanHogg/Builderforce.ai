@@ -7,7 +7,7 @@ import { tasksApi, type Task, type TaskPriority, type WorkItemKind } from '@/lib
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * Create/edit an Epic in a slide-out side panel. Shared by the Epics tree view
  * (the "New epic" button and clicking an epic row) so the Epic CRUD form lives
@@ -47,35 +47,26 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
   const [description, setDescription] = useState(epic?.description ?? '');
   const [status, setStatus] = useState(epic?.status ?? 'backlog');
   const [priority, setPriority] = useState<TaskPriority>(epic?.priority ?? 'medium');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
 
   const targetProjectId = epic?.projectId ?? projectId;
 
   // Change the item's TYPE (task⇄epic, or promote to an OKR Objective). Promoting
-  // to an objective removes this board item and creates a real OKR, so confirm first.
+  // to an objective DELETES this board item (its row, status and history) and creates
+  // a real OKR — a destructive approval, so it is confirmed first.
   const convertTo = async (target: WorkItemKind) => {
     if (!epic) return;
-    if (target === 'objective' && !(await confirm({ message: t('convertToOkrConfirm'), destructive: false }))) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await tasksApi.convertType(epic.id, target);
-      onSaved();
-      onClose();
-    } catch (e) {
-      setError(faultMessage(e));
-    } finally {
-      setBusy(false);
-    }
+    if (target === 'objective' && !(await confirm({ message: t('convertToOkrConfirm'), confirmLabel: t('convertToOkr') }))) return;
+    const result = await task.run(async () => { await tasksApi.convertType(epic.id, target); return true; });
+    if (result === undefined) return;
+    onSaved();
+    onClose();
   };
 
   const save = async () => {
-    if (!title.trim()) { setError(t('epicTitleRequired')); return; }
-    if (targetProjectId == null) { setError(t('epicNeedsProject')); return; }
-    setBusy(true);
-    setError(null);
-    try {
+    if (!title.trim()) { task.fail(t('epicTitleRequired')); return; }
+    if (targetProjectId == null) { task.fail(t('epicNeedsProject')); return; }
+    const result = await task.run(async () => {
       if (isEdit) {
         await tasksApi.update(epic!.id, {
           title: title.trim(),
@@ -92,13 +83,11 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
           taskType: 'epic',
         });
       }
-      onSaved();
-      onClose();
-    } catch (e) {
-      setError(faultMessage(e));
-    } finally {
-      setBusy(false);
-    }
+      return true;
+    });
+    if (result === undefined) return;
+    onSaved();
+    onClose();
   };
 
   return (
@@ -151,11 +140,11 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
               <button
                 type="button"
                 onClick={() => convertTo('objective')}
-                disabled={busy}
+                disabled={task.busy}
                 style={{
                   padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
                   background: 'transparent', color: 'var(--text-primary)', fontWeight: 600,
-                  cursor: busy ? 'default' : 'pointer', fontSize: 13,
+                  cursor: task.busy ? 'default' : 'pointer', fontSize: 13,
                 }}
               >
                 {t('convertToOkr')}
@@ -163,11 +152,11 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
               <button
                 type="button"
                 onClick={() => convertTo('task')}
-                disabled={busy}
+                disabled={task.busy}
                 style={{
                   padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',
                   background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600,
-                  cursor: busy ? 'default' : 'pointer', fontSize: 13,
+                  cursor: task.busy ? 'default' : 'pointer', fontSize: 13,
                 }}
               >
                 {t('convertToTask')}
@@ -175,15 +164,15 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
             </div>
           </div>
         )}
-        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+        {task.error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{task.error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
             onClick={save}
-            disabled={busy}
+            disabled={task.busy}
             style={{
               padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)',
-              color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+              color: 'var(--text-on-accent)', fontWeight: 600, cursor: task.busy ? 'default' : 'pointer', opacity: task.busy ? 0.6 : 1,
             }}
           >
             {isEdit ? t('epicSaveChanges') : t('epicCreate')}

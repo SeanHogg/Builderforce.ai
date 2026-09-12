@@ -6,6 +6,13 @@ import { runtimeApi } from '@/lib/builderforceApi';
 const confirmSpy = vi.fn();
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => confirmSpy }));
 vi.mock('@/components/RoleGate', () => ({ RoleGate: ({ children }: { children: unknown }) => children }));
+// The REAL English catalog: the assertions below are about the copy a person reads.
+vi.mock('next-intl', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next-intl')>()),
+  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
+    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+  ),
+}));
 
 /**
  * Both saves go through an AWAITED confirm promise, so the assertion has to

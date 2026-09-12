@@ -19,7 +19,8 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { WhyChainChart } from '@/components/charts/WhyChainChart';
 import { incidentsApi, type PostmortemWhy } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { usePanelTask } from '@/hooks/usePanelTask';
 
 type T = ReturnType<typeof useTranslations>;
 
@@ -51,19 +52,24 @@ export function WhyLadderSection({
   onSaved?: () => void;
 }) {
   const [saved, setSaved] = useState<PostmortemWhy[]>([]);
+  const errorMessage = useErrorMessage();
   // The cap and the convention arrive with the chain from the service that
   // truncates at them; until they do, nothing can be added past what is there.
   const [limits, setLimits] = useState<{ maxSteps: number; conventionalSteps: number } | null>(null);
   const MAX_STEPS = limits?.maxSteps ?? 0;
   const [draft, setDraft] = useState<Draft[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The save's busy/error; a failed read lands in the same error slot.
+  const task = usePanelTask();
+  const { run: taskRun, fail: taskFail, clear: taskClear } = task;
 
   const load = useCallback(() => {
     incidentsApi.whyLadder(incidentId)
       .then((ladder) => { setSaved(ladder.whys); setLimits({ maxSteps: ladder.maxSteps, conventionalSteps: ladder.conventionalSteps }); setDraft(null); })
-      .catch((e: unknown) => setError(faultMessage(e)));
-  }, [incidentId]);
+      .catch((e: unknown) => {
+        const message = errorMessage(e);
+        if (message) taskFail(message);
+      });
+  }, [incidentId, errorMessage, taskFail]);
   useEffect(() => { load(); }, [load]);
 
   const editing = draft !== null;
@@ -93,19 +99,13 @@ export function WhyLadderSection({
     setDraft((prev) => (prev ?? toDraft(saved)).map((s, idx) => ({ ...s, isRoot: idx === i ? !s.isRoot : false })));
 
   const save = async () => {
-    setBusy(true); setError(null);
-    try {
-      const rows = await incidentsApi.replaceWhys(incidentId, steps
-        .map((s) => ({ statement: s.statement.trim(), isRoot: s.isRoot }))
-        .filter((s) => s.statement.length > 0));
-      setSaved(rows);
-      setDraft(null);
-      onSaved?.();
-    } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
-    } finally {
-      setBusy(false);
-    }
+    const rows = await taskRun(() => incidentsApi.replaceWhys(incidentId, steps
+      .map((s) => ({ statement: s.statement.trim(), isRoot: s.isRoot }))
+      .filter((s) => s.statement.length > 0)), { failure: tc('actionFailed') });
+    if (rows === undefined) return;
+    setSaved(rows);
+    setDraft(null);
+    onSaved?.();
   };
 
   const chartSteps = useMemo(
@@ -121,9 +121,9 @@ export function WhyLadderSection({
         <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', flex: 1, minWidth: 120 }}>{t('whys.hint')}</span>
       </div>
 
-      {error && (
+      {task.error && (
         <div style={{ border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', padding: 8, fontSize: 'var(--font-size-small)' }}>
-          {error}
+          {task.error}
         </div>
       )}
 
@@ -202,10 +202,10 @@ export function WhyLadderSection({
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn btn-primary btn-sm" onClick={save} disabled={busy || !canManage}>
-              {busy ? tc('saving') : t('whys.save')}
+            <button type="button" className="btn btn-primary btn-sm" onClick={save} disabled={task.busy || !canManage}>
+              {task.busy ? tc('saving') : t('whys.save')}
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDraft(null); setError(null); }} disabled={busy}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDraft(null); taskClear(); }} disabled={task.busy}>
               {tc('cancel')}
             </button>
           </div>

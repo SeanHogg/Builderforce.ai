@@ -12,7 +12,7 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { mailboxApi, type MailboxConnection, type MailboxProviderInfo } from '@/lib/mailboxApi';
 import { button, listItem, listReset, muted, spread, Row } from './growthStyles';
-import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 export function MailboxesSection() {
   const t = useTranslations('growth');
   const confirm = useConfirm();
@@ -20,9 +20,8 @@ export function MailboxesSection() {
 
   const [mailboxes, setMailboxes] = useState<MailboxConnection[]>([]);
   const [providers, setProviders] = useState<MailboxProviderInfo[]>([]);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const task = usePanelTask();
+  const { run: taskRun, fail: taskFail } = task;
 
   const reload = useCallback(async () => {
     const { providers: p, connections } = await mailboxApi.providers();
@@ -41,41 +40,29 @@ export function MailboxesSection() {
   useEffect(() => {
     const outcome = searchParams.get('mailbox');
     if (!outcome) return;
-    if (outcome === 'connected') setNotice(t('mailboxes.connected'));
-    else setError(t(`mailboxes.error.${outcome === 'declined' ? 'declined' : 'failed'}`));
-  }, [searchParams, t]);
+    // The grant already completed on the provider's side; report that finished action
+    // through the same notice slot a local action uses.
+    if (outcome === 'connected') void taskRun(() => Promise.resolve(), { success: t('mailboxes.connected') });
+    else taskFail(t(`mailboxes.error.${outcome === 'declined' ? 'declined' : 'failed'}`));
+  }, [searchParams, t, taskRun, taskFail]);
 
-  const run = useCallback(async (op: () => Promise<unknown>, successMessage: string) => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      await op();
-      setNotice(successMessage);
-      await reload();
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    } finally {
-      setBusy(false);
-    }
-  }, [reload, t]);
+  // The reload is part of the action, so the notice lands only once the list shows it.
+  const run = useCallback((op: () => Promise<unknown>, success: string) => taskRun(async () => {
+    await op();
+    await reload();
+  }, { success, failure: t('genericError') }), [taskRun, reload, t]);
 
   const connectMailbox = useCallback(async (provider: MailboxProviderInfo['name']) => {
-    setError('');
-    try {
-      // A full-page navigation, not a fetch: the provider's consent screen
-      // cannot be framed or XHR'd.
-      const { authUrl } = await mailboxApi.connect(provider, '/growth');
-      window.location.href = authUrl;
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    }
-  }, [t]);
+    // A full-page navigation, not a fetch: the provider's consent screen
+    // cannot be framed or XHR'd.
+    const started = await taskRun(() => mailboxApi.connect(provider, '/growth'), { failure: t('genericError') });
+    if (started) window.location.href = started.authUrl;
+  }, [taskRun, t]);
 
   return (
     <section>
-      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{notice}</p>}
-      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{error}</p>}
+      {task.notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{task.notice}</p>}
+      {task.error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{task.error}</p>}
       {mailboxes.length === 0 ? (
         <p style={{ ...muted, marginTop: 10 }}>{t('mailboxes.empty')}</p>
       ) : (
@@ -97,7 +84,7 @@ export function MailboxesSection() {
                   <input
                     type="checkbox"
                     checked={mailbox.allowSending}
-                    disabled={busy || mailbox.status !== 'connected'}
+                    disabled={task.busy || mailbox.status !== 'connected'}
                     onChange={(e) => run(
                       () => mailboxApi.setSending(mailbox.id, e.target.checked),
                       t('mailboxes.sendingUpdated'),
@@ -105,7 +92,7 @@ export function MailboxesSection() {
                   />
                   {t('mailboxes.allowSending')}
                 </label>
-                <button type="button" style={button} disabled={busy}
+                <button type="button" style={button} disabled={task.busy}
                   onClick={async () => {
                     const ok = await confirm({
                       message: t('mailboxes.confirmDisconnect', { email: mailbox.accountEmail }),
@@ -123,7 +110,7 @@ export function MailboxesSection() {
       <Row>
         {providers.map((provider) => (
           <button key={provider.name} type="button" style={button}
-            disabled={busy || !provider.configured}
+            disabled={task.busy || !provider.configured}
             title={provider.configured ? undefined : t('mailboxes.notConfigured')}
             onClick={() => connectMailbox(provider.name)}>
             {t('mailboxes.connect', { provider: provider.label })}

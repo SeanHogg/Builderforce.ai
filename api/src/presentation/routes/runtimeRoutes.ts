@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
@@ -393,10 +394,10 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       const preview = await handlePreviewOp(
         c.env as Env, db, { tenantId: ctx.tenantId, executionId: body.executionId }, body.args ?? {},
       );
-      return c.json(preview.body as Record<string, unknown>, preview.status as 200);
+      return statusResponse(c, preview.body as Record<string, unknown>, preview.status, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'previewOp' });
     }
     const res = await handleContainerOp(c.env as Env, db, runtimeService, ctx, body.executionId, body.op, body.args ?? {});
-    return c.json(res.body as Record<string, unknown>, res.status as 200);
+    return statusResponse(c, res.body as Record<string, unknown>, res.status, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'containerOp' });
   });
 
   const containerGitProxy = async (c: Context<RuntimeHonoEnv>, subPath: string, method: 'GET' | 'POST'): Promise<Response> => {
@@ -431,14 +432,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
   // Mints a session handle for a run the caller is about to submit — part of the
   // dispatch path, so it carries the same run-tier gate as the submit itself.
-  router.post('/sessions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/sessions', requireRole(TenantRole.DEVELOPER), async (c) => {
     const body = await parseBody(c, SessionBody);
     const sessionId = body.sessionId ?? crypto.randomUUID();
     return c.json({ sessionId }, 201);
   });
 
   // STARTS a billable run (legacy BuilderForce Link submit path).
-  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER), async (c) => {
     const body = await parseBody(c, SubmitRunBody);
 
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
@@ -520,7 +521,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // CANCELS a run (legacy alias of /executions/:id/cancel).
-  router.post('/tasks/:id/cancel', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/tasks/:id/cancel', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
@@ -528,7 +529,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Submit a task for execution — the primary "start a billable run" entry point.
-  router.post('/executions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/executions', requireRole(TenantRole.DEVELOPER), async (c) => {
     const body = await parseBody(c, SubmitRunBody);
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
@@ -791,7 +792,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json({ enabled: row.enabled });
   });
 
-  router.put('/execution-control', requireRole(TenantRole.MANAGER) as never, async (c) => {
+  router.put('/execution-control', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, ExecutionControlBody);
 
     const tenantId = c.get('tenantId');
@@ -811,7 +812,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
   // Master fleet stop. Resolve the tenant-scoped live set on the server and
   // cancel every run through the same lifecycle used by an individual cancel.
-  router.post('/executions/cancel-all', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/executions/cancel-all', requireRole(TenantRole.DEVELOPER), async (c) => {
     return c.json(await cancelTenantExecutions(c, db, runtimeService, false));
   });
 
@@ -1032,7 +1033,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Legacy telemetry / trace endpoints (used by some older integrations)
   // WRITES metered usage rows for a run (agent-host callback; host machine tokens
   // carry DEVELOPER). Not a read — a viewer must not be able to forge usage.
-  router.post('/executions/:id/telemetry', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/executions/:id/telemetry', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req
       .json<ExecutionTelemetryBody>()
@@ -1378,7 +1379,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // the host (which aborts the live session); cloud runs are halted by the
   // background loop's per-step cancel poll (see runCloudToolLoop). Without this,
   // cancel was cosmetic and the agent kept burning tokens to completion.
-  router.post('/executions/:id/cancel', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/executions/:id/cancel', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
@@ -1427,7 +1428,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
    * Refuses anything that is not paused — a live run does not need resuming and a
    * terminal one cannot be, and silently re-running either is the bug this fixes.
    */
-  router.post('/executions/:id/resume', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/executions/:id/resume', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     const owned = await loadOwnedExecution(c, runtimeService, id);
     if (!owned) return c.json({ error: 'Execution not found' }, 404);
@@ -1464,7 +1465,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // MANAGER — not the DEVELOPER tier the rest of this file's dispatch routes use.
   // Starting a run is a developer's job; DESTROYING the output of one, including
   // commits a human may have reviewed, is a governance action.
-  router.post('/executions/:id/revert', requireRole(TenantRole.MANAGER) as never, async (c) => {
+  router.post('/executions/:id/revert', requireRole(TenantRole.MANAGER), async (c) => {
     const id = Number(c.req.param('id'));
     const owned = await loadOwnedExecution(c, runtimeService, id);
     if (!owned) return c.json({ error: 'Execution not found' }, 404);
@@ -1507,7 +1508,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   //     no-op, which only ever forwarded to a live host and dropped everything else.
   // STEERS a live run, RESUMES a paused one, and on a terminal run STARTS a
   // brand-new billable one.
-  router.post('/executions/:id/messages', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/executions/:id/messages', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     const body = await parseBody(c, MessageBody);
     const text = body.text?.trim();
@@ -1608,7 +1609,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Agent callback: update execution state (running / completed / failed)
-  router.patch('/executions/:id/state', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.patch('/executions/:id/state', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const body = await parseBody(c, ExecutionStateBody);
@@ -1897,7 +1898,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Broadcast an existing task to all currently connected agentHosts in the tenant.
   // STARTS a run and fans it out to every connected host — the widest-blast-radius
   // dispatch in the file.
-  router.post('/tasks/:taskId/broadcast', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.post('/tasks/:taskId/broadcast', requireRole(TenantRole.DEVELOPER), async (c) => {
     const taskId = Number(c.req.param('taskId'));
     const body = await parseBody(c, BroadcastBody);
 

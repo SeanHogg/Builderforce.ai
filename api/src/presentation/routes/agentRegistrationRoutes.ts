@@ -98,7 +98,7 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
     return c.json({ agents: rows.map(serialize) });
   });
 
-  router.post('/', requireRole(TenantRole.MANAGER) as never, async (c) => {
+  router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     let body: RegistrationInput;
     try {
       body = await c.req.json<RegistrationInput>();
@@ -141,7 +141,7 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
     return c.json({ agent: serialize(row) });
   });
 
-  router.patch('/:id', requireRole(TenantRole.MANAGER) as never, async (c) => {
+  router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     try {
       const body = await c.req.json<RegistrationInput & { status?: unknown }>();
       const existing = await service.get(c.req.param('id'), scope(c));
@@ -205,7 +205,7 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
     }
   });
 
-  router.delete('/:id', requireRole(TenantRole.MANAGER) as never, async (c) => {
+  router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const row = await service.deactivate(c.req.param('id'), scope(c));
     if (!row) return c.json({ error: 'Agent registration not found' }, 404);
     return c.json({ agent: serialize(row) });

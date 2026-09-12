@@ -16,6 +16,7 @@
  * `application/lti/LtiService.ts` and `domain/lti/ltiClaims.ts`. The route never sees a
  * key, a table or a fetch.
  */
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono, type Context } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
@@ -166,7 +167,7 @@ export function createLtiRoutes(db: Db) {
           ? c.redirect(`${frontend}/lti/deep-link?token=${encodeURIComponent(picker.token)}`, 302)
           : c.redirect(`${frontend}/lti/launch?error=${encodeURIComponent(picker.error)}`, 302);
       }
-      if (!picker.ok) return c.json({ error: picker.error }, picker.status as 400 | 403 | 409);
+      if (!picker.ok) return statusResponse(c, { error: picker.error }, picker.status, { source: 'presentation/routes/ltiRoutes.ts', operation: 'deepLinkPicker' });
       return c.json({
         ok: true,
         messageType: context.messageType,
@@ -211,7 +212,7 @@ export function createLtiRoutes(db: Db) {
       return c.redirect(`${frontend}/auth/callback?code=${encodeURIComponent(code)}`, 302);
     }
 
-    if (!bridged.ok) return c.json({ error: bridged.error }, bridged.status as 403 | 404 | 409);
+    if (!bridged.ok) return statusResponse(c, { error: bridged.error }, bridged.status, { source: 'presentation/routes/ltiRoutes.ts', operation: 'launchBridge' });
 
     return c.json({
       ok: true,
@@ -292,7 +293,7 @@ export function createLtiRoutes(db: Db) {
 
     const origin = new URL(c.req.url).origin;
     const result = await buildDeepLinkResponse(c.env, db, session, objectIds, `${origin}/api/lti/launch`);
-    if (!result.ok) return c.json({ error: result.error }, result.status as 400 | 404 | 409 | 502);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/ltiRoutes.ts', operation: 'deepLinkResponse' });
     return c.json({ returnUrl: result.returnUrl, jwt: result.jwt });
   });
 

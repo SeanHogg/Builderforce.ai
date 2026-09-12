@@ -24,6 +24,8 @@ import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import { resolveUsageDatabase } from '../../application/llm/usageLedger';
+import { completeJson } from '../../application/llm/completeJson';
+import { asJsonObject } from '../../domain/shared/json';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -42,14 +44,6 @@ type AssignmentResolveResult =
 type ProjectRecommendation = {
   name: string;
   description: string;
-};
-
-type ChatCompletionPayload = {
-  choices?: Array<{
-    message?: {
-      content?: string | null;
-    };
-  }>;
 };
 
 /**
@@ -101,15 +95,6 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     return deriveProjectName(prompt);
   };
 
-  const extractJsonObject = (content: string): string | null => {
-    const trimmed = content.trim();
-    if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed;
-    const start = trimmed.indexOf('{');
-    const end = trimmed.lastIndexOf('}');
-    if (start === -1 || end === -1 || end <= start) return null;
-    return trimmed.slice(start, end + 1);
-  };
-
   const summarizePrompt = (prompt: string) => {
     const singleLine = prompt.replace(/\s+/g, ' ').trim();
     return singleLine.length > 420 ? `${singleLine.slice(0, 417)}...` : singleLine;
@@ -119,10 +104,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     c: Context<HonoEnv>,
     prompt: string,
   ): Promise<ProjectRecommendation | null> => {
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader) return null;
+    const tenantId = c.get('tenantId');
+    if (!tenantId) return null;
 
-    const llmUrl = new URL('/llm/v1/chat/completions', c.req.url).toString();
     const systemPrompt = [
       'You are a product planning assistant for software projects.',
       'Given a raw user prompt, produce a concise project name and summary.',
@@ -135,38 +119,21 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       '- Do not include markdown or code fences.',
     ].join('\n');
 
-    const llmResponse = await fetch(llmUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader,
-        'Content-Type': 'application/json',
+    // The tenant dispatch, not an HTTP round-trip to this Worker's own `/llm` route with
+    // the caller's bearer: same account resolution and metering, no second auth pass,
+    // and a reply the ONE JSON reader parses (the private brace-slicer it replaced fed
+    // an unguarded `JSON.parse`).
+    const out = await completeJson(
+      { kind: 'tenant', env: c.env as Env, tenantId, opts: { meterUseCase: 'project_recommendation', userId: c.get('userId') ?? null } },
+      { system: systemPrompt, user: prompt, temperature: 0.2, maxTokens: 280, useCase: 'project_recommendation' },
+      (value): ProjectRecommendation | null => {
+        const parsed = asJsonObject(value);
+        const name = typeof parsed?.name === 'string' ? parsed.name.trim() : '';
+        const description = typeof parsed?.description === 'string' ? parsed.description.trim() : '';
+        return name && description ? { name, description } : null;
       },
-      body: JSON.stringify({
-        stream: false,
-        temperature: 0.2,
-        max_tokens: 280,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-
-    if (!llmResponse.ok) return null;
-
-    const payload = await llmResponse.json() as ChatCompletionPayload;
-    const content = payload.choices?.[0]?.message?.content?.trim();
-    if (!content) return null;
-
-    const candidateJson = extractJsonObject(content);
-    if (!candidateJson) return null;
-
-    const parsed = JSON.parse(candidateJson) as Partial<ProjectRecommendation>;
-    const name = parsed.name?.trim();
-    const description = parsed.description?.trim();
-    if (!name || !description) return null;
-
-    return { name, description };
+    );
+    return out.ok ? out.value : null;
   };
 
   const resolveSourceControlAssignment = async (

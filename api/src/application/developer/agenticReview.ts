@@ -47,6 +47,7 @@
  * review is visible to a buyer rather than laundered into an approval.
  */
 
+import { asJsonObject } from '../../domain/shared/json';
 import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import { resolvePolicyGates } from '../governance/policyPackService';
 import { BUILTIN_AGENTS } from '../agent/provisionBuiltinAgents';
@@ -213,7 +214,7 @@ export const agenticStage: ReviewStage = {
         maxTokens: 900,
         useCase: 'extension_governance_review',
       },
-      (value) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as GovernanceVerdict) : null),
+      asJsonObject,
     );
     if (!out.ok) {
       switch (out.reason) {

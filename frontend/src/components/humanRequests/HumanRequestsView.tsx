@@ -3,12 +3,13 @@
 import { Select } from '@/components/Select';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type RequestKind, type AgentHost } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ApprovalResolveControl } from './ApprovalResolveControl';
 import { TicketDetailsPanel } from '@/components/task/TicketDetailsPanel';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Human-in-the-loop request queue — the portal side of the agent's `ask_human`
  * tool. Lists every request an agent has bubbled up (approvals, questions,
@@ -25,28 +26,9 @@ import { faultMessage } from '@/lib/apiClient';
 type KindFilter = '' | RequestKind;
 type StatusFilter = '' | ApprovalStatus;
 
-const KIND_OPTIONS: Array<{ value: KindFilter; label: string }> = [
-  { value: '', label: 'All kinds' },
-  { value: 'approval', label: 'Approvals' },
-  { value: 'question', label: 'Questions' },
-  { value: 'feedback', label: 'Feedback' },
-];
-
-const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
-  { value: '', label: 'All statuses' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'answered', label: 'Answered' },
-  { value: 'expired', label: 'Expired' },
-];
-
-const KIND_LABEL: Record<RequestKind, string> = {
-  approval: 'Approval',
-  question: 'Question',
-  feedback: 'Feedback',
-};
-
+/** Filter orders. Labels resolve under `humanRequests.kindPlural.*` / `humanRequests.status.*`. */
+const KIND_FILTERS: readonly RequestKind[] = ['approval', 'question', 'feedback'];
+const STATUS_FILTERS: readonly ApprovalStatus[] = ['pending', 'approved', 'rejected', 'answered', 'expired'];
 
 function statusClass(status: ApprovalStatus): string {
   switch (status) {
@@ -86,7 +68,9 @@ export function HumanRequestsView({
   compact = false,
   onPendingCountChange,
 }: HumanRequestsViewProps = {}) {
+  const t = useTranslations('humanRequests');
   const fmt = useFormat();
+  const errorMessage = useErrorMessage();
   const [rows, setRows] = useState<Approval[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,11 +96,11 @@ export function HumanRequestsView({
       setRows(approvals);
       if (lockedAgentHostId == null) setAgentHostList(agentHostsData);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load requests'));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [status, agentHostId, lockedAgentHostId]);
+  }, [status, agentHostId, lockedAgentHostId, errorMessage]);
 
   useEffect(() => {
     void load();
@@ -152,7 +136,7 @@ export function HumanRequestsView({
   /** Resolution summary for a non-pending row. */
   const resolutionText = (row: Approval): string => {
     if (row.status === 'answered') {
-      return `${row.reviewedBy ?? 'human'}: ${row.responseText ?? ''}`;
+      return `${row.reviewedBy ?? t('human')}: ${row.responseText ?? ''}`;
     }
     if (row.reviewedBy) {
       return `${row.reviewedBy}${row.reviewNote ? `: ${row.reviewNote}` : ''}`;
@@ -160,13 +144,16 @@ export function HumanRequestsView({
     return '-';
   };
 
-  const emptyText = 'No requests found';
+  const agentHostLabel = (row: Approval): string =>
+    row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-';
+
+  const emptyText = t('empty');
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-          Approvals, questions, and feedback your agents have escalated for a human. Resolving a request unblocks the waiting agent.
+          {t('intro')}
         </p>
         {!compact && <ViewToggle value={viewMode} onChange={setViewMode} />}
       </div>
@@ -174,21 +161,23 @@ export function HumanRequestsView({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         {!defaultKind && (
           <Select className="admin-select" value={kind} onChange={(e) => setKind(e.target.value as KindFilter)}>
-            {KIND_OPTIONS.map((opt) => (
-              <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+            <option value="">{t('allKinds')}</option>
+            {KIND_FILTERS.map((value) => (
+              <option key={value} value={value}>{t(`kindPlural.${value}`)}</option>
             ))}
           </Select>
         )}
 
         <Select className="admin-select" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
-          {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+          <option value="">{t('allStatuses')}</option>
+          {STATUS_FILTERS.map((value) => (
+            <option key={value} value={value}>{t(`status.${value}`)}</option>
           ))}
         </Select>
 
         {lockedAgentHostId == null && (
           <Select className="admin-select" value={agentHostId} onChange={(e) => setAgentHostId(e.target.value)}>
-            <option value="">All agentHosts</option>
+            <option value="">{t('allAgentHosts')}</option>
             {agentHostList.map((c) => (
               <option key={c.id} value={String(c.id)}>{c.name}</option>
             ))}
@@ -200,14 +189,14 @@ export function HumanRequestsView({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search action, description, answer"
+            placeholder={t('searchPlaceholder')}
             className="admin-select"
             style={{ minWidth: 220 }}
           />
         )}
 
         <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>
-          {loading ? 'Refreshing...' : 'Refresh'}
+          {loading ? t('refreshing') : t('refresh')}
         </button>
       </div>
 
@@ -228,35 +217,35 @@ export function HumanRequestsView({
           <table className="data-table" style={{ fontSize: 13 }}>
             <thead>
               <tr>
-                <th>Kind</th>
-                <th>Status</th>
-                <th>Action</th>
-                <th>Description</th>
-                <th>Item</th>
-                <th>AgentHost</th>
-                <th>Requested</th>
-                <th>Resolution</th>
-                <th>Resolve</th>
+                <th>{t('column.kind')}</th>
+                <th>{t('column.status')}</th>
+                <th>{t('column.action')}</th>
+                <th>{t('column.description')}</th>
+                <th>{t('column.item')}</th>
+                <th>{t('column.agentHost')}</th>
+                <th>{t('column.requested')}</th>
+                <th>{t('column.resolution')}</th>
+                <th>{t('column.resolve')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="text-muted">Loading requests...</td></tr>
+                <tr><td colSpan={9} className="text-muted">{t('loading')}</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={9} className="text-muted">{emptyText}</td></tr>
               ) : (
                 filtered.map((row) => (
                   <tr key={row.id}>
-                    <td><span className={kindClass(row.kind)}>{KIND_LABEL[row.kind]}</span></td>
-                    <td><span className={statusClass(row.status)}>{row.status}</span></td>
+                    <td><span className={kindClass(row.kind)}>{t(`kind.${row.kind}`)}</span></td>
+                    <td><span className={statusClass(row.status)}>{t(`status.${row.status}`)}</span></td>
                     <td style={{ whiteSpace: 'nowrap' }}>{row.actionType}</td>
                     <td title={row.description} style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.description}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       {row.taskId != null
-                        ? <button type="button" className="btn-ghost" onClick={() => setSelectedTaskId(row.taskId)}>View ticket</button>
+                        ? <button type="button" className="btn-ghost" onClick={() => setSelectedTaskId(row.taskId)}>{t('viewTicket')}</button>
                         : <span className="text-muted">-</span>}
                     </td>
-                    <td>{row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-'}</td>
+                    <td>{agentHostLabel(row)}</td>
                     <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmt.dateTime(row.createdAt)}</td>
                     <td className="text-muted" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} title={resolutionText(row)}>
                       {row.status === 'pending' ? '-' : resolutionText(row)}
@@ -274,7 +263,7 @@ export function HumanRequestsView({
         </div>
       ) : (
         loading ? (
-          <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>Loading requests...</div>
+          <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>{t('loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="text-muted" style={{ fontSize: 13, padding: '16px 0' }}>{emptyText}</div>
         ) : (
@@ -289,37 +278,37 @@ export function HumanRequestsView({
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <span className={kindClass(row.kind)} style={{ flexShrink: 0 }}>{KIND_LABEL[row.kind]}</span>
+                    <span className={kindClass(row.kind)} style={{ flexShrink: 0 }}>{t(`kind.${row.kind}`)}</span>
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {row.actionType}
                     </span>
                   </span>
-                  <span className={statusClass(row.status)} style={{ flexShrink: 0 }}>{row.status}</span>
+                  <span className={statusClass(row.status)} style={{ flexShrink: 0 }}>{t(`status.${row.status}`)}</span>
                 </div>
 
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{row.description}</div>
 
                 {row.taskId != null && (
                   <button type="button" className="btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setSelectedTaskId(row.taskId)}>
-                    View ticket
+                    {t('viewTicket')}
                   </button>
                 )}
 
                 {row.status !== 'pending' && row.status !== 'expired' && (
                   <div style={{ fontSize: 12, color: 'var(--text-primary)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', overflowWrap: 'anywhere' }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{row.status === 'answered' ? 'Answer' : 'Resolution'}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{row.status === 'answered' ? t('column.answer') : t('column.resolution')}</div>
                     {resolutionText(row)}
                   </div>
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   {[
-                    { label: 'AgentHost', value: row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-' },
-                    { label: 'Requested By', value: row.requestedBy ?? '-' },
-                    { label: 'Requested', value: fmt.dateTime(row.createdAt) },
-                    { label: 'Expires', value: fmt.dateTime(row.expiresAt) },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
+                    { key: 'agentHost', label: t('column.agentHost'), value: agentHostLabel(row) },
+                    { key: 'requestedBy', label: t('column.requestedBy'), value: row.requestedBy ?? '-' },
+                    { key: 'requested', label: t('column.requested'), value: fmt.dateTime(row.createdAt) },
+                    { key: 'expires', label: t('column.expires'), value: fmt.dateTime(row.expiresAt) },
+                  ].map(({ key, label, value }) => (
+                    <div key={key}>
                       <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{value}</div>
                     </div>
@@ -331,7 +320,7 @@ export function HumanRequestsView({
                     <ApprovalResolveControl approval={row} compact={compact} onResolved={() => void load()} />
                   </div>
                 ) : (
-                  <span className="text-muted" style={{ fontSize: 12 }}>No actions available</span>
+                  <span className="text-muted" style={{ fontSize: 12 }}>{t('noActions')}</span>
                 )}
               </div>
             ))}

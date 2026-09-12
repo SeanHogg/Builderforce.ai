@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * "Connect your own subscription" — the ONE PKCE connect flow, for every
@@ -334,7 +335,7 @@ export function mountSubscriptionOAuthRoutes(router: Hono<HonoEnv>, gate: Subscr
           outcome = await adapter.grant.poll(deviceCode);
         } catch (e) {
           const { body: failure, status } = exchangeFailureResponse(e, adapter.provider);
-          return c.json(failure, status);
+          return statusResponse(c, failure, status, { source: 'presentation/routes/subscriptionOAuthRoutes.ts', operation: 'oauthPoll' }, e);
         }
         // Still waiting is a SUCCESSFUL poll, not an error — the client is meant to call
         // again. Reporting it as a failure would make a normal wait look like a breakage.
@@ -357,7 +358,7 @@ export function mountSubscriptionOAuthRoutes(router: Hono<HonoEnv>, gate: Subscr
           tokens = await adapter.grant.exchange({ code: parsed.code, state, ...readPending(raw) });
         } catch (e) {
           const { body: failure, status } = exchangeFailureResponse(e, adapter.provider);
-          return c.json(failure, status);
+          return statusResponse(c, failure, status, { source: 'presentation/routes/subscriptionOAuthRoutes.ts', operation: 'oauthExchange' }, e);
         }
       }
       await setTenantProviderOAuth(c.env, access.tenantId, adapter.provider, tokens, access.userId);

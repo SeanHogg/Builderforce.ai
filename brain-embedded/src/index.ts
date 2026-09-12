@@ -274,6 +274,9 @@ export type { ModelFallbackSurface } from '@builderforce/agent-stall';
 // question and the transcript that RENDERS it must agree on the fence and on what
 // counts as a renderable card, or the question is silently swallowed.
 export {
+  // The ONE number every surface stops on: consecutive failed tool calls. There is no
+  // step cap. Re-exported for the same reason as the ask-user protocol below.
+  DEFAULT_TOOL_FAILURE_STREAK,
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
   askUserAnchorId,

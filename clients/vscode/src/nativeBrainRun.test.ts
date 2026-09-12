@@ -11,7 +11,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetBrainRunStore, type EvermindRunHooks } from "@seanhogg/builderforce-brain-embedded";
+import { DEFAULT_TOOL_FAILURE_STREAK, resetBrainRunStore, type EvermindRunHooks } from "@seanhogg/builderforce-brain-embedded";
 import { fakeGateway, type GatewayScript } from "../harness/fakeGateway";
 import type { ToolDef } from "./fileTools";
 import type { PolicyGate } from "./policy";
@@ -92,7 +92,6 @@ async function runTurn(opts: {
   policyGates?: PolicyGate[];
   projectId?: number;
   evermind?: EvermindRunHooks;
-  maxIterations?: number;
   chatId?: number;
   prompt?: string;
 }) {
@@ -110,7 +109,6 @@ async function runTurn(opts: {
     ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
     ...(opts.evermind ? { evermind: opts.evermind } : {}),
     ...(opts.policyGates ? { policyGates: opts.policyGates } : {}),
-    ...(opts.maxIterations ? { maxIterations: opts.maxIterations } : {}),
     permissionMode: opts.permissionMode ?? "ask",
     approve: async (req) => {
       approvals.push(req);
@@ -444,13 +442,12 @@ describe("the memory-first short-circuit", () => {
   });
 });
 
-// ── §2.5 #7 — the tool budget, and the dispatch hint on exhaustion ───────────
-describe("a run that burns its tool budget", () => {
-  it("stops at the injected ceiling and appends the dispatch hint", async () => {
-    const read = toolDef("read_file", { result: { content: "…" } });
+// ── §2.5 #7 — no tool budget; the failure breaker, and the dispatch hint when it trips ──
+describe("a run whose tool calls keep failing", () => {
+  it("is stopped by the consecutive-failure breaker and appends the dispatch hint", async () => {
+    const read = toolDef("read_file", { throws: "EACCES: permission denied" });
     const { log, requests } = await runTurn({
       tools: [read],
-      maxIterations: 2,
       permissionMode: "acceptEdits",
       script: (ctx) =>
         ctx.toolless
@@ -458,11 +455,27 @@ describe("a run that burns its tool budget", () => {
           : { toolCalls: [{ name: "read_file", args: { path: `f${ctx.turn}.ts` } }] },
     });
 
-    // Two tool turns, then the loop's forced final synthesis with tools withdrawn.
-    expect(requests).toHaveLength(3);
-    expect(requests[2]?.toolless).toBe(true);
+    // Five failing tool turns, then the loop's forced final synthesis with tools withdrawn.
+    expect(requests).toHaveLength(DEFAULT_TOOL_FAILURE_STREAK + 1);
+    expect(requests[DEFAULT_TOOL_FAILURE_STREAK]?.toolless).toBe(true);
     expect(log.text).toContain("Here is what I found so far.");
     expect(log.text).toContain(LABELS.dispatchHint);
+  });
+
+  it("never cuts off a long run of SUCCESSFUL calls — there is no step ceiling", async () => {
+    const read = toolDef("read_file", { result: { content: "…" } });
+    const { log, requests } = await runTurn({
+      tools: [read],
+      permissionMode: "acceptEdits",
+      script: (ctx) =>
+        ctx.toolless || ctx.turn > 50
+          ? { text: "Done." }
+          : { toolCalls: [{ name: "read_file", args: { path: `f${ctx.turn}.ts` } }] },
+    });
+    // Fifty tool turns (past the participant's old 40-turn cap) + the model's own answer.
+    expect(requests).toHaveLength(51);
+    expect(requests.every((r) => !r.toolless)).toBe(true);
+    expect(log.text).not.toContain(LABELS.dispatchHint);
   });
 
   it("does not append the hint to a run that finished normally", async () => {

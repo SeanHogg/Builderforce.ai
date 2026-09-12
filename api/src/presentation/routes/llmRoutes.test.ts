@@ -321,6 +321,8 @@ type TenantApiKeyRow = {
   tenantId: number;
   revokedAt: Date | null;
   allowedOrigins?: string | null;
+  /** The member who minted the key; their role is read by the membership resolver. */
+  createdByUserId?: string | null;
 };
 type TenantRow = {
   id: number;
@@ -332,6 +334,9 @@ type TenantRow = {
 
 function mockDb(opts: {
   keyRow?:    TenantApiKeyRow;
+  /** The key creator's `tenant_members` row (the membership resolver's query), queued
+   *  between the key row and the tenant row — the order the bfk_* path reads them in. */
+  membershipRow?: { userId: string; role: string; isSuperadmin: boolean } | null;
   tenantRow?: TenantRow;
   /** Reply for the token-sum query (awaited directly on `.where()`). `used` feeds
    *  the single-window sum (sumTenantTextTokens); `day`/`month` feed the combined
@@ -347,6 +352,8 @@ function mockDb(opts: {
   // row, then the tenant row. We hand back an iterator of canned results.
   const queue: unknown[][] = [];
   if (opts.keyRow !== undefined) queue.push([opts.keyRow]);
+  // A key WITH a creator triggers the membership query; `null` = no active membership.
+  if (opts.membershipRow !== undefined) queue.push(opts.membershipRow ? [opts.membershipRow] : []);
   if (opts.tenantRow !== undefined) queue.push([opts.tenantRow]);
 
   const usageRow = opts.usageRow;
@@ -365,7 +372,8 @@ function mockDb(opts: {
         then:  (resolve: (v: unknown) => unknown) =>
           resolve(usageRow !== undefined ? [usageRow] : []),
       });
-      const chain = { leftJoin: () => chain, where };
+      // The membership resolver `.innerJoin(users)`s before its `.where()`.
+      const chain = { leftJoin: () => chain, innerJoin: () => chain, where };
       return chain;
     },
   }));
@@ -422,7 +430,7 @@ describe('requireTenantAccess (bfk_* path)', () => {
     mocks.buildDatabase.mockReset();
   });
 
-  it('resolves a valid bfk_* key to the tenant + effective plan', async () => {
+  it('resolves a valid bfk_* key to the tenant + effective plan, as an anonymous developer when it has no creator', async () => {
     mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
     const db = mockDb({
       keyRow:    { id: 'kid', tenantId: 42, revokedAt: null },
@@ -436,7 +444,42 @@ describe('requireTenantAccess (bfk_* path)', () => {
     expect(access.agentHostId).toBeNull();
     expect(access.agentHostTokenDailyLimit).toBeNull();
     expect(access.userId).toBeNull();
+    expect(access.role).toBe('developer');
     expect(access.effectivePlan).toBe('pro');
+  });
+
+  // The key is the member's editor credential (device sign-in mints it for the
+  // signed-in member), so the gateway acts AS that member — their id and their role.
+  // Before this a workspace owner directing the agent from VS Code was answered
+  // `403 manager role required` by a route the chat replayed on their behalf.
+  it('acts as the key\'s creator: their user id and their membership role', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:        { id: 'kid', tenantId: 42, revokedAt: null, createdByUserId: 'user-owner' },
+      membershipRow: { userId: 'user-owner', role: 'owner', isSuperadmin: false },
+      tenantRow:     { id: 42, plan: 'pro', billingStatus: 'active' },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const access = await requireTenantAccess(mockContext('bfk_abc123', db));
+
+    expect(access.userId).toBe('user-owner');
+    expect(access.role).toBe('owner');
+  });
+
+  it('keeps the developer floor when the creator is no longer an active member (no membership row)', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:        { id: 'kid', tenantId: 42, revokedAt: null, createdByUserId: 'user-gone' },
+      membershipRow: null,
+      tenantRow:     { id: 42, plan: 'pro', billingStatus: 'active' },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const access = await requireTenantAccess(mockContext('bfk_abc123', db));
+
+    expect(access.userId).toBeNull();
+    expect(access.role).toBe('developer');
   });
 
   it('rejects a revoked bfk_* key with 401-shaped error', async () => {

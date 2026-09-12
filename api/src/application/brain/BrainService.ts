@@ -1242,7 +1242,6 @@ export class BrainService {
       if (f?.vendor) byoFailure = { vendor: f.vendor, code: f.code ?? 0, ...(f.detail ? { detail: f.detail } : {}) };
     };
 
-    const MAX_ITERS = 6;
     let text = '';
     let toolCallCount = 0;
     let iterations = 0;
@@ -1330,7 +1329,10 @@ export class BrainService {
       messages: convo,
       // Every tool result is size-capped for the transcript.
       codec: openAiChatCodec<Record<string, unknown>>((r) => JSON.stringify(r.data ?? null).slice(0, 8000)),
-      budget: { stepCap: MAX_ITERS },
+      // No step cap: an addressed agent asked to review forty tickets makes forty
+      // calls. The kernel's consecutive-tool-failure breaker is the only limit — the
+      // same one the editor Brain and the cloud engine stop on.
+      budget: {},
       hooks: {
         beforeTurn: async () => {
           const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
@@ -1507,7 +1509,8 @@ export class BrainService {
       },
     });
     // A reply that SETTLED — final prose, an `ask_user` question, an exhausted-stall
-    // notice — is the text. A spent tool budget leaves it empty for the synthesis below.
+    // notice — is the text. A tripped failure breaker leaves it empty for the synthesis
+    // below, which then reports what kept failing rather than an empty reply.
     text = loop.finished ? loop.output : '';
 
     // The tool loop ended with no prose (only tool calls across every iteration, or a

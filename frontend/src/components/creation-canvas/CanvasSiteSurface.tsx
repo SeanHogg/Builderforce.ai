@@ -316,7 +316,10 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
                     the redesign ships. `next/image` cannot take a data URL of unknown
                     height, which is exactly what a capture is. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={before.imageUrl} alt={t('surface.site.beforeAlt', { url: before.url })} loading="lazy" />
+                {/* A capture's true height is only known once it loads; the attributes reserve
+                    a desktop-viewport box (the CSS keeps `height: auto`), so the pane holds its
+                    shape while it arrives instead of jumping from zero. */}
+                <img src={before.imageUrl} alt={t('surface.site.beforeAlt', { url: before.url })} width={1280} height={800} loading="lazy" />
               </figure>
               <figure className={styles.siteComparePane} data-side="after">
                 <figcaption>

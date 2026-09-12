@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { ProjectService } from '../../application/project/ProjectService';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
@@ -117,7 +118,7 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
     // API traffic. Tenant comes from the auth middleware; no end-user id here.
     logTrace(c.env, c.executionCtx, {
       traceId, surface: 'ide-chat',
-      tenantId: c.get('tenantId') ?? null,
+      tenantId: optionalTenantId(c),
       userId: c.get('userId') ?? null,
       result, streamed: true,
       requestIp: c.req.header('cf-connecting-ip') ?? null,

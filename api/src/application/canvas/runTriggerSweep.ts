@@ -42,6 +42,7 @@
  * almost all of them ([[neon-cost-under-5-dollars]]).
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { evaluateBoardTriggers, type ResolvedTrigger, type TriggerBoardObject } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
@@ -88,15 +89,11 @@ interface ObjectRow {
   content: unknown;
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
 /** A saved row in the shape the shared engine speaks. `content` holds the authored
  *  fields (title, status, and the spec's own); `canvas_data` holds geometry, which an
  *  evaluation has no use for and is deliberately not loaded. */
 function toBoardObject(row: ObjectRow): TriggerBoardObject {
-  const content = asRecord(row.content);
+  const content = asJsonRecord(row.content);
   return {
     id: row.id,
     kind: row.kind,

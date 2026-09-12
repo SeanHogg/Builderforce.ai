@@ -36,6 +36,7 @@ import {
 } from '../knowledgeStyles';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { formatCents, KNOWN_CURRENCIES } from '@/lib/canvasMoney';
 
 const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_error'];
@@ -647,6 +648,7 @@ function AiAssist({
   t: ReturnType<typeof useTranslations>;
   onApply: (text: string, replace: boolean) => void;
 }) {
+  const errorMessage = useErrorMessage();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
@@ -670,7 +672,7 @@ function AiAssist({
       );
       setResult(final.trim() || null);
     } catch (e) {
-      setError(faultMessage(e, 'AI failed'));
+      setError(errorMessage(e));
       setResult(null);
     } finally {
       setBusy(false);
@@ -773,6 +775,7 @@ function AnalyzePanel({
   t: ReturnType<typeof useTranslations>;
   onApplyFlow: (flow: string) => void;
 }) {
+  const errorMessage = useErrorMessage();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -785,7 +788,7 @@ function AnalyzePanel({
     try {
       setResult(await knowledgeApi.analyze(docId));
     } catch (e) {
-      setError(faultMessage(e, 'Analysis failed'));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

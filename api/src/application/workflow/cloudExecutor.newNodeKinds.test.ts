@@ -15,10 +15,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   executeCloudNode, dispositionFromDeps, applyErrorHandler, planIteratorExpansion,
-  type CloudExecutorEnv, type IteratorTaskRef,
+  type IteratorTaskRef,
 } from './cloudExecutor';
+import type { Env } from '../../env';
 
-const env = {} as CloudExecutorEnv;
+const env = {} as Env;
 
 describe('router', () => {
   it('tags $route with the first matching route', async () => {

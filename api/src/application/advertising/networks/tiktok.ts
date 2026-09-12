@@ -11,8 +11,9 @@
  * Money is the MAJOR currency unit throughout — `budget: 50` is fifty dollars.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   ageFromBuckets, bucketedAgeKeys, mapTargetingValues, readNativeValues, requireTargetingSupport,
@@ -43,7 +44,7 @@ const OBJECTIVES: Partial<Record<AdObjective, string>> = {
  * network has already rejected. Rate limits and internal errors are worth another go.
  */
 function unwrap(result: AdCallResult): Record<string, unknown> {
-  const envelope = rec(result.data);
+  const envelope = asJsonRecord(result.data);
   const code = Number(envelope.code ?? 0);
   if (code !== 0) {
     const retryable = code === 40016 || code === 50000 || code >= 50000;
@@ -53,7 +54,7 @@ function unwrap(result: AdCallResult): Record<string, unknown> {
       retryable,
     );
   }
-  return rec(envelope.data);
+  return asJsonRecord(envelope.data);
 }
 
 function toStatus(raw: unknown, secondary: unknown): AdStatus {
@@ -146,7 +147,7 @@ async function resolveLocationIds(
   const data = unwrap(await ask(call, 'list_regions', { advertiser_id: advertiserId }));
   const byCode = new Map<string, string>();
   for (const raw of list(data.region_info ?? data.list)) {
-    const region = rec(raw);
+    const region = asJsonRecord(raw);
     const code = text(region.region_code).toUpperCase();
     const id = text(region.region_id ?? region.location_id);
     if (code && id && !byCode.has(code)) byCode.set(code, id);
@@ -181,7 +182,7 @@ async function resolveInterestIds(
   const byName = new Map<string, string>();
   const walk = (nodes: unknown): void => {
     for (const raw of list(nodes)) {
-      const node = rec(raw);
+      const node = asJsonRecord(raw);
       const name = text(node.interest_category_name ?? node.name).toLowerCase();
       const id = text(node.interest_category_id ?? node.id);
       if (name && id && !byName.has(name)) byName.set(name, id);
@@ -298,7 +299,7 @@ export const tiktokAdsProvider: AdsProvider = {
   async listCampaigns(call, fields, identity) {
     const advertiserId = requireField(fields, 'adAccountId', 'the advertiser ID');
     const data = unwrap(await ask(call, 'list_campaigns', { advertiser_id: advertiserId, page_size: 1000 }));
-    return list(data.list).map(rec).map((c) => {
+    return list(data.list).map(asJsonRecord).map((c) => {
       const native = text(c.objective_type) || null;
       return {
         externalId: text(c.campaign_id),
@@ -378,7 +379,7 @@ export const tiktokAdsProvider: AdsProvider = {
       page_size: 1000,
       ...(externalCampaignId ? { filtering: filterBy({ campaign_ids: [externalCampaignId] }) } : {}),
     }));
-    return list(data.list).map(rec).map((row) => ({
+    return list(data.list).map(asJsonRecord).map((row) => ({
       externalId: text(row.adgroup_id),
       externalCampaignId: text(row.campaign_id) || null,
       name: text(row.adgroup_name),
@@ -487,7 +488,7 @@ export const tiktokAdsProvider: AdsProvider = {
       page_size: 1000,
       ...(externalAdSetId ? { filtering: filterBy({ adgroup_ids: [externalAdSetId] }) } : {}),
     }));
-    return list(data.list).map(rec).map((row) => ({
+    return list(data.list).map(asJsonRecord).map((row) => ({
       externalId: text(row.ad_id),
       externalAdSetId: text(row.adgroup_id) || null,
       name: text(row.ad_name),
@@ -532,7 +533,7 @@ export const tiktokAdsProvider: AdsProvider = {
         ...(draft.creativeRef ? { video_id: draft.creativeRef } : {}),
       }],
     }));
-    const id = list(data.ad_ids).map(text).find(Boolean) ?? text(rec(list(data.list)[0]).ad_id);
+    const id = list(data.ad_ids).map(text).find(Boolean) ?? text(asJsonRecord(list(data.list)[0]).ad_id);
     if (!id) throw new AdsProviderError('TikTok accepted the ad but did not return its id.', 502, true);
 
     return {
@@ -571,9 +572,9 @@ export const tiktokAdsProvider: AdsProvider = {
       end_date: query.until,
       page_size: 1000,
     }));
-    return list(data.list).map(rec).flatMap((row) => {
-      const dimensions = rec(row.dimensions);
-      const metrics = rec(row.metrics);
+    return list(data.list).map(asJsonRecord).flatMap((row) => {
+      const dimensions = asJsonRecord(row.dimensions);
+      const metrics = asJsonRecord(row.metrics);
       const externalCampaignId = text(dimensions.campaign_id);
       const date = toDay(dimensions.stat_time_day);
       if (!externalCampaignId || !date) return [];

@@ -13,6 +13,7 @@
  * reason the output is still parsed defensively and rendered into deterministic
  * Markdown, so even a weak model on the downgraded path produces a clean artifact.
  */
+import { asJsonObject } from '../../domain/shared/json';
 import { completeJson } from '../llm/completeJson';
 import { artifactResponseFormat } from './artifactSchemas';
 import type { Env } from '../../env';
@@ -290,7 +291,7 @@ export class ArchitectAnalysisService {
         maxTokens: MAX_TOKENS[kind],
         useCase: `repo_analysis_${kind}`,
       },
-      (value) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null),
+      asJsonObject,
     );
     if (!out.ok) {
       if (out.reason === 'gateway') {

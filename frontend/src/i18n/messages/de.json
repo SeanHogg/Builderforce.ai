@@ -1727,7 +1727,6 @@
     "deleteCloudAgentConfirm": "Agent „{name}“ löschen? Seine agentenspezifischen Skills und Personas werden gelöscht.",
     "deleteSkillConfirm": "Diesen Skill löschen?",
     "deleteNamedConfirm": "„{name}“ löschen?",
-    "servePreviewAnywayConfirm": "Die letzten Prüfungen sind fehlgeschlagen ({summary}). Vorschau trotzdem bereitstellen?",
     "language": "Sprache",
     "typeTask": "Aufgabe",
     "typeEpic": "Epic",
@@ -1805,7 +1804,13 @@
     "no": "Nein",
     "copyLink": "Link kopieren",
     "copyFallback": "Kopiere diesen Link von Hand – die Zwischenablage ist nicht verfügbar.",
-    "unavailable": "Nicht verfügbar"
+    "unavailable": "Nicht verfügbar",
+    "actionFailed": "Das hat nicht geklappt. Bitte versuchen Sie es erneut.",
+    "inlineConfirm": {
+      "confirm": "Bestätigen",
+      "armed": "Zum Bestätigen erneut drücken, mit Esc abbrechen."
+    },
+    "servingPreviewAnyway": "Die letzten Prüfungen sind fehlgeschlagen ({summary}) – die Vorschau wird trotzdem bereitgestellt."
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -2184,7 +2189,6 @@
       "unsubscribedTitle": "Sie sind abgemeldet",
       "unsubscribedBody": "Sie erhalten keine optionalen E-Mails. Konto- und Sicherheitsnachrichten werden weiterhin gesendet.",
       "resubscribeCta": "Erneut anmelden",
-      "resubscribeTitle": "Optionale E-Mails wieder abonnieren",
       "resubscribeConfirm": "Sie erhalten wieder optionale E-Mails, entsprechend den von Ihnen aktivierten Kategorien. Fortfahren?"
     },
     "spendLimits": "Ausgabenlimits",
@@ -13680,9 +13684,7 @@
       "allTables": "alle Tabellen",
       "maintenanceCleanup": "Aufbewahrungsbereinigung ausführen",
       "maintenanceVacuum": "Vacuum von {table} in {target}",
-      "confirmTitle": "Wartung ausführen?",
-      "confirmMaintenance": "Bestätigen: {label}? Dies ist ein auditierter Wartungsvorgang.",
-      "confirmRun": "Ausführen"
+      "confirmMaintenance": "Bestätigen: {label}? Dies ist ein auditierter Wartungsvorgang."
     }
   },
   "providerKeys": {
@@ -15102,7 +15104,21 @@
     "revertConfirmMessage": "Dies schließt den von Lauf #{id} geöffneten Pull Request und löscht den Branch, den er geschrieben hat. Das lässt sich nicht rückgängig machen. Es wird abgelehnt, wenn der Pull Request bereits gemergt wurde oder etwas anderes den Branch geändert hat.",
     "revertConfirmAction": "Lauf zurücknehmen",
     "revertDone": "Zurückgenommen — Branch {branch} gelöscht ({commits} Commit(s)).",
-    "failedToRevert": "Lauf konnte nicht zurückgenommen werden"
+    "failedToRevert": "Lauf konnte nicht zurückgenommen werden",
+    "title": "Notabschaltung der Agentenausführung",
+    "disabledBody": "Die Agentenausführung des Mandanten ist gesperrt. VS-Code- und Brain-Chats, Canvas/Create und die MCP-Werkzeuge der Seite bleiben verfügbar.",
+    "enabledBody": "Notfall-Übersteuerung für den Arbeitsbereich. Das Deaktivieren stoppt die Agenten des Mandanten und sperrt manuelle, geplante, Integrations- und autonome Plattformläufe; interaktive Arbeit in VS Code und Brain bleibt verfügbar.",
+    "confirmTitle": "Gesamte Agentenausführung deaktivieren?",
+    "confirmBody": "Dadurch werden wartende, laufende oder pausierte Agenten des Mandanten sofort abgebrochen und manuelle, geplante und autonome Plattformläufe gesperrt, bis ein Manager die Ausführung wieder aktiviert. VS-Code- und Brain-Chats, Canvas/Create und die MCP-Werkzeuge der Seite bleiben verfügbar.",
+    "disableAll": "Deaktivieren und alle Agenten stoppen",
+    "enable": "Agentenausführung aktivieren",
+    "updating": "Wird aktualisiert…",
+    "statusLoading": "Status: Wird geladen…",
+    "statusEnabled": "Status: Ausführung aktiviert",
+    "statusDisabled": "Status: AUSFÜHRUNG DEAKTIVIERT",
+    "stoppedAll": "Die Ausführung ist deaktiviert. {count, plural, one {# aktiver Lauf gestoppt} other {# aktive Läufe gestoppt}}.",
+    "stoppedSome": "Die Ausführung ist deaktiviert. {cancelled, plural, one {# Lauf gestoppt} other {# Läufe gestoppt}}; {failed} konnten nicht abgebrochen werden.",
+    "enabledNotice": "Die Agentenausführung ist aktiviert."
   },
   "aiTraining": {
     "adapterName": "{model}-Adapter",
@@ -16499,7 +16515,6 @@
     "replaceCard": "Karte ersetzen",
     "retryCard": "Erneut versuchen",
     "cardWorking": "Wird ausgeführt…",
-    "replaceCardTitle": "Karte ersetzen?",
     "replaceCardWarning": "Ihre aktuelle Karte bleibt aktiv, bis die neue verifiziert ist — Premium-Modelle werden nie unterbrochen. Die alte Karte wird automatisch entfernt, sobald die neue bestätigt ist.",
     "retryCardMessage": "Wir starten eine neue 0-$-Prüfung. Ihre Karte wird nicht belastet.",
     "replaceCardConfirm": "Weiter",
@@ -17814,7 +17829,6 @@
       "forgetTitle": "Diesen Fakt vergessen?",
       "forgetConfirm": "Agenten erinnern sich nicht mehr an „{key}“. Existiert eine weiter gefasste Version desselben Schlüssels, wird diese wieder sichtbar.",
       "purge": "Abgelaufene löschen",
-      "purgeTitle": "Abgelaufene Fakten löschen?",
       "purgeConfirm": "Löscht Fakten, deren Ablauf bereits vorbei ist. Agenten haben sie seit dem Ablauf ohnehin nicht mehr erinnert – für einen Lauf ändert sich nichts.",
       "statTotal": "Fakten im Bereich",
       "statTotalHint": "Woran sich ein hier laufender Agent erinnern kann.",
@@ -19063,7 +19077,15 @@
         "noSuppressionCheck": "Die Sperrliste wurde nicht geprüft",
         "emptyAfterSuppression": "Nach Abzug der Sperrliste bleibt niemand übrig",
         "forbiddenClaim": "Der Text enthält eine Aussage, die die Marke verbietet"
-      }
+      },
+      "inboxFilterAll": "Alle aktuellen E-Mails",
+      "inboxFilterUnread": "ungelesen",
+      "inboxFilterFrom": "von {value}",
+      "inboxFilterSubject": "Betreff „{value}“",
+      "inboxFilterMatching": "passend zu „{value}“",
+      "inboxFilterAttachments": "mit Anhängen",
+      "inboxFilterSince": "seit {date}",
+      "inboxFilterBefore": "vor {date}"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -20725,7 +20747,11 @@
       "campaignScheduled": "Für {count} Konten geplant.",
       "campaignUpdateFailed": "Diese Kampagne konnte nicht aktualisiert werden.",
       "boardMedia": "Aus dieser Leinwand anhängen",
-      "boardMediaHelp": "Ausgewählte Bilder und Videos werden automatisch unter einer öffentlichen URL veröffentlicht — genau das brauchen Instagram und TikTok, um sie abzurufen."
+      "boardMediaHelp": "Ausgewählte Bilder und Videos werden automatisch unter einer öffentlichen URL veröffentlicht — genau das brauchen Instagram und TikTok, um sie abzurufen.",
+      "mediaTabOnly": "Diese Datei existiert nur in diesem Browser-Tab. Generiere sie neu oder lade sie erneut hoch, damit sie eine dauerhafte Quelle hat.",
+      "mediaNotPublic": "Ein soziales Netzwerk ruft Medien selbst ab und braucht daher eine öffentliche https-URL — diese ist weder https noch eingebettete Medien.",
+      "mediaUploadFailed": "Diese Datei konnte nicht unter einer öffentlichen URL veröffentlicht werden.",
+      "mediaUploadFailedReason": "Diese Datei konnte nicht unter einer öffentlichen URL veröffentlicht werden: {reason}"
     },
     "noticeGuestLimitRoom": "Diese geteilte Sitzung hat ihre {limit} kostenlosen Nachrichten für heute aufgebraucht. Melden Sie sich kostenlos an, um weiterzumachen – Ihr Canvas kommt mit.",
     "founder": {
@@ -21082,6 +21108,61 @@
         "expires": "Läuft ab",
         "views": "Aufrufe",
         "lastViewedAt": "Zuletzt angesehen"
+      },
+      "verdict": {
+        "boardRef": {
+          "notFound": "Noch kein `{kind}` passt zu „{ref}“ – lege eines an, um die Verknüpfung herzustellen."
+        },
+        "counterparty": {
+          "linkedOwned": "Verknüpft mit `account` „{title}“ ({relationship}), verantwortlich: {owner}.",
+          "linked": "Verknüpft mit `account` „{title}“ ({relationship})."
+        },
+        "fallback": {
+          "thisContract": "dieser Vertrag",
+          "untitledDocument": "ein unbenanntes Dokument",
+          "unnamedObligation": "eine unbenannte Verpflichtung"
+        },
+        "obligation": {
+          "noRef": "Unter Vertrag „{contract}“ ausgestellt, aber keine `obligationRef` gibt an, WELCHE Verpflichtung damit erfüllt wird. Setze sie auf einen dieser Werte: {available}.",
+          "noReferences": "Unter Vertrag „{contract}“ ausgestellt, dessen Verpflichtungen keine `reference`-Werte haben – daher lässt sich nichts auf {host, select, bill {dieser Eingangsrechnung} other {dieser Rechnung}} mit dem Vereinbarten abgleichen. Gib zuerst jeder Verpflichtung im Vertrag eine `reference`.",
+          "unknownRef": "Vertrag „{contract}“ hat KEINE Verpflichtung mit der Referenz „{ref}“ – das ist eine Belastung ohne passende Verpflichtung. Entweder sind die Verpflichtungen des Vertrags veraltet, oder {host, select, bill {diese Eingangsrechnung} other {diese Rechnung}} hätte nicht ausgestellt werden dürfen.",
+          "axis": {
+            "amount": "Betrag",
+            "date": "Datum",
+            "cadence": "Turnus"
+          },
+          "problem": {
+            "amount": "der Betrag ist {actual, number}, die Verpflichtung nennt {agreed, number}",
+            "date": "sie wird {days, plural, one {# Tag} other {# Tage}} {direction, select, after {nach} other {vor}} dem Termin der Verpflichtung ({due}) fällig",
+            "cadence": "sie wiederholt sich im Turnus {actual}, die Verpflichtung nennt {agreed}"
+          },
+          "mismatch": "Verweist auf die Verpflichtung „{obligation}“ in Vertrag „{contract}“, aber {problems}. Prüfe sie anhand der Vereinbarung, bevor du sie {host, select, bill {freigibst oder bezahlst} other {ausstellst}}.",
+          "discharged": "Erfüllt die Verpflichtung „{obligation}“ in Vertrag „{contract}“ – {checked} {count, plural, one {stimmt} other {stimmen}} mit dem Vereinbarten überein.",
+          "linkedOnly": "Verweist auf die Verpflichtung „{obligation}“ in Vertrag „{contract}“. Auf keiner Seite ist etwas Vergleichbares ausgefüllt, daher ist das eine Verknüpfung und noch keine Prüfung."
+        },
+        "evidence": {
+          "bound": "An den Live-Split „{key}“ gebunden – jede Impression und jede Conversion unten wurde von der Plattform gezählt, nicht eingetragen.",
+          "authored": "MANUELL ERFASST. Nichts hat diese Zahlen erzeugt: Sie wurden auf die Karte getippt. Binde dieses Experiment an einen `ab_tests`-Schlüssel, bevor du das Ergebnis als Messung zitierst."
+        },
+        "significance": {
+          "nothingYet": "NICHTS hier ist bisher signifikant.",
+          "real": "{variant} liegt {points, number} Prozentpunkte {direction, select, up {über} other {unter}} der Kontrollgruppe (p={p}), Intervall {low, number} bis {high, number} Prozentpunkte.",
+          "noise": "{variant} liegt gegenüber der Kontrollgruppe im Rauschen (p={p}); n ist zu klein für eine Aussage."
+        },
+        "ownership": {
+          "balanced": "Inhaber und der nicht zugeteilte Pool machen {accounted} % der voll verwässerten Gesamtzahl aus.",
+          "unbalanced": "Inhaber und der nicht zugeteilte Pool machen nur {accounted} % der voll verwässerten Gesamtzahl aus – Register und genehmigte Anzahl stimmen nicht überein; das ist ein echter Befund, den es zu untersuchen gilt, kein Rundungsfehler.",
+          "percentSkew": "Die Prozentspalte ergibt einschließlich des nicht zugeteilten Pools {total, number} %, nicht 100 – die Prozentsätze gehen nicht auf.",
+          "convertibles": "{count, plural, one {# Wandelinstrument ausstehend} other {# Wandelinstrumente ausstehend}} – nicht in diesen Prozentsätzen enthalten, bis eine Finanzierungsrunde sie wandelt."
+        },
+        "coverage": {
+          "noIdentity": "Dieser Vertrag hat weder eine `reference` noch einen Titel, daher kann ihn keine Rechnung benennen. Gib ihm eine Referenz, bevor du etwas darauf ausstellst.",
+          "billable": "{covered} von {total} abrechenbaren {total, plural, one {Verpflichtung} other {Verpflichtungen}} {covered, plural, one {hat} other {haben}} ein ausgestelltes Dokument.",
+          "noneBillable": "Keine Verpflichtung hier ist eine Forderung oder Verbindlichkeit, daher sollte dieser Vertrag keine Rechnung erzeugen.",
+          "open": "Noch nichts ausgestellt für: {names}.",
+          "orphans": "{count, plural, one {# Dokument benennt diesen Vertrag und passt} other {# Dokumente benennen diesen Vertrag und passen}} zu keiner seiner Verpflichtungen – {names}.",
+          "unreferenced": "{count, plural, one {# Verpflichtung hat keine `reference`, daher lässt sich nie zeigen, dass sie erfüllt wurde.} other {# Verpflichtungen haben keine `reference`, daher lässt sich nie zeigen, dass sie erfüllt wurden.}}"
+        }
       }
     },
     "datasetImportedWithPii": "{name} importiert — {rows} Zeilen, {columns} Spalten. {pii} Spalten enthalten personenbezogene Daten und werden maskiert.",
@@ -21658,7 +21739,13 @@
       "freshMinutes": "vor {count} Min.",
       "freshHours": "vor {count} Std.",
       "freshDays": "vor {count} T.",
-      "barValue": "{value} ({percent} %)"
+      "barValue": "{value} ({percent} %)",
+      "verdict": {
+        "lateBy": {
+          "hours": "{hours} Std. verspätet",
+          "days": "{days} Tg. verspätet"
+        }
+      }
     },
     "hiring": {
       "empty": "Dieses {label} enthält noch nichts.",
@@ -21913,6 +22000,12 @@
         "manuscript": "Manuskript",
         "draft": "Entwurf",
         "noSource": "Keine Quelle"
+      },
+      "bar": {
+        "replied": "Geantwortet",
+        "completed": "Abgeschlossen",
+        "stopped": "Gestoppt",
+        "inFlight": "Laufend"
       }
     },
     "noticeGateEvaluated": "Freigabekriterium anhand der Läufe und Fehler auf diesem Board bewertet — {score} % der Kriterien erfüllt.",
@@ -22346,6 +22439,20 @@
         "action": "Maßnahme",
         "owner": "Verantwortlich",
         "dueAt": "Fällig"
+      },
+      "verdict": {
+        "validity": {
+          "expired": "seit {days, plural, one {# Tag} other {# Tagen}} abgelaufen",
+          "expiresSoon": "läuft in {days, plural, one {# Tag} other {# Tagen}} ab",
+          "valid": "gültig · noch {days, plural, one {# Tag} other {# Tage}}"
+        },
+        "stock": {
+          "out": "nicht vorrätig",
+          "belowWithOrder": "unter dem Meldebestand, selbst mit bestellter Ware",
+          "orderNow": "am oder unter dem Meldebestand – jetzt bestellen",
+          "coveredByOrder": "durch bestellte Ware gedeckt",
+          "inStock": "vorrätig"
+        }
       }
     },
     "legal": {
@@ -22424,6 +22531,17 @@
         "at": "Datum",
         "event": "Ereignis",
         "note": "Notiz"
+      },
+      "verdict": {
+        "assignment": {
+          "none": "NICHT ÜBERTRAGEN. Es ist kein Übertragender erfasst, daher gehört das Recht laut diesem Datensatz weiterhin dem, der es geschaffen hat. Das ist ein Due-Diligence-Befund, kein fehlendes Feld – erfasse die Übertragung oder sage klar, dass es keine gibt.",
+          "dated": "Übertragen von {from} am {at}.",
+          "undated": "Übertragen von {from}, OHNE erfasstes Ausfertigungsdatum – eine undatierte Übertragung kann eine Gegenpartei auf die Zeit nach der Anmeldung legen."
+        },
+        "spend": {
+          "over": "Die bisherigen Ausgaben betragen {share} % des geschätzten Risikos – für diesen Streit wurde mehr ausgegeben, als er schätzungsweise wert ist. Das ist ein Fall für ein Vergleichsgespräch, nicht für eine Budgetzeile.",
+          "under": "Die bisherigen Ausgaben betragen {share} % des geschätzten Risikos."
+        }
       }
     },
     "legalUpload": {
@@ -22499,7 +22617,6 @@
       "publishVersion": "v{version} veröffentlichen",
       "restage": "Erneut erfassen",
       "working": "Läuft…",
-      "revertTitle": "v{version} wieder in den Verkauf geben?",
       "revertBody": "Neue Käufer erhalten sie statt v{version}. Die {holders}, die bereits auf v{version} sind, behalten ihren Stand — niemand wird umgestellt.",
       "revertConfirm": "Wieder verkaufen",
       "noticeStaged": "v{version} geprüft.",
@@ -23196,6 +23313,15 @@
         "dueAtISO": "Fällig",
         "sellerOwner": "Unser Owner",
         "buyerOwner": "Ihr Owner"
+      },
+      "verdict": {
+        "planRisk": {
+          "atRisk": "Gefährdet – {problems}.",
+          "overdue": "{count} überfällig",
+          "unowned": "{count} ohne Verantwortliche auf Käuferseite",
+          "onTrack": "Im Plan – {done} von {total} erledigt, nichts überfällig."
+        },
+        "openGaps": "{open} ({gaps, plural, one {# Lücke} other {# Lücken}}, {unevidenced} ohne Nachweis)"
       }
     },
     "exportRestricted": "Eingeschränkt – diese Karte kann nicht exportiert werden",
@@ -23354,6 +23480,15 @@
         "description": "Arbeit",
         "minutes": "Minuten",
         "billable": "Abrechenbar"
+      },
+      "verdict": {
+        "pressure": {
+          "none": "keine",
+          "comfortable": "entspannt",
+          "planning": "Planung nötig",
+          "urgent": "dringend",
+          "critical": "kritisch"
+        }
       }
     },
     "agentModel": "Agentenmodell",
@@ -24448,7 +24583,6 @@
     "folderHint": "Leer lassen, um die Sitzung aus ihrem Ordner zu entfernen.",
     "required": "Wähle einen Wert oder gib einen ein.",
     "failed": "Die Sitzung konnte nicht aktualisiert werden.",
-    "mergeConfirmTitle": "Diese Sitzungen zusammenführen?",
     "mergeConfirmMessageSaved": "Canvas, Unterhaltung und Projektverknüpfungen aus „{source}“ werden zu „{target}“ hinzugefügt. Danach wird die Quellsitzung archiviert.",
     "mergeConfirmMessageLocal": "Canvas und Unterhaltung aus „{source}“ werden zu „{target}“ hinzugefügt. Danach wird der Quellentwurf aus diesem Browser entfernt.",
     "deleteConfirmTitle": "Sitzung löschen?",
@@ -24465,7 +24599,6 @@
     "bulkMergeTitle": "Ausgewählte Sitzungen zusammenführen",
     "bulkMergeDescription": "Alles von den anderen ausgewählten Canvas kommt zu der Sitzung, die du behältst. Sie werden archiviert, sobald ihr Inhalt übertragen ist.",
     "bulkMergeTarget": "Sitzung, die bleibt",
-    "bulkMergeConfirmTitle": "Diese Sitzungen zusammenführen?",
     "bulkMergeConfirmMessage": "{count} Sitzungen werden zu „{target}“ hinzugefügt und danach archiviert.",
     "bulkDeleteConfirmTitle": "Diese Sitzungen löschen?",
     "bulkDeleteConfirmMessage": "{count} Sitzungen löschen? Sie bleiben während der Aufbewahrungsfrist wiederherstellbar.",
@@ -28577,5 +28710,186 @@
     "add": "Hinzufügen",
     "noProject": "Kein Projekt",
     "folderProjectLabel": "Projekt für {name}"
+  },
+  "humanRequests": {
+    "intro": "Freigaben, Fragen und Feedback, die Ihre Agenten an einen Menschen eskaliert haben. Das Bearbeiten einer Anfrage gibt den wartenden Agenten frei.",
+    "allKinds": "Alle Arten",
+    "allStatuses": "Alle Status",
+    "allAgentHosts": "Alle Agent-Hosts",
+    "searchPlaceholder": "Aktion, Beschreibung, Antwort suchen",
+    "refresh": "Aktualisieren",
+    "refreshing": "Wird aktualisiert…",
+    "loading": "Anfragen werden geladen…",
+    "empty": "Keine Anfragen gefunden",
+    "viewTicket": "Ticket ansehen",
+    "noActions": "Keine Aktionen verfügbar",
+    "human": "Mensch",
+    "kind": {
+      "approval": "Freigabe",
+      "question": "Frage",
+      "feedback": "Feedback"
+    },
+    "kindPlural": {
+      "approval": "Freigaben",
+      "question": "Fragen",
+      "feedback": "Feedback"
+    },
+    "status": {
+      "pending": "Ausstehend",
+      "approved": "Freigegeben",
+      "rejected": "Abgelehnt",
+      "answered": "Beantwortet",
+      "expired": "Abgelaufen"
+    },
+    "column": {
+      "kind": "Art",
+      "status": "Status",
+      "action": "Aktion",
+      "description": "Beschreibung",
+      "item": "Element",
+      "agentHost": "Agent-Host",
+      "requested": "Angefragt",
+      "resolution": "Ergebnis",
+      "resolve": "Bearbeiten",
+      "answer": "Antwort",
+      "requestedBy": "Angefragt von",
+      "expires": "Läuft ab"
+    }
+  },
+  "stakeholderAlignment": {
+    "title": "Stakeholder-Abstimmung",
+    "subtitle": "Prioritäten abstimmen, Freigaben einholen und Konflikte sichtbar machen, bevor die Lieferung abdriftet.",
+    "approvedCount": "{count} freigegeben",
+    "pendingCount": "{count} ausstehend",
+    "overdueCount": "{count} überfällig",
+    "conflictsCount": "{count, plural, one {# Konflikt} other {# Konflikte}}",
+    "mapTitle": "Stakeholder-Übersicht",
+    "noStakeholders": "Keine Stakeholder konfiguriert.",
+    "roleApprover": "Freigebende Person",
+    "roleInformed": "Informiert",
+    "removeAria": "{name} entfernen",
+    "nameAria": "Name des Stakeholders",
+    "namePlaceholder": "Name",
+    "refAria": "Benutzerreferenz des Stakeholders",
+    "refPlaceholder": "Benutzer-ID",
+    "teamAria": "Teambereich",
+    "teamPlaceholder": "Team (optional)",
+    "roleAria": "Rolle des Stakeholders",
+    "roleRequiredApprover": "Erforderliche freigebende Person",
+    "add": "Hinzufügen",
+    "healthTitle": "Zustand der Abstimmung",
+    "answer": {
+      "yes": "Ja",
+      "no": "Nein",
+      "unknown": "Unbekannt"
+    },
+    "saveHealth": "Zustandsprofil speichern",
+    "question": {
+      "priorities_clear": "Prioritäten sind klar und abgestimmt",
+      "competing_p0s_reconciled": "Konkurrierende P0s sind abgeglichen",
+      "approvers_current": "Erforderliche freigebende Personen sind aktuell",
+      "conflicts_within_sla": "Konflikte liegen innerhalb der 48-Stunden-SLA",
+      "delivery_reflects_priorities": "Die Lieferung spiegelt die abgestimmten Prioritäten wider"
+    }
+  },
+  "agentHostTabs": {
+    "errorPrefix": "Fehler: {message}",
+    "back": "← Zurück",
+    "projects": {
+      "loading": "Projekte werden geladen…",
+      "heading": "Projekte ({count})",
+      "assign": "+ Projekt zuweisen",
+      "selectProject": "Projekt auswählen…",
+      "assignAction": "Zuweisen",
+      "empty": "Diesem Agent-Host sind noch keine Projekte zugewiesen.",
+      "projectFallback": "Projekt Nr. {id}",
+      "role": "Rolle: {role}",
+      "open": "Öffnen",
+      "remove": "Entfernen",
+      "status": "{status, select, active {Aktiv} completed {Abgeschlossen} archived {Archiviert} on_hold {Pausiert} other {{status}}}"
+    },
+    "workspace": {
+      "syncedAt": "synchronisiert {when}",
+      "noFiles": "Noch keine Dateien synchronisiert.",
+      "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
+      "heading": "Synchronisierte Verzeichnisse ({count})",
+      "empty": "Keine Verzeichnisse synchronisiert. Verzeichnisse werden synchronisiert, wenn ein Agent-Host seinen Arbeitsbereich registriert.",
+      "lastSynced": "Zuletzt synchronisiert: {when}",
+      "sync": "⟳ Synchronisieren",
+      "status": "{status, select, synced {Synchronisiert} pending {Ausstehend} error {Fehler} other {{status}}}"
+    },
+    "config": {
+      "loading": "Konfiguration wird geladen…",
+      "title": "Laufzeitkonfiguration",
+      "format": "Formatieren",
+      "reset": "Zurücksetzen",
+      "description": "JSON-Konfiguration, die an die Laufzeit des Agent-Hosts übergeben wird. Änderungen werden bei der nächsten Verbindung des Agent-Hosts wirksam.",
+      "invalidJson": "Ungültiges JSON – vor dem Speichern korrigieren.",
+      "saved": "Gespeichert um {time}",
+      "save": "Konfiguration speichern"
+    },
+    "sessions": {
+      "loading": "Sitzungen werden geladen…",
+      "messageCount": "{count, plural, one {# Nachricht} other {# Nachrichten}}",
+      "handoff": "Übergeben →",
+      "handoffTitle": "An einen anderen Agent-Host übergeben",
+      "handoffBody": "Senden Sie den Kontext dieser Sitzung an einen anderen Agent-Host, damit er das Gespräch fortsetzen kann. Die letzten 20 Nachrichten werden mitgesendet.",
+      "selectTarget": "Ziel-Agent-Host auswählen…",
+      "notePlaceholder": "Übergabenotiz (optional)",
+      "handoffSuccess": "Sitzung übergeben.",
+      "handingOff": "Wird übergeben…",
+      "handOff": "Übergeben",
+      "loadingMessages": "Nachrichten werden geladen…",
+      "noMessages": "Keine Nachrichten gefunden.",
+      "heading": "Chat-Sitzungen ({count})",
+      "empty": "Noch keine Sitzungen. Sitzungen entstehen, wenn ein Agent-Host ein Gespräch beginnt.",
+      "active": "(aktiv)",
+      "msgCount": "{count, plural, one {# Nachr.} other {# Nachr.}}",
+      "role": "{role, select, user {Benutzer} assistant {Agent} system {System} tool {Werkzeug} other {{role}}}"
+    }
+  },
+  "repoSync": {
+    "title": "Repository-Synchronisierung",
+    "linkedTo": "Verknüpft mit <strong>{repo}</strong>",
+    "lastSynced": " · zuletzt synchronisiert <code>{ref}</code>",
+    "notImported": " · noch nicht importiert",
+    "import": "Aus Repository importieren",
+    "importing": "Wird importiert…",
+    "commit": "Committen & PR öffnen",
+    "committing": "Wird committet…",
+    "noRepo": "Kein Repository verknüpft – Ihre Dateien liegen im Canvas-Builder-Arbeitsbereich. Erstellen Sie ein neues Repository, um live zu gehen, oder verbinden Sie unten ein bestehendes.",
+    "createRepo": "+ Repository erstellen",
+    "repoNamePlaceholder": "Name des Repositorys",
+    "selectCredential": "GitHub-Zugangsdaten auswählen…",
+    "noCredential": "Keine GitHub-Zugangsdaten gefunden. Fügen Sie zuerst welche unter Integrationen hinzu.",
+    "private": "Privates Repository",
+    "createAndPush": "Erstellen & pushen",
+    "creating": "Wird erstellt…",
+    "imported": "{count, plural, one {# Datei} other {# Dateien}} aus {ref} importiert.",
+    "pushedPr": "{count, plural, one {# Datei} other {# Dateien}} gepusht – PR Nr. {pr} geöffnet.",
+    "committed": "{count, plural, one {# Datei} other {# Dateien}} nach {branch} committet.",
+    "created": "{repo} erstellt und {count, plural, one {# Datei} other {# Dateien}} gepusht."
+  },
+  "soc2Tracker": {
+    "title": "SOC-2-Kontrollverfolgung",
+    "loading": "SOC-2-Kontrollen werden geladen…",
+    "emptyBody": "Noch keine Kontrollen. Laden Sie die Basis der SOC-2-Common-Criteria (CC1–CC9), um die Bereitschaft zu verfolgen.",
+    "seed": "SOC-2-Basis laden",
+    "seeding": "Wird geladen…",
+    "loadFailed": "SOC-2-Kontrollen konnten nicht geladen werden.",
+    "seedFailed": "Laden fehlgeschlagen (Manager-Rolle erforderlich).",
+    "updateFailed": "Aktualisierung fehlgeschlagen.",
+    "readiness": "Bereitschaft <strong>{pct} %</strong> ({ready}/{inScope} im Umfang)",
+    "categoryReady": "· {pct} % bereit",
+    "status": {
+      "not_started": "Nicht begonnen",
+      "in_progress": "In Arbeit",
+      "ready": "Bereit",
+      "out_of_scope": "Außerhalb des Umfangs"
+    }
+  },
+  "workflowDag": {
+    "empty": "Dieser Workflow enthält noch keine Aufgaben.",
+    "defaultRole": "Agent"
   }
 }

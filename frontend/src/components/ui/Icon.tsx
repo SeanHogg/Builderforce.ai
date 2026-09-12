@@ -1,14 +1,15 @@
 import { isValidElement, type ReactNode, type SVGProps } from 'react';
 
 export type IconName =
-  | 'activity' | 'admin' | 'alert' | 'apps' | 'arrow-up-right' | 'automation'
-  | 'attachment' | 'billing' | 'brain' | 'briefcase' | 'calendar' | 'camera' | 'canvas'
-  | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'copy' | 'document' | 'edit' | 'external-link'
+  | 'activity' | 'admin' | 'alert' | 'apps' | 'arrow-up' | 'arrow-up-right' | 'automation'
+  | 'attachment' | 'billing' | 'board' | 'brain' | 'branch' | 'briefcase' | 'calendar' | 'camera' | 'canvas'
+  | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'copy'
+  | 'density-expanded' | 'density-minimized' | 'density-preview' | 'document' | 'edit' | 'external-link'
   | 'expand-horizontal' | 'collapse-horizontal'
   | 'download' | 'drag-handle' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
-  | 'link' | 'lock' | 'mail' | 'megaphone' | 'menu' | 'message' | 'mic' | 'mobile'
+  | 'link' | 'lock' | 'mail' | 'maximize' | 'megaphone' | 'menu' | 'message' | 'mic' | 'minus' | 'mobile'
   | 'monitor' | 'more-horizontal' | 'pause' | 'people' | 'person' | 'pin' | 'play' | 'plus' | 'project' | 'quality' | 'search'
-  | 'settings' | 'shield' | 'sign-out' | 'sparkles' | 'sun' | 'moon' | 'cart' | 'target' | 'template' | 'tools' | 'trash' | 'archive'
+  | 'settings' | 'shield' | 'sign-out' | 'sparkles' | 'stop' | 'sun' | 'moon' | 'cart' | 'target' | 'template' | 'tools' | 'trash' | 'archive'
   | 'video' | 'volume' | 'warning' | 'workflow' | 'workspace';
 
 /**
@@ -75,11 +76,19 @@ const PATHS: Record<IconName, ReactNode> = {
   admin: <><path d="M12 3 4.5 6v5c0 4.7 3.2 8.2 7.5 10 4.3-1.8 7.5-5.3 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></>,
   alert: <><path d="M6 16.5h12l-1.6-2.1V10a4.4 4.4 0 0 0-8.8 0v4.4L6 16.5Z"/><path d="M10 19a2.2 2.2 0 0 0 4 0"/></>,
   apps: <><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></>,
+  /* Send. Straight up — the composer's own direction of travel, not the diagonal
+     `arrow-up-right` that means "leave this page". */
+  'arrow-up': <path d="M12 19V5M5 12l7-7 7 7"/>,
   'arrow-up-right': <><path d="M7 17 17 7M9 7h8v8"/></>,
   automation: <><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 11 15.5 7M8.5 13l7 4"/></>,
   billing: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></>,
+  /* A work board: three columns of unequal depth. Provider-neutral on purpose — Jira,
+     Linear and GitHub Projects all read as this shape, and the provider rides in the label. */
+  board: <><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></>,
   cart: <><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2.5 3.5h3l2.4 11.2a1.8 1.8 0 0 0 1.8 1.4h7.6a1.8 1.8 0 0 0 1.8-1.4L21 7.5H6.2"/></>,
   brain: <><path d="M12 5.5A4 4 0 0 0 5.5 9a4 4 0 0 0 2 7.5A4 4 0 0 0 12 19M12 5.5A4 4 0 0 1 18.5 9a4 4 0 0 1-2 7.5A4 4 0 0 1 12 19M12 5.5V19M8 9.5h4M12 14.5h4"/></>,
+  /* Source control: a trunk and a branch merging back into it. Provider-neutral, like `board`. */
+  branch: <><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M6 8.5v7M18 8.5a7 7 0 0 1-7 7H6"/></>,
   briefcase: <><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v2h4v-2"/></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></>,
   camera: <><path d="M4 7h3l1.5-2h7L17 7h3v12H4V7Z"/><circle cx="12" cy="13" r="3.5"/></>,
@@ -92,6 +101,11 @@ const PATHS: Record<IconName, ReactNode> = {
   close: <path d="m6 6 12 12M18 6 6 18"/>,
   code: <><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></>,
   copy: <><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>,
+  /* A canvas card's three readings, drawn as the CURRENT one — a three-position control
+     has to say which position it is in: full rows, one row plus a rule, or a dot. */
+  'density-expanded': <><rect x="3.9" y="4.5" width="16.2" height="3.9" rx="1.5" fill="currentColor" stroke="none"/><rect x="3.9" y="10.2" width="16.2" height="3.9" rx="1.5" fill="currentColor" stroke="none" opacity=".55"/><rect x="3.9" y="15.9" width="16.2" height="3.9" rx="1.5" fill="currentColor" stroke="none" opacity=".3"/></>,
+  'density-minimized': <circle cx="12" cy="12" r="4.6" fill="currentColor" stroke="none"/>,
+  'density-preview': <><rect x="3.9" y="5.1" width="16.2" height="4.5" rx="1.5" fill="currentColor" stroke="none"/><path d="M3.9 14.4h16.2"/></>,
   document: <><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></>,
   download: <><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 20h16"/></>,
   /* Two columns of three dots — the grip a floating card exposes so it can be dragged
@@ -117,10 +131,14 @@ const PATHS: Record<IconName, ReactNode> = {
   link: <><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></>,
   lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></>,
   mail: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></>,
+  /* Open full screen: two corners pushed out along the diagonal. */
+  maximize: <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>,
   megaphone: <><path d="M4 13.5v-3l14-5v13l-14-5Z"/><path d="M8 15v4h4v-2.5M18 10a3 3 0 0 1 0 4"/></>,
   menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>,
   message: <><path d="M4 5h16v12H9l-5 4V5Z"/></>,
   mic: <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></>,
+  /* "Not included" — the neutral partner to `check` in a comparison table. */
+  minus: <path d="M5 12h14"/>,
   mobile: <><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></>,
   monitor: <><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 22h8M12 18v4"/></>,
   'more-horizontal': <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></>,
@@ -139,6 +157,8 @@ const PATHS: Record<IconName, ReactNode> = {
   sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
   moon: <><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></>,
   sparkles: <><path d="M12 3 9.8 9.8 3 12l6.8 2.2L12 21l2.2-6.8L21 12l-6.8-2.2L12 3Z"/></>,
+  /* Stop / interrupt a run: the one filled glyph a media control has always used. */
+  stop: <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>,
   target: <><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="m15.2 8.8 4-4M16.8 4.8h2.4v2.4"/></>,
   template: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></>,
   tools: <><path d="m14.5 6.5 3-3 3 3-3 3M13 8l-9.5 9.5V21H7l9.5-9.5"/></>,

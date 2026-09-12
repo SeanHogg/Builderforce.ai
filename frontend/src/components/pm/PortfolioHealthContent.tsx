@@ -5,7 +5,8 @@ import { fetchProjects } from '@/lib/api';
 import { useFormat } from '@/i18n/useFormat';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { usePmData } from '@/lib/pm/usePmData';
-import { buildPortfolioHealth, RAG_COLOR, type Rag } from '@/lib/pm/portfolioHealth';
+import { buildPortfolioHealth, RAG_TONE, type Rag } from '@/lib/pm/portfolioHealth';
+import { statusColor } from '@/lib/statusTone';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { PmEmpty, PmError } from './pmShared';
 import { PortfolioHealthCard } from './PortfolioHealthCard';
@@ -62,7 +63,8 @@ export function PortfolioHealthContent() {
   if (portfolio.summary.total === 0) return <PmEmpty message={t('health.empty')} />;
 
   const { summary, items } = portfolio;
-  const overallColor = RAG_COLOR[summary.overall];
+  const overallBorder = statusColor(RAG_TONE, summary.overall, 'border');
+  const overallInk = statusColor(RAG_TONE, summary.overall);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -85,14 +87,14 @@ export function PortfolioHealthContent() {
             label={t(`health.rag.${band}`)}
             value={String(summary[band])}
             sub={t('health.ofTotal', { total: summary.total })}
-            color={RAG_COLOR[band]}
+            color={statusColor(RAG_TONE, band, 'solid')}
           />
         ))}
       </div>
 
-      <div style={bannerStyle(overallColor)}>
+      <div style={bannerStyle(overallBorder)}>
         <span>{t('health.overallLabel')}</span>
-        <strong style={{ color: overallColor, fontSize: 'var(--font-size-body)' }}>
+        <strong style={{ color: overallInk, fontSize: 'var(--font-size-body)' }}>
           {t(`health.rag.${summary.overall}`)}
         </strong>
       </div>
@@ -105,7 +107,7 @@ export function PortfolioHealthContent() {
           <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {summary.topActions.map(({ rank, item }) => (
               <li key={rank} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                <strong style={{ color: RAG_COLOR[item.rag] }}>{item.name}</strong>
+                <strong style={{ color: statusColor(RAG_TONE, item.rag) }}>{item.name}</strong>
                 {' — '}
                 {t(`health.action.${item.action.key}`, item.action.values)}
               </li>

@@ -25,6 +25,7 @@
 
 import { Hono, type Context, type Next } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import type { Env, HonoEnv } from '../../env';
 import { consumeGuestAllowance } from '../../application/guest/guestDailyCounter';
 import { guestIdentityFromRequest } from '../../application/guest/guestToken';
@@ -120,7 +121,7 @@ const MAX_DOCX_SOURCE_BYTES = 20 * 1024 * 1024;
 async function docxSourceBytes(c: Context<HonoEnv>, key: string | undefined): Promise<Uint8Array | null | 'foreign'> {
   const sourceFileKey = (key ?? '').trim();
   if (!sourceFileKey) return null;
-  const tenantId = c.get('tenantId') as number | undefined;
+  const tenantId = optionalTenantId(c);
   if (!tenantId) return null;
   if (!sourceFileKey.startsWith(`${tenantId}/`)) return 'foreign';
   if (!c.env.UPLOADS) return null;

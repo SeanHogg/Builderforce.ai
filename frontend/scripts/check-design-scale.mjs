@@ -238,8 +238,13 @@ const BASELINE = {
    * the room's (X) glyph (20px = the floor of `--font-size-section`). Same four-way
    * mapping every entry above records; with `TicketContextStrip`'s own -6 it is a
    * net -12 below the old floor, and the floor follows it down.
+   *
+   * 3,475 -> 3,473 (2026-09-12): the same commit (8c4d1dda7) carried the incidents
+   * pass, and `IncidentsPageClient` and `reliability/MonitoringSections` each shed one
+   * literal on the way. Two points of slack on a green tree is budget the next
+   * regression spends silently, so the floor takes them too.
    */
-  offScaleFontSizes: 3475,
+  offScaleFontSizes: 3473,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

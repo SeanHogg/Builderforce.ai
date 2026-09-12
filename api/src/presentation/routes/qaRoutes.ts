@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
@@ -1118,7 +1119,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       contentType: c.req.header('content-type') ?? '',
       bytes: await c.req.arrayBuffer(),
     });
-    if (!result.ok) return c.json({ error: result.reason }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.reason }, result.status, { source: 'presentation/routes/qaRoutes.ts', operation: 'ingestReport' });
     return c.json({ screenshotKey: result.key }, 201);
   });
 

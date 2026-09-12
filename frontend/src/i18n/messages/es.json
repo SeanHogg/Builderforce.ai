@@ -1727,7 +1727,6 @@
     "deleteCloudAgentConfirm": "¿Eliminar el agente «{name}»? Se borrarán sus habilidades y personas por agente.",
     "deleteSkillConfirm": "¿Eliminar esta habilidad?",
     "deleteNamedConfirm": "¿Eliminar «{name}»?",
-    "servePreviewAnywayConfirm": "Las últimas comprobaciones fallaron ({summary}). ¿Servir la vista previa de todos modos?",
     "language": "Idioma",
     "typeTask": "Tarea",
     "typeEpic": "Épica",
@@ -1805,7 +1804,13 @@
     "no": "No",
     "copyLink": "Copiar enlace",
     "copyFallback": "Copia este enlace a mano: el portapapeles no está disponible.",
-    "unavailable": "No disponible"
+    "unavailable": "No disponible",
+    "actionFailed": "No se pudo completar. Inténtalo de nuevo.",
+    "inlineConfirm": {
+      "confirm": "Confirmar",
+      "armed": "Pulsa de nuevo para confirmar o Esc para cancelar."
+    },
+    "servingPreviewAnyway": "Las últimas comprobaciones fallaron ({summary}): se sirve la vista previa de todos modos."
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -2184,7 +2189,6 @@
       "unsubscribedTitle": "Te has dado de baja",
       "unsubscribedBody": "No estás recibiendo ningún correo opcional. Los mensajes de cuenta y seguridad se siguen enviando.",
       "resubscribeCta": "Volver a suscribirme",
-      "resubscribeTitle": "Volver a suscribirte al correo opcional",
       "resubscribeConfirm": "Volverás a recibir correo opcional según las categorías que tengas activadas. ¿Continuar?"
     },
     "spendLimits": "Límites de gasto",
@@ -13680,9 +13684,7 @@
       "allTables": "todas las tablas",
       "maintenanceCleanup": "ejecutar la limpieza de retención",
       "maintenanceVacuum": "vacuum de {table} en {target}",
-      "confirmTitle": "¿Ejecutar mantenimiento?",
-      "confirmMaintenance": "Confirmar: ¿{label}? Es una operación de mantenimiento auditada.",
-      "confirmRun": "Ejecutar"
+      "confirmMaintenance": "Confirmar: ¿{label}? Es una operación de mantenimiento auditada."
     }
   },
   "providerKeys": {
@@ -15102,7 +15104,21 @@
     "revertConfirmMessage": "Esto cierra la pull request que abrió la ejecución n.º {id} y elimina la rama que escribió. No se puede deshacer. Se rechazará si la pull request ya se fusionó o si algo más modificó la rama.",
     "revertConfirmAction": "Revertir ejecución",
     "revertDone": "Revertida: se eliminó la rama {branch} ({commits} commit(s)).",
-    "failedToRevert": "No se pudo revertir esta ejecución"
+    "failedToRevert": "No se pudo revertir esta ejecución",
+    "title": "Interruptor de emergencia de la ejecución de agentes",
+    "disabledBody": "La ejecución de agentes del inquilino está bloqueada. Los chats de VS Code y Brain, Canvas/Create y las herramientas MCP de la página siguen disponibles.",
+    "enabledBody": "Anulación de emergencia del espacio de trabajo. Al desactivarla se detienen los agentes del inquilino y se bloquean las ejecuciones manuales, programadas, de integración y autónomas de la plataforma; el trabajo interactivo en VS Code y Brain sigue disponible.",
+    "confirmTitle": "¿Desactivar toda la ejecución de agentes?",
+    "confirmBody": "Esto cancela de inmediato los agentes del inquilino en cola, en ejecución o en pausa, y bloquea las ejecuciones manuales, programadas y autónomas de la plataforma hasta que un responsable vuelva a activarla. Los chats de VS Code y Brain, Canvas/Create y las herramientas MCP de la página siguen disponibles.",
+    "disableAll": "Desactivar y detener todos los agentes",
+    "enable": "Activar la ejecución de agentes",
+    "updating": "Actualizando…",
+    "statusLoading": "Estado: cargando…",
+    "statusEnabled": "Estado: ejecución activada",
+    "statusDisabled": "Estado: EJECUCIÓN DESACTIVADA",
+    "stoppedAll": "La ejecución está desactivada. {count, plural, one {Se detuvo # ejecución activa} other {Se detuvieron # ejecuciones activas}}.",
+    "stoppedSome": "La ejecución está desactivada. {cancelled, plural, one {Se detuvo # ejecución} other {Se detuvieron # ejecuciones}}; {failed} no se pudieron cancelar.",
+    "enabledNotice": "La ejecución de agentes está activada."
   },
   "aiTraining": {
     "adapterName": "Adaptador de {model}",
@@ -16499,7 +16515,6 @@
     "replaceCard": "Reemplazar tarjeta",
     "retryCard": "Reintentar",
     "cardWorking": "Procesando…",
-    "replaceCardTitle": "¿Reemplazar tu tarjeta?",
     "replaceCardWarning": "Tu tarjeta actual seguirá funcionando hasta que se verifique la nueva, así que los modelos premium nunca se interrumpen. La tarjeta anterior se elimina automáticamente en cuanto se confirma la nueva.",
     "retryCardMessage": "Iniciaremos una nueva verificación de 0 $. No se cobrará nada a tu tarjeta.",
     "replaceCardConfirm": "Continuar",
@@ -17814,7 +17829,6 @@
       "forgetTitle": "¿Olvidar este hecho?",
       "forgetConfirm": "Los agentes dejarán de recordar «{key}». Si existe una versión más amplia con la misma clave, esa volverá a ser visible.",
       "purge": "Borrar caducados",
-      "purgeTitle": "¿Borrar los hechos caducados?",
       "purgeConfirm": "Elimina los hechos cuya caducidad ya pasó. Los agentes dejaron de recordarlos al caducar, así que nada cambia para una ejecución.",
       "statTotal": "Hechos en el ámbito",
       "statTotalHint": "Lo que puede recordar un agente que se ejecute aquí.",
@@ -19063,7 +19077,15 @@
         "noSuppressionCheck": "No se ha comprobado la lista de exclusión",
         "emptyAfterSuppression": "No queda nadie tras aplicar las exclusiones",
         "forbiddenClaim": "El texto incluye una afirmación que la marca prohíbe"
-      }
+      },
+      "inboxFilterAll": "Todo el correo reciente",
+      "inboxFilterUnread": "no leídos",
+      "inboxFilterFrom": "de {value}",
+      "inboxFilterSubject": "asunto «{value}»",
+      "inboxFilterMatching": "que coinciden con «{value}»",
+      "inboxFilterAttachments": "con adjuntos",
+      "inboxFilterSince": "desde el {date}",
+      "inboxFilterBefore": "antes del {date}"
     },
     "editor": {
       "toolbar": "Formato",
@@ -20725,7 +20747,11 @@
       "campaignScheduled": "Programado para {count} cuentas.",
       "campaignUpdateFailed": "No se pudo actualizar esa campaña.",
       "boardMedia": "Adjuntar desde este lienzo",
-      "boardMediaHelp": "Las imágenes y los vídeos seleccionados se publican automáticamente en una URL pública: eso es lo que Instagram y TikTok necesitan para descargarlos."
+      "boardMediaHelp": "Las imágenes y los vídeos seleccionados se publican automáticamente en una URL pública: eso es lo que Instagram y TikTok necesitan para descargarlos.",
+      "mediaTabOnly": "Ese archivo solo existe en esta pestaña del navegador. Vuelve a generarlo o a subirlo para que tenga un origen duradero.",
+      "mediaNotPublic": "Una red social descarga el contenido multimedia por su cuenta, así que necesita una URL https pública; esta no es https ni contenido incrustado.",
+      "mediaUploadFailed": "No se pudo publicar ese archivo en una URL pública.",
+      "mediaUploadFailedReason": "No se pudo publicar ese archivo en una URL pública: {reason}"
     },
     "noticeGuestLimitRoom": "Esta sesión compartida ya usó sus {limit} mensajes gratuitos de hoy. Regístrate gratis para continuar: tu lienzo te acompaña.",
     "founder": {
@@ -21082,6 +21108,61 @@
         "expires": "Caduca",
         "views": "Visualizaciones",
         "lastViewedAt": "Última consulta"
+      },
+      "verdict": {
+        "boardRef": {
+          "notFound": "Todavía ningún `{kind}` coincide con \"{ref}\": crea uno para vincularlo."
+        },
+        "counterparty": {
+          "linkedOwned": "Vinculado a `account` \"{title}\" ({relationship}), responsable: {owner}.",
+          "linked": "Vinculado a `account` \"{title}\" ({relationship})."
+        },
+        "fallback": {
+          "thisContract": "este contrato",
+          "untitledDocument": "un documento sin título",
+          "unnamedObligation": "una obligación sin nombre"
+        },
+        "obligation": {
+          "noRef": "Emitido bajo el contrato \"{contract}\", pero ningún `obligationRef` indica QUÉ obligación cumple. Asígnale uno de estos valores: {available}.",
+          "noReferences": "Emitido bajo el contrato \"{contract}\", cuyas obligaciones no tienen valores de `reference`, así que nada en {host, select, bill {esta factura de proveedor} other {esta factura}} puede contrastarse con lo acordado. Asigna primero una `reference` a cada obligación del contrato.",
+          "unknownRef": "El contrato \"{contract}\" NO tiene ninguna obligación con la referencia \"{ref}\": es un cargo sin obligación correspondiente. O las obligaciones del contrato están desactualizadas o {host, select, bill {esta factura de proveedor} other {esta factura}} no debería haberse emitido.",
+          "axis": {
+            "amount": "importe",
+            "date": "fecha",
+            "cadence": "periodicidad"
+          },
+          "problem": {
+            "amount": "el importe es {actual, number} cuando la obligación indica {agreed, number}",
+            "date": "vence {days, plural, one {# día} other {# días}} {direction, select, after {después de} other {antes de}} la fecha de la obligación, {due}",
+            "cadence": "se repite con periodicidad {actual} cuando la obligación indica {agreed}"
+          },
+          "mismatch": "Apunta a la obligación \"{obligation}\" del contrato \"{contract}\", pero {problems}. Revísalo contra el acuerdo antes de {host, select, bill {aprobarla o pagarla} other {emitirla}}.",
+          "discharged": "Cumple la obligación \"{obligation}\" del contrato \"{contract}\": {checked} {count, plural, one {coincide} other {coinciden}} con lo acordado.",
+          "linkedOnly": "Apunta a la obligación \"{obligation}\" del contrato \"{contract}\". No hay nada comparable rellenado en ninguno de los dos lados, así que es un vínculo y todavía no una comprobación."
+        },
+        "evidence": {
+          "bound": "Vinculado a la división en vivo \"{key}\": cada exposición y conversión de abajo la contó la plataforma; nada se introdujo a mano.",
+          "authored": "INTRODUCIDO A MANO. Nada produjo estos números: se escribieron en la tarjeta. Vincula este experimento a una clave de `ab_tests` antes de citar el resultado como una medición."
+        },
+        "significance": {
+          "nothingYet": "NADA de esto es significativo todavía.",
+          "real": "{variant} está {direction, select, up {por encima} other {por debajo}} del control en {points, number} pp (p={p}), intervalo de {low, number} a {high, number} pp.",
+          "noise": "{variant} está dentro del ruido respecto al control (p={p}); n es demasiado pequeño para sacar conclusiones."
+        },
+        "ownership": {
+          "balanced": "Los titulares y el pool no asignado representan el {accounted}% del total totalmente diluido.",
+          "unbalanced": "Los titulares y el pool no asignado representan solo el {accounted}% del total totalmente diluido: el registro y las cifras autorizadas no coinciden, lo que es una situación real que hay que investigar y no un error de redondeo.",
+          "percentSkew": "La columna de porcentajes suma {total, number}% incluyendo el pool no asignado, no 100: los porcentajes no cuadran.",
+          "convertibles": "{count, plural, one {# convertible pendiente} other {# convertibles pendientes}}: no se incluyen en estos porcentajes hasta que una ronda los convierta."
+        },
+        "coverage": {
+          "noIdentity": "Este contrato no tiene ni `reference` ni título, así que ninguna factura puede nombrarlo. Asígnale una referencia antes de emitir nada contra él.",
+          "billable": "{covered} de {total} {total, plural, one {obligación facturable} other {obligaciones facturables}} {covered, plural, one {tiene} other {tienen}} un documento emitido.",
+          "noneBillable": "Ninguna obligación aquí es un cobro ni un pago, así que nada en este contrato debería generar una factura.",
+          "open": "Aún no se ha emitido nada para: {names}.",
+          "orphans": "{count, plural, one {# documento nombra este contrato y no coincide} other {# documentos nombran este contrato y no coinciden}} con ninguna de sus obligaciones: {names}.",
+          "unreferenced": "{count, plural, one {# obligación no tiene `reference`, así que nunca podrá demostrarse que se ha cumplido.} other {# obligaciones no tienen `reference`, así que nunca podrá demostrarse que se han cumplido.}}"
+        }
       }
     },
     "datasetImportedWithPii": "Se importó {name}: {rows} filas, {columns} columnas. {pii} columnas contienen datos personales y se enmascaran.",
@@ -21658,7 +21739,13 @@
       "freshMinutes": "hace {count} min",
       "freshHours": "hace {count} h",
       "freshDays": "hace {count} d",
-      "barValue": "{value} ({percent} %)"
+      "barValue": "{value} ({percent} %)",
+      "verdict": {
+        "lateBy": {
+          "hours": "{hours} h de retraso",
+          "days": "{days} d de retraso"
+        }
+      }
     },
     "hiring": {
       "empty": "Este {label} aún no tiene contenido.",
@@ -21913,6 +22000,12 @@
         "manuscript": "Manuscrito",
         "draft": "Borrador",
         "noSource": "Sin fuente"
+      },
+      "bar": {
+        "replied": "Respondieron",
+        "completed": "Completaron",
+        "stopped": "Detenidos",
+        "inFlight": "En curso"
       }
     },
     "noticeGateEvaluated": "Criterio de publicación evaluado con las ejecuciones y los defectos de este lienzo: {score}% de los criterios cumplidos.",
@@ -22346,6 +22439,20 @@
         "action": "Acción",
         "owner": "Responsable",
         "dueAt": "Vence"
+      },
+      "verdict": {
+        "validity": {
+          "expired": "caducado hace {days, plural, one {# día} other {# días}}",
+          "expiresSoon": "caduca en {days, plural, one {# día} other {# días}}",
+          "valid": "válido · {days, plural, one {queda # día} other {quedan # días}}"
+        },
+        "stock": {
+          "out": "sin existencias",
+          "belowWithOrder": "por debajo del punto de pedido incluso con las existencias pedidas",
+          "orderNow": "en el punto de pedido o por debajo: pide ahora",
+          "coveredByOrder": "cubierto por las existencias pedidas",
+          "inStock": "en existencias"
+        }
       }
     },
     "legal": {
@@ -22424,6 +22531,17 @@
         "at": "Fecha",
         "event": "Evento",
         "note": "Nota"
+      },
+      "verdict": {
+        "assignment": {
+          "none": "NO CEDIDO. No consta ningún cedente, así que según este registro el derecho sigue perteneciendo a quien lo creó. Es un hallazgo de due diligence, no un campo vacío: registra la cesión o indica claramente que no existe.",
+          "dated": "Cedido por {from} el {at}.",
+          "undated": "Cedido por {from}, SIN fecha de otorgamiento registrada: una cesión sin fecha es una que la contraparte puede situar después de la solicitud."
+        },
+        "spend": {
+          "over": "El gasto hasta la fecha es el {share}% de la exposición estimada: se ha gastado más en litigar esto de lo que se estima que vale. Es una conversación de acuerdo, no una partida presupuestaria.",
+          "under": "El gasto hasta la fecha es el {share}% de la exposición estimada."
+        }
       }
     },
     "legalUpload": {
@@ -22499,7 +22617,6 @@
       "publishVersion": "Publicar v{version}",
       "restage": "Capturar otra vez",
       "working": "Trabajando…",
-      "revertTitle": "¿Volver a poner en venta la v{version}?",
       "revertBody": "Los nuevos compradores la recibirán en lugar de la v{version}. Quienes ya están en la v{version} ({holders}) conservan lo que compraron: nadie cambia de versión.",
       "revertConfirm": "Ponerla en venta",
       "noticeStaged": "v{version} preparada.",
@@ -23196,6 +23313,15 @@
         "dueAtISO": "Vence",
         "sellerOwner": "Responsable nuestro",
         "buyerOwner": "Responsable suyo"
+      },
+      "verdict": {
+        "planRisk": {
+          "atRisk": "En riesgo: {problems}.",
+          "overdue": "{count, plural, one {# vencido} other {# vencidos}}",
+          "unowned": "{count} sin responsable del lado del comprador",
+          "onTrack": "En curso: {done} de {total} completados, nada vencido."
+        },
+        "openGaps": "{open} ({gaps, plural, one {# brecha} other {# brechas}}, {unevidenced} sin evidencia)"
       }
     },
     "exportRestricted": "Restringido: esta tarjeta no se puede exportar",
@@ -23354,6 +23480,15 @@
         "description": "Trabajo",
         "minutes": "Minutos",
         "billable": "Facturable"
+      },
+      "verdict": {
+        "pressure": {
+          "none": "ninguna",
+          "comfortable": "holgada",
+          "planning": "hay que planificar",
+          "urgent": "urgente",
+          "critical": "crítica"
+        }
       }
     },
     "agentModel": "Modelo del agente",
@@ -24448,7 +24583,6 @@
     "folderHint": "Déjalo vacío para quitar la sesión de su carpeta.",
     "required": "Elige o escribe un valor.",
     "failed": "No se pudo actualizar la sesión.",
-    "mergeConfirmTitle": "¿Combinar estas sesiones?",
     "mergeConfirmMessageSaved": "El lienzo, la conversación y los enlaces de proyecto de «{source}» se añadirán a «{target}». Después, la sesión de origen se archivará.",
     "mergeConfirmMessageLocal": "El lienzo y la conversación de «{source}» se añadirán a «{target}». Después, el borrador de origen se eliminará de este navegador.",
     "deleteConfirmTitle": "¿Eliminar la sesión?",
@@ -24465,7 +24599,6 @@
     "bulkMergeTitle": "Combinar las sesiones seleccionadas",
     "bulkMergeDescription": "Todo lo que hay en los demás lienzos seleccionados se añade al que conservas. Se archivan cuando su contenido ha pasado.",
     "bulkMergeTarget": "Sesión que se conserva",
-    "bulkMergeConfirmTitle": "¿Combinar estas sesiones?",
     "bulkMergeConfirmMessage": "Se añadirán {count} sesiones a «{target}» y después se archivarán.",
     "bulkDeleteConfirmTitle": "¿Eliminar estas sesiones?",
     "bulkDeleteConfirmMessage": "¿Eliminar {count} sesiones? Se pueden recuperar durante el periodo de retención.",
@@ -28577,5 +28710,186 @@
     "add": "Añadir",
     "noProject": "Sin proyecto",
     "folderProjectLabel": "Proyecto de {name}"
+  },
+  "humanRequests": {
+    "intro": "Aprobaciones, preguntas y comentarios que tus agentes han escalado a una persona. Resolver una solicitud desbloquea al agente que espera.",
+    "allKinds": "Todos los tipos",
+    "allStatuses": "Todos los estados",
+    "allAgentHosts": "Todos los hosts de agentes",
+    "searchPlaceholder": "Buscar acción, descripción, respuesta",
+    "refresh": "Actualizar",
+    "refreshing": "Actualizando…",
+    "loading": "Cargando solicitudes…",
+    "empty": "No se encontraron solicitudes",
+    "viewTicket": "Ver ticket",
+    "noActions": "No hay acciones disponibles",
+    "human": "persona",
+    "kind": {
+      "approval": "Aprobación",
+      "question": "Pregunta",
+      "feedback": "Comentario"
+    },
+    "kindPlural": {
+      "approval": "Aprobaciones",
+      "question": "Preguntas",
+      "feedback": "Comentarios"
+    },
+    "status": {
+      "pending": "Pendiente",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "answered": "Respondida",
+      "expired": "Caducada"
+    },
+    "column": {
+      "kind": "Tipo",
+      "status": "Estado",
+      "action": "Acción",
+      "description": "Descripción",
+      "item": "Elemento",
+      "agentHost": "Host del agente",
+      "requested": "Solicitada",
+      "resolution": "Resolución",
+      "resolve": "Resolver",
+      "answer": "Respuesta",
+      "requestedBy": "Solicitada por",
+      "expires": "Caduca"
+    }
+  },
+  "stakeholderAlignment": {
+    "title": "Alineación de partes interesadas",
+    "subtitle": "Acuerda prioridades, recoge aprobaciones y saca a la luz los conflictos antes de que la entrega se desvíe.",
+    "approvedCount": "{count} aprobadas",
+    "pendingCount": "{count} pendientes",
+    "overdueCount": "{count} vencidas",
+    "conflictsCount": "{count, plural, one {# conflicto} other {# conflictos}}",
+    "mapTitle": "Mapa de partes interesadas",
+    "noStakeholders": "No hay partes interesadas configuradas.",
+    "roleApprover": "Aprobador",
+    "roleInformed": "Informado",
+    "removeAria": "Quitar a {name}",
+    "nameAria": "Nombre de la parte interesada",
+    "namePlaceholder": "Nombre",
+    "refAria": "Referencia de usuario de la parte interesada",
+    "refPlaceholder": "ID de usuario",
+    "teamAria": "Ámbito del equipo",
+    "teamPlaceholder": "Equipo (opcional)",
+    "roleAria": "Rol de la parte interesada",
+    "roleRequiredApprover": "Aprobador obligatorio",
+    "add": "Añadir",
+    "healthTitle": "Salud de la alineación",
+    "answer": {
+      "yes": "Sí",
+      "no": "No",
+      "unknown": "Desconocido"
+    },
+    "saveHealth": "Guardar perfil de salud",
+    "question": {
+      "priorities_clear": "Las prioridades están claras y acordadas",
+      "competing_p0s_reconciled": "Los P0 en competencia están conciliados",
+      "approvers_current": "Los aprobadores obligatorios están al día",
+      "conflicts_within_sla": "Los conflictos están dentro del SLA de 48 horas",
+      "delivery_reflects_priorities": "La entrega refleja las prioridades acordadas"
+    }
+  },
+  "agentHostTabs": {
+    "errorPrefix": "Error: {message}",
+    "back": "← Volver",
+    "projects": {
+      "loading": "Cargando proyectos…",
+      "heading": "Proyectos ({count})",
+      "assign": "+ Asignar proyecto",
+      "selectProject": "Selecciona un proyecto…",
+      "assignAction": "Asignar",
+      "empty": "Todavía no hay proyectos asignados a este host de agentes.",
+      "projectFallback": "Proyecto n.º {id}",
+      "role": "Rol: {role}",
+      "open": "Abrir",
+      "remove": "Quitar",
+      "status": "{status, select, active {Activo} completed {Completado} archived {Archivado} on_hold {En pausa} other {{status}}}"
+    },
+    "workspace": {
+      "syncedAt": "sincronizado {when}",
+      "noFiles": "Todavía no hay archivos sincronizados.",
+      "fileCount": "{count, plural, one {# archivo} other {# archivos}}",
+      "heading": "Directorios sincronizados ({count})",
+      "empty": "No hay directorios sincronizados. Los directorios se sincronizan cuando un host de agentes registra su espacio de trabajo.",
+      "lastSynced": "Última sincronización: {when}",
+      "sync": "⟳ Sincronizar",
+      "status": "{status, select, synced {Sincronizado} pending {Pendiente} error {Error} other {{status}}}"
+    },
+    "config": {
+      "loading": "Cargando configuración…",
+      "title": "Configuración de ejecución",
+      "format": "Formatear",
+      "reset": "Restablecer",
+      "description": "Configuración JSON que se pasa al entorno de ejecución del host de agentes. Los cambios surten efecto la próxima vez que el host se conecte.",
+      "invalidJson": "JSON no válido: corrígelo antes de guardar.",
+      "saved": "Guardado a las {time}",
+      "save": "Guardar configuración"
+    },
+    "sessions": {
+      "loading": "Cargando sesiones…",
+      "messageCount": "{count, plural, one {# mensaje} other {# mensajes}}",
+      "handoff": "Traspasar →",
+      "handoffTitle": "Traspasar a otro host de agentes",
+      "handoffBody": "Envía el contexto de esta sesión a otro host de agentes para que pueda retomar la conversación. Se incluyen los últimos 20 mensajes.",
+      "selectTarget": "Selecciona un host de agentes de destino…",
+      "notePlaceholder": "Nota de traspaso (opcional)",
+      "handoffSuccess": "Sesión traspasada.",
+      "handingOff": "Traspasando…",
+      "handOff": "Traspasar",
+      "loadingMessages": "Cargando mensajes…",
+      "noMessages": "No se encontraron mensajes.",
+      "heading": "Sesiones de chat ({count})",
+      "empty": "Todavía no hay sesiones. Las sesiones se crean cuando un host de agentes inicia una conversación.",
+      "active": "(activa)",
+      "msgCount": "{count, plural, one {# mensaje} other {# mensajes}}",
+      "role": "{role, select, user {Usuario} assistant {Agente} system {Sistema} tool {Herramienta} other {{role}}}"
+    }
+  },
+  "repoSync": {
+    "title": "Sincronización del repositorio",
+    "linkedTo": "Vinculado a <strong>{repo}</strong>",
+    "lastSynced": " · última sincronización <code>{ref}</code>",
+    "notImported": " · aún no importado",
+    "import": "Importar desde el repositorio",
+    "importing": "Importando…",
+    "commit": "Confirmar y abrir PR",
+    "committing": "Confirmando…",
+    "noRepo": "No hay ningún repositorio vinculado: tus archivos están en el espacio de trabajo de Canvas Builder. Crea un repositorio limpio para publicar o conecta uno existente abajo.",
+    "createRepo": "+ Crear repositorio",
+    "repoNamePlaceholder": "Nombre del repositorio",
+    "selectCredential": "Selecciona una credencial de GitHub…",
+    "noCredential": "No se encontró ninguna credencial de GitHub. Añade una primero en Integraciones.",
+    "private": "Repositorio privado",
+    "createAndPush": "Crear y enviar",
+    "creating": "Creando…",
+    "imported": "{count, plural, one {Se importó # archivo} other {Se importaron # archivos}} desde {ref}.",
+    "pushedPr": "{count, plural, one {Se envió # archivo} other {Se enviaron # archivos}}: se abrió la PR n.º {pr}.",
+    "committed": "{count, plural, one {Se confirmó # archivo} other {Se confirmaron # archivos}} en {branch}.",
+    "created": "Se creó {repo} y se {count, plural, one {envió # archivo} other {enviaron # archivos}}."
+  },
+  "soc2Tracker": {
+    "title": "Seguimiento de controles SOC 2",
+    "loading": "Cargando controles SOC 2…",
+    "emptyBody": "Todavía no hay controles. Carga la base de los Criterios Comunes de SOC 2 (CC1–CC9) para empezar a medir la preparación.",
+    "seed": "Cargar la base SOC 2",
+    "seeding": "Cargando…",
+    "loadFailed": "No se pudieron cargar los controles SOC 2.",
+    "seedFailed": "No se pudo cargar la base (se requiere el rol de responsable).",
+    "updateFailed": "No se pudo actualizar.",
+    "readiness": "Preparación <strong>{pct} %</strong> ({ready}/{inScope} en alcance)",
+    "categoryReady": "· {pct} % preparado",
+    "status": {
+      "not_started": "Sin empezar",
+      "in_progress": "En curso",
+      "ready": "Preparado",
+      "out_of_scope": "Fuera de alcance"
+    }
+  },
+  "workflowDag": {
+    "empty": "Todavía no hay tareas en este flujo de trabajo.",
+    "defaultRole": "agente"
   }
 }

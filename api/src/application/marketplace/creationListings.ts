@@ -81,7 +81,6 @@ import { liveUrl, runStageChecks, runnableDocument, type StageObject } from './s
 import { deploymentProbe, systemDryRunProbe, voiceCloneProbe, watchHostedListing } from './stageChecks.probe';
 import { isSandboxApplicable, stageSandboxPayloadHash } from '../../domain/marketplace/stageSandboxPayload';
 import { resolveStageSandboxState } from './stageSandboxRuns';
-import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
 import {
   hostedListingStatus,
   isHostedListing,
@@ -757,7 +756,7 @@ export async function publishCreationListing(
     probe: deploymentProbe(),
     sandbox,
     voiceClone: voiceCloneProbe(db, input.tenantId),
-    systemDryRun: harness === 'system' ? systemDryRunProbe(env as unknown as CloudExecutorEnv) : null,
+    systemDryRun: harness === 'system' ? systemDryRunProbe(env) : null,
   });
   if (!isPublishable(checks)) {
     // 409 rather than 400: the request is well-formed and the seller is entitled to

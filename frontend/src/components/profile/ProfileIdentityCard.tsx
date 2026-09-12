@@ -50,7 +50,7 @@ export function ProfileAvatar({ displayName, avatarUrl, size = 64 }: {
     border: '1px solid var(--border-subtle)',
   };
   // eslint-disable-next-line @next/next/no-img-element
-  if (avatarUrl) return <img src={avatarUrl} alt="" style={common} />;
+  if (avatarUrl) return <img src={avatarUrl} alt="" width={size} height={size} style={common} />;
   return (
     <div
       style={{

@@ -17,8 +17,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { usePermission } from '@/lib/rbac';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 import { workspaceSkillsApi, type WorkspaceSkill, type WorkspaceSkillStatus } from '@/lib/workspaceSkillsApi';
 
 const FILTERS: readonly WorkspaceSkillStatus[] = ['draft', 'approved', 'rejected'];
@@ -53,29 +56,32 @@ const body: React.CSSProperties = {
   maxHeight: 320,
 };
 
-const STATUS_COLOR: Record<WorkspaceSkillStatus, string> = {
-  draft: 'var(--warning)',
-  approved: 'var(--success)',
-  rejected: 'var(--text-muted)',
+const STATUS_TONE: StatusToneMap<WorkspaceSkillStatus> = {
+  draft: 'warning',
+  approved: 'success',
+  rejected: 'neutral',
 };
 
 export function WorkspaceSkillReview() {
   const t = useTranslations('workspaceSkills');
+  const tc = useTranslations('common');
   const confirm = useConfirm();
   const { allowed } = usePermission('integrations.manage');
   const [status, setStatus] = useState<WorkspaceSkillStatus>('draft');
   const [skills, setSkills] = useState<WorkspaceSkill[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Approve / reject / delete are the panel's actions: their busy flag and their
+  // failure live in the shared task, apart from the list's own load failure.
+  const task = usePanelTask();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setSkills(await workspaceSkillsApi.list(status));
-      setError(null);
+      setLoadError(null);
     } catch (e) {
-      setError(faultMessage(e));
+      setLoadError(faultMessage(e));
     } finally {
       setLoading(false);
     }
@@ -83,31 +89,24 @@ export function WorkspaceSkillReview() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Approve is reversible (Reject later) and loses nothing, so its deliberate second
+  // click is the inline two-step on the button, not a modal.
   const decide = async (skill: WorkspaceSkill, decision: 'approved' | 'rejected') => {
-    if (decision === 'approved' && !(await confirm({ message: t('confirmApprove', { name: skill.name }), destructive: false }))) return;
-    setBusyId(skill.id);
-    try {
+    await task.run(async () => {
       await workspaceSkillsApi.review(skill.id, decision);
       await load();
-    } catch (e) {
-      setError(faultMessage(e));
-    } finally {
-      setBusyId(null);
-    }
+    }, { failure: tc('actionFailed') });
   };
 
   const remove = async (skill: WorkspaceSkill) => {
     if (!(await confirm({ message: t('confirmDelete', { name: skill.name }), destructive: true }))) return;
-    setBusyId(skill.id);
-    try {
+    await task.run(async () => {
       await workspaceSkillsApi.remove(skill.id);
       await load();
-    } catch (e) {
-      setError(faultMessage(e));
-    } finally {
-      setBusyId(null);
-    }
+    }, { failure: tc('actionFailed') });
   };
+
+  const error = task.error ?? loadError;
 
   return (
     <section>
@@ -141,7 +140,7 @@ export function WorkspaceSkillReview() {
                 <strong style={{ color: 'var(--text-primary)' }}>{skill.name}</strong>
                 <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{skill.description}</p>
               </div>
-              <span style={{ color: STATUS_COLOR[skill.status], fontSize: 'var(--font-size-eyebrow)', fontWeight: 650 }}>● {t(`filter.${skill.status}`)}</span>
+              <span style={{ color: statusColor(STATUS_TONE, skill.status), fontSize: 'var(--font-size-eyebrow)', fontWeight: 650 }}>● {t(`filter.${skill.status}`)}</span>
             </div>
 
             <p style={{ margin: '8px 0 0', fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
@@ -158,12 +157,12 @@ export function WorkspaceSkillReview() {
             <RoleGate capability="integrations.manage" variant="inline">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                 {skill.status !== 'approved' && (
-                  <button type="button" style={button} disabled={busyId === skill.id || !allowed} onClick={() => void decide(skill, 'approved')}>{t('approve')}</button>
+                  <InlineConfirmButton style={button} disabled={task.busy || !allowed} onConfirm={() => decide(skill, 'approved')} hint={t('confirmApprove', { name: skill.name })} confirmLabel={t('approve')}>{t('approve')}</InlineConfirmButton>
                 )}
                 {skill.status !== 'rejected' && (
-                  <button type="button" style={button} disabled={busyId === skill.id || !allowed} onClick={() => void decide(skill, 'rejected')}>{t('reject')}</button>
+                  <button type="button" style={button} disabled={task.busy || !allowed} onClick={() => void decide(skill, 'rejected')}>{t('reject')}</button>
                 )}
-                <button type="button" style={{ ...button, color: 'var(--danger)' }} disabled={busyId === skill.id || !allowed} onClick={() => void remove(skill)}>{t('delete')}</button>
+                <button type="button" style={{ ...button, color: 'var(--danger)' }} disabled={task.busy || !allowed} onClick={() => void remove(skill)}>{t('delete')}</button>
               </div>
             </RoleGate>
           </article>

@@ -26,6 +26,7 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -316,8 +317,8 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
   const [starred, setStarred] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [analysis, setAnalysis] = useState<PromptAnalysis | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  // Analyze and save-suggestion share one busy/error slot.
+  const task = usePanelTask();
   const [saved, setSaved] = useState(false);
   const id = (prompt as PromptPublicView & { id: string }).id;
 
@@ -329,26 +330,19 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
   };
 
   const runAnalyze = async () => {
-    setAnalyzing(true);
-    setAnalyzeError(null);
     setSaved(false);
-    try {
-      setAnalysis(await promptLibraryApi.analyze(id));
-    } catch (e) {
-      setAnalyzeError(faultMessage(e, t('analysisFailed')));
-    } finally {
-      setAnalyzing(false);
-    }
+    const result = await task.run(() => promptLibraryApi.analyze(id), { failure: t('analysisFailed') });
+    if (result !== undefined) setAnalysis(result);
   };
 
   const saveSuggestion = async () => {
     if (!analysis?.suggestion) return;
-    try {
-      await promptLibraryApi.addVersion(id, { body: analysis.suggestion, notes: 'Analyzer suggestion' });
-      setSaved(true);
-    } catch (e) {
-      setAnalyzeError(faultMessage(e, t('saveFailed')));
-    }
+    const suggestion = analysis.suggestion;
+    const done = await task.run(
+      () => promptLibraryApi.addVersion(id, { body: suggestion, notes: 'Analyzer suggestion' }).then(() => true),
+      { failure: t('saveFailed') },
+    );
+    if (done) setSaved(true);
   };
 
   return (
@@ -377,13 +371,13 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
           {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={toggleStar}>{starred ? t('starred') : t('star')}</button>}
           {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={() => setShowHistory(true)}>{t('history')}</button>}
           {isAuthed && id && (
-            <button type="button" className="btn btn-secondary" onClick={runAnalyze} disabled={analyzing}>
-              {analyzing ? t('analyzing') : t('analyze')}
+            <button type="button" className="btn btn-secondary" onClick={runAnalyze} disabled={task.busy}>
+              {task.busy ? t('analyzing') : t('analyze')}
             </button>
           )}
         </div>
 
-        {analyzeError && <div style={{ color: 'var(--danger)', fontSize: 'var(--font-size-small)', marginBottom: 12 }}>{analyzeError}</div>}
+        {task.error && <div style={{ color: 'var(--danger)', fontSize: 'var(--font-size-small)', marginBottom: 12 }}>{task.error}</div>}
 
         {analysis && (
           <div style={{ ...card, marginBottom: 16, borderColor: 'var(--coral-bright)' }}>

@@ -21,6 +21,7 @@ import { getStoredTenant } from '@/lib/auth';
 import { useConsumption } from '@/lib/useConsumption';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 /**
  * Integrations gallery — the workspace-level home for every external system.
  * Cards derive from the board-provider catalog (single source of truth) plus the
@@ -314,6 +315,7 @@ function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[];
   const [logs, setLogs] = useState<Record<string, SyncLog[]>>({});
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const errorText = useErrorText();
 
   useEffect(() => {
     credentials.forEach((c) => {
@@ -324,7 +326,7 @@ function ActivityTab({ credentials, t }: { credentials: IntegrationCredential[];
   const test = async (id: string) => {
     setTesting(id);
     try { const r = await integrationsApi.test(id); setResults((p) => ({ ...p, [id]: r })); }
-    catch (e) { setResults((p) => ({ ...p, [id]: { ok: false, message: e instanceof Error ? e.message : 'failed' } })); }
+    catch (e) { setResults((p) => ({ ...p, [id]: { ok: false, message: errorText(e) } })); }
     finally { setTesting(null); }
   };
 

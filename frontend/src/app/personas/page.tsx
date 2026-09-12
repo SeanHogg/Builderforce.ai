@@ -28,6 +28,7 @@ import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsConten
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 /** Map a server-owned persona (from GET /api/personas/mine) into the flat display
  *  shape the "My Personas" tab renders. `shared` = the persona is published (public). */
 function serverToUserPersona(p: PublicPersona): UserPersona {
@@ -77,6 +78,7 @@ function publicToPersona(p: PublicPersona): Persona {
 export default function PersonasPage() {
   const t = useTranslations('personasPage');
   const tc = useTranslations('common');
+  const errorText = useErrorText();
   const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
@@ -138,11 +140,11 @@ export default function PersonasPage() {
         setStats(s);
       }
     } catch (e) {
-      setError(faultText(e, 'Failed to load'));
+      setError(errorText(e));
     } finally {
       setLoading(false);
     }
-  }, [tenantNum]);
+  }, [tenantNum, errorText]);
 
   useEffect(() => {
     load();
@@ -155,7 +157,7 @@ export default function PersonasPage() {
       setInstalledSlugs((prev) => new Set([...prev, slug]));
       await load();
     } catch (e) {
-      setError(faultText(e, 'Assign failed'));
+      setError(errorText(e));
     }
   };
 
@@ -172,7 +174,7 @@ export default function PersonasPage() {
       const updated = await marketplaceStats.getStats('persona', [slug]).catch(() => ({}));
       setStats((s) => ({ ...s, ...updated }));
     } catch (e) {
-      setError(faultText(e, 'Unassign failed'));
+      setError(errorText(e));
     }
   };
 
@@ -185,7 +187,7 @@ export default function PersonasPage() {
         [slug]: { ...prev, liked, likes: liked ? prev.likes + 1 : Math.max(0, prev.likes - 1) },
       }));
     } catch (e) {
-      setError(faultText(e, 'Like failed'));
+      setError(errorText(e));
     }
   };
 

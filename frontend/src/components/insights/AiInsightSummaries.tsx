@@ -9,6 +9,8 @@ import { KpiGrid } from './LensShell';
 import { pct, score2 } from './format';
 import { useInsightFormat } from './format';
 import { useAiOverview, useLlmUsage, useLlmBySource } from './insightsSources';
+import { REC_SEVERITY_TONE } from './RecommendationsLens';
+import { statusColor } from '@/lib/statusTone';
 
 /**
  * Compact "at-a-glance" summaries for the combined AI Insights dashboard.
@@ -27,12 +29,6 @@ import { useAiOverview, useLlmUsage, useLlmBySource } from './insightsSources';
  * source {@link useAiOverview} instead, so the single round-trip is a property of
  * the data layer rather than of a parent's cooperation.
  */
-
-const SEVERITY_COLOR: Record<RecSeverity, string> = {
-  critical: 'var(--error)',
-  warning: 'var(--warning)',
-  info: 'var(--info)',
-};
 
 /**
  * Consumption per funding credential — the tenant's connected BYO integrations
@@ -205,7 +201,7 @@ export function RecommendationsSummary({ days }: { days: number }) {
             key={s}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600,
-              color: 'var(--text-on-accent)', background: SEVERITY_COLOR[s], padding: '4px 10px', borderRadius: 'var(--radius-full)',
+              color: 'var(--text-on-accent)', background: statusColor(REC_SEVERITY_TONE, s, 'solid'), padding: '4px 10px', borderRadius: 'var(--radius-full)',
             }}
           >
             {counts[s]} {t(`recs.severity.${s}`)}

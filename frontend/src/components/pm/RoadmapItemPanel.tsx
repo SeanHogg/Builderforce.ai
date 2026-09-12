@@ -6,7 +6,7 @@ import { Select } from '@/components/Select';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { roadmapClient, ROADMAP_HORIZONS, ROADMAP_STATUSES, rstr } from '@/lib/pm/roadmap';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * Create/edit a roadmap item. Shared by RoadmapTimeline (add / click a card) and
  * RoadmapGantt (click a bar) so the roadmap CRUD form is defined once. A null
@@ -36,13 +36,10 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
   const [status, setStatus] = useState(item ? rstr(item, 'status') || 'planned' : 'planned');
   const [theme, setTheme] = useState(item ? rstr(item, 'theme') : '');
   const [targetDate, setTargetDate] = useState(item ? rstr(item, 'targetDate').slice(0, 10) : '');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
 
   const save = async () => {
-    if (!title.trim()) { setError(t('titleRequired')); return; }
-    setBusy(true);
-    setError(null);
+    if (!title.trim()) { task.fail(t('titleRequired')); return; }
     const body: Record<string, unknown> = {
       title: title.trim(),
       horizon,
@@ -50,16 +47,14 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
       theme: theme.trim() || null,
       targetDate: targetDate ? new Date(targetDate).toISOString() : null,
     };
-    try {
+    const result = await task.run(async () => {
       if (isEdit) await roadmapClient.update(String(item!.id), body);
       else await roadmapClient.create({ ...body, projectId: projectId ?? undefined });
-      onSaved();
-      onClose();
-    } catch (e) {
-      setError(faultMessage(e));
-    } finally {
-      setBusy(false);
-    }
+      return true;
+    });
+    if (result === undefined) return;
+    onSaved();
+    onClose();
   };
 
   return (
@@ -91,9 +86,9 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
           <label style={labelStyle} htmlFor="rm-target">{t('targetDateLabel')}</label>
           <input id="rm-target" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} style={fieldStyle} />
         </div>
-        {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+        {task.error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{task.error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          <button type="button" onClick={save} disabled={task.busy} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, cursor: task.busy ? 'default' : 'pointer', opacity: task.busy ? 0.6 : 1 }}>
             {isEdit ? t('saveChanges') : t('create')}
           </button>
           <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{tc('cancel')}</button>

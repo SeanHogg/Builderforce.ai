@@ -11,6 +11,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /**
  * The operating surface for a project's server-side half.
  *
@@ -74,14 +75,13 @@ const button: React.CSSProperties = {
   cursor: 'pointer',
 };
 
-/** Verdict → theme-token colour. Both themes get the variable, with a literal
- *  fallback so an unset token still reads. */
-const VERDICT_COLOR: Record<string, string> = {
-  ok: 'var(--success)',
-  unverified: 'var(--warning)',
-  'no-handler': 'var(--warning)',
-  'rate-limited': 'var(--warning)',
-  error: 'var(--danger)',
+/** Verdict → what it means. An unknown verdict keeps the primary text colour. */
+const VERDICT_TONE: StatusToneMap = {
+  ok: 'success',
+  unverified: 'warning',
+  'no-handler': 'warning',
+  'rate-limited': 'warning',
+  error: 'danger',
 };
 
 export default function ProjectBackendPanel({ projectId }: { projectId: number }) {
@@ -460,7 +460,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>
                       {r.statusCode}
                     </td>
-                    <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: VERDICT_COLOR[r.verdict] ?? 'var(--text-primary)' }}>
+                    <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: r.verdict in VERDICT_TONE ? statusColor(VERDICT_TONE, r.verdict) : 'var(--text-primary)' }}>
                       {t(`verdict.${r.verdict}`)}
                       {r.error && (
                         <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{r.error}</div>

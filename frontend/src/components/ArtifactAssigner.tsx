@@ -17,6 +17,7 @@ import {
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 interface ArtifactAssignerProps {
   artifactType: ArtifactType;
   artifactSlug: string;
@@ -36,16 +37,14 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
   const [assignments, setAssignments] = useState<ArtifactAssignment[]>([]);
   const [assignmentsLoaded, setAssignmentsLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const { busy: saving, error, notice: success, run, fail, clear } = usePanelTask();
   // Auto-pick the first non-empty scope only once per open, so the user's
   // manual tab choice is never overridden (e.g. after an assign re-fetches).
   const didInitScope = useRef(false);
 
   const loadEntities = useCallback(async () => {
     setLoading(true);
-    setError('');
+    clear();
     try {
       const [c, p, t] = await Promise.all([
         agentHosts.list().catch(() => []),
@@ -63,11 +62,11 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         if (!c.length) setScope(p.length ? 'project' : t.length ? 'task' : 'host');
       }
     } catch (e) {
-      setError(faultText(e, t('failedToLoad')));
+      fail(faultText(e, t('failedToLoad')));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, clear, fail]);
 
   useEffect(() => {
     if (open && !assignmentsLoaded) {
@@ -79,14 +78,13 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
   useEffect(() => {
     if (!open) {
       didInitScope.current = false;
-      setError('');
-      setSuccess('');
+      clear();
       return;
     }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, clear]);
 
   useEffect(() => {
     if (!open || assignmentsLoaded || (!agentHostsList.length && !projectsList.length && !tasksList.length)) return;
@@ -132,28 +130,21 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
 
   const handleAssign = async () => {
     if (!selectedId) return;
-    setSaving(true);
-    setError('');
-    setSuccess('');
-    try {
+    const done = await run(async () => {
       await artifactAssignments.assign(artifactType, artifactSlug, scope, Number(selectedId));
-      setSuccess(t('assignedTo', { scope: scopeName(scope) }));
-      setSelectedId('');
-      setAssignmentsLoaded(false);
-    } catch (e) {
-      setError(faultText(e, t('assignFailed')));
-    } finally {
-      setSaving(false);
-    }
+      return true;
+    }, { success: t('assignedTo', { scope: scopeName(scope) }), failure: t('assignFailed') });
+    if (!done) return;
+    setSelectedId('');
+    setAssignmentsLoaded(false);
   };
 
   const handleUnassign = async (s: AssignmentScope, scopeId: number) => {
-    try {
+    const done = await run(async () => {
       await artifactAssignments.unassign(artifactType, artifactSlug, s, scopeId);
-      setAssignments((prev) => prev.filter((a) => !(a.scope === s && a.scopeId === scopeId)));
-    } catch (e) {
-      setError(faultText(e, t('unassignFailed')));
-    }
+      return true;
+    }, { failure: t('unassignFailed') });
+    if (done) setAssignments((prev) => prev.filter((a) => !(a.scope === s && a.scopeId === scopeId)));
   };
 
   const scopeLabel = (s: AssignmentScope, scopeId: number): string => {

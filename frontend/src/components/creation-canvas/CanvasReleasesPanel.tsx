@@ -39,7 +39,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { useConfirm } from '@/components/ConfirmProvider';
+import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import {
   STAGE_CHECK_GROUPS,
   blockingChecks,
@@ -89,7 +89,6 @@ export function CanvasReleasesPanel({
   onNotice,
 }: CanvasReleasesPanelProps) {
   const t = useTranslations('creationCanvas.releases');
-  const confirm = useConfirm();
   const [rail, setRail] = useState<ReleaseRail | null>(null);
   const [candidate, setCandidate] = useState<PublishCandidate | null>(null);
   const [staged, setStaged] = useState<StagedRelease | null>(null);
@@ -243,28 +242,14 @@ export function CanvasReleasesPanel({
   /**
    * Put an earlier version back on sale.
    *
-   * Confirmed, because it changes what every NEW buyer receives — and the
-   * confirmation says how many people are on the version being replaced, which is
-   * the fact that makes it a decision rather than a shrug. Existing buyers are not
-   * moved; their licence pins what they bought.
+   * A deliberate two-step on the row's button (InlineConfirmButton), because it
+   * changes what every NEW buyer receives — the armed button says how many people
+   * are on the version being replaced (`revertHint`). Not a destructive modal: it
+   * takes nothing away (existing buyers keep what their licence pins) and is undone
+   * by reverting again.
    */
   const revert = useCallback(async (release: ReleaseView) => {
     if (!rail?.listingId || !release.snapshotId) return;
-    const live = rail.releases.find((entry) => entry.state === 'live');
-    const ok = await confirm({
-      title: t('revertTitle', { version: release.version }),
-      // The version being REPLACED and how many people are on it — the two facts
-      // that turn "put this back" from a shrug into a decision.
-      message: t('revertBody', {
-        version: live?.version ?? '—',
-        holders: t('holders', { count: live?.holders ?? 0 }),
-      }),
-      confirmLabel: t('revertConfirm'),
-      // Reverting takes nothing away — existing buyers keep what they hold, and the
-      // action is undone by reverting again — so it is not styled as destruction.
-      destructive: false,
-    });
-    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
@@ -276,11 +261,18 @@ export function CanvasReleasesPanel({
     } finally {
       setBusy(false);
     }
-  }, [rail, confirm, loadRail, onNotice, t]);
+  }, [rail, loadRail, onNotice, t]);
 
   const blockers = useMemo(() => blockingChecks(staged?.checks ?? []), [staged]);
   const canPublish = !!staged && isPublishable(staged.checks) && !busy;
   const kindSpec = candidate?.kinds[0] ? listingKindSpec(candidate.kinds[0]) : null;
+  // The version being REPLACED and how many people are on it — the two facts that
+  // turn "put this back" from a shrug into a decision. Shown when Revert is armed.
+  const liveRelease = rail?.releases.find((entry) => entry.state === 'live');
+  const revertHint = t('revertBody', {
+    version: liveRelease?.version ?? '—',
+    holders: t('holders', { count: liveRelease?.holders ?? 0 }),
+  });
 
   return (
     <SlideOutPanel
@@ -321,6 +313,7 @@ export function CanvasReleasesPanel({
                   busy={busy}
                   onStage={release.state === 'draft' ? stage : undefined}
                   onRevert={release.state === 'superseded' ? () => revert(release) : undefined}
+                  revertHint={revertHint}
                   slug={rail.slug}
                 />
               ))}
@@ -478,12 +471,15 @@ function ReleaseRow({
   slug,
   onStage,
   onRevert,
+  revertHint,
 }: {
   release: ReleaseView;
   busy: boolean;
   slug: string | null;
   onStage?: () => void;
   onRevert?: () => void;
+  /** The consequence shown when Revert is armed — see `revertHint` in the panel. */
+  revertHint?: string;
 }) {
   const fmt = useFormat();
   const t = useTranslations('creationCanvas.releases');
@@ -510,9 +506,9 @@ function ReleaseRow({
           </button>
         )}
         {onRevert && (
-          <button type="button" className={styles.secondaryFullButton} onClick={onRevert} disabled={busy}>
+          <InlineConfirmButton block className={styles.secondaryFullButton} onConfirm={onRevert} disabled={busy} hint={revertHint} confirmLabel={t('revertConfirm')}>
             {t('revertAction')}
-          </button>
+          </InlineConfirmButton>
         )}
         {release.state === 'live' && slug && (
           <a className={styles.secondaryFullButton} href={`/marketplace/listing/${slug}`} target="_blank" rel="noreferrer">

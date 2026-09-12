@@ -5,7 +5,7 @@ import { usePolledResource } from '@/hooks/usePolledResource';
 import { runtimeApi, type ActiveRun } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 /**
  * Fleet "what's running right now": every non-terminal execution across the
  * tenant, on-prem and cloud, with elapsed time and a working Cancel. This is the
@@ -36,6 +36,7 @@ const KIND_PILL: Record<ActiveRun['kind'], { label: string; bg: string; fg: stri
 };
 
 export function ActiveRunsPanel() {
+  const errorText = useErrorText();
   const confirm = useConfirm();
   const [runs, setRuns] = useState<ActiveRun[] | null>(null);
   const [cancelling, setCancelling] = useState<Set<number>>(new Set());
@@ -81,11 +82,11 @@ export function ActiveRunsPanel() {
       }
       await load();
     } catch (e) {
-      setError(faultText(e, 'Could not stop all agents.'));
+      setError(errorText(e));
     } finally {
       setStoppingAll(false);
     }
-  }, [confirm, load, runs]);
+  }, [confirm, errorText, load, runs]);
 
   // Idle fleet (or first load) → render nothing; this component owns its visibility.
   if (!runs || runs.length === 0) return null;

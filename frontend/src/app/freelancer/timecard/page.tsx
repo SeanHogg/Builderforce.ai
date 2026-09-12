@@ -10,7 +10,7 @@ import {
   listMyTimecards, resolveTimecard, submitTimecard, listTimecardEntries, addTimecardEntry, updateTimecardEntry, deleteTimecardEntry, type Timecard, type TimecardEntry,
 } from '@/lib/freelance/timecards';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
 };
@@ -30,6 +30,7 @@ const fmtHrs = (min: number) => `${(min / 60).toFixed(1)}h`;
 export default function FreelancerTimecardPage() {
   const { formatCents } = useMoneyFormat();
   const t = useTranslations('freelancer');
+  const errorMessage = useErrorMessage();
   const [today, setToday] = useState<{ signalCount: number; minutes: number; byKind: Record<string, number> } | null>(null);
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [cards, setCards] = useState<Timecard[]>([]);
@@ -53,11 +54,11 @@ export default function FreelancerTimecardPage() {
       setEngagements(engs.filter((e) => e.status === 'active'));
       setCards(tcs);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load'));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -68,7 +69,7 @@ export default function FreelancerTimecardPage() {
       await resolveTimecard({ engagementId, periodStart: start, periodEnd: end });
       await load();
     } catch (e) {
-      setError(faultMessage(e, 'Failed to resolve'));
+      setError(errorMessage(e));
     } finally {
       setBusy(null);
     }
@@ -77,7 +78,7 @@ export default function FreelancerTimecardPage() {
   const submit = async (id: string) => {
     setBusy(id); setError(null);
     try { await submitTimecard(id); await load(); }
-    catch (e) { setError(faultMessage(e, 'Failed to submit')); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
 
@@ -100,21 +101,21 @@ export default function FreelancerTimecardPage() {
     if (!minutes || minutes <= 0) return;
     setBusy(`add:${id}`); setError(null);
     try { await addTimecardEntry(id, { minutes, description: newEntry.description || undefined }); setNewEntry({ minutes: '', description: '' }); await refreshEntries(id); }
-    catch (e) { setError(faultMessage(e, 'Failed')); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
 
   const toggleBillable = async (id: string, entry: TimecardEntry) => {
     setBusy(`e:${entry.id}`);
     try { await updateTimecardEntry(id, entry.id, { billable: !entry.billable }); await refreshEntries(id); }
-    catch (e) { setError(faultMessage(e, 'Failed')); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
 
   const removeEntry = async (id: string, entryId: string) => {
     setBusy(`e:${entryId}`);
     try { await deleteTimecardEntry(id, entryId); await refreshEntries(id); }
-    catch (e) { setError(faultMessage(e, 'Failed')); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
 
@@ -123,7 +124,7 @@ export default function FreelancerTimecardPage() {
     if (!meeting.engagementId || !minutes || minutes <= 0) return;
     setBusy('meeting'); setError(null);
     try { await logMeeting({ engagementId: meeting.engagementId, durationMinutes: minutes, note: meeting.note || undefined }); setMeeting({ engagementId: '', minutes: '', note: '' }); await load(); }
-    catch (e) { setError(faultMessage(e, 'Failed')); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
 

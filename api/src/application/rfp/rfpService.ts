@@ -1,3 +1,4 @@
+import { asJsonObject } from '../../domain/shared/json';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * RFP Response orchestration (PRD 15).
@@ -52,10 +53,6 @@ import { loadProjectInTenant } from '../project/projectOwnership';
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 const MILLICENTS_PER_USD = 100_000;
-
-/** A plain object, or null — the shape every structured reply here must have. */
-const asObject = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 const PORTFOLIO_MATCHES_SCHEMA = jsonSchemaFormat('portfolio_matches', {
   type: 'object', additionalProperties: false, required: ['matches'],
@@ -361,7 +358,7 @@ export async function matchPortfolio(
         maxTokens: 500,
         useCase: 'rfp_portfolio_match',
       },
-      asObject,
+      asJsonObject,
     );
     // Metered whenever the gateway answered at all — a 4xx/5xx still spent a call.
     if (out.result) void recordProxyUsage(db, env, { tenantId, useCase: 'rfp_portfolio_match', result: out.result });
@@ -475,7 +472,7 @@ async function generateNarrative(
         maxTokens: 1200,
         useCase: 'rfp_narrative',
       },
-      asObject,
+      asJsonObject,
     );
     // Metered whenever the gateway answered at all — a 4xx/5xx still spent a call.
     if (out.result) void recordProxyUsage(deps.db, deps.env, { tenantId, useCase: 'rfp_narrative', result: out.result });

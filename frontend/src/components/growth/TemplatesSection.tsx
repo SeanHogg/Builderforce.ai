@@ -13,15 +13,14 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { growthApi, type EmailTemplate } from '@/lib/growthApi';
 import { button, listItem, listReset, muted, spread, Row } from './growthStyles';
-import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 export function TemplatesSection() {
   const t = useTranslations('growth');
   const confirm = useConfirm();
   const router = useRouter();
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const task = usePanelTask();
+  const { run: taskRun } = task;
 
   const reload = useCallback(async () => {
     const { templates: tpl } = await growthApi.listTemplates();
@@ -30,25 +29,16 @@ export function TemplatesSection() {
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const run = useCallback(async (op: () => Promise<unknown>, successMessage: string) => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      await op();
-      setNotice(successMessage);
-      await reload();
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    } finally {
-      setBusy(false);
-    }
-  }, [reload, t]);
+  // The reload is part of the action, so the notice lands only once the list shows it.
+  const run = useCallback((op: () => Promise<unknown>, success: string) => taskRun(async () => {
+    await op();
+    await reload();
+  }, { success, failure: t('genericError') }), [taskRun, reload, t]);
 
   return (
     <section>
-      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{notice}</p>}
-      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{error}</p>}
+      {task.notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{task.notice}</p>}
+      {task.error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{task.error}</p>}
       {templates.length === 0 ? (
         <p style={{ ...muted, marginTop: 10 }}>{t('templates.empty')}</p>
       ) : (
@@ -67,11 +57,11 @@ export function TemplatesSection() {
                 </div>
               )}
               <Row>
-                <button type="button" style={button} disabled={busy}
+                <button type="button" style={button} disabled={task.busy}
                   onClick={() => router.push(`/growth?tab=campaigns&template=${template.id}`)}>
                   {t('templates.use')}
                 </button>
-                <button type="button" style={button} disabled={busy}
+                <button type="button" style={button} disabled={task.busy}
                   onClick={async () => {
                     const ok = await confirm({ message: t('templates.confirmDelete', { name: template.name }) });
                     if (!ok) return;
@@ -85,7 +75,7 @@ export function TemplatesSection() {
         </ul>
       )}
       <Row>
-        <ImportTemplateButton busy={busy} onImport={(name, bodyHtml) => run(
+        <ImportTemplateButton busy={task.busy} onImport={(name, bodyHtml) => run(
           () => growthApi.createTemplate({ name, bodyHtml, source: 'imported' }),
           t('templates.imported'),
         )} label={t('templates.import')} />

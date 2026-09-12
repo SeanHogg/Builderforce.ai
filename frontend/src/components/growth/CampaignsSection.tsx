@@ -22,7 +22,7 @@ import { mailboxApi, type MailboxConnection } from '@/lib/mailboxApi';
 import { connectorsApi, type ConnectorConnection } from '@/lib/connectorsApi';
 import { CampaignComposer, type CampaignDraftBody } from './CampaignComposer';
 import { button, listItem, listReset, muted, primary, spread, Row } from './growthStyles';
-import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /** Twilio's email product. The campaign transport resolves against this key. */
 const SENDGRID_CONNECTOR_KEY = 'sendgrid';
 
@@ -38,9 +38,8 @@ export function CampaignsSection() {
   const [mailboxes, setMailboxes] = useState<MailboxConnection[]>([]);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [sendgridConnections, setSendgridConnections] = useState<ConnectorConnection[]>([]);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const task = usePanelTask();
+  const { run: taskRun } = task;
   const [composerOpen, setComposerOpen] = useState(false);
   const [initialTemplateId, setInitialTemplateId] = useState<number | null>(null);
 
@@ -74,20 +73,11 @@ export function CampaignsSection() {
     router.replace('/growth?tab=campaigns');
   }, [searchParams, router]);
 
-  const run = useCallback(async (op: () => Promise<unknown>, successMessage: string) => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      await op();
-      setNotice(successMessage);
-      await reload();
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    } finally {
-      setBusy(false);
-    }
-  }, [reload, t]);
+  // The reload is part of the action, so the notice lands only once the list shows it.
+  const run = useCallback((op: () => Promise<unknown>, success: string) => taskRun(async () => {
+    await op();
+    await reload();
+  }, { success, failure: t('genericError') }), [taskRun, reload, t]);
 
   const sendCampaign = useCallback(async (campaign: Campaign) => {
     // A campaign reaches thousands of real strangers and cannot be recalled, so
@@ -96,7 +86,6 @@ export function CampaignsSection() {
       title: t('campaigns.confirmSendTitle'),
       message: t('campaigns.confirmSend', { name: campaign.name }),
       confirmLabel: t('campaigns.send'),
-      destructive: false,
     });
     if (!ok) return;
     await run(() => growthApi.send(campaign.id), t('campaigns.sent'));
@@ -115,8 +104,8 @@ export function CampaignsSection() {
 
   return (
     <section>
-      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{notice}</p>}
-      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{error}</p>}
+      {task.notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{task.notice}</p>}
+      {task.error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{task.error}</p>}
       {campaigns.length === 0 ? (
         <p style={{ ...muted, marginTop: 10 }}>{t('campaigns.empty')}</p>
       ) : (
@@ -143,7 +132,7 @@ export function CampaignsSection() {
                   }`)}
                 </div>
                 <button type="button" style={{ ...primary, marginTop: 8 }}
-                  disabled={busy || blockers.length > 0}
+                  disabled={task.busy || blockers.length > 0}
                   onClick={() => sendCampaign(campaign)}>
                   {t('campaigns.send')}
                 </button>
@@ -160,7 +149,7 @@ export function CampaignsSection() {
         </ul>
       )}
       <Row>
-        <button type="button" style={primary} disabled={busy || audiences.length === 0}
+        <button type="button" style={primary} disabled={task.busy || audiences.length === 0}
           onClick={() => { setInitialTemplateId(null); setComposerOpen(true); }}>
           {t('campaigns.compose')}
         </button>
@@ -170,7 +159,7 @@ export function CampaignsSection() {
       <CampaignComposer
         open={composerOpen}
         onClose={closeComposer}
-        busy={busy}
+        busy={task.busy}
         templates={templates}
         audiences={audiences}
         senders={senders}

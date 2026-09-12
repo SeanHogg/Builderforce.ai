@@ -120,8 +120,26 @@ export function extractJsonPayload(text: string): unknown | null {
   return null;
 }
 
+/**
+ * A parsed value narrowed to a plain object, or `null` for an array, a scalar or null.
+ * THE object validator for `completeJson(dispatch, request, asJsonObject)` — seven call
+ * sites had each inlined this ternary as a lambda or a private `jsonObjectOnly`.
+ */
+export function asJsonObject<T extends object = Record<string, unknown>>(value: unknown): T | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as T) : null;
+}
+
+/**
+ * {@link asJsonObject} with `{}` for anything that is not a plain object — THE tolerant
+ * reader for untyped provider and stored JSON (`asJsonRecord(payload.data).id`).
+ * Fourteen modules each declared a private `rec` / `asRecord` / `record` / `obj` for
+ * exactly this.
+ */
+export function asJsonRecord(value: unknown): Record<string, unknown> {
+  return asJsonObject(value) ?? {};
+}
+
 /** {@link extractJsonPayload} narrowed to a plain object — what most prompts ask for. */
 export function extractJsonObject(text: string): Record<string, unknown> | null {
-  const value = extractJsonPayload(text);
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  return asJsonObject(extractJsonPayload(text));
 }

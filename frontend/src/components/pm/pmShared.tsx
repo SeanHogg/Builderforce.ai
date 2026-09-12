@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { InsightStat } from '@/components/dashboard/InsightStat';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * Shared chrome for the PM visualizers — empty/error/loading states, a status
@@ -80,31 +81,42 @@ export function FocusTarget({ id, active, children }: { id: string; active: bool
   );
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  done: 'var(--success)',
-  shipped: 'var(--success)',
-  in_progress: 'var(--info)',
-  in_review: 'var(--violet-bright)',
-  blocked: 'var(--error)',
-  planned: 'var(--text-muted)',
-  now: 'var(--success)',
-  next: 'var(--info)',
-  later: 'var(--text-muted)',
+/** The PM work-item status + roadmap-horizon vocabulary. */
+export type WorkItemStatus =
+  | 'done' | 'shipped' | 'in_progress' | 'in_review' | 'blocked' | 'backlog' | 'planned'
+  | 'now' | 'next' | 'later';
+
+/**
+ * THE work-item status → tone map, shared by this pill and the dependency graph's
+ * node strokes so a task status reads the same on every PM surface. `in_review` is
+ * `accent` (not `info`) so it stays distinct from `in_progress` beside it.
+ */
+export const WORK_ITEM_STATUS_TONE: StatusToneMap<WorkItemStatus> = {
+  done: 'success',
+  shipped: 'success',
+  in_progress: 'info',
+  in_review: 'accent',
+  blocked: 'danger',
+  backlog: 'neutral',
+  planned: 'neutral',
+  now: 'success',
+  next: 'info',
+  later: 'neutral',
 };
 
 /** A small colored status/horizon pill. */
 export function StatusPill({ value }: { value: string }) {
-  const color = STATUS_COLORS[value] ?? 'var(--text-muted)';
   return (
     <span
       style={{
         display: 'inline-block',
         padding: '2px 10px',
         borderRadius: 'var(--radius-full)',
+        borderWidth: 1,
+        borderStyle: 'solid',
         fontSize: '0.72rem',
         fontWeight: 600,
-        color: 'var(--text-on-accent)',
-        background: color,
+        ...statusPillStyle(WORK_ITEM_STATUS_TONE, value),
         whiteSpace: 'nowrap',
       }}
     >

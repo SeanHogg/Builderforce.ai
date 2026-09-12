@@ -47,6 +47,7 @@ import { coerceFileContent, validateFileContentForPath } from '@builderforce/ide
 import { formatBuildFailures } from '@/lib/buildDiagnostics';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
 import type { CanvasBuildBinding } from '@/lib/canvasBuild';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 /** A Builder object on the board that has a workspace behind it. */
 export interface BoundCanvasBuild {
@@ -294,7 +295,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
             next: 'The workspace is seeded and runnable. Edit the starter files with canvas_edit_build_file (or canvas_write_build_file for a new file) to build what the user asked for.',
           };
         } catch (error) {
-          return { error: error instanceof Error ? error.message : 'The workspace could not be created.' };
+          return { error: toolErrorMessage(error, 'The workspace could not be created.') };
         }
       },
     },
@@ -319,7 +320,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
             map: summarizeWorkspace(files),
           };
         } catch (error) {
-          return { error: error instanceof Error ? error.message : 'The workspace file list could not be read.' };
+          return { error: toolErrorMessage(error, 'The workspace file list could not be read.') };
         }
       },
     },
@@ -384,7 +385,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
             matches: matches.slice(0, MAX_SEARCH_MATCHES),
           };
         } catch (error) {
-          return { error: error instanceof Error ? error.message : 'The workspace could not be searched.' };
+          return { error: toolErrorMessage(error, 'The workspace could not be searched.') };
         }
       },
     },
@@ -415,7 +416,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
           ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
           return { ok: true, applied: true, path, bytes: content.length };
         } catch (error) {
-          return { error: error instanceof Error ? error.message : `"${path}" could not be written.` };
+          return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
         }
       },
     },
@@ -460,7 +461,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
           ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
           return { ok: true, applied: true, path, replacements: edit.replacements };
         } catch (error) {
-          return { error: error instanceof Error ? error.message : `"${path}" could not be written.` };
+          return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
         }
       },
     },
@@ -515,7 +516,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
             })),
           };
         } catch (error) {
-          return { error: error instanceof Error ? error.message : 'The file history could not be read.' };
+          return { error: toolErrorMessage(error, 'The file history could not be read.') };
         }
       },
     },
@@ -543,7 +544,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
           ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
           return { ok: true, applied: true, path, restoredFrom: new Date(at).toISOString() };
         } catch (error) {
-          return { error: error instanceof Error ? error.message : `"${path}" could not be restored.` };
+          return { error: toolErrorMessage(error, `"${path}" could not be restored.`) };
         }
       },
     },

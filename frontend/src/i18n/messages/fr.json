@@ -1727,7 +1727,6 @@
     "deleteCloudAgentConfirm": "Supprimer l'agent « {name} » ? Ses compétences et personas par agent seront effacées.",
     "deleteSkillConfirm": "Supprimer cette compétence ?",
     "deleteNamedConfirm": "Supprimer « {name} » ?",
-    "servePreviewAnywayConfirm": "Les dernières vérifications ont échoué ({summary}). Diffuser quand même l'aperçu ?",
     "language": "Langue",
     "typeTask": "Tâche",
     "typeEpic": "Épopée",
@@ -1805,7 +1804,13 @@
     "no": "Non",
     "copyLink": "Copier le lien",
     "copyFallback": "Copiez ce lien à la main : le presse-papiers est indisponible.",
-    "unavailable": "Indisponible"
+    "unavailable": "Indisponible",
+    "actionFailed": "Cela n’a pas fonctionné. Veuillez réessayer.",
+    "inlineConfirm": {
+      "confirm": "Confirmer",
+      "armed": "Appuyez à nouveau pour confirmer, ou sur Échap pour annuler."
+    },
+    "servingPreviewAnyway": "Les dernières vérifications ont échoué ({summary}) — l’aperçu est tout de même servi."
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -2184,7 +2189,6 @@
       "unsubscribedTitle": "Vous êtes désabonné",
       "unsubscribedBody": "Vous ne recevez aucun e-mail facultatif. Les messages de compte et de sécurité continuent d’être envoyés.",
       "resubscribeCta": "Se réabonner",
-      "resubscribeTitle": "Se réabonner aux e-mails facultatifs",
       "resubscribeConfirm": "Vous recevrez de nouveau les e-mails facultatifs, selon les catégories que vous avez activées. Continuer ?"
     },
     "spendLimits": "Limites de dépenses",
@@ -13680,9 +13684,7 @@
       "allTables": "toutes les tables",
       "maintenanceCleanup": "lancer le nettoyage de rétention",
       "maintenanceVacuum": "vacuum de {table} dans {target}",
-      "confirmTitle": "Lancer la maintenance ?",
-      "confirmMaintenance": "Confirmer : {label} ? Il s’agit d’une opération de maintenance auditée.",
-      "confirmRun": "Lancer"
+      "confirmMaintenance": "Confirmer : {label} ? Il s’agit d’une opération de maintenance auditée."
     }
   },
   "providerKeys": {
@@ -15102,7 +15104,21 @@
     "revertConfirmMessage": "Cela ferme la pull request ouverte par l’exécution n° {id} et supprime la branche qu’elle a écrite. Cette action est irréversible. Elle sera refusée si la pull request a déjà été fusionnée ou si autre chose a modifié la branche.",
     "revertConfirmAction": "Annuler l’exécution",
     "revertDone": "Annulée — branche {branch} supprimée ({commits} commit(s)).",
-    "failedToRevert": "Échec de l’annulation de cette exécution"
+    "failedToRevert": "Échec de l’annulation de cette exécution",
+    "title": "Coupe-circuit d’exécution des agents",
+    "disabledBody": "L’exécution des agents du locataire est bloquée. Les chats VS Code et Brain, Canvas/Create et les outils MCP de la page restent disponibles.",
+    "enabledBody": "Contournement d’urgence de l’espace de travail. La désactivation arrête les agents du locataire et bloque les exécutions manuelles, planifiées, d’intégration et autonomes de la plateforme ; le travail interactif dans VS Code et Brain reste disponible.",
+    "confirmTitle": "Désactiver toute l’exécution des agents ?",
+    "confirmBody": "Cela annule immédiatement les agents du locataire en file d’attente, en cours ou en pause, et bloque les exécutions manuelles, planifiées et autonomes de la plateforme jusqu’à ce qu’un responsable réactive l’exécution. Les chats VS Code et Brain, Canvas/Create et les outils MCP de la page restent disponibles.",
+    "disableAll": "Désactiver et arrêter tous les agents",
+    "enable": "Activer l’exécution des agents",
+    "updating": "Mise à jour…",
+    "statusLoading": "Statut : chargement…",
+    "statusEnabled": "Statut : exécution activée",
+    "statusDisabled": "Statut : EXÉCUTION DÉSACTIVÉE",
+    "stoppedAll": "L’exécution est désactivée. {count, plural, one {# exécution active arrêtée} other {# exécutions actives arrêtées}}.",
+    "stoppedSome": "L’exécution est désactivée. {cancelled, plural, one {# exécution arrêtée} other {# exécutions arrêtées}} ; {failed} n’ont pas pu être annulées.",
+    "enabledNotice": "L’exécution des agents est activée."
   },
   "aiTraining": {
     "adapterName": "Adaptateur {model}",
@@ -16499,7 +16515,6 @@
     "replaceCard": "Remplacer la carte",
     "retryCard": "Réessayer",
     "cardWorking": "En cours…",
-    "replaceCardTitle": "Remplacer votre carte ?",
     "replaceCardWarning": "Votre carte actuelle reste active jusqu'à la vérification de la nouvelle : les modèles premium ne sont jamais interrompus. L'ancienne carte est supprimée automatiquement dès que la nouvelle est confirmée.",
     "retryCardMessage": "Nous allons lancer une nouvelle vérification à 0 $. Votre carte n'est pas débitée.",
     "replaceCardConfirm": "Continuer",
@@ -17814,7 +17829,6 @@
       "forgetTitle": "Oublier ce fait ?",
       "forgetConfirm": "Les agents cesseront de rappeler « {key} ». S’il existe une version plus large de la même clé, celle-ci redeviendra visible.",
       "purge": "Purger les expirés",
-      "purgeTitle": "Purger les faits expirés ?",
       "purgeConfirm": "Supprime les faits dont l’expiration est passée. Les agents avaient déjà cessé de les rappeler, donc rien ne change pour une exécution.",
       "statTotal": "Faits dans la portée",
       "statTotalHint": "Ce qu’un agent exécuté ici peut rappeler.",
@@ -19063,7 +19077,15 @@
         "noSuppressionCheck": "La liste d’exclusion n’a pas été vérifiée",
         "emptyAfterSuppression": "Il ne reste personne une fois les exclusions retirées",
         "forbiddenClaim": "Le texte avance une affirmation que la marque interdit"
-      }
+      },
+      "inboxFilterAll": "Tous les e-mails récents",
+      "inboxFilterUnread": "non lus",
+      "inboxFilterFrom": "de {value}",
+      "inboxFilterSubject": "objet « {value} »",
+      "inboxFilterMatching": "contenant « {value} »",
+      "inboxFilterAttachments": "avec pièces jointes",
+      "inboxFilterSince": "depuis le {date}",
+      "inboxFilterBefore": "avant le {date}"
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -20725,7 +20747,11 @@
       "campaignScheduled": "Programmé pour {count} comptes.",
       "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour.",
       "boardMedia": "Joindre depuis ce canevas",
-      "boardMediaHelp": "Les images et les vidéos choisies sont automatiquement publiées sur une URL publique — c'est ce dont Instagram et TikTok ont besoin pour les récupérer."
+      "boardMediaHelp": "Les images et les vidéos choisies sont automatiquement publiées sur une URL publique — c'est ce dont Instagram et TikTok ont besoin pour les récupérer.",
+      "mediaTabOnly": "Ce fichier n’existe que dans cet onglet du navigateur. Régénérez-le ou importez-le à nouveau pour qu’il ait une source durable.",
+      "mediaNotPublic": "Un réseau social récupère lui-même les médias : il lui faut une URL https publique, or celle-ci n’est ni en https ni un média intégré.",
+      "mediaUploadFailed": "Ce fichier n’a pas pu être publié à une URL publique.",
+      "mediaUploadFailedReason": "Ce fichier n’a pas pu être publié à une URL publique : {reason}"
     },
     "noticeGuestLimitRoom": "Cette session partagée a utilisé ses {limit} messages gratuits du jour. Inscrivez-vous gratuitement pour continuer — votre canevas vous suit.",
     "founder": {
@@ -21082,6 +21108,61 @@
         "expires": "Expire",
         "views": "Consultations",
         "lastViewedAt": "Dernière consultation"
+      },
+      "verdict": {
+        "boardRef": {
+          "notFound": "Aucun `{kind}` ne correspond encore à « {ref} » — créez-en un pour établir le lien."
+        },
+        "counterparty": {
+          "linkedOwned": "Lié à `account` « {title} » ({relationship}), responsable : {owner}.",
+          "linked": "Lié à `account` « {title} » ({relationship})."
+        },
+        "fallback": {
+          "thisContract": "ce contrat",
+          "untitledDocument": "un document sans titre",
+          "unnamedObligation": "une obligation sans nom"
+        },
+        "obligation": {
+          "noRef": "Émis au titre du contrat « {contract} », mais aucun `obligationRef` n’indique QUELLE obligation il acquitte. Renseignez l’une de ces valeurs : {available}.",
+          "noReferences": "Émis au titre du contrat « {contract} », dont les obligations n’ont aucune valeur `reference` — rien sur {host, select, bill {cette facture fournisseur} other {cette facture}} ne peut donc être vérifié par rapport à ce qui a été convenu. Attribuez d’abord une `reference` à chaque obligation du contrat.",
+          "unknownRef": "Le contrat « {contract} » n’a AUCUNE obligation portant la référence « {ref} » — il s’agit d’une charge sans obligation correspondante. Soit les obligations du contrat ne sont plus à jour, soit {host, select, bill {cette facture fournisseur} other {cette facture}} n’aurait pas dû être émise.",
+          "axis": {
+            "amount": "montant",
+            "date": "date",
+            "cadence": "périodicité"
+          },
+          "problem": {
+            "amount": "le montant est de {actual, number} alors que l’obligation indique {agreed, number}",
+            "date": "son échéance tombe {days, plural, one {# jour} other {# jours}} {direction, select, after {après} other {avant}} celle de l’obligation, le {due}",
+            "cadence": "elle se répète selon la périodicité {actual} alors que l’obligation indique {agreed}"
+          },
+          "mismatch": "Renvoie à l’obligation « {obligation} » du contrat « {contract} », mais {problems}. Vérifiez-la par rapport à l’accord avant de {host, select, bill {l’approuver ou de la payer} other {l’émettre}}.",
+          "discharged": "Acquitte l’obligation « {obligation} » du contrat « {contract} » — {checked} {count, plural, one {concorde} other {concordent}} avec ce qui a été convenu.",
+          "linkedOnly": "Renvoie à l’obligation « {obligation} » du contrat « {contract} ». Rien de comparable n’est renseigné d’un côté comme de l’autre : c’est un lien, pas encore une vérification."
+        },
+        "evidence": {
+          "bound": "Lié au test en direct « {key} » — chaque exposition et chaque conversion ci-dessous ont été comptées par la plateforme, pas saisies.",
+          "authored": "SAISI À LA MAIN. Rien n’a produit ces chiffres : ils ont été tapés sur la carte. Liez cette expérience à une clé `ab_tests` avant de citer le résultat comme une mesure."
+        },
+        "significance": {
+          "nothingYet": "RIEN n’est encore significatif ici.",
+          "real": "{variant} est en {direction, select, up {hausse} other {baisse}} de {points, number} pts par rapport au contrôle (p={p}), intervalle de {low, number} à {high, number} pts.",
+          "noise": "{variant} reste dans le bruit par rapport au contrôle (p={p}) ; n est trop petit pour conclure."
+        },
+        "ownership": {
+          "balanced": "Les détenteurs et le pool non attribué représentent {accounted} % du total entièrement dilué.",
+          "unbalanced": "Les détenteurs et le pool non attribué ne représentent que {accounted} % du total entièrement dilué — le registre et les montants autorisés divergent, ce qui est une situation réelle à examiner et non une erreur d’arrondi.",
+          "percentSkew": "La colonne des pourcentages totalise {total, number} % pool non attribué compris, et non 100 — les pourcentages ne s’équilibrent pas.",
+          "convertibles": "{count, plural, one {# instrument convertible en circulation} other {# instruments convertibles en circulation}} — non inclus dans ces pourcentages tant qu’un tour ne les a pas convertis."
+        },
+        "coverage": {
+          "noIdentity": "Ce contrat n’a ni `reference` ni titre, donc aucune facture ne peut le désigner. Donnez-lui une référence avant d’émettre quoi que ce soit à son titre.",
+          "billable": "{covered} sur {total} {total, plural, one {obligation facturable} other {obligations facturables}} {covered, plural, one {a} other {ont}} un document émis.",
+          "noneBillable": "Aucune obligation ici n’est une créance ou une dette, donc rien dans ce contrat ne devrait générer de facture.",
+          "open": "Rien n’a encore été émis pour : {names}.",
+          "orphans": "{count, plural, one {# document désigne ce contrat sans correspondre} other {# documents désignent ce contrat sans correspondre}} à aucune de ses obligations — {names}.",
+          "unreferenced": "{count, plural, one {# obligation n’a pas de `reference` : rien ne pourra donc jamais montrer qu’elle a été acquittée.} other {# obligations n’ont pas de `reference` : rien ne pourra donc jamais montrer qu’elles ont été acquittées.}}"
+        }
       }
     },
     "datasetImportedWithPii": "{name} importé — {rows} lignes, {columns} colonnes. {pii} colonnes contiennent des données personnelles et sont masquées.",
@@ -21658,7 +21739,13 @@
       "freshMinutes": "il y a {count} min",
       "freshHours": "il y a {count} h",
       "freshDays": "il y a {count} j",
-      "barValue": "{value} ({percent} %)"
+      "barValue": "{value} ({percent} %)",
+      "verdict": {
+        "lateBy": {
+          "hours": "{hours} h de retard",
+          "days": "{days} j de retard"
+        }
+      }
     },
     "hiring": {
       "empty": "Ce {label} ne contient encore rien.",
@@ -21913,6 +22000,12 @@
         "manuscript": "Manuscrit",
         "draft": "Brouillon",
         "noSource": "Aucune source"
+      },
+      "bar": {
+        "replied": "Ont répondu",
+        "completed": "Terminé",
+        "stopped": "Arrêté",
+        "inFlight": "En cours"
       }
     },
     "noticeGateEvaluated": "Critère de publication évalué à partir des exécutions et des anomalies de ce canevas — {score} % des critères remplis.",
@@ -22346,6 +22439,20 @@
         "action": "Action",
         "owner": "Responsable",
         "dueAt": "Échéance"
+      },
+      "verdict": {
+        "validity": {
+          "expired": "expiré depuis {days, plural, one {# jour} other {# jours}}",
+          "expiresSoon": "expire dans {days, plural, one {# jour} other {# jours}}",
+          "valid": "valide · {days, plural, one {# jour restant} other {# jours restants}}"
+        },
+        "stock": {
+          "out": "en rupture de stock",
+          "belowWithOrder": "sous le point de commande, même avec le stock en commande",
+          "orderNow": "au point de commande ou en dessous — commandez maintenant",
+          "coveredByOrder": "couvert par le stock en commande",
+          "inStock": "en stock"
+        }
       }
     },
     "legal": {
@@ -22424,6 +22531,17 @@
         "at": "Date",
         "event": "Événement",
         "note": "Note"
+      },
+      "verdict": {
+        "assignment": {
+          "none": "NON CÉDÉ. Aucun cédant n’est enregistré : selon ce dossier, le droit appartient toujours à celui qui l’a créé. C’est un constat de due diligence, pas un champ manquant — enregistrez la cession ou indiquez clairement qu’il n’y en a pas.",
+          "dated": "Cédé par {from} le {at}.",
+          "undated": "Cédé par {from}, SANS date de signature enregistrée — une cession non datée peut être placée par une contrepartie après le dépôt."
+        },
+        "spend": {
+          "over": "Les dépenses à ce jour représentent {share} % de l’exposition estimée — on a déjà dépensé plus pour plaider cette affaire que ce qu’elle est censée valoir. C’est une discussion de transaction, pas une ligne budgétaire.",
+          "under": "Les dépenses à ce jour représentent {share} % de l’exposition estimée."
+        }
       }
     },
     "legalUpload": {
@@ -22499,7 +22617,6 @@
       "publishVersion": "Publier la v{version}",
       "restage": "Capturer à nouveau",
       "working": "En cours…",
-      "revertTitle": "Remettre la v{version} en vente ?",
       "revertBody": "Les nouveaux acheteurs la recevront à la place de la v{version}. Les {holders} déjà sur la v{version} gardent ce qu’ils ont acheté : personne n’est déplacé.",
       "revertConfirm": "La remettre en vente",
       "noticeStaged": "v{version} préparée.",
@@ -23196,6 +23313,15 @@
         "dueAtISO": "Échéance",
         "sellerOwner": "Notre responsable",
         "buyerOwner": "Leur responsable"
+      },
+      "verdict": {
+        "planRisk": {
+          "atRisk": "À risque — {problems}.",
+          "overdue": "{count} en retard",
+          "unowned": "{count} sans responsable côté acheteur",
+          "onTrack": "Dans les temps — {done} sur {total} terminés, rien en retard."
+        },
+        "openGaps": "{open} ({gaps, plural, one {# lacune} other {# lacunes}}, {unevidenced} sans preuve)"
       }
     },
     "exportRestricted": "Restreint — cette carte ne peut pas être exportée",
@@ -23354,6 +23480,15 @@
         "description": "Travail",
         "minutes": "Minutes",
         "billable": "Facturable"
+      },
+      "verdict": {
+        "pressure": {
+          "none": "aucune",
+          "comfortable": "confortable",
+          "planning": "à planifier",
+          "urgent": "urgente",
+          "critical": "critique"
+        }
       }
     },
     "agentModel": "Modèle de l’agent",
@@ -24448,7 +24583,6 @@
     "folderHint": "Laissez vide pour retirer la session de son dossier.",
     "required": "Choisissez ou saisissez une valeur.",
     "failed": "La session n’a pas pu être mise à jour.",
-    "mergeConfirmTitle": "Fusionner ces sessions ?",
     "mergeConfirmMessageSaved": "Le canevas, la conversation et les liens de projet de « {source} » seront ajoutés à « {target} ». La session source sera ensuite archivée.",
     "mergeConfirmMessageLocal": "Le canevas et la conversation de « {source} » seront ajoutés à « {target} ». Le brouillon source sera ensuite supprimé de ce navigateur.",
     "deleteConfirmTitle": "Supprimer la session ?",
@@ -24465,7 +24599,6 @@
     "bulkMergeTitle": "Fusionner les sessions sélectionnées",
     "bulkMergeDescription": "Tout ce que contiennent les autres canevas sélectionnés rejoint celui que vous gardez. Ils sont archivés une fois leur contenu déplacé.",
     "bulkMergeTarget": "Session à conserver",
-    "bulkMergeConfirmTitle": "Fusionner ces sessions ?",
     "bulkMergeConfirmMessage": "{count} sessions seront ajoutées à « {target} », puis archivées.",
     "bulkDeleteConfirmTitle": "Supprimer ces sessions ?",
     "bulkDeleteConfirmMessage": "Supprimer {count} sessions ? Elles restent récupérables pendant la période de rétention.",
@@ -28577,5 +28710,186 @@
     "add": "Ajouter",
     "noProject": "Aucun projet",
     "folderProjectLabel": "Projet pour {name}"
+  },
+  "humanRequests": {
+    "intro": "Approbations, questions et retours que vos agents ont remontés à un humain. Traiter une demande débloque l’agent en attente.",
+    "allKinds": "Tous les types",
+    "allStatuses": "Tous les statuts",
+    "allAgentHosts": "Tous les hôtes d’agents",
+    "searchPlaceholder": "Rechercher une action, une description, une réponse",
+    "refresh": "Actualiser",
+    "refreshing": "Actualisation…",
+    "loading": "Chargement des demandes…",
+    "empty": "Aucune demande trouvée",
+    "viewTicket": "Voir le ticket",
+    "noActions": "Aucune action disponible",
+    "human": "humain",
+    "kind": {
+      "approval": "Approbation",
+      "question": "Question",
+      "feedback": "Retour"
+    },
+    "kindPlural": {
+      "approval": "Approbations",
+      "question": "Questions",
+      "feedback": "Retours"
+    },
+    "status": {
+      "pending": "En attente",
+      "approved": "Approuvée",
+      "rejected": "Refusée",
+      "answered": "Répondue",
+      "expired": "Expirée"
+    },
+    "column": {
+      "kind": "Type",
+      "status": "Statut",
+      "action": "Action",
+      "description": "Description",
+      "item": "Élément",
+      "agentHost": "Hôte d’agent",
+      "requested": "Demandée",
+      "resolution": "Résolution",
+      "resolve": "Traiter",
+      "answer": "Réponse",
+      "requestedBy": "Demandée par",
+      "expires": "Expire"
+    }
+  },
+  "stakeholderAlignment": {
+    "title": "Alignement des parties prenantes",
+    "subtitle": "Accordez les priorités, recueillez les validations et faites remonter les conflits avant que la livraison ne dérive.",
+    "approvedCount": "{count} approuvées",
+    "pendingCount": "{count} en attente",
+    "overdueCount": "{count} en retard",
+    "conflictsCount": "{count, plural, one {# conflit} other {# conflits}}",
+    "mapTitle": "Cartographie des parties prenantes",
+    "noStakeholders": "Aucune partie prenante configurée.",
+    "roleApprover": "Approbateur",
+    "roleInformed": "Informé",
+    "removeAria": "Retirer {name}",
+    "nameAria": "Nom de la partie prenante",
+    "namePlaceholder": "Nom",
+    "refAria": "Référence utilisateur de la partie prenante",
+    "refPlaceholder": "ID utilisateur",
+    "teamAria": "Périmètre de l’équipe",
+    "teamPlaceholder": "Équipe (facultatif)",
+    "roleAria": "Rôle de la partie prenante",
+    "roleRequiredApprover": "Approbateur requis",
+    "add": "Ajouter",
+    "healthTitle": "Santé de l’alignement",
+    "answer": {
+      "yes": "Oui",
+      "no": "Non",
+      "unknown": "Inconnu"
+    },
+    "saveHealth": "Enregistrer le profil de santé",
+    "question": {
+      "priorities_clear": "Les priorités sont claires et acceptées",
+      "competing_p0s_reconciled": "Les P0 concurrents sont réconciliés",
+      "approvers_current": "Les approbateurs requis sont à jour",
+      "conflicts_within_sla": "Les conflits respectent le SLA de 48 heures",
+      "delivery_reflects_priorities": "La livraison reflète les priorités convenues"
+    }
+  },
+  "agentHostTabs": {
+    "errorPrefix": "Erreur : {message}",
+    "back": "← Retour",
+    "projects": {
+      "loading": "Chargement des projets…",
+      "heading": "Projets ({count})",
+      "assign": "+ Affecter un projet",
+      "selectProject": "Sélectionnez un projet…",
+      "assignAction": "Affecter",
+      "empty": "Aucun projet n’est encore affecté à cet hôte d’agents.",
+      "projectFallback": "Projet n° {id}",
+      "role": "Rôle : {role}",
+      "open": "Ouvrir",
+      "remove": "Retirer",
+      "status": "{status, select, active {Actif} completed {Terminé} archived {Archivé} on_hold {En pause} other {{status}}}"
+    },
+    "workspace": {
+      "syncedAt": "synchronisé {when}",
+      "noFiles": "Aucun fichier synchronisé pour l’instant.",
+      "fileCount": "{count, plural, one {# fichier} other {# fichiers}}",
+      "heading": "Répertoires synchronisés ({count})",
+      "empty": "Aucun répertoire synchronisé. Les répertoires sont synchronisés lorsqu’un hôte d’agents enregistre son espace de travail.",
+      "lastSynced": "Dernière synchronisation : {when}",
+      "sync": "⟳ Synchroniser",
+      "status": "{status, select, synced {Synchronisé} pending {En attente} error {Erreur} other {{status}}}"
+    },
+    "config": {
+      "loading": "Chargement de la configuration…",
+      "title": "Configuration d’exécution",
+      "format": "Formater",
+      "reset": "Réinitialiser",
+      "description": "Configuration JSON transmise à l’environnement d’exécution de l’hôte d’agents. Les modifications prennent effet à la prochaine connexion de l’hôte.",
+      "invalidJson": "JSON non valide — corrigez-le avant d’enregistrer.",
+      "saved": "Enregistré à {time}",
+      "save": "Enregistrer la configuration"
+    },
+    "sessions": {
+      "loading": "Chargement des sessions…",
+      "messageCount": "{count, plural, one {# message} other {# messages}}",
+      "handoff": "Transférer →",
+      "handoffTitle": "Transférer à un autre hôte d’agents",
+      "handoffBody": "Envoyez le contexte de cette session à un autre hôte d’agents pour qu’il reprenne la conversation. Les 20 derniers messages sont inclus.",
+      "selectTarget": "Sélectionnez un hôte d’agents cible…",
+      "notePlaceholder": "Note de transfert (facultatif)",
+      "handoffSuccess": "Session transférée.",
+      "handingOff": "Transfert en cours…",
+      "handOff": "Transférer",
+      "loadingMessages": "Chargement des messages…",
+      "noMessages": "Aucun message trouvé.",
+      "heading": "Sessions de chat ({count})",
+      "empty": "Aucune session pour l’instant. Les sessions sont créées lorsqu’un hôte d’agents démarre une conversation.",
+      "active": "(active)",
+      "msgCount": "{count, plural, one {# message} other {# messages}}",
+      "role": "{role, select, user {Utilisateur} assistant {Agent} system {Système} tool {Outil} other {{role}}}"
+    }
+  },
+  "repoSync": {
+    "title": "Synchronisation du dépôt",
+    "linkedTo": "Lié à <strong>{repo}</strong>",
+    "lastSynced": " · dernière synchronisation <code>{ref}</code>",
+    "notImported": " · pas encore importé",
+    "import": "Importer depuis le dépôt",
+    "importing": "Importation…",
+    "commit": "Valider et ouvrir une PR",
+    "committing": "Validation…",
+    "noRepo": "Aucun dépôt lié — vos fichiers sont dans l’espace de travail Canvas Builder. Créez un dépôt vierge pour passer en ligne, ou connectez un dépôt existant ci-dessous.",
+    "createRepo": "+ Créer un dépôt",
+    "repoNamePlaceholder": "Nom du dépôt",
+    "selectCredential": "Sélectionnez un identifiant GitHub…",
+    "noCredential": "Aucun identifiant GitHub trouvé. Ajoutez-en un d’abord dans Intégrations.",
+    "private": "Dépôt privé",
+    "createAndPush": "Créer et pousser",
+    "creating": "Création…",
+    "imported": "{count, plural, one {# fichier importé} other {# fichiers importés}} depuis {ref}.",
+    "pushedPr": "{count, plural, one {# fichier poussé} other {# fichiers poussés}} — PR n° {pr} ouverte.",
+    "committed": "{count, plural, one {# fichier validé} other {# fichiers validés}} sur {branch}.",
+    "created": "{repo} créé et {count, plural, one {# fichier poussé} other {# fichiers poussés}}."
+  },
+  "soc2Tracker": {
+    "title": "Suivi des contrôles SOC 2",
+    "loading": "Chargement des contrôles SOC 2…",
+    "emptyBody": "Aucun contrôle pour l’instant. Chargez la base des critères communs SOC 2 (CC1–CC9) pour commencer à suivre la préparation.",
+    "seed": "Charger la base SOC 2",
+    "seeding": "Chargement…",
+    "loadFailed": "Impossible de charger les contrôles SOC 2.",
+    "seedFailed": "Échec du chargement (rôle de responsable requis).",
+    "updateFailed": "Échec de la mise à jour.",
+    "readiness": "Préparation <strong>{pct} %</strong> ({ready}/{inScope} dans le périmètre)",
+    "categoryReady": "· {pct} % prêt",
+    "status": {
+      "not_started": "Non commencé",
+      "in_progress": "En cours",
+      "ready": "Prêt",
+      "out_of_scope": "Hors périmètre"
+    }
+  },
+  "workflowDag": {
+    "empty": "Aucune tâche dans ce workflow pour l’instant.",
+    "defaultRole": "agent"
   }
 }

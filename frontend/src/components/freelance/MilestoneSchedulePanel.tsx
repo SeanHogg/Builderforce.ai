@@ -31,6 +31,7 @@ import {
 } from '@/lib/milestonesApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 16,
@@ -48,16 +49,16 @@ const btn = (variant: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
   color: variant === 'primary' ? 'var(--text-on-accent)' : variant === 'danger' ? 'var(--error)' : 'var(--text-primary)',
 });
 
-/** Status → the token that carries its meaning in BOTH themes. Declared as data beside
+/** Status → the tone that carries its meaning in BOTH themes. Declared as data beside
  *  the machine's states so a new state cannot silently fall back to body text. */
-const STATUS_TONE: Record<MilestoneStatus, string> = {
-  draft: 'var(--text-muted)',
-  funded: 'var(--cyan-bright, var(--cyan-bright))',
-  submitted: 'var(--warning-text, var(--warning))',
-  approved: 'var(--success)',
-  released: 'var(--success)',
-  cancelled: 'var(--text-muted)',
-  disputed: 'var(--error)',
+const STATUS_TONE: StatusToneMap<MilestoneStatus> = {
+  draft: 'neutral',
+  funded: 'info',
+  submitted: 'warning',
+  approved: 'success',
+  released: 'success',
+  cancelled: 'neutral',
+  disputed: 'danger',
 };
 
 /** The moves that need a reason typed before they are sent. */
@@ -71,7 +72,7 @@ function StatusPill({ status }: { status: MilestoneStatus }) {
   return (
     <span style={{
       fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase',
-      letterSpacing: '0.05em', color: STATUS_TONE[status], whiteSpace: 'nowrap',
+      letterSpacing: '0.05em', color: statusColor(STATUS_TONE, status), whiteSpace: 'nowrap',
     }}>
       {t(`status.${status}`)}
     </span>
@@ -151,7 +152,9 @@ function MilestoneRows({ milestones, busy, onAction, onRemove, showContext }: Ro
     if (NEEDS_CONFIRM.has(action)) {
       const agreed = await confirm({
         message: t(`confirm.${action}`, { amount: formatCents(row.amountCents, { currency: row.currency }) }),
-        destructive: action === 'cancel',
+        // Fund, release and cancel all move money irreversibly — every one is a
+        // destructive approval, named by the action rather than the default "Delete".
+        confirmLabel: t(`action.${action}`),
       });
       if (!agreed) return;
     }

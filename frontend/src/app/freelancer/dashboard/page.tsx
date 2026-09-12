@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
+import { ButtonLink, EmptyState } from '@/components/ui';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { ENGAGEMENT_TONE } from '@/lib/freelance/statusTones';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { cumulativeDailySeries, cumulativeDailyTotals } from '@/components/dashboard/seriesFromTimestamps';
@@ -29,20 +32,12 @@ type FreelancerTab = (typeof FREELANCER_TABS)[number];
 
 const fmtHrs = (min: number) => `${(min / 60).toFixed(1)}h`;
 
-const ENGAGEMENT_TONE: Record<Engagement['status'], string> = {
-  invited: 'var(--warning-text)',
-  interviewing: 'var(--cyan-bright, var(--cyan-bright))',
-  active: 'rgba(34,197,94,0.9)',
-  declined: 'var(--text-muted)',
-  terminated: 'var(--text-muted)',
-};
-
-const TIMECARD_TONE: Record<Timecard['status'], string> = {
-  draft: 'var(--text-muted)',
-  submitted: 'var(--cyan-bright, var(--cyan-bright))',
-  approved: 'rgba(34,197,94,0.9)',
-  rejected: 'var(--danger)',
-  paid: 'var(--coral-bright)',
+const TIMECARD_TONE: StatusToneMap<Timecard['status']> = {
+  draft: 'neutral',
+  submitted: 'info',
+  approved: 'success',
+  rejected: 'danger',
+  paid: 'accent',
 };
 
 /**
@@ -268,7 +263,7 @@ export default function FreelancerDashboardPage() {
         {/* My Work — engagements */}
         {!loading && activeTab === 'work' && (
           engagements.length === 0 ? (
-            <EmptyState message={t('work.empty')} ctaHref="/marketplace?category=gigs" ctaLabel={t('work.findWork')} />
+            <EmptyState title={t('work.empty')} actions={<ButtonLink href="/marketplace?category=gigs" variant="primary">{t('work.findWork')}</ButtonLink>} />
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
               {engagements.map((e) => (
@@ -288,7 +283,7 @@ export default function FreelancerDashboardPage() {
                   {(e.status === 'active' || e.status === 'terminated') && e.hiredAt && (
                     <RateClientButton engagementId={e.id} clientName={e.tenantName} />
                   )}
-                  <span style={{ ...badgeStyle, color: ENGAGEMENT_TONE[e.status] }}>{t(`work.status.${e.status}`)}</span>
+                  <span style={{ ...badgeStyle, color: statusColor(ENGAGEMENT_TONE, e.status) }}>{t(`work.status.${e.status}`)}</span>
                 </div>
               ))}
             </div>
@@ -302,7 +297,7 @@ export default function FreelancerDashboardPage() {
         {/* My Timecards */}
         {!loading && activeTab === 'timecards' && (
           timecards.length === 0 ? (
-            <EmptyState message={t('timecards.empty')} ctaHref="/freelancer/timecard" ctaLabel={t('timecards.manage')} />
+            <EmptyState title={t('timecards.empty')} actions={<ButtonLink href="/freelancer/timecard" variant="primary">{t('timecards.manage')}</ButtonLink>} />
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}>
@@ -319,7 +314,7 @@ export default function FreelancerDashboardPage() {
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tc.tenantName ?? '—'} · {fmtHrs(tc.billableMinutes)}</span>
                   </span>
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatCents(tc.amountCents, { currency: tc.currency })}</span>
-                  <span style={{ ...badgeStyle, color: TIMECARD_TONE[tc.status] }}>{t(`timecards.status.${tc.status}`)}</span>
+                  <span style={{ ...badgeStyle, color: statusColor(TIMECARD_TONE, tc.status) }}>{t(`timecards.status.${tc.status}`)}</span>
                 </div>
               ))}
             </div>
@@ -338,14 +333,3 @@ const rowStyle: React.CSSProperties = {
 const badgeStyle: React.CSSProperties = {
   fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
 };
-
-function EmptyState({ message, ctaHref, ctaLabel }: { message: string; ctaHref: string; ctaLabel: string }) {
-  return (
-    <div style={{ border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '28px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-      <p style={{ margin: '0 0 12px', fontSize: 14 }}>{message}</p>
-      <Link href={ctaHref} style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 'var(--radius-md)', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
-        {ctaLabel}
-      </Link>
-    </div>
-  );
-}

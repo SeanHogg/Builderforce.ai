@@ -22,6 +22,7 @@
  * `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`.
  */
 
+import { reportServerError } from '../middleware/errorResponse';
 import { Hono, type Context } from 'hono';
 import { listGatewayMcpTools, callGatewayMcpTool, resolveGatewayMcpTool } from '../../application/llm/mcpGateway';
 import { describeToolSurfaces, resolveToolSurface, TOOL_SURFACES } from '../../application/llm/toolSurfaces';
@@ -273,6 +274,9 @@ export function createMcpServerRoutes(): Hono<HonoEnv> {
       const response = await handleRpc(body as JsonRpcRequest, ctx);
       return response === null ? c.body(null, 202) : c.json(response);
     } catch (e) {
+      // The body is the JSON-RPC error envelope the protocol requires, so this answers
+      // by hand — but the failure is reported like every other 500.
+      reportServerError(c, e, { source: 'presentation/routes/mcpServerRoutes.ts', operation: 'rpc' });
       return c.json(
         rpcError(null, JSON_RPC.INTERNAL_ERROR, e instanceof Error ? e.message : 'Internal error'),
         500,

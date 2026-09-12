@@ -98,7 +98,9 @@ function makeService(opts: {
         return { managed: true, toStatus: opts.managedToStatus! };
       }
     : undefined;
-  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, onTaskStatusSync, undefined, onLaneEntry, resolveNextStatus, undefined, undefined, onManagedRunStatus);
+  const svc = new RuntimeService({
+    executions, tasks, agents, audit, onTaskStatusSync, onLaneEntry, resolveNextStatus, onManagedRunStatus,
+  });
   return {
     svc,
     getCaptured: () => captured,

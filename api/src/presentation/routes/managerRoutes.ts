@@ -241,7 +241,7 @@ export function createManagerRoutes(
     // audit timeline, not just in the row's updated_by.
     await recordActivity(c.env as Env, db, {
       tenantId,
-      actor: await resolveActorFromContext(c.env as Env, db, c as never),
+      actor: await resolveActorFromContext(c.env as Env, db, c),
       verb: 'manager.defaults.update',
       targetType: 'tenant', targetId: tenantId,
       summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}).`,
@@ -738,7 +738,7 @@ export function createManagerRoutes(
     const directive = (body.directive ?? '').trim();
     if (directive.length < 3) return c.json({ error: 'directive is required' }, 400);
     const mode = body.mode === 'task' ? 'task' : 'directive';
-    const actor = await resolveActorFromContext(c.env as Env, db, c as never);
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
 
     // mode 'task' — spawn a one-off ticket the manager executes once.
     if (mode === 'task') {

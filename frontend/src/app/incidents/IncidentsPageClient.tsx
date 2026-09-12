@@ -43,14 +43,17 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { SECTION_CARD as card, SectionEmpty, SectionError, SectionLoading } from '@/components/ui/SectionState';
 import { SEVERITIES, SEVERITY_BADGE } from '@/lib/reliability/severity';
+import { Badge } from '@/components/ui';
+import { statusTone, type StatusToneMap } from '@/lib/statusTone';
 
-const STATUS_BADGE: Record<IncidentStatus, string> = {
-  open: 'badge-red',
-  acknowledged: 'badge-amber',
-  mitigated: 'badge-blue',
-  resolved: 'badge-green',
+const STATUS_TONE: StatusToneMap<IncidentStatus> = {
+  open: 'danger',
+  acknowledged: 'warning',
+  mitigated: 'info',
+  resolved: 'success',
 };
 const ROTATION_KINDS: RotationKind[] = ['manual', 'daily', 'weekly'];
 const TARGET_KINDS: EscalationTargetKind[] = ['oncall_rotation', 'user', 'contact', 'team_chat'];
@@ -166,7 +169,7 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span className={SEVERITY_BADGE[inc.severity]}>{t(`severity.${inc.severity}`)}</span>
-                  <span className={STATUS_BADGE[inc.status]}>{t(`status.${inc.status}`)}</span>
+                  <Badge tone={statusTone(STATUS_TONE, inc.status)}>{t(`status.${inc.status}`)}</Badge>
                   <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 15, flex: 1, minWidth: 0 }}>{inc.title}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -204,6 +207,7 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
 }
 
 function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: SectionProps & { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const errorMessage = useErrorMessage();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<IncidentSeverity>('sev3');
@@ -234,7 +238,7 @@ function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: Sec
       });
       onCreated();
     } catch (e) {
-      setError(faultMessage(e, 'Create failed'));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -280,6 +284,7 @@ function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: Sec
 }
 
 function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged }: SectionProps & { incidentId: string; onClose: () => void; onChanged: () => void }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [incident, setIncident] = useState<Incident | null>(null);
   const [timeline, setTimeline] = useState<IncidentEvent[]>([]);
@@ -302,7 +307,7 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
   const run = async (fn: () => unknown) => {
     setBusy(true); setError(null);
     try { await fn(); load(); onChanged(); }
-    catch (e) { setError(faultMessage(e, 'Action failed')); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   };
 
@@ -321,7 +326,7 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
           <>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <span className={SEVERITY_BADGE[incident.severity]}>{t(`severity.${incident.severity}`)}</span>
-              <span className={STATUS_BADGE[incident.status]}>{t(`status.${incident.status}`)}</span>
+              <Badge tone={statusTone(STATUS_TONE, incident.status)}>{t(`status.${incident.status}`)}</Badge>
               <span className="badge-muted">{t('escalationLevel', { level: incident.escalationLevel })}</span>
             </div>
 
@@ -517,6 +522,7 @@ const RCA_DOC_TYPES: PostmortemDocType[] = ['postmortem', 'known_error'];
 type ActionItemDraft = { title: string; detail: string };
 
 function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & { incident: Incident; onPublished: () => void }) {
+  const errorMessage = useErrorMessage();
   const [open, setOpen] = useState(false);
   const [summary, setSummary] = useState('');
   const [rootCause, setRootCause] = useState(incident.rootCause ?? '');
@@ -581,7 +587,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
       });
       onPublished();
     } catch (e) {
-      setError(faultMessage(e, 'Publish failed'));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -678,6 +684,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
 /* ─────────────────── Runbooks — custom workflows on an incident ─────────────────── */
 
 function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { incidentId: string }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
   const [runs, setRuns] = useState<IncidentWorkflowRun[]>([]);
@@ -701,7 +708,7 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
       await incidentsApi.runWorkflow(incidentId, { definitionId: selectedDef });
       setSelectedDef('');
       loadRuns();
-    } catch (e) { setError(faultMessage(e, 'Run failed')); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   };
 
@@ -753,6 +760,7 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
 /* ─────────────────────────── On-call ─────────────────────────── */
 
 function OnCallSection({ t, tc, canManage }: SectionProps) {
+  const errorMessage = useErrorMessage();
   const confirm = useConfirm();
   const [rotations, setRotations] = useState<OnCallRotation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -782,14 +790,14 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
       await incidentsApi.createRotation({ name: name.trim(), description: description.trim() || undefined, rotationKind });
       setCreateOpen(false); setName(''); setDescription(''); setRotationKind('manual');
       load();
-    } catch (e) { setError(faultMessage(e, 'Create failed')); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setSaving(false); }
   };
 
   const removeRotation = async (r: OnCallRotation) => {
     if (!(await confirm({ message: t('deleteRotationConfirm', { name: r.name }), destructive: true }))) return;
     try { await incidentsApi.removeRotation(r.id); load(); }
-    catch (e) { setError(faultMessage(e, 'Delete failed')); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   const addMember = async (r: OnCallRotation) => {
@@ -799,13 +807,13 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
       await incidentsApi.addRotationMember(r.id, { memberRef: d.memberRef.trim(), displayName: d.displayName.trim() || undefined });
       setMemberDraft((prev) => ({ ...prev, [r.id]: { displayName: '', memberRef: '' } }));
       load();
-    } catch (e) { setError(faultMessage(e, 'Add failed')); }
+    } catch (e) { setError(errorMessage(e)); }
   };
 
   const removeMember = async (r: OnCallRotation, memberId: string) => {
     if (!(await confirm({ message: t('deleteMemberConfirm'), destructive: true }))) return;
     try { await incidentsApi.removeRotationMember(r.id, memberId); load(); }
-    catch (e) { setError(faultMessage(e, 'Delete failed')); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   return (
@@ -900,6 +908,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
 /* ─────────────────────────── Escalation ─────────────────────────── */
 
 function EscalationSection({ t, tc, canManage }: SectionProps) {
+  const errorMessage = useErrorMessage();
   const confirm = useConfirm();
   const [policies, setPolicies] = useState<EscalationPolicy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -934,14 +943,14 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
       });
       setCreateOpen(false); setName(''); setDescription(''); setMatchSeverity('');
       load();
-    } catch (e) { setError(faultMessage(e, 'Create failed')); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setSaving(false); }
   };
 
   const removePolicy = async (p: EscalationPolicy) => {
     if (!(await confirm({ message: t('deletePolicyConfirm', { name: p.name }), destructive: true }))) return;
     try { await incidentsApi.removePolicy(p.id); load(); }
-    catch (e) { setError(faultMessage(e, 'Delete failed')); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   const addLevel = async (p: EscalationPolicy) => {
@@ -959,13 +968,13 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
       });
       setLevelDraft((prev) => ({ ...prev, [p.id]: emptyLevel }));
       load();
-    } catch (e) { setError(faultMessage(e, 'Add failed')); }
+    } catch (e) { setError(errorMessage(e)); }
   };
 
   const removeLevel = async (levelId: string) => {
     if (!(await confirm({ message: t('deleteLevelConfirm'), destructive: true }))) return;
     try { await incidentsApi.removeLevel(levelId); load(); }
-    catch (e) { setError(faultMessage(e, 'Delete failed')); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   const channelsLabel = (lv: EscalationPolicy['levels'][number]) => {
@@ -1084,6 +1093,7 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
 const EMPTY_CONTACT = { name: '', roleTitle: '', company: '', email: '', phone: '', teamsId: '', notes: '' };
 
 function ContactsSection({ t, tc, canManage }: SectionProps) {
+  const errorMessage = useErrorMessage();
   const confirm = useConfirm();
   const [contacts, setContacts] = useState<BusinessContact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1116,14 +1126,14 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
       if (editing) await incidentsApi.updateContact(editing.id, draft);
       else await incidentsApi.createContact({ ...draft, name: draft.name.trim() });
       setPanelOpen(false); load();
-    } catch (e) { setError(faultMessage(e, 'Save failed')); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setSaving(false); }
   };
 
   const remove = async (c: BusinessContact) => {
     if (!(await confirm({ message: t('deleteContactConfirm', { name: c.name }), destructive: true }))) return;
     try { await incidentsApi.removeContact(c.id); load(); }
-    catch (e) { setError(faultMessage(e, 'Delete failed')); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   return (

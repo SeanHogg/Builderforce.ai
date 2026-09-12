@@ -16,6 +16,7 @@ import { Hono } from 'hono';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
@@ -67,7 +68,7 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   // Reject any request whose URL :tenantId disagrees with the JWT's tenant.
   router.use('*', async (c, next) => {
     const urlTenantId = Number(c.req.param('tenantId'));
-    const jwtTenantId = c.get('tenantId') as number | undefined;
+    const jwtTenantId = optionalTenantId(c);
     if (!Number.isFinite(urlTenantId) || urlTenantId !== jwtTenantId) {
       return c.json({ error: 'Forbidden' }, 403);
     }

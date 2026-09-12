@@ -27,6 +27,7 @@
  * engine already documents for `sendFromMailbox`, applied here rather than re-invented.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   readSequenceEnrolments, readSequenceSteps, sequenceDueSteps,
@@ -68,9 +69,6 @@ interface DispatchResult {
   retryable: boolean;
   detail: string;
 }
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 /** Substitute the two placeholders a cadence step may carry. Deliberately two and not a
  *  template language: `{{name}}` and `{{company}}` are what a first-touch email actually
@@ -209,7 +207,7 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
   const result: SequenceSweepResult = { sequences: 0, sent: 0, stopped: 0, failed: 0 };
 
   for (const row of rows) {
-    const content = asRecord(row.content);
+    const content = asJsonRecord(row.content);
     const due: SequenceDueStep[] = sequenceDueSteps(
       { state: content.sequenceState, steps: content.steps, enrolments: content.enrolments },
       now,
@@ -232,7 +230,7 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
     // Where a manual step's card lands: below the cadence, in a column. Read off the
     // cadence's own geometry so the cards it spawns appear beside it rather than at the
     // origin of a board the seller may have panned away from.
-    const geometry = asRecord(row.geometry);
+    const geometry = asJsonRecord(row.geometry);
     const baseX = Number(geometry.x ?? 0);
     const baseY = Number(geometry.y ?? 0) + Number(geometry.h ?? 220) + 40;
 

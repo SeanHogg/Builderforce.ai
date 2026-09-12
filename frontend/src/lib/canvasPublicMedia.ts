@@ -66,12 +66,37 @@ export function isPubliclyFetchable(url: string): boolean {
   return /^https:\/\//i.test(url.trim());
 }
 
+/** Why a source could not be made public. A CODE, not a sentence: the social
+ *  panel translates it for a person, and a canvas tool hands the model the English
+ *  from {@link describePublicMediaProblem}. */
+export type PublicMediaProblemCode = 'tabOnly' | 'notPublic' | 'uploadFailed';
+
+export interface PublicMediaProblem {
+  source: string;
+  code: PublicMediaProblemCode;
+  /** The store's own rejection message, when an upload failed with one. */
+  detail?: string;
+}
+
 export interface PublicMediaResolution {
   /** URLs a network can fetch, in the order they were requested. */
   urls: string[];
   /** One entry per source that could not be made public, with the reason to
    *  relay. Never thrown: one unusable picture must not lose the whole campaign. */
-  problems: Array<{ source: string; reason: string }>;
+  problems: PublicMediaProblem[];
+}
+
+/** The English reason a MODEL reads for a problem (a tool result's `mediaProblems`).
+ *  A person's surface translates `code` instead. */
+export function describePublicMediaProblem(problem: PublicMediaProblem): string {
+  switch (problem.code) {
+    case 'tabOnly':
+      return 'That file is only held in this browser tab. Re-generate or re-upload it so it has a durable source.';
+    case 'notPublic':
+      return 'A social network fetches media itself, so it needs a public https URL — this one is neither https nor inline media.';
+    case 'uploadFailed':
+      return problem.detail || 'That file could not be published to a public URL.';
+  }
 }
 
 /** How much of a `data:` URI to show when naming it in an error. The whole thing
@@ -104,18 +129,19 @@ export async function resolvePublicMediaUrls(
     if (source.startsWith('blob:')) {
       // A blob URL only exists inside the tab that minted it. Nothing server-side
       // can read one, so say that rather than uploading an empty file.
-      problems.push({ source: label(source), reason: 'That file is only held in this browser tab. Re-generate or re-upload it so it has a durable source.' });
+      problems.push({ source: label(source), code: 'tabOnly' });
       continue;
     }
     if (!source.startsWith('data:')) {
-      problems.push({ source: label(source), reason: 'A social network fetches media itself, so it needs a public https URL — this one is neither https nor inline media.' });
+      problems.push({ source: label(source), code: 'notPublic' });
       continue;
     }
     try {
       const asset = await growthApi.createAssetFromSource({ source, name: opts.name?.slice(0, 120) || 'Canvas media' });
       urls.push(asset.url);
     } catch (error) {
-      problems.push({ source: label(source), reason: error instanceof Error ? error.message : 'That file could not be published to a public URL.' });
+      const detail = error instanceof Error && error.message ? error.message : undefined;
+      problems.push({ source: label(source), code: 'uploadFailed', ...(detail ? { detail } : {}) });
     }
   }
 

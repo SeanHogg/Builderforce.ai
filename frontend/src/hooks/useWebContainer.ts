@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import type { WebContainerState } from '@/lib/types';
+import { useErrorText } from '@/i18n/useErrorMessage';
 
 let webContainerInstance: import('@webcontainer/api').WebContainer | null = null;
 let bootPromise: Promise<import('@webcontainer/api').WebContainer> | null = null;
@@ -27,6 +28,7 @@ function buildFileSystemTree(files: Record<string, string>): Record<string, any>
 export function useWebContainer() {
   const [state, setState] = useState<WebContainerState>({ status: 'idle' });
   const instanceRef = useRef<import('@webcontainer/api').WebContainer | null>(null);
+  const errorText = useErrorText();
 
   const getOrBootWebContainer = useCallback(async () => {
     // If we already have an instance, return it
@@ -75,13 +77,13 @@ export function useWebContainer() {
       setState({ status: 'ready' });
       return instance;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to boot WebContainer';
+      const msg = errorText(error);
       setState({ status: 'error', error: msg });
       bootPromise = null;
       webContainerInstance = null;
       throw error;
     }
-  }, []);
+  }, [errorText]);
 
   const mountFiles = useCallback(async (files: Record<string, string>) => {
     const instance = await getOrBootWebContainer();

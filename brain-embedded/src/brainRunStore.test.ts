@@ -17,7 +17,7 @@ import {
 } from './brainRunStore';
 import type { BrainStreamFn } from './brainRunStore';
 import type { ChatCompletionMessage } from './streamChatCompletion';
-import { parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
+import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
 // (see brainRunStore.ts); update the literals if that cap changes.
@@ -171,50 +171,82 @@ describe('auto-compaction partitioning (summarize the middle, never orphan a too
   });
 });
 
-describe('the host-injected tool-iteration ceiling (BrainRunRequest.maxIterations)', () => {
-  /** A gateway that always asks for one more tool call, so only the cap ends the run. */
-  const alwaysCallsATool = (): { stream: BrainStreamFn; turns: () => number } => {
+describe('a run has no tool-call limit — only the consecutive-failure breaker', () => {
+  /**
+   * A gateway that asks for one more tool call per turn, with DISTINCT arguments each
+   * time (so the exact-repeat dedupe and the repeat-failure tally never see a repeat),
+   * and answers in prose once it has made `calls` of them — or as soon as the loop
+   * withdraws its tools.
+   */
+  const callsThenAnswers = (calls: number): { stream: BrainStreamFn; turns: () => number } => {
     let turns = 0;
     const stream: BrainStreamFn = async (opts) => {
       turns += 1;
       const toolless = opts.tools === undefined;
-      return {
-        text: toolless ? 'Here is what I found.' : '',
-        toolCalls: toolless ? [] : [{ id: `c${turns}`, name: 'read_file', args: '{}' }],
-        finishReason: toolless ? 'stop' : 'tool_calls',
-      };
+      if (toolless || turns > calls) return { text: 'Here is what I found.', toolCalls: [], finishReason: 'stop' };
+      return { text: '', toolCalls: [{ id: `c${turns}`, name: 'read_file', args: JSON.stringify({ path: `f${turns}.ts` }) }], finishReason: 'tool_calls' };
     };
     return { stream, turns: () => turns };
   };
 
   const persistence = { sendMessages: async () => [] };
+  const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
 
-  it('stops at the host ceiling, then forces one final tools-free answer', async () => {
-    const gateway = alwaysCallsATool();
+  it('lets a long run of SUCCESSFUL calls go past every ceiling that used to exist', async () => {
+    const gateway = callsThenAnswers(60);
+    let executed = 0;
     await startRun(4242, {
       resolvedSystemPrompt: 'sys',
-      tools: [{ type: 'function', function: { name: 'read_file', description: 'read', parameters: {} } }],
-      runTool: async () => ({ ok: true }),
+      tools: READ_TOOL,
+      runTool: async () => { executed += 1; return { ok: true, content: 'body' }; },
       stream: gateway.stream,
       persistence,
       userTurn: 'read everything',
-      maxIterations: 3,
     });
-    // Three capped tool turns + the loop's always-speak closing synthesis.
-    expect(gateway.turns()).toBe(4);
+    // Sixty tool turns (well past the old 25/40 caps) + the model's own final answer.
+    expect(executed).toBe(60);
+    expect(gateway.turns()).toBe(61);
+    expect(getRunTrace(4242).some((e) => (e.args as { forcedFinish?: unknown } | undefined)?.forcedFinish === true)).toBe(false);
   });
 
-  it('ignores a nonsensical ceiling rather than running a zero-turn (answerless) loop', async () => {
-    const gateway = alwaysCallsATool();
+  it('stops once DEFAULT_TOOL_FAILURE_STREAK calls fail in a row, then forces one tools-free answer that names the failures', async () => {
+    const gateway = callsThenAnswers(100);
+    const handed: string[] = [];
     await startRun(4243, {
       resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: false, error: 'EACCES: permission denied' }),
+      stream: async (opts, cb) => {
+        const last = opts.messages[opts.messages.length - 1];
+        if (opts.tools === undefined && last?.role === 'user') handed.push(String(last.content));
+        return gateway.stream(opts, cb);
+      },
+      persistence,
+      userTurn: 'read everything',
+    });
+    // Five failing tool turns, then the closing synthesis with tools withdrawn.
+    expect(gateway.turns()).toBe(DEFAULT_TOOL_FAILURE_STREAK + 1);
+    expect(handed[0]).toContain(`last ${DEFAULT_TOOL_FAILURE_STREAK} tool calls all failed`);
+    const trace = getRunTrace(4243);
+    expect(trace.some((e) => (e.args as { forcedFinish?: unknown } | undefined)?.forcedFinish === true)).toBe(true);
+    // The forced answer spoke, so the run ends with a reply and no error.
+    expect(getRunSnapshot(4243).error).toBe('');
+  });
+
+  it('a success in between resets the streak, so a run with scattered failures keeps going', async () => {
+    const gateway = callsThenAnswers(20);
+    let n = 0;
+    await startRun(4244, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      // Four failures, one success, four failures, one success, … — never five in a row.
+      runTool: async () => (++n % 5 === 0 ? { ok: true, content: 'body' } : { ok: false, error: 'flaky' }),
       stream: gateway.stream,
       persistence,
-      userTurn: 'hello',
-      maxIterations: 0,
+      userTurn: 'read everything',
     });
-    // Falls back to the shared default, so the run still produces a turn.
-    expect(gateway.turns()).toBeGreaterThan(0);
+    expect(gateway.turns()).toBe(21);
+    expect(getRunTrace(4244).some((e) => (e.args as { forcedFinish?: unknown } | undefined)?.forcedFinish === true)).toBe(false);
   });
 });
 
@@ -224,14 +256,15 @@ describe('the re-read loop guard', () => {
 
   /**
    * A model that keeps reading ONE file at shifting offsets — the pattern the
-   * exact-repeat dedupe cannot see, and the one that burns a run's whole budget
-   * without producing a change.
+   * exact-repeat dedupe cannot see, and the one that circles without producing a
+   * change. It gives up on its own after six reads: the run has no step cap to end
+   * it, and the advisory it earns is advice, not a stop.
    */
   const rereadsOneFile = (path: string): BrainStreamFn => {
     let turn = 0;
     return async (opts) => {
       turn += 1;
-      if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      if (opts.tools === undefined || turn > 6) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
       return {
         text: '',
         toolCalls: [{ id: `c${turn}`, name: 'read_file', args: JSON.stringify({ path, offset: turn * 100 }) }],
@@ -257,7 +290,6 @@ describe('the re-read loop guard', () => {
       },
       persistence,
       userTurn: 'reduce the height',
-      maxIterations: 6,
     });
     const advised = seen.filter((c) => c.includes('read') && c.includes('times in this run'));
     expect(advised.length).toBeGreaterThan(0);
@@ -274,7 +306,7 @@ describe('the re-read loop guard', () => {
       stream: async (opts) => {
         for (const m of opts.messages) if (m.role === 'tool') seen.push(String(m.content));
         turn += 1;
-        if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        if (opts.tools === undefined || turn > 6) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
         return {
           text: '',
           toolCalls: [{ id: `c${turn}`, name: 'read_file', args: JSON.stringify({ path: `file-${turn}.css` }) }],
@@ -283,7 +315,6 @@ describe('the re-read loop guard', () => {
       },
       persistence,
       userTurn: 'survey the styles',
-      maxIterations: 6,
     });
     expect(seen.some((c) => c.includes('times in this run'))).toBe(false);
     expect(seen.some((c) => c.includes('STOP RE-READING'))).toBe(false);
@@ -451,7 +482,6 @@ describe('a run that ships its change closes its own ticket', () => {
       stream,
       persistence,
       userTurn: 'reduce the height and push to main',
-      maxIterations: 6,
     });
     // The TOOL receives only the status change...
     const done = calls.find((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done');
@@ -479,7 +509,6 @@ describe('a run that ships its change closes its own ticket', () => {
       stream,
       persistence,
       userTurn: 'reduce the height and push the branch',
-      maxIterations: 6,
     });
     expect(calls.some((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done')).toBe(false);
   });
@@ -508,7 +537,6 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
       },
       persistence,
       userTurn: 'fix the deep link',
-      maxIterations: 3,
     });
     const handed = JSON.parse(seen[0]) as Record<string, unknown>;
     // Structured, parseable, and honest about where it stopped: the old cap cut the JSON
@@ -546,7 +574,6 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
       },
       persistence,
       userTurn: 'fix the deep link',
-      maxIterations: 12,
     });
     // The disk was read once per file — the repeat was answered from the cache.
     expect(executed).toEqual(['f1.ts', 'f2.ts', 'f3.ts', 'f4.ts', 'f5.ts', 'f6.ts', 'f7.ts']);
@@ -580,7 +607,6 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
       },
       persistence,
       userTurn: 'reduce the height',
-      maxIterations: 6,
     });
     expect(executed.filter((n) => n === 'read_file')).toHaveLength(1);
   });
@@ -636,7 +662,6 @@ describe('a turn that hands the user the commands it holds the tools for', () =>
       stream,
       persistence,
       userTurn: 'Fix the type errors',
-      maxIterations: 6,
     });
     expect(nudges().length).toBeGreaterThan(0);
     expect(nudges()[0]).toContain('run_command');
@@ -661,7 +686,6 @@ describe('a turn that hands the user the commands it holds the tools for', () =>
       },
       persistence,
       userTurn: 'Fix the type errors',
-      maxIterations: 6,
     });
     expect(nudges()).toHaveLength(0);
     expect(getRunTrace(4802).some((e) => e.label === 'loop.recover_handed_off_work')).toBe(false);
@@ -676,7 +700,6 @@ describe('a turn that hands the user the commands it holds the tools for', () =>
       stream,
       persistence,
       userTurn: 'How do I run the API type-check locally?',
-      maxIterations: 6,
     });
     expect(nudges()).toHaveLength(0);
   });

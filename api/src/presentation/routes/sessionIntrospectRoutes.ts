@@ -3,6 +3,7 @@ import { decodeJwtPayload } from '@builderforce/hs256-jwt';
 import type { SessionIntrospection } from '@builderforce/session-introspection';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 
 /**
  * `GET /api/auth/introspect` — "is the bearer token I am holding still live?"
@@ -39,7 +40,7 @@ export function createSessionIntrospectRoutes(): Hono<HonoEnv> {
     const verdict: SessionIntrospection = {
       active: true,
       sub: c.get('userId') as string,
-      tenantId: (c.get('tenantId') as number | undefined) ?? null,
+      tenantId: optionalTenantId(c),
       jti,
       exp,
     };

@@ -22,7 +22,7 @@ vi.mock('@/lib/AuthContext', () => ({
 vi.mock('../task/RunAgentControl', () => ({ RunAgentControl: () => <div data-testid="run-control" /> }));
 vi.mock('../ChatMessageContent', () => ({ ChatMessageContent: ({ content }: { content: string }) => <div>{content}</div> }));
 vi.mock('../board/AgentChip', () => ({
-  EXECUTION_STATUS_COLOR: {} as Record<string, string>,
+  EXECUTION_STATUS_TONE: {},
   rerunAffordance: (s: string) => (s === 'failed' || s === 'cancelled' ? 'retry' : s === 'paused' ? 'resume' : null),
 }));
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));

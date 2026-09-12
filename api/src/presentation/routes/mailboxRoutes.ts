@@ -15,6 +15,7 @@
  * turning a mailbox into something a campaign can blast from is MANAGER-gated —
  * the same bar as every other route that can reach a stranger's inbox.
  */
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -304,7 +305,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
     const query = parseMailboxQuery((key) => c.req.query(key));
     const result = await readMailbox(db, c.env as Env, c.get('tenantId') as number, id, query);
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'readMailbox' });
     return c.json({
       messages: result.messages,
       // The compact projection alongside the full one, so the canvas tile and a
@@ -321,7 +322,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     const result = await readMailboxMessage(
       db, c.env as Env, c.get('tenantId') as number, id, c.req.param('messageId'),
     );
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'readMessage' });
     return c.json(result.message);
   });
 
@@ -335,7 +336,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     const result = await listMailboxAttachments(
       db, c.env as Env, c.get('tenantId') as number, id, c.req.param('messageId'),
     );
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'listAttachments' });
     return c.json({ attachments: result.attachments });
   });
 
@@ -360,7 +361,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
       db, c.env as Env, c.get('tenantId') as number, id,
       c.req.param('messageId'), c.req.param('attachmentId'),
     );
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'readAttachment' });
 
     const { attachment } = result;
     const filename = safeAttachmentFilename(attachment.filename);
@@ -385,7 +386,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     const result = await setMailboxMessageRead(
       db, c.env as Env, c.get('tenantId') as number, id, c.req.param('messageId'), !body.unread,
     );
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'setRead' });
     return c.json({ unread: body.unread });
   });
 
@@ -403,7 +404,7 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     const result = await sendFromMailbox(db, c.env as Env, c.get('tenantId') as number, id, {
       to: body.to.trim(), subject: body.subject.trim(), html: body.html, replyTo: body.replyTo?.trim() || undefined,
     });
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'send' });
     return c.json({ sent: true, id: result.id, accountEmail: result.accountEmail });
   });
 

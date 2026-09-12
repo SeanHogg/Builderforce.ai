@@ -31,7 +31,7 @@ import { readTrustAnswers, type TrustAnswer } from '@builderforce/creation-canva
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
-import { extractJsonObject } from '../../domain/shared/json';
+import { asJsonRecord, extractJsonObject } from '../../domain/shared/json';
 import {
   connections, creationSessionConnections, creationSessionEvents, creationSessionObjects, creationSessions,
   legalDocumentFiles,
@@ -40,9 +40,6 @@ import { requireSessionRole, type SessionAccess } from '../creation/sessionAcces
 import { computeControlCoverage } from '../finops/socControls';
 import { condenseTranscript } from '../meetings/meetingIntelligence';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 const text = (value: unknown, max: number): string =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -96,7 +93,7 @@ export async function resolveSellMotionCard(
   if (row.kind !== input.expectedKind) {
     return { ok: false, status: 409, error: `That card is a ${row.kind}, not a ${input.expectedKind}.` };
   }
-  return { ok: true, access, card: { id: row.id, kind: row.kind, content: asRecord(row.content) } };
+  return { ok: true, access, card: { id: row.id, kind: row.kind, content: asJsonRecord(row.content) } };
 }
 
 /**
@@ -194,7 +191,7 @@ function readCallJson(raw: string): Omit<CallReading, 'talkRatioPercent'> | null
   if (!row) return null;
   const objections = (Array.isArray(row.objections) ? row.objections.slice(0, 12) : [])
     .flatMap((entry) => {
-      const item = asRecord(entry);
+      const item = asJsonRecord(entry);
       const title = text(item.title, 160);
       return title ? [{ title, detail: text(item.detail, 600) }] : [];
     });

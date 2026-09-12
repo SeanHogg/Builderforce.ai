@@ -18,7 +18,8 @@
  */
 
 import { Hono, type Context } from 'hono';
-import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { authMiddleware } from '../middleware/authMiddleware';
+import { requireTenantId } from '../middleware/tenantContext';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import {
@@ -34,14 +35,18 @@ const text = (value: unknown, max: number): string =>
 
 export function createSellMotionRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
-  r.use('*', webAuthMiddleware);
+  // The WORKSPACE gate, not the person-level one: every act resolves its board inside
+  // the caller's tenant, and the client sends the tenant JWT. `webAuthMiddleware` used to
+  // sit here — it verified that token but never publishes `tid`, so every lookup ran
+  // scoped to tenant `undefined` and a seller's own board could never resolve.
+  r.use('*', authMiddleware);
 
   /** The one resolution every handler needs, read off the request. */
   const resolve = (c: Context<HonoEnv>, expectedKind: string): Promise<CardResolution> =>
     resolveSellMotionCard(db, {
       sessionId: c.req.param('id') ?? '',
       objectId: c.req.param('objectId') ?? '',
-      tenantId: c.get('tenantId') as number,
+      tenantId: requireTenantId(c),
       userId: c.get('userId') as string,
       expectedKind,
     });

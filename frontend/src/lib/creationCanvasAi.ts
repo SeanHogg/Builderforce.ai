@@ -57,6 +57,7 @@ import {
   TRUNCATED_TURN_DIRECTIVE,
 } from '@/lib/canvasAiTurnBudget';
 import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 type CanvasAiOptions = {
   prompt: string;
@@ -513,10 +514,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           const approved = options.confirmAction ? await options.confirmAction({ name: call.name, args }) : false;
           if (!approved) outcome = { error: options.confirmAction ? 'The user declined this tenant mutation.' : 'This tenant mutation requires in-app approval.' };
           else {
-            try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
+            try { outcome = await action.run(args); } catch (error) { outcome = { error: toolErrorMessage(error, 'Tool failed') }; }
           }
         } else {
-          try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
+          try { outcome = await action.run(args); } catch (error) { outcome = { error: toolErrorMessage(error, 'Tool failed') }; }
         }
         if (call.name === 'builtin_web_search' && isNarrowSearchResult(outcome)) narrowSearches += 1;
         if (toolOutcomeChangedCanvas(outcome)) {

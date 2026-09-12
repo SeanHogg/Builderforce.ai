@@ -14,6 +14,8 @@ import {
   type SecurityAudiences,
 } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -32,13 +34,14 @@ const linesToList = (v: string): string[] =>
 
 export function SecurityTicketAccessCard() {
   const t = useTranslations('security');
+  const errorMessage = useErrorMessage();
   const [cfg, setCfg] = useState<SecurityAccessConfig | null>(null);
   const [userIds, setUserIds] = useState('');
   const [agentRefs, setAgentRefs] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const task = usePanelTask();
+  // Stable — the load effect runs once, so it must not key on `task`.
+  const { fail } = task;
 
   useEffect(() => {
     securityAgentApi.getAccess()
@@ -47,34 +50,35 @@ export function SecurityTicketAccessCard() {
         setUserIds((c.allowUserIds ?? []).join('\n'));
         setAgentRefs((c.allowAgentRefs ?? []).join('\n'));
       })
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => { const message = faultMessage(e); if (message) fail(message); })
       .finally(() => setLoading(false));
-  }, []);
+  }, [fail]);
 
   const toggle = (key: keyof SecurityAudiences) => {
     if (!cfg) return;
-    setSaved(false);
+    task.clear();
     setCfg({ ...cfg, audiences: { ...cfg.audiences, [key]: !cfg.audiences[key] } });
   };
 
   const save = async () => {
     if (!cfg) return;
-    setSaving(true); setError(null); setSaved(false);
-    try {
-      const next = await securityAgentApi.setAccess({
-        audiences: cfg.audiences,
-        allowUserIds: linesToList(userIds),
-        allowAgentRefs: linesToList(agentRefs),
-      });
-      setCfg(next);
-      setUserIds((next.allowUserIds ?? []).join('\n'));
-      setAgentRefs((next.allowAgentRefs ?? []).join('\n'));
-      setSaved(true);
-    } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
-    } finally {
-      setSaving(false);
-    }
+    const next = await task.run(async () => {
+      try {
+        return await securityAgentApi.setAccess({
+          audiences: cfg.audiences,
+          allowUserIds: linesToList(userIds),
+          allowAgentRefs: linesToList(agentRefs),
+        });
+      } catch (cause) {
+        // The localized sentence (transport failures included), not the raw message;
+        // an empty one — "signed out", nothing to report — leaves the slot empty.
+        throw new Error(errorMessage(cause) ?? '');
+      }
+    }, { success: t('accessSaved') });
+    if (next === undefined) return;
+    setCfg(next);
+    setUserIds((next.allowUserIds ?? []).join('\n'));
+    setAgentRefs((next.allowAgentRefs ?? []).join('\n'));
   };
 
   const AUDIENCES: Array<{ key: keyof SecurityAudiences; label: string; hint: string }> = [
@@ -88,7 +92,7 @@ export function SecurityTicketAccessCard() {
       <div style={{ ...sectionTitle, marginBottom: 4 }}>{t('accessTitle')}</div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 14 }}>{t('accessSubtitle')}</p>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('error', { message: error })}</div>}
+      {task.error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('error', { message: task.error })}</div>}
 
       {loading || !cfg ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
@@ -123,7 +127,7 @@ export function SecurityTicketAccessCard() {
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('accessAllowUsers')}</label>
               <textarea
                 value={userIds}
-                onChange={(e) => { setUserIds(e.target.value); setSaved(false); }}
+                onChange={(e) => { setUserIds(e.target.value); task.clear(); }}
                 placeholder={t('accessAllowUsersPlaceholder')}
                 style={inputStyle}
               />
@@ -132,7 +136,7 @@ export function SecurityTicketAccessCard() {
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('accessAllowAgents')}</label>
               <textarea
                 value={agentRefs}
-                onChange={(e) => { setAgentRefs(e.target.value); setSaved(false); }}
+                onChange={(e) => { setAgentRefs(e.target.value); task.clear(); }}
                 placeholder={t('accessAllowAgentsPlaceholder')}
                 style={inputStyle}
               />
@@ -143,16 +147,16 @@ export function SecurityTicketAccessCard() {
             <button
               type="button"
               onClick={() => void save()}
-              disabled={saving}
+              disabled={task.busy}
               style={{
                 padding: '8px 16px', fontSize: 13, fontWeight: 600,
                 background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
-                border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1,
+                border: 'none', borderRadius: 'var(--radius-md)', cursor: task.busy ? 'default' : 'pointer', opacity: task.busy ? 0.7 : 1,
               }}
             >
-              {saving ? t('saving') : t('accessSave')}
+              {task.busy ? t('saving') : t('accessSave')}
             </button>
-            {saved && <span style={{ fontSize: 12, color: 'var(--success-text, var(--success))' }}>{t('accessSaved')}</span>}
+            {task.notice && <span style={{ fontSize: 12, color: 'var(--success-text, var(--success))' }}>{task.notice}</span>}
           </div>
         </>
       )}

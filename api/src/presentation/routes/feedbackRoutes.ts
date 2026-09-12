@@ -16,6 +16,7 @@
  *     any agent (see feedbackSpec / evaluateTaskAutoRun).
  */
 
+import { InternalError } from '../../domain/shared/errors';
 import { Hono } from 'hono';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -111,7 +112,7 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
       if (isUniqueViolation(e)) return c.json({ error: 'This project already has a feedback collector' }, 409);
       throw e;
     }
-    if (!row) return c.json({ error: 'Failed to create collector' }, 500);
+    if (!row) throw new InternalError('Failed to create collector');
 
     return c.json({
       collector: row,

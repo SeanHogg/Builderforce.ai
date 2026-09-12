@@ -1,3 +1,4 @@
+import { InternalError } from '../../domain/shared/errors';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Studio voice-clone routes (Voice PRD #1994): `/api/studio/voice-clones/*`.
@@ -155,7 +156,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
         consentTextVersion: CONSENT_TEXT_VERSION,
       })
       .returning();
-    if (!created) return c.json({ error: 'Failed to create voice clone' }, 500);
+    if (!created) throw new InternalError('Failed to create voice clone');
 
     await bumpCacheVersion(env, `voiceclones:${tenantId}`);
     if (visibility === 'marketplace') await bumpCacheVersion(env, 'voiceclones:marketplace');

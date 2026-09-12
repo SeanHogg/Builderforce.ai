@@ -2,6 +2,7 @@
  * IDE (Builderforce) routes — project files, datasets, training, workforce agents.
  * Projects are the unified API projects (projects table). Project files in R2 under ide/projects/{projectId}/.
  */
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { and, asc, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
@@ -17,6 +18,7 @@ import {
   projects,
 } from '../../infrastructure/database/schema';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { invalidateCached, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   type AgentDescriptor,
@@ -555,7 +557,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const body = await parseBody(c, ImportRepoBody);
     const result = await importRepoToWorkspace(c.env as Env, tenantId, projectId, body.repoId, body.ref);
-    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/ideRoutes.ts', operation: 'importRepo' });
     await invalidateCached(c.env as Env, repoStatusKey(projectId));
     return c.json(result);
   });
@@ -568,7 +570,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const body = await parseBody(c, CommitBody);
     const result = await commitWorkspaceToRepo(c.env as Env, tenantId, projectId, body.repoId, { message: body.message, branch: body.branch });
-    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/ideRoutes.ts', operation: 'commitRepo' });
     await invalidateCached(c.env as Env, repoStatusKey(projectId));
     return c.json(result);
   });
@@ -583,7 +585,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const result = await createRemoteRepo(c.env as Env, tenantId, projectId, {
       provider: body.provider, name: body.name, private: body.private, credentialId: body.credentialId,
     });
-    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/ideRoutes.ts', operation: 'createRemoteRepo' });
     await invalidateCached(c.env as Env, repoStatusKey(projectId));
     return c.json(result);
   });
@@ -617,7 +619,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       subdomain: body.subdomain ?? null,
       distDir: body.distDir,
     });
-    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/ideRoutes.ts', operation: 'deploySite' });
     await invalidateCached(c.env as Env, repoStatusKey(projectId));
     const { ok: _ok, ...enabled } = result;
     return c.json(enabled);
@@ -673,7 +675,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       description: typeof form.get('description') === 'string' ? String(form.get('description')) : undefined,
       accent: typeof form.get('accent') === 'string' ? String(form.get('accent')) : undefined,
     });
-    if (!result.ok) return c.json({ error: result.reason }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.reason }, result.status, { source: 'presentation/routes/ideRoutes.ts', operation: 'uploadSite' });
     return c.json({ success: true, target, state: result.state, writtenPaths: result.writtenPaths });
   });
 
@@ -906,7 +908,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
           if (traced) {
             logTrace(c.env, c.executionCtx, {
               traceId: datasetTraceId, surface: 'dataset-gen',
-              tenantId: c.get('tenantId') ?? null,
+              tenantId: optionalTenantId(c),
               userId: c.get('userId') ?? null,
               result: traced, streamed: false,
               requestIp: c.req.header('cf-connecting-ip') ?? null,
@@ -1396,7 +1398,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       // model/vendor/attempt telemetry keyed to the same traceId.
       logTrace(c.env, c.executionCtx, {
         traceId, surface: 'agent',
-        tenantId: c.get('tenantId') ?? null,
+        tenantId: optionalTenantId(c),
         userId: c.get('userId') ?? null,
         result, streamed,
         requestIp: c.req.header('cf-connecting-ip') ?? null,

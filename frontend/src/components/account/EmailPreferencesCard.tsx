@@ -15,12 +15,12 @@
  * The global unsubscribe (taken from a mail footer, off-session) is shown as a
  * banner rather than a fourth toggle: it OVERRIDES the categories, so rendering it
  * inline with them would imply it is peer-level and let a category toggle appear
- * to undo it. Turning it back on is an explicit, confirmed action.
+ * to undo it. Turning it back on is an explicit, two-step action.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { useConfirm } from '@/components/ConfirmProvider';
+import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LOCALE_LABELS, LOCALES, type Locale } from '@/i18n/config';
@@ -93,7 +93,6 @@ function ToggleRow({ label, help, checked, disabled, onChange }: {
 
 export default function EmailPreferencesCard() {
   const t = useTranslations('settings');
-  const confirm = useConfirm();
 
   const [prefs, setPrefs] = useState<EmailPreferences | null>(null);
   const [locale, setLocale] = useState<Locale | null>(null);
@@ -133,17 +132,10 @@ export default function EmailPreferencesCard() {
     }
   };
 
-  const resubscribe = async () => {
-    // Re-enabling someone's own mail is a consent action, so make it deliberate.
-    // Not destructive — hence `destructive: false`, which keeps the neutral button.
-    const ok = await confirm({
-      title: t('emailPrefs.resubscribeTitle'),
-      message: t('emailPrefs.resubscribeConfirm'),
-      confirmLabel: t('emailPrefs.resubscribeCta'),
-      destructive: false,
-    });
-    if (ok) await patch({ resubscribe: true });
-  };
+  // Re-enabling someone's own mail is a consent action, so it is deliberate — but
+  // it loses nothing (the switches turn it off again), so the second click lives on
+  // the button itself (InlineConfirmButton), not in a modal.
+  const resubscribe = () => patch({ resubscribe: true });
 
   const HELP: Record<LifecycleToggle, { label: string; help: string }> = {
     productUpdates: { label: t('emailPrefs.productUpdates'), help: t('emailPrefs.productUpdatesHelp') },
@@ -221,10 +213,11 @@ export default function EmailPreferencesCard() {
                 </div>
                 <div style={mutedStyle}>{t('emailPrefs.unsubscribedBody')}</div>
               </div>
-              <button
-                type="button"
-                onClick={() => void resubscribe()}
+              <InlineConfirmButton
+                onConfirm={resubscribe}
                 disabled={busy}
+                hint={t('emailPrefs.resubscribeConfirm')}
+                confirmLabel={t('emailPrefs.resubscribeCta')}
                 style={{
                   padding: '7px 14px', fontSize: 12, fontWeight: 700, borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border-subtle)', cursor: busy ? 'wait' : 'pointer',
@@ -233,7 +226,7 @@ export default function EmailPreferencesCard() {
                 }}
               >
                 {t('emailPrefs.resubscribeCta')}
-              </button>
+              </InlineConfirmButton>
             </div>
           )}
 

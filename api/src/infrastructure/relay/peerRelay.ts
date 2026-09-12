@@ -26,6 +26,8 @@
  * it in the DO, as `GuestRoomDO` does with its transcript and turn budget.
  */
 
+import { fullBucket, takeToken } from './tokenBucket';
+
 /** A connected socket and the identity the room attributes its frames to. */
 export interface RelayPeer {
   ws: WebSocket;
@@ -110,8 +112,7 @@ export class PeerRelay {
       ref: identity.ref ?? '',
       channel: identity.channel ?? 'default',
       fixedIdentity: typeof identity.ref === 'string' && identity.ref.length > 0,
-      tokens: this.opts.burst,
-      refilledAtMs: this.clock(),
+      ...fullBucket(this.opts, this.clock()),
     };
     this.peers.set(ws, peer);
     return peer;
@@ -212,7 +213,7 @@ export class PeerRelay {
     if (this.opts.allowFrames && !this.opts.allowFrames.includes(parsed.type)) return null;
     const shaped = this.opts.sanitize ? this.opts.sanitize(parsed, peer) : parsed;
     if (!shaped) return null;
-    if (!this.spend(peer)) return null;
+    if (!takeToken(peer, this.opts, this.clock())) return null;
     const stamp = this.opts.stamp?.(peer) ?? { from: peer.id };
     return JSON.stringify({ ...shaped, ...stamp });
   }
@@ -227,17 +228,6 @@ export class PeerRelay {
     const frame = this.accept(peer, raw);
     if (!frame) return false;
     this.broadcast(frame, { channel: peer.channel, except: peer.ws });
-    return true;
-  }
-
-  /** Token bucket: refill by elapsed time, then take one. */
-  private spend(peer: RelayPeer): boolean {
-    const now = this.clock();
-    const elapsed = Math.max(0, now - peer.refilledAtMs);
-    peer.refilledAtMs = now;
-    peer.tokens = Math.min(this.opts.burst, peer.tokens + (elapsed / 1_000) * this.opts.framesPerSecond);
-    if (peer.tokens < 1) return false;
-    peer.tokens -= 1;
     return true;
   }
 

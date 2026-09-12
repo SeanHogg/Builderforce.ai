@@ -8,6 +8,7 @@ import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import { RESUME_TEMPLATES, masterResumeRevision, type ResumeTemplateId } from '@/lib/canvasResume';
 import { getMyResume, updateMyResume, uploadMyResume, getResumeSuggestions, type MyResume, type ResumePrivacyLevel, type ResumeSuggestions } from '@/lib/freelance/talentProfile';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /** Who may see the résumé. Ordered widest → narrowest, which is how the label reads. */
 const PRIVACY_LEVELS: readonly ResumePrivacyLevel[] = ['public', 'recruiter_only', 'connections', 'private'];
 
@@ -33,69 +34,68 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
   const tTemplate = useTranslations('creationCanvas.resumeEditor');
   const [resume, setResume] = useState<MyResume | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [autofilling, setAutofilling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { busy, error, notice, run: runTask, fail: failTask } = usePanelTask();
+  // Which action the in-flight task is — only so the right control says "…ing".
+  const [pending, setPending] = useState<'upload' | 'autofill' | 'patch' | null>(null);
+  const uploading = busy && pending === 'upload';
+  const autofilling = busy && pending === 'autofill';
+
+  /** Read the résumé and report it up — the mount load and the post-upload re-read. */
+  const fetchResume = useCallback(async () => {
+    const loaded = await getMyResume();
+    setResume(loaded);
+    onLoaded?.(loaded);
+    return loaded;
+  }, [onLoaded]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const loaded = await getMyResume();
-      setResume(loaded);
-      onLoaded?.(loaded);
+      await fetchResume();
     } catch (err) {
-      setError(faultMessage(err, t('loadFailed')));
+      const message = faultMessage(err, t('loadFailed'));
+      if (message) failTask(message);
     } finally {
       setLoading(false);
     }
-  }, [t, onLoaded]);
+  }, [t, fetchResume, failTask]);
 
   useEffect(() => { void load(); }, [load]);
 
   const onUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    setUploading(true); setError(null); setNotice(null);
-    try {
-      const result = await uploadMyResume(file);
-      await load();
-      setNotice(t('uploaded', { title: result.resumeTitle }));
-    } catch (err) {
-      setError(faultMessage(err, t('uploadFailed')));
-    } finally {
-      setUploading(false);
-      // Let the same file be chosen again after a failure.
-      event.target.value = '';
+    setPending('upload');
+    const result = await runTask(() => uploadMyResume(file), { failure: t('uploadFailed') });
+    // The title comes from the UPLOAD; the notice rides on the re-read, so it never
+    // sits above the résumé it replaced.
+    if (result !== undefined) {
+      await runTask(fetchResume, { success: t('uploaded', { title: result.resumeTitle }), failure: t('loadFailed') });
     }
+    // Let the same file be chosen again after a failure.
+    event.target.value = '';
   };
 
   /** Persist one résumé setting, showing the result optimistically. */
   const patch = async (input: { templateId?: ResumeTemplateId; privacy?: ResumePrivacyLevel; masterRevisionId?: string }) => {
     if (!resume) return;
-    setError(null);
-    try {
-      const { family } = await updateMyResume(input);
-      const next = { ...resume, family };
-      setResume(next);
-      onLoaded?.(next);
-    } catch (err) {
-      setError(faultMessage(err, t('updateFailed')));
-    }
+    setPending('patch');
+    const updated = await runTask(() => updateMyResume(input), { failure: t('updateFailed') });
+    if (updated === undefined) return;
+    const next = { ...resume, family: updated.family };
+    setResume(next);
+    onLoaded?.(next);
   };
 
   const applyToProfile = async () => {
-    setAutofilling(true); setError(null); setNotice(null);
-    try {
-      const suggestions = await getResumeSuggestions();
-      if (!suggestions.available) { setError(t('autofillUnavailable')); return; }
-      onAutofill?.(suggestions);
-      setNotice(t('autofilled'));
-    } catch (err) {
-      setError(faultMessage(err, t('autofillFailed')));
-    } finally {
-      setAutofilling(false);
-    }
+    setPending('autofill');
+    const suggestions = await runTask(async () => {
+      const found = await getResumeSuggestions();
+      if (!found.available) throw new Error(t('autofillUnavailable'));
+      return found;
+    }, { success: t('autofilled'), failure: t('autofillFailed') });
+    if (suggestions === undefined) return;
+    onAutofill?.(suggestions);
   };
 
   const master = resume ? masterResumeRevision(resume.family) : null;
@@ -115,12 +115,12 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
             type="file"
             accept=".pdf,.doc,.docx,.txt,.md,.json"
             onChange={onUpload}
-            disabled={uploading}
+            disabled={busy}
             style={{ display: 'none' }}
           />
         </label>
         {resume && (
-          <Button variant="secondary" size="sm" onClick={applyToProfile} disabled={autofilling}>
+          <Button variant="secondary" size="sm" onClick={applyToProfile} disabled={busy}>
             {autofilling ? t('filling') : t('fillFromResume')}
           </Button>
         )}

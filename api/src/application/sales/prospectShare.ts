@@ -29,6 +29,7 @@
  * of four places had to be told about it.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import {
   PROSPECT_EVENTS, boundaryAdmits, defaultConfidentialityForKind, isConfidentialityLevel,
@@ -104,7 +105,7 @@ const text = (value: unknown, max: number): string =>
 /** Read the settings off a stored share row, with every field defaulted. A share minted
  *  before a setting existed must render, not blank the page. */
 export function readShareSettings(raw: unknown): ProspectShareSettings {
-  const row = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const row = asJsonRecord(raw);
   const accent = text(row.accentColor, 32);
   return {
     sellerName: text(row.sellerName, 120),

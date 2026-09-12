@@ -54,6 +54,26 @@ export class ServiceUnavailableError extends DomainError {
   }
 }
 
+/**
+ * A server-side failure whose MESSAGE is written for the caller — "Failed to create
+ * template", "Processing failed" — as opposed to an arbitrary thrown error whose text
+ * is a diagnostic (`relation "x" does not exist`). Answers 500 with its own message
+ * (every other 5xx answers generically) and, like every 5xx, is REPORTED: thrown, it
+ * reaches `app.onError` → `reportUnhandledError`; caught, it goes through
+ * `failResponse` → `reportCaughtError`.
+ *
+ * This is what a route uses instead of `return c.json({ error }, 500)`, which answered
+ * the caller and told nobody. Pass the underlying error as `cause` — the reporter
+ * records it; the caller never sees it.
+ */
+export class InternalError extends DomainError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'InternalError';
+    if (options && 'cause' in options) this.cause = options.cause;
+  }
+}
+
 /** One field-level problem with a request, as the client should see it. */
 export interface RequestValidationIssue {
   /** Dotted path into the body (`"items.0.id"`), `""` for the whole body. */
@@ -84,6 +104,7 @@ const DOMAIN_ERROR_STATUS: ReadonlyArray<readonly [new (...args: never[]) => Dom
   [NotFoundError, 404],
   [ConflictError, 409],
   [ServiceUnavailableError, 503],
+  [InternalError, 500],
 ];
 
 /** `true` for a 4xx — the caller's mistake, never reported as a defect. */

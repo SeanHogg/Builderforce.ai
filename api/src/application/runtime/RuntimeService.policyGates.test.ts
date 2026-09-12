@@ -63,13 +63,12 @@ function makeService(
     ? async (s: Scope) => { scopes.push(s); return resolver(s); }
     : undefined;
 
-  const svc = new RuntimeService(
+  const svc = new RuntimeService({
     executions, tasks, agents, audit,
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-    wrapped,
-    registrationResolver,
-    executionEnabled,
-  );
+    resolvePolicyGates: wrapped,
+    resolveAgentRegistration: registrationResolver,
+    isAgentExecutionEnabled: executionEnabled,
+  });
   return { svc, getPayload: () => savedPayload, getSaveCount: () => saveCount, scopes };
 }
 

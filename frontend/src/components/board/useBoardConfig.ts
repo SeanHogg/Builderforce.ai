@@ -8,7 +8,7 @@ import {
   type Swimlane,
   type SwimlaneAgent,
 } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface BoardConfig {
   board: Board | null;
   lanes: Swimlane[];
@@ -34,6 +34,7 @@ export function useBoardConfig(
   projectId: number | null | undefined,
   enabled = true,
 ): BoardConfig {
+  const errorMessage = useErrorMessage();
   const [board, setBoard] = useState<Board | null>(null);
   const [lanes, setLanes] = useState<Swimlane[]>([]);
   const [agentsByLane, setAgentsByLane] = useState<Record<string, SwimlaneAgent[]>>({});
@@ -69,11 +70,11 @@ export function useBoardConfig(
         setAgentsByLane({});
       }
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load board'));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, errorMessage]);
 
   useEffect(() => {
     if (enabled) reload();

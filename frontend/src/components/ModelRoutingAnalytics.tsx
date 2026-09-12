@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { formatUsdSpend } from '@/lib/formatSpend';
 import { llmApi, type ModelAnalyticsResponse } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -30,6 +30,7 @@ function fmtPct(n: number): string {
 const fmtUsd = (millicents: number): string => formatUsdSpend(millicents / 100_000);
 
 export function ModelRoutingAnalytics() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [scope, setScope] = useState<Scope>('tenant');
   const [data, setData] = useState<ModelAnalyticsResponse | null>(null);
@@ -45,10 +46,10 @@ export function ModelRoutingAnalytics() {
     llmApi
       .modelAnalytics(scope)
       .then((res) => { if (!cancelled) setData(res); })
-      .catch((e) => { if (!cancelled) setError(faultMessage(e, 'Failed to load analytics')); })
+      .catch((e) => { if (!cancelled) setError(errorMessage(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [scope]);
+  }, [scope, errorMessage]);
 
   const switchScope = (s: Scope) => {
     if (s === scope) return;

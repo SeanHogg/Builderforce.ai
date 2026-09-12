@@ -16,7 +16,8 @@
  * unaffected.
  */
 
-import { signJwt } from '../../infrastructure/auth/JwtService';
+import { signJwt, signOpaqueJwt } from '../../infrastructure/auth/JwtService';
+import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { TenantRole } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -82,10 +83,13 @@ export async function replayRoute(
   const auth = resolveReplayAuth({
     authToken: ctx.authToken,
     agentRef: ctx.agentRef,
+    userId: ctx.userId,
   });
-  const bearer = auth.forwardToken
+  const bearer = auth.kind === 'forward'
     ? auth.forwardToken
-    : await signJwt(
+    : auth.kind === 'user'
+      ? await signInProcessUserToken(ctx.env.JWT_SECRET, { sub: auth.subject, tid: ctx.tenantId, role: ctx.role ?? TenantRole.DEVELOPER })
+      : await signJwt(
         {
           sub: auth.subject,
           tid: ctx.tenantId,
@@ -117,12 +121,20 @@ export async function replayRoute(
   return parsed;
 }
 
-export interface ReplayAuthPlan {
+/** The machine subject a replay runs as when no person can be named for it. */
+export const REPLAY_MACHINE_SUBJECT = 'agentHost:mcp';
+
+/** How long an in-process replay token lives. It never leaves the isolate — the
+ *  request is handed straight to `app.request` — so it only has to outlive one call. */
+const IN_PROCESS_TOKEN_TTL_SECONDS = 300;
+
+export type ReplayAuthPlan =
   /** A real person's still-authoritative bearer token. Never set for an agent run. */
-  forwardToken?: string;
-  /** Machine subject used when the platform must mint a fresh in-process token. */
-  subject: 'agentHost:mcp';
-}
+  | { kind: 'forward'; forwardToken: string; subject: string }
+  /** Mint an in-process token AS this person (a gateway-key caller that resolved to a member). */
+  | { kind: 'user'; subject: string }
+  /** Mint an in-process machine token (an agent run, or a caller nobody can be named for). */
+  | { kind: 'machine'; subject: typeof REPLAY_MACHINE_SUBJECT };
 
 /**
  * Decide how an in-process route replay authenticates.
@@ -133,17 +145,48 @@ export interface ReplayAuthPlan {
  * bounded by the run's tenant/role while the signed `agt` claim above preserves
  * the real agent authorship. Human MCP calls still forward their bearer so
  * session revocation and exact user permissions remain authoritative.
+ *
+ * A PERSON calling through a gateway key (`bfk_*` — the VS Code editor credential) has
+ * no bearer to forward, but they are not anonymous: the gateway resolved the key to its
+ * creator (`requireTenantAccess`), and that member's id arrives as `userId`. The replay
+ * then runs AS THEM — their id, their role — because a platform tool the editor chat
+ * replays is that person acting. Under the machine subject the replayed route filed
+ * every write under `agentHost:mcp` and, worse, the recorded override authority for a
+ * human-directed run named nobody.
  */
 export function resolveReplayAuth(args: {
   authToken?: string | null;
   agentRef?: string | null;
+  userId?: string | null;
 }): ReplayAuthPlan {
   const token = args.authToken?.trim() ?? '';
   const isGatewayKey = /^(bfk_|bfa_|clk_)/.test(token);
   if (!args.agentRef && token && !isGatewayKey) {
-    return { forwardToken: token, subject: 'agentHost:mcp' };
+    return { kind: 'forward', forwardToken: token, subject: REPLAY_MACHINE_SUBJECT };
   }
-  return { subject: 'agentHost:mcp' };
+  const userId = args.userId?.trim() ?? '';
+  // A machine-shaped id (`agentHost:5`, `embed:…`) is not a person; and an agent run's
+  // `userId` is its own ref, which the `agentRef` guard above already excluded.
+  if (!args.agentRef && userId && parseMachineSubject(userId) === null) {
+    return { kind: 'user', subject: userId };
+  }
+  return { kind: 'machine', subject: REPLAY_MACHINE_SUBJECT };
+}
+
+/**
+ * An in-process token for a PERSON. Deliberately carries no `jti` and no `sv`: the
+ * session-revocation check needs a persisted `auth_tokens` row (one per replay would be
+ * a write per tool call for a token that never leaves the isolate), and the session-
+ * version check is for tokens that can be stolen. This one cannot — it is handed to
+ * `app.request` and discarded — and it is bounded by the gateway key that resolved the
+ * member, which is itself revocable and cache-invalidated on revocation.
+ */
+async function signInProcessUserToken(
+  secret: string,
+  claims: { sub: string; tid: number; role: TenantRole },
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return signOpaqueJwt({ ...claims, iat: now, exp: now + IN_PROCESS_TOKEN_TTL_SECONDS }, secret);
 }
 
 /**

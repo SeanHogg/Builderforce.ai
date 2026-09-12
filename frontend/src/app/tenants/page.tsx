@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId, createTenant as apiCreateTenant, renameTenant as apiRenameTenant } from '@/lib/auth';
 import type { Tenant } from '@/lib/types';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /** Auto-select tenant when there is only one or a default is set (BuilderForceAgentsLink-style). Returns the tenant to select or null. */
 function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
   if (list.length === 0) return null;
@@ -22,6 +22,7 @@ export default function TenantsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant, webToken, fetchTenants, selectTenant } = useAuth();
+  const errorMessage = useErrorMessage();
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,10 +57,10 @@ export default function TenantsPage() {
         setTenants(data);
       })
       .catch((err: unknown) =>
-        setError(faultMessage(err, 'Failed to load tenants'))
+        setError(errorMessage(err))
       )
       .finally(() => setIsLoading(false));
-  }, [isAuthenticated, fetchTenants]);
+  }, [isAuthenticated, fetchTenants, errorMessage]);
 
   // Auto-select tenant only when user has no tenant (e.g. just from login). If they already have a tenant, they're visiting to switch or create one — don't redirect.
   useEffect(() => {
@@ -85,7 +86,7 @@ export default function TenantsPage() {
       const next = searchParams.get('next') || '/dashboard';
       router.push(next);
     } catch (err) {
-      setError(faultMessage(err, 'Failed to select tenant'));
+      setError(errorMessage(err));
       setIsSelecting(null);
     }
   };
@@ -132,7 +133,7 @@ export default function TenantsPage() {
         router.replace(next);
       }
     } catch (err) {
-      setError(faultMessage(err, 'Failed to create workspace'));
+      setError(errorMessage(err));
     } finally {
       setIsCreating(false);
     }
@@ -163,7 +164,7 @@ export default function TenantsPage() {
       setTenants((prev) => prev.map((t) => (t.id === tenant.id ? { ...t, name: updated.name, slug: updated.slug ?? t.slug } : t)));
       cancelRename();
     } catch (err) {
-      setError(faultMessage(err, 'Failed to rename workspace'));
+      setError(errorMessage(err));
     } finally {
       setIsRenaming(false);
     }

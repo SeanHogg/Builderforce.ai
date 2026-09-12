@@ -9,8 +9,9 @@
  * Money is micros of the account currency.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   mapTargetingValues, readNativeValues, requireTargetingSupport,
@@ -92,7 +93,7 @@ function targetingSpec(targeting: AdTargeting): Record<string, unknown> {
  *  Reddit's console targets communities this port has no name for, and reporting the
  *  half we understand beats reporting nothing. */
 function readRedditTargeting(raw: unknown): AdTargeting {
-  const spec = rec(raw);
+  const spec = asJsonRecord(raw);
   const targeting: {
     countries?: string[]; ageMin?: number; ageMax?: number;
     genders?: AdGender[]; interests?: string[]; placements?: AdPlacement[]; devices?: AdDevice[];
@@ -130,7 +131,7 @@ export const redditAdsProvider: AdsProvider = {
 
   async identity(call, fields) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const accounts = list((await ask(call, 'list_ad_accounts', { page_size: 100 })).data).map(rec);
+    const accounts = list((await ask(call, 'list_ad_accounts', { page_size: 100 })).data).map(asJsonRecord);
     const match = accounts.find((a) => text(a.id) === accountId);
     return {
       externalId: accountId,
@@ -141,12 +142,12 @@ export const redditAdsProvider: AdsProvider = {
 
   async listCampaigns(call, fields, identity) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const campaigns = list((await ask(call, 'list_campaigns', { ad_account_id: accountId, page_size: 200 })).data).map(rec);
+    const campaigns = list((await ask(call, 'list_campaigns', { ad_account_id: accountId, page_size: 200 })).data).map(asJsonRecord);
     if (campaigns.length === 0) return [];
 
     // ONE call for every ad group, grouped in memory — the daily budget lives there,
     // and a request per campaign would be an N+1 across the whole account.
-    const adGroups = list((await ask(call, 'list_ad_groups', { ad_account_id: accountId, page_size: 500 })).data).map(rec);
+    const adGroups = list((await ask(call, 'list_ad_groups', { ad_account_id: accountId, page_size: 500 })).data).map(asJsonRecord);
     const dailyByCampaign = new Map<string, number>();
     const scheduleByCampaign = new Map<string, { start: string | null; end: string | null }>();
     for (const group of adGroups) {
@@ -185,7 +186,7 @@ export const redditAdsProvider: AdsProvider = {
   async createCampaign(call, fields, draft, identity) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
     const objective = mapObjective(redditAdsProvider, OBJECTIVES, draft.objective);
-    const created = rec((await ask(call, 'create_campaign', {
+    const created = asJsonRecord((await ask(call, 'create_campaign', {
       ad_account_id: accountId,
       name: draft.name,
       objective,
@@ -231,7 +232,7 @@ export const redditAdsProvider: AdsProvider = {
 
   async listAdSets(call, fields, identity, externalCampaignId) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const rows = list((await ask(call, 'list_ad_groups', { ad_account_id: accountId, page_size: 500 })).data).map(rec);
+    const rows = list((await ask(call, 'list_ad_groups', { ad_account_id: accountId, page_size: 500 })).data).map(asJsonRecord);
     // Reddit's ad-group edge takes no campaign filter, so the scope is applied here —
     // one call for the account still beats one call per campaign.
     const scoped = externalCampaignId ? rows.filter((row) => text(row.campaign_id) === externalCampaignId) : rows;
@@ -259,7 +260,7 @@ export const redditAdsProvider: AdsProvider = {
     const bid = fromCents(draft.bidCents, MICROS);
     const daily = fromCents(draft.dailyBudgetCents, MICROS);
 
-    const created = rec((await ask(call, 'create_ad_group', {
+    const created = asJsonRecord((await ask(call, 'create_ad_group', {
       ad_account_id: accountId,
       campaign_id: draft.externalCampaignId,
       name: draft.name,
@@ -315,7 +316,7 @@ export const redditAdsProvider: AdsProvider = {
 
   async listAds(call, fields, _identity, externalAdSetId) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const rows = list((await ask(call, 'list_ads', { ad_account_id: accountId, page_size: 500 })).data).map(rec);
+    const rows = list((await ask(call, 'list_ads', { ad_account_id: accountId, page_size: 500 })).data).map(asJsonRecord);
     const scoped = externalAdSetId ? rows.filter((row) => text(row.ad_group_id) === externalAdSetId) : rows;
     return scoped.map((row) => ({
       externalId: text(row.id),
@@ -343,7 +344,7 @@ export const redditAdsProvider: AdsProvider = {
       );
     }
 
-    const created = rec((await ask(call, 'create_ad', {
+    const created = asJsonRecord((await ask(call, 'create_ad', {
       ad_account_id: accountId,
       ad_group_id: draft.externalAdSetId,
       name: draft.name,
@@ -393,7 +394,7 @@ export const redditAdsProvider: AdsProvider = {
       ends_at: `${query.until}T23:59:59Z`,
       time_zone_id: 'UTC',
     });
-    return list(rec(result.data).metrics ?? result.data).map(rec).flatMap((row) => {
+    return list(asJsonRecord(result.data).metrics ?? result.data).map(asJsonRecord).flatMap((row) => {
       const externalCampaignId = text(row.campaign_id);
       const date = toDay(row.date);
       if (!externalCampaignId || !date) return [];

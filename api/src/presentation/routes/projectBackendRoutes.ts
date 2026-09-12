@@ -15,6 +15,7 @@
  * their webhooks' replies.
  */
 
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
@@ -239,7 +240,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
 
     const body = await c.req.json<{ document?: unknown }>().catch(() => ({}) as never);
     const saved = await saveHandler(env, env.UPLOADS, project.id, c.req.param('name'), body.document);
-    if (!saved.ok) return c.json({ error: saved.reason }, saved.status);
+    if (!saved.ok) return statusResponse(c, { error: saved.reason }, saved.status, { source: 'presentation/routes/projectBackendRoutes.ts', operation: 'saveHandler' });
 
     await regenerate(db, env, tenantId, project);
     return c.json({ ok: true, path: saved.path, spec: saved.spec });

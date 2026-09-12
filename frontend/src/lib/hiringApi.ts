@@ -8,6 +8,7 @@
 
 import { apiRequest } from './apiClient';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 export interface FunnelStage {
   stage: string;
@@ -79,7 +80,7 @@ export const hiringApi = {
   ): Promise<SlotOffer | { error: string }> =>
     apiRequest<SlotOffer>(`/api/hiring/interviews/${interviewId}/offer-slots`, {
       method: 'POST', body: JSON.stringify(body),
-    }).catch((error: unknown) => ({ error: error instanceof Error ? error.message : 'Could not create the booking link.' })),
+    }).catch((error: unknown) => ({ error: toolErrorMessage(error, 'Could not create the booking link.') })),
 
   /** Record the lawful basis this candidate record is held under, and its clock. */
   recordConsent: (

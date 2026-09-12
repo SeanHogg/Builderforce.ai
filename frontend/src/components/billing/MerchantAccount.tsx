@@ -40,6 +40,7 @@ import {
   type MerchantAccountView,
 } from '@/lib/founderOpsApi';
 import { faultText } from '@/lib/apiClient';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 export interface MerchantAccountProps {
   /** Where the processor's round trip returns to. */
   returnTo: string;
@@ -67,14 +68,14 @@ const rowStyle: React.CSSProperties = {
   padding: '4px 0',
 };
 
-/** The one place a status becomes a colour, so the three states cannot be tinted
- *  differently by two callers. Both themes are covered because every value is a
- *  token — see [[theme-and-responsive-ui]]. */
-const STATUS_COLOR: Record<string, string> = {
-  connected: 'var(--success-strong, var(--text-primary))',
-  restricted: 'var(--coral-bright)',
-  pending: 'var(--text-muted)',
-  absent: 'var(--text-muted)',
+/** The one place a status becomes a tone, so the states cannot be tinted
+ *  differently by two callers. Both themes are covered because `lib/statusTone`
+ *  resolves every tone to a token — see [[theme-and-responsive-ui]]. */
+const STATUS_TONE: StatusToneMap = {
+  connected: 'success',
+  restricted: 'warning',
+  pending: 'neutral',
+  absent: 'neutral',
 };
 
 export function MerchantAccount({ returnTo, onChanged }: MerchantAccountProps) {
@@ -139,7 +140,7 @@ export function MerchantAccount({ returnTo, onChanged }: MerchantAccountProps) {
     <div style={cardStyle}>
       <div style={rowStyle}>
         <span style={{ color: 'var(--text-muted)' }}>{t('statusLabel')}</span>
-        <strong style={{ color: STATUS_COLOR[status] ?? 'var(--text-primary)' }}>
+        <strong style={{ color: statusColor(STATUS_TONE, status) }}>
           {t(`status.${status}` as 'status.absent')}
         </strong>
       </div>

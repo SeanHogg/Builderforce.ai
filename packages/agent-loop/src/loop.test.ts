@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runAgentLoop } from "./loop.js";
 import { openAiChatCodec, type OpenAiAssistantRow, type OpenAiToolRow } from "./openaiCodec.js";
-import type { LoopHooks, LoopPorts, LoopTurnResult, ParsedToolCall } from "./types.js";
+import { DEFAULT_TOOL_FAILURE_STREAK, type LoopHooks, type LoopPorts, type LoopTurnResult, type ParsedToolCall } from "./types.js";
 
 type Row = OpenAiAssistantRow | OpenAiToolRow | { role: "user" | "system"; content: string };
 
@@ -110,7 +110,69 @@ describe("runAgentLoop", () => {
       { content: "", toolCalls: [call("b", "read")] },
     ]);
     const r = await runAgentLoop({ messages: [], codec: openAiChatCodec<Row>(), ports, budget: { stepCap: 2 } });
-    expect(r).toMatchObject({ finished: false, exhausted: true, step: 2 });
+    expect(r).toMatchObject({ finished: false, exhausted: true, exhaustedBy: "steps", step: 2 });
+  });
+
+  // ── The tool-failure breaker: the ONLY limit a run has by default ────────────
+  it("runs without a step cap by default: a long run of successful calls is never cut off", async () => {
+    const turns: LoopTurnResult[] = Array.from({ length: 120 }, (_, i) => ({ content: "", toolCalls: [call(`c${i}`, "read")] }));
+    turns.push({ content: "done", toolCalls: [] });
+    const ports = scripted(turns);
+    const r = await runAgentLoop({ messages: [], codec: openAiChatCodec<Row>(), ports, budget: {} });
+    expect(r).toMatchObject({ finished: true, exhausted: false, output: "done", step: 120, failureStreak: 0 });
+    expect(ports.dispatched).toHaveLength(120);
+  });
+
+  it("stops the run once DEFAULT_TOOL_FAILURE_STREAK dispatches in a row fail", async () => {
+    const turns: LoopTurnResult[] = Array.from({ length: 10 }, (_, i) => ({ content: "", toolCalls: [call(`c${i}`, "boom")] }));
+    const failing: LoopPorts<Row> = {
+      ...scripted(turns),
+      async dispatch() {
+        return { data: { ok: false, error: "nope" }, isError: true };
+      },
+    };
+    const r = await runAgentLoop({ messages: [], codec: openAiChatCodec<Row>(), ports: failing, budget: {} });
+    expect(r).toMatchObject({ finished: false, exhausted: true, exhaustedBy: "failures", failureStreak: DEFAULT_TOOL_FAILURE_STREAK });
+    // Five turns ran — the step count says how far the run got, as it does for a step cap.
+    expect(r.step).toBe(DEFAULT_TOOL_FAILURE_STREAK);
+  });
+
+  it("a successful dispatch resets the streak, so interleaved failures never trip it", async () => {
+    // fail, fail, ok, fail, fail, ok, … — never five failures in a row.
+    const turns: LoopTurnResult[] = Array.from({ length: 30 }, (_, i) => ({ content: "", toolCalls: [call(`c${i}`, i % 3 === 2 ? "ok" : "boom")] }));
+    turns.push({ content: "done", toolCalls: [] });
+    const base = scripted(turns);
+    const ports: LoopPorts<Row> = {
+      ...base,
+      async dispatch(c) {
+        return c.name === "ok" ? { data: { ok: true } } : { data: { ok: false, error: "nope" }, isError: true };
+      },
+    };
+    const r = await runAgentLoop({ messages: [], codec: openAiChatCodec<Row>(), ports, budget: {} });
+    expect(r).toMatchObject({ finished: true, exhausted: false, output: "done" });
+  });
+
+  it("counts a beforeDispatch short-circuit flagged isError, but never a control signal", async () => {
+    const turns: LoopTurnResult[] = [
+      { content: "", toolCalls: [call("a", "blocked")] },
+      { content: "", toolCalls: [call("b", "blocked")] },
+      { content: "", toolCalls: [call("f", "finish", { summary: "shipped" })] },
+    ];
+    const ports = scripted(turns);
+    const r = await runAgentLoop({
+      messages: [], codec: openAiChatCodec<Row>(), ports, budget: { failureStreakCap: 3 },
+      hooks: { beforeDispatch: (c) => (c.name === "blocked" ? { result: { data: { error: "policy" }, isError: true } } : undefined) },
+    });
+    // Two blocked calls counted (streak 2 < 3), then the finish control ended the run cleanly.
+    expect(r).toMatchObject({ finished: true, exhausted: false, output: "shipped", failureStreak: 2 });
+  });
+
+  it("failureStreakCap: Infinity disables the breaker", async () => {
+    const turns: LoopTurnResult[] = Array.from({ length: 8 }, (_, i) => ({ content: "", toolCalls: [call(`c${i}`, "boom")] }));
+    turns.push({ content: "gave up", toolCalls: [] });
+    const ports: LoopPorts<Row> = { ...scripted(turns), async dispatch() { return { data: null, isError: true }; } };
+    const r = await runAgentLoop({ messages: [], codec: openAiChatCodec<Row>(), ports, budget: { failureStreakCap: Number.POSITIVE_INFINITY } });
+    expect(r).toMatchObject({ finished: true, output: "gave up", step: 8, failureStreak: 8 });
   });
 
   it("stops before asking the model when cancelled via hook or signal", async () => {

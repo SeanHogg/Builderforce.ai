@@ -27,13 +27,6 @@ import { runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nat
 const PARTICIPANT_ID = "builderforce.agent";
 
 /**
- * Tool-iteration ceiling for a native turn. Higher than the shared default because the
- * participant runs a real coding loop against an open workspace, where a single request
- * ("rename this across the repo") legitimately spans many read/edit turns.
- */
-const MAX_ITERATIONS = 40;
-
-/**
  * Recover the session's Brain chat id from the native chat history: it is stashed in
  * every prior response turn's `result.metadata.brainChatId` (the Chat Participant
  * API's per-session state channel — there is no stable session id in the stable API).
@@ -235,7 +228,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
       permissionMode,
       ...(policyGates.length ? { policyGates } : {}),
-      maxIterations: MAX_ITERATIONS,
       // The transport for this route — gateway or on-device — decided in `modelRouting`,
       // never here. The sign-in gate above guarantees a key on the gateway branch.
       stream: routeStream(modelChoice, key),
@@ -250,7 +242,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       },
       labels: {
         dispatchHint: vscode.l10n.t(
-          "_This turn reached its tool budget. For work this long, dispatch a cloud agent from the board instead — it runs without a turn limit._",
+          "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",
         ),
         blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
       },

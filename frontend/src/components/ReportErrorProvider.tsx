@@ -6,7 +6,7 @@ import { useToast } from './ToastProvider';
 import { reportProductError, REPORT_ERROR_EVENT, type ReportErrorPrefill } from '@/lib/reportError';
 import { SlideOutPanel } from './SlideOutPanel';
 import { Select } from './Select';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 type OpenReporter = (prefill?: ReportErrorPrefill) => void;
 
 /**
@@ -26,17 +26,17 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
   const [message, setMessage] = useState('');
   const [level, setLevel] = useState<'fatal' | 'error' | 'warning' | 'info'>('error');
   const [url, setUrl] = useState<string | undefined>(undefined);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
+  const { busy: submitting, clear: clearTask } = task;
 
   const reportError = useCallback<OpenReporter>((prefill) => {
     setTitle(prefill?.title ?? '');
     setMessage(prefill?.message ?? '');
     setUrl(prefill?.url);
     setLevel('error');
-    setError(null);
+    clearTask();
     setOpen(true);
-  }, []);
+  }, [clearTask]);
 
   // Root-level surfaces (the global API-error toast) open the panel via a window
   // event, since they sit above this provider in the tree.
@@ -50,21 +50,20 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
 
   const submit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await reportProductError(
-        { message: message.trim(), title: title.trim() || undefined, url, level },
-      );
-      toast.success(t('reported'));
-      setOpen(false);
-    } catch (err) {
-      setError(faultMessage(err, t('failed')));
-    } finally {
-      setSubmitting(false);
-    }
-  }, [message, title, url, level, submitting, toast, t]);
+    if (!message.trim() || task.busy) return;
+    const reported = await task.run(
+      async () => {
+        await reportProductError(
+          { message: message.trim(), title: title.trim() || undefined, url, level },
+        );
+        return true;
+      },
+      { failure: t('failed') },
+    );
+    if (reported === undefined) return;
+    toast.success(t('reported'));
+    setOpen(false);
+  }, [message, title, url, level, task, toast, t]);
 
   const canSubmit = message.trim().length > 0 && !submitting;
 
@@ -107,8 +106,8 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
             </Select>
           </label>
 
-          {error && (
-            <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--error-text, var(--error))' }}>{error}</p>
+          {task.error && (
+            <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--error-text, var(--error))' }}>{task.error}</p>
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>

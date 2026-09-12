@@ -9,9 +9,9 @@
  * read. This helper and {@link errorHandler} share {@link errorResponseBody}, so
  * a thrown error and a caught one produce byte-identical answers.
  */
-import type { Context } from 'hono';
+import type { Context, Env as HonoBaseEnv } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { RequestValidationError, isClientError, statusOf } from '../../domain/shared/errors';
+import { InternalError, RequestValidationError, isClientError, statusOf } from '../../domain/shared/errors';
 import { reportCaughtError, type CaughtErrorDetails } from '../../application/observability/caughtErrorReporter';
 import type { HonoEnv } from '../../env';
 
@@ -34,7 +34,8 @@ export interface ErrorResponseBody {
  */
 export function errorResponseBody(error: unknown): { status: number; body: ErrorResponseBody } {
   const status = statusOf(error);
-  if (status >= 500) return { status, body: { error: GENERIC_SERVER_ERROR } };
+  // An InternalError's message was written for the caller; any other 5xx text is a diagnostic.
+  if (status >= 500) return { status, body: { error: error instanceof InternalError ? error.message : GENERIC_SERVER_ERROR } };
   const message = error instanceof Error ? error.message : String(error);
   const body: ErrorResponseBody = { error: message };
   if (error instanceof RequestValidationError) body.issues = error.issues;
@@ -59,16 +60,48 @@ export function failResponse(
   extra?: Record<string, unknown>,
 ): Response {
   const { status, body } = errorResponseBody(error);
-  if (!isClientError(status)) {
-    reportCaughtError(error, details, {
-      env: c.env,
-      method: c.req.method,
-      path: new URL(c.req.url).pathname,
-      tenantId: c.get('tenantId'),
-      userId: c.get('userId'),
-    });
-  }
+  if (!isClientError(status)) reportServerError(c, error, details);
   return c.json(extra ? { ...body, ...extra } : body, status as ContentfulStatusCode);
+}
+
+/**
+ * Answer `body` at a status the handler COMPUTED — a service's `{ ok: false, status }`,
+ * a rejection→status table, a pass-through op result — rather than one it threw. The
+ * body and status are rendered exactly as given; a 5xx is also REPORTED (with `cause`
+ * when the handler holds the underlying error). Replaces `c.json(body, result.status)`,
+ * which answered a 502 and told nobody.
+ */
+export function statusResponse<E extends HonoBaseEnv = HonoEnv>(
+  c: Context<E>,
+  body: object,
+  status: number,
+  details: CaughtErrorDetails,
+  cause?: unknown,
+): Response {
+  // Generic so routers whose env adds bindings (agent-host relay, runtime) can call it;
+  // the reporter reads only the request, the env handle and the identity variables every
+  // env in this app carries.
+  const ctx = c as unknown as Context<HonoEnv>;
+  if (status >= 500) {
+    const said = (body as { error?: unknown }).error;
+    reportServerError(ctx, new InternalError(typeof said === 'string' ? said : `answered ${status}`, cause === undefined ? undefined : { cause }), details);
+  }
+  return ctx.json(body as Record<string, unknown>, status as ContentfulStatusCode);
+}
+
+/**
+ * Report a server failure with the request's identity attached, for the rare handler
+ * whose 5xx body is a PROTOCOL's shape rather than `{ error }` (a JSON-RPC error
+ * envelope) and so cannot answer through {@link failResponse} or {@link statusResponse}.
+ */
+export function reportServerError(c: Context<HonoEnv>, error: unknown, details: CaughtErrorDetails): void {
+  reportCaughtError(error, details, {
+    env: c.env,
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+    tenantId: c.get('tenantId'),
+    userId: c.get('userId'),
+  });
 }
 
 /**

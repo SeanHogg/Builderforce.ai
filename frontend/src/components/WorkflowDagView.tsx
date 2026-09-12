@@ -11,14 +11,10 @@
  */
 
 import { useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import type { WorkflowGraphNode, WorkflowGraphEdge } from '@/lib/builderforceApi';
-
-const STATUS_COLORS: Record<string, string> = {
-  pending:   'var(--text-muted)',
-  running:   'var(--cyan-bright, var(--cyan-bright))',
-  completed: 'rgba(34,197,94,0.9)',
-  failed:    'var(--coral-bright)',
-};
+import { statusColor } from '@/lib/statusTone';
+import { WORKFLOW_STATUS_TONE } from './workflowRunUi';
 
 const NODE_W = 180;
 const NODE_H = 56;
@@ -110,12 +106,13 @@ interface Props {
 }
 
 export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
+  const t = useTranslations('workflowDag');
   const positioned = useMemo(() => layoutNodes(nodes, edges), [nodes, edges]);
 
   if (positioned.length === 0) {
     return (
       <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>
-        No tasks in this workflow yet.
+        {t('empty')}
       </div>
     );
   }
@@ -150,7 +147,7 @@ export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
               key={i}
               d={`M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`}
               fill="none"
-              stroke="var(--border-subtle, rgba(255,255,255,0.1))"
+              stroke="var(--border-subtle)"
               strokeWidth={1.5}
               markerEnd="url(#arrow)"
             />
@@ -169,14 +166,16 @@ export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
           >
             <path
               d="M0,0 L0,6 L8,3 z"
-              fill="var(--border-subtle, rgba(255,255,255,0.15))"
+              fill="var(--border-subtle)"
             />
           </marker>
         </defs>
 
         {/* Nodes */}
         {positioned.map((n) => {
-          const color = STATUS_COLORS[n.status] ?? STATUS_COLORS.pending;
+          // Stroke / accent bar / dot are marks; the role label is ink.
+          const color = statusColor(WORKFLOW_STATUS_TONE, n.status, 'solid');
+          const ink = statusColor(WORKFLOW_STATUS_TONE, n.status);
           const isActive = n.status === 'running';
           return (
             <g
@@ -191,7 +190,7 @@ export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
                 height={NODE_H}
                 rx={8}
                 fill="var(--bg-elevated)"
-                stroke={isActive ? color : 'var(--border-subtle, rgba(255,255,255,0.08))'}
+                stroke={isActive ? color : 'var(--border-subtle)'}
                 strokeWidth={isActive ? 1.5 : 1}
               />
               {/* Left accent bar */}
@@ -210,10 +209,10 @@ export function WorkflowDagView({ nodes, edges, onNodeClick }: Props) {
                 y={19}
                 fontSize={9}
                 fontWeight={700}
-                fill={color}
+                fill={ink}
                 style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
               >
-                {(n.role ?? 'agent').slice(0, 20)}
+                {(n.role ?? t('defaultRole')).slice(0, 20)}
               </text>
               {/* Description */}
               <text

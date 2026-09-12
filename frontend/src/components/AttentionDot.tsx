@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import type { AttentionState } from '@/lib/builderforceApi';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * The ONE cross-surface status glyph for a session/ticket's live state. Given an
@@ -9,12 +10,12 @@ import type { AttentionState } from '@/lib/builderforceApi';
  * an accessible, localised label — `running` = coral, `awaiting_input` = amber
  * "needs answer". Renders nothing for an idle/absent state so a caller can drop
  * it into any row unconditionally (`<AttentionDot state={attn.chats[id]?.state} />`)
- * and it self-hides. Colours mirror {@link EXECUTION_STATUS_COLOR} so the board
+ * and it self-hides. Colours mirror {@link EXECUTION_STATUS_TONE} so the board
  * chips and these dots agree on hue everywhere.
  */
-const COLOR: Record<AttentionState, string> = {
-  running: 'var(--coral-bright)',
-  awaiting_input: 'var(--warning)',
+const ATTENTION_TONE: StatusToneMap<AttentionState> = {
+  running: 'accent',
+  awaiting_input: 'warning',
 };
 
 export function AttentionDot({
@@ -28,7 +29,7 @@ export function AttentionDot({
 }) {
   const t = useTranslations('attention');
   if (!state) return null;
-  const color = COLOR[state];
+  const color = statusColor(ATTENTION_TONE, state, 'solid');
   const label = state === 'awaiting_input' ? t('awaiting') : t('running');
   return (
     <span
@@ -50,7 +51,7 @@ export function AttentionDot({
         }}
       />
       {showLabel && (
-        <span style={{ fontSize: 11, fontWeight: 600, color, whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: statusColor(ATTENTION_TONE, state), whiteSpace: 'nowrap' }}>{label}</span>
       )}
     </span>
   );

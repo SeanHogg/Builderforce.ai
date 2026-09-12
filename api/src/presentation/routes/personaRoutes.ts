@@ -33,6 +33,7 @@
 import { Hono } from 'hono';
 import { and, desc, eq, ilike, ne, or, sql as dsql } from 'drizzle-orm';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { requiredPlanForFeature } from '../../domain/tenant/planFeatures';
 import {
@@ -191,7 +192,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // Authentication only enriches the response with the tenant's entitlement.
   // -------------------------------------------------------------------------
   router.get('/psychometric/catalog', optionalAuthMiddleware, async (c) => {
-    const tenantId = c.get('tenantId') as number | undefined;
+    const tenantId = optionalTenantId(c);
     const userId = c.get('userId') as string | undefined;
     // `entitled` here gates ATTACHING a profile to an agent/persona (the editor's
     // locked state). Superadmin- and premium-override-aware via the shared gate.

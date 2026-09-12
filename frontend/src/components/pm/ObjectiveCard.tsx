@@ -163,7 +163,7 @@ export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects,
             {o.period && <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{o.period}</span>}
             <button type="button" style={ghostBtn} disabled={busy}
               title={t('okr.convertToEpicHint')}
-              onClick={async () => { if (await confirm({ message: t('okr.convertToEpicConfirm'), destructive: false })) run(() => pmoApi.objectives.convertType(o.id, 'epic')); }}>
+              onClick={async () => { if (await confirm({ message: t('okr.convertToEpicConfirm'), confirmLabel: t('okr.convertToEpic') })) run(() => pmoApi.objectives.convertType(o.id, 'epic')); }}>
               {t('okr.convertToEpic')}
             </button>
             <button type="button" style={ghostBtn} disabled={busy}

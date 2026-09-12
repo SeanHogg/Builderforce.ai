@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { agentHostConfigApi } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 interface AgentHostConfigContentProps {
   agentHostId: number;
 }
@@ -16,13 +17,12 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentProps) {
+  const tc = useTranslations('common');
+  const t = useTranslations('agentHostTabs.config');
   const fmt = useFormat();
   const [raw, setRaw] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const task = usePanelTask();
   const [jsonValid, setJsonValid] = useState(true);
 
   useEffect(() => {
@@ -39,9 +39,13 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
       .finally(() => setLoading(false));
   }, [agentHostId]);
 
+  // Editing drops a save error but not the "Saved" line; while an error shows there is
+  // no notice (the task holds one or the other), so clearing only then drops just it.
+  const dropSaveError = () => { if (task.error) task.clear(); };
+
   const handleChange = (value: string) => {
     setRaw(value);
-    setSaveError(null);
+    dropSaveError();
     try {
       JSON.parse(value);
       setJsonValid(true);
@@ -52,23 +56,16 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
 
   const handleSave = async () => {
     if (!jsonValid) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
+    await task.run(async () => {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       await agentHostConfigApi.update(agentHostId, parsed);
-      setSavedAt(new Date());
-    } catch (e) {
-      setSaveError(faultMessage(e, 'Save failed'));
-    } finally {
-      setSaving(false);
-    }
+    }, { success: () => t('saved', { time: fmt.time(new Date()) }) });
   };
 
   const handleReset = () => {
     setRaw('{}');
     setJsonValid(true);
-    setSaveError(null);
+    dropSaveError();
   };
 
   const handleFormat = () => {
@@ -80,13 +77,13 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
     }
   };
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading config…</div>;
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>Runtime Configuration</div>
+          <div style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{t('title')}</div>
           <button
             type="button"
             onClick={handleFormat}
@@ -102,7 +99,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               cursor: jsonValid ? 'pointer' : 'not-allowed',
             }}
           >
-            Format
+            {t('format')}
           </button>
           <button
             type="button"
@@ -118,12 +115,12 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
               cursor: 'pointer',
             }}
           >
-            Reset
+            {t('reset')}
           </button>
         </div>
 
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-          JSON configuration passed to the agentHost runtime. Changes take effect on next agentHost connection.
+          {t('description')}
         </p>
 
         <textarea
@@ -149,47 +146,41 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
 
         {!jsonValid && (
           <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 6 }}>
-            Invalid JSON — fix before saving.
+            {t('invalidJson')}
           </div>
         )}
 
-        {saveError && (
+        {task.error && (
           <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 6 }}>
-            {saveError}
+            {task.error}
           </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, justifyContent: 'flex-end' }}>
-          {savedAt && (
+          {task.notice && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Saved {fmt.time(savedAt)}
+              {task.notice}
             </span>
           )}
           <button
             type="button"
             onClick={handleSave}
-            disabled={!jsonValid || saving}
+            disabled={!jsonValid || task.busy}
             style={{
               padding: '8px 18px',
               fontSize: 13,
               fontWeight: 600,
-              background: jsonValid && !saving ? 'var(--coral-bright)' : 'var(--bg-elevated)',
-              color: jsonValid && !saving ? 'var(--text-on-accent)' : 'var(--text-muted)',
+              background: jsonValid && !task.busy ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+              color: jsonValid && !task.busy ? 'var(--text-on-accent)' : 'var(--text-muted)',
               border: 'none',
               borderRadius: 'var(--radius-md)',
-              cursor: !jsonValid || saving ? 'not-allowed' : 'pointer',
+              cursor: !jsonValid || task.busy ? 'not-allowed' : 'pointer',
             }}
           >
-            {saving ? 'Saving…' : 'Save Config'}
+            {task.busy ? tc('saving') : t('save')}
           </button>
         </div>
       </div>
-
-      {error && (
-        <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>
-          {error}
-        </div>
-      )}
     </div>
   );
 }

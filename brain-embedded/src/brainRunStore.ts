@@ -102,25 +102,15 @@ function provenanceMetadata(result: StreamChatResult): string | undefined {
 // the on-prem/cloud agent loop hits the identical failure and shares the heuristic,
 // the per-run budget and the re-prompt wording from there.
 
-/**
- * Max agent-loop iterations before we stop chaining tool calls (runaway guard).
- * Each iteration is one model turn and can batch several tool calls, but models
- * commonly emit one call per turn — so the cap must be high enough for real bulk
- * operations (e.g. "link 50 tickets to their epics, archive 18 duplicates") to
- * complete instead of dying with "kept calling tools without finishing".
- */
-const MAX_TOOL_ITERATIONS = 25;
-/**
- * The cap a run ACTUALLY uses: the host's injected ceiling when it supplied one
- * (see {@link BrainRunRequest.maxIterations}), otherwise the shared default. A
- * non-positive / non-finite value is ignored rather than trusted, so a host can
- * never accidentally configure a zero-iteration (silently answerless) run.
- */
-function iterationCap(requested: number | undefined): number {
-  return typeof requested === 'number' && Number.isFinite(requested) && requested > 0
-    ? Math.floor(requested)
-    : MAX_TOOL_ITERATIONS;
-}
+// There is NO tool-iteration ceiling on a run. A chat turn ends when the model answers,
+// when the user stops it, or when its tool calls keep FAILING — the kernel's
+// consecutive-failure breaker (`DEFAULT_TOOL_FAILURE_STREAK` in `@builderforce/agent-loop`)
+// is the only limit, and it is the same one on every surface. The step ceiling this
+// replaced (25 here, 40 on the native participant, 6 on the server reply) cut off exactly
+// the runs it should not have: a review of forty ticket branches, a rename across a
+// repository, "assign these to the agents and merge them" — long because the work was
+// long, not because the model was stuck. A stuck run announces itself by failing.
+
 /** How much history we send to the model (message-count ceiling). */
 const HISTORY_WINDOW = 80;
 
@@ -299,16 +289,6 @@ export interface BrainRunRequest {
    * than silently losing their ticket lineage.
    */
   chatMode?: ChatMode;
-  /**
-   * Tool-iteration ceiling for THIS run (one iteration = one model turn, which may
-   * batch several tool calls). Omit to use the shared default.
-   *
-   * An injected capability, not a per-host branch: a surface whose budget is
-   * legitimately different — the native VS Code chat participant runs a longer
-   * coding loop than a web panel — states its own number here instead of the loop
-   * learning which host is calling it. Non-positive values are ignored.
-   */
-  maxIterations?: number;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
@@ -1552,8 +1532,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // metadata below and the system-prompt directive further down need it, and they must
   // never disagree about which mode this run was.
   const runMode = normalizeChatMode(req.chatMode ?? 'work');
-  // The host may raise/lower this run's tool-iteration ceiling (see BrainRunRequest.maxIterations).
-  const maxIterations = iterationCap(req.maxIterations);
   const metadata: CompletionMetadata = {
     chatId,
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -1745,7 +1723,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // model that keeps narrating instead of acting cannot spin the loop. Not one-shot:
   // a model that stalls once frequently stalls again on the very next turn, and
   // spending the single retry on the first stall left the user holding the SECOND
-  // promise. MAX_TOOL_ITERATIONS still caps the run either way.
+  // promise. The stall budget (`agent-stall`) bounds these recoveries on its own — a
+  // run has no iteration ceiling to fall back on.
   let announcementRecoveries = 0;
   // The model this run is CURRENTLY talking to, and every model it has already tried.
   // Both change when a model burns its whole stall budget without emitting a single
@@ -1785,7 +1764,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   ];
 
   // Evermind learning + reconciliation provenance for a completed turn. Extracted so
-  // BOTH the normal final-answer branch AND the tool-budget-exhausted forced-final
+  // BOTH the normal final-answer branch AND the breaker-stopped forced-final
   // synthesis branch emit identical memory provenance — a forced-final answer still
   // persists server-side (its `assistantMsg` carries the truthful `evermindLearn`), so
   // it must show the same `learn`/`reconcile` steps + answer-cache write as any other.
@@ -2477,20 +2456,23 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     ports,
     hooks,
     signal: c.abort?.signal,
-    budget: { stepCap: maxIterations },
+    // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
+    // limit — see the note above `HISTORY_WINDOW`.
+    budget: {},
   });
   // A settled reply (the final-answer hook stopped the loop) or a user Stop ends the
-  // run here; only a SPENT tool budget falls through to the forced synthesis below.
+  // run here; only a TRIPPED failure breaker falls through to the forced synthesis below.
   if (loop.finished || loop.cancelled) return;
 
-  // Loop exhausted without a final text answer. Rather than drop the whole run with
-  // "kept calling tools without finishing", force ONE final completion WITHOUT tools so
-  // the model MUST answer in prose using what it already gathered — the same "always
-  // speak" guarantee the server-side addressed-agent loop gives (BrainService.agentReply).
-  // A run that spent its tool budget then returns a useful summary instead of an error;
-  // we only surface the loop-exhausted error if THIS closing turn is also empty. This
-  // does not depend on which model answered, so it also rescues a weak auto-selected
-  // model that looped without converging.
+  // The breaker stopped the run: its last N tool calls all failed and it never wrote a
+  // final answer. Rather than drop the whole run with "kept calling tools without
+  // finishing", force ONE final completion WITHOUT tools so the model MUST answer in
+  // prose using what it already gathered — the same "always speak" guarantee the
+  // server-side addressed-agent loop gives (BrainService.agentReply). The user then
+  // reads WHAT kept failing and what is needed, instead of an error; we only surface
+  // the loop error if THIS closing turn is also empty. This does not depend on which
+  // model answered, so it also rescues a weak auto-selected model that thrashed.
+  const streak = loop.failureStreak;
   c.streamingText = '';
   if (!c.abort?.signal.aborted) {
     const closeStart = nowMs();
@@ -2501,7 +2483,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         {
           role: 'user',
           content:
-            'You have reached your tool-call budget for this turn. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered — summarise your findings and state plainly anything you could not finish.',
+            `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered — say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`,
         },
       ];
       let closeFirstTokenAt: number | undefined;
@@ -2518,11 +2500,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
         ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
-        args: { model: closing.resolvedModel ?? activeModel ?? 'default', requestedModel: activeModel ?? 'default', step: maxIterations, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? 'default', requestedModel: activeModel ?? 'default', step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
-        result: `forced final synthesis (tool budget reached) · ${closing.text.length} chars · finish: ${closing.finishReason ?? '—'}`,
+        result: `forced final synthesis (${streak} consecutive tool failures stopped the run) · ${closing.text.length} chars · finish: ${closing.finishReason ?? '—'}`,
       });
       const closingText = canonicalTurnText(closing.text);
       if (closingText) {
@@ -2551,9 +2533,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     ts: nowIso(),
     category: 'error',
     label: 'agent.loop',
-    result: `Loop exhausted after ${maxIterations} tool iterations (a forced final answer without tools also came back empty)`,
+    result: `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`,
     isError: true,
   });
-  c.error = 'The assistant kept calling tools without finishing. Try rephrasing.';
+  c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
   emit(c);
 }

@@ -55,6 +55,7 @@ import {
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /**
  * AI Manager — the per-project backlog manager surface. It reads the manager
  * overview (config + effective policy + stats + ranked backlog + activity feed),
@@ -1120,19 +1121,19 @@ function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 
   return 'open';
 }
 
-/** Status → theme tone for the run-task badge (light + dark safe via CSS vars). */
-const RUN_TASK_TONE: Record<'in_progress' | 'done' | 'blocked' | 'open', string> = {
-  in_progress: 'var(--accent)',
-  done: 'var(--success-text, var(--success))',
-  blocked: 'var(--warning-text)',
-  open: 'var(--text-secondary)',
+/** Status → theme tone for the run-task badge (light + dark safe via `lib/statusTone`). */
+const RUN_TASK_TONE: StatusToneMap<'in_progress' | 'done' | 'blocked' | 'open'> = {
+  in_progress: 'accent',
+  done: 'success',
+  blocked: 'warning',
+  open: 'neutral',
 };
 
 function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
   task: ManagerRunTask; statusLabel: string; owner: string; systemOwnerLabel: string; when: string;
 }) {
   const key = runTaskStatusKey(task.status);
-  const tone = RUN_TASK_TONE[key];
+  const tone = statusColor(RUN_TASK_TONE, key);
   const unowned = task.assignedUserId == null && task.assignedAgentRef == null && task.assignedAgentHostId == null;
   return (
     <tr style={trStyle}>
@@ -1140,7 +1141,7 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
       <td style={tdStyle}>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600,
-          color: tone, border: `1px solid ${tone}`, borderRadius: 'var(--radius-full)', padding: '2px 9px',
+          color: tone, border: `1px solid ${statusColor(RUN_TASK_TONE, key, 'border')}`, borderRadius: 'var(--radius-full)', padding: '2px 9px',
         }}>
           <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
           {statusLabel}

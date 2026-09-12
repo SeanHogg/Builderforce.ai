@@ -61,8 +61,8 @@ export class SalesWorkspaceService {
   }
 
   /** The CRO report, for one workspace. `associateUserId` null = every associate
-   *  in it (the aggregate). */
-  report(tenantId: number, associateUserId: string | null) {
+   *  in it (the aggregate); `tenantId` null = no workspace, so no referral facts. */
+  report(tenantId: number | null, associateUserId: string | null) {
     return buildSalesReport(this.db, tenantId, { associateUserId });
   }
 

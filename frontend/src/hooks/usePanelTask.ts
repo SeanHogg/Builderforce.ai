@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * The one shape a canvas panel's ACTION has: busy while it runs, a notice when it
@@ -25,6 +26,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * Deliberately UI-agnostic: no styles, no strings, no knowledge of ads or drives. It is
  * the async half of a panel, and any surface with a button that can fail can use it.
  */
+/**
+ * The words for one action. `success` may be a function of the action's resolved value,
+ * for the sentences that report what came back — "sent, 2 segments, $0.02", "12 fetched,
+ * 9 written" — which are the success copies that otherwise kept a hand-rolled notice.
+ */
+export interface PanelTaskMessages<T> {
+  success?: string | ((value: T) => string | undefined);
+  failure?: string;
+}
+
 export interface PanelTask {
   /** True while an action is in flight. Drives `disabled` on every control. */
   busy: boolean;
@@ -38,7 +49,7 @@ export interface PanelTask {
    * API refusal names what was wrong, and replacing it with a generic sentence throws
    * away the only actionable part), otherwise `messages.failure`.
    */
-  run: <T>(action: () => Promise<T>, messages?: { success?: string; failure?: string }) => Promise<T | undefined>;
+  run: <T>(action: () => Promise<T>, messages?: PanelTaskMessages<T>) => Promise<T | undefined>;
   /**
    * State a refusal the panel decided ITSELF, without running anything.
    *
@@ -54,6 +65,7 @@ export interface PanelTask {
 }
 
 export function usePanelTask(): PanelTask {
+  const errorMessage = useErrorMessage();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -78,26 +90,29 @@ export function usePanelTask(): PanelTask {
 
   const run = useCallback(async <T,>(
     action: () => Promise<T>,
-    messages: { success?: string; failure?: string } = {},
+    messages: PanelTaskMessages<T> = {},
   ): Promise<T | undefined> => {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const value = await action();
-      if (live.current && messages.success) setNotice(messages.success);
+      const success = typeof messages.success === 'function' ? messages.success(value) : messages.success;
+      if (live.current && success) setNotice(success);
       return value;
     } catch (failure) {
       if (live.current) {
-        setError(failure instanceof Error && failure.message
-          ? failure.message
-          : messages.failure ?? null);
+        // The reader's-language text for the rejection (a transport failure's English
+        // diagnostic translated, a signed-out read silent) — unless the error said
+        // nothing and the panel supplied its own, more specific sentence.
+        const text = errorMessage(failure);
+        setError(failure instanceof Error && failure.message ? text : messages.failure ?? text);
       }
       return undefined;
     } finally {
       if (live.current) setBusy(false);
     }
-  }, []);
+  }, [errorMessage]);
 
   // Memoized so a consumer can hold the whole task in a `useCallback` dependency list
   // without re-creating every callback on every render — `run` and `clear` are stable,

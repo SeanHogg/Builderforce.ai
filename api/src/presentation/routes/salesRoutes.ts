@@ -1,6 +1,8 @@
 /** Server-backed CRM shared by a sales associate and platform superadmins. */
+import { InternalError } from '../../domain/shared/errors';
 import { Hono, type Context } from 'hono';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import type { Env, HonoEnv } from '../../env';
 import { TenantService } from '../../application/tenant/TenantService';
 import { commissionPercentToBps } from '../../application/sales/salesPolicy';
@@ -86,7 +88,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     if (!target) return c.json({ error: 'Forbidden' }, 403);
     const body = await c.req.json<Record<string, unknown>>();
     const current = await sales.settings(target.id);
-    if (!current) return c.json({ error: 'Settings unavailable' }, 500);
+    if (!current) throw new InternalError('Settings unavailable');
     const row = await sales.updateSettings(target.id, {
       revenueGoalCents: body.revenueGoalCents == null ? current.revenueGoalCents : moneyCents(body.revenueGoalCents, current.revenueGoalCents),
       notifyOnSignup: body.notifyOnSignup == null ? current.notifyOnSignup : body.notifyOnSignup === true,
@@ -195,13 +197,16 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     const current = await viewer(c);
     if (!current) return c.json({ error: 'Authentication required' }, 401);
     const requested = c.req.query('associateId');
+    // A web token carries no workspace, so this is usually null: the report then
+    // has no workspace-scoped referral facts, rather than querying with undefined.
+    const tenantId = optionalTenantId(c);
     if (current.isSuperadmin) {
-      const report = await sales.report(c.get('tenantId') as number, requested || null);
+      const report = await sales.report(tenantId, requested || null);
       return c.json({ report, scope: requested ? 'associate' : 'aggregate' });
     }
     const target = await owner(c);
     if (!target) return c.json({ error: 'Sales workspace access required' }, 403);
-    return c.json({ report: await sales.report(c.get('tenantId') as number, target.id), scope: 'associate' });
+    return c.json({ report: await sales.report(tenantId, target.id), scope: 'associate' });
   });
 
   /**
@@ -214,8 +219,13 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   r.get('/payouts', async (c) => {
     const target = await owner(c);
     if (!target) return c.json({ error: 'Forbidden' }, 403);
+    const tenantId = optionalTenantId(c);
+    // Payout accounts and ledger rows are workspace-scoped; with no workspace there
+    // are none, and the balance is the honest zero rather than a NULL-tenant read.
+    if (tenantId == null) {
+      return c.json({ balance: { earnedCents: 0, paidCents: 0, availableCents: 0 }, payouts: [], accounts: [] });
+    }
     const payouts = new PayoutAccountService(db, c.env as Env);
-    const tenantId = c.get('tenantId') as number;
     const earned = await earnedCommissionCents(db, tenantId, target.id);
     const [balance, history, accounts] = await Promise.all([
       payouts.balance(tenantId, userAccount(target.id), earned),
@@ -233,7 +243,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     const window = isSalesReportWindow(requested) ? requested : 'month';
     return c.json({
       window,
-      leads: await recentReferrals(db, c.get('tenantId') as number, target.id, windowStart(window, new Date())),
+      leads: await recentReferrals(db, optionalTenantId(c), target.id, windowStart(window, new Date())),
     });
   });
 

@@ -24,6 +24,7 @@
 
 import { Hono } from 'hono';
 import { authMiddleware, optionalAuthMiddleware, requireRole } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -96,7 +97,7 @@ export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
   // the gate below is ever reached, while every route under it keeps the full
   // gate. `tenantId` is therefore possibly absent — that is the guest.
   router.get('/', optionalAuthMiddleware, async (c) => {
-    const tenantId = (c.get('tenantId') as number | undefined) ?? null;
+    const tenantId = optionalTenantId(c);
     const [entries, connected] = await Promise.all([
       listTemplatesForTenant(db, tenantId, c.env as Env),
       // `env` so the connected-key read comes from the cache every connector
@@ -112,7 +113,7 @@ export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
   // GET /:key — the full manifest, plus what it will create and what is already
   // connected. This is the page somebody reads BEFORE starting setup.
   router.get('/:key', optionalAuthMiddleware, async (c) => {
-    const tenantId = (c.get('tenantId') as number | undefined) ?? null;
+    const tenantId = optionalTenantId(c);
     const template = await resolveTemplate(db, tenantId, c.req.param('key'), c.env as Env);
     if (!template) return c.json({ error: 'Template not found' }, 404);
     const connected = await connectedConnectorKeys(db, tenantId, c.env as Env);

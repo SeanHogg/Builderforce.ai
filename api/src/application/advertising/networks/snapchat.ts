@@ -9,8 +9,9 @@
  * Money is micros of the account currency.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   ageWindow, mapTargetingValues, requireTargetingSupport,
@@ -58,8 +59,8 @@ function fromStatus(status: AdStatus | undefined): string | undefined {
  * one fact about this API, and one fact belongs in one place.
  */
 const unwrapItem = (raw: unknown, kind: 'campaign' | 'adsquad' | 'ad'): Record<string, unknown> => {
-  const entry = rec(raw);
-  return rec(entry[kind] ?? entry);
+  const entry = asJsonRecord(raw);
+  return asJsonRecord(entry[kind] ?? entry);
 };
 
 /**
@@ -70,11 +71,11 @@ const unwrapItem = (raw: unknown, kind: 'campaign' | 'adsquad' | 'ad'): Record<s
  * in the same envelope.
  */
 function createdId(result: { data: unknown }, kind: 'campaign' | 'adsquad' | 'ad', label: string): string {
-  const entry = rec(list(result.data)[0]);
+  const entry = asJsonRecord(list(result.data)[0]);
   const id = text(unwrapItem(entry, kind).id);
   if (id) return id;
   const reason = text(entry.sub_request_status) === 'ERROR'
-    ? text(rec(entry.errors ?? {}).message) || `Snapchat rejected the ${label}.`
+    ? text(asJsonRecord(entry.errors ?? {}).message) || `Snapchat rejected the ${label}.`
     : `Snapchat accepted the request but did not return ${label === 'ad' ? 'an' : 'a'} ${label} id.`;
   throw new AdsProviderError(reason.slice(0, 300), 502, false);
 }
@@ -131,18 +132,18 @@ function targetingSpec(targeting: AdTargeting): Record<string, unknown> {
 
 /** Snap's spec → as much of our vocabulary as it holds. Never throws. */
 function readSnapTargeting(raw: unknown): AdTargeting {
-  const spec = rec(raw);
+  const spec = asJsonRecord(raw);
   const targeting: {
     countries?: string[]; ageMin?: number; ageMax?: number;
     genders?: AdGender[]; interests?: string[]; placements?: AdPlacement[]; devices?: AdDevice[];
   } = {};
 
   const countries = list(spec.geos)
-    .map((entry) => text(rec(entry).country_code).toUpperCase())
+    .map((entry) => text(asJsonRecord(entry).country_code).toUpperCase())
     .filter((value) => /^[A-Z]{2}$/.test(value));
   if (countries.length) targeting.countries = countries;
 
-  const demographic = rec(list(spec.demographics)[0]);
+  const demographic = asJsonRecord(list(spec.demographics)[0]);
   const min = Number(text(demographic.min_age).replace(/\D/g, ''));
   const max = Number(text(demographic.max_age).replace(/\D/g, ''));
   if (Number.isFinite(min) && min > 0) targeting.ageMin = min;
@@ -445,10 +446,10 @@ export const snapchatAdsProvider: AdsProvider = {
       });
       // `resultPath: 'timeseries_stats'` leaves the per-item envelope array; the days
       // are one level further in, under `timeseries_stat.timeseries`.
-      const stat = rec(rec(list(result.data)[0]).timeseries_stat);
-      return list(stat.timeseries).map(rec).flatMap((point) => {
+      const stat = asJsonRecord(asJsonRecord(list(result.data)[0]).timeseries_stat);
+      return list(stat.timeseries).map(asJsonRecord).flatMap((point) => {
         const date = toDay(point.start_time);
-        const stats = rec(point.stats);
+        const stats = asJsonRecord(point.stats);
         if (!date) return [];
         return [{
           date,

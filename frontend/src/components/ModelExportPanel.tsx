@@ -22,15 +22,15 @@ import {
   type PublishedEvermindModel,
   type EvermindExportFormat,
 } from '@/lib/studioModelsApi';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 export function ModelExportPanel() {
   const t = useTranslations('modelExport');
   const [models, setModels] = useState<PublishedEvermindModel[] | null>(null);
   const [selectedSlug, setSelectedSlug] = useState('');
   const [format, setFormat] = useState<EvermindExportFormat>('huggingface');
   const [fp16, setFp16] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
+  // The file the last export produced — data the success line names, not a message slot.
   const [done, setDone] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,19 +52,16 @@ export function ModelExportPanel() {
   const fp16Supported = format === 'safetensors' || format === 'gguf';
 
   const run = useCallback(async () => {
-    setBusy(true);
-    setError(null);
     setDone(null);
-    try {
-      const filename = await exportPublishedModel(selectedSlug, format, fp16Supported && fp16);
-      setDone(filename);
-    } catch (e) {
-      setError(faultMessage(e, t('error')));
-    } finally {
-      setBusy(false);
-    }
-  }, [selectedSlug, format, fp16, fp16Supported, t]);
+    const filename = await task.run(
+      () => exportPublishedModel(selectedSlug, format, fp16Supported && fp16),
+      { failure: t('error') },
+    );
+    if (filename === undefined) return;
+    setDone(filename);
+  }, [selectedSlug, format, fp16, fp16Supported, t, task]);
 
+  const busy = task.busy;
   const noModels = models !== null && models.length === 0;
   const disabled = busy || !selectedSlug || noModels;
 
@@ -161,7 +158,7 @@ export function ModelExportPanel() {
         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t('pushNote')}</span>
       </div>
 
-      {error && (
+      {task.error && (
         <div
           role="alert"
           style={{
@@ -169,8 +166,8 @@ export function ModelExportPanel() {
             borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
-          
-          <Icon source="⚠" size="1em" /> {error}
+
+          <Icon source="⚠" size="1em" /> {task.error}
         </div>
       )}
 

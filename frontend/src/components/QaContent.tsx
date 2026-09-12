@@ -17,7 +17,8 @@ import { Select } from '@/components/Select';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
-import { Empty, STATUS_COLOR, SEVERITY_COLOR, Section, Table, Td, btnStyle, inputStyle } from './qa/QaPrimitives';
+import { Empty, STATUS_TONE, SEVERITY_COLOR, Section, Table, Td, btnStyle, inputStyle } from './qa/QaPrimitives';
+import { statusColor } from '@/lib/statusTone';
 import { QualityTrendSection, RoutingSection } from './qa/QaQualitySections';
 import {
   aggregateFlows,
@@ -247,7 +248,7 @@ export function QaContent() {
               <tr key={r.id}>
                 <Td>{r.testName ?? r.testSlug ?? '—'}</Td>
                 <Td>{r.credentialLabel ?? r.credentialRole ?? '—'}</Td>
-                <Td><span style={{ color: STATUS_COLOR[r.status] ?? 'var(--text-secondary)', fontWeight: 700 }}>{r.status}</span></Td>
+                <Td><span style={{ color: statusColor(STATUS_TONE, r.status), fontWeight: 700 }}>{r.status}</span></Td>
                 <Td>{r.passedSteps != null && r.totalSteps != null ? `${r.passedSteps}/${r.totalSteps}` : '—'}</Td>
                 <Td>{r.durationMs != null ? t('durationSeconds', { seconds: (r.durationMs / 1000).toFixed(1) }) : '—'}</Td>
                 <Td>{fmt.dateTime(r.createdAt)}</Td>
@@ -328,7 +329,7 @@ function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun 
           {explorations.map((ex) => (
             <tr key={ex.id}>
               <Td>{fmt.dateTime(ex.createdAt)}</Td>
-              <Td><span style={{ color: STATUS_COLOR[ex.status] ?? 'var(--text-secondary)', fontWeight: 700 }}>{ex.status}</span></Td>
+              <Td><span style={{ color: statusColor(STATUS_TONE, ex.status), fontWeight: 700 }}>{ex.status}</span></Td>
               <Td>{ex.zonesExplored != null ? `${ex.zonesExplored}/${ex.zonesPlanned}` : ex.zonesPlanned}</Td>
               <Td>{ex.findingsCount}</Td>
               <Td style={{ maxWidth: 280 }}>{ex.summary ?? ex.errorMessage ?? '—'}</Td>
@@ -382,6 +383,8 @@ function FindingScreenshot({ screenshotKey }: { screenshotKey: string }) {
         <img
           src={url}
           alt={t('screenshotAlt')}
+          width={160}
+          height={100}
           style={{
             display: 'block', width: 160, maxWidth: '100%', height: 'auto',
             borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)',

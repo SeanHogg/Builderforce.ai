@@ -1727,7 +1727,6 @@
     "deleteCloudAgentConfirm": "Delete agent \"{name}\"? Its per-agent skills and personas will be cleared.",
     "deleteSkillConfirm": "Delete this skill?",
     "deleteNamedConfirm": "Delete \"{name}\"?",
-    "servePreviewAnywayConfirm": "Last checks failed ({summary}). Serve the preview anyway?",
     "language": "Language",
     "typeTask": "Task",
     "typeEpic": "Epic",
@@ -1805,7 +1804,13 @@
     "no": "No",
     "copyLink": "Copy link",
     "copyFallback": "Copy this link by hand — the clipboard is unavailable.",
-    "unavailable": "Unavailable"
+    "unavailable": "Unavailable",
+    "actionFailed": "That didn’t work. Please try again.",
+    "inlineConfirm": {
+      "confirm": "Confirm",
+      "armed": "Press again to confirm, or Escape to cancel."
+    },
+    "servingPreviewAnyway": "Last checks failed ({summary}) — serving the preview anyway."
   },
   "prdCreate": {
     "title": "New PRD",
@@ -2184,7 +2189,6 @@
       "unsubscribedTitle": "You are unsubscribed",
       "unsubscribedBody": "You are not receiving any optional email. Account and security messages are still sent.",
       "resubscribeCta": "Resubscribe",
-      "resubscribeTitle": "Resubscribe to optional email",
       "resubscribeConfirm": "You will start receiving optional email again, based on the categories you have switched on. Continue?"
     },
     "spendLimits": "Spend limits",
@@ -13680,9 +13684,7 @@
       "allTables": "all tables",
       "maintenanceCleanup": "run retention cleanup",
       "maintenanceVacuum": "vacuum {table} in {target}",
-      "confirmTitle": "Run maintenance?",
-      "confirmMaintenance": "Confirm: {label}? This is an audited maintenance operation.",
-      "confirmRun": "Run"
+      "confirmMaintenance": "Confirm: {label}? This is an audited maintenance operation."
     }
   },
   "providerKeys": {
@@ -15102,7 +15104,21 @@
     "revertConfirmMessage": "This closes the pull request run #{id} opened and deletes the branch it wrote. This cannot be undone. It will be refused if the pull request was already merged or anything else changed the branch.",
     "revertConfirmAction": "Revert run",
     "revertDone": "Reverted — deleted branch {branch} ({commits} commit(s)).",
-    "failedToRevert": "Failed to revert this run"
+    "failedToRevert": "Failed to revert this run",
+    "title": "Agent execution kill switch",
+    "disabledBody": "Tenant agent execution is blocked. VS Code and Brain chats, Canvas/Create, and page MCP tools remain available.",
+    "enabledBody": "Emergency workspace override. Disabling stops tenant agents and blocks manual, scheduled, integration, and autonomous platform runs; interactive VS Code and Brain work remains available.",
+    "confirmTitle": "Disable all agent execution?",
+    "confirmBody": "This immediately cancels queued, running, or paused tenant agents and blocks manual, scheduled, and autonomous platform runs until a manager enables execution again. VS Code and Brain chats, Canvas/Create, and page MCP tools remain available.",
+    "disableAll": "Disable and stop all agents",
+    "enable": "Enable agent execution",
+    "updating": "Updating…",
+    "statusLoading": "Status: Loading…",
+    "statusEnabled": "Status: Execution enabled",
+    "statusDisabled": "Status: EXECUTION DISABLED",
+    "stoppedAll": "Execution is disabled. {count, plural, one {# active run stopped} other {# active runs stopped}}.",
+    "stoppedSome": "Execution is disabled. {cancelled, plural, one {# run stopped} other {# runs stopped}}; {failed} could not be cancelled.",
+    "enabledNotice": "Agent execution is enabled."
   },
   "aiTraining": {
     "adapterName": "{model} Adapter",
@@ -16499,7 +16515,6 @@
     "replaceCard": "Replace card",
     "retryCard": "Try again",
     "cardWorking": "Working…",
-    "replaceCardTitle": "Replace your card?",
     "replaceCardWarning": "Your current card keeps working until the new one is verified, so premium models are never interrupted. The old card is removed automatically once the new one is confirmed.",
     "retryCardMessage": "We will start a new $0 verification. Your card is not charged.",
     "replaceCardConfirm": "Continue",
@@ -17814,7 +17829,6 @@
       "forgetTitle": "Forget this fact?",
       "forgetConfirm": "Agents will stop recalling \"{key}\". If a broader version of the same key exists, that one becomes visible again.",
       "purge": "Clear lapsed",
-      "purgeTitle": "Clear lapsed facts?",
       "purgeConfirm": "Deletes facts whose expiry has already passed. Agents stopped recalling them when they lapsed, so nothing changes for a run.",
       "statTotal": "Facts in scope",
       "statTotalHint": "What an agent running here can recall.",
@@ -19063,7 +19077,15 @@
         "noSuppressionCheck": "The suppression list has not been checked",
         "emptyAfterSuppression": "Nobody is left once suppressions are removed",
         "forbiddenClaim": "The copy makes a claim the brand forbids"
-      }
+      },
+      "inboxFilterAll": "All recent mail",
+      "inboxFilterUnread": "unread",
+      "inboxFilterFrom": "from {value}",
+      "inboxFilterSubject": "subject “{value}”",
+      "inboxFilterMatching": "matching “{value}”",
+      "inboxFilterAttachments": "with attachments",
+      "inboxFilterSince": "since {date}",
+      "inboxFilterBefore": "before {date}"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -20725,7 +20747,11 @@
       "campaignScheduled": "Scheduled for {count} accounts.",
       "campaignUpdateFailed": "That campaign could not be updated.",
       "boardMedia": "Attach from this board",
-      "boardMediaHelp": "Picked pictures and clips are published to a public URL automatically — that is what Instagram and TikTok need to fetch them."
+      "boardMediaHelp": "Picked pictures and clips are published to a public URL automatically — that is what Instagram and TikTok need to fetch them.",
+      "mediaTabOnly": "That file is only held in this browser tab. Re-generate or re-upload it so it has a durable source.",
+      "mediaNotPublic": "A social network fetches media itself, so it needs a public https URL — this one is neither https nor inline media.",
+      "mediaUploadFailed": "That file could not be published to a public URL.",
+      "mediaUploadFailedReason": "That file could not be published to a public URL: {reason}"
     },
     "noticeGuestLimitRoom": "This shared session has used its {limit} free messages for today. Sign up free to keep going — your canvas comes with you.",
     "founder": {
@@ -21082,6 +21108,61 @@
         "expires": "Expires",
         "views": "Views",
         "lastViewedAt": "Last viewed"
+      },
+      "verdict": {
+        "boardRef": {
+          "notFound": "No `{kind}` matches \"{ref}\" yet — author one to link this."
+        },
+        "counterparty": {
+          "linkedOwned": "Linked to `account` \"{title}\" ({relationship}), owned by {owner}.",
+          "linked": "Linked to `account` \"{title}\" ({relationship})."
+        },
+        "fallback": {
+          "thisContract": "this contract",
+          "untitledDocument": "an untitled document",
+          "unnamedObligation": "an unnamed obligation"
+        },
+        "obligation": {
+          "noRef": "Raised under contract \"{contract}\", but no `obligationRef` says WHICH obligation it discharges. Set it to one of: {available}.",
+          "noReferences": "Raised under contract \"{contract}\", whose obligations carry no `reference` values — so nothing on this {host, select, bill {bill} other {invoice}} can be checked against what was agreed. Give each obligation a reference on the contract first.",
+          "unknownRef": "Contract \"{contract}\" has NO obligation with the reference \"{ref}\" — this is a charge with no matching obligation. Either the contract's obligations are out of date or this {host, select, bill {bill} other {invoice}} should not have been raised.",
+          "axis": {
+            "amount": "amount",
+            "date": "date",
+            "cadence": "cadence"
+          },
+          "problem": {
+            "amount": "the amount is {actual, number} where the obligation says {agreed, number}",
+            "date": "it falls due {days, plural, one {# day} other {# days}} {direction, select, after {after} other {before}} the obligation's {due}",
+            "cadence": "it recurs {actual} where the obligation says {agreed}"
+          },
+          "mismatch": "Points at obligation \"{obligation}\" on contract \"{contract}\", but {problems}. Check it against the agreement before {host, select, bill {approving or paying it} other {issuing it}}.",
+          "discharged": "Discharges obligation \"{obligation}\" on contract \"{contract}\" — {checked} {count, plural, one {agrees} other {agree}} with what was agreed.",
+          "linkedOnly": "Points at obligation \"{obligation}\" on contract \"{contract}\". Nothing comparable is filled in on either side, so this is a link and not yet a check."
+        },
+        "evidence": {
+          "bound": "Bound to the live split \"{key}\" — every exposure and conversion below was counted by the platform, not entered.",
+          "authored": "AUTHORED. Nothing produced these numbers: they were typed onto the card. Bind this experiment to an `ab_tests` key before quoting the result as a measurement."
+        },
+        "significance": {
+          "nothingYet": "NOTHING here is significant yet.",
+          "real": "{variant} is {direction, select, up {up} other {down}} {points, number}pp on the control (p={p}), interval {low, number} to {high, number}pp.",
+          "noise": "{variant} is within noise of the control (p={p}); n is too small to call."
+        },
+        "ownership": {
+          "balanced": "Holders and the unallocated pool account for {accounted}% of the fully diluted total.",
+          "unbalanced": "Holders and the unallocated pool account for only {accounted}% of the fully diluted total — the ledger and the authorised counts disagree, which is a real condition to investigate rather than a rounding error.",
+          "percentSkew": "The percent column totals {total, number}% including the unallocated pool, not 100 — the percentages do not balance.",
+          "convertibles": "{count, plural, one {# convertible} other {# convertibles}} outstanding — not priced into these percentages until a round converts them."
+        },
+        "coverage": {
+          "noIdentity": "This contract has neither a `reference` nor a title, so no invoice or bill can name it. Give it a reference before raising anything against it.",
+          "billable": "{covered} of {total} billable {total, plural, one {obligation} other {obligations}} {covered, plural, one {has} other {have}} a document raised against {total, plural, one {it} other {them}}.",
+          "noneBillable": "No obligation here is a receivable or a payable, so nothing on this contract should generate an invoice or a bill.",
+          "open": "Nothing raised yet for: {names}.",
+          "orphans": "{count, plural, one {# document names this contract and matches no obligation on it} other {# documents name this contract and match no obligation on it}} — {names}.",
+          "unreferenced": "{count, plural, one {# obligation carries no `reference`, so nothing can ever be shown to discharge it.} other {# obligations carry no `reference`, so nothing can ever be shown to discharge them.}}"
+        }
       }
     },
     "datasetImportedWithPii": "Imported {name} — {rows} rows, {columns} columns. {pii} columns hold personal data and are masked.",
@@ -21658,7 +21739,13 @@
       "freshMinutes": "{count}m ago",
       "freshHours": "{count}h ago",
       "freshDays": "{count}d ago",
-      "barValue": "{value} ({percent}%)"
+      "barValue": "{value} ({percent}%)",
+      "verdict": {
+        "lateBy": {
+          "hours": "{hours}h late",
+          "days": "{days}d late"
+        }
+      }
     },
     "hiring": {
       "empty": "This {label} has nothing authored yet.",
@@ -21913,6 +22000,12 @@
         "manuscript": "Manuscript",
         "draft": "Draft",
         "noSource": "No source"
+      },
+      "bar": {
+        "replied": "Replied",
+        "completed": "Completed",
+        "stopped": "Stopped",
+        "inFlight": "In flight"
       }
     },
     "noticeGateEvaluated": "Release gate evaluated from the runs and defects on this board — {score}% of criteria met.",
@@ -22346,6 +22439,20 @@
         "action": "Action",
         "owner": "Owner",
         "dueAt": "Due"
+      },
+      "verdict": {
+        "validity": {
+          "expired": "expired {days, plural, one {# day} other {# days}} ago",
+          "expiresSoon": "expires in {days, plural, one {# day} other {# days}}",
+          "valid": "valid · {days, plural, one {# day} other {# days}} remaining"
+        },
+        "stock": {
+          "out": "out of stock",
+          "belowWithOrder": "below reorder point even with stock on order",
+          "orderNow": "at or below reorder point — order now",
+          "coveredByOrder": "covered by stock on order",
+          "inStock": "in stock"
+        }
       }
     },
     "legal": {
@@ -22424,6 +22531,17 @@
         "at": "Date",
         "event": "Event",
         "note": "Note"
+      },
+      "verdict": {
+        "assignment": {
+          "none": "NOT ASSIGNED. No assignor is recorded, so on this record the right still belongs to whoever created it. That is a diligence finding, not a missing field — record the assignment or say plainly that there is none.",
+          "dated": "Assigned from {from} on {at}.",
+          "undated": "Assigned from {from}, with NO execution date recorded — an assignment nobody dated is one a counterparty can put after the filing."
+        },
+        "spend": {
+          "over": "Spend to date is {share}% of the estimated exposure — more has gone on arguing this than it is estimated to be worth. That is a settlement conversation, not a budget line.",
+          "under": "Spend to date is {share}% of the estimated exposure."
+        }
       }
     },
     "legalUpload": {
@@ -22499,7 +22617,6 @@
       "publishVersion": "Publish v{version}",
       "restage": "Capture again",
       "working": "Working…",
-      "revertTitle": "Put v{version} back on sale?",
       "revertBody": "New buyers will receive it instead of v{version}. The {holders} already on v{version} keep what they bought — nobody is moved.",
       "revertConfirm": "Put it back on sale",
       "noticeStaged": "Staged v{version}.",
@@ -23196,6 +23313,15 @@
         "dueAtISO": "Due",
         "sellerOwner": "Our owner",
         "buyerOwner": "Their owner"
+      },
+      "verdict": {
+        "planRisk": {
+          "atRisk": "At risk — {problems}.",
+          "overdue": "{count} overdue",
+          "unowned": "{count} with no owner on the buyer's side",
+          "onTrack": "On track — {done} of {total} done, nothing overdue."
+        },
+        "openGaps": "{open} ({gaps, plural, one {# gap} other {# gaps}}, {unevidenced} unevidenced)"
       }
     },
     "exportRestricted": "Restricted — this card cannot be exported",
@@ -23354,6 +23480,15 @@
         "description": "Work",
         "minutes": "Minutes",
         "billable": "Billable"
+      },
+      "verdict": {
+        "pressure": {
+          "none": "none",
+          "comfortable": "comfortable",
+          "planning": "planning",
+          "urgent": "urgent",
+          "critical": "critical"
+        }
       }
     },
     "agentModel": "Agent model",
@@ -24448,7 +24583,6 @@
     "folderHint": "Leave blank to remove the session from its folder.",
     "required": "Choose or enter a value.",
     "failed": "The session could not be updated.",
-    "mergeConfirmTitle": "Merge these sessions?",
     "mergeConfirmMessageSaved": "The canvas, conversation, and project links from “{source}” will be added to “{target}”. The source session will then be archived.",
     "mergeConfirmMessageLocal": "The canvas and conversation from “{source}” will be added to “{target}”. The source draft will then be removed from this browser.",
     "deleteConfirmTitle": "Delete session?",
@@ -24465,7 +24599,6 @@
     "bulkMergeTitle": "Merge selected sessions",
     "bulkMergeDescription": "Everything on the other selected canvases is added to the one you keep. They are archived once their contents have moved.",
     "bulkMergeTarget": "Session to keep",
-    "bulkMergeConfirmTitle": "Merge these sessions?",
     "bulkMergeConfirmMessage": "{count} sessions will be added to “{target}” and then archived.",
     "bulkDeleteConfirmTitle": "Delete these sessions?",
     "bulkDeleteConfirmMessage": "Delete {count} sessions? They remain recoverable during the retention period.",
@@ -28577,5 +28710,186 @@
     "add": "Add",
     "noProject": "No project",
     "folderProjectLabel": "Project for {name}"
+  },
+  "humanRequests": {
+    "intro": "Approvals, questions, and feedback your agents have escalated for a human. Resolving a request unblocks the waiting agent.",
+    "allKinds": "All kinds",
+    "allStatuses": "All statuses",
+    "allAgentHosts": "All agent hosts",
+    "searchPlaceholder": "Search action, description, answer",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "loading": "Loading requests…",
+    "empty": "No requests found",
+    "viewTicket": "View ticket",
+    "noActions": "No actions available",
+    "human": "human",
+    "kind": {
+      "approval": "Approval",
+      "question": "Question",
+      "feedback": "Feedback"
+    },
+    "kindPlural": {
+      "approval": "Approvals",
+      "question": "Questions",
+      "feedback": "Feedback"
+    },
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "answered": "Answered",
+      "expired": "Expired"
+    },
+    "column": {
+      "kind": "Kind",
+      "status": "Status",
+      "action": "Action",
+      "description": "Description",
+      "item": "Item",
+      "agentHost": "Agent host",
+      "requested": "Requested",
+      "resolution": "Resolution",
+      "resolve": "Resolve",
+      "answer": "Answer",
+      "requestedBy": "Requested by",
+      "expires": "Expires"
+    }
+  },
+  "stakeholderAlignment": {
+    "title": "Stakeholder alignment",
+    "subtitle": "Agree priorities, collect sign-off, and surface conflicts before delivery drifts.",
+    "approvedCount": "{count} approved",
+    "pendingCount": "{count} pending",
+    "overdueCount": "{count} overdue",
+    "conflictsCount": "{count, plural, one {# conflict} other {# conflicts}}",
+    "mapTitle": "Stakeholder map",
+    "noStakeholders": "No stakeholders configured.",
+    "roleApprover": "Approver",
+    "roleInformed": "Informed",
+    "removeAria": "Remove {name}",
+    "nameAria": "Stakeholder name",
+    "namePlaceholder": "Name",
+    "refAria": "Stakeholder user reference",
+    "refPlaceholder": "User ID",
+    "teamAria": "Team scope",
+    "teamPlaceholder": "Team (optional)",
+    "roleAria": "Stakeholder role",
+    "roleRequiredApprover": "Required approver",
+    "add": "Add",
+    "healthTitle": "Alignment health",
+    "answer": {
+      "yes": "Yes",
+      "no": "No",
+      "unknown": "Unknown"
+    },
+    "saveHealth": "Save health profile",
+    "question": {
+      "priorities_clear": "Priorities are clear and agreed",
+      "competing_p0s_reconciled": "Competing P0s are reconciled",
+      "approvers_current": "Required approvers are current",
+      "conflicts_within_sla": "Conflicts are within the 48-hour SLA",
+      "delivery_reflects_priorities": "Delivery reflects agreed priorities"
+    }
+  },
+  "agentHostTabs": {
+    "errorPrefix": "Error: {message}",
+    "back": "← Back",
+    "projects": {
+      "loading": "Loading projects…",
+      "heading": "Projects ({count})",
+      "assign": "+ Assign project",
+      "selectProject": "Select a project…",
+      "assignAction": "Assign",
+      "empty": "No projects assigned to this agent host yet.",
+      "projectFallback": "Project #{id}",
+      "role": "Role: {role}",
+      "open": "Open",
+      "remove": "Remove",
+      "status": "{status, select, active {Active} completed {Completed} archived {Archived} on_hold {On hold} other {{status}}}"
+    },
+    "workspace": {
+      "syncedAt": "synced {when}",
+      "noFiles": "No files synced yet.",
+      "fileCount": "{count, plural, one {# file} other {# files}}",
+      "heading": "Synced directories ({count})",
+      "empty": "No directories synced. Directories are synced when an agent host registers its workspace.",
+      "lastSynced": "Last synced: {when}",
+      "sync": "⟳ Sync",
+      "status": "{status, select, synced {Synced} pending {Pending} error {Error} other {{status}}}"
+    },
+    "config": {
+      "loading": "Loading config…",
+      "title": "Runtime configuration",
+      "format": "Format",
+      "reset": "Reset",
+      "description": "JSON configuration passed to the agent host runtime. Changes take effect the next time the agent host connects.",
+      "invalidJson": "Invalid JSON — fix it before saving.",
+      "saved": "Saved {time}",
+      "save": "Save config"
+    },
+    "sessions": {
+      "loading": "Loading sessions…",
+      "messageCount": "{count, plural, one {# message} other {# messages}}",
+      "handoff": "Hand off →",
+      "handoffTitle": "Hand off to another agent host",
+      "handoffBody": "Send this session’s context to another agent host so it can resume the conversation. The last 20 messages are included.",
+      "selectTarget": "Select a target agent host…",
+      "notePlaceholder": "Handoff note (optional)",
+      "handoffSuccess": "Session handed off.",
+      "handingOff": "Handing off…",
+      "handOff": "Hand off",
+      "loadingMessages": "Loading messages…",
+      "noMessages": "No messages found.",
+      "heading": "Chat sessions ({count})",
+      "empty": "No sessions yet. Sessions are created when an agent host starts a conversation.",
+      "active": "(active)",
+      "msgCount": "{count, plural, one {# msg} other {# msgs}}",
+      "role": "{role, select, user {User} assistant {Agent} system {System} tool {Tool} other {{role}}}"
+    }
+  },
+  "repoSync": {
+    "title": "Repository sync",
+    "linkedTo": "Linked to <strong>{repo}</strong>",
+    "lastSynced": " · last synced <code>{ref}</code>",
+    "notImported": " · not yet imported",
+    "import": "Import from repo",
+    "importing": "Importing…",
+    "commit": "Commit & open PR",
+    "committing": "Committing…",
+    "noRepo": "No repo linked — your files live in the Canvas Builder workspace. Create a clean repo to go live, or connect an existing one below.",
+    "createRepo": "+ Create repo",
+    "repoNamePlaceholder": "Repository name",
+    "selectCredential": "Select a GitHub credential…",
+    "noCredential": "No GitHub credential found. Add one under Integrations first.",
+    "private": "Private repository",
+    "createAndPush": "Create & push",
+    "creating": "Creating…",
+    "imported": "{count, plural, one {Imported # file} other {Imported # files}} from {ref}.",
+    "pushedPr": "{count, plural, one {Pushed # file} other {Pushed # files}} — PR #{pr} opened.",
+    "committed": "{count, plural, one {Committed # file} other {Committed # files}} to {branch}.",
+    "created": "Created {repo} and pushed {count, plural, one {# file} other {# files}}."
+  },
+  "soc2Tracker": {
+    "title": "SOC 2 control tracker",
+    "loading": "Loading SOC 2 controls…",
+    "emptyBody": "No controls yet. Seed the SOC 2 Common Criteria (CC1–CC9) baseline to start tracking readiness.",
+    "seed": "Seed SOC 2 baseline",
+    "seeding": "Seeding…",
+    "loadFailed": "Could not load SOC 2 controls.",
+    "seedFailed": "Seeding failed (manager role required).",
+    "updateFailed": "Update failed.",
+    "readiness": "Readiness <strong>{pct}%</strong> ({ready}/{inScope} in scope)",
+    "categoryReady": "· {pct}% ready",
+    "status": {
+      "not_started": "Not started",
+      "in_progress": "In progress",
+      "ready": "Ready",
+      "out_of_scope": "Out of scope"
+    }
+  },
+  "workflowDag": {
+    "empty": "No tasks in this workflow yet.",
+    "defaultRole": "agent"
   }
 }

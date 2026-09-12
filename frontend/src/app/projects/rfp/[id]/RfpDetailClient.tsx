@@ -13,7 +13,9 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal
@@ -46,6 +48,7 @@ const COST_COLORS: Record<string, string> = {
 
 export default function RfpDetailClient() {
   const t = useTranslations('rfpPage');
+  const errorMessage = useErrorMessage();
   const params = useParams();
   const router = useRouter();
   const id = String(params?.id ?? '');
@@ -95,7 +98,7 @@ export default function RfpDetailClient() {
       await rfpApi.generate(id);
       load();
     } catch (e) {
-      setError(faultMessage(e, 'Generation failed'));
+      setError(errorMessage(e));
     } finally {
       setGenerating(false);
     }
@@ -149,7 +152,7 @@ export default function RfpDetailClient() {
       const name = `${request?.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.pdf`;
       await rfpApi.downloadPdf(latestId, name);
     } catch (e) {
-      setError(faultMessage(e, 'Download failed'));
+      setError(errorMessage(e));
     } finally {
       setDownloading(false);
     }
@@ -435,7 +438,8 @@ function StatusControl({ entry, canManage, onStatus, t }: {
   );
 }
 
-const SEVERITY_COLOR: Record<string, string> = { high: 'var(--error)', medium: 'var(--warning)', low: 'var(--success)' };
+// Risk severity → tone: dots render `solid`, the severity label `text`.
+const RISK_TONE: StatusToneMap = { high: 'danger', medium: 'warning', low: 'success' };
 
 function RisksSection({ body, register, canManage, onStatus, t }: {
   body: RfpResponseBody;
@@ -455,9 +459,9 @@ function RisksSection({ body, register, canManage, onStatus, t }: {
           {rows.map((r) => (
             <div key={r.id} style={{ opacity: r.status === 'closed' ? 0.55 : 1 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: SEVERITY_COLOR[r.severity ?? ''] ?? 'var(--text-muted)' }} />
+                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: statusColor(RISK_TONE, r.severity, 'solid') }} />
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{r.title}</span>
-                {r.severity && <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: SEVERITY_COLOR[r.severity] }}>{t(`severity.${r.severity}`)}</span>}
+                {r.severity && <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: statusColor(RISK_TONE, r.severity) }}>{t(`severity.${r.severity}`)}</span>}
                 <StatusControl entry={r} canManage={canManage} onStatus={onStatus} t={t} />
               </div>
               <p style={{ ...muted, margin: '2px 0 0 16px' }}>{r.detail}</p>
@@ -469,9 +473,9 @@ function RisksSection({ body, register, canManage, onStatus, t }: {
           {body.risks.map((r, i) => (
             <div key={i}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: SEVERITY_COLOR[r.severity] ?? 'var(--text-muted)' }} />
+                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: statusColor(RISK_TONE, r.severity, 'solid') }} />
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{r.title}</span>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: SEVERITY_COLOR[r.severity] ?? 'var(--text-muted)' }}>{t(`severity.${r.severity}`)}</span>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: statusColor(RISK_TONE, r.severity) }}>{t(`severity.${r.severity}`)}</span>
               </div>
               <p style={{ ...muted, margin: '2px 0 0 16px' }}>{r.mitigation}</p>
             </div>

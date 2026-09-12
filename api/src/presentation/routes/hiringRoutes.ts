@@ -22,6 +22,7 @@ import { Hono } from 'hono';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv, Env } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { requireTenantId } from '../middleware/tenantContext';
 import { hiringFunnel, invalidateHiringFunnel } from '../../application/hiring/hiringFunnel';
 import { interviewPanelRefs, offerInterviewSlots } from '../../application/hiring/interviewScheduling';
 import {
@@ -53,11 +54,10 @@ export function createHiringRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
   r.use('*', authMiddleware);
 
-  const scope = (c: { get: (key: 'tenantId') => number | undefined }) => c.get('tenantId') ?? 0;
 
   // GET /funnel?pipelineRef=&days=
   r.get('/funnel', async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     const pipelineRef = c.req.query('pipelineRef') || null;
     const days = Number(c.req.query('days') ?? 90);
     return c.json(await hiringFunnel(c.env as Env, db, tenantId, { pipelineRef, days }));
@@ -65,7 +65,7 @@ export function createHiringRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /interviews/:id/offer-slots — mint the candidate's self-schedule link.
   r.post('/interviews/:id/offer-slots', async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     const interviewId = Number(c.req.param('id'));
     if (!Number.isInteger(interviewId)) return c.json({ error: 'Unknown interview.' }, 400);
 
@@ -96,7 +96,7 @@ export function createHiringRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /candidates/:ref/consent — record the lawful basis and the retention clock.
   r.post('/candidates/:ref/consent', async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     const candidateRef = c.req.param('ref');
     const body = await parseBody(c, ConsentBody);
 
@@ -120,7 +120,7 @@ export function createHiringRoutes(db: Db): Hono<HonoEnv> {
    * breach rather than a recovery.
    */
   r.post('/candidates/:ref/erase', async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     const candidateRef = c.req.param('ref');
     const result = await eraseCandidateRecord(db, tenantId, candidateRef);
     if (!result.ok) return c.json({ error: 'No candidate role for that person.' }, 404);
@@ -141,7 +141,7 @@ export function createHiringRoutes(db: Db): Hono<HonoEnv> {
    * exists to prevent.
    */
   r.get('/diversity', async (c) => {
-    const tenantId = scope(c as never);
+    const tenantId = requireTenantId(c);
     return c.json(await candidateDiversityReport(db, tenantId));
   });
 

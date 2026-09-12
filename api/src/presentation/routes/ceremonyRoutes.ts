@@ -1,3 +1,4 @@
+import { InternalError } from '../../domain/shared/errors';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Ceremonies — /api/agile/ceremonies.
@@ -232,7 +233,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       turnStartedAt: isStandup ? now : null,
       startedAt: now,
     }).returning();
-    if (!session) return c.json({ error: 'Failed to create session' }, 500);
+    if (!session) throw new InternalError('Failed to create session');
 
     const parts = (body.participants ?? []).filter((p) => p.ref);
     if (parts.length > 0) {
@@ -603,7 +604,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       createdBy: c.get('userId') ?? null,
       updatedAt: new Date(),
     }).returning();
-    if (!schedule) return c.json({ error: 'Failed to create schedule' }, 500);
+    if (!schedule) throw new InternalError('Failed to create schedule');
     await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, body.projectId)).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });

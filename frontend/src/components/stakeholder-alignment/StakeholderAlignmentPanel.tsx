@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   governanceApi,
   type StakeholderAnswer,
@@ -8,14 +9,18 @@ import {
   type StakeholderMapEntry,
   type StakeholderQuestionKey,
 } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
-const QUESTIONS: Array<{ key: StakeholderQuestionKey; label: string }> = [
-  { key: 'priorities_clear', label: 'Priorities are clear and agreed' },
-  { key: 'competing_p0s_reconciled', label: 'Competing P0s are reconciled' },
-  { key: 'approvers_current', label: 'Required approvers are current' },
-  { key: 'conflicts_within_sla', label: 'Conflicts are within the 48-hour SLA' },
-  { key: 'delivery_reflects_priorities', label: 'Delivery reflects agreed priorities' },
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+
+/** Question order. Labels resolve under `stakeholderAlignment.question.<key>`. */
+const QUESTIONS: readonly StakeholderQuestionKey[] = [
+  'priorities_clear',
+  'competing_p0s_reconciled',
+  'approvers_current',
+  'conflicts_within_sla',
+  'delivery_reflects_priorities',
 ];
+
+const ANSWERS: readonly StakeholderAnswer[] = ['yes', 'no', 'unknown'];
 
 const EMPTY_ANSWERS: Record<StakeholderQuestionKey, StakeholderAnswer> = {
   priorities_clear: 'unknown',
@@ -33,6 +38,8 @@ const input: React.CSSProperties = {
 };
 
 export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) {
+  const t = useTranslations('stakeholderAlignment');
+  const errorMessage = useErrorMessage();
   const [dashboard, setDashboard] = useState<StakeholderDashboard | null>(null);
   const [stakeholders, setStakeholders] = useState<StakeholderMapEntry[]>([]);
   const [answers, setAnswers] = useState(EMPTY_ANSWERS);
@@ -55,9 +62,9 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       if (profileResult.profile) setAnswers(profileResult.profile.answers);
       setError(null);
     } catch (cause) {
-      setError(faultMessage(cause, 'Unable to load stakeholder alignment'));
+      setError(errorMessage(cause));
     }
-  }, [projectId]);
+  }, [projectId, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -71,7 +78,7 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       setName(''); setRef(''); setTeamScope('');
       await load();
     } catch (cause) {
-      setError(faultMessage(cause, 'Unable to save stakeholder'));
+      setError(errorMessage(cause));
     } finally { setBusy(false); }
   }
 
@@ -81,7 +88,7 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       await governanceApi.stakeholder.saveHealthProfile(projectId, answers);
       await load();
     } catch (cause) {
-      setError(faultMessage(cause, 'Unable to save health profile'));
+      setError(errorMessage(cause));
     } finally { setBusy(false); }
   }
 
@@ -91,7 +98,7 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       await governanceApi.stakeholder.removeMapEntry(id);
       await load();
     } catch (cause) {
-      setError(faultMessage(cause, 'Unable to remove stakeholder'));
+      setError(errorMessage(cause));
     } finally { setBusy(false); }
   }
 
@@ -99,14 +106,14 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
     <section style={card} aria-labelledby="stakeholder-alignment-title">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h3 id="stakeholder-alignment-title" style={{ fontSize: 'var(--font-size-body)', margin: 0 }}>Stakeholder alignment</h3>
-          <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>Agree priorities, collect sign-off, and surface conflicts before delivery drifts.</p>
+          <h3 id="stakeholder-alignment-title" style={{ fontSize: 'var(--font-size-body)', margin: 0 }}>{t('title')}</h3>
+          <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('subtitle')}</p>
         </div>
         {dashboard ? (
           <div style={{ display: 'flex', gap: 10, fontSize: 'var(--font-size-small)', flexWrap: 'wrap' }}>
-            <span>{dashboard.approved} approved</span><span>{dashboard.pending} pending</span>
-            <span style={{ color: dashboard.overdue ? 'var(--error)' : 'var(--text-muted)' }}>{dashboard.overdue} overdue</span>
-            <span style={{ color: dashboard.activeConflicts ? 'var(--warning)' : 'var(--text-muted)' }}>{dashboard.activeConflicts} conflicts</span>
+            <span>{t('approvedCount', { count: dashboard.approved })}</span><span>{t('pendingCount', { count: dashboard.pending })}</span>
+            <span style={{ color: dashboard.overdue ? 'var(--error)' : 'var(--text-muted)' }}>{t('overdueCount', { count: dashboard.overdue })}</span>
+            <span style={{ color: dashboard.activeConflicts ? 'var(--warning)' : 'var(--text-muted)' }}>{t('conflictsCount', { count: dashboard.activeConflicts })}</span>
           </div>
         ) : null}
       </div>
@@ -116,39 +123,39 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginTop: 14 }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', marginBottom: 8 }}>Stakeholder map</div>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', marginBottom: 8 }}>{t('mapTitle')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {stakeholders.length === 0 ? <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>No stakeholders configured.</span> : stakeholders.map((stakeholder) => (
+            {stakeholders.length === 0 ? <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('noStakeholders')}</span> : stakeholders.map((stakeholder) => (
               <div key={stakeholder.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-small)' }}>
-                <span style={{ flex: 1 }}><strong>{stakeholder.displayName}</strong> · {stakeholder.role === 'required_approver' ? 'Approver' : 'Informed'}{stakeholder.teamScope ? ` · ${stakeholder.teamScope}` : ''}</span>
-                <button type="button" disabled={busy} aria-label={`Remove ${stakeholder.displayName}`} onClick={() => void removeStakeholder(stakeholder.id)} style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
+                <span style={{ flex: 1 }}><strong>{stakeholder.displayName}</strong> · {stakeholder.role === 'required_approver' ? t('roleApprover') : t('roleInformed')}{stakeholder.teamScope ? ` · ${stakeholder.teamScope}` : ''}</span>
+                <button type="button" disabled={busy} aria-label={t('removeAria', { name: stakeholder.displayName })} onClick={() => void removeStakeholder(stakeholder.id)} style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
               </div>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            <input aria-label="Stakeholder name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" style={input} />
-            <input aria-label="Stakeholder user reference" value={ref} onChange={(event) => setRef(event.target.value)} placeholder="User ID" style={input} />
-            <input aria-label="Team scope" value={teamScope} onChange={(event) => setTeamScope(event.target.value)} placeholder="Team (optional)" style={input} />
-            <select aria-label="Stakeholder role" value={role} onChange={(event) => setRole(event.target.value as StakeholderMapEntry['role'])} style={input}>
-              <option value="required_approver">Required approver</option><option value="informed">Informed</option>
+            <input aria-label={t('nameAria')} value={name} onChange={(event) => setName(event.target.value)} placeholder={t('namePlaceholder')} style={input} />
+            <input aria-label={t('refAria')} value={ref} onChange={(event) => setRef(event.target.value)} placeholder={t('refPlaceholder')} style={input} />
+            <input aria-label={t('teamAria')} value={teamScope} onChange={(event) => setTeamScope(event.target.value)} placeholder={t('teamPlaceholder')} style={input} />
+            <select aria-label={t('roleAria')} value={role} onChange={(event) => setRole(event.target.value as StakeholderMapEntry['role'])} style={input}>
+              <option value="required_approver">{t('roleRequiredApprover')}</option><option value="informed">{t('roleInformed')}</option>
             </select>
-            <button type="button" disabled={busy || !name.trim() || !ref.trim()} onClick={() => void addStakeholder()} style={{ ...input, flex: 0, cursor: 'pointer', fontWeight: 700 }}>Add</button>
+            <button type="button" disabled={busy || !name.trim() || !ref.trim()} onClick={() => void addStakeholder()} style={{ ...input, flex: 0, cursor: 'pointer', fontWeight: 700 }}>{t('add')}</button>
           </div>
         </div>
 
         <div>
-          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', marginBottom: 8 }}>Alignment health</div>
+          <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', marginBottom: 8 }}>{t('healthTitle')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {QUESTIONS.map((question) => (
-              <label key={question.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 'var(--font-size-small)' }}>
-                <span>{question.label}</span>
-                <select value={answers[question.key]} onChange={(event) => setAnswers((current) => ({ ...current, [question.key]: event.target.value as StakeholderAnswer }))} style={{ ...input, minWidth: 92, flex: 0 }}>
-                  <option value="yes">Yes</option><option value="no">No</option><option value="unknown">Unknown</option>
+              <label key={question} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 'var(--font-size-small)' }}>
+                <span>{t(`question.${question}`)}</span>
+                <select value={answers[question]} onChange={(event) => setAnswers((current) => ({ ...current, [question]: event.target.value as StakeholderAnswer }))} style={{ ...input, minWidth: 92, flex: 0 }}>
+                  {ANSWERS.map((answer) => <option key={answer} value={answer}>{t(`answer.${answer}`)}</option>)}
                 </select>
               </label>
             ))}
           </div>
-          <button type="button" disabled={busy} onClick={() => void saveHealth()} style={{ ...input, marginTop: 10, cursor: 'pointer', fontWeight: 700 }}>Save health profile</button>
+          <button type="button" disabled={busy} onClick={() => void saveHealth()} style={{ ...input, marginTop: 10, cursor: 'pointer', fontWeight: 700 }}>{t('saveHealth')}</button>
         </div>
       </div>
     </section>

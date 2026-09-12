@@ -5,7 +5,7 @@ import { SHARED_OBJECT_SPECS } from './sharedCanvasObjects';
 import './specObjectSets';
 import {
   makeSpecDeriveBoard, specFieldNames, specFieldValue, specMutableFields,
-  specObjectNamespace, specReadableFields, specRestrictedFields,
+  specObjectNamespace, specReadableFields, specRestrictedFields, specValueInEnglish,
 } from './specObjects';
 
 describe('hiring vocabulary', () => {
@@ -152,7 +152,9 @@ describe('placement.client, the fourth counterparty field', () => {
     expect(field.derived).toBe(true);
     expect(specMutableFields('placement')).not.toContain('clientAccount');
     const placement = { kind: 'placement', title: 'Placement 1', client: 'Northwind Traders' };
-    const linked = String(specFieldValue(field, placement, makeSpecDeriveBoard([CLIENT, placement])));
+    // The resolver's sentence is a verdict descriptor under the founder catalog; the model
+    // reads it in English.
+    const linked = String(specValueInEnglish(specFieldValue(field, placement, makeSpecDeriveBoard([CLIENT, placement])), 'creationCanvas.hiring'));
     expect(linked).toContain('Northwind Traders');
     expect(linked).toContain('Sam Ito');
   });

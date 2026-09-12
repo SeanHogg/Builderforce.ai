@@ -1,5 +1,6 @@
 import type { Project } from '@/lib/types';
 import { computeProjectHealth, type ProjectHealth } from '@/lib/projectHealth';
+import type { StatusToneMap } from '@/lib/statusTone';
 
 /**
  * Cross-project health — the portfolio-wide RAG read behind the Projects →
@@ -199,9 +200,9 @@ export function buildPortfolioHealth(projects: Project[]): PortfolioHealth {
   };
 }
 
-/** Token colour per band — shared by the badge, the counts and the overall banner. */
-export const RAG_COLOR: Record<Rag, string> = {
-  green: 'var(--success)',
-  amber: 'var(--warning)',
-  red: 'var(--error)',
+/** Tone per band — shared by the badge, the counts and the overall banner. */
+export const RAG_TONE: StatusToneMap<Rag> = {
+  green: 'success',
+  amber: 'warning',
+  red: 'danger',
 };

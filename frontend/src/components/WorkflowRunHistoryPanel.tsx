@@ -24,7 +24,8 @@ import {
 } from '@/lib/builderforceApi';
 import { WorkflowDagView } from './WorkflowDagView';
 import { TrendChart } from './charts/TrendChart';
-import { StatusPill, STATUS_COLORS, cardStyle, subtleBtn } from './workflowRunUi';
+import { StatusPill, WORKFLOW_STATUS_TONE, cardStyle, subtleBtn } from './workflowRunUi';
+import { statusColor } from '@/lib/statusTone';
 import { useFormat } from "@/i18n/useFormat";
 
 interface Props {
@@ -36,7 +37,7 @@ interface Props {
 }
 
 function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
-  const color = STATUS_COLORS[task.status] ?? 'var(--text-muted)';
+  const color = statusColor(WORKFLOW_STATUS_TONE, task.status, 'solid');
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
       <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 5 }} />

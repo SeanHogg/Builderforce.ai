@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { FOUNDER_OBJECT_KINDS, isFounderObjectKind, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 import {
-  FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS,
+  FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_NAMESPACE, FOUNDER_OBJECT_SPECS,
   capTablePercentBalance, counterpartyAccountField, founderMutableFields,
 } from './founderObjects';
-import { makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specObjectSpec, specSetGuidance } from './specObjects';
+import {
+  makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specObjectSpec, specSetGuidance, specValueInEnglish,
+} from './specObjects';
 import {
   createDefaultCreationData, creationObjectAiContext, creationObjectContentFields,
   creationObjectDefinition, creationObjectMutableFields, emptyShellProblem,
@@ -18,6 +20,11 @@ import de from '@/i18n/messages/de.json';
 const CATALOGS = { en, zh, es, fr, de } as const;
 const at = (catalog: unknown, path: readonly string[]): unknown =>
   path.reduce<unknown>((node, key) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined), catalog);
+
+/** A resolved field value as the MODEL reads it. A worded derivation returns a verdict
+ *  descriptor so the card can translate it; the prompt gets it formatted in English,
+ *  through the same formatter — which is what these assertions read. */
+const english = (value: unknown): string => String(specValueInEnglish(value, FOUNDER_NAMESPACE));
 
 describe('the founder spec covers the contract', () => {
   it('specs every declared founder kind, and nothing else', () => {
@@ -165,9 +172,9 @@ describe('the cap table percent column', () => {
 
   it('says on the card when the percentages do not balance, rather than adjusting one', () => {
     const check = fieldOn('capTable', 'ownershipCheck');
-    const balanced = String(specFieldValue(check, table([{ shares: 600, percent: 60 }, { shares: 300, percent: 30 }], 100)));
+    const balanced = english(specFieldValue(check, table([{ shares: 600, percent: 60 }, { shares: 300, percent: 30 }], 100)));
     expect(balanced).not.toContain('do not balance');
-    const skewed = String(specFieldValue(check, table([{ shares: 600, percent: 55 }, { shares: 300, percent: 30 }], 100)));
+    const skewed = english(specFieldValue(check, table([{ shares: 600, percent: 55 }, { shares: 300, percent: 30 }], 100)));
     expect(skewed).toContain('percent column totals 95%');
     expect(skewed).toContain('do not balance');
   });
@@ -254,16 +261,16 @@ describe('the counterparty resolver', () => {
   const resolveVia = (customer: string) => specFieldValue(counterpartyAccountField('customer'), { kind: 'invoice', title: 'INV-1', customer }, makeSpecDeriveBoard([ACME]));
 
   it('matches an account by title, case- and space-insensitively', () => {
-    expect(String(resolveVia('  acme holdings ltd  '))).toContain('Linked to `account` "Acme Holdings Ltd"');
+    expect(english(resolveVia('  acme holdings ltd  '))).toContain('Linked to `account` "Acme Holdings Ltd"');
   });
 
   it('falls back to an alias in alsoKnownAs', () => {
-    expect(String(resolveVia('Acme'))).toContain('Linked to `account` "Acme Holdings Ltd"');
+    expect(english(resolveVia('Acme'))).toContain('Linked to `account` "Acme Holdings Ltd"');
   });
 
   it('resolves nothing for an empty label or an unmatched name', () => {
     expect(resolveVia('')).toBeUndefined();
-    expect(String(resolveVia('Some Other Company'))).toContain('No `account` matches');
+    expect(english(resolveVia('Some Other Company'))).toContain('No `account` matches');
   });
 
   it('is never authorable — the resolution is read-only', () => {
@@ -282,9 +289,9 @@ describe('the counterparty resolver', () => {
   it('reports what it linked to, and nudges to author the account when nothing matches', () => {
     const invoice = { kind: 'invoice', title: 'INV-1', customer: 'Acme Holdings Ltd' };
     const field = specObjectSpec('invoice')!.fields.find((entry) => entry.name === 'customerAccount')!;
-    expect(String(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Acme Holdings Ltd');
-    expect(String(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Jane Lee');
-    expect(String(specFieldValue(field, { ...invoice, customer: 'Nobody Ltd' }, makeSpecDeriveBoard([ACME])))).toContain('author one');
+    expect(english(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Acme Holdings Ltd');
+    expect(english(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Jane Lee');
+    expect(english(specFieldValue(field, { ...invoice, customer: 'Nobody Ltd' }, makeSpecDeriveBoard([ACME])))).toContain('author one');
     // No counterparty authored yet — no section to draw.
     expect(specFieldValue(field, { kind: 'invoice', title: 'INV-2' }, makeSpecDeriveBoard([ACME]))).toBeUndefined();
   });
@@ -301,7 +308,7 @@ describe('the counterparty resolver', () => {
     // or silently omitting the section.
     const field = specObjectSpec('bill')!.fields.find((entry) => entry.name === 'vendorAccount')!;
     const legacyBill = { kind: 'bill', title: 'B-1', vendor: 'Some Supplier Inc' };
-    expect(String(specFieldValue(field, legacyBill, makeSpecDeriveBoard([legacyBill])))).toContain('No `account` matches');
+    expect(english(specFieldValue(field, legacyBill, makeSpecDeriveBoard([legacyBill])))).toContain('No `account` matches');
   });
 });
 
@@ -341,7 +348,7 @@ describe('contract obligations', () => {
 
   const fieldOn = (kind: string, name: string) => specObjectSpec(kind)!.fields.find((entry) => entry.name === name)!;
   const coverage = (objects: readonly Record<string, unknown>[]) =>
-    String(specFieldValue(fieldOn('contract', 'obligationCoverage'), MSA, makeSpecDeriveBoard([...objects])) ?? '');
+    english(specFieldValue(fieldOn('contract', 'obligationCoverage'), MSA, makeSpecDeriveBoard([...objects])) ?? '');
 
   it('models an obligation as a row with an identity, a direction and a cadence', () => {
     const obligations = fieldOn('contract', 'obligations');
@@ -370,7 +377,9 @@ describe('contract obligations', () => {
 
   it('names a document that points here and matches no obligation', () => {
     const verdict = coverage([MSA, SUPPORT_INVOICE, HOSTING_BILL, STRAY_BILL]);
-    expect(verdict).toContain('match no obligation on it');
+    // One stray document, so the sentence is singular — an ICU plural now, which is also
+    // what fixed "1 document names this contract and match…".
+    expect(verdict).toContain('matches no obligation on it');
     expect(verdict).toContain('ACME-78');
   });
 
@@ -385,27 +394,27 @@ describe('contract obligations', () => {
   });
 
   it('flags a bill whose obligation does not exist on the contract it names', () => {
-    const verdict = String(specFieldValue(fieldOn('bill', 'contractObligation'), STRAY_BILL, makeSpecDeriveBoard([MSA, STRAY_BILL])));
+    const verdict = english(specFieldValue(fieldOn('bill', 'contractObligation'), STRAY_BILL, makeSpecDeriveBoard([MSA, STRAY_BILL])));
     expect(verdict).toContain('charge with no matching obligation');
     expect(verdict).toContain('Acme MSA');
   });
 
   it('confirms a bill that matches on amount, date and cadence', () => {
-    const verdict = String(specFieldValue(fieldOn('bill', 'contractObligation'), HOSTING_BILL, makeSpecDeriveBoard([MSA, HOSTING_BILL])));
+    const verdict = english(specFieldValue(fieldOn('bill', 'contractObligation'), HOSTING_BILL, makeSpecDeriveBoard([MSA, HOSTING_BILL])));
     expect(verdict).toContain('Discharges obligation "Monthly hosting pass-through"');
     expect(verdict).toContain('cadence');
   });
 
   it('names every axis a bill disagrees with the obligation on', () => {
     const wrong = { ...HOSTING_BILL, amount: 900, dueAt: '2026-09-22', recurring: 'annual' };
-    const verdict = String(specFieldValue(fieldOn('bill', 'contractObligation'), wrong, makeSpecDeriveBoard([MSA, wrong])));
+    const verdict = english(specFieldValue(fieldOn('bill', 'contractObligation'), wrong, makeSpecDeriveBoard([MSA, wrong])));
     expect(verdict).toContain('the amount is 900 where the obligation says 800');
     expect(verdict).toContain('7 days after');
     expect(verdict).toContain('recurs annual where the obligation says monthly');
   });
 
   it('tells an invoice which obligation it discharges', () => {
-    const verdict = String(specFieldValue(fieldOn('invoice', 'contractObligation'), SUPPORT_INVOICE, makeSpecDeriveBoard([MSA, SUPPORT_INVOICE])));
+    const verdict = english(specFieldValue(fieldOn('invoice', 'contractObligation'), SUPPORT_INVOICE, makeSpecDeriveBoard([MSA, SUPPORT_INVOICE])));
     expect(verdict).toContain('Discharges obligation "Quarterly support fee"');
     // An invoice declares no recurrence, so the confirming sentence must not claim a
     // cadence agreed that nothing on the card states.
@@ -414,7 +423,7 @@ describe('contract obligations', () => {
 
   it('asks for an obligationRef when a document names only the contract', () => {
     const vague = { ...SUPPORT_INVOICE, obligationRef: '' };
-    const verdict = String(specFieldValue(fieldOn('invoice', 'contractObligation'), vague, makeSpecDeriveBoard([MSA, vague])));
+    const verdict = english(specFieldValue(fieldOn('invoice', 'contractObligation'), vague, makeSpecDeriveBoard([MSA, vague])));
     expect(verdict).toContain('SUPPORT-Q');
     expect(verdict).toContain('HOSTING-M');
   });
@@ -423,7 +432,7 @@ describe('contract obligations', () => {
     // The half `boardRefField` exists to keep identical: a reference that resolves to
     // nothing must SAY so on every kind, never draw an empty section.
     const orphan = { ...SUPPORT_INVOICE, contractRef: 'MSA-NOBODY' };
-    const verdict = String(specFieldValue(fieldOn('invoice', 'contractObligation'), orphan, makeSpecDeriveBoard([orphan])));
+    const verdict = english(specFieldValue(fieldOn('invoice', 'contractObligation'), orphan, makeSpecDeriveBoard([orphan])));
     expect(verdict).toBe('No `contract` matches "MSA-NOBODY" yet — author one to link this.');
   });
 

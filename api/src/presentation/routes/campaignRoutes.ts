@@ -13,6 +13,7 @@
  * JavaScript or a second confirmation click is the kind of dark pattern that
  * gets a sending domain blocklisted.
  */
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -304,7 +305,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
         ...(isAssetKind(body.kind) ? { kind: body.kind } : {}),
         createdBy: c.get('userId') as string,
       });
-      if (!stored.ok) return c.json({ error: stored.error }, stored.status);
+      if (!stored.ok) return statusResponse(c, { error: stored.error }, stored.status, { source: 'presentation/routes/campaignRoutes.ts', operation: 'storeAsset' });
       return c.json(stored.asset, 201);
     }
     const form = await c.req.formData().catch(() => null);
@@ -330,7 +331,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
       source: 'uploaded',
       createdBy: c.get('userId') as string,
     });
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/campaignRoutes.ts', operation: 'uploadAsset' });
     return c.json(result.asset, 201);
   });
 
@@ -388,7 +389,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
       prompt,
       createdBy: c.get('userId') as string,
     });
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/campaignRoutes.ts', operation: 'generateAsset' });
     return c.json(result.asset, 201);
   });
 

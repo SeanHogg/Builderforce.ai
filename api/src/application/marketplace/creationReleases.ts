@@ -62,7 +62,6 @@ import { runStageChecks, type StageObject } from './stageChecks';
 import { deploymentProbe, systemDryRunProbe, voiceCloneProbe } from './stageChecks.probe';
 import { isSandboxApplicable, stageSandboxPayloadHash } from '../../domain/marketplace/stageSandboxPayload';
 import { ensureStageSandboxRun, resolveStageSandboxState } from './stageSandboxRuns';
-import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
 import {
   SNAPSHOT_REASON_PUBLICATION,
   SNAPSHOT_REASON_STAGE,
@@ -492,7 +491,7 @@ async function stagedView(
     probe: deploymentProbe(),
     sandbox,
     voiceClone: voiceCloneProbe(db, meta.tenantId),
-    systemDryRun: harness === 'system' ? systemDryRunProbe(env as unknown as CloudExecutorEnv) : null,
+    systemDryRun: harness === 'system' ? systemDryRunProbe(env) : null,
   });
 
   return {

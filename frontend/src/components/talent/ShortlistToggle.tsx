@@ -13,12 +13,11 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { savedTalentIds, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 export function ShortlistToggle({ freelancerUserId }: { freelancerUserId: string }) {
   const t = useTranslations('talent');
   const [saved, setSaved] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
 
   useEffect(() => {
     let cancelled = false;
@@ -35,27 +34,24 @@ export function ShortlistToggle({ freelancerUserId }: { freelancerUserId: string
   if (saved === null) return null;
 
   const toggle = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      if (saved) { await unsaveTalent(freelancerUserId); setSaved(false); }
-      else { await saveTalent({ freelancerUserId }); setSaved(true); }
-    } catch (e) {
-      setError(faultMessage(e, t('shortlist.failed')));
-    } finally {
-      setBusy(false);
-    }
+    const result = await task.run(async () => {
+      if (saved) await unsaveTalent(freelancerUserId);
+      else await saveTalent({ freelancerUserId });
+      return true;
+    }, { failure: t('shortlist.failed') });
+    if (result === undefined) return;
+    setSaved(!saved);
   };
 
   return (
     <button
       type="button"
-      disabled={busy}
+      disabled={task.busy}
       aria-pressed={saved}
-      title={error ?? undefined}
+      title={task.error ?? undefined}
       onClick={() => void toggle()}
       style={{
-        padding: '9px 16px', borderRadius: 'var(--radius-lg)', cursor: busy ? 'wait' : 'pointer',
+        padding: '9px 16px', borderRadius: 'var(--radius-lg)', cursor: task.busy ? 'wait' : 'pointer',
         fontWeight: 600, fontSize: 'var(--font-size-small)',
         border: `1px solid ${saved ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
         background: saved ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',

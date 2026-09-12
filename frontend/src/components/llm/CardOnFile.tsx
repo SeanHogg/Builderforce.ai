@@ -4,11 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { useStartCardValidation } from '@/lib/useCardValidation';
 import { invalidateLlmModels } from '@/lib/useLlmModels';
 import { invalidateConsumption } from '@/lib/useConsumption';
 import { cardValidationApi, type CardValidationState } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /**
  * The card BuilderForce has on file, and the only way to change it.
  *
@@ -39,6 +41,14 @@ const actionButton: React.CSSProperties = {
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-md)',
+};
+
+/** Validated reads as success, pending as in-progress, failed as a problem — tones that
+ *  `lib/statusTone` resolves to theme tokens, so light and dark both stay legible. */
+const CARD_STATUS_TONE: StatusToneMap<CardValidationState['status']> = {
+  validated: 'success',
+  pending: 'neutral',
+  failed: 'danger',
 };
 
 export function CardOnFile() {
@@ -102,19 +112,11 @@ export function CardOnFile() {
     }
   };
 
-  const replace = async () => {
-    // Add-then-swap (migration 0346): the current card stays validated until the
-    // new one is confirmed, then the server detaches the old one. So this confirm
-    // reassures rather than warns — there is no access gap to disclose. The
-    // `retry` variant still explains the $0 charge for a failed card.
-    const ok = await confirm({
-      title: t('replaceCardTitle'),
-      message: state.validated ? t('replaceCardWarning') : t('retryCardMessage'),
-      confirmLabel: t('replaceCardConfirm'),
-      destructive: false,
-    });
-    if (ok) await start();
-  };
+  // Add-then-swap (migration 0346): the current card stays validated until the new
+  // one is confirmed, then the server detaches the old one — nothing is lost, so
+  // the reassurance (or, for `retry`, the $0-charge note) rides on the inline
+  // two-step button rather than a modal.
+  const replace = () => start();
 
   const statusLabel = state.status === 'validated'
     ? t('cardStatusValidated')
@@ -122,13 +124,7 @@ export function CardOnFile() {
       ? t('cardStatusPending')
       : t('cardStatusFailed');
 
-  // Validated reads as success, pending as in-progress, failed as a problem — all
-  // from theme tokens so both light and dark themes stay legible.
-  const statusColor = state.status === 'validated'
-    ? 'var(--success)'
-    : state.status === 'pending'
-      ? 'var(--text-muted)'
-      : 'var(--danger)';
+  const statusTextColor = statusColor(CARD_STATUS_TONE, state.status, 'text', 'danger');
 
   return (
     <div
@@ -156,7 +152,7 @@ export function CardOnFile() {
           ) : (
             <span style={{ color: 'var(--text-muted)' }}>{t('cardNoDetails')}</span>
           )}
-          <span style={{ color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
+          <span style={{ color: statusTextColor, fontWeight: 600 }}>{statusLabel}</span>
         </div>
 
         <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
@@ -174,14 +170,15 @@ export function CardOnFile() {
           the clock, so the actions wait rather than offering a no-op. */}
       {state.status !== 'pending' && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: '0 0 auto' }}>
-          <button
-            type="button"
-            onClick={() => void replace()}
+          <InlineConfirmButton
+            onConfirm={replace}
             disabled={busy}
+            hint={state.validated ? t('replaceCardWarning') : t('retryCardMessage')}
+            confirmLabel={t('replaceCardConfirm')}
             style={{ ...actionButton, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}
           >
             {busy ? t('cardWorking') : state.validated ? t('replaceCard') : t('retryCard')}
-          </button>
+          </InlineConfirmButton>
           <button
             type="button"
             onClick={() => void remove()}

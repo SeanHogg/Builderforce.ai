@@ -65,7 +65,6 @@ export interface WebviewRunStart {
   userTurn?: string | ContentPart[];
   projectId?: number | null;
   chatMode?: ChatMode;
-  maxIterations?: number;
   /** The panel's Auto-mode switch at start; `setAutoApprove` follows it live. */
   autoApprove: boolean;
   /** Whether this chat's project memory is switched on (recall + learn). */
@@ -342,7 +341,6 @@ ${p.systemPrompt}` : p.systemPrompt,
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
         projectId: p.projectId ?? null,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
-        ...(p.maxIterations ? { maxIterations: p.maxIterations } : {}),
       });
     } finally {
       flags.delete(chatId);

@@ -19,11 +19,15 @@
  */
 
 import type React from 'react';
+import type { StatusToneMap } from '@/lib/statusTone';
 
-
-export const STATUS_COLOR: Record<string, string> = {
-  passed: 'var(--success)', failed: 'var(--error)', error: 'var(--error)', skipped: 'var(--text-muted)',
-  running: 'var(--amber-bright)', queued: 'var(--text-muted)',
+/**
+ * Run / execution status → tone. Render with `statusColor(STATUS_TONE, s)` from
+ * `@/lib/statusTone`. `running` is the live one (accent), not a warning.
+ */
+export const STATUS_TONE: StatusToneMap = {
+  passed: 'success', failed: 'danger', error: 'danger', skipped: 'neutral',
+  running: 'accent', queued: 'neutral',
 };
 
 export const SEVERITY_COLOR: Record<string, string> = {

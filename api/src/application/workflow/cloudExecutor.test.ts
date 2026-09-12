@@ -9,10 +9,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { executeCloudNode, type CloudExecutorEnv } from './cloudExecutor';
+import { executeCloudNode } from './cloudExecutor';
+import type { Env } from '../../env';
 import { sandboxOutboundPort } from './sandboxOutboundPort';
 
-const env = {} as CloudExecutorEnv;
+const env = {} as Env;
 
 describe('executeCloudNode — outbound port', () => {
   it('a stubbed gmail node needs no usageCtx at all', async () => {

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { fetchProject, updateProject } from '@/lib/api';
 import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface GovernanceContentProps {
   projectId: number;
   /** When set, governance is read/written on this agent instead of the project. */
@@ -13,6 +13,7 @@ export interface GovernanceContentProps {
 }
 
 export function GovernanceContent({ projectId, agentAssignment, className, style }: GovernanceContentProps) {
+  const errorMessage = useErrorMessage();
   const [governance, setGovernance] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -36,7 +37,7 @@ export function GovernanceContent({ projectId, agentAssignment, className, style
           if (!cancelled) setGovernance(project?.governance ?? '');
         }
       } catch (e) {
-        if (!cancelled) setError(faultMessage(e, 'Failed to load governance'));
+        if (!cancelled) setError(errorMessage(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -44,7 +45,7 @@ export function GovernanceContent({ projectId, agentAssignment, className, style
     return () => { cancelled = true; };
     // agentAssignment is keyed by its id; re-run when the selected agent changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, agentId]);
+  }, [projectId, agentId, errorMessage]);
 
   const startEdit = () => {
     setDraft(governance);
@@ -63,7 +64,7 @@ export function GovernanceContent({ projectId, agentAssignment, className, style
       setGovernance(draft);
       setEditing(false);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to save governance'));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }

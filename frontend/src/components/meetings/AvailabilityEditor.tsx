@@ -5,7 +5,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { meetingsApi, type AvailabilityProfile, type AvailabilityWindow } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 function browserTz(): string {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
 }
@@ -32,6 +32,7 @@ export function AvailabilityEditor({
   onSaved: (profile: AvailabilityProfile) => void;
 }) {
   const t = useTranslations('meetings');
+  const errorMessage = useErrorMessage();
   const locale = useLocale();
   const [timezone, setTimezone] = useState(initial?.timezone && initial.timezone !== 'UTC' ? initial.timezone : browserTz());
   const [windows, setWindows] = useState<AvailabilityWindow[]>(initial?.windows ?? []);
@@ -91,9 +92,9 @@ export function AvailabilityEditor({
       const saved = await meetingsApi.setMyAvailability({ timezone, windows: clean });
       onSaved(saved);
     } catch (e) {
-      setError(faultMessage(e, 'Could not save'));
+      setError(errorMessage(e));
     } finally { setBusy(false); }
-  }, [windows, timezone, onSaved]);
+  }, [windows, timezone, onSaved, errorMessage]);
 
   const field: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' };
 

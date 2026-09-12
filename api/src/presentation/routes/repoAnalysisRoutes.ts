@@ -25,6 +25,7 @@
  * this side to invalidate on and a cached copy would only ever show a stale
  * stage while the run moves underneath it.
  */
+import { InternalError } from '../../domain/shared/errors';
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -64,7 +65,7 @@ export function createRepoAnalysisRoutes(db: Db, taskService: TaskService): Hono
       if (started.reason === 'no_repo') {
         return c.json({ error: 'no_repo', message: 'Map at least one repository to this project before running an analysis.' }, 409);
       }
-      return c.json({ error: 'Failed to create analysis run' }, 500);
+      throw new InternalError('Failed to create analysis run');
     }
 
     return c.json({ taskId: started.taskId, executionId: started.executionId, runId: started.runId }, 202);

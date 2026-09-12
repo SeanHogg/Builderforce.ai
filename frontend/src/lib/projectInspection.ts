@@ -1,5 +1,5 @@
 import type { Project } from '@/lib/types';
-import { computeProjectHealth, healthTier, type HealthTier } from '@/lib/projectHealth';
+import { computeProjectHealth, healthTier, healthTierColor as tierColor, type HealthTier } from '@/lib/projectHealth';
 
 /**
  * The project "full inspection" — a multi-dimension Product-Management rating that
@@ -27,7 +27,7 @@ export interface InspectionDimension {
   score: number | null;
   /** Tier for the score (null score → null tier → "no data"). */
   tier: HealthTier | null;
-  /** Tier colour (hex, stable across themes — same convention as projectHealth). */
+  /** Tier colour — {@link healthTierColor}, the one tier ramp in `projectHealth`. */
   color: string;
   /** Relative weight in the overall rating (renormalized over scored dimensions). */
   weight: number;
@@ -54,17 +54,6 @@ export interface ProjectInspection {
   dimensions: InspectionDimension[];
   /** Prescriptive next steps, already sorted by urgency (most urgent first). */
   recommendations: InspectionRecommendation[];
-}
-
-const TIER_COLOR: Record<HealthTier, string> = {
-  healthy: 'var(--success)',
-  watch: 'var(--yellow-bright)',
-  at_risk: 'var(--warning)',
-  critical: 'var(--error)',
-};
-
-function tierColor(tier: HealthTier | null): string {
-  return tier ? TIER_COLOR[tier] : 'var(--border-subtle)';
 }
 
 /** Map a 0–100 overall to a letter grade (aligned with the health tier cutoffs). */

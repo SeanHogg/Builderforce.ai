@@ -8,6 +8,8 @@
  * Auth model: email + password → JWT  (separate from the API-key auth used
  * by the orchestration API). Marketplace JWTs carry { sub, tid: 0 }.
  */
+import { InternalError } from '../../domain/shared/errors';
+import { failResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
@@ -504,7 +506,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       if (msg.includes('unique') || msg.includes('duplicate') || msg.includes('23505')) {
         return c.json({ error: 'Slug already taken' }, 409);
       }
-      return c.json({ error: 'Failed to create skill' }, 500);
+      return failResponse(c, new InternalError('Failed to create skill', { cause: err }), { source: 'presentation/routes/marketplaceRoutes.ts', operation: 'createSkill' });
     }
   });
 

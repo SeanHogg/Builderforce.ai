@@ -4,6 +4,18 @@ import { useTranslations } from 'next-intl';
 import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { diagnosticScoreColor, orderDiagnostics } from '@/lib/diagnosticScore';
 import { Icon } from '@/components/ui/Icon';
+import { statusPillStyle, toneColor, type StatusToneMap } from '@/lib/statusTone';
+
+/** The honest remediation state a gauge badge reports. */
+type RemediationState = 'good' | 'progress' | 'warn';
+
+/**
+ * Remediation state → tone. One tone trio per state, ground and edge included (the
+ * old alphas were mixed against the DARK hue, so on paper the border and the label
+ * were two different greens). `progress` is `info` throughout — its ink used to be
+ * coral on an info wash.
+ */
+const REMEDIATION_TONE: StatusToneMap<RemediationState> = { good: 'success', progress: 'info', warn: 'warning' };
 
 /**
  * ProjectDiagnosticsStrip — the SINGLE surface for showing the diagnostics a
@@ -64,21 +76,12 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
   // The honest remediation signal for the gauge badge. A diagnostic with a filed
   // remediation ticket shows its real PR/merge state (matching the marketing SOC 2
   // gauge); one with no ticket falls back to the gap count.
-  type BadgeTone = 'good' | 'progress' | 'warn';
-  const remediationBadge = (d: ProjectDiagnosticSummary): { label: string; tone: BadgeTone } => {
+  const remediationBadge = (d: ProjectDiagnosticSummary): { label: string; tone: RemediationState } => {
     const state = d.remediation?.state ?? 'none';
     if (state === 'resolved') return { label: `✓ ${t('remediationResolved')}`, tone: 'good' };
     if (state === 'pr_open') return { label: `✓ ${t('remediationPrOpen')}`, tone: 'good' };
     if (state === 'filed') return { label: t('remediationFiled', { count: d.remediation.open }), tone: 'progress' };
     return d.gapCount > 0 ? { label: gapText(d), tone: 'warn' } : { label: `✓ ${t('noGaps')}`, tone: 'good' };
-  };
-  const BADGE_TONE: Record<BadgeTone, { fg: string; bg: string; border: string }> = {
-    // One family per status, ground and edge included. The alphas here were mixed
-    // against the DARK hue, so each chip kept its near-black wash on warm paper
-    // while its ink darkened — the border and the label were two different greens.
-    good: { fg: 'var(--success)', bg: 'var(--success-bg)', border: 'var(--success-border)' },
-    progress: { fg: 'var(--coral-bright)', bg: 'var(--info-bg)', border: 'var(--info-border)' },
-    warn: { fg: 'var(--warning)', bg: 'var(--warning-bg)', border: 'var(--warning-border)' },
   };
 
   // ── chips: dense score pills for the project card / list row ────────────────
@@ -93,8 +96,8 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
           // (green), outstanding gaps read as "attention" (coral); otherwise none.
           const remState = d.remediation?.state ?? 'none';
           const dot = (remState === 'pr_open' || remState === 'resolved')
-            ? { color: 'var(--success-text)', title: remediationBadge(d).label }
-            : d.gapCount > 0 ? { color: 'var(--coral-bright)', title: gapText(d) } : null;
+            ? { color: toneColor('success', 'solid'), title: remediationBadge(d).label }
+            : d.gapCount > 0 ? { color: toneColor('accent', 'solid'), title: gapText(d) } : null;
           const chip = (
             <>
               <span aria-hidden><Icon source={d.icon} size={14} /></span>
@@ -113,7 +116,9 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
           const style: React.CSSProperties = {
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: 11, lineHeight: 1,
-            background: 'var(--bg-base)', border: `1px solid ${d.score == null ? 'var(--border-subtle)' : color + '66'}`,
+            background: 'var(--bg-base)', // `color` is a CSS custom-property reference, so a hex alpha suffix (`+ '66'`) made invalid CSS
+            // and the outline silently vanished; mix the 40% edge instead.
+            border: `1px solid ${d.score == null ? 'var(--border-subtle)' : `color-mix(in srgb, ${color} 40%, transparent)`}`,
             borderRadius: 'var(--radius-full)', padding: '4px 9px', color: 'var(--text-secondary)',
           };
           return onOpen ? (
@@ -153,11 +158,10 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
                 </div>
                 {(() => {
                   const badge = remediationBadge(d);
-                  const tone = BADGE_TONE[badge.tone];
                   return (
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
-                      color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}`,
+                      borderWidth: 1, borderStyle: 'solid', ...statusPillStyle(REMEDIATION_TONE, badge.tone),
                       borderRadius: 'var(--radius-full)', padding: '3px 9px', maxWidth: '100%',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>

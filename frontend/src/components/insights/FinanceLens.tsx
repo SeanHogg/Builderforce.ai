@@ -14,6 +14,7 @@ import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
 import { useInsightFormat } from './format';
 import { useFormat } from "@/i18n/useFormat";
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * Resolve the compact scope-picker value ('tenant' | 'project:<id>' |
@@ -34,8 +35,8 @@ const btnStyle: React.CSSProperties = {
   color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
-const STATUS_TONE: Record<BudgetState, string> = {
-  over: 'var(--danger)', forecast_over: 'var(--warning)', on_track: 'var(--success)', no_budget: 'var(--text-muted)',
+const STATUS_TONE: StatusToneMap<BudgetState> = {
+  over: 'danger', forecast_over: 'warning', on_track: 'success', no_budget: 'neutral',
 };
 
 function currentMonth(): string {
@@ -142,7 +143,7 @@ export function FinanceLens() {
                   <span style={{ fontWeight: 600 }}>{b.scopeName}</span>
                   <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     <span style={{ color: 'var(--text-muted)' }}>{usd(b.actualUsd)} / {usd(b.limitUsd)}</span>
-                    <span style={{ color: STATUS_TONE[b.status], fontWeight: 600, fontSize: '0.78rem' }}>{statusLabel(b.status)}</span>
+                    <span style={{ color: statusColor(STATUS_TONE, b.status), fontWeight: 600, fontSize: '0.78rem' }}>{statusLabel(b.status)}</span>
                     <button
                       type="button" disabled={busy} title={t('common.delete')}
                       onClick={() => run(() => insightsApi.budgets.remove(b.id))}

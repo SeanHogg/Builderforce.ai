@@ -59,11 +59,19 @@ import {
   registerSpecObjectSet,
   specMutableFields,
   specRefKey,
+  specVerdict,
   sumColumn,
   type SpecDeriveBoard,
   type SpecField,
   type SpecObjectSpec,
+  type SpecVerdict,
+  type SpecVerdictResult,
 } from './specObjects';
+
+/** i18n namespace for every founder label, status, field, column and verdict. Named
+ *  because `boardRefField` resolves its sentences here even when a legal or hiring kind
+ *  carries it — see `SpecVerdict.namespace`. */
+export const FOUNDER_NAMESPACE = 'creationCanvas.founder';
 
 /**
  * A founder field IS a spec field.
@@ -243,9 +251,10 @@ export function boardRefField(options: {
   hint: string;
   /** How to find the target. Defaults to `board.byRef(targetKind, ref)`. */
   resolve?: (ref: string, board: SpecDeriveBoard) => Record<string, unknown> | null;
-  /** What to say once it IS found. The not-found sentence is not overridable — that is
-   *  the half this helper exists to keep identical. */
-  describe: (target: Record<string, unknown>, data: Record<string, unknown>, board: SpecDeriveBoard) => string;
+  /** What to say once it IS found, as verdict descriptors under the FOUNDER namespace. The
+   *  not-found sentence is not overridable — that is the half this helper exists to keep
+   *  identical. */
+  describe: (target: Record<string, unknown>, data: Record<string, unknown>, board: SpecDeriveBoard) => SpecVerdictResult;
 }): FounderField {
   const { name, label, sourceField, targetKind, hint, resolve, describe } = options;
   return {
@@ -258,10 +267,29 @@ export function boardRefField(options: {
       const ref = typeof data[sourceField] === 'string' ? (data[sourceField] as string).trim() : '';
       if (!ref) return undefined;
       const target = resolve ? resolve(ref, board) : board.byRef(targetKind, ref);
-      if (!target) return `No \`${targetKind}\` matches "${ref}" yet — author one to link this.`;
-      return describe(target, data, board);
+      // Every sentence this helper produces resolves under the FOUNDER catalog, whichever
+      // vocabulary's kind carries the field — a legal matter and a placement reuse this
+      // resolver, and its words live in one place. See `SpecVerdict.namespace`.
+      const found = target
+        ? describe(target, data, board)
+        : founderVerdict('boardRef.notFound', { kind: targetKind, ref });
+      return isFounderVerdictList(found) ? found.map(inFounderNamespace) : inFounderNamespace(found);
     },
   };
+}
+
+/** A founder verdict descriptor. Explicitly namespaced, so it reads the same on a kind
+ *  another vocabulary declares. */
+function founderVerdict(key: string, values?: SpecVerdict['values']): SpecVerdict {
+  return specVerdict(key, values, FOUNDER_NAMESPACE);
+}
+
+function inFounderNamespace(verdict: SpecVerdict): SpecVerdict {
+  return verdict.namespace ? verdict : { ...verdict, namespace: FOUNDER_NAMESPACE };
+}
+
+function isFounderVerdictList(value: SpecVerdictResult): value is readonly SpecVerdict[] {
+  return Array.isArray(value);
 }
 
 /**
@@ -287,8 +315,8 @@ export function counterpartyAccountField(sourceField: string): FounderField {
       const relationship = typeof account.relationship === 'string' && account.relationship ? account.relationship : 'contact';
       const owner = typeof account.owner === 'string' ? account.owner.trim() : '';
       return owner
-        ? `Linked to \`account\` "${title}" (${relationship}), owned by ${owner}.`
-        : `Linked to \`account\` "${title}" (${relationship}).`;
+        ? founderVerdict('counterparty.linkedOwned', { title, relationship, owner })
+        : founderVerdict('counterparty.linked', { title, relationship });
     },
   });
 }
@@ -353,11 +381,12 @@ function contractRefKeys(data: Record<string, unknown>): ReadonlySet<string> {
   return new Set([specRefKey(data.reference), specRefKey(data.title)].filter(Boolean));
 }
 
-/** A contract's display name, for a sentence rendered on some other card. */
-function contractLabel(contract: Record<string, unknown>): string {
+/** A contract's display name, for a sentence rendered on some other card. The fallback
+ *  is WORDS, so it is a descriptor like the sentence it sits in. */
+function contractLabel(contract: Record<string, unknown>): string | SpecVerdict {
   const title = typeof contract.title === 'string' ? contract.title.trim() : '';
   const reference = typeof contract.reference === 'string' ? contract.reference.trim() : '';
-  return title || reference || 'this contract';
+  return title || reference || founderVerdict('fallback.thisContract');
 }
 
 /** `bill.recurring` says `none` where an obligation says `once`. One vocabulary at the
@@ -368,12 +397,12 @@ function cadenceKey(value: unknown): string {
 }
 
 /** The reference an invoice or a bill is known by, for naming it in a verdict. */
-function documentLabel(document: Record<string, unknown>): string {
+function documentLabel(document: Record<string, unknown>): string | SpecVerdict {
   for (const key of ['invoiceNumber', 'reference', 'title']) {
     const value = document[key];
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
-  return 'an untitled document';
+  return founderVerdict('fallback.untitledDocument');
 }
 
 /**
@@ -400,32 +429,36 @@ function contractObligationField(options: { host: 'invoice' | 'bill'; cadenceSou
       if (!wanted) {
         const available = rows.map((row) => String(row.reference ?? '').trim()).filter(Boolean);
         return available.length
-          ? `Raised under contract "${label}", but no \`obligationRef\` says WHICH obligation it discharges. Set it to one of: ${available.join(', ')}.`
-          : `Raised under contract "${label}", whose obligations carry no \`reference\` values — so nothing on this ${host} can be checked against what was agreed. Give each obligation a reference on the contract first.`;
+          ? founderVerdict('obligation.noRef', { contract: label, available })
+          : founderVerdict('obligation.noReferences', { contract: label, host });
       }
       const row = rows.find((candidate) => specRefKey(candidate.reference) === wanted);
       if (!row) {
-        return `Contract "${label}" has NO obligation with the reference "${String(data.obligationRef).trim()}" — this is a charge with no matching obligation. Either the contract's obligations are out of date or this ${host} should not have been raised.`;
+        return founderVerdict('obligation.unknownRef', { contract: label, ref: String(data.obligationRef).trim(), host });
       }
       const named = String(row.obligation ?? row.reference ?? '').trim() || wanted;
 
-      const problems: string[] = [];
-      const checked: string[] = [];
+      // Both lists are descriptors: the axis names and the problem clauses are words, and
+      // the sentence that joins them is translated as one.
+      const problems: SpecVerdict[] = [];
+      const checked: SpecVerdict[] = [];
 
       const agreedAmount = deriveNumber(row.amount);
       const actualAmount = deriveNumber(data.amount);
       if (agreedAmount !== undefined && actualAmount !== undefined) {
-        checked.push('amount');
+        checked.push(founderVerdict('obligation.axis.amount'));
         if (Math.abs(agreedAmount - actualAmount) > 0.01) {
-          problems.push(`the amount is ${actualAmount} where the obligation says ${agreedAmount}`);
+          problems.push(founderVerdict('obligation.problem.amount', { actual: actualAmount, agreed: agreedAmount }));
         }
       }
 
       const drift = deriveDaysBetween(row.due, data.dueAt);
       if (drift !== undefined) {
-        checked.push('date');
+        checked.push(founderVerdict('obligation.axis.date'));
         if (drift !== 0) {
-          problems.push(`it falls due ${Math.abs(drift)} day${Math.abs(drift) === 1 ? '' : 's'} ${drift > 0 ? 'after' : 'before'} the obligation's ${String(row.due).trim()}`);
+          problems.push(founderVerdict('obligation.problem.date', {
+            days: Math.abs(drift), direction: drift > 0 ? 'after' : 'before', due: String(row.due).trim(),
+          }));
         }
       }
 
@@ -433,19 +466,19 @@ function contractObligationField(options: { host: 'invoice' | 'bill'; cadenceSou
         const agreedCadence = cadenceKey(row.cadence);
         const actualCadence = cadenceKey(data[cadenceSource]);
         if (agreedCadence && actualCadence) {
-          checked.push('cadence');
+          checked.push(founderVerdict('obligation.axis.cadence'));
           if (agreedCadence !== actualCadence) {
-            problems.push(`it recurs ${actualCadence} where the obligation says ${agreedCadence}`);
+            problems.push(founderVerdict('obligation.problem.cadence', { actual: actualCadence, agreed: agreedCadence }));
           }
         }
       }
 
       if (problems.length) {
-        return `Points at obligation "${named}" on contract "${label}", but ${problems.join('; ')}. Check it against the agreement before ${host === 'bill' ? 'approving or paying it' : 'issuing it'}.`;
+        return founderVerdict('obligation.mismatch', { obligation: named, contract: label, problems, host });
       }
       return checked.length
-        ? `Discharges obligation "${named}" on contract "${label}" — ${checked.join(', ')} agree${checked.length === 1 ? 's' : ''} with what was agreed.`
-        : `Points at obligation "${named}" on contract "${label}". Nothing comparable is filled in on either side, so this is a link and not yet a check.`;
+        ? founderVerdict('obligation.discharged', { obligation: named, contract: label, checked, count: checked.length })
+        : founderVerdict('obligation.linkedOnly', { obligation: named, contract: label });
     },
   });
 }
@@ -632,8 +665,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
           const bound = String(data.abTestKey ?? '').trim();
           const rows = deriveRows(data.variants);
           if (!rows.length) return undefined;
-          if (bound) return `Bound to the live split "${bound}" — every exposure and conversion below was counted by the platform, not entered.`;
-          return 'AUTHORED. Nothing produced these numbers: they were typed onto the card. Bind this experiment to an `ab_tests` key before quoting the result as a measurement.';
+          return bound ? specVerdict('evidence.bound', { key: bound }) : specVerdict('evidence.authored');
         },
       },
       {
@@ -665,13 +697,20 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
             // render "NaNpp real at NaN%" beside a real p-value.
             const direction = test.absoluteLift >= 0 ? 'up' : 'down';
             const points = Math.abs(Math.round(test.absoluteLift * 1000) / 10);
+            // The p-value travels as a STRING: it is already rounded by the test, and a
+            // number format would round it again to three places.
+            const variant = String(row.variant ?? '');
+            const p = String(test.pValue);
             return test.significant
-              ? `${row.variant} is ${direction} ${points}pp on the control (p=${test.pValue}), interval ${Math.round(test.interval.low * 1000) / 10} to ${Math.round(test.interval.high * 1000) / 10}pp.`
-              : `${row.variant} is within noise of the control (p=${test.pValue}); n is too small to call.`;
+              ? specVerdict('significance.real', {
+                variant, direction, points, p,
+                low: Math.round(test.interval.low * 1000) / 10,
+                high: Math.round(test.interval.high * 1000) / 10,
+              })
+              : specVerdict('significance.noise', { variant, p });
           });
           const anyReal = compared.some((row) => row.test!.significant);
-          const lead = anyReal ? '' : 'NOTHING here is significant yet. ';
-          return `${lead}${parts.join(' ')}`;
+          return anyReal ? parts : [specVerdict('significance.nothingYet'), ...parts];
         },
       },
       { name: 'verdict', render: 'verdict', label: 'verdict', hint: 'shipped | rejected | inconclusive, and the reason. "Inconclusive" is a real and common answer.' },
@@ -897,21 +936,17 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
           const accounted = derivePercent(held + unallocated, fullyDiluted) ?? 0;
           const overhang = deriveRows(data.convertibles).length;
           const balanced = accounted >= 99 && accounted <= 101;
-          const note = overhang
-            ? ` ${overhang} convertible${overhang === 1 ? '' : 's'} outstanding — not priced into these percentages until a round converts them.`
-            : '';
           // The PERCENT column is checked as its own question. Shares answer "does the
           // ledger reach the authorised count"; the percentages are what a reader adds
           // up, and the spec's own prose promises that when they do not reach ~100 the
           // card SAYS so rather than nudging a number. Legacy rows without a percent
           // column are not judged — nothing to add.
           const percents = capTablePercentBalance(holders, unallocated, fullyDiluted);
-          const percentNote = percents && !percents.balanced
-            ? ` The percent column totals ${percents.total}% including the unallocated pool, not 100 — the percentages do not balance.`
-            : '';
-          return balanced
-            ? `Holders and the unallocated pool account for ${accounted}% of the fully diluted total.${percentNote}${note}`
-            : `Holders and the unallocated pool account for only ${accounted}% of the fully diluted total — the ledger and the authorised counts disagree, which is a real condition to investigate rather than a rounding error.${percentNote}${note}`;
+          return [
+            specVerdict(balanced ? 'ownership.balanced' : 'ownership.unbalanced', { accounted }),
+            ...(percents && !percents.balanced ? [specVerdict('ownership.percentSkew', { total: percents.total })] : []),
+            ...(overhang ? [specVerdict('ownership.convertibles', { count: overhang })] : []),
+          ];
         },
       },
       SUMMARY_FIELD,
@@ -1383,38 +1418,34 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
           const rows = deriveRows(data.obligations);
           if (!rows.length) return undefined;
           const mine = contractRefKeys(data);
-          if (!mine.size) {
-            return 'This contract has neither a `reference` nor a title, so no invoice or bill can name it. Give it a reference before raising anything against it.';
-          }
+          if (!mine.size) return specVerdict('coverage.noIdentity');
 
           const documents = [...board.ofKind('invoice'), ...board.ofKind('bill')]
             .filter((document) => mine.has(specRefKey(document.contractRef)));
 
           const billable = rows.filter((row) => OBLIGATION_DOCUMENT_KIND[String(row.kind ?? '').trim().toLowerCase()]);
           const unreferenced = rows.filter((row) => !specRefKey(row.reference)).length;
-          const covered: string[] = [];
-          const open: string[] = [];
+          const covered: Array<string | SpecVerdict> = [];
+          const open: Array<string | SpecVerdict> = [];
           for (const row of billable) {
             const key = specRefKey(row.reference);
             const raised = !!key && documents.some((document) => specRefKey(document.obligationRef) === key);
-            (raised ? covered : open).push(String(row.obligation ?? row.reference ?? '').trim() || 'an unnamed obligation');
+            (raised ? covered : open).push(String(row.obligation ?? row.reference ?? '').trim() || specVerdict('fallback.unnamedObligation'));
           }
 
           const known = new Set(rows.map((row) => specRefKey(row.reference)).filter(Boolean));
           const orphans = documents.filter((document) => !known.has(specRefKey(document.obligationRef)));
 
-          const parts: string[] = [];
-          parts.push(billable.length
-            ? `${covered.length} of ${billable.length} billable obligation${billable.length === 1 ? '' : 's'} ${covered.length === 1 ? 'has' : 'have'} a document raised against ${billable.length === 1 ? 'it' : 'them'}.`
-            : 'No obligation here is a receivable or a payable, so nothing on this contract should generate an invoice or a bill.');
-          if (open.length) parts.push(`Nothing raised yet for: ${open.join(', ')}.`);
-          if (orphans.length) {
-            parts.push(`${orphans.length} document${orphans.length === 1 ? '' : 's'} name${orphans.length === 1 ? 's' : ''} this contract and match no obligation on it — ${orphans.map(documentLabel).join(', ')}.`);
-          }
-          if (unreferenced) {
-            parts.push(`${unreferenced} obligation${unreferenced === 1 ? '' : 's'} carr${unreferenced === 1 ? 'ies' : 'y'} no \`reference\`, so nothing can ever be shown to discharge ${unreferenced === 1 ? 'it' : 'them'}.`);
-          }
-          return parts.join(' ');
+          // One sentence per finding, each a descriptor: the counts are ICU plurals in the
+          // catalog, and the name lists are formatted by the reader's list formatter.
+          return [
+            billable.length
+              ? specVerdict('coverage.billable', { covered: covered.length, total: billable.length })
+              : specVerdict('coverage.noneBillable'),
+            ...(open.length ? [specVerdict('coverage.open', { names: open })] : []),
+            ...(orphans.length ? [specVerdict('coverage.orphans', { count: orphans.length, names: orphans.map(documentLabel) })] : []),
+            ...(unreferenced ? [specVerdict('coverage.unreferenced', { count: unreferenced })] : []),
+          ];
         },
       },
       {
@@ -1551,6 +1582,6 @@ export function founderMutableFields(kind: FounderObjectKind): readonly string[]
  */
 registerSpecObjectSet({
   id: 'founder',
-  namespace: 'creationCanvas.founder',
+  namespace: FOUNDER_NAMESPACE,
   specs: FOUNDER_OBJECT_SPECS,
 });

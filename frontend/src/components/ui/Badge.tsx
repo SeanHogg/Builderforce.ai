@@ -1,6 +1,8 @@
 import type { HTMLAttributes, ReactNode } from 'react';
+import type { StatusTone } from '@/lib/statusTone';
 
-export type BadgeTone = 'neutral' | 'accent' | 'info' | 'success' | 'warning' | 'danger';
+/** The badge tones ARE the status tones — a `lib/statusTone` map feeds `<Badge tone>` directly. */
+export type BadgeTone = StatusTone;
 
 export function Badge({ tone = 'neutral', dot = false, className, children, ...props }: {
   tone?: BadgeTone;

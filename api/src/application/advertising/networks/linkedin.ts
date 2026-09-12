@@ -27,8 +27,9 @@
  *      (`{"amount":"50.00","currencyCode":"USD"}`).
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, list, mapObjective, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   requireTargetingSupport,
@@ -88,7 +89,7 @@ function fromStatus(status: AdStatus | undefined): string | undefined {
 }
 
 /** `{"amount":"50.00","currencyCode":"USD"}` → cents. */
-const amountCents = (value: unknown): number | null => toCents(rec(value).amount, MAJOR);
+const amountCents = (value: unknown): number | null => toCents(asJsonRecord(value).amount, MAJOR);
 
 /** cents → the money object LinkedIn takes on a write. */
 function moneyFrom(cents: number | null | undefined, currency: string): Record<string, string> | undefined {
@@ -147,7 +148,7 @@ export const linkedinAdsProvider: AdsProvider = {
 
   async identity(call, fields) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const accounts = list((await ask(call, 'list_ad_accounts', { q: 'search', count: 100 })).data).map(rec);
+    const accounts = list((await ask(call, 'list_ad_accounts', { q: 'search', count: 100 })).data).map(asJsonRecord);
     const match = accounts.find((a) => text(a.id) === accountId);
     return {
       externalId: accountId,
@@ -160,7 +161,7 @@ export const linkedinAdsProvider: AdsProvider = {
 
   async listCampaigns(call, fields, identity) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const groups = list((await ask(call, 'list_campaign_groups', { account_id: accountId, q: 'search', count: 100 })).data).map(rec);
+    const groups = list((await ask(call, 'list_campaign_groups', { account_id: accountId, q: 'search', count: 100 })).data).map(asJsonRecord);
     if (groups.length === 0) return [];
 
     /*
@@ -169,7 +170,7 @@ export const linkedinAdsProvider: AdsProvider = {
      * the account, grouped in memory: a request per group is the N+1 this codebase
      * forbids, and the daily budget has to be summed from here anyway.
      */
-    const campaigns = list((await ask(call, 'list_campaigns', { account_id: accountId, q: 'search', count: 1000 })).data).map(rec);
+    const campaigns = list((await ask(call, 'list_campaigns', { account_id: accountId, q: 'search', count: 1000 })).data).map(asJsonRecord);
     const objectiveByGroup = new Map<string, string>();
     const dailyByGroup = new Map<string, number>();
     for (const campaign of campaigns) {
@@ -186,7 +187,7 @@ export const linkedinAdsProvider: AdsProvider = {
     return groups.map((g) => {
       const id = text(g.id);
       const native = objectiveByGroup.get(id) ?? null;
-      const schedule = rec(g.runSchedule);
+      const schedule = asJsonRecord(g.runSchedule);
       return {
         externalId: id,
         name: text(g.name),
@@ -195,7 +196,7 @@ export const linkedinAdsProvider: AdsProvider = {
         objective: unmapObjective(OBJECTIVES, native),
         dailyBudgetCents: dailyByGroup.get(id) ?? null,
         totalBudgetCents: amountCents(g.totalBudget),
-        currency: text(rec(g.totalBudget).currencyCode) || identity.currency,
+        currency: text(asJsonRecord(g.totalBudget).currencyCode) || identity.currency,
         startsAtISO: toISO(schedule.start),
         endsAtISO: toISO(schedule.end),
       };
@@ -209,7 +210,7 @@ export const linkedinAdsProvider: AdsProvider = {
     const objectiveType = mapObjective(linkedinAdsProvider, OBJECTIVES, draft.objective);
     const total = moneyFrom(draft.totalBudgetCents, identity.currency);
 
-    const created = rec((await ask(call, 'create_campaign_group', {
+    const created = asJsonRecord((await ask(call, 'create_campaign_group', {
       account_id: accountId,
       name: draft.name,
       account: accountUrn(accountId),
@@ -260,7 +261,7 @@ export const linkedinAdsProvider: AdsProvider = {
 
   async listAdSets(call, fields, identity, externalCampaignId) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const rows = list((await ask(call, 'list_campaigns', { account_id: accountId, q: 'search', count: 1000 })).data).map(rec);
+    const rows = list((await ask(call, 'list_campaigns', { account_id: accountId, q: 'search', count: 1000 })).data).map(asJsonRecord);
     // LinkedIn's account-level campaign finder takes no campaign-group filter, so the
     // scope is applied here — one call for the account still beats one per group.
     const scoped = externalCampaignId
@@ -268,7 +269,7 @@ export const linkedinAdsProvider: AdsProvider = {
       : rows;
 
     return scoped.map((row) => {
-      const schedule = rec(row.runSchedule);
+      const schedule = asJsonRecord(row.runSchedule);
       return {
         externalId: text(row.id),
         externalCampaignId: idOfUrn(text(row.campaignGroup)) || null,
@@ -282,7 +283,7 @@ export const linkedinAdsProvider: AdsProvider = {
         bidStrategy: text(row.costType) || null,
         bidCents: amountCents(row.unitCost),
         dailyBudgetCents: amountCents(row.dailyBudget),
-        currency: text(rec(row.dailyBudget).currencyCode) || identity.currency,
+        currency: text(asJsonRecord(row.dailyBudget).currencyCode) || identity.currency,
         startsAtISO: toISO(schedule.start),
         endsAtISO: toISO(schedule.end),
       } satisfies AdSetRemote;
@@ -297,7 +298,7 @@ export const linkedinAdsProvider: AdsProvider = {
     const daily = moneyFrom(draft.dailyBudgetCents, identity.currency);
     const bid = moneyFrom(draft.bidCents, identity.currency);
 
-    const created = rec((await ask(call, 'create_campaign', {
+    const created = asJsonRecord((await ask(call, 'create_campaign', {
       account_id: accountId,
       name: draft.name,
       account: accountUrn(accountId),
@@ -356,7 +357,7 @@ export const linkedinAdsProvider: AdsProvider = {
       q: 'criteria',
       count: 1000,
       ...(externalAdSetId ? { campaigns: `List(${encodeURIComponent(campaignUrn(externalAdSetId))})` } : {}),
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
 
     return rows.map((row) => {
       const urn = text(row.id);
@@ -389,7 +390,7 @@ export const linkedinAdsProvider: AdsProvider = {
       );
     }
 
-    const created = rec((await ask(call, 'create_creative', {
+    const created = asJsonRecord((await ask(call, 'create_creative', {
       account_id: accountId,
       campaign: campaignUrn(draft.externalAdSetId),
       inlineContent: content,
@@ -446,13 +447,13 @@ export const linkedinAdsProvider: AdsProvider = {
       ...dateParts('end', query.until),
       ...scoped,
       fields: 'costInLocalCurrency,impressions,clicks,externalWebsiteConversions,dateRange,pivotValues',
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
 
     return rows.flatMap((row) => {
       // The group this row belongs to arrives as a URN inside `pivotValues`.
       const pivot = list(row.pivotValues).map(text).find((v) => v.includes('sponsoredCampaignGroup'));
       const externalCampaignId = pivot ? idOfUrn(pivot) : '';
-      const start = rec(rec(row.dateRange).start);
+      const start = asJsonRecord(asJsonRecord(row.dateRange).start);
       const date = toDay(`${text(start.year)}-${text(start.month).padStart(2, '0')}-${text(start.day).padStart(2, '0')}`);
       if (!externalCampaignId || !date) return [];
       return [{

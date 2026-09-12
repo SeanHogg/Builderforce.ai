@@ -30,6 +30,8 @@ export interface ParsedFileResult {
   filename: string;
   fileType: ImportFileType | null;
   error?: string;
+  /** The parser threw: the raw rejection, for the surface to word in the reader's language. */
+  parseFailure?: { cause: unknown };
 }
 
 /** A single row-level validation error */
@@ -180,8 +182,7 @@ export async function parseFile(file: File): Promise<ParsedFileResult> {
 
     return { ...base, headers, rows, totalRows: rows.length };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown parsing error';
-    return { ...base, headers: [], rows: [], totalRows: 0, error: message };
+    return { ...base, headers: [], rows: [], totalRows: 0, parseFailure: { cause: err } };
   }
 }
 

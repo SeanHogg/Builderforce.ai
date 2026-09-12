@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { salesApi, type SalesCommissionRule, type SalesPricing } from '@/lib/salesApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export default function SalesCommissionsPanel() {
+  const errorMessage = useErrorMessage();
   const [rules, setRules] = useState<SalesCommissionRule[]>([]);
   const [pricing, setPricing] = useState<SalesPricing | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  useEffect(() => { salesApi.commissionRules().then((data) => { setRules(data.rules); setPricing(data.pricing); }).catch((error) => setMessage(faultMessage(error, 'Could not load commission rules.'))); }, []);
+  useEffect(() => { salesApi.commissionRules().then((data) => { setRules(data.rules); setPricing(data.pricing); }).catch((error) => setMessage(errorMessage(error))); }, [errorMessage]);
   const percent = (bps: number) => bps / 100;
   const update = (key: string, field: 'referralBps' | 'salesBps', value: string) => setRules((current) => current.map((rule) => rule.ruleKey === key ? { ...rule, [field]: Math.max(0, Math.min(10000, Math.round((Number(value) || 0) * 100))) } : rule));
   const price = (rule: SalesCommissionRule) => {
@@ -21,7 +22,7 @@ export default function SalesCommissionsPanel() {
     try {
       const result = await salesApi.saveCommissionRules(rules.map((rule) => ({ plan: rule.plan, billingCycle: rule.billingCycle, referralPercent: percent(rule.referralBps), salesPercent: percent(rule.salesBps) })));
       setRules(result.rules); setMessage('Commission policy saved. Existing earned commissions retain their original snapshot.');
-    } catch (error) { setMessage(faultMessage(error, 'Could not save commission rules.')); }
+    } catch (error) { setMessage(errorMessage(error)); }
     finally { setSaving(false); }
   }
   return <section>

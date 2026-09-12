@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { generatePrd, savePrd, generateTasks, saveTasks } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 interface ChatProjectActionsProps {
   projectId: number;
   /** The assistant message content (for Generate Tasks). */
@@ -21,6 +21,7 @@ export function ChatProjectActions({
   onPrdSaved,
   onTasksAdded,
 }: ChatProjectActionsProps) {
+  const errorMessage = useErrorMessage();
   const [prdLoading, setPrdLoading] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [prdModal, setPrdModal] = useState<{ prd: string } | null>(null);
@@ -35,11 +36,11 @@ export function ChatProjectActions({
       if (prd.trim()) setPrdModal({ prd: prd.trim() });
       else setError('No PRD content generated.');
     } catch (e) {
-      setError(faultMessage(e, 'Failed to generate PRD'));
+      setError(errorMessage(e));
     } finally {
       setPrdLoading(false);
     }
-  }, [assistantContent, conversationMessages]);
+  }, [assistantContent, conversationMessages, errorMessage]);
 
   const handleSavePrd = useCallback(async () => {
     if (!prdModal) return;
@@ -49,9 +50,9 @@ export function ChatProjectActions({
       setPrdModal(null);
       onPrdSaved?.();
     } catch (e) {
-      setError(faultMessage(e, 'Failed to save PRD'));
+      setError(errorMessage(e));
     }
-  }, [projectId, prdModal, onPrdSaved]);
+  }, [projectId, prdModal, onPrdSaved, errorMessage]);
 
   const handleGenerateTasks = useCallback(async () => {
     setError(null);
@@ -61,11 +62,11 @@ export function ChatProjectActions({
       if (titles.length > 0) setTasksModal({ titles, descriptions });
       else setError('No tasks extracted.');
     } catch (e) {
-      setError(faultMessage(e, 'Failed to generate tasks'));
+      setError(errorMessage(e));
     } finally {
       setTasksLoading(false);
     }
-  }, [assistantContent]);
+  }, [assistantContent, errorMessage]);
 
   const handleAddAllTasks = useCallback(async () => {
     if (!tasksModal) return;
@@ -75,9 +76,9 @@ export function ChatProjectActions({
       setTasksModal(null);
       onTasksAdded?.();
     } catch (e) {
-      setError(faultMessage(e, 'Failed to add tasks'));
+      setError(errorMessage(e));
     }
-  }, [projectId, tasksModal, onTasksAdded]);
+  }, [projectId, tasksModal, onTasksAdded, errorMessage]);
 
   return (
     <>

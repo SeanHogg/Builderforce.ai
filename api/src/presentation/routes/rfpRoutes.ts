@@ -21,6 +21,7 @@
  *   POST   /brand/extract             derive a palette from a website URL       [developer]
  *   POST   /portfolio-match           rank similar projects for requirements    [viewer]
  */
+import { InternalError } from '../../domain/shared/errors';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { and, eq, desc } from 'drizzle-orm';
@@ -124,7 +125,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       createdBy: userId ?? null,
     }).returning();
-    if (!row) return c.json({ error: 'Failed to create request' }, 500);
+    if (!row) throw new InternalError('Failed to create request');
     await bumpCacheVersion(c.env as Env, rfpVersionKey(tenantId));
     return c.json(row, 201);
   });

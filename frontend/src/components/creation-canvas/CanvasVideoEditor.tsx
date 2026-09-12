@@ -43,7 +43,8 @@ function PreviewMedia({ clip, source, playhead, playing }: { clip: CanvasVideoCl
   // Canvas media may be a data URL, a local blob, or an authenticated R2 URL;
   // Next Image cannot optimize those editor-owned sources.
   // eslint-disable-next-line @next/next/no-img-element
-  if (source.kind === 'image') return <img src={source.url} alt={clip.label} />;
+  // Sized to the preview's own 16:9 stage; the CSS fills that stage with `object-fit: contain`.
+  if (source.kind === 'image') return <img src={source.url} alt={clip.label} width={1280} height={720} />;
   if (source.kind === 'audio') return <audio ref={(node) => { media.current = node; }} src={source.url} preload="auto" />;
   return <video ref={(node) => { media.current = node; }} src={source.url} muted={clip.track === 'visual'} playsInline preload="auto" />;
 }

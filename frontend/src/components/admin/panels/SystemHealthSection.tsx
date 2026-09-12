@@ -6,14 +6,13 @@ import { adminApi, type AdminSystemHealth } from '@/lib/adminApi';
 import { errText } from '../adminShared';
 import { formatBytes } from '@/lib/formatBytes';
 import { useAdminFormat } from '../adminShared';
-import { useConfirm } from '@/components/ConfirmProvider';
+import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 
 type MaintenanceAction = 'purge_expired' | 'vacuum_analyze';
 type MaintenanceTarget = 'primary' | 'transactional';
 
 export function SystemHealthSection() {
   const t = useTranslations('admin.system');
-  const confirm = useConfirm();
   const { fmtDateTime, fmtNum } = useAdminFormat();
   const [health, setHealth] = useState<AdminSystemHealth | null>(null);
   const [error, setError] = useState('');
@@ -24,13 +23,18 @@ export function SystemHealthSection() {
   }, []);
   useEffect(() => { void reload(); }, [reload]);
 
-  const maintain = async (action: MaintenanceAction, target?: MaintenanceTarget, table?: string) => {
+  /** What a maintenance run will do — the consequence shown when its button is armed. */
+  const maintenanceHint = (action: MaintenanceAction, target?: MaintenanceTarget, table?: string) => {
     const label = action === 'purge_expired'
       ? t('maintenanceCleanup')
       : t('maintenanceVacuum', { table: table ?? t('allTables'), target: target ?? '' });
-    // An audited operation on the live database: the in-app modal, never the
-    // browser's, so it is styled, translated and cannot be dismissed by accident.
-    if (!(await confirm({ title: t('confirmTitle'), message: t('confirmMaintenance', { label }), confirmLabel: t('confirmRun'), destructive: false }))) return;
+    return t('confirmMaintenance', { label });
+  };
+
+  // Vacuum and the retention sweep lose nothing live (the sweep only removes rows
+  // already past retention), so the deliberate second click is the inline two-step
+  // on each button (InlineConfirmButton), not a destructive modal.
+  const maintain = async (action: MaintenanceAction, target?: MaintenanceTarget, table?: string) => {
     try {
       setBusy(`${action}:${target ?? 'both'}:${table ?? ''}`); setError('');
       await adminApi.systemMaintenance({ action, target, table });
@@ -47,7 +51,7 @@ export function SystemHealthSection() {
           <p className="text-muted" style={{ margin: '4px 0 0', fontSize: 'var(--font-size-body)' }}>{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('purge_expired')}>{t('cleanExpired')}</button>
+          <InlineConfirmButton className="btn-ghost" disabled={Boolean(busy)} hint={maintenanceHint('purge_expired')} onConfirm={() => maintain('purge_expired')}>{t('cleanExpired')}</InlineConfirmButton>
           <button className="btn-ghost" type="button" onClick={() => void reload()}>{t('refresh')}</button>
         </div>
       </div>
@@ -65,9 +69,9 @@ export function SystemHealthSection() {
         {health.databases.map((db) => <div key={db.name} className="health-card" style={{ padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <div><strong style={{ textTransform: 'capitalize' }}>{t('neonDatabase', { name: db.name })}</strong><div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{db.databaseName ?? t('unavailable')} · {db.ok ? t('latency', { ms: db.latencyMs }) : db.error}</div></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>{formatBytes(db.totalBytes)}</strong><button className="btn-ghost" type="button" disabled={Boolean(busy) || !db.ok} onClick={() => void maintain('vacuum_analyze', db.name)}>{t('vacuumAnalyze')}</button></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>{formatBytes(db.totalBytes)}</strong><InlineConfirmButton className="btn-ghost" disabled={Boolean(busy) || !db.ok} hint={maintenanceHint('vacuum_analyze', db.name)} onConfirm={() => maintain('vacuum_analyze', db.name)}>{t('vacuumAnalyze')}</InlineConfirmButton></div>
           </div>
-          <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table" style={{ fontSize: 'var(--font-size-small)' }}><thead><tr><th>{t('colTable')}</th><th>{t('colSize')}</th><th>{t('colRows')}</th><th>{t('colWrites')}</th><th>{t('colLastVacuum')}</th><th></th></tr></thead><tbody>{db.tables.map((table) => <tr key={table.name}><td>{table.name}</td><td>{formatBytes(Number(table.totalBytes))}</td><td>{fmtNum(Number(table.estimatedRows))}</td><td>{fmtNum(Number(table.insertsSinceStatsReset) + Number(table.updatesSinceStatsReset) + Number(table.deletesSinceStatsReset))}</td><td>{table.lastAutovacuum ? fmtDateTime(table.lastAutovacuum) : '—'}</td><td><button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('vacuum_analyze', db.name, table.name)}>{t('vacuum')}</button></td></tr>)}</tbody></table></div>
+          <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table" style={{ fontSize: 'var(--font-size-small)' }}><thead><tr><th>{t('colTable')}</th><th>{t('colSize')}</th><th>{t('colRows')}</th><th>{t('colWrites')}</th><th>{t('colLastVacuum')}</th><th></th></tr></thead><tbody>{db.tables.map((table) => <tr key={table.name}><td>{table.name}</td><td>{formatBytes(Number(table.totalBytes))}</td><td>{fmtNum(Number(table.estimatedRows))}</td><td>{fmtNum(Number(table.insertsSinceStatsReset) + Number(table.updatesSinceStatsReset) + Number(table.deletesSinceStatsReset))}</td><td>{table.lastAutovacuum ? fmtDateTime(table.lastAutovacuum) : '—'}</td><td><InlineConfirmButton className="btn-ghost" disabled={Boolean(busy)} hint={maintenanceHint('vacuum_analyze', db.name, table.name)} onConfirm={() => maintain('vacuum_analyze', db.name, table.name)}>{t('vacuum')}</InlineConfirmButton></td></tr>)}</tbody></table></div>
         </div>)}
       </>}
     </section>

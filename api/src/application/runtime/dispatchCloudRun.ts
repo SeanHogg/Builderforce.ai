@@ -146,7 +146,20 @@ export type SubmittedExecution = { id: number; status: string; toPlain(): unknow
  * non-UI caller should be shown ({@link AUTO_RUN_REASON_TEXT}, extended with the
  * specific detail the refusing guard knows).
  */
-export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found';
+/**
+ * `dispatch_error`: the dispatcher THREW before a run existed (a DB blip, an exception in
+ * a guard, a runtime-submit failure). It is a refusal like the others — "no run, and here
+ * is why" — rather than a swallowed exception, because a caller that `.catch`es it into a
+ * bare `null` has to invent a reason, and the one it invented (`no_agent`) sent a person
+ * to staff a lane that was staffed. See {@link dispatchError}.
+ */
+export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found' | 'dispatch_error';
+
+/** The refusals a person directing a run may NOT override: they are billing entitlements,
+ *  not backpressure, so a human click cannot clear them either. */
+export const ENTITLEMENT_REFUSALS: ReadonlySet<CloudDispatchRefusalReason> = new Set<CloudDispatchRefusalReason>([
+  'cloud_run_limit', 'tenant_token_limit',
+]);
 
 export interface CloudDispatchRefusal {
   reason: CloudDispatchRefusalReason;
@@ -165,8 +178,20 @@ export interface CloudDispatchOutcome {
 function refuse(reason: CloudDispatchRefusalReason, detail?: string | null): CloudDispatchOutcome {
   const base = reason === 'task_not_found'
     ? 'No run: no ticket with that id exists in this workspace.'
-    : AUTO_RUN_REASON_TEXT[reason];
+    : reason === 'dispatch_error'
+      ? 'No run: the dispatcher failed before a run could be created. The error above is the reason; it is not a configuration or entitlement problem.'
+      : AUTO_RUN_REASON_TEXT[reason];
   return { executionId: null, refusal: { reason, message: detail?.trim() ? `${detail.trim()} ${base}` : base } };
+}
+
+/**
+ * The outcome for a dispatcher that THREW. The one place a thrown error becomes a
+ * refusal, so every caller that wraps `dispatchCloudRunForTask` in a `catch` hands the
+ * real message on instead of a reasonless null.
+ */
+export function dispatchError(error: unknown): CloudDispatchOutcome {
+  const message = error instanceof Error ? error.message : String(error);
+  return refuse('dispatch_error', message.slice(0, 400));
 }
 
 export async function dispatchCloudRunForTask(

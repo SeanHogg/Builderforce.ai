@@ -17,6 +17,7 @@
  * stored copy instead would mean shipping something other than what is on screen.
  */
 
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
@@ -127,7 +128,7 @@ export function createGameRoutes(db: Db): Hono<HonoEnv> {
       target,
       game: game.game,
     });
-    if (!result.ok) return c.json({ error: result.reason }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.reason }, result.status, { source: 'presentation/routes/gameRoutes.ts', operation: 'build' });
     return c.json({ state: result.state, files: result.writtenPaths });
   });
 
@@ -152,7 +153,7 @@ export function createGameRoutes(db: Db): Hono<HonoEnv> {
       game: game.game,
       subdomain: optionalString(body.subdomain),
     });
-    if (!published.ok) return c.json({ error: published.error }, published.status as 400);
+    if (!published.ok) return statusResponse(c, { error: published.error }, published.status, { source: 'presentation/routes/gameRoutes.ts', operation: 'publishWeb' });
     return c.json({ url: published.url, state: published.state });
   });
 
@@ -178,7 +179,7 @@ export function createGameRoutes(db: Db): Hono<HonoEnv> {
       universeId: String(body.universeId ?? ''),
       placeId: String(body.placeId ?? ''),
     });
-    if (!published.ok) return c.json({ error: published.error }, published.status as 400);
+    if (!published.ok) return statusResponse(c, { error: published.error }, published.status, { source: 'presentation/routes/gameRoutes.ts', operation: 'publishRoblox' });
     return c.json({ placeUrl: published.placeUrl, versionNumber: published.versionNumber, state: published.state });
   });
 

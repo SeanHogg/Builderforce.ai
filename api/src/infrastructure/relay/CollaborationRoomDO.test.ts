@@ -1,10 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
-import { CollaborationRoomDO, encodeSyncStep1, encodeUpdate, encodeAwareness } from './CollaborationRoomDO';
+import {
+  CLOSE_RATE_LIMITED,
+  COLLAB_FRAME_RATE,
+  CollaborationRoomDO,
+  encodeAwareness,
+  encodeSyncStep1,
+  encodeUpdate,
+} from './CollaborationRoomDO';
 
 /**
  * The room is now AUTHORITATIVE, and these tests are written against that rather than
@@ -40,6 +47,12 @@ class MockWebSocket {
   send(msg: string | Uint8Array) {
     if (this._throwOnSend) throw new Error('send error');
     this.sent.push(msg);
+  }
+
+  closed: { code: number; reason: string } | null = null;
+  close(code: number, reason: string) {
+    this.closed = { code, reason };
+    this.readyState = 3;
   }
 
   serializeAttachment(value: unknown) { this.attachment = value; }
@@ -249,6 +262,51 @@ describe('awareness', () => {
     const room = new CollaborationRoomDO(makeMockState());
     const roomAwareness = (room as unknown as { awareness: awarenessProtocol.Awareness }).awareness;
     expect(roomAwareness.getStates().size).toBe(0);
+  });
+});
+
+describe('the per-socket frame budget', () => {
+  beforeEach(() => {
+    // Frozen clock: the bucket refills by elapsed time, and a slow machine must not
+    // earn the flooder an extra frame mid-loop.
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function flood(frame: string, count: number) {
+    const state = makeMockState();
+    const room = new CollaborationRoomDO(state);
+    const flooder = join(room, state, new MockWebSocket(), { userId: 'f', name: 'Flooder', color: '#111' });
+    const peer = join(room, state, new MockWebSocket(), { userId: 'p', name: 'Peer', color: '#222' });
+    for (let i = 0; i < count; i += 1) room.webSocketMessage(flooder as unknown as WebSocket, frame);
+    return { flooder, peer };
+  }
+
+  it('drops cursor/presence frames past the budget instead of fanning them out', () => {
+    const { flooder, peer } = flood(JSON.stringify({ type: 'presence', cursor: { line: 1 } }), COLLAB_FRAME_RATE.burst + 50);
+    expect(peer.sent).toHaveLength(COLLAB_FRAME_RATE.burst);
+    expect(flooder.closed, 'an ephemeral frame is dropped, not punished').toBeNull();
+  });
+
+  it('closes a socket that floods frames which may not be dropped, so it re-syncs instead of forking', () => {
+    const { flooder, peer } = flood(JSON.stringify({ type: 'terminal-input', data: 'x' }), COLLAB_FRAME_RATE.burst + 1);
+    expect(peer.sent).toHaveLength(COLLAB_FRAME_RATE.burst);
+    expect(flooder.closed?.code).toBe(CLOSE_RATE_LIMITED);
+  });
+
+  it('refills with time, so a steady editor is never limited', () => {
+    const state = makeMockState();
+    const room = new CollaborationRoomDO(state);
+    const editor = join(room, state, new MockWebSocket(), { userId: 'e', name: 'Editor', color: '#111' });
+    const peer = join(room, state, new MockWebSocket(), { userId: 'p', name: 'Peer', color: '#222' });
+    const frame = JSON.stringify({ type: 'terminal-input', data: 'x' });
+    for (let i = 0; i < COLLAB_FRAME_RATE.burst * 2; i += 1) {
+      room.webSocketMessage(editor as unknown as WebSocket, frame);
+      vi.advanceTimersByTime(1_000 / COLLAB_FRAME_RATE.framesPerSecond);
+    }
+    expect(editor.closed).toBeNull();
+    expect(peer.sent).toHaveLength(COLLAB_FRAME_RATE.burst * 2);
   });
 });
 

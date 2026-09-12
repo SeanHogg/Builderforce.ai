@@ -10,7 +10,7 @@
  * `undefined` rather than crashing on unparseable JSON.
  */
 
-import type { OutboundPort } from './cloudExecutor';
+import type { OutboundPort } from './nodes/types';
 
 async function stub(kind: string, config: Record<string, unknown>): Promise<string> {
   return JSON.stringify({ stubbed: true, kind, capturedConfig: Object.keys(config) });

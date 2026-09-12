@@ -3,10 +3,12 @@
 import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { agentHostProjectsApi, type AgentHostProject } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import Link from 'next/link';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 interface AgentHostProjectsContentProps {
   agentHostId: number;
@@ -19,17 +21,22 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  active: 'var(--cyan-bright, var(--cyan-bright))',
-  completed: 'var(--text-muted)',
-  archived: 'var(--text-muted)',
-  on_hold: 'var(--text-muted)',
+const STATUS_TONE: StatusToneMap = {
+  active: 'info',
+  completed: 'neutral',
+  archived: 'neutral',
+  on_hold: 'neutral',
 };
 
 export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsContentProps) {
+  const t = useTranslations('agentHostTabs');
+  const tc = useTranslations('common');
+  const errorMessage = useErrorMessage();
   const [associations, setAssociations] = useState<AgentHostProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // A failed assign/unassign keeps the list on screen and says why beside it.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [allProjects, setAllProjects] = useState<Array<{ id: number; name: string }>>([]);
   const [showAssign, setShowAssign] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
@@ -41,9 +48,9 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
     agentHostProjectsApi
       .list(agentHostId)
       .then(setAssociations)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [agentHostId]);
+  }, [agentHostId, errorMessage]);
 
   useEffect(() => {
     load();
@@ -55,29 +62,31 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
   const handleAssign = async () => {
     if (!selectedProjectId) return;
     setAssigning(true);
+    setActionError(null);
     try {
       await agentHostProjectsApi.assign(agentHostId, Number(selectedProjectId));
       setShowAssign(false);
       setSelectedProjectId('');
       load();
-    } catch {
-      // ignore
+    } catch (e) {
+      setActionError(errorMessage(e));
     } finally {
       setAssigning(false);
     }
   };
 
   const handleUnassign = async (projectId: number) => {
+    setActionError(null);
     try {
       await agentHostProjectsApi.unassign(agentHostId, projectId);
       setAssociations((prev) => prev.filter((a) => a.projectId !== projectId));
-    } catch {
-      // ignore
+    } catch (e) {
+      setActionError(errorMessage(e));
     }
   };
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading projects…</div>;
-  if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>;
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('projects.loading')}</div>;
+  if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>{t('errorPrefix', { message: error })}</div>;
 
   const assignedIds = new Set(associations.map((a) => a.projectId));
   const availableToAssign = allProjects.filter((p) => !assignedIds.has(p.id));
@@ -86,7 +95,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-          Projects ({associations.length})
+          {t('projects.heading', { count: associations.length })}
         </div>
         {availableToAssign.length > 0 && (
           <button
@@ -103,10 +112,14 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
               cursor: 'pointer',
             }}
           >
-            {showAssign ? 'Cancel' : '+ Assign Project'}
+            {showAssign ? tc('cancel') : t('projects.assign')}
           </button>
         )}
       </div>
+
+      {actionError && (
+        <div role="alert" style={{ fontSize: 12, color: 'var(--coral-bright)' }}>{actionError}</div>
+      )}
 
       {showAssign && (
         <div style={{ ...cardStyle, display: 'flex', gap: 8 }}>
@@ -123,7 +136,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
               borderRadius: 'var(--radius-md)',
             }}
           >
-            <option value="">Select a project…</option>
+            <option value="">{t('projects.selectProject')}</option>
             {availableToAssign.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -144,14 +157,14 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
               opacity: !selectedProjectId || assigning ? 0.5 : 1,
             }}
           >
-            {assigning ? '…' : 'Assign'}
+            {assigning ? '…' : t('projects.assignAction')}
           </button>
         </div>
       )}
 
       {associations.length === 0 ? (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-          No projects assigned to this agentHost yet.
+          {t('projects.empty')}
         </div>
       ) : (
         associations.map((assoc) => {
@@ -160,7 +173,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
             <div key={assoc.projectId} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {project?.name ?? `Project #${assoc.projectId}`}
+                  {project?.name ?? t('projects.projectFallback', { id: assoc.projectId })}
                 </div>
                 {project?.description && (
                   <div
@@ -178,7 +191,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                 )}
                 {assoc.role && (
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Role: {assoc.role}
+                    {t('projects.role', { role: assoc.role })}
                   </div>
                 )}
               </div>
@@ -191,11 +204,11 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                     padding: '3px 8px',
                     borderRadius: 'var(--radius-sm)',
                     background: 'var(--bg-elevated)',
-                    color: STATUS_COLORS[project.status] ?? 'var(--text-muted)',
+                    color: statusColor(STATUS_TONE, project.status),
                     flexShrink: 0,
                   }}
                 >
-                  {project.status}
+                  {t('projects.status', { status: project.status })}
                 </span>
               )}
               <Link
@@ -212,7 +225,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                   flexShrink: 0,
                 }}
               >
-                Open
+                {t('projects.open')}
               </Link>
               <button
                 type="button"
@@ -229,7 +242,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                   flexShrink: 0,
                 }}
               >
-                Remove
+                {t('projects.remove')}
               </button>
             </div>
           );

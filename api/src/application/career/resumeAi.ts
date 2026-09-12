@@ -21,14 +21,15 @@
  * the tenant, since the tenant decides which model the cascade reaches. Same bytes in,
  * same bytes out — asking twice about an unchanged document is not a second question.
  *
- * What is stored is the model's RAW reply, not the finished verdict. Verification lives
- * in `resumeAiPrompts` and gets tightened; freezing its output in KV would mean a
+ * What is stored is the model's REPLY — the JSON `completeJson` read out of it, or the
+ * raw text when it held none — not the finished verdict. Verification lives in
+ * `resumeAiPrompts` and gets tightened; freezing its output in KV would mean a
  * fabricated metric caught by today's guard still being served from a cache filled by
  * yesterday's. Re-parsing a cached string costs microseconds and keeps the guard live.
  */
 
-import { completeForTenant, TenantAiService } from '../llm/tenantProxy';
-import { readProxyChoice } from '../llm/LlmProxyService';
+import { TenantAiService } from '../llm/tenantProxy';
+import { completeJson, JSON_OBJECT_FORMAT } from '../llm/completeJson';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import { scoreResume, type ResumeScore } from './resumeAnalysis';
@@ -193,20 +194,16 @@ export class ResumeAiService extends TenantAiService {
       const key = `career-ai:${useCase}:${PROMPT_VERSION}:${tenantId}:${await fingerprint(inputs)}`;
       const stored = await getOrSetCached(this.aiEnv, key, async () => {
         cached = false;
-        const result = await completeForTenant(this.aiEnv, tenantId, {
-          messages: [
-            { role: 'system', content: prompt.system },
-            { role: 'user', content: prompt.user },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.2,
-          max_tokens: 3000,
-          useCase,
-        }, { meterUseCase: useCase, userId: userId ?? null });
-        if (result.response.status >= 400) throw new ModelUnavailableError(`The model service answered ${result.response.status}.`);
-        const choice = await readProxyChoice(result);
-        if (!choice.content) throw new ModelUnavailableError('The model returned an empty reply.');
-        return { content: choice.content, model: result.resolvedModel ?? null };
+        const out = await completeJson(
+          { kind: 'tenant', env: this.aiEnv, tenantId, opts: { meterUseCase: useCase, userId: userId ?? null } },
+          { system: prompt.system, user: prompt.user, schema: JSON_OBJECT_FORMAT, temperature: 0.2, maxTokens: 3000, useCase },
+        );
+        if (out.ok) return { content: JSON.stringify(out.value), model: out.model };
+        // Prose where JSON was asked for is an ANSWER the verifier refuses line by line
+        // (`not_answered`), not an outage — so it is kept and cached like any reply.
+        if (out.content) return { content: out.content, model: out.result?.resolvedModel ?? null };
+        if (out.reason === 'empty') throw new ModelUnavailableError('The model returned an empty reply.');
+        throw new ModelUnavailableError(out.status ? `The model service answered ${out.status}.` : `The model call failed: ${out.detail}`);
       }, { kvTtlSeconds: CACHE_TTL_SECONDS });
       return { content: stored.content, model: stored.model, cached, failure: null };
     } catch (error) {

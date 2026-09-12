@@ -86,11 +86,10 @@ function makeService(opts: {
   const onManagedRunStatus = opts.managedToStatus !== undefined
     ? async () => ({ managed: true, toStatus: opts.managedToStatus! })
     : undefined;
-  const svc = new RuntimeService(
+  const svc = new RuntimeService({
     executions, tasks, agents, audit,
-    undefined, undefined, undefined, undefined, undefined,
-    onRunMilestone as never, undefined, onManagedRunStatus,
-  );
+    onRunMilestone: onRunMilestone as never, onManagedRunStatus,
+  });
   return { svc, milestones, getSavedExec: () => savedExec };
 }
 
@@ -186,14 +185,13 @@ describe('RuntimeService run-milestone narration (chat awareness)', () => {
   it('milestone failures never break the transition (best-effort contract)', async () => {
     const stored = buildTask(TaskStatus.IN_PROGRESS);
     const exec = buildExecution({});
-    const svc = new RuntimeService(
-      { findById: async () => exec, update: async (e: Execution) => e } as unknown as IExecutionRepository,
-      { findById: async () => stored, update: async (t: Task) => t } as unknown as ITaskRepository,
-      {} as IAgentRepository,
-      { save: async () => undefined } as unknown as IAuditRepository,
-      undefined, undefined, undefined, undefined, undefined,
-      (async () => { throw new Error('chat down'); }) as never,
-    );
+    const svc = new RuntimeService({
+      executions: { findById: async () => exec, update: async (e: Execution) => e } as unknown as IExecutionRepository,
+      tasks: { findById: async () => stored, update: async (t: Task) => t } as unknown as ITaskRepository,
+      agents: {} as IAgentRepository,
+      audit: { save: async () => undefined } as unknown as IAuditRepository,
+      onRunMilestone: (async () => { throw new Error('chat down'); }) as never,
+    });
     const saved = await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
     expect(saved.status).toBe(ExecutionStatus.COMPLETED);
   });

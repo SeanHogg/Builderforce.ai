@@ -1,3 +1,5 @@
+import { InternalError } from '../../domain/shared/errors';
+import { failResponse, statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Superadmin routes — /api/admin/*
@@ -406,7 +408,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       const document = await publishLegalDoc(db, docType, body, actorUserId, c.env);
       return c.json({ document }, 201);
     } catch (e) {
-      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      if (e instanceof LegalDocError) return statusResponse(c, { error: e.message }, e.status, { source: 'presentation/routes/adminRoutes.ts', operation: 'legalDoc' }, e);
       throw e;
     }
   });
@@ -427,7 +429,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       const document = await amendActiveLegalDoc(db, docType, body, actorUserId, c.env);
       return c.json({ document });
     } catch (e) {
-      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      if (e instanceof LegalDocError) return statusResponse(c, { error: e.message }, e.status, { source: 'presentation/routes/adminRoutes.ts', operation: 'legalDoc' }, e);
       throw e;
     }
   });
@@ -457,7 +459,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       });
       return c.json({ content });
     } catch (e) {
-      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      if (e instanceof LegalDocError) return statusResponse(c, { error: e.message }, e.status, { source: 'presentation/routes/adminRoutes.ts', operation: 'legalDoc' }, e);
       throw e;
     }
   });
@@ -598,7 +600,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       })
       .returning();
 
-    if (!created) return c.json({ error: 'Failed to create template' }, 500);
+    if (!created) throw new InternalError('Failed to create template');
 
     return c.json({
       template: {
@@ -1603,7 +1605,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       isActive: body.isActive ?? true,
       createdByUserId: c.get('userId') as string,
     }).returning();
-    if (!created) return c.json({ error: 'Failed to create discount code' }, 500);
+    if (!created) throw new InternalError('Failed to create discount code');
     await writeAdminAudit(db, 'DISCOUNT_CODE_CREATED', c.get('userId') as string, {
       metadata: { discountCodeId: created.id, code },
     });
@@ -2108,7 +2110,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       // and the relation-name guard cannot diverge between the two callers.
       await vacuumRelation(db, body.table);
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : 'VACUUM failed' }, 500);
+      return failResponse(c, new InternalError('VACUUM failed', { cause: error }), { source: 'presentation/routes/adminRoutes.ts', operation: 'vacuumAnalyze' });
     }
     await writeAdminAudit(requestDb(c), 'SYSTEM_HEALTH_VACUUM_ANALYZE', actorId ?? null, {
       metadata: { target: body.target, table: body.table ?? null }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
@@ -2806,7 +2808,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         active: body.active ?? true,
       })
       .returning();
-    if (!inserted) return c.json({ error: 'Insert failed' }, 500);
+    if (!inserted) throw new InternalError('Insert failed');
     return c.json({
       persona: {
         id:         inserted.id,
@@ -2868,7 +2870,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (body.author !== undefined) updates.author = body.author;
     if (body.active !== undefined) updates.active = body.active;
     const [updated] = await db.update(platformPersonas).set(updates as Record<string, unknown>).where(eq(platformPersonas.id, id)).returning();
-    if (!updated) return c.json({ error: 'Update failed' }, 500);
+    if (!updated) throw new InternalError('Update failed');
     // Invalidate the cloud capability cache for both old + new slug so the next
     // cloud run re-reads the edited persona body.
     await invalidateCapabilityCache(c.env, 'persona', existing.slug);
@@ -3051,7 +3053,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       })
       .returning();
 
-    if (!session) return c.json({ error: 'Failed to create impersonation session' }, 500);
+    if (!session) throw new InternalError('Failed to create impersonation session');
 
     // Sign emulation JWT
     const token = await signEmulationJwt(

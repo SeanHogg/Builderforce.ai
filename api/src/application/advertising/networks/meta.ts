@@ -8,8 +8,9 @@
  * plausible on a dashboard.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   ageWindow, mapTargetingValues, requireTargetingSupport,
@@ -56,7 +57,7 @@ function fromStatus(status: AdStatus | undefined): string | undefined {
 }
 
 function toCampaign(raw: unknown, fallbackCurrency: string): AdCampaignRemote {
-  const c = rec(raw);
+  const c = asJsonRecord(raw);
   const native = text(c.objective) || null;
   return {
     externalId: text(c.id),
@@ -126,7 +127,7 @@ const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['geo', 'age', 'ge
 async function resolveInterests(call: AdCall, phrases: readonly string[]): Promise<Array<{ id: string; name: string }>> {
   const resolved: Array<{ id: string; name: string }> = [];
   for (const phrase of phrases) {
-    const hits = list((await ask(call, 'search_targeting', { type: 'adinterest', q: phrase, limit: 1 })).data).map(rec);
+    const hits = list((await ask(call, 'search_targeting', { type: 'adinterest', q: phrase, limit: 1 })).data).map(asJsonRecord);
     const hit = hits[0];
     const id = hit ? text(hit.id) : '';
     if (!id) {
@@ -179,13 +180,13 @@ async function targetingSpec(call: AdCall, targeting: AdTargeting): Promise<Reco
  *  Ads Manager carries custom audiences this port has no name for, and reporting the
  *  half we understand beats reporting nothing. */
 function readMetaTargeting(raw: unknown): AdTargeting {
-  const spec = rec(raw);
+  const spec = asJsonRecord(raw);
   const targeting: {
     countries?: string[]; ageMin?: number; ageMax?: number;
     genders?: AdGender[]; interests?: string[]; placements?: AdPlacement[]; devices?: AdDevice[];
   } = {};
 
-  const countries = list(rec(spec.geo_locations).countries).map(text).filter(Boolean);
+  const countries = list(asJsonRecord(spec.geo_locations).countries).map(text).filter(Boolean);
   if (countries.length) targeting.countries = countries;
   if (Number.isFinite(Number(spec.age_min))) targeting.ageMin = Number(spec.age_min);
   if (Number.isFinite(Number(spec.age_max))) targeting.ageMax = Number(spec.age_max);
@@ -196,7 +197,7 @@ function readMetaTargeting(raw: unknown): AdTargeting {
   if (genders.length) targeting.genders = genders;
 
   const interests = list(spec.flexible_spec)
-    .flatMap((entry) => list(rec(entry).interests).map((interest) => text(rec(interest).name)))
+    .flatMap((entry) => list(asJsonRecord(entry).interests).map((interest) => text(asJsonRecord(interest).name)))
     .filter(Boolean);
   if (interests.length) targeting.interests = interests;
 
@@ -237,7 +238,7 @@ function conversionsFrom(row: Record<string, unknown>): number {
   const explicit = Number(row.conversions);
   if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
   return list(row.actions).reduce<number>((total, raw) => {
-    const action = rec(raw);
+    const action = asJsonRecord(raw);
     return CONVERSION_ACTIONS.has(text(action.action_type)) ? total + count(action.value) : total;
   }, 0);
 }
@@ -263,7 +264,7 @@ export const metaAdsProvider: AdsProvider = {
     // The account list is the only place Meta reports the CURRENCY, and every budget
     // this adapter writes is denominated in it — so identity is where it is read.
     const accounts = list((await ask(call, 'list_ad_accounts', { fields: 'id,name,currency,account_status', limit: 200 })).data);
-    const match = accounts.map(rec).find((a) => text(a.id) === accountId);
+    const match = accounts.map(asJsonRecord).find((a) => text(a.id) === accountId);
     return {
       externalId: accountId,
       name: match ? text(match.name) || accountId : accountId,
@@ -281,7 +282,7 @@ export const metaAdsProvider: AdsProvider = {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
     const daily = fromCents(draft.dailyBudgetCents, BUDGET_SCALE);
     const lifetime = fromCents(draft.totalBudgetCents, BUDGET_SCALE);
-    const created = rec((await ask(call, 'create_campaign', {
+    const created = asJsonRecord((await ask(call, 'create_campaign', {
       ad_account_id: accountId,
       name: draft.name,
       objective: mapObjective(metaAdsProvider, OBJECTIVES, draft.objective),
@@ -324,7 +325,7 @@ export const metaAdsProvider: AdsProvider = {
 
   async listAdSets(call, fields, identity, externalCampaignId) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const rows = list((await ask(call, 'list_adsets', { ad_account_id: accountId, fields: AD_SET_FIELDS, limit: 500 })).data).map(rec);
+    const rows = list((await ask(call, 'list_adsets', { ad_account_id: accountId, fields: AD_SET_FIELDS, limit: 500 })).data).map(asJsonRecord);
     // Meta has no `campaign_id` filter on the account-level edge, so the scope is
     // applied here — one call for the account still beats one call per campaign.
     const scoped = externalCampaignId ? rows.filter((row) => text(row.campaign_id) === externalCampaignId) : rows;
@@ -354,7 +355,7 @@ export const metaAdsProvider: AdsProvider = {
     const daily = fromCents(draft.dailyBudgetCents, BUDGET_SCALE);
     const bid = fromCents(draft.bidCents, BUDGET_SCALE);
 
-    const created = rec((await ask(call, 'create_adset', {
+    const created = asJsonRecord((await ask(call, 'create_adset', {
       ad_account_id: accountId,
       campaign_id: draft.externalCampaignId,
       name: draft.name,
@@ -409,11 +410,11 @@ export const metaAdsProvider: AdsProvider = {
 
   async listAds(call, fields, _identity, externalAdSetId) {
     const accountId = requireField(fields, 'adAccountId', 'the ad account ID');
-    const rows = list((await ask(call, 'list_ads', { ad_account_id: accountId, fields: AD_FIELDS, limit: 500 })).data).map(rec);
+    const rows = list((await ask(call, 'list_ads', { ad_account_id: accountId, fields: AD_FIELDS, limit: 500 })).data).map(asJsonRecord);
     const scoped = externalAdSetId ? rows.filter((row) => text(row.adset_id) === externalAdSetId) : rows;
     return scoped.map((row) => {
-      const creative = rec(row.creative);
-      const linkData = rec(rec(creative.object_story_spec).link_data);
+      const creative = asJsonRecord(row.creative);
+      const linkData = asJsonRecord(asJsonRecord(creative.object_story_spec).link_data);
       return {
         externalId: text(row.id),
         externalAdSetId: text(row.adset_id) || null,
@@ -421,7 +422,7 @@ export const metaAdsProvider: AdsProvider = {
         status: toStatus(row.status),
         headline: text(creative.title) || text(linkData.name) || null,
         body: text(creative.body) || text(linkData.message) || null,
-        callToAction: text(rec(linkData.call_to_action).type) || null,
+        callToAction: text(asJsonRecord(linkData.call_to_action).type) || null,
         destinationUrl: text(linkData.link) || null,
       } satisfies AdCreativeRemote;
     });
@@ -445,7 +446,7 @@ export const metaAdsProvider: AdsProvider = {
       }
       const link = (draft.destinationUrl ?? '').trim();
       if (!link) throw new AdsProviderError('A Meta ad needs a destination URL — that is what the click buys.', 400, false);
-      const creative = rec((await ask(call, 'create_ad_creative', {
+      const creative = asJsonRecord((await ask(call, 'create_ad_creative', {
         ad_account_id: accountId,
         name: `${draft.name} creative`,
         object_story_spec: {
@@ -462,7 +463,7 @@ export const metaAdsProvider: AdsProvider = {
       if (!creativeId) throw new AdsProviderError('Meta accepted the creative but did not return its id.', 502, true);
     }
 
-    const created = rec((await ask(call, 'create_ad', {
+    const created = asJsonRecord((await ask(call, 'create_ad', {
       ad_account_id: accountId,
       name: draft.name,
       adset_id: draft.externalAdSetId,
@@ -505,7 +506,7 @@ export const metaAdsProvider: AdsProvider = {
       limit: 500,
     });
     return list(result.data).flatMap((raw) => {
-      const row = rec(raw);
+      const row = asJsonRecord(raw);
       const externalCampaignId = text(row.campaign_id);
       const date = toDay(row.date_start);
       // A row without a day or a campaign cannot be stored idempotently — the daily

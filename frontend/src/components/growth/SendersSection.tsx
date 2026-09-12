@@ -6,14 +6,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { growthApi, type SenderIdentity } from '@/lib/growthApi';
 import { button, input, listItem, listReset, muted, spread, Row } from './growthStyles';
-import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 export function SendersSection() {
   const t = useTranslations('growth');
   const [senders, setSenders] = useState<SenderIdentity[]>([]);
   const [senderEmail, setSenderEmail] = useState('');
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const task = usePanelTask();
+  const { run: taskRun } = task;
 
   const reload = useCallback(async () => {
     const { senders: s } = await growthApi.listSenders();
@@ -22,25 +21,16 @@ export function SendersSection() {
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const run = useCallback(async (op: () => Promise<unknown>, successMessage: string) => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      await op();
-      setNotice(successMessage);
-      await reload();
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    } finally {
-      setBusy(false);
-    }
-  }, [reload, t]);
+  // The reload is part of the action, so the notice lands only once the list shows it.
+  const run = useCallback((op: () => Promise<unknown>, success: string) => taskRun(async () => {
+    await op();
+    await reload();
+  }, { success, failure: t('genericError') }), [taskRun, reload, t]);
 
   return (
     <section>
-      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{notice}</p>}
-      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{error}</p>}
+      {task.notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{task.notice}</p>}
+      {task.error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{task.error}</p>}
       {senders.length === 0 ? (
         <p style={{ ...muted, marginTop: 10 }}>{t('senders.empty')}</p>
       ) : (
@@ -66,7 +56,7 @@ export function SendersSection() {
                   }}>
                     {`TXT  ${sender.recordName}  →  ${sender.verifyToken}`}
                   </code>
-                  <button type="button" style={{ ...button, marginTop: 8 }} disabled={busy}
+                  <button type="button" style={{ ...button, marginTop: 8 }} disabled={task.busy}
                     onClick={() => run(() => growthApi.verifySender(sender.id), t('senders.checked'))}>
                     {t('senders.verify')}
                   </button>
@@ -77,10 +67,10 @@ export function SendersSection() {
         </ul>
       )}
       <Row>
-        <input style={input} value={senderEmail} disabled={busy} type="email"
+        <input style={input} value={senderEmail} disabled={task.busy} type="email"
           onChange={(e) => setSenderEmail(e.target.value)}
           placeholder={t('senders.emailPlaceholder')} aria-label={t('senders.emailLabel')} />
-        <button type="button" style={button} disabled={busy || !senderEmail.trim()}
+        <button type="button" style={button} disabled={task.busy || !senderEmail.trim()}
           onClick={() => run(
             () => growthApi.createSender({ fromEmail: senderEmail }).then(() => setSenderEmail('')),
             t('senders.created'),

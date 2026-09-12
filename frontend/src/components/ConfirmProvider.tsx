@@ -12,8 +12,13 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   /** Cancel button label. Defaults (localized) to "Cancel". */
   cancelLabel?: string;
-  /** Destructive (default) → coral button; false → neutral accent button. */
-  destructive?: boolean;
+  /**
+   * Always destructive — the modal exists ONLY for destructive approvals. The flag
+   * is accepted as a self-documenting `true` at call sites; `false` is a type error
+   * on purpose: a non-destructive action takes a toast (`useToast()`) or the inline
+   * two-step `InlineConfirmButton`, never this modal.
+   */
+  destructive?: true;
 }
 
 /** Awaitable confirm: resolves true if the user confirms, false otherwise.
@@ -28,6 +33,9 @@ const ConfirmContext = createContext<ConfirmFn | null>(null);
  * call site replaces the browser-native `window.confirm()` with the in-app modal
  * via a minimal-diff `if (!(await confirm(...))) return;`. Mounted once at the
  * app root (see app/layout.tsx) — never per-feature.
+ *
+ * Destructive approvals only (delete, send to real recipients, move money, remove
+ * access). Anything that loses nothing uses a toast or `InlineConfirmButton`.
  */
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [opts, setOpts] = useState<ConfirmOptions | null>(null);
@@ -54,7 +62,6 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         title={opts?.title}
         confirmLabel={opts?.confirmLabel}
         cancelLabel={opts?.cancelLabel}
-        destructive={opts?.destructive ?? true}
         onConfirm={() => settle(true)}
         onCancel={() => settle(false)}
       />
@@ -66,7 +73,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
  * Returns an awaitable `confirm()` backed by the shared in-app modal.
  *
  *   const confirm = useConfirm();
- *   if (!(await confirm({ message: t('deleteConfirm'), destructive: true }))) return;
+ *   if (!(await confirm({ message: t('deleteConfirm'), confirmLabel: t('delete') }))) return;
  */
 export function useConfirm(): ConfirmFn {
   const ctx = useContext(ConfirmContext);

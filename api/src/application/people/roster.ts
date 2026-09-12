@@ -34,7 +34,8 @@
  * a headcount, and the instruction it returns says so to the model that reads it.
  */
 
-import { asRecord, pickNumber, pickPathNumber, pickPathText, pickText, rowsFrom } from '../connectors/providerPayload';
+import { asJsonRecord } from '../../domain/shared/json';
+import { pickNumber, pickPathNumber, pickPathText, pickText, rowsFrom } from '../connectors/providerPayload';
 
 // ---------------------------------------------------------------------------
 // The nouns
@@ -410,10 +411,10 @@ function annualise(rate: number, unit: string): number {
 function nestedCompensation(row: Record<string, unknown>): { rate: number; unit: string } | null {
   const jobs = Array.isArray(row.jobs) ? row.jobs : Array.isArray(row.employments) ? row.employments : [];
   for (const job of jobs) {
-    const record = asRecord(job);
+    const record = asJsonRecord(job);
     const list = Array.isArray(record.compensations) ? record.compensations : [];
     for (const entry of list) {
-      const comp = asRecord(entry);
+      const comp = asJsonRecord(entry);
       const rate = pickNumber(comp, ['rate', 'amount', 'annual_salary']);
       if (rate == null) continue;
       return { rate, unit: (pickText(comp, ['payment_unit', 'paymentUnit', 'frequency']) ?? '').toLowerCase() };

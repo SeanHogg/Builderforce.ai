@@ -33,6 +33,7 @@
  * ⇒ rotate, which is a PATCH that mints a new one.
  */
 
+import { InternalError } from '../../domain/shared/errors';
 import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
@@ -202,7 +203,7 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
         createdByKeyId: resolved.keyId,
       })
       .returning();
-    if (!row) return c.json({ error: 'Could not create the subscription' }, 500);
+    if (!row) throw new InternalError('Could not create the subscription');
 
     return c.json({
       subscription: subscriptionView(row),

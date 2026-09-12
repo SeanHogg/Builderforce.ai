@@ -6,6 +6,7 @@ import { recommendationsApi, type RecommendationsResult, type Recommendation, ty
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
 import { DaysWindowSelect } from './LensShell';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * AI-driven Recommendations lens — the prescriptive layer over the read-only
@@ -14,10 +15,11 @@ import { DaysWindowSelect } from './LensShell';
  * refetches so it drops off the list.
  */
 
-const SEVERITY_COLOR: Record<RecSeverity, string> = {
-  critical: 'var(--error)',
-  warning: 'var(--warning)',
-  info: 'var(--info)',
+/** Recommendation severity → tone. Shared with the AI Insights summary chips. */
+export const REC_SEVERITY_TONE: StatusToneMap<RecSeverity> = {
+  critical: 'danger',
+  warning: 'warning',
+  info: 'info',
 };
 
 export function RecommendationsLens() {
@@ -63,7 +65,7 @@ function Card({
   onDismiss: () => void;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const color = SEVERITY_COLOR[r.severity];
+  const color = statusColor(REC_SEVERITY_TONE, r.severity, 'solid');
   return (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderLeft: `4px solid ${color}`, borderRadius: 'var(--radius-lg)', padding: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -77,7 +79,7 @@ function Card({
           <span style={{ fontSize: '1rem', fontWeight: 700 }}>{r.title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: '1.1rem', fontWeight: 700, color }}>{r.metric}</span>
+          <span style={{ fontSize: '1.1rem', fontWeight: 700, color: statusColor(REC_SEVERITY_TONE, r.severity) }}>{r.metric}</span>
           <button
             type="button"
             onClick={onDismiss}

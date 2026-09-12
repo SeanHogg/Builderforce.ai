@@ -14,7 +14,7 @@
 
 import type { LlmComplete } from '../compile';
 import type { Env } from '../../env';
-import { ideProxy } from './LlmProxyService';
+import { ideProxy, readProxyChoice } from './LlmProxyService';
 
 export interface GatewayExtractorOptions {
   /** Metering label, so extraction traffic is attributable per caller. */
@@ -39,10 +39,7 @@ export function gatewayExtractor(env: Env, opts: GatewayExtractorOptions = {}): 
       useCase: opts.useCase ?? 'structured_extraction',
     });
     if (result.response.status >= 400) throw new Error(`gateway ${result.response.status}`);
-    const raw = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown } }> }
-      | null;
-    const content = raw?.choices?.[0]?.message?.content;
-    return typeof content === 'string' ? content : '';
+    // THE one unwrap: a non-string or missing content is '' there, never a throw.
+    return (await readProxyChoice(result)).content;
   };
 }

@@ -4,8 +4,9 @@ import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CalendarEvent, UndatedEntry } from '@builderforce/creation-canvas-contract';
 import type { CalendarEventDraft } from '@/lib/calendar/calendarSources';
+import { statusColor } from '@/lib/statusTone';
 import {
-  DEADLINE_COLORS,
+  DEADLINE_TONE,
   daysBetween,
   getSchedule,
   parseDate,
@@ -32,7 +33,7 @@ import { ScheduleLegend } from './ScheduleLegend';
  *   • a `Schedulable` (start + due) is a span, and an item with only a deadline is a
  *     one-day span — so the month answers "what is in flight on the 14th" and not only
  *     "what lands on it";
- *   • the stripe colour is the DEADLINE STATUS (`DEADLINE_COLORS`), which is this
+ *   • the stripe colour is the DEADLINE STATUS (`DEADLINE_TONE`), which is this
  *     domain's rule and not a category hash;
  *   • the optional health dot rides alongside as the entry's `accent`;
  *   • a drag means {@link shiftSchedule}, the one rule both this and the Gantt obey, so
@@ -82,7 +83,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
       startISO: schedule.start.toISOString().slice(0, 10),
       endISO: schedule.end.toISOString().slice(0, 10),
       allDay: true,
-      color: DEADLINE_COLORS[schedule.status],
+      color: statusColor(DEADLINE_TONE, schedule.status, 'solid'),
       ...(accent ? { accent } : {}),
     }];
   }), [items, today, getLabel, getAccentColor]);

@@ -20,7 +20,9 @@ import {
   type VendorId,
   type VendorHealthRow,
   type VendorHealthSnapshot,
+  type VendorHealthStatus,
 } from '@/lib/adminApi';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 import { Select } from '@/components/Select';
 import { llmChat } from '@/lib/builderforceApi';
 import { errText, AdminError, AdminLoading } from '../adminShared';
@@ -28,6 +30,14 @@ import { useAdminFormat } from '../adminShared';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
+
+const VENDOR_HEALTH_TONE: StatusToneMap<VendorHealthStatus> = {
+  ok: 'success',
+  degraded: 'warning',
+  down: 'danger',
+  unconfigured: 'neutral',
+};
+
 export default function UsagePanel() {
   const { fmtDateTime, fmtNum } = useAdminFormat();
   const fmt = useFormat();
@@ -534,12 +544,6 @@ export default function UsagePanel() {
                   const health = fresh ?? last;
                   const running = !!vendorHealthRunning[v.vendor];
                   const probeErr = vendorHealthError[v.vendor];
-                  const statusColor: Record<string, string> = {
-                    ok: 'var(--success-text)',
-                    degraded: 'var(--warning-text)',
-                    down: 'var(--error-text)',
-                    unconfigured: 'var(--text-muted)',
-                  };
                   return (
                     <div key={v.vendor} className="health-card">
                       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
@@ -565,7 +569,7 @@ export default function UsagePanel() {
                       {probeErr ? (
                         <div style={{ fontSize: 11, color: 'var(--error-text)', marginTop: 6 }}>{probeErr}</div>
                       ) : health ? (
-                        <div style={{ marginTop: 6, fontSize: 12, color: statusColor[health.status] ?? 'var(--text-muted)', fontWeight: 600 }}>
+                        <div style={{ marginTop: 6, fontSize: 12, color: statusColor(VENDOR_HEALTH_TONE, health.status), fontWeight: 600 }}>
                           {t('usage.vendorStatus', { status: health.status, ok: health.okCount, probed: health.probedCount })}
                           {health.latencyMs > 0 && (
                             <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {health.latencyMs}ms</span>

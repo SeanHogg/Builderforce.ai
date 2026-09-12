@@ -43,6 +43,7 @@
  * platform should ever do without saying so on a pricing page.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { connections } from '../../infrastructure/database/schema';
@@ -133,9 +134,6 @@ async function merchantRow(db: Db, tenantId: number): Promise<MerchantRow | null
   return row ?? null;
 }
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 /**
  * The account id that may be charged THROUGH, or null.
  *
@@ -147,7 +145,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 export async function chargeableMerchantId(db: Db, tenantId: number): Promise<string | null> {
   const row = await merchantRow(db, tenantId);
   if (!row?.externalAccount) return null;
-  return asRecord(row.config).chargesEnabled === true ? row.externalAccount : null;
+  return asJsonRecord(row.config).chargesEnabled === true ? row.externalAccount : null;
 }
 
 /**
@@ -176,7 +174,7 @@ export async function merchantAccount(db: Db, env: Env, tenantId: number): Promi
     // through `status`, rather than reporting `chargesEnabled: false` — which
     // would tell a tenant their working account is broken because our key is not
     // configured on this deployment.
-    const cached = asRecord(row.config);
+    const cached = asJsonRecord(row.config);
     return {
       connected: true,
       accountId: row.externalAccount,

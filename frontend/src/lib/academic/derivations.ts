@@ -18,7 +18,7 @@
  */
 
 import {
-  deriveNumber, derivePercent, deriveRows, specRefKey, sumColumn, type SpecDeriveBoard,
+  deriveNumber, derivePercent, deriveRows, specRefKey, specVerdict, sumColumn, type SpecDeriveBoard,
 } from '../specObjects';
 import {
   buildGradebook, columnFromAssignment, gradebookStats, learnersFromCohort, markFromSubmission,
@@ -229,7 +229,10 @@ export const deriveSubmissionLateBy: SpecDerive = (data, board) => {
   if (!assignment || !String(data.submittedAt ?? '').trim()) return undefined;
   const hours = hoursLate(data.submittedAt, assignment.dueAt);
   if (hours <= 0) return undefined;
-  return hours < 48 ? `${Math.round(hours)}h late` : `${Math.round(hours / 24)}d late`;
+  // Words, so a descriptor — see `SpecVerdict`. The numbers stay numbers.
+  return hours < 48
+    ? specVerdict('lateBy.hours', { hours: Math.round(hours) })
+    : specVerdict('lateBy.days', { days: Math.round(hours / 24) });
 };
 
 /** `gradebook.marks` — see the field's hint for what it means. */

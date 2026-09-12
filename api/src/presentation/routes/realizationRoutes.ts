@@ -24,6 +24,8 @@
  * proof to run costs a request and leaves no rows behind.
  */
 
+import { InternalError } from '../../domain/shared/errors';
+import { failResponse } from '../middleware/errorResponse';
 import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
@@ -386,8 +388,10 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
       }
       return c.json({ realization: updated ? toRealizationView(updated) : null, result });
     } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/realizationRoutes.ts', operation: 'build' });
       const message = error instanceof Error ? error.message : 'Build failed';
+      // Answered — and reported, with the cause — BEFORE the bookkeeping writes, so a
+      // failing write cannot swallow the report.
+      const failed = failResponse(c, new InternalError(message, { cause: error }), { source: 'presentation/routes/realizationRoutes.ts', operation: 'build' });
       await setRealizationOutcome(db, tenantId, row.id, { status: 'failed', error: message });
       await recordProofOutcome(db, {
         ...subject,
@@ -398,7 +402,7 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
         targetKey: row.targetKey,
         durationMs: Date.now() - buildStartedAt,
       });
-      return c.json({ error: message }, 500);
+      return failed;
     }
   });
 

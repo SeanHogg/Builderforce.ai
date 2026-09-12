@@ -30,6 +30,7 @@
  * provider catalog, the credential store and the two application services that
  * own the tables. Nothing here knows about Hono or HTTP status codes.
  */
+import { asJsonRecord } from '../../domain/shared/json';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -132,8 +133,6 @@ function day(value: unknown): string | null {
 const asDate = (value: string | null): Date | null => (value ? new Date(value) : null);
 
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-const record = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 // ---------------------------------------------------------------------------
 // Per-vendor normalization
@@ -141,17 +140,17 @@ const record = (value: unknown): Record<string, unknown> =>
 
 /** Clearbit `/v2/people/find`. */
 function fromClearbit(body: unknown): EnrichedPerson {
-  const person = record(body);
-  const employment = record(person.employment);
-  const geo = record(person.geo);
+  const person = asJsonRecord(body);
+  const employment = asJsonRecord(person.employment);
+  const geo = asJsonRecord(person.geo);
   const company = text(employment.name);
   const title = text(employment.title);
   return {
-    fullName: text(record(person.name).fullName),
+    fullName: text(asJsonRecord(person.name).fullName),
     title,
     company,
     location: text(geo.city) ?? text(geo.country),
-    linkedinUrl: text(record(record(person.linkedin).handle)) ?? text(record(person.linkedin).handle),
+    linkedinUrl: text(asJsonRecord(asJsonRecord(person.linkedin).handle)) ?? text(asJsonRecord(person.linkedin).handle),
     // Clearbit reports only the CURRENT role, so that is the only one claimed.
     roles: company || title ? [{ company, title, startedAt: null, endedAt: null, isCurrent: true }] : [],
     educations: [],
@@ -161,12 +160,12 @@ function fromClearbit(body: unknown): EnrichedPerson {
 
 /** People Data Labs `/v5/person/enrich` — the richest of the three. */
 function fromPeopleDataLabs(body: unknown): EnrichedPerson {
-  const data = record(record(body).data);
-  const job = record(data.job_company_name ? data : data);
+  const data = asJsonRecord(asJsonRecord(body).data);
+  const job = asJsonRecord(data.job_company_name ? data : data);
   const roles = list(data.experience).map((entry): EnrichedRole => {
-    const item = record(entry);
-    const company = record(item.company);
-    const title = record(item.title);
+    const item = asJsonRecord(entry);
+    const company = asJsonRecord(item.company);
+    const title = asJsonRecord(item.title);
     return {
       company: text(company.name),
       title: text(title.name),
@@ -176,9 +175,9 @@ function fromPeopleDataLabs(body: unknown): EnrichedPerson {
     };
   });
   const educations = list(data.education).map((entry): EnrichedEducation => {
-    const item = record(entry);
+    const item = asJsonRecord(entry);
     return {
-      institution: text(record(item.school).name),
+      institution: text(asJsonRecord(item.school).name),
       degree: text(list(item.degrees)[0]),
       field: text(list(item.majors)[0]),
       startedAt: day(item.start_date),
@@ -202,10 +201,10 @@ function fromPeopleDataLabs(body: unknown): EnrichedPerson {
 
 /** Apollo `/api/v1/people/match`. */
 function fromApollo(body: unknown): EnrichedPerson {
-  const person = record(record(body).person);
-  const organization = record(person.organization);
+  const person = asJsonRecord(asJsonRecord(body).person);
+  const organization = asJsonRecord(person.organization);
   const roles = list(person.employment_history).map((entry): EnrichedRole => {
-    const item = record(entry);
+    const item = asJsonRecord(entry);
     return {
       company: text(item.organization_name),
       title: text(item.title),

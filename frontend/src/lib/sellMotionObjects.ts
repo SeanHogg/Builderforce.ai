@@ -48,7 +48,7 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import { formatCents } from './canvasMoney';
 import {
-  deriveDaysBetween, deriveNumber, registerSpecObjectSet, SUMMARY_FIELD,
+  deriveDaysBetween, deriveNumber, registerSpecObjectSet, specVerdict, SUMMARY_FIELD, type SpecVerdict,
   type SpecField, type SpecObjectSpec,
 } from './specObjects';
 
@@ -401,7 +401,9 @@ export const SELL_MOTION_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         derive: (data) => {
           const readiness = trustPacketReadiness(readTrustAnswers(data.questionnaire));
           const open = readiness.gaps + readiness.unevidenced;
-          return open > 0 ? `${open} (${readiness.gaps} gaps, ${readiness.unevidenced} unevidenced)` : undefined;
+          return open > 0
+            ? specVerdict('openGaps', { open, gaps: readiness.gaps, unevidenced: readiness.unevidenced })
+            : undefined;
         },
       },
       {
@@ -455,19 +457,18 @@ export const SELL_MOTION_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       {
         name: 'planRisk', render: 'verdict', label: 'planRisk',
         hint: 'What is actually wrong with this plan: overdue milestones, and milestones nobody on the buyer\'s side owns. Computed, and deliberately blunt — a mutual plan the buyer has not taken a single item on is not a mutual plan, and the object should say so rather than showing a healthy percentage.',
-        // A STRING, not an object: `verdict` renders through `statText`, so a returned
-        // record would draw "[object Object]" — the failure mode a typed render style is
-        // supposed to prevent and does not, because the style is closed and the value is
-        // not. Every other `verdict` in every vocabulary is a sentence; so is this one.
+        // A `SpecVerdict`, never an arbitrary record: the node body translates a verdict
+        // descriptor and would draw any other object as "[object Object]". The problems
+        // are nested descriptors so the joined clause stays translatable too.
         derive: (data) => {
           const health = mutualPlanHealth(readMapMilestones(data.milestones), new Date());
           if (health.total === 0) return undefined;
-          const problems: string[] = [];
-          if (health.overdue > 0) problems.push(`${health.overdue} overdue`);
-          if (health.unownedByBuyer > 0) problems.push(`${health.unownedByBuyer} with no owner on the buyer's side`);
+          const problems: SpecVerdict[] = [];
+          if (health.overdue > 0) problems.push(specVerdict('planRisk.overdue', { count: health.overdue }));
+          if (health.unownedByBuyer > 0) problems.push(specVerdict('planRisk.unowned', { count: health.unownedByBuyer }));
           return problems.length > 0
-            ? `At risk — ${problems.join('; ')}.`
-            : `On track — ${health.done} of ${health.total} done, nothing overdue.`;
+            ? specVerdict('planRisk.atRisk', { problems })
+            : specVerdict('planRisk.onTrack', { done: health.done, total: health.total });
         },
       },
       {

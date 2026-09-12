@@ -22,6 +22,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { TenantRole } from '../../domain/shared/types';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import {
@@ -52,7 +53,7 @@ export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
   // Reject any request whose URL :tenantId disagrees with the JWT's tenant.
   router.use('*', async (c, next) => {
     const urlTenantId = Number(c.req.param('tenantId'));
-    const jwtTenantId = c.get('tenantId') as number | undefined;
+    const jwtTenantId = optionalTenantId(c);
     if (!Number.isFinite(urlTenantId) || urlTenantId !== jwtTenantId) {
       return c.json({ error: 'Forbidden' }, 403);
     }

@@ -7,6 +7,7 @@ import { OPERATIONS_LABELS, OPERATIONS_OBJECT_SPECS, OPERATIONS_STATUSES } from 
 import './specObjectSets';
 import {
   specDerivedValues, specFieldValue, specMutableFields, specObjectNamespace, specObjectSpec,
+  specValueInEnglish,
 } from './specObjects';
 import en from '@/i18n/messages/en.json';
 
@@ -147,8 +148,21 @@ describe('computed fields', () => {
   it('says whether a certification is actually valid, from its expiry', () => {
     const future = new Date(Date.now() + 400 * 86_400_000).toISOString();
     const past = new Date(Date.now() - 10 * 86_400_000).toISOString();
-    expect(String(specFieldValue(field('certification', 'validity'), { kind: 'certification', expiresAt: future }))).toContain('valid');
-    expect(String(specFieldValue(field('certification', 'validity'), { kind: 'certification', expiresAt: past }))).toContain('expired');
+    // A worded derivation is a verdict descriptor; read it as the model does, in English.
+    const validity = (expiresAt: string) =>
+      specValueInEnglish(specFieldValue(field('certification', 'validity'), { kind: 'certification', expiresAt }), 'creationCanvas.operations');
+    expect(validity(future)).toContain('valid');
+    expect(validity(past)).toContain('expired');
+  });
+
+  it('says whether stock covers the reorder point, in words the card translates', () => {
+    const coverage = (data: Record<string, unknown>) =>
+      specValueInEnglish(specFieldValue(field('inventoryItem', 'stockCoverage'), { kind: 'inventoryItem', ...data }), 'creationCanvas.operations');
+    expect(coverage({ onHand: 0, reorderPoint: 5 })).toBe('out of stock');
+    expect(coverage({ onHand: 3, reorderPoint: 5 })).toContain('order now');
+    expect(coverage({ onHand: 20, reorderPoint: 5 })).toBe('in stock');
+    // No reorder point is not "in stock" — there is nothing to judge against.
+    expect(specFieldValue(field('inventoryItem', 'stockCoverage'), { kind: 'inventoryItem', onHand: 3 })).toBeUndefined();
   });
 
   it('counts the corrective actions an incident has left open', () => {

@@ -1,3 +1,4 @@
+import { asJsonObject } from '../../domain/shared/json';
 import { Task } from '../../domain/task/Task';
 import { TaskPriority } from '../../domain/shared/types';
 import type { Env } from '../../env';
@@ -173,7 +174,7 @@ export function llmEpicDecomposer(env: Env): EpicDecomposer {
             maxTokens: 900,
             useCase: 'epic_decomposition',
           },
-          (value) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as { isEpic?: unknown; children?: unknown }) : null),
+          asJsonObject,
         );
         if (!out.ok) return heuristicEpicDecomposer.assess(task);
         const obj = out.value;

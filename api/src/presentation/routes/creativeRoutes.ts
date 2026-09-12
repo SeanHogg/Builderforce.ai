@@ -28,10 +28,11 @@
  *
  * Not cached: a generative call keyed on a free-text brief.
  */
+import { asJsonObject } from '../../domain/shared/json';
 import { Hono, type Context } from 'hono';
 import { CANVAS_VIEWPORTS } from '@builderforce/creation-canvas-contract';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { failResponse } from '../middleware/errorResponse';
+import { failResponse, statusResponse } from '../middleware/errorResponse';
 import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 import type { HonoEnv } from '../../env';
 import { ServiceUnavailableError } from '../../domain/shared/errors';
@@ -211,11 +212,6 @@ Rules:
 - Preserve every supported item and bullet.
 - Shape: { basics: { name, label, image, email, phone, url, summary, location: { address, postalCode, city, countryCode, region } }, work: [{ id, name, position, url, startDate, endDate, summary, highlights }], education: [{ id, institution, url, area, studyType, startDate, endDate, score, courses }], skills: [{ id, name, level, keywords }], volunteer: [], projects: [], awards: [], certificates: [], publications: [], languages: [], interests: [], references: [] }.`;
 
-/** A `completeJson` validator that admits a plain object and refuses arrays and scalars. */
-function jsonObjectOnly(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
 function bytesBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -274,7 +270,7 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
         // 503 for "this deployment cannot", 502 for "that page would not" — different
         // answers to the operator's monitoring and to the user reading the reply. The
         // mapping lives with the reasons so a new one must decide its own status.
-        return c.json({ error: error.message, reason: error.reason }, SCREENSHOT_REASON_STATUS[error.reason]);
+        return statusResponse(c, { error: error.message, reason: error.reason }, SCREENSHOT_REASON_STATUS[error.reason], { source: 'presentation/routes/creativeRoutes.ts', operation: 'screenshot' }, error);
       }
       // An SSRF refusal or a malformed URL — the caller's input, not the renderer.
       return c.json({ error: error instanceof Error ? error.message : 'The page could not be captured', reason: 'rejected' }, 400);
@@ -369,7 +365,7 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
         maxTokens: 6000,
         useCase: extractedText ? 'resume_structured_extraction' : 'resume_ocr',
       },
-      jsonObjectOnly,
+      asJsonObject,
     );
     if (!out.ok) {
       const error = out.reason === 'gateway' ? 'Resume extraction is unavailable' : 'Resume extraction returned invalid structured data';
@@ -603,7 +599,7 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
           maxTokens: MAX_TOKENS[kind],
           useCase: `creative_${kind}`,
         },
-        jsonObjectOnly,
+        asJsonObject,
       );
       if (!out.ok) {
         const unreadable = geometry

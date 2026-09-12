@@ -5,20 +5,15 @@
  * gauges all colour a SOC 2 / Quality / … score identically.
  */
 
-/** Best→worst tier hexes (match the DORA/health tier palette used across the app). */
-const TIER_HEX = {
-  healthy: 'var(--success)',
-  watch: 'var(--yellow-bright)',
-  atRisk: 'var(--warning)',
-  critical: 'var(--error)',
-} as const;
+import { healthTierColor } from './projectHealth';
 
-/** Map a 1–5 diagnostic score to a tier colour. Higher is better. */
+/** Map a 1–5 diagnostic score to a tier colour. Higher is better. The colours are
+ *  the project-health tiers' — one palette, owned by `projectHealth`. */
 export function diagnosticScoreColor(score: number): string {
-  if (score >= 4) return TIER_HEX.healthy;
-  if (score >= 3) return TIER_HEX.watch;
-  if (score >= 2) return TIER_HEX.atRisk;
-  return TIER_HEX.critical;
+  if (score >= 4) return healthTierColor('healthy');
+  if (score >= 3) return healthTierColor('watch');
+  if (score >= 2) return healthTierColor('at_risk');
+  return healthTierColor('critical');
 }
 
 /** SOC 2 audit id — surfaced first in diagnostic strips (compliance is the

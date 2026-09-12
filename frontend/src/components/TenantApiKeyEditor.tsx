@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Inline editor for an existing tenant API key. Shared between the owner
  * self-service flow (`/settings/api-keys`) and the superadmin mint-on-behalf
@@ -32,6 +32,7 @@ interface Props {
 }
 
 export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave, onCancel, saving }: Props) {
+  const errorMessage = useErrorMessage();
   const [name, setName] = useState(initialName);
   const [allowedOrigins, setAllowedOrigins] = useState<string[] | null>(initialAllowedOrigins);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave,
     try {
       await onSave(patch);
     } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
+      setError(errorMessage(e));
     }
   };
 

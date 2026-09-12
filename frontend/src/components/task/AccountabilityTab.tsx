@@ -12,6 +12,7 @@ import {
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 /**
  * "Sign-off & Accountability" tab of the ticket detail — the operator's headline
  * surface (PRD-coordinated-role-participation.md §5.9). For every required role it
@@ -21,21 +22,20 @@ import { faultMessage } from '@/lib/apiClient';
  * role — designer, security engineer) and materialize the work items.
  */
 
-const STATE_TONE: Record<string, { bg: string; fg: string }> = {
-  completed:          { bg: 'var(--success-bg)', fg: 'var(--success-text)' },
-  waived:             { bg: 'var(--warning-bg)', fg: 'var(--warning-text)' },
-  in_progress:        { bg: 'var(--info-bg)',   fg: 'var(--info-text)' },
-  assigned:           { bg: 'var(--bg-deep)',   fg: 'var(--text-secondary)' },
-  changes_requested:  { bg: 'var(--danger-bg)', fg: 'var(--danger-text)' },
-  unstaffed:          { bg: 'var(--danger-bg)', fg: 'var(--danger-text)' },
-  pending:            { bg: 'var(--bg-deep)',   fg: 'var(--text-muted)' },
-  skipped:            { bg: 'var(--bg-deep)',   fg: 'var(--text-muted)' },
+const STATE_TONE: StatusToneMap = {
+  completed: 'success',
+  waived: 'warning',
+  in_progress: 'info',
+  assigned: 'neutral',
+  changes_requested: 'danger',
+  unstaffed: 'danger',
+  pending: 'neutral',
+  skipped: 'neutral',
 };
 
 function StateChip({ state, label }: { state: string; label: string }) {
-  const tone = STATE_TONE[state] ?? STATE_TONE.pending;
   return (
-    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, background: tone.bg, color: tone.fg, whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, ...statusPillStyle(STATE_TONE, state), whiteSpace: 'nowrap' }}>
       {label}
     </span>
   );
@@ -59,28 +59,29 @@ function gapDetailKey(g: AccountabilityGap): string {
     : 'gaps.detail.unsigned';
 }
 
-const GAP_TONE = {
-  blocking: { border: 'var(--danger-border)', bg: 'var(--danger-bg)', fg: 'var(--danger-text)' },
-  advisory: { border: 'var(--warning-border)', bg: 'var(--warning-bg)', fg: 'var(--warning-text)' },
-} as const;
+type GapSeverity = 'blocking' | 'advisory';
+const GAP_TONE: StatusToneMap<GapSeverity> = {
+  blocking: 'danger',
+  advisory: 'warning',
+};
 
 /**
  * One bucket of gaps. Rendered twice — blocking (red) and advisory (amber) — instead of
  * one red list, so "this role has not signed off yet" stops being reported as an error
  * next to a table showing that role happily in progress.
  */
-function GapList({ gaps, tone, title }: { gaps: AccountabilityGap[]; tone: keyof typeof GAP_TONE; title: string }) {
+function GapList({ gaps, tone, title }: { gaps: AccountabilityGap[]; tone: GapSeverity; title: string }) {
   const t = useTranslations('accountability');
   const statusLabel = useTaskStatusLabel();
   if (gaps.length === 0) return null;
-  const c = GAP_TONE[tone];
+  const c = statusPillStyle(GAP_TONE, tone);
   const tr = (key: string, values?: Record<string, string>) => (t.has(key as never) ? t(key as never, values as never) : key);
   return (
-    <div style={{ border: `1px solid ${c.border}`, background: c.bg, borderRadius: 'var(--radius-lg)', padding: '10px 12px' }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: c.fg, marginBottom: 6 }}>{title}</div>
+    <div style={{ border: `1px solid ${c.borderColor}`, background: c.background, borderRadius: 'var(--radius-lg)', padding: '10px 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: c.color, marginBottom: 6 }}>{title}</div>
       <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
         {gaps.map((g, i) => (
-          <li key={`${g.stageKey ?? ''}:${g.roleKey}:${g.kind}:${i}`} style={{ fontSize: 12, color: c.fg }}>
+          <li key={`${g.stageKey ?? ''}:${g.roleKey}:${g.kind}:${i}`} style={{ fontSize: 12, color: c.color }}>
             <strong>{g.roleName}</strong>
             {g.responsibility ? ` · ${tr(`responsibility.${g.responsibility}`)}` : ''}
             {g.stageKey ? ` · ${statusLabel(g.stageKey)}` : ''}

@@ -13,6 +13,7 @@
  * Not cached: publish is a write; test is a generative call keyed on the request
  * body. Model resolution rides the existing cached `resolveTenantModel`.
  */
+import { InternalError } from '../../domain/shared/errors';
 import { Hono } from 'hono';
 import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -134,7 +135,7 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       trainedModelRef: ref,
       visibility: 'tenant',
     });
-    if (!model) return c.json({ error: 'Failed to register published model' }, 500);
+    if (!model) throw new InternalError('Failed to register published model');
 
     return c.json(
       {
@@ -172,7 +173,7 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
     const previousBaseModel = current.baseModel;
     const activeBaseModel = `${EVERMIND_PIN_PREFIX}${nextRef}`;
     const updated = await updateTenantModel(c.env as Env, db, tenantId, current.id, { baseModel: activeBaseModel, trainedModelRef: nextRef });
-    if (!updated) return c.json({ error: 'Model rollback failed' }, 500);
+    if (!updated) throw new InternalError('Model rollback failed');
     return c.json({ rolledBack: true, model: updated, previousBaseModel, activeBaseModel, rollbackToken: previousBaseModel.slice(EVERMIND_PIN_PREFIX.length) });
   });
 

@@ -30,10 +30,7 @@
  * which drops a pay run with no total rather than importing it as zero.
  */
 
-/** Narrow an `unknown` to a plain object. An array is NOT an object here: every
- *  caller that wants a list asks {@link rowsFrom} for one. */
-export const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+import { asJsonRecord } from '../../domain/shared/json';
 
 /**
  * The row array in a provider response.
@@ -43,11 +40,11 @@ export const asRecord = (value: unknown): Record<string, unknown> =>
  * without re-implementing the search.
  */
 export function rowsFrom(data: unknown, extraKeys: readonly string[] = []): Record<string, unknown>[] {
-  if (Array.isArray(data)) return data.map(asRecord);
-  const envelope = asRecord(data);
+  if (Array.isArray(data)) return data.map(asJsonRecord);
+  const envelope = asJsonRecord(data);
   for (const key of [...extraKeys, 'data', 'results', 'items', 'records']) {
     const candidate = envelope[key];
-    if (Array.isArray(candidate)) return candidate.map(asRecord);
+    if (Array.isArray(candidate)) return candidate.map(asJsonRecord);
   }
   return [];
 }

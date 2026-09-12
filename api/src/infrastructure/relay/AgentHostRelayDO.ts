@@ -9,8 +9,8 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  *   1. BuilderForce Agents connects to /api/agent-hosts/:id/upstream (agentHost API key auth)
  *      → stored as upstreamSocket
  *   2. Browser clients connect to /api/agent-hosts/:id/ws (tenant JWT auth)
- *      → added to clientSockets set
- *   3. Messages from BuilderForce Agents → broadcast to all clientSockets
+ *      → registered as a broadcast peer on the shared PeerRelay
+ *   3. Messages from BuilderForce Agents → broadcast to all clients
  *   4. Messages from any client → forwarded to upstreamSocket
  *   5. When BuilderForce Agents disconnects → send { type:"agent_host_offline" } to clients
  *
@@ -31,6 +31,7 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  */
 
 import { buildExecutionMessageFrame, buildExecutionCancelFrame } from './executionMessage';
+import { PeerRelay } from './peerRelay';
 
 interface BufferedMessage {
   role: string;
@@ -85,7 +86,10 @@ export class AgentHostRelayDO implements DurableObject {
   declare readonly "__DURABLE_OBJECT_BRAND": never;
 
   private upstreamSocket: WebSocket | null = null;
-  private clientSockets: Set<WebSocket> = new Set();
+  /** Browser sessions, fanned out through the shared {@link PeerRelay}. Broadcast-only:
+   *  a client frame goes UPSTREAM to the host (never client-to-client), so the relay's
+   *  frame allow-list and rate limit (which apply to `relay()`) are not engaged. */
+  private clients = new PeerRelay({ idPrefix: 'c' });
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   // --- Chat persistence state (in-memory, lives as long as DO is alive) ---
@@ -147,7 +151,7 @@ export class AgentHostRelayDO implements DurableObject {
           return this.json({ ok: false, delivered: false, error: "agent_host_offline" }, 409);
         }
         // Echo to browser clients so the chat thread shows the steering message.
-        this.broadcast(JSON.stringify({ type: "chat.message", role: "user", text: built.frame.text, ephemeral: true }));
+        this.clients.broadcast(JSON.stringify({ type: "chat.message", role: "user", text: built.frame.text, ephemeral: true }));
         return this.json({ ok: true, delivered: true }, 200);
       }
 
@@ -233,7 +237,7 @@ export class AgentHostRelayDO implements DurableObject {
       // browser clients. Claimed BEFORE the broadcast for exactly that reason.
       if (this.resolveEgress(data)) return;
       // Broadcast every upstream message to all connected clients
-      this.broadcast(data);
+      this.clients.broadcast(data);
       // Persist complete messages (not deltas) to Postgres
       this.handleUpstreamMessage(data);
     });
@@ -246,7 +250,7 @@ export class AgentHostRelayDO implements DurableObject {
         // caller wait out the full egress ceiling.
         this.failPendingEgress();
         // Notify all clients that the agentHost went offline
-        this.broadcast(JSON.stringify({ type: "agent_host_offline" }));
+        this.clients.broadcast(JSON.stringify({ type: "agent_host_offline" }));
       }
     });
 
@@ -261,7 +265,7 @@ export class AgentHostRelayDO implements DurableObject {
     ws.send(JSON.stringify({ type: "relay_connected" }));
 
     // Notify any waiting clients that the agentHost is now online
-    this.broadcast(JSON.stringify({ type: "agent_host_online" }));
+    this.clients.broadcast(JSON.stringify({ type: "agent_host_online" }));
   }
 
   // ---------------------------------------------------------------------------
@@ -269,7 +273,7 @@ export class AgentHostRelayDO implements DurableObject {
   // ---------------------------------------------------------------------------
 
   private attachClient(ws: WebSocket) {
-    this.clientSockets.add(ws);
+    this.clients.add(ws);
 
     // Immediately tell the client whether the agentHost is connected
     if (this.upstreamSocket === null) {
@@ -301,7 +305,7 @@ export class AgentHostRelayDO implements DurableObject {
     });
 
     ws.addEventListener("close", () => {
-      this.clientSockets.delete(ws);
+      this.clients.remove(ws);
     });
 
     ws.addEventListener("error", () => { /* close follows */ });
@@ -327,7 +331,7 @@ export class AgentHostRelayDO implements DurableObject {
       if (msg.type === "chat" && typeof msg.message === "string" && msg.message.trim().length > 0) {
         const session = (msg.session && msg.session.trim().length > 0) ? msg.session.trim() : this.currentSessionKey;
         // Mirror outgoing user message to all connected browser clients immediately
-        this.broadcast(
+        this.clients.broadcast(
           JSON.stringify({
             type: "chat.message",
             role: "user",
@@ -510,7 +514,7 @@ export class AgentHostRelayDO implements DurableObject {
       this.logBuffer.shift();
     }
 
-    this.broadcast(JSON.stringify({ type: "log", level: entry.level, message: entry.message, ts: entry.ts, ...(entry.executionId != null ? { executionId: entry.executionId } : {}) }));
+    this.clients.broadcast(JSON.stringify({ type: "log", level: entry.level, message: entry.message, ts: entry.ts, ...(entry.executionId != null ? { executionId: entry.executionId } : {}) }));
   }
 
   /**
@@ -774,18 +778,6 @@ export class AgentHostRelayDO implements DurableObject {
       status,
       headers: { "Content-Type": "application/json" },
     });
-  }
-
-  private broadcast(data: string) {
-    const dead: WebSocket[] = [];
-    for (const ws of this.clientSockets) {
-      try {
-        ws.send(data);
-      } catch {
-        dead.push(ws);
-      }
-    }
-    for (const ws of dead) this.clientSockets.delete(ws);
   }
 
   private schedulePings() {

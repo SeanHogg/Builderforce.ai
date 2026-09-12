@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { dryRunSystemSteps } from './systemDryRun';
 import { sandboxOutboundPort } from '../workflow/sandboxOutboundPort';
-import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
+import type { Env } from '../../env';
 
-const env = {} as CloudExecutorEnv;
+const env = {} as Env;
 
 function objects(steps: unknown[]) {
   return [{ canvasData: { steps }, content: null }];

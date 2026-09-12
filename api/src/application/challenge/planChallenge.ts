@@ -18,6 +18,7 @@
  * cause is invisible from the provider's side.
  */
 
+import { asJsonObject } from '../../domain/shared/json';
 import { parseHandlerSpec } from '../backend/handlerSpec';
 import type { BackendStrategyKey } from '../backend/hostingStrategy';
 import type { LlmComplete } from '../compile';
@@ -125,10 +126,6 @@ function connectorCatalogPrompt(spec: ChallengeSpec): string {
 
 const asStrings = (v: unknown, cap = 12): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((s) => s.trim()).slice(0, cap) : [];
-
-/** The design must be an object; an array or scalar reply is refused. */
-const asObject = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 /** File-name-safe handler key. */
 function handlerFileName(name: string, index: number): string {
@@ -242,7 +239,7 @@ export async function planChallenge(spec: ChallengeSpec, briefText: string, llm?
       maxTokens: 4000,
       useCase: 'challenge_plan_design',
     },
-    asObject,
+    asJsonObject,
   );
   if (!out.ok) {
     return { ...base, handlerWarnings: ['The design step did not return a usable plan; the workspace skeleton was used instead.'] };

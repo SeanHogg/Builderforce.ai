@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { agentHosts } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -52,6 +52,7 @@ export function AgentHostDebugContent({
   style,
   compact = true,
 }: AgentHostDebugContentProps) {
+  const errorMessage = useErrorMessage();
   const [connState, setConnState] = useState<'connecting' | 'connected' | 'offline' | 'disconnected'>('disconnected');
   const [statusSnapshot, setStatusSnapshot] = useState<unknown>(null);
   const [healthSnapshot, setHealthSnapshot] = useState<unknown>(null);
@@ -166,11 +167,11 @@ export function AgentHostDebugContent({
       setStatusSnapshot(status);
       setHealthSnapshot(health);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to refresh snapshots'));
+      setError(errorMessage(e));
     } finally {
       setRefreshing(false);
     }
-  }, [callRpc]);
+  }, [callRpc, errorMessage]);
 
   useEffect(() => {
     const justConnected = prevConnStateRef.current !== 'connected' && connState === 'connected';
@@ -193,11 +194,11 @@ export function AgentHostDebugContent({
       setRpcOutput(pretty(result));
     } catch (e) {
       setRpcOutput('');
-      setError(faultMessage(e, 'RPC failed'));
+      setError(errorMessage(e));
     } finally {
       setRpcRunning(false);
     }
-  }, [rpcMethod, rpcParams, callRpc]);
+  }, [rpcMethod, rpcParams, callRpc, errorMessage]);
 
   const isOffline = connState === 'offline';
   const dotColor =

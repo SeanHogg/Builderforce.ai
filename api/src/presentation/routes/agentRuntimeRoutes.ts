@@ -23,6 +23,7 @@
  * PUSHES every other runtime through the relay), so a host claiming here would be
  * stealing the browser worker's queue rather than finding its own.
  */
+import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { and, asc, eq } from 'drizzle-orm';
@@ -183,7 +184,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as RuntimeEnv;
     const secret = integrationCredentialSecret(env);
     const result = await openDispatchPullRequest(db, secret, tenantId, dispatchId, body);
-    if (!result.ok) return c.json({ error: result.error }, result.status);
+    if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/agentRuntimeRoutes.ts', operation: 'openDispatchPullRequest' });
     return c.json({ ok: true, url: result.url, number: result.number });
   });
 

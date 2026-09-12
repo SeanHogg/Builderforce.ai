@@ -7,6 +7,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * workflows, executes each by node kind, and advances the workflow's status when
  * its tasks reach a terminal state.
  *
+ * Each kind is a handler in `NODE_HANDLERS`, merged from one table per family in
+ * `./nodes/` — transform.ts, control.ts, ai.ts, io.ts.
+ *
  * Node-kind coverage on cloud:
  *   - trigger / llm / transform / filter / branch / output / gmail → executed natively.
  *     gmail sends through the tenant's connected Gmail integration (googleOAuth).
@@ -72,7 +75,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     loop below rather than the pre-joined `inputText`. The `*-variable(s)`
  *     kinds read/write `workflowVariables.ts`'s KV store. `sleep` is gated in
  *     `advanceCloudWorkflow` via `workflow_tasks.not_before` — by the time its
- *     `case` runs, the delay has already elapsed.
+ *     handler runs, the delay has already elapsed.
  *
  * A per-tick task budget bounds how much work one cron invocation does; a
  * multi-stage cloud workflow advances across successive ticks.
@@ -81,142 +84,18 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflows, workflowTasks } from '../../infrastructure/database/schema';
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
-import { loadGoogleCredential } from '../integrations/googleCredential';
-import { sendGmail, searchGoogleDrive, readGoogleDriveFileText } from '../integrations/googleOAuth';
-import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
-import { recordProxyUsage } from '../llm/usageLedger';
-import {
-  contextFromInput, evaluateBool, referencesRunVariables, renderTransform, renderValueTemplate, withRunVariables,
-  type ExprContext,
-} from '../../domain/workflowExpr';
-import {
-  regexMatch, htmlToText, htmlTable, htmlElements, matchElements,
-  matchPatternAdvanced, replaceText, chunkText, convertEncoding,
-} from '../../domain/workflowTextTools';
-import { credentialSecret } from '../integrations/credentialCrypto';
-import { executeMcpNode, type McpNodeConfig } from './mcpNode';
-import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
-import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable, listWorkflowVariables } from './workflowVariables';
-import { assertSafeUrl, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
-import { fetchPublic } from '../../infrastructure/net/fetchPublic';
-import { platformWebSearchBacking } from '../runtime/webSearchCredential';
-import { searchWeb } from '../runtime/cloudWeb';
-import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
-import { fetchWebDocumentCached } from '../web/webFetch';
-import type { ProxyEnv } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-
-export interface CloudExecutorEnv extends ProxyEnv {
-  NEON_DATABASE_URL: string;
-}
+import type { NodeHandler, NodeHandlerTable, NodeInput, NodeResult, OutboundPort, UsageContext } from './nodes/types';
+import { TRANSFORM_NODE_HANDLERS } from './nodes/transform';
+import { CONTROL_NODE_HANDLERS } from './nodes/control';
+import { AI_NODE_HANDLERS } from './nodes/ai';
+import { IO_NODE_HANDLERS } from './nodes/io';
 
 /** Default per-cron-tick budget of tasks to execute across all cloud workflows. */
 const DEFAULT_TASK_BUDGET = 50;
 
 type TaskRow = typeof workflowTasks.$inferSelect;
-export interface NodeInput {
-  kind: string;
-  config: Record<string, unknown>;
-  payload?: unknown;
-  triggerSource?: string;
-  /** `merge` only — the raw output of each dependency, in `dependsOn` order
-   *  (NOT the newline-joined `inputText` every other kind reads). Populated by
-   *  `advanceCloudWorkflow`, never persisted on the task's own stored input. */
-  depOutputs?: string[];
-  /**
-   * Dependency task id → the outlet label its edge carries (0 or more entries).
-   *
-   * Written by `instantiateRun` from the definition's labeled edges. A dependency
-   * listed here is CONDITIONAL: this task runs only if that upstream node took
-   * this outlet. Absent = unconditional, which is every edge authored before
-   * labels existed, so nothing that already runs changes behaviour.
-   */
-  depLabels?: Record<string, string>;
-}
-
-/** Tenant + run context a node needs to touch state beyond its own payload —
- *  the LLM usage ledger, and (new) the run/definition-scoped variable store. */
-export interface UsageContext {
-  db: Db;
-  tenantId: number;
-  /** This execution's `workflows.id` — the scope for `set-variable`/`get-variable`. */
-  workflowId: string;
-  /** The source `workflow_definitions.id`, when this run came from one — the
-   *  cross-run scope for `increment`. Falls back to `workflowId` for ad-hoc runs. */
-  workflowDefinitionId: string | null;
-}
-
-/** Substitute `{{input}}` (and `{{ input }}`) in a template with the upstream text. */
-export function renderTemplate(template: string, input: string): string {
-  return template.replace(/\{\{\s*input\s*\}\}/g, input);
-}
-
-/**
- * The context an author-written expression is evaluated against: the upstream
- * payload, plus — when one of the node's expressions names `$vars` — every run
- * variable an earlier step published. That is what lets a declared DATA IN read
- * a value three steps back without re-threading it through every step between.
- * Loaded on demand only, so a node that never mentions a variable pays nothing.
- */
-async function expressionContext(
-  inputText: string,
-  usageCtx: UsageContext | undefined,
-  expressions: readonly unknown[],
-): Promise<ExprContext> {
-  const ctx = contextFromInput(inputText);
-  if (!usageCtx || !referencesRunVariables(expressions)) return ctx;
-  const variables = await listWorkflowVariables(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId);
-  return withRunVariables(ctx, variables);
-}
-
-/**
- * One vision-capable turn — an image URL plus a text prompt, on whichever
- * model the tenant's BYO/operator pool routes a vision request to.
- * `poolRouting.ts`'s `hasVision` detection already promotes a vision-capable
- * model whenever it sees this EXACT `{type:'image_url'}` content shape, so no
- * vendor/model pin is needed here — same auto-routing the `llm` case's plain
- * text turns get, just with image-aware detection doing the picking. Shared by
- * `analyze-image` and `extract-document-data`, which differ only in prompt.
- */
-async function completeVisionPrompt(
-  env: CloudExecutorEnv,
-  usageCtx: UsageContext | undefined,
-  systemPrompt: string,
-  userText: string,
-  imageUrl: string,
-  useCase: string,
-): Promise<string> {
-  const messages = [
-    ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-    {
-      role: 'user' as const,
-      content: [
-        { type: 'text', text: userText },
-        { type: 'image_url', image_url: { url: imageUrl } },
-      ],
-    },
-  ];
-  const { proxy, byoVendors, registeredModels } = usageCtx
-    ? await tenantProxyForPlan(env as unknown as Env, usageCtx.tenantId)
-    : { proxy: ideProxy(env), byoVendors: new Set<string>(), registeredModels: [] as readonly string[] };
-  const result = await proxy.complete({
-    model: byoAwareModel(undefined, byoVendors, registeredModels),
-    // The proxy's public `ChatMessage.content` type is `string` (its documented
-    // surface for `llmRoutes`/`ideAiRoutes`); the actual dispatch is content-shape
-    // agnostic (`poolRouting.ts` inspects it for `image_url` blocks at runtime —
-    // see the module comment above), so a vision turn's multipart content is
-    // asserted through rather than widening that public, "kept stable" type for
-    // every caller over one workflow-node need.
-    messages: messages as unknown as Parameters<typeof proxy.complete>[0]['messages'],
-  });
-  if (usageCtx) {
-    void recordProxyUsage(usageCtx.db, env as unknown as Env, { tenantId: usageCtx.tenantId, useCase, result });
-  }
-  if (!result.response.ok) throw new Error(`vision call failed (${result.response.status})`);
-  return (await readProxyChoice(result)).content;
-}
 
 function parseInput(raw: string | null): NodeInput {
   if (!raw) return { kind: 'unknown', config: {} };
@@ -234,623 +113,51 @@ function parseInput(raw: string | null): NodeInput {
   }
 }
 
-/** The outcome of running one cloud node. `drop` (filter only) means the node's
- *  predicate rejected the payload, so this path should be pruned downstream. */
-interface NodeResult {
-  output: string;
-  drop?: boolean;
+/** Merge the per-family tables; a kind claimed by two families fails at module load
+ *  rather than one silently shadowing the other. */
+function mergeHandlerTables(...tables: NodeHandlerTable[]): ReadonlyMap<string, NodeHandler> {
+  const merged = new Map<string, NodeHandler>();
+  for (const table of tables) {
+    for (const [kind, handler] of Object.entries(table)) {
+      if (merged.has(kind)) throw new Error(`workflow node kind "${kind}" is registered twice`);
+      merged.set(kind, handler);
+    }
+  }
+  return merged;
 }
 
 /**
- * A stand-in for the node kinds that leave this workspace (or spend real
- * tokens). Every method is OPTIONAL — a port that only stubs `gmail` leaves
- * `connector`/`mcp`/`llm` to run for real, which is never how this is actually
- * used today (the sandbox dry-run stubs all four) but keeps the seam honest
- * about being per-kind rather than all-or-nothing.
- *
- * Consulted BEFORE the real path's own preconditions (a stubbed `gmail` node
- * needs no `usageCtx`, no connected account, nothing) — that is what makes a
- * dry-run runnable with no tenant context at all.
+ * NODE_HANDLERS — node kind → handler, the ONE dispatch table for cloud nodes.
+ * A `Map` (not an object lookup) so a kind like `constructor` or `__proto__`
+ * resolves to nothing and takes the unsupported-kind path, exactly as the old
+ * `switch`'s `default` did.
  */
-export interface OutboundPort {
-  gmail?(config: Record<string, unknown>, inputText: string): Promise<string>;
-  connector?(config: Record<string, unknown>, inputText: string): Promise<string>;
-  mcp?(config: Record<string, unknown>, inputText: string): Promise<string>;
-  llm?(config: Record<string, unknown>, inputText: string): Promise<string>;
-  webSearch?(config: Record<string, unknown>, inputText: string): Promise<string>;
-  webFetch?(config: Record<string, unknown>, inputText: string): Promise<string>;
-  googleDrive?(config: Record<string, unknown>, inputText: string): Promise<string>;
-  transcribeAudio?(config: Record<string, unknown>, inputText: string): Promise<string>;
-}
+export const NODE_HANDLERS: ReadonlyMap<string, NodeHandler> = mergeHandlerTables(
+  TRANSFORM_NODE_HANDLERS,
+  CONTROL_NODE_HANDLERS,
+  AI_NODE_HANDLERS,
+  IO_NODE_HANDLERS,
+);
 
 /** Run one cloud-native node; returns its output (and a drop flag) or throws on failure.
  *  `usageCtx` (when known) lets the `llm` node record its spend in the ledger [1310].
- *  `outbound` (when supplied) intercepts the four node kinds that leave this workspace —
+ *  `outbound` (when supplied) intercepts the node kinds that leave this workspace —
  *  see {@link OutboundPort}. Omitted, every live caller today, this is a no-op: the
  *  real adapters run exactly as they always have. */
 export async function executeCloudNode(
-  env: CloudExecutorEnv,
+  env: Env,
   node: NodeInput,
   inputText: string,
   usageCtx?: UsageContext,
   outbound?: OutboundPort,
 ): Promise<NodeResult> {
-  switch (node.kind) {
-    case 'trigger':
-      return { output: node.payload !== undefined ? JSON.stringify(node.payload) : inputText };
-
-    case 'llm': {
-      if (outbound?.llm) return { output: await outbound.llm(node.config, inputText) };
-      const cfg = node.config;
-      const system = typeof cfg.system === 'string' ? cfg.system : '';
-      const prompt = typeof cfg.prompt === 'string' ? cfg.prompt : '';
-      const messages = [
-        ...(system ? [{ role: 'system' as const, content: renderTemplate(system, inputText) }] : []),
-        { role: 'user' as const, content: renderTemplate(prompt || '{{input}}', inputText) },
-      ];
-      // The tenant's workflow LLM node → run on their connected BYO account when they
-      // have one; the node's configured `cfg.model` is a deliberate choice, so it's
-      // honored only when it preempts the BYO seed (nothing connected, or it's on their
-      // own account) — otherwise the connected flagship leads. Without a tenant (should
-      // not happen for a real workflow) fall back to the operator pool.
-      const nodeModel = typeof cfg.model === 'string' ? cfg.model : undefined;
-      const { proxy, byoVendors, registeredModels } = usageCtx
-        ? await tenantProxyForPlan(env as unknown as Env, usageCtx.tenantId)
-        : { proxy: ideProxy(env), byoVendors: new Set<string>(), registeredModels: [] as readonly string[] };
-      const result = await proxy.complete({
-        model: byoAwareModel(nodeModel, byoVendors, registeredModels),
-        messages,
-        ...(typeof cfg.temperature === 'number' ? { temperature: cfg.temperature } : {}),
-      });
-      if (usageCtx) {
-        void recordProxyUsage(usageCtx.db, env as unknown as Env, {
-          tenantId: usageCtx.tenantId, useCase: 'workflow_llm_node', result,
-        });
-      }
-      if (!result.response.ok) {
-        throw new Error(`llm call failed (${result.response.status})`);
-      }
-      return { output: (await readProxyChoice(result)).content };
-    }
-
-    case 'web-search': {
-      if (outbound?.webSearch) return { output: await outbound.webSearch(node.config, inputText) };
-      const query = renderTemplate(
-        typeof node.config.query === 'string' && node.config.query ? node.config.query : '{{input}}',
-        inputText,
-      ).trim();
-      if (!query) throw new Error('Web Search needs a query');
-      // With a tenant in scope, this checks the tenant's OWNED crawled index first and
-      // only falls back to a vendor (tenant Tavily/Ollama/Exa/Linkup key → operator key
-      // → SearXNG → keyless Wikipedia) to discover pages worth crawling — the SAME
-      // `searchOwnedThenDiscover` primitive the cloud agent's `web_search` tool and the
-      // Brain's `web.search` MCP tool use, so a workflow's research also builds the
-      // tenant's index instead of discarding every result. A tenant-LESS run (a preview
-      // with no usageCtx) has no index to own, so it falls back to a vendor-only call
-      // against the platform backing — never null, so no "connect an integration"
-      // refusal either way.
-      const result = usageCtx
-        ? await searchOwnedThenDiscover({ db: usageCtx.db, env: env as unknown as Env, tenantId: usageCtx.tenantId, request: { query } })
-        : await searchWeb(env as unknown as Env, platformWebSearchBacking(env as unknown as Env), query);
-      if (!result.ok) throw new Error(result.error ?? 'Web search failed');
-      return {
-        output: JSON.stringify({
-          query, results: result.results ?? [], coverage: result.coverage, attribution: result.attribution,
-        }),
-      };
-    }
-
-    case 'web-fetch': {
-      if (outbound?.webFetch) return { output: await outbound.webFetch(node.config, inputText) };
-      // Reuses the SAME SSRF-guarded, redirect-revalidating, cached fetch the
-      // Brain's own "read this URL" tool uses — see application/web/webFetch.ts.
-      // No credential needed (any public URL), so this runs with or without a
-      // tenant context, same as web-search's keyless floor.
-      const url = renderTemplate(typeof node.config.url === 'string' ? node.config.url : '', inputText).trim();
-      if (!url) throw new Error('Web Fetch needs a URL');
-      const doc = await fetchWebDocumentCached(env as unknown as Env, url);
-      return {
-        output: JSON.stringify({
-          url: doc.url, status: doc.status, contentType: doc.contentType,
-          title: doc.title, text: doc.text, truncated: doc.truncated,
-        }),
-      };
-    }
-
-    // ETL kinds — evaluated cloud-side via the sandbox-safe expression engine
-    // (no eval/Function). An empty expression is a pass-through, so existing
-    // workflows are unaffected.
-    case 'transform': {
-      const expression = typeof node.config.expression === 'string' ? node.config.expression : '';
-      const ctx = await expressionContext(inputText, usageCtx, [expression]);
-      return { output: renderTransform(expression, inputText, ctx) };
-    }
-    case 'filter': {
-      const predicate = typeof node.config.predicate === 'string' ? node.config.predicate : '';
-      const ctx = await expressionContext(inputText, usageCtx, [predicate]);
-      // Predicate holds → forward the payload; fails → drop it, which prunes the
-      // whole downstream cone of this filter (the drain loop cancels dependents
-      // of a dropped node — see `dispositionFromDeps`).
-      return evaluateBool(predicate, ctx) ? { output: inputText } : { output: '', drop: true };
-    }
-    case 'branch': {
-      // Evaluate the condition and tag the payload with the taken branch. The
-      // tag is read TWICE: by any downstream node that wants `$branch` in its
-      // expressions, and by the drain loop, which prunes an arm whose labeled
-      // edge does not match it (see `prunedByEdgeLabel`). An unlabeled graph
-      // still runs both sides, exactly as before — a workflow authored without
-      // labels cannot change behaviour under it.
-      const condition = typeof node.config.condition === 'string' ? node.config.condition : '';
-      const ctx = await expressionContext(inputText, usageCtx, [condition]);
-      const taken = condition ? evaluateBool(condition, ctx) : true;
-      try {
-        const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return { output: JSON.stringify({ ...parsed, $branch: taken }) };
-        }
-      } catch (error) {
-        /* non-JSON payload — fall through to passthrough */
-      
-        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
-      }
-      return { output: inputText };
-    }
-    case 'router': {
-      // Same JSON-tag mechanism as `branch`, generalized to N named routes:
-      // the first route (in declared order) whose condition holds (or which
-      // has no condition) wins; an unmatched payload takes `fallback`. An edge
-      // labeled with a route name is pruned by the drain loop when a different
-      // route won; a `filter` on `$route` remains available for graphs that
-      // were authored before labels existed.
-      const ctx = await expressionContext(inputText, usageCtx, [node.config.routes]);
-      // `routes` is authored as a JSON string in the config panel (same
-      // convention as the `mcp` kind's `params` field) — parse defensively so a
-      // malformed/empty value degrades to "no routes" rather than throwing.
-      let routes: Array<{ name?: unknown; condition?: unknown }> = [];
-      if (Array.isArray(node.config.routes)) {
-        routes = node.config.routes as Array<{ name?: unknown; condition?: unknown }>;
-      } else if (typeof node.config.routes === 'string') {
-        try {
-          const parsedRoutes = JSON.parse(node.config.routes) as unknown;
-          if (Array.isArray(parsedRoutes)) routes = parsedRoutes as Array<{ name?: unknown; condition?: unknown }>;
-        } catch (error) {
-          // Malformed routes JSON — treat as no routes, falls through to fallback.
-          reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'router.parseRoutes', level: 'warning' });
-        }
-      }
-      let taken: string | null = null;
-      for (const r of routes) {
-        const name = typeof r?.name === 'string' ? r.name.trim() : '';
-        if (!name) continue;
-        const condition = typeof r?.condition === 'string' ? r.condition : '';
-        if (!condition || evaluateBool(condition, ctx)) { taken = name; break; }
-      }
-      const route = taken ?? (typeof node.config.fallback === 'string' && node.config.fallback.trim() ? node.config.fallback.trim() : 'none');
-      try {
-        const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return { output: JSON.stringify({ ...parsed, $route: route }) };
-        }
-      } catch (error) {
-        /* non-JSON payload — fall through to passthrough */
-        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
-      }
-      return { output: inputText };
-    }
-    case 'switch': {
-      // Like `router`, but matches a VALUE against literal cases rather than
-      // evaluating a boolean expression per route — Make's Switch module.
-      // `field` names a top-level property of the JSON payload to read; empty
-      // means match against the whole (trimmed) input text instead.
-      const ctx = contextFromInput(inputText);
-      const field = typeof node.config.field === 'string' ? node.config.field.trim() : '';
-      const actual = field ? String((ctx as Record<string, unknown>)[field] ?? '') : inputText.trim();
-      let cases: Array<{ match?: unknown; name?: unknown }> = [];
-      if (Array.isArray(node.config.cases)) {
-        cases = node.config.cases as Array<{ match?: unknown; name?: unknown }>;
-      } else if (typeof node.config.cases === 'string') {
-        try {
-          const parsedCases = JSON.parse(node.config.cases) as unknown;
-          if (Array.isArray(parsedCases)) cases = parsedCases as Array<{ match?: unknown; name?: unknown }>;
-        } catch (error) {
-          reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'switch.parseCases', level: 'warning' });
-        }
-      }
-      let taken: string | null = null;
-      for (const c of cases) {
-        if (String(c?.match ?? '') === actual) { taken = typeof c?.name === 'string' && c.name ? c.name : actual; break; }
-      }
-      const route = taken ?? (typeof node.config.fallback === 'string' && node.config.fallback.trim() ? node.config.fallback.trim() : 'none');
-      try {
-        const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return { output: JSON.stringify({ ...parsed, $route: route }) };
-        }
-      } catch (error) {
-        reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'executeCloudNode' });
-      }
-      return { output: inputText };
-    }
-    case 'iterator': {
-      // Validates the shape and hands the array back unchanged — the actual
-      // per-item fan-out happens in `advanceCloudWorkflow` the moment THIS
-      // task is recorded `completed`, via `planIteratorExpansion` (see its
-      // docstring for the exact mechanism and its bounded scope).
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(inputText);
-      } catch (error) {
-        reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'iterator.parseInput', level: 'warning' });
-        parsed = null;
-      }
-      const items = Array.isArray(parsed)
-        ? parsed
-        : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items))
-          ? (parsed as { items: unknown[] }).items
-          : null;
-      if (!items) throw new Error('Iterator needs an array (or {"items":[...]}) as its input');
-      return { output: JSON.stringify(items) };
-    }
-    // A nested canvas is EXPANDED when the run is instantiated
-    // (`expandSubflows.ts`), so a node of this kind reaching the executor means it
-    // was never expanded — a definition compiled by a path that does not know
-    // about composition (the `compile()` primitive's process-chart lowering is the
-    // one that exists today). Fail loudly: a pass-through here would be a step
-    // that reports success for a whole canvas nobody ran.
-    case 'subflow':
-      throw new Error(
-        `Nested canvas "${String(node.config.canvas ?? node.config.definitionId ?? '')}" was not resolved before the run started, so it cannot run.`,
-      );
-
-    case 'merge': {
-      // Reads the RAW per-dependency outputs (advanceCloudWorkflow populates
-      // `node.depOutputs`), not the newline-joined `inputText` — a fan-in needs
-      // to know where one branch's output ends and the next begins.
-      const strategy = typeof node.config.strategy === 'string' ? node.config.strategy : 'array';
-      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
-      const parseOrRaw = (s: string): unknown => { try { return JSON.parse(s); } catch { return s; } };
-      if (strategy === 'first') return { output: parts[0] ?? '' };
-      if (strategy === 'object-keys') {
-        const keys = typeof node.config.keys === 'string'
-          ? node.config.keys.split(',').map((k) => k.trim()).filter(Boolean)
-          : [];
-        const obj: Record<string, unknown> = {};
-        parts.forEach((p, i) => { obj[keys[i] ?? `output${i + 1}`] = parseOrRaw(p); });
-        return { output: JSON.stringify(obj) };
-      }
-      return { output: JSON.stringify(parts.map(parseOrRaw)) };
-    }
-    case 'numeric-aggregator': {
-      // Same raw-depOutputs fan-in as `merge`, reduced to one number — Make's
-      // Numeric aggregator. Non-numeric branch outputs are dropped rather than
-      // failing the node (an aggregate over "the numbers that were there").
-      const op = typeof node.config.op === 'string' ? node.config.op : 'sum';
-      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
-      const nums = parts.map((p) => Number(p)).filter((n) => Number.isFinite(n));
-      let result: number;
-      if (op === 'avg') result = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
-      else if (op === 'min') result = nums.length ? Math.min(...nums) : 0;
-      else if (op === 'max') result = nums.length ? Math.max(...nums) : 0;
-      else if (op === 'count') result = nums.length;
-      else result = nums.reduce((a, b) => a + b, 0);
-      return { output: String(result) };
-    }
-    case 'table-aggregator': {
-      // `merge`'s 'array' strategy, filtered to rows that actually parsed as an
-      // object — Make's Table aggregator collects structured rows, not a mix
-      // of scalars and objects.
-      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
-      const rows = parts
-        .map((p) => { try { return JSON.parse(p) as unknown; } catch { return null; } })
-        .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object' && !Array.isArray(r));
-      return { output: JSON.stringify(rows) };
-    }
-    case 'text-aggregator': {
-      const separator = typeof node.config.separator === 'string' ? node.config.separator : '\n';
-      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
-      return { output: parts.join(separator) };
-    }
-    case 'set-variable': {
-      if (!usageCtx) throw new Error('The Set Variable node needs a tenant context to store state');
-      const key = typeof node.config.key === 'string' ? node.config.key.trim() : '';
-      if (!key) throw new Error('Set Variable needs a key');
-      // `renderValueTemplate`, not `renderTemplate`: a value field is a literal
-      // unless it carries a span, and every span form is available — so a declared
-      // output capture can name a PATH (`{{ order.id }}`) instead of being able to
-      // store only the whole upstream payload. See its own doc comment.
-      const template = typeof node.config.value === 'string' ? node.config.value : '{{input}}';
-      const value = renderValueTemplate(template, inputText, await expressionContext(inputText, usageCtx, [template]));
-      await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
-      return { output: value };
-    }
-    case 'get-variable': {
-      if (!usageCtx) throw new Error('The Get Variable node needs a tenant context to read state');
-      const key = typeof node.config.key === 'string' ? node.config.key.trim() : '';
-      if (!key) throw new Error('Get Variable needs a key');
-      const value = await getWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key);
-      return { output: value };
-    }
-    case 'increment': {
-      if (!usageCtx) throw new Error('The Increment node needs a tenant context to store state');
-      const key = typeof node.config.key === 'string' ? node.config.key.trim() : '';
-      if (!key) throw new Error('Increment needs a key');
-      const step = typeof node.config.step === 'number' ? node.config.step : Number(node.config.step) || 1;
-      // Definition-scoped (not run-scoped): the counter persists across runs of
-      // the SAME workflow, matching Make's Increment function. An ad-hoc run
-      // with no source definition falls back to its own workflowId so the node
-      // still works (just without cross-run persistence, which nothing needs).
-      const scopeId = usageCtx.workflowDefinitionId ?? usageCtx.workflowId;
-      const value = await incrementWorkflowVariable(usageCtx.db, usageCtx.tenantId, scopeId, key, step);
-      return { output: String(value) };
-    }
-    case 'get-variables': {
-      if (!usageCtx) throw new Error('The Get Variables node needs a tenant context to read state');
-      const keys = typeof node.config.keys === 'string'
-        ? node.config.keys.split(',').map((k) => k.trim()).filter(Boolean)
-        : [];
-      const out: Record<string, string> = {};
-      for (const key of keys) {
-        out[key] = await getWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key);
-      }
-      return { output: JSON.stringify(out) };
-    }
-    case 'set-variables': {
-      if (!usageCtx) throw new Error('The Set Variables node needs a tenant context to store state');
-      // Authored as a JSON string, same convention as `router`'s `routes` and
-      // `mcp`'s `params` — {"key": "value or {{input}}"} per entry.
-      let values: Record<string, unknown> = {};
-      if (typeof node.config.values === 'string') {
-        try {
-          const parsedValues = JSON.parse(node.config.values) as unknown;
-          if (parsedValues && typeof parsedValues === 'object' && !Array.isArray(parsedValues)) {
-            values = parsedValues as Record<string, unknown>;
-          }
-        } catch (error) {
-          reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'set-variables.parseValues', level: 'warning' });
-        }
-      }
-      const written: Record<string, string> = {};
-      // One context for the whole map — parsing the payload once per node, not once
-      // per key, on what is routinely the widest node in a graph.
-      const valuesCtx = await expressionContext(inputText, usageCtx, Object.values(values));
-      for (const [key, raw] of Object.entries(values)) {
-        const value = renderValueTemplate(String(raw ?? ''), inputText, valuesCtx);
-        await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
-        written[key] = value;
-      }
-      return { output: JSON.stringify(written) };
-    }
-    case 'compose-string':
-      return { output: renderTemplate(typeof node.config.template === 'string' ? node.config.template : '{{input}}', inputText) };
-    case 'convert-encoding': {
-      const mode = typeof node.config.mode === 'string' ? node.config.mode : 'base64-encode';
-      return { output: convertEncoding(mode, inputText) };
-    }
-    case 'sleep':
-      // The delay itself is enforced by advanceCloudWorkflow's `not_before`
-      // gate before this case ever runs — by the time we get here, it's due.
-      return { output: inputText };
-    case 'regex-match': {
-      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
-      const flags = typeof node.config.flags === 'string' ? node.config.flags : '';
-      return { output: JSON.stringify(regexMatch(pattern, flags, inputText)) };
-    }
-    case 'html-to-text':
-      return { output: htmlToText(inputText) };
-    case 'html-table':
-      return { output: JSON.stringify(htmlTable(inputText)) };
-    case 'html-elements': {
-      const tag = typeof node.config.tag === 'string' ? node.config.tag : '';
-      return { output: JSON.stringify(htmlElements(inputText, tag)) };
-    }
-    case 'match-elements': {
-      const tag = typeof node.config.tag === 'string' ? node.config.tag : '';
-      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
-      return { output: JSON.stringify(matchElements(inputText, tag, pattern)) };
-    }
-    case 'match-pattern-advanced': {
-      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
-      const flags = typeof node.config.flags === 'string' ? node.config.flags : '';
-      return { output: JSON.stringify(matchPatternAdvanced(pattern, flags, inputText)) };
-    }
-    case 'replace': {
-      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
-      const replacement = typeof node.config.replacement === 'string' ? node.config.replacement : '';
-      const flags = typeof node.config.flags === 'string' ? node.config.flags : '';
-      const literal = node.config.literal === true || node.config.literal === 'true';
-      return { output: replaceText(inputText, pattern, replacement, flags, literal) };
-    }
-    case 'chunk-text': {
-      const chunkSize = typeof node.config.chunkSize === 'number' ? node.config.chunkSize : Number(node.config.chunkSize) || 1000;
-      const overlap = typeof node.config.overlap === 'number' ? node.config.overlap : Number(node.config.overlap) || 0;
-      return { output: JSON.stringify(chunkText(inputText, chunkSize, overlap)) };
-    }
-    case 'assert': {
-      const expression = typeof node.config.expression === 'string' ? node.config.expression : '';
-      const ctx = await expressionContext(inputText, usageCtx, [expression]);
-      const onFail = node.config.onFail === 'warn-only' ? 'warn-only' : 'fail-task';
-      const holds = evaluateBool(expression, ctx);
-      if (!holds && onFail === 'fail-task') throw new Error(`Assertion failed: ${expression || '(empty expression)'}`);
-      try {
-        const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return { output: JSON.stringify({ ...parsed, $assert: holds }) };
-        }
-      } catch (error) {
-        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
-      }
-      return { output: inputText };
-    }
-    case 'healthcheck': {
-      const url = renderTemplate(typeof node.config.url === 'string' ? node.config.url : '', inputText).trim();
-      if (!url) throw new Error('Healthcheck needs a URL');
-      const expectedStatus = typeof node.config.expectedStatus === 'number'
-        ? node.config.expectedStatus
-        : Number(node.config.expectedStatus) || 200;
-      let status = 0;
-      let up = false;
-      let errorMsg: string | null = null;
-      try {
-        // Same SSRF guard `webFetch.ts` applies: reject internal/loopback/metadata
-        // hosts up front, then `fetchPublic`'s DNS-rebinding check around the request.
-        // `redirect: 'manual'` deliberately does NOT follow redirects (a 3xx is itself
-        // a reportable status) rather than re-implementing per-hop re-validation for a
-        // node whose whole job is "what status did this URL return".
-        const parsed = assertSafeUrl(url, { allowHttp: true });
-        const res = await fetchPublic(parsed, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(8000) });
-        status = res.status;
-        up = status === expectedStatus;
-      } catch (e) {
-        errorMsg = e instanceof BlockedUrlError ? e.message : e instanceof Error ? e.message : 'fetch failed';
-      }
-      return { output: JSON.stringify({ url, status, expectedStatus, up, error: errorMsg }) };
-    }
-    case 'output':
-      return { output: inputText };
-
-    case 'gmail': {
-      if (outbound?.gmail) return { output: await outbound.gmail(node.config, inputText) };
-      // Send an email through the tenant's connected Gmail integration. Fields
-      // support {{input}} so an upstream node's output can drive the recipient,
-      // subject or body. Needs the tenant context to load the (encrypted) creds.
-      if (!usageCtx) throw new Error('The Gmail node needs a tenant context to load your connected account');
-      const creds = await loadGoogleCredential(env as unknown as Env, usageCtx.db, usageCtx.tenantId, 'gmail');
-      if (!creds) throw new Error('Connect a Gmail integration under Settings ▸ Integrations to use the Gmail node');
-      const cfg = node.config;
-      const to = renderTemplate(typeof cfg.to === 'string' ? cfg.to : '', inputText).trim();
-      const subject = renderTemplate(typeof cfg.subject === 'string' ? cfg.subject : '', inputText);
-      const body = renderTemplate(typeof cfg.body === 'string' ? cfg.body : '{{input}}', inputText);
-      const sent = await sendGmail(creds, { to, subject, body });
-      return { output: JSON.stringify({ sent: true, id: sent.id, to }) };
-    }
-
-    case 'analyze-image': {
-      if (outbound?.llm) return { output: await outbound.llm(node.config, inputText) };
-      const cfg = node.config;
-      const url = renderTemplate(typeof cfg.url === 'string' && cfg.url ? cfg.url : '{{input}}', inputText).trim();
-      if (!url) throw new Error('Analyze Image needs an image URL');
-      const prompt = typeof cfg.prompt === 'string' && cfg.prompt ? cfg.prompt : 'Describe this image in detail.';
-      const content = await completeVisionPrompt(env, usageCtx, '', prompt, url, 'workflow_analyze_image');
-      return { output: content };
-    }
-
-    case 'extract-document-data': {
-      if (outbound?.llm) return { output: await outbound.llm(node.config, inputText) };
-      // Make's "Content Extractor" (document/invoice/receipt) is a vision call
-      // with a structured-extraction prompt, not a different capability — the
-      // same `completeVisionPrompt` `analyze-image` uses, above.
-      const cfg = node.config;
-      const url = renderTemplate(typeof cfg.url === 'string' && cfg.url ? cfg.url : '{{input}}', inputText).trim();
-      if (!url) throw new Error('Extract Document Data needs a document/image URL');
-      const fields = typeof cfg.fields === 'string' ? cfg.fields.trim() : '';
-      const system = 'You are a document data extraction assistant. Extract exactly the requested fields from the document image. Reply with only a single valid JSON object mapping each requested field to its extracted value (or null if not found) — no markdown, no explanation.';
-      const prompt = fields
-        ? `Extract these fields: ${fields}`
-        : 'Extract every key field visible (e.g. date, total amount, vendor/sender name, line items) as JSON.';
-      const content = await completeVisionPrompt(env, usageCtx, system, prompt, url, 'workflow_extract_document');
-      return { output: content };
-    }
-
-    case 'transcribe-audio': {
-      if (outbound?.transcribeAudio) return { output: await outbound.transcribeAudio(node.config, inputText) };
-      // Whisper is a multipart REST call, not a chat completion — genuinely a
-      // different transport from every other AI Agents kind here, so it is not
-      // routed through `proxy.complete()`. Operator-funded only (no per-tenant
-      // BYO path exists for Whisper today, same tradeoff as TAVILY_API_KEY —
-      // see `env.ts`'s `OPENAI_API_KEY` doc).
-      const cfg = node.config;
-      const url = renderTemplate(typeof cfg.url === 'string' && cfg.url ? cfg.url : '{{input}}', inputText).trim();
-      if (!url) throw new Error('Transcribe Audio needs an audio file URL');
-      const mode = cfg.mode === 'translate' ? 'translate' : 'transcribe';
-      const apiKey = (env as unknown as Env).OPENAI_API_KEY;
-      if (!apiKey) throw new Error('Transcribe Audio needs an operator-configured OPENAI_API_KEY');
-
-      const parsed = assertSafeUrl(url, { allowHttp: true });
-      const audioRes = await fetchPublic(parsed, { method: 'GET', signal: AbortSignal.timeout(20_000) });
-      if (!audioRes.ok) throw new Error(`Could not fetch the audio file (${audioRes.status})`);
-      const audioBlob = await audioRes.blob();
-
-      const form = new FormData();
-      form.append('file', audioBlob, 'audio');
-      form.append('model', 'whisper-1');
-      if (mode === 'transcribe' && typeof cfg.language === 'string' && cfg.language) {
-        form.append('language', cfg.language);
-      }
-      const endpoint = mode === 'translate'
-        ? 'https://api.openai.com/v1/audio/translations'
-        : 'https://api.openai.com/v1/audio/transcriptions';
-      const res = await fetch(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: form });
-      const body = (await res.json().catch(() => ({}))) as { text?: string; error?: { message?: string } };
-      if (!res.ok) throw new Error(body.error?.message || `Whisper ${mode} failed (${res.status})`);
-      return { output: JSON.stringify({ text: body.text ?? '', mode }) };
-    }
-
-    case 'google-drive': {
-      if (outbound?.googleDrive) return { output: await outbound.googleDrive(node.config, inputText) };
-      // Same tenant-credential path as `gmail` above (`integration_credentials`,
-      // provider='google_drive') — replaces the old "Google Drive" palette entry,
-      // which was `kind: 'trigger'` (inert when chained mid-flow — see DONE.md
-      // 2026-08-16). NOT the separate per-USER `DriveProvider`/`driveService.ts`
-      // system the canvas import picker uses (that needs an interactive
-      // `userId`+`connectionId` this node has no session to supply).
-      if (!usageCtx) throw new Error('The Google Drive node needs a tenant context to load your connected account');
-      const driveCreds = await loadGoogleCredential(env as unknown as Env, usageCtx.db, usageCtx.tenantId, 'google_drive');
-      if (!driveCreds) throw new Error('Connect a Google Drive integration under Settings ▸ Integrations to use the Google Drive node');
-      const driveCfg = node.config;
-      const operation = typeof driveCfg.operation === 'string' ? driveCfg.operation : 'search';
-      if (operation === 'read') {
-        const fileId = renderTemplate(typeof driveCfg.fileId === 'string' ? driveCfg.fileId : '', inputText).trim();
-        if (!fileId) throw new Error('Google Drive read needs a file id');
-        const file = await readGoogleDriveFileText(driveCreds, fileId);
-        return { output: JSON.stringify(file) };
-      }
-      const query = renderTemplate(typeof driveCfg.query === 'string' && driveCfg.query ? driveCfg.query : '{{input}}', inputText).trim();
-      if (!query) throw new Error('Google Drive search needs a query');
-      const hits = await searchGoogleDrive(driveCreds, query);
-      return { output: JSON.stringify({ query, files: hits }) };
-    }
-
-    case 'connector': {
-      if (outbound?.connector) return { output: await outbound.connector(node.config, inputText) };
-      // EVERY connector action — Twilio SMS/voice/WhatsApp, SendGrid, Slack,
-      // Stripe, a tenant's own connector — reaches a workflow through this one
-      // node. It takes the connector and action as CONFIG, so publishing a new
-      // connector makes it usable in a workflow with no change here.
-      if (!usageCtx) throw new Error('An integration node needs a tenant context to load your connection');
-      const outcome = await executeConnectorNode(
-        { db: usageCtx.db, env: env as unknown as Env, tenantId: usageCtx.tenantId },
-        node.config as ConnectorNodeConfig,
-        inputText,
-      );
-      if (!outcome.ok) throw new Error(outcome.error);
-      return { output: outcome.output };
-    }
-
-    case 'mcp': {
-      if (outbound?.mcp) return { output: await outbound.mcp(node.config, inputText) };
-      // Every Data + Marketing palette integration lands here. The node resolves
-      // the tenant's stored credential for its provider and issues the SAME HTTP
-      // call the connect form's "Test connection" makes, so a green test and a
-      // green node cannot mean different things (see application/workflow/mcpNode.ts).
-      if (!usageCtx) throw new Error('An integration node needs a tenant context to load your connection');
-      const outcome = await executeMcpNode(
-        {
-          db: usageCtx.db,
-          tenantId: usageCtx.tenantId,
-          encryptionSecret: credentialSecret(env as unknown as Env),
-        },
-        node.config as McpNodeConfig,
-        inputText,
-      );
-      if (!outcome.ok) throw new Error(outcome.error);
-      return { output: outcome.output };
-    }
-
-    default:
-      throw new Error(
-        `node kind "${node.kind}" is not supported on the cloud runtime — run this workflow on a self-hosted agentHost`,
-      );
+  const handler = NODE_HANDLERS.get(node.kind);
+  if (!handler) {
+    throw new Error(
+      `node kind "${node.kind}" is not supported on the cloud runtime — run this workflow on a self-hosted agentHost`,
+    );
   }
+  return handler({ env, node, inputText, usageCtx, outbound });
 }
 
 /**
@@ -1111,7 +418,7 @@ function depIds(task: TaskRow): string[] {
 }
 
 /** Drain ready tasks for one cloud workflow; returns how many tasks it executed. */
-async function advanceCloudWorkflow(env: CloudExecutorEnv, db: Db, workflowId: string, budget: number): Promise<number> {
+async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget: number): Promise<number> {
   // The workflow's tenant — lets each `llm` node record its spend in the ledger
   // [1310], and (new) lets set-variable/get-variable/increment scope their state.
   const [wf] = await db
@@ -1300,8 +607,8 @@ export interface CloudExecResult {
 }
 
 /** Advance all pending/running cloud workflows within the per-tick task budget. */
-export async function processPendingCloudWorkflows(env: CloudExecutorEnv, budget = DEFAULT_TASK_BUDGET): Promise<CloudExecResult> {
-  const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
+export async function processPendingCloudWorkflows(env: Env, budget = DEFAULT_TASK_BUDGET): Promise<CloudExecResult> {
+  const db = buildDatabase(env);
 
   const cloud = await db
     .select({ id: workflows.id })

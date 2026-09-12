@@ -35,7 +35,7 @@ import {
   type SpeakerEmbedding,
 } from '@/lib/voiceEngine';
 import { fetchIdeProjectByStorage } from '@/lib/api';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CreateCloneInput {
   name: string;
   consentAttested: boolean;
@@ -83,6 +83,7 @@ export function useVoiceStudio(
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [result, setResult] = useState<NarrationResult | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const errorMessage = useErrorMessage();
 
   // Resolve the IDE project backing this storage project so clones scope to this
   // project's own custom voices. Falls back to the unscoped (tenant) studio.
@@ -108,11 +109,11 @@ export function useVoiceStudio(
       // Keep the selection valid: default to the first clone after a (re)load.
       setSelectedCloneId((cur) => (list.some((c) => c.id === cur) ? cur : (list[0]?.id ?? 0)));
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load voice clones.'));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [enabled, ideProjectId]);
+  }, [enabled, ideProjectId, errorMessage]);
 
   useEffect(() => { void reload(); }, [reload]);
   useEffect(() => {
@@ -136,11 +137,11 @@ export function useVoiceStudio(
       setResult(res);
       setAudioUrl(await narrationResultToObjectUrl(res));
     } catch (e) {
-      setUnavailable(faultMessage(e, 'Synthesis failed.'));
+      setUnavailable(errorMessage(e));
     } finally {
       setBusy(false);
     }
-  }, [selectedCloneId, text]);
+  }, [selectedCloneId, text, errorMessage]);
 
   const createClone = useCallback(async (input: CreateCloneInput) => {
     // Enrol on-device when possible → embedding (the free synthesis identity).

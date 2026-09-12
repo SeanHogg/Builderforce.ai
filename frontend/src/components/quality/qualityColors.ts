@@ -4,8 +4,11 @@
  * charts panel and the detail drawer never re-inline a divergent map.
  */
 
+import type { StatusToneMap } from '@/lib/statusTone';
+
 export const LEVELS = ['fatal', 'error', 'warning', 'info'] as const;
 export const STATUSES = ['unresolved', 'fixing', 'resolved', 'ignored'] as const;
+export type QualityStatus = (typeof STATUSES)[number];
 
 /**
  * Severity is an ordinal ramp, so `fatal` gets the rung above `--error` rather
@@ -17,8 +20,13 @@ export const LEVEL_COLOR: Record<string, string> = {
   fatal: 'var(--error-strong)', error: 'var(--error)', warning: 'var(--warning)', info: 'var(--info)',
 };
 
-export const STATUS_COLOR: Record<string, string> = {
-  unresolved: 'var(--error)', fixing: 'var(--violet-bright)', resolved: 'var(--success)', ignored: 'var(--text-muted)',
+/**
+ * Error-group lifecycle → tone. A status, not a ramp, so it speaks the shared
+ * vocabulary: render with `statusColor(STATUS_TONE, s, rendering)` from
+ * `@/lib/statusTone` — `solid` for a chart swatch, `text` for a label.
+ */
+export const STATUS_TONE: StatusToneMap<QualityStatus> = {
+  unresolved: 'danger', fixing: 'info', resolved: 'success', ignored: 'neutral',
 };
 
 /** Ingest sources (must mirror api qualitySourceCatalog ids) → swatch colours. */
@@ -31,5 +39,4 @@ export const SOURCE_COLOR: Record<string, string> = {
 const UNKNOWN = 'var(--text-muted)';
 
 export const levelColor = (level: string): string => LEVEL_COLOR[level] ?? UNKNOWN;
-export const statusColor = (status: string): string => STATUS_COLOR[status] ?? UNKNOWN;
 export const sourceColor = (source: string): string => SOURCE_COLOR[source] ?? UNKNOWN;

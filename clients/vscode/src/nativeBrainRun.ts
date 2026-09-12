@@ -79,7 +79,8 @@ export interface NativeApprovalRequest {
 
 /** Prose the HOST owns, because it must be localized through `vscode.l10n.t()`. */
 export interface NativeRunLabels {
-  /** Appended when the run burned its whole tool-iteration budget without finishing. */
+  /** Appended when the loop stopped the run itself — its last few tool calls all failed
+   *  and it had to be forced to answer (or gave up outright). */
   dispatchHint: string;
   /** Handed to the model in place of a call a governance `block` gate refused. */
   blockedByPolicy(reason: string): string;
@@ -125,8 +126,6 @@ export interface NativeBrainRunOptions {
   persistence?: BrainRunPersistence;
   /** Project-Evermind hooks: recall, the memory-first answer, the answer cache. */
   evermind?: EvermindRunHooks;
-  /** Tool-iteration ceiling for this run. */
-  maxIterations?: number;
   signal: AbortSignal;
   labels: NativeRunLabels;
   events: NativeRunEvents;
@@ -362,10 +361,11 @@ export function createStreamRelay(events: Pick<NativeRunEvents, "onText">): (sna
 }
 
 /**
- * Did the run burn its entire tool-iteration budget? True when the loop had to force a
- * final answer with tools withdrawn, or gave up outright. The native surface appends a
- * dispatch hint on that outcome — a long IDE task that hit the ceiling is telling the
- * user it belongs on an agent, not in a chat turn.
+ * Did the loop stop the run itself? A run has no step ceiling; the only limit is the
+ * consecutive-tool-failure breaker, after which the loop forces a final answer with
+ * tools withdrawn (or, if that too is empty, records a loop error). True on either. The
+ * native surface appends a dispatch hint on that outcome — the failures are named in
+ * the turn, and a cloud agent can carry the work on in its own runtime.
  */
 export function exhaustedToolBudget(events: readonly BrainTraceEvent[]): boolean {
   return events.some(
@@ -477,7 +477,6 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       ...(opts.chatMode ? { chatMode: opts.chatMode } : {}),
       ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
       ...(opts.evermind ? { evermind: opts.evermind } : {}),
-      ...(opts.maxIterations ? { maxIterations: opts.maxIterations } : {}),
       runTool,
       needsConfirm: nativeNeedsConfirm(tools, permissionMode, policyGates),
       stream: opts.stream,

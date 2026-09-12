@@ -5,6 +5,7 @@ import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 import { relayIdentityFromHeaders } from '../../domain/shared/relayIdentity';
+import { fullBucket, takeToken, type BucketRate, type TokenBucket } from './tokenBucket';
 
 /**
  * CollaborationRoomDO — a hibernation-WebSocket Durable Object for real-time co-editing
@@ -85,6 +86,16 @@ const DOC_KEY = 'ydoc:v1';
  */
 const PERSIST_DEBOUNCE_MS = 2_000;
 
+/**
+ * Per-socket frame budget. Every frame fans out to the whole room, so one flooding
+ * client is an N× amplifier without it. Deep enough for a y-websocket handshake burst
+ * and fast typing with a moving cursor.
+ */
+export const COLLAB_FRAME_RATE: BucketRate = { framesPerSecond: 60, burst: 240 };
+
+/** Close code for a socket that exceeded its budget on a frame that may not be dropped. */
+export const CLOSE_RATE_LIMITED = 1008;
+
 interface SessionInfo {
   /** `users.id`, asserted by the authed route. Never read from the query string. */
   userId: string;
@@ -110,6 +121,12 @@ export class CollaborationRoomDO implements DurableObject {
   private doc: Y.Doc;
   private awareness: awarenessProtocol.Awareness;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Frame budgets, in memory on purpose: unlike a session, a budget that resets on
+   * hibernation is correct — the object only hibernates after going idle, and an idle
+   * bucket would have refilled to full anyway.
+   */
+  private readonly budgets = new WeakMap<WebSocket, TokenBucket>();
   /** Bound once here so no call site can forget the runtime override. */
   private readonly reportError: DurableErrorReporter;
 
@@ -206,11 +223,20 @@ export class CollaborationRoomDO implements DurableObject {
       if (!session) return;
 
       if (typeof message !== 'string') {
-        this.handleBinary(ws, toBytes(message));
+        const bytes = toBytes(message);
+        if (!this.withinBudget(ws)) {
+          this.refuse(ws, bytes[0] === MESSAGE_AWARENESS);
+          return;
+        }
+        this.handleBinary(ws, bytes);
         return;
       }
 
       const data = JSON.parse(message) as { type: string; [key: string]: unknown };
+      if (!this.withinBudget(ws)) {
+        this.refuse(ws, data.type === 'presence');
+        return;
+      }
 
       switch (data.type) {
         case 'yjs-update':
@@ -242,6 +268,32 @@ export class CollaborationRoomDO implements DurableObject {
       }
     } catch (error) {
       this.reportError(error, { operation: 'webSocketMessage' });
+    }
+  }
+
+  /** Spend one frame from this socket's budget. */
+  private withinBudget(ws: WebSocket): boolean {
+    const now = Date.now();
+    let bucket = this.budgets.get(ws);
+    if (!bucket) {
+      bucket = fullBucket(COLLAB_FRAME_RATE, now);
+      this.budgets.set(ws, bucket);
+    }
+    return takeToken(bucket, COLLAB_FRAME_RATE, now);
+  }
+
+  /**
+   * An over-budget frame. A cursor or presence frame is dropped — the next heartbeat
+   * corrects it. A document or terminal frame may NOT be dropped: the sender believes it
+   * was delivered, so the room would silently fork. The socket is closed instead, and the
+   * client reconnects and re-syncs.
+   */
+  private refuse(ws: WebSocket, ephemeral: boolean): void {
+    if (ephemeral) return;
+    try {
+      ws.close(CLOSE_RATE_LIMITED, 'rate limited');
+    } catch (error) {
+      this.reportError(error, { operation: 'refuse' });
     }
   }
 

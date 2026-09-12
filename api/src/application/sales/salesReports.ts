@@ -392,10 +392,14 @@ export function leaderboard(
  *
  * `associateUserId` null means the AGGREGATE (every associate) — which is the
  * superadmin's view, and the only difference between the two audiences.
+ *
+ * `tenantId` null means the caller has no workspace (a web-token session): the
+ * referral facts are workspace-scoped, so there are none to read — the report
+ * says so with empty windows rather than querying `tenant_id = NULL`.
  */
 export async function buildSalesReport(
   db: Db,
-  tenantId: number,
+  tenantId: number | null,
   options: { associateUserId?: string | null; now?: Date; quotaWindow?: SalesReportWindow } = {},
 ): Promise<SalesReport> {
   const now = options.now ?? new Date();
@@ -416,7 +420,7 @@ export async function buildSalesReport(
   const stalledBefore = new Date(now.getTime() - STALLED_CONTACT_DAYS * DAY_MS);
 
   const [referralRows, contactRows, peopleRows, goalRows] = await Promise.all([
-    db.select({
+    tenantId == null ? Promise.resolve([] as ReferralFact[]) : db.select({
       associateUserId: salesReferrals.associateUserId,
       attributionType: salesReferrals.attributionType,
       signedUpAt: salesReferrals.signedUpAt,
@@ -508,8 +512,10 @@ export async function buildSalesReport(
 }
 
 /** Commission EARNED to date (converted referrals), which is what the payout
- *  balance subtracts from. One SUM, and the one definition of "earned". */
-export async function earnedCommissionCents(db: Db, tenantId: number, associateUserId: string): Promise<number> {
+ *  balance subtracts from. One SUM, and the one definition of "earned".
+ *  No workspace (`tenantId` null) means no workspace-scoped referrals: 0. */
+export async function earnedCommissionCents(db: Db, tenantId: number | null, associateUserId: string): Promise<number> {
+  if (tenantId == null) return 0;
   const rows = await db.select({ commissionCents: salesReferrals.commissionCents })
     .from(salesReferrals)
     .where(and(
@@ -520,8 +526,10 @@ export async function earnedCommissionCents(db: Db, tenantId: number, associateU
   return rows.reduce((sum, row) => sum + (row.commissionCents ?? 0), 0);
 }
 
-/** Referrals that signed up since `from` — the "current leads" list the hub shows. */
-export async function recentReferrals(db: Db, tenantId: number, associateUserId: string, from: Date) {
+/** Referrals that signed up since `from` — the "current leads" list the hub shows.
+ *  No workspace (`tenantId` null) means none, rather than a `tenant_id = NULL` read. */
+export async function recentReferrals(db: Db, tenantId: number | null, associateUserId: string, from: Date) {
+  if (tenantId == null) return [];
   return db.select({
     id: salesReferrals.id,
     attributionType: salesReferrals.attributionType,

@@ -1,21 +1,22 @@
 'use client';
 
 import type { CSSProperties, MouseEvent } from 'react';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
- * Single source of truth for execution-status → colour, shared by the board
+ * Single source of truth for execution-status → tone, shared by the board
  * cards, the column headers, and the task Agent tab. A status of `undefined`
  * means the chip represents a *configured* agent (no live run), shown neutral.
  */
-export const EXECUTION_STATUS_COLOR: Record<string, string> = {
-  completed: 'var(--success)',
-  failed: 'var(--danger)',
-  cancelled: 'var(--text-muted)',
-  running: 'var(--coral-bright)',
-  submitted: 'var(--coral-bright)',
-  pending: 'var(--text-muted)',
+export const EXECUTION_STATUS_TONE: StatusToneMap = {
+  completed: 'success',
+  failed: 'danger',
+  cancelled: 'neutral',
+  running: 'accent',
+  submitted: 'accent',
+  pending: 'neutral',
   // Agent called ask_human and is waiting on a person — amber "needs attention".
-  paused: 'var(--warning)',
+  paused: 'warning',
 };
 
 /** Statuses that mean an agent is currently working the task. */
@@ -57,7 +58,7 @@ export interface AgentChipProps {
  * per agent so multiple agents on a lane/task stay individually visible.
  */
 export function AgentChip({ label, status, meta, title, onClick }: AgentChipProps) {
-  const color = status ? EXECUTION_STATUS_COLOR[status] ?? 'var(--text-muted)' : 'var(--text-muted)';
+  const color = statusColor(EXECUTION_STATUS_TONE, status, 'solid');
   const active = status ? ACTIVE_EXECUTION_STATUSES.has(status) : false;
 
   const style: CSSProperties = {

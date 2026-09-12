@@ -24,7 +24,7 @@ import {
   type DevexTemplate, type DevexCampaign, type DevexQuestion,
   type DevexQuestionType, type DevexDimension, type DevexAnswerMap, type DevexAnswerValue,
 } from '@/lib/devexApi';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 const inputStyle: React.CSSProperties = {
   padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', width: '100%',
@@ -78,28 +78,23 @@ function TemplateAuthor({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [questions, setQuestions] = useState<DevexQuestion[]>([newQuestion()]);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const task = usePanelTask();
 
   const updateQ = (i: number, patch: Partial<DevexQuestion>) =>
     setQuestions((qs) => qs.map((q, j) => (j === i ? { ...q, ...patch } : q)));
 
   const submit = useCallback(async () => {
-    setErr(null);
     const valid = questions.filter((q) => q.prompt.trim());
-    if (!name.trim()) { setErr(t('err.nameRequired')); return; }
-    if (valid.length === 0) { setErr(t('err.questionRequired')); return; }
-    setBusy(true);
-    try {
+    if (!name.trim()) { task.fail(t('err.nameRequired')); return; }
+    if (valid.length === 0) { task.fail(t('err.questionRequired')); return; }
+    const result = await task.run(async () => {
       await devexApi.templates.create({ name: name.trim(), description, questions: valid });
-      setName(''); setDescription(''); setQuestions([newQuestion()]);
-      onCreated();
-    } catch (e) {
-      setErr(faultMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [name, description, questions, onCreated, t]);
+      return true;
+    });
+    if (result === undefined) return;
+    setName(''); setDescription(''); setQuestions([newQuestion()]);
+    onCreated();
+  }, [name, description, questions, onCreated, t, task]);
 
   return (
     <PmCard title={t('author.title')}>
@@ -134,8 +129,8 @@ function TemplateAuthor({ onCreated }: { onCreated: () => void }) {
           </button>
         </div>
 
-        {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
-        <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('author.create')}</button>
+        {task.error && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{task.error}</span>}
+        <button style={btnStyle} disabled={task.busy} onClick={submit}>{task.busy ? t('saving') : t('author.create')}</button>
       </div>
     </PmCard>
   );
@@ -196,28 +191,23 @@ function CampaignLauncher({ templates, onLaunched }: { templates: DevexTemplate[
   const [templateId, setTemplateId] = useState<string>('');
   const [periodMonth, setPeriodMonth] = useState('');
   const [anonymous, setAnonymous] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const task = usePanelTask();
 
   const submit = useCallback(async () => {
-    setErr(null);
-    if (!title.trim()) { setErr(t('err.titleRequired')); return; }
-    setBusy(true);
-    try {
+    if (!title.trim()) { task.fail(t('err.titleRequired')); return; }
+    const result = await task.run(async () => {
       await devexApi.campaigns.create({
         title: title.trim(),
         templateId: templateId ? Number(templateId) : null,
         periodMonth: periodMonth || null,
         anonymous,
       });
-      setTitle(''); setTemplateId(''); setPeriodMonth('');
-      onLaunched();
-    } catch (e) {
-      setErr(faultMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [title, templateId, periodMonth, anonymous, onLaunched, t]);
+      return true;
+    });
+    if (result === undefined) return;
+    setTitle(''); setTemplateId(''); setPeriodMonth('');
+    onLaunched();
+  }, [title, templateId, periodMonth, anonymous, onLaunched, t, task]);
 
   return (
     <PmCard title={t('launch.title')}>
@@ -234,8 +224,8 @@ function CampaignLauncher({ templates, onLaunched }: { templates: DevexTemplate[
             {t('launch.anonymous')}
           </label>
         </div>
-        {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
-        <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('launch.create')}</button>
+        {task.error && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{task.error}</span>}
+        <button style={btnStyle} disabled={task.busy} onClick={submit}>{task.busy ? t('saving') : t('launch.create')}</button>
       </div>
     </PmCard>
   );
@@ -322,25 +312,17 @@ function RespondForm({
 }: { campaignId: number; questions: DevexQuestion[]; onDone: () => void }) {
   const t = useTranslations('surveys');
   const [answers, setAnswers] = useState<DevexAnswerMap>({});
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const task = usePanelTask();
 
   const setA = (id: string, v: DevexAnswerValue) => setAnswers((a) => ({ ...a, [id]: v }));
 
   const submit = useCallback(async () => {
-    setErr(null);
-    setBusy(true);
-    try {
-      await devexApi.respond(campaignId, answers);
-      setDone(true);
-      setTimeout(onDone, 800);
-    } catch (e) {
-      setErr(faultMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [campaignId, answers, onDone]);
+    const result = await task.run(async () => { await devexApi.respond(campaignId, answers); return true; });
+    if (result === undefined) return;
+    setDone(true);
+    setTimeout(onDone, 800);
+  }, [campaignId, answers, onDone, task]);
 
   if (done) return <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('respond.thanks')}</div>;
 
@@ -375,9 +357,9 @@ function RespondForm({
           )}
         </div>
       ))}
-      {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
+      {task.error && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{task.error}</span>}
       <div style={{ display: 'flex', gap: 8 }}>
-        <button style={btnStyle} disabled={busy} onClick={submit}>{busy ? t('saving') : t('respond.submit')}</button>
+        <button style={btnStyle} disabled={task.busy} onClick={submit}>{task.busy ? t('saving') : t('respond.submit')}</button>
         <button style={{ ...btnStyle, background: 'transparent' }} onClick={onDone}>{t('respond.cancel')}</button>
       </div>
     </div>

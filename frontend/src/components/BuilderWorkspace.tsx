@@ -29,7 +29,7 @@ import { BuilderProjectsSlideOutPanel } from './builder/BuilderProjectsSlideOutP
 import { BrainPanel } from './brain/BrainPanel';
 import { TeamChatButton } from './brain/TeamChatButton';
 import { BuilderSettingsPanel } from './BuilderSettingsPanel';
-import { useConfirm } from '@/components/ConfirmProvider';
+import { useToast } from '@/components/ToastProvider';
 import { BuilderAgentPanel } from './builder/BuilderAgentPanel';
 import { DevicePreview } from './builder/DevicePreview';
 import { MobileDevicePanel } from './builder/MobileDevicePanel';
@@ -58,6 +58,8 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { VoiceOutput } from './builder/VoiceOutput';
 import { VoiceConfigPanel } from './builder/VoiceConfigPanel';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
 interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
@@ -92,7 +94,8 @@ interface CheckResult {
 export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
   const t = useTranslations('ide');
   const tc = useTranslations('common');
-  const confirm = useConfirm();
+  const errorMessage = useErrorMessage();
+  const toast = useToast();
   // Builder is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modalityDef = getModality(project.modality);
@@ -139,7 +142,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [datasetsRegistered, setDatasetsRegistered] = useState(0);
   const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
   // When on, a Run is hard-gated on the last check pass — "code must be good
-  // before it runs". When off, failed checks only warn (confirm) before serving.
+  // before it runs". When off, failed checks only warn (a toast) while serving.
   const [gateRunOnChecks, setGateRunOnChecks] = useState(true);
   // Pending Brain-tool artifact reviews. The `generate_prd`/`generate_tasks`
   // tools surface the generated artifact here and await the user's confirm/cancel
@@ -433,10 +436,9 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         log.hint('runBlockedHint');
         return;
       }
-      if (typeof window !== 'undefined' &&
-        !(await confirm({ message: tc('servePreviewAnywayConfirm', { summary }), destructive: false }))) {
-        return;
-      }
+      // Serving a preview of a failing build loses nothing — the run proceeds and
+      // the warning says why it may misbehave (a toast, never a modal).
+      toast.warning(tc('servingPreviewAnyway', { summary }));
     }
     setIsRunning(true);
     // A new run is judged on its own output: clear the previous attempt's failures
@@ -528,7 +530,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, confirm, t, tc, projectIdNum]);
+  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, toast, t, tc, projectIdNum]);
 
   /**
    * Build the project in the WebContainer and capture its `dist/` output for
@@ -955,7 +957,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             await savePrd(liveRef.current.projectIdNum, prd.trim());
             return { saved: true };
           } catch (e) {
-            return { error: e instanceof Error ? e.message : 'Failed to save PRD' };
+            return { error: toolErrorMessage(e, 'Failed to save PRD') };
           }
         }
         // Surface for review; resolve once the user saves or cancels.
@@ -995,7 +997,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             await saveTasks(liveRef.current.projectIdNum, { titles, descriptions });
             return { added: list.length };
           } catch (e) {
-            return { error: e instanceof Error ? e.message : 'Failed to add tasks' };
+            return { error: toolErrorMessage(e, 'Failed to add tasks') };
           }
         }
         // Surface for review; resolve once the user adds or cancels.
@@ -1024,11 +1026,11 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       prdReview.resolve(true);
       setPrdReview(null);
     } catch (e) {
-      setReviewError(faultMessage(e, 'Failed to save PRD'));
+      setReviewError(errorMessage(e));
     } finally {
       setReviewSaving(false);
     }
-  }, [prdReview, projectIdNum]);
+  }, [prdReview, projectIdNum, errorMessage]);
 
   const cancelPrdReview = useCallback(() => {
     if (!prdReview) return;
@@ -1046,11 +1048,11 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       tasksReview.resolve(true);
       setTasksReview(null);
     } catch (e) {
-      setReviewError(faultMessage(e, 'Failed to add tasks'));
+      setReviewError(errorMessage(e));
     } finally {
       setReviewSaving(false);
     }
-  }, [tasksReview, projectIdNum]);
+  }, [tasksReview, projectIdNum, errorMessage]);
 
   const cancelTasksReview = useCallback(() => {
     if (!tasksReview) return;

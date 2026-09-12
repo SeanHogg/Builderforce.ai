@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
@@ -244,7 +245,7 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       body.args ?? {},
       { surface: 'github_actions' },
     );
-    return c.json(result.body as Record<string, unknown>, result.status as 200);
+    return statusResponse(c, result.body as Record<string, unknown>, result.status, { source: 'presentation/routes/githubActionsRoutes.ts', operation: 'containerOp' });
   });
 
   return router;

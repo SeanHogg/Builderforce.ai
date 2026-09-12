@@ -20,6 +20,8 @@
  * is what keeps the claim rules testable without a network.
  */
 
+import { asJsonRecord } from '../shared/json';
+
 const BASE = 'https://purl.imsglobal.org/spec/lti/claim';
 
 export const LTI_CLAIM = {
@@ -140,9 +142,6 @@ export interface LtiLaunchContext {
 const str = (value: unknown, limit = 500): string =>
   typeof value === 'string' ? value.trim().slice(0, limit) : '';
 
-const obj = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 export type LtiClaimResult =
   | { ok: true; context: LtiLaunchContext }
   | { ok: false; error: string };
@@ -176,13 +175,13 @@ export function readLaunchClaims(payload: Readonly<Record<string, unknown>>): Lt
   const rawRoles = Array.isArray(payload[LTI_CLAIM.roles]) ? payload[LTI_CLAIM.roles] as unknown[] : [];
   const roles = rawRoles.map((role) => str(role, 200)).filter(Boolean).slice(0, 30);
 
-  const context = obj(payload[LTI_CLAIM.context]);
-  const resourceLink = obj(payload[LTI_CLAIM.resourceLink]);
-  const ags = obj(payload[LTI_CLAIM.ags]);
-  const nrps = obj(payload[LTI_CLAIM.nrps]);
+  const context = asJsonRecord(payload[LTI_CLAIM.context]);
+  const resourceLink = asJsonRecord(payload[LTI_CLAIM.resourceLink]);
+  const ags = asJsonRecord(payload[LTI_CLAIM.ags]);
+  const nrps = asJsonRecord(payload[LTI_CLAIM.nrps]);
 
   const custom = Object.fromEntries(
-    Object.entries(obj(payload[LTI_CLAIM.custom]))
+    Object.entries(asJsonRecord(payload[LTI_CLAIM.custom]))
       .slice(0, 50)
       .map(([key, value]) => [key.slice(0, 80), str(value, 500)]),
   );
@@ -277,7 +276,7 @@ const flag = (value: unknown): boolean => value === true || value === 'true';
 export function readDeepLinkingSettings(
   payload: Readonly<Record<string, unknown>>,
 ): LtiDeepLinkingSettings | null {
-  const settings = obj(payload[LTI_CLAIM.deepLinkingSettings]);
+  const settings = asJsonRecord(payload[LTI_CLAIM.deepLinkingSettings]);
   const returnUrl = str(settings.deep_link_return_url, 1_000);
   if (!returnUrl) return null;
   return {
@@ -386,7 +385,7 @@ export interface LtiMember {
 export function readMembers(body: Readonly<Record<string, unknown>>): readonly LtiMember[] {
   const members = Array.isArray(body.members) ? body.members : [];
   return members.slice(0, 2_000).flatMap((raw): LtiMember[] => {
-    const member = obj(raw);
+    const member = asJsonRecord(raw);
     const userId = str(member.user_id, 200);
     if (!userId) return [];
     const roles = (Array.isArray(member.roles) ? member.roles as unknown[] : [])

@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { tasksApi } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { ModalOverlay } from '@/components/ui/ModalOverlay';
 export interface DeleteProjectDialogProps {
   /** The project to delete; null keeps the dialog closed. */
@@ -34,6 +34,7 @@ type TaskDisposition = 'move' | 'delete';
  * place.
  */
 export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProjectDialogProps) {
+  const errorMessage = useErrorMessage();
   const [openTaskIds, setOpenTaskIds] = useState<number[]>([]);
   const [archivedCount, setArchivedCount] = useState(0);
   const [destinations, setDestinations] = useState<Project[]>([]);
@@ -69,7 +70,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
         setDisposition(others.length === 0 ? 'delete' : 'move');
         setMoveTargetId(others[0] ? String(others[0].id) : '');
       } catch (e) {
-        if (!cancelled) setError(faultMessage(e, 'Failed to load tasks'));
+        if (!cancelled) setError(errorMessage(e));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -77,7 +78,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
     return () => {
       cancelled = true;
     };
-  }, [project]);
+  }, [project, errorMessage]);
 
   if (!project) return null;
 
@@ -99,7 +100,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
       }
       onConfirm(project);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to move tasks'));
+      setError(errorMessage(e));
       setBusy(false);
     }
   };

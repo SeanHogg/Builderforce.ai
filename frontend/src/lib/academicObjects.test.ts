@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ACADEMIC_OBJECT_KINDS, CREATION_OBJECT_KINDS, isAcademicObjectKind } from '@builderforce/creation-canvas-contract';
 import { ACADEMIC_LABELS, ACADEMIC_NAMESPACE, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from './academicObjects';
 import {
-  allSpecObjectSpecs, isSpecObjectKind, makeSpecDeriveBoard, specFieldGuidance, specFieldValue,
+  allSpecObjectSpecs, isSpecObjectKind, makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specValueInEnglish,
   specMutableFields, specObjectNamespace, specObjectSpec, specReadableFields, specSetGuidance,
 } from './specObjects';
 import {
@@ -298,7 +298,10 @@ describe('cross-object derivations', () => {
 
   it('reports lateness against the deadline on the assignment, and nothing when on time', () => {
     const on = board(ASSIGNMENT);
-    expect(String(value('submission', 'lateBy', submission('s2', { submittedAt: '2026-03-03T23:59:00Z' }), on))).toContain('2d late');
+    // Lateness is WORDS, so the derivation returns a verdict descriptor; the model reads it
+    // formatted in English.
+    expect(specValueInEnglish(value('submission', 'lateBy', submission('s2', { submittedAt: '2026-03-03T23:59:00Z' }), on), 'creationCanvas.academic'))
+      .toContain('2d late');
     expect(value('submission', 'lateBy', submission('s1', { submittedAt: '2026-02-28T10:00:00Z' }), on)).toBeUndefined();
     // No assignment on the board is not "on time" — it is unknowable, and saying nothing
     // is the only honest answer.

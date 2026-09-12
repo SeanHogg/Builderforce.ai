@@ -6,14 +6,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { growthApi, type Audience } from '@/lib/growthApi';
 import { button, input, listItem, listReset, muted, spread, Row } from './growthStyles';
-import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 export function AudiencesSection() {
   const t = useTranslations('growth');
   const [audiences, setAudiences] = useState<Audience[]>([]);
   const [audienceName, setAudienceName] = useState('');
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const task = usePanelTask();
+  const { run: taskRun } = task;
 
   const reload = useCallback(async () => {
     const { audiences: a } = await growthApi.listAudiences();
@@ -22,25 +21,16 @@ export function AudiencesSection() {
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const run = useCallback(async (op: () => Promise<unknown>, successMessage: string) => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      await op();
-      setNotice(successMessage);
-      await reload();
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    } finally {
-      setBusy(false);
-    }
-  }, [reload, t]);
+  // The reload is part of the action, so the notice lands only once the list shows it.
+  const run = useCallback((op: () => Promise<unknown>, success: string) => taskRun(async () => {
+    await op();
+    await reload();
+  }, { success, failure: t('genericError') }), [taskRun, reload, t]);
 
   return (
     <section>
-      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{notice}</p>}
-      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{error}</p>}
+      {task.notice && <p role="status" style={{ ...muted, color: 'var(--success-text)' }}>{task.notice}</p>}
+      {task.error && <p role="alert" style={{ ...muted, color: 'var(--danger-text)' }}>{task.error}</p>}
       {audiences.length === 0 ? (
         <p style={{ ...muted, marginTop: 10 }}>{t('audiences.empty')}</p>
       ) : (
@@ -54,10 +44,10 @@ export function AudiencesSection() {
         </ul>
       )}
       <Row>
-        <input style={input} value={audienceName} disabled={busy}
+        <input style={input} value={audienceName} disabled={task.busy}
           onChange={(e) => setAudienceName(e.target.value)}
           placeholder={t('audiences.namePlaceholder')} aria-label={t('audiences.nameLabel')} />
-        <button type="button" style={button} disabled={busy || !audienceName.trim()}
+        <button type="button" style={button} disabled={task.busy || !audienceName.trim()}
           onClick={() => run(
             () => growthApi.createAudience({ name: audienceName }).then(() => setAudienceName('')),
             t('audiences.created'),

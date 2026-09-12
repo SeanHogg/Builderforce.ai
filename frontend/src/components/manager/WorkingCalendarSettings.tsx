@@ -7,6 +7,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { pmoApi, type Holiday, type WorkingCalendarSettings as Settings } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * The workspace's WORKING CALENDAR — which weekdays this workspace works, and the
  * days nobody does.
@@ -31,39 +32,31 @@ export function WorkingCalendarSettings() {
   const confirm = useConfirm();
 
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const task = usePanelTask();
+  // Stable callbacks — `load` keys the mount effect, so it must not depend on `task`.
+  const { fail, clear } = task;
   const [newHoliday, setNewHoliday] = useState<Holiday>({ date: '', name: '' });
 
   const load = useCallback(async () => {
-    setError(null);
+    clear();
     try {
       setSettings(await pmoApi.workingCalendar());
     } catch (e) {
-      setError(faultMessage(e));
+      const message = faultMessage(e);
+      if (message) fail(message);
     }
-  }, []);
+  }, [clear, fail]);
 
   useEffect(() => { void load(); }, [load]);
 
   const persist = async (next: Settings) => {
-    setBusy(true);
-    setError(null);
-    setSaved(false);
-    try {
-      const written = await pmoApi.saveWorkingCalendar({
-        workingWeekdays: next.workingWeekdays,
-        holidays: next.holidays,
-        timezone: next.timezone,
-      });
-      setSettings(written);
-      setSaved(true);
-    } catch (e) {
-      setError(faultMessage(e));
-    } finally {
-      setBusy(false);
-    }
+    const written = await task.run(() => pmoApi.saveWorkingCalendar({
+      workingWeekdays: next.workingWeekdays,
+      holidays: next.holidays,
+      timezone: next.timezone,
+    }), { success: t('saved') });
+    if (written === undefined) return;
+    setSettings(written);
   };
 
   const toggleWeekday = async (day: number) => {
@@ -75,7 +68,7 @@ export function WorkingCalendarSettings() {
     // An empty working week is not a calendar — every plan would have nowhere to
     // land — and the server would reject it back to the default anyway. Refuse it
     // here so the user sees WHY rather than watching their change silently revert.
-    if (next.length === 0) { setError(t('errorEmptyWeek')); return; }
+    if (next.length === 0) { task.fail(t('errorEmptyWeek')); return; }
     await persist({ ...settings, workingWeekdays: next });
   };
 
@@ -94,8 +87,8 @@ export function WorkingCalendarSettings() {
     await persist({ ...settings, holidays: settings.holidays.filter((h) => h.date !== date) });
   };
 
-  if (error && !settings) {
-    return <div role="alert" style={{ ...panelStyle, ...toneDanger }}>{error}</div>;
+  if (task.error && !settings) {
+    return <div role="alert" style={{ ...panelStyle, ...toneDanger }}>{task.error}</div>;
   }
   if (!settings) return <div style={panelStyle}><span style={mutedStyle}>{t('loading')}</span></div>;
 
@@ -110,11 +103,11 @@ export function WorkingCalendarSettings() {
       </div>
       <p style={{ ...mutedStyle, marginTop: 6, marginBottom: 14, lineHeight: 1.5 }}>{t('caption')}</p>
 
-      {error && <div role="alert" style={{ ...noticeStyle, ...toneDanger }}>{error}</div>}
-      {saved && <div role="status" style={{ ...noticeStyle, ...toneSuccess }}>{t('saved')}</div>}
+      {task.error && <div role="alert" style={{ ...noticeStyle, ...toneDanger }}>{task.error}</div>}
+      {task.notice && <div role="status" style={{ ...noticeStyle, ...toneSuccess }}>{task.notice}</div>}
 
       <RoleGate capability="manager.manage" variant="block">
-        <fieldset style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }} disabled={busy}>
+        <fieldset style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }} disabled={task.busy}>
           <legend style={labelStyle}>{t('workingWeek')}</legend>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
             {WEEKDAY_NUMBERS.map((day) => {
@@ -125,13 +118,13 @@ export function WorkingCalendarSettings() {
                   type="button"
                   aria-pressed={on}
                   onClick={() => void toggleWeekday(day)}
-                  disabled={busy}
+                  disabled={task.busy}
                   style={{
                     padding: '6px 12px',
                     borderRadius: 'var(--radius-md)',
                     fontSize: 'var(--font-size-small)',
                     fontWeight: 600,
-                    cursor: busy ? 'default' : 'pointer',
+                    cursor: task.busy ? 'default' : 'pointer',
                     border: `1px solid ${on ? 'var(--accent)' : 'var(--border-subtle)'}`,
                     background: on ? 'var(--accent)' : 'transparent',
                     color: on ? 'var(--text-on-accent)' : 'var(--text-secondary)',
@@ -163,7 +156,7 @@ export function WorkingCalendarSettings() {
                 <button
                   type="button"
                   onClick={() => void removeHoliday(h.date)}
-                  disabled={busy}
+                  disabled={task.busy}
                   style={{ ...ghostBtnStyle, marginLeft: 'auto', color: 'var(--error-text)' }}
                 >
                   {t('remove')}
@@ -191,7 +184,7 @@ export function WorkingCalendarSettings() {
             <button
               type="button"
               onClick={() => void addHoliday()}
-              disabled={busy || !newHoliday.date}
+              disabled={task.busy || !newHoliday.date}
               style={{ ...ghostBtnStyle, opacity: newHoliday.date ? 1 : 0.55 }}
             >
               <Icon source="＋" size="1em" /> {t('addHoliday')}

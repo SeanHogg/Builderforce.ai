@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { usePanelTask } from '@/hooks/usePanelTask';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { taxApi, type TaxProfile, type TaxProfileOptions } from '@/lib/taxApi';
@@ -72,9 +73,7 @@ export function TaxProfileForm() {
   const [profile, setProfile] = useState<TaxProfile | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
+  const { busy, error, notice, run, fail } = usePanelTask();
 
   const load = useCallback(async () => {
     try {
@@ -83,11 +82,11 @@ export function TaxProfileForm() {
       setProfile(p);
       setDraft(draftFrom(p));
     } catch (cause) {
-      setError(faultText(cause, t('loadFailed')));
+      fail(faultText(cause, t('loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, fail]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -96,9 +95,7 @@ export function TaxProfileForm() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setBusy(true); setError(''); setSaved(false);
-    try {
-      const next = await taxApi.saveProfile({
+    const next = await run(() => taxApi.saveProfile({
         entityType: draft.entityType || undefined,
         legalName: draft.legalName || undefined,
         businessName: draft.businessName || undefined,
@@ -113,15 +110,10 @@ export function TaxProfileForm() {
         // Omit entirely when blank, so a re-save without retyping the id leaves
         // the sealed value untouched rather than clearing it.
         taxId: draft.taxId || undefined,
-      });
-      setProfile(next);
-      setDraft(draftFrom(next));
-      setSaved(true);
-    } catch (cause) {
-      setError(faultText(cause, t('saveFailed')));
-    } finally {
-      setBusy(false);
-    }
+      }), { success: t('saved'), failure: t('saveFailed') });
+    if (!next) return;
+    setProfile(next);
+    setDraft(draftFrom(next));
   };
 
   if (loading) return <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('loading')}</p>;
@@ -130,7 +122,7 @@ export function TaxProfileForm() {
   return (
     <form onSubmit={(event) => void submit(event)} style={{ display: 'grid', gap: 14 }}>
       {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', margin: 0 }}>{error}</p>}
-      {saved && !error && <p role="status" style={{ color: 'var(--success)', fontSize: 'var(--font-size-small)', margin: 0 }}>{t('saved')}</p>}
+      {notice && <p role="status" style={{ color: 'var(--success)', fontSize: 'var(--font-size-small)', margin: 0 }}>{notice}</p>}
 
       {profile.hasTaxId && (
         <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', margin: 0 }}>

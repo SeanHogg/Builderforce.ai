@@ -14,6 +14,15 @@
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import type { McpExtension } from '@/lib/mcpExtensionsApi';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+
+/** What the card reports on sight, derived from `enabled` + whether an OAuth grant is held. */
+type McpServerStatus = 'disabled' | 'ready' | 'needsConsent';
+const STATUS_TONE: StatusToneMap<McpServerStatus> = {
+  disabled: 'neutral',
+  ready: 'success',
+  needsConsent: 'warning',
+};
 
 const card: React.CSSProperties = {
   border: '1px solid var(--border-subtle)',
@@ -53,16 +62,7 @@ export function McpServerCard(props: McpServerCardProps) {
   const t = useTranslations('mcpServers');
   const { server, busy } = props;
   const connected = server.authKind !== 'oauth' || server.oauthConnectedAt != null;
-  const statusColor = !server.enabled
-    ? 'var(--text-muted)'
-    : connected
-      ? 'var(--success)'
-      : 'var(--warning)';
-  const statusLabel = !server.enabled
-    ? t('status.disabled')
-    : connected
-      ? t('status.ready')
-      : t('status.needsConsent');
+  const status: McpServerStatus = !server.enabled ? 'disabled' : connected ? 'ready' : 'needsConsent';
   const toolsLabel = server.allowedTools === null
     ? t('tools.all')
     : server.allowedTools.length === 0
@@ -74,7 +74,7 @@ export function McpServerCard(props: McpServerCardProps) {
       <div style={{ minWidth: 0, flex: '1 1 220px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <strong style={{ color: 'var(--text-primary)', wordBreak: 'break-word' }}>{server.name}</strong>
-          <span style={{ color: statusColor, fontSize: 'var(--font-size-eyebrow)', fontWeight: 650 }}>● {statusLabel}</span>
+          <span style={{ color: statusColor(STATUS_TONE, status), fontSize: 'var(--font-size-eyebrow)', fontWeight: 650 }}>● {t(`status.${status}`)}</span>
         </div>
         <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', margin: '6px 0 0', wordBreak: 'break-all' }}>{server.serverUrl}</p>
         <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-eyebrow)', margin: '6px 0 0' }}>

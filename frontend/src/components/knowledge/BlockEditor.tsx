@@ -182,7 +182,9 @@ function MediaBlockCard({
     >
       {block.type === 'image' && url ? (
         // eslint-disable-next-line @next/next/no-img-element -- an uploaded asset, not a Next-optimizable local one
-        <img src={url} alt={block.attrs.label ?? ''} style={{ maxHeight: 160, maxWidth: 260, borderRadius: 'var(--radius-sm)', objectFit: 'contain' }} />
+        // An upload's size is unknown until it loads, so it gets the block's own fixed box
+        // (the old max bounds) and `contain` letterboxes it — no reflow when it arrives.
+        <img src={url} alt={block.attrs.label ?? ''} width={260} height={160} style={{ maxWidth: '100%', borderRadius: 'var(--radius-sm)', objectFit: 'contain' }} />
       ) : block.type === 'video' && url ? (
         <video src={url} controls style={{ maxHeight: 200, maxWidth: 320, borderRadius: 'var(--radius-sm)' }} />
       ) : (

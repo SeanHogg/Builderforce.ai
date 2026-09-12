@@ -23,6 +23,7 @@ import { useCart } from '@/lib/CartContext';
 import { calculateSubscriptionLine } from '@/lib/subscriptionCart';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { Icon } from '@/components/ui/Icon';
 // The subscription shape and its two calls live in `lib/billingApi` — `/billing`
 // reads exactly the same three things, and a second copy of the fetch here is
 // what dropped the emulation and locale headers on this page.
@@ -34,10 +35,6 @@ function PlanBadge({ plan }: { plan: Plan }) {
   const labels: Record<Plan, string> = { free: t('free'), pro: t('pro'), teams: t('teams') };
   return <span className={styles.planBadge} data-plan={plan}>{labels[plan]}</span>;
 }
-
-function CheckIcon({ checked }: { checked: boolean }) {
-  return <span className={checked ? styles.check : styles.dash}>{checked ? '✓' : '—'}</span>;
-};
 
 /**
  * Per-plan call-to-action: "Current plan" when active, an upgrade button for a
@@ -86,6 +83,7 @@ export default function PricingPageClient() {
   const locale = useLocale();
   const tierT = useTranslations('planBadge.tier');
   const navT = useTranslations('nav');
+  const tc = useTranslations('common');
   const confirm = useConfirm();
   const { tenant } = useAuth();
   const { items, addItem, removeItem, hasItem, openCart } = useCart();
@@ -201,7 +199,9 @@ export default function PricingPageClient() {
 
   const handleDowngrade = async () => {
     if (!tenantId || downgrading) return;
-    if (!(await confirm({ message: t('downgradeConfirm'), destructive: false }))) return;
+    // Removes the plan's features at period end — a real loss of access, so it is
+    // a destructive approval (the modal's only job), labelled with the action.
+    if (!(await confirm({ message: t('downgradeConfirm'), confirmLabel: t('downgradeToFree') }))) return;
     setDowngrading(true);
     try {
       await billingApi.downgradeToFree(tenantId);
@@ -453,9 +453,16 @@ export default function PricingPageClient() {
                     return (
                     <tr key={label}>
                       <td>{label}</td>
-                      <td><CheckIcon checked={planById('free')?.features.includes(label) === true} /></td>
-                      <td><CheckIcon checked={planById('pro')?.features.includes(label) === true} /></td>
-                      <td><CheckIcon checked={planById('teams')?.features.includes(label) === true} /></td>
+                      {(['free', 'pro', 'teams'] as const).map((plan) => {
+                        const included = planById(plan)?.features.includes(label) === true;
+                        // The glyph is decorative; the cell keeps the yes/no a screen
+                        // reader heard back when it was a text ✓ / —.
+                        return (
+                          <td key={plan}>
+                            <Icon name={included ? 'check' : 'minus'} size={16} className={included ? styles.check : styles.dash} role="img" aria-hidden={false} aria-label={included ? tc('yes') : tc('no')} />
+                          </td>
+                        );
+                      })}
                     </tr>
                   );})}
                 </tbody>

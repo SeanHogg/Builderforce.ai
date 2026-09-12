@@ -1727,7 +1727,6 @@
     "deleteCloudAgentConfirm": "删除智能体“{name}”？其各自的技能和人设将被清除。",
     "deleteSkillConfirm": "删除此技能？",
     "deleteNamedConfirm": "删除“{name}”？",
-    "servePreviewAnywayConfirm": "最近的检查失败（{summary}）。仍要提供预览吗？",
     "language": "语言",
     "typeTask": "任务",
     "typeEpic": "史诗",
@@ -1805,7 +1804,13 @@
     "no": "否",
     "copyLink": "复制链接",
     "copyFallback": "剪贴板不可用，请手动复制此链接。",
-    "unavailable": "不可用"
+    "unavailable": "不可用",
+    "actionFailed": "操作未成功，请重试。",
+    "inlineConfirm": {
+      "confirm": "确认",
+      "armed": "再次按下以确认，或按 Esc 取消。"
+    },
+    "servingPreviewAnyway": "上次检查失败（{summary}）——仍在提供预览。"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -2184,7 +2189,6 @@
       "unsubscribedTitle": "您已退订",
       "unsubscribedBody": "您当前不会收到任何可选邮件。账户与安全相关的通知仍会发送。",
       "resubscribeCta": "重新订阅",
-      "resubscribeTitle": "重新订阅可选邮件",
       "resubscribeConfirm": "您将根据已开启的类别重新开始接收可选邮件。是否继续？"
     },
     "spendLimits": "支出限额",
@@ -13680,9 +13684,7 @@
       "allTables": "所有表",
       "maintenanceCleanup": "运行保留期清理",
       "maintenanceVacuum": "在 {target} 中清理 {table}",
-      "confirmTitle": "运行维护？",
-      "confirmMaintenance": "确认：{label}？这是一项受审计的维护操作。",
-      "confirmRun": "运行"
+      "confirmMaintenance": "确认：{label}？这是一项受审计的维护操作。"
     }
   },
   "providerKeys": {
@@ -15102,7 +15104,21 @@
     "revertConfirmMessage": "这将关闭运行 #{id} 创建的拉取请求，并删除它写入的分支。此操作无法撤销。如果拉取请求已合并，或分支被其他人改动过，操作将被拒绝。",
     "revertConfirmAction": "回滚运行",
     "revertDone": "已回滚 — 已删除分支 {branch}（{commits} 个提交）。",
-    "failedToRevert": "回滚此次运行失败"
+    "failedToRevert": "回滚此次运行失败",
+    "title": "智能体执行总开关",
+    "disabledBody": "租户智能体执行已被阻止。VS Code 和 Brain 聊天、Canvas/Create 以及页面 MCP 工具仍可使用。",
+    "enabledBody": "工作区紧急覆盖。禁用后将停止租户智能体，并阻止手动、定时、集成和自主的平台运行；交互式 VS Code 和 Brain 工作仍可使用。",
+    "confirmTitle": "禁用所有智能体执行？",
+    "confirmBody": "这将立即取消排队中、运行中或已暂停的租户智能体，并阻止手动、定时和自主的平台运行，直到经理重新启用执行。VS Code 和 Brain 聊天、Canvas/Create 以及页面 MCP 工具仍可使用。",
+    "disableAll": "禁用并停止所有智能体",
+    "enable": "启用智能体执行",
+    "updating": "正在更新…",
+    "statusLoading": "状态：加载中…",
+    "statusEnabled": "状态：执行已启用",
+    "statusDisabled": "状态：执行已禁用",
+    "stoppedAll": "执行已禁用。已停止 {count, plural, other {# 个活动运行}}。",
+    "stoppedSome": "执行已禁用。已停止 {cancelled, plural, other {# 个运行}}；{failed} 个无法取消。",
+    "enabledNotice": "智能体执行已启用。"
   },
   "aiTraining": {
     "adapterName": "{model} 适配器",
@@ -16499,7 +16515,6 @@
     "replaceCard": "更换银行卡",
     "retryCard": "重试",
     "cardWorking": "处理中…",
-    "replaceCardTitle": "要更换银行卡吗？",
     "replaceCardWarning": "在新卡通过验证之前，您当前的银行卡将继续有效，因此高级模型不会中断。新卡确认后，旧卡将被自动移除。",
     "retryCardMessage": "我们将启动新的 0 美元验证，不会向您的卡扣款。",
     "replaceCardConfirm": "继续",
@@ -17814,7 +17829,6 @@
       "forgetTitle": "忘记该事实？",
       "forgetConfirm": "智能体将不再回忆「{key}」。如果存在同名的更大范围版本，该版本将重新可见。",
       "purge": "清理已失效",
-      "purgeTitle": "清理已失效的事实？",
       "purgeConfirm": "删除已过期的事实。它们失效时智能体就已停止回忆，因此对运行没有任何影响。",
       "statTotal": "范围内事实",
       "statTotalHint": "此处运行的智能体可回忆的内容。",
@@ -19063,7 +19077,15 @@
         "noSuppressionCheck": "尚未核对屏蔽名单",
         "emptyAfterSuppression": "剔除屏蔽名单后已无收件人",
         "forbiddenClaim": "文案中含有品牌禁止的说法"
-      }
+      },
+      "inboxFilterAll": "所有近期邮件",
+      "inboxFilterUnread": "未读",
+      "inboxFilterFrom": "来自 {value}",
+      "inboxFilterSubject": "主题“{value}”",
+      "inboxFilterMatching": "匹配“{value}”",
+      "inboxFilterAttachments": "带附件",
+      "inboxFilterSince": "{date} 起",
+      "inboxFilterBefore": "{date} 之前"
     },
     "editor": {
       "toolbar": "格式",
@@ -20725,7 +20747,11 @@
       "campaignScheduled": "已为 {count} 个账号排期。",
       "campaignUpdateFailed": "无法更新该活动。",
       "boardMedia": "从本画布附加",
-      "boardMediaHelp": "所选图片和视频会自动发布到公开链接 — Instagram 和 TikTok 需要通过它来获取媒体。"
+      "boardMediaHelp": "所选图片和视频会自动发布到公开链接 — Instagram 和 TikTok 需要通过它来获取媒体。",
+      "mediaTabOnly": "该文件仅保存在此浏览器标签页中。请重新生成或重新上传，使其拥有持久的来源。",
+      "mediaNotPublic": "社交平台会自行抓取媒体，因此需要公开的 https 链接——此链接既不是 https，也不是内嵌媒体。",
+      "mediaUploadFailed": "无法将该文件发布到公开链接。",
+      "mediaUploadFailedReason": "无法将该文件发布到公开链接：{reason}"
     },
     "noticeGuestLimitRoom": "此共享会话今天的 {limit} 条免费消息已用完。免费注册即可继续——您的画布会一并保留。",
     "founder": {
@@ -21082,6 +21108,61 @@
         "expires": "到期",
         "views": "查看次数",
         "lastViewedAt": "最近查看"
+      },
+      "verdict": {
+        "boardRef": {
+          "notFound": "尚无与“{ref}”匹配的 `{kind}`——请创建一个以建立关联。"
+        },
+        "counterparty": {
+          "linkedOwned": "已关联到 `account`“{title}”（{relationship}），负责人：{owner}。",
+          "linked": "已关联到 `account`“{title}”（{relationship}）。"
+        },
+        "fallback": {
+          "thisContract": "此合同",
+          "untitledDocument": "一份未命名的单据",
+          "unnamedObligation": "一项未命名的义务"
+        },
+        "obligation": {
+          "noRef": "依据合同“{contract}”开具，但没有 `obligationRef` 说明它履行的是哪一项义务。请将其设为以下之一：{available}。",
+          "noReferences": "依据合同“{contract}”开具，但该合同的义务均未填写 `reference`——因此这张{host, select, bill {账单} other {发票}}上的任何内容都无法与约定进行核对。请先在合同上为每项义务填写 `reference`。",
+          "unknownRef": "合同“{contract}”中没有 `reference` 为“{ref}”的义务——这是一笔没有对应义务的费用。要么合同的义务已经过时，要么这张{host, select, bill {账单} other {发票}}本不应开具。",
+          "axis": {
+            "amount": "金额",
+            "date": "日期",
+            "cadence": "周期"
+          },
+          "problem": {
+            "amount": "金额为 {actual, number}，而义务约定为 {agreed, number}",
+            "date": "到期日比义务约定的 {due} {direction, select, after {晚} other {早}} {days, plural, other {# 天}}",
+            "cadence": "重复周期为 {actual}，而义务约定为 {agreed}"
+          },
+          "mismatch": "指向合同“{contract}”上的义务“{obligation}”，但{problems}。请在{host, select, bill {批准或支付} other {开具}}之前对照协议核实。",
+          "discharged": "履行合同“{contract}”上的义务“{obligation}”——{checked}与约定一致。",
+          "linkedOnly": "指向合同“{contract}”上的义务“{obligation}”。双方都没有填写可比较的内容，因此这只是一个关联，还不是核对。"
+        },
+        "evidence": {
+          "bound": "已绑定到实时分流“{key}”——下方的每一次曝光和转化都由平台统计，而非手工录入。",
+          "authored": "手工录入。这些数字并非由任何机制产生：它们是直接输入到卡片上的。在把结果当作测量结果引用之前，请将此实验绑定到一个 `ab_tests` 键。"
+        },
+        "significance": {
+          "nothingYet": "目前还没有任何结果具有统计显著性。",
+          "real": "{variant} 相比对照组{direction, select, up {上升} other {下降}} {points, number} 个百分点（p={p}），区间为 {low, number} 至 {high, number} 个百分点。",
+          "noise": "{variant} 与对照组的差异在噪声范围内（p={p}）；样本量太小，无法下结论。"
+        },
+        "ownership": {
+          "balanced": "持有人和未分配期权池合计占完全稀释总数的 {accounted}%。",
+          "unbalanced": "持有人和未分配期权池合计仅占完全稀释总数的 {accounted}%——账簿与授权数量不一致，这是需要调查的真实情况，而不是舍入误差。",
+          "percentSkew": "包含未分配期权池在内，百分比列合计为 {total, number}%，而不是 100——各百分比不平衡。",
+          "convertibles": "尚有 {count, plural, other {# 份可转换工具}}未转换——在融资轮将其转换之前，它们不计入这些百分比。"
+        },
+        "coverage": {
+          "noIdentity": "此合同既没有 `reference` 也没有标题，因此任何发票或账单都无法指向它。请先为它设置 `reference`，再依据它开具任何单据。",
+          "billable": "{total, plural, other {# 项}}可计费义务中，有 {covered} 项已开具单据。",
+          "noneBillable": "这里没有任何义务属于应收或应付，因此此合同不应产生任何发票或账单。",
+          "open": "尚未开具单据：{names}。",
+          "orphans": "{count, plural, other {# 份单据}}指向此合同，但与其中任何义务都不匹配——{names}。",
+          "unreferenced": "{count, plural, other {# 项义务}}没有 `reference`，因此永远无法证明它们已被履行。"
+        }
       }
     },
     "datasetImportedWithPii": "已导入 {name}——{rows} 行、{columns} 列。其中 {pii} 列包含个人数据并已脱敏显示。",
@@ -21658,7 +21739,13 @@
       "freshMinutes": "{count} 分钟前",
       "freshHours": "{count} 小时前",
       "freshDays": "{count} 天前",
-      "barValue": "{value}（{percent}%）"
+      "barValue": "{value}（{percent}%）",
+      "verdict": {
+        "lateBy": {
+          "hours": "迟交 {hours} 小时",
+          "days": "迟交 {days} 天"
+        }
+      }
     },
     "hiring": {
       "empty": "此{label}尚未填写任何内容。",
@@ -21913,6 +22000,12 @@
         "manuscript": "手稿",
         "draft": "草稿",
         "noSource": "未选择数据源"
+      },
+      "bar": {
+        "replied": "已回复",
+        "completed": "已完成",
+        "stopped": "已停止",
+        "inFlight": "进行中"
       }
     },
     "noticeGateEvaluated": "已根据此画布上的运行与缺陷评估发布门禁——满足 {score}% 的标准。",
@@ -22346,6 +22439,20 @@
         "action": "措施",
         "owner": "负责人",
         "dueAt": "截止"
+      },
+      "verdict": {
+        "validity": {
+          "expired": "已过期 {days, plural, other {# 天}}",
+          "expiresSoon": "{days, plural, other {# 天}}后到期",
+          "valid": "有效 · 剩余 {days, plural, other {# 天}}"
+        },
+        "stock": {
+          "out": "缺货",
+          "belowWithOrder": "即使计入在途订货，仍低于再订货点",
+          "orderNow": "处于或低于再订货点——请立即订货",
+          "coveredByOrder": "在途订货可以覆盖",
+          "inStock": "有货"
+        }
       }
     },
     "legal": {
@@ -22424,6 +22531,17 @@
         "at": "日期",
         "event": "事件",
         "note": "备注"
+      },
+      "verdict": {
+        "assignment": {
+          "none": "未转让。未记录任何转让人，因此按此记录，该权利仍归其创作者所有。这是尽职调查中的发现，而不是缺失的字段——请记录转让情况，或明确说明不存在转让。",
+          "dated": "由 {from} 于 {at} 转让。",
+          "undated": "由 {from} 转让，但未记录签署日期——没有日期的转让，对方可以主张其发生在申请之后。"
+        },
+        "spend": {
+          "over": "迄今支出为预估风险敞口的 {share}%——为此争议花费的已超过其预估价值。这应当是和解的讨论，而不是预算项目。",
+          "under": "迄今支出为预估风险敞口的 {share}%。"
+        }
       }
     },
     "legalUpload": {
@@ -22499,7 +22617,6 @@
       "publishVersion": "发布 v{version}",
       "restage": "重新捕获",
       "working": "处理中…",
-      "revertTitle": "将 v{version} 重新上架？",
       "revertBody": "新买家将收到该版本，而不是 v{version}。已在 v{version} 上的 {holders} 位买家保留他们买到的版本，不会被迁移。",
       "revertConfirm": "重新上架",
       "noticeStaged": "已预演 v{version}。",
@@ -23196,6 +23313,15 @@
         "dueAtISO": "到期",
         "sellerOwner": "我方负责人",
         "buyerOwner": "对方负责人"
+      },
+      "verdict": {
+        "planRisk": {
+          "atRisk": "有风险——{problems}。",
+          "overdue": "{count} 项逾期",
+          "unowned": "{count} 项在买方没有负责人",
+          "onTrack": "进展正常——已完成 {done}/{total} 项，无逾期。"
+        },
+        "openGaps": "{open}（{gaps} 项差距，{unevidenced} 项缺少证据）"
       }
     },
     "exportRestricted": "受限 — 此卡片无法导出",
@@ -23354,6 +23480,15 @@
         "description": "工作内容",
         "minutes": "分钟",
         "billable": "可计费"
+      },
+      "verdict": {
+        "pressure": {
+          "none": "无压力",
+          "comfortable": "宽裕",
+          "planning": "需要规划",
+          "urgent": "紧迫",
+          "critical": "危急"
+        }
       }
     },
     "agentModel": "智能体模型",
@@ -24448,7 +24583,6 @@
     "folderHint": "留空即可将会话移出文件夹。",
     "required": "请选择或输入一个值。",
     "failed": "无法更新会话。",
-    "mergeConfirmTitle": "合并这些会话？",
     "mergeConfirmMessageSaved": "“{source}”中的画布、对话和项目链接将添加到“{target}”。之后源会话将被归档。",
     "mergeConfirmMessageLocal": "“{source}”中的画布和对话将添加到“{target}”。之后源草稿将从此浏览器中移除。",
     "deleteConfirmTitle": "删除会话？",
@@ -24465,7 +24599,6 @@
     "bulkMergeTitle": "合并所选会话",
     "bulkMergeDescription": "其他所选画布上的全部内容都会并入你保留的那一个，内容转移后它们将被归档。",
     "bulkMergeTarget": "要保留的会话",
-    "bulkMergeConfirmTitle": "合并这些会话？",
     "bulkMergeConfirmMessage": "{count} 个会话将并入“{target}”，随后被归档。",
     "bulkDeleteConfirmTitle": "删除这些会话？",
     "bulkDeleteConfirmMessage": "删除 {count} 个会话？在保留期内仍可恢复。",
@@ -28577,5 +28710,186 @@
     "add": "添加",
     "noProject": "无项目",
     "folderProjectLabel": "{name} 的项目"
+  },
+  "humanRequests": {
+    "intro": "你的智能体上报给人工处理的审批、问题和反馈。处理请求后，等待中的智能体即可继续。",
+    "allKinds": "全部类型",
+    "allStatuses": "全部状态",
+    "allAgentHosts": "全部智能体主机",
+    "searchPlaceholder": "搜索操作、描述、回答",
+    "refresh": "刷新",
+    "refreshing": "正在刷新…",
+    "loading": "正在加载请求…",
+    "empty": "未找到请求",
+    "viewTicket": "查看工单",
+    "noActions": "无可用操作",
+    "human": "人工",
+    "kind": {
+      "approval": "审批",
+      "question": "问题",
+      "feedback": "反馈"
+    },
+    "kindPlural": {
+      "approval": "审批",
+      "question": "问题",
+      "feedback": "反馈"
+    },
+    "status": {
+      "pending": "待处理",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "answered": "已回答",
+      "expired": "已过期"
+    },
+    "column": {
+      "kind": "类型",
+      "status": "状态",
+      "action": "操作",
+      "description": "描述",
+      "item": "条目",
+      "agentHost": "智能体主机",
+      "requested": "请求时间",
+      "resolution": "处理结果",
+      "resolve": "处理",
+      "answer": "回答",
+      "requestedBy": "请求人",
+      "expires": "过期时间"
+    }
+  },
+  "stakeholderAlignment": {
+    "title": "干系人对齐",
+    "subtitle": "在交付偏离之前，统一优先级、收集签字确认并暴露冲突。",
+    "approvedCount": "{count} 已批准",
+    "pendingCount": "{count} 待处理",
+    "overdueCount": "{count} 已逾期",
+    "conflictsCount": "{count, plural, other {# 个冲突}}",
+    "mapTitle": "干系人地图",
+    "noStakeholders": "尚未配置干系人。",
+    "roleApprover": "审批人",
+    "roleInformed": "知会",
+    "removeAria": "移除 {name}",
+    "nameAria": "干系人姓名",
+    "namePlaceholder": "姓名",
+    "refAria": "干系人用户标识",
+    "refPlaceholder": "用户 ID",
+    "teamAria": "团队范围",
+    "teamPlaceholder": "团队（可选）",
+    "roleAria": "干系人角色",
+    "roleRequiredApprover": "必需审批人",
+    "add": "添加",
+    "healthTitle": "对齐健康度",
+    "answer": {
+      "yes": "是",
+      "no": "否",
+      "unknown": "未知"
+    },
+    "saveHealth": "保存健康度档案",
+    "question": {
+      "priorities_clear": "优先级清晰且已达成一致",
+      "competing_p0s_reconciled": "相互冲突的 P0 已协调",
+      "approvers_current": "必需审批人信息是最新的",
+      "conflicts_within_sla": "冲突在 48 小时 SLA 内处理",
+      "delivery_reflects_priorities": "交付体现了已商定的优先级"
+    }
+  },
+  "agentHostTabs": {
+    "errorPrefix": "错误：{message}",
+    "back": "← 返回",
+    "projects": {
+      "loading": "正在加载项目…",
+      "heading": "项目（{count}）",
+      "assign": "+ 分配项目",
+      "selectProject": "选择项目…",
+      "assignAction": "分配",
+      "empty": "尚未为此智能体主机分配项目。",
+      "projectFallback": "项目 #{id}",
+      "role": "角色：{role}",
+      "open": "打开",
+      "remove": "移除",
+      "status": "{status, select, active {进行中} completed {已完成} archived {已归档} on_hold {已暂停} other {{status}}}"
+    },
+    "workspace": {
+      "syncedAt": "同步于 {when}",
+      "noFiles": "尚未同步任何文件。",
+      "fileCount": "{count, plural, other {# 个文件}}",
+      "heading": "已同步目录（{count}）",
+      "empty": "尚未同步任何目录。智能体主机注册其工作区时会同步目录。",
+      "lastSynced": "上次同步：{when}",
+      "sync": "⟳ 同步",
+      "status": "{status, select, synced {已同步} pending {待同步} error {出错} other {{status}}}"
+    },
+    "config": {
+      "loading": "正在加载配置…",
+      "title": "运行时配置",
+      "format": "格式化",
+      "reset": "重置",
+      "description": "传递给智能体主机运行时的 JSON 配置。更改将在智能体主机下次连接时生效。",
+      "invalidJson": "JSON 无效——请修正后再保存。",
+      "saved": "已于 {time} 保存",
+      "save": "保存配置"
+    },
+    "sessions": {
+      "loading": "正在加载会话…",
+      "messageCount": "{count, plural, other {# 条消息}}",
+      "handoff": "移交 →",
+      "handoffTitle": "移交给另一个智能体主机",
+      "handoffBody": "将此会话的上下文发送给另一个智能体主机，以便其继续对话。将包含最近 20 条消息。",
+      "selectTarget": "选择目标智能体主机…",
+      "notePlaceholder": "移交备注（可选）",
+      "handoffSuccess": "会话已移交。",
+      "handingOff": "正在移交…",
+      "handOff": "移交",
+      "loadingMessages": "正在加载消息…",
+      "noMessages": "未找到消息。",
+      "heading": "聊天会话（{count}）",
+      "empty": "暂无会话。智能体主机开始对话时会创建会话。",
+      "active": "（进行中）",
+      "msgCount": "{count, plural, other {# 条}}",
+      "role": "{role, select, user {用户} assistant {智能体} system {系统} tool {工具} other {{role}}}"
+    }
+  },
+  "repoSync": {
+    "title": "仓库同步",
+    "linkedTo": "已关联 <strong>{repo}</strong>",
+    "lastSynced": " · 上次同步 <code>{ref}</code>",
+    "notImported": " · 尚未导入",
+    "import": "从仓库导入",
+    "importing": "正在导入…",
+    "commit": "提交并创建 PR",
+    "committing": "正在提交…",
+    "noRepo": "尚未关联仓库——你的文件保存在 Canvas Builder 工作区中。创建一个全新仓库即可上线，或在下方连接现有仓库。",
+    "createRepo": "+ 创建仓库",
+    "repoNamePlaceholder": "仓库名称",
+    "selectCredential": "选择 GitHub 凭据…",
+    "noCredential": "未找到 GitHub 凭据。请先在“集成”中添加。",
+    "private": "私有仓库",
+    "createAndPush": "创建并推送",
+    "creating": "正在创建…",
+    "imported": "已从 {ref} 导入 {count, plural, other {# 个文件}}。",
+    "pushedPr": "已推送 {count, plural, other {# 个文件}}——已创建 PR #{pr}。",
+    "committed": "已向 {branch} 提交 {count, plural, other {# 个文件}}。",
+    "created": "已创建 {repo} 并推送 {count, plural, other {# 个文件}}。"
+  },
+  "soc2Tracker": {
+    "title": "SOC 2 控制项追踪",
+    "loading": "正在加载 SOC 2 控制项…",
+    "emptyBody": "暂无控制项。导入 SOC 2 通用准则（CC1–CC9）基线，开始追踪就绪度。",
+    "seed": "导入 SOC 2 基线",
+    "seeding": "正在导入…",
+    "loadFailed": "无法加载 SOC 2 控制项。",
+    "seedFailed": "导入失败（需要经理角色）。",
+    "updateFailed": "更新失败。",
+    "readiness": "就绪度 <strong>{pct}%</strong>（范围内 {ready}/{inScope}）",
+    "categoryReady": "· 已就绪 {pct}%",
+    "status": {
+      "not_started": "未开始",
+      "in_progress": "进行中",
+      "ready": "已就绪",
+      "out_of_scope": "不在范围内"
+    }
+  },
+  "workflowDag": {
+    "empty": "此工作流中还没有任务。",
+    "defaultRole": "智能体"
   }
 }

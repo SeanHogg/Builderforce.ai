@@ -8,12 +8,13 @@
  * than on a `readOnly` flag the caller would have to keep true.
  */
 import type { ProfessionalReference, ReferenceStatus } from '@/lib/referencesApi';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 
-const STATUS_COLOR: Record<ReferenceStatus, string> = {
-  draft: 'var(--text-muted)',
-  requested: 'var(--warning)',
-  confirmed: 'var(--success)',
-  declined: 'var(--error)',
+const STATUS_TONE: StatusToneMap<ReferenceStatus> = {
+  draft: 'neutral',
+  requested: 'warning',
+  confirmed: 'success',
+  declined: 'danger',
 };
 
 export interface ReferenceCardProps {
@@ -45,8 +46,8 @@ export function ReferenceCard({ reference, statusLabel, canSpeakToLabel, actions
         </div>
         <span style={{
           fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: '0.06em',
-          textTransform: 'uppercase', color: STATUS_COLOR[reference.status],
-          border: `1px solid ${STATUS_COLOR[reference.status]}`,
+          textTransform: 'uppercase', borderWidth: 1, borderStyle: 'solid',
+          ...statusPillStyle(STATUS_TONE, reference.status),
           borderRadius: 'var(--radius-sm)', padding: '1px 7px', whiteSpace: 'nowrap',
         }}>
           {statusLabel}

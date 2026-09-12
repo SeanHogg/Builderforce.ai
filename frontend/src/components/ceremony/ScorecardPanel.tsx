@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { membersApi, type MemberScorecard, type MemberProfile } from '@/lib/builderforceApi';
 import { formatHours } from '@/lib/duration';
 import type { CeremonyMember } from './types';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /** One labelled stat tile; renders "No data yet" when the value is null. */
 function Tile({ label, value, hint }: { label: string; value: string | number | null; hint?: string }) {
   const empty = value == null || value === '';
@@ -25,6 +25,7 @@ function Tile({ label, value, hint }: { label: string; value: string | number | 
  * stats are human-only; agents show "No data yet" for those.
  */
 export function ScorecardPanel({ member }: { member: CeremonyMember }) {
+  const errorMessage = useErrorMessage();
   const [card, setCard] = useState<MemberScorecard | null>(null);
   const [profile, setProfile] = useState<MemberProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,10 +44,10 @@ export function ScorecardPanel({ member }: { member: CeremonyMember }) {
         setCard(metrics.find((m) => m.memberKind === member.kind && m.memberRef === member.ref) ?? null);
         setProfile(profiles.find((p) => p.memberKind === member.kind && p.memberRef === member.ref) ?? null);
       })
-      .catch((e) => { if (live) setError(faultMessage(e, 'Failed to load')); })
+      .catch((e) => { if (live) setError(errorMessage(e)); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [member.kind, member.ref]);
+  }, [member.kind, member.ref, errorMessage]);
 
   if (loading) return <div style={{ padding: 16, color: 'var(--text-muted)', fontSize: 13 }}>Loading scorecard…</div>;
   if (error) return <div style={{ padding: 16, color: 'var(--error-text)', fontSize: 13 }}>{error}</div>;

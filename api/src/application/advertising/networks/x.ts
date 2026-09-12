@@ -13,8 +13,9 @@
  * Money is micros of the account currency.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, requireField, text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   ageFromBuckets, bucketedAgeKeys, mapTargetingValues, readNativeValues, requireTargetingSupport,
@@ -57,7 +58,7 @@ function fromStatus(status: AdStatus | undefined): string | undefined {
 
 /** The account's first usable funding instrument, and the currency it bills in. */
 async function funding(call: AdCall, accountId: string): Promise<{ id: string; currency: string }> {
-  const instruments = list((await ask(call, 'list_funding_instruments', { account_id: accountId, count: 50 })).data).map(rec);
+  const instruments = list((await ask(call, 'list_funding_instruments', { account_id: accountId, count: 50 })).data).map(asJsonRecord);
   const usable = instruments.find((i) => !i.deleted && i.able_to_fund !== false) ?? instruments[0];
   return {
     id: usable ? text(usable.id) : '',
@@ -119,7 +120,7 @@ async function resolveLocationValues(call: AdCall, countries: readonly string[])
   for (const country of countries) {
     const hits = list((await ask(call, 'list_targeting_locations', {
       country_code: country.toUpperCase(), location_type: 'COUNTRY', count: 10,
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     const hit = hits.find((row) => text(row.country_code).toUpperCase() === country.toUpperCase()) ?? hits[0];
     const value = hit ? text(hit.targeting_value) : '';
     if (!value) {
@@ -219,7 +220,7 @@ export const xAdsProvider: AdsProvider = {
 
   async identity(call, fields) {
     const accountId = requireField(fields, 'adAccountId', 'the ads account ID');
-    const accounts = list((await ask(call, 'list_accounts', { count: 200 })).data).map(rec);
+    const accounts = list((await ask(call, 'list_accounts', { count: 200 })).data).map(asJsonRecord);
     const match = accounts.find((a) => text(a.id) === accountId);
     const { currency } = await funding(call, accountId);
     return {
@@ -231,12 +232,12 @@ export const xAdsProvider: AdsProvider = {
 
   async listCampaigns(call, fields, identity) {
     const accountId = requireField(fields, 'adAccountId', 'the ads account ID');
-    const campaigns = list((await ask(call, 'list_campaigns', { account_id: accountId, count: 200 })).data).map(rec);
+    const campaigns = list((await ask(call, 'list_campaigns', { account_id: accountId, count: 200 })).data).map(asJsonRecord);
     if (campaigns.length === 0) return [];
 
     // ONE call for every line item on the account, then grouped in memory — the
     // alternative is one request per campaign, which is the N+1 this codebase forbids.
-    const lineItems = list((await ask(call, 'list_line_items', { account_id: accountId, count: 1000 })).data).map(rec);
+    const lineItems = list((await ask(call, 'list_line_items', { account_id: accountId, count: 1000 })).data).map(asJsonRecord);
     const objectiveByCampaign = new Map<string, string>();
     for (const item of lineItems) {
       const campaignId = text(item.campaign_id);
@@ -272,7 +273,7 @@ export const xAdsProvider: AdsProvider = {
       throw new AdsProviderError('This X ads account has no funding instrument, so a campaign cannot be created. Add a payment method in X Ads first.', 409, false);
     }
 
-    const campaign = rec((await ask(call, 'create_campaign', {
+    const campaign = asJsonRecord((await ask(call, 'create_campaign', {
       account_id: accountId,
       name: draft.name,
       funding_instrument_id: fundingInstrumentId,
@@ -325,7 +326,7 @@ export const xAdsProvider: AdsProvider = {
       account_id: accountId,
       count: 1000,
       ...(externalCampaignId ? { campaign_ids: externalCampaignId } : {}),
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     if (rows.length === 0) return [];
 
     // ONE call for every criterion on these line items, grouped in memory. A request per
@@ -334,7 +335,7 @@ export const xAdsProvider: AdsProvider = {
       account_id: accountId,
       line_item_ids: rows.map((row) => text(row.id)).filter(Boolean).join(','),
       count: 1000,
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     const byLineItem = new Map<string, Record<string, unknown>[]>();
     for (const criterion of criteria) {
       const lineItemId = text(criterion.line_item_id);
@@ -374,7 +375,7 @@ export const xAdsProvider: AdsProvider = {
     const criteria = await criteriaFor(call, draft.targeting);
     const bid = fromCents(draft.bidCents, MICROS);
 
-    const created = rec((await ask(call, 'create_line_item', {
+    const created = asJsonRecord((await ask(call, 'create_line_item', {
       account_id: accountId,
       campaign_id: draft.externalCampaignId,
       name: draft.name,
@@ -441,7 +442,7 @@ export const xAdsProvider: AdsProvider = {
      */
     const existing = list((await ask(call, 'list_targeting_criteria', {
       account_id: accountId, line_item_ids: externalId, count: 1000,
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     const criteria = await criteriaFor(call, patch.targeting);
 
     const operations = [
@@ -467,7 +468,7 @@ export const xAdsProvider: AdsProvider = {
       account_id: accountId,
       count: 1000,
       ...(externalAdSetId ? { line_item_ids: externalAdSetId } : {}),
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     return rows.map((row) => ({
       externalId: text(row.id),
       externalAdSetId: text(row.line_item_id) || null,
@@ -496,7 +497,7 @@ export const xAdsProvider: AdsProvider = {
       );
     }
 
-    const created = rec(list((await ask(call, 'create_promoted_tweet', {
+    const created = asJsonRecord(list((await ask(call, 'create_promoted_tweet', {
       account_id: accountId,
       line_item_id: draft.externalAdSetId,
       tweet_ids: tweetId,
@@ -567,10 +568,10 @@ export const xAdsProvider: AdsProvider = {
       });
 
       for (const raw of list(result.data)) {
-        const entry = rec(raw);
+        const entry = asJsonRecord(raw);
         const externalCampaignId = text(entry.id);
-        const series = rec(list(entry.id_data)[0]).metrics;
-        const metrics = rec(series);
+        const series = asJsonRecord(list(entry.id_data)[0]).metrics;
+        const metrics = asJsonRecord(series);
         // Every metric is an ARRAY, one entry per day in the requested range, and a day
         // with no delivery is `null` rather than 0.
         const spend = list(metrics.billed_charge_local_micro);
@@ -587,7 +588,7 @@ export const xAdsProvider: AdsProvider = {
             spendCents: toCents(spend[day], MICROS) ?? 0,
             impressions: count(impressions[day]),
             clicks: count(clicks[day]),
-            conversions: count(rec(conversions[day]).post_engagement ?? conversions[day]),
+            conversions: count(asJsonRecord(conversions[day]).post_engagement ?? conversions[day]),
             currency: identity.currency,
           });
         }

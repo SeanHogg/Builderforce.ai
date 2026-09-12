@@ -50,22 +50,6 @@ const iconBtn: React.CSSProperties = {
   cursor: 'pointer', color: 'var(--text-secondary)', padding: 0,
 };
 
-const PencilIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 20h9" />
-    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-  </svg>
-);
-
-const TrashIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M3 6h18" />
-    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-    <path d="M10 11v6M14 11v6" />
-  </svg>
-);
-
 export function SourceControlContent({
   projectId,
   onImported,
@@ -398,10 +382,10 @@ export function SourceControlContent({
                 )}
                 {!r.isDefault && <button type="button" style={btnSubtle} onClick={() => setDefault(r.id)}>{t('setDefault')}</button>}
                 <button type="button" style={iconBtn} title={t('editRepository')} aria-label={t('editRepository')} onClick={() => openEdit(r)}>
-                  <PencilIcon />
+                  <Icon name="edit" size={14} />
                 </button>
                 <button type="button" style={{ ...iconBtn, color: 'var(--danger)' }} title={t('removeRepository')} aria-label={t('removeRepository')} onClick={() => remove(r.id)}>
-                  <TrashIcon />
+                  <Icon name="trash" size={14} />
                 </button>
               </div>
             );

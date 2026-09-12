@@ -32,6 +32,7 @@
  * otherwise land its whole cost in the wrong month.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { invoiceLineItems, payRuns } from '../../infrastructure/database/schema';
@@ -39,7 +40,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { connectedConnectorKeys } from '../connectors/connectorTools';
-import { asRecord, pickNumber, pickText, rowsFrom } from '../connectors/providerPayload';
+import { pickNumber, pickText, rowsFrom } from '../connectors/providerPayload';
 import { setDocumentLines } from './payables';
 
 export class PayRunError extends Error {
@@ -313,7 +314,7 @@ export function normalisePayRuns(data: unknown): Array<Omit<PayRunInput, 'source
 
   const out: Array<Omit<PayRunInput, 'source'>> = [];
   for (const row of rows) {
-    const totals = asRecord(row.totals);
+    const totals = asJsonRecord(row.totals);
     const externalRef = pickText(row, ['id', 'payroll_id', 'uuid', 'reference', 'payroll_uuid']);
     if (!externalRef) continue;
 
@@ -355,7 +356,7 @@ function normaliseLines(row: Record<string, unknown>): PayRunLine[] {
     : [];
   const lines: PayRunLine[] = [];
   for (const raw of source) {
-    const line = asRecord(raw);
+    const line = asJsonRecord(raw);
     const amount = pick(line, ['gross_pay', 'amount', 'total', 'gross']);
     if (amount == null) continue;
     lines.push({

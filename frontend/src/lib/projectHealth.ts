@@ -1,5 +1,6 @@
 import type { Project } from '@/lib/types';
 import { computeDeliveryVerdict, type Verdict } from '@/lib/deliveryVerdict';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * Single source of truth for a project's health + progress. Both the project card
@@ -31,8 +32,8 @@ export interface ProjectHealth {
   verdict: Verdict;
   /** Tier for the score, or null when healthScore is null. */
   tier: HealthTier | null;
-  /** Tier colour (hex, stable across themes — same convention as chartColors);
-   *  neutral border colour when there's no health score. */
+  /** Tier colour as a mark (a `var(--token)` defined for light AND dark — see
+   *  {@link healthTierColor}); neutral border colour when there's no health score. */
   color: string;
   completed: number;
   total: number;
@@ -41,14 +42,29 @@ export interface ProjectHealth {
   overdue: number;
 }
 
-const TIER_COLOR: Record<HealthTier, string> = {
-  healthy: 'var(--success)',
-  watch: 'var(--yellow-bright)',
-  at_risk: 'var(--warning)',
-  critical: 'var(--error)',
+/**
+ * THE health-tier ramp — the single home for the project card, the inspection
+ * report and every other surface that grades a score into a tier.
+ *
+ * Four rungs, and the six status tones carry only three of them: `watch` sits
+ * between `healthy` (success) and `at_risk` (warning), so it keeps the one extra
+ * rung — yellow, between the green and the amber — as a documented local colour
+ * rather than collapsing into either neighbour and losing a grade.
+ */
+export const HEALTH_TIER_TONE: StatusToneMap<Exclude<HealthTier, 'watch'>> = {
+  healthy: 'success',
+  at_risk: 'warning',
+  critical: 'danger',
 };
+const WATCH_TIER_COLOR = 'var(--yellow-bright)';
 
 const NO_SCORE_COLOR = 'var(--border-subtle)';
+
+/** A tier's colour as a mark (gauge, dot, rule); `null` (no score) → the neutral border. */
+export function healthTierColor(tier: HealthTier | null): string {
+  if (tier == null) return NO_SCORE_COLOR;
+  return tier === 'watch' ? WATCH_TIER_COLOR : statusColor(HEALTH_TIER_TONE, tier, 'solid');
+}
 
 /** Map a 0–100 score to a tier (shared so the badge + gauge agree). */
 export function healthTier(score: number): HealthTier {
@@ -75,7 +91,7 @@ export function computeProjectHealth(project: Project): ProjectHealth {
     ? computeDeliveryVerdict(s.dora, s.lifecycle, s.bottlenecks)
     : { verdict: 'no_data' as Verdict, score: null };
   const tier = score != null ? healthTier(score) : null;
-  const color = tier ? TIER_COLOR[tier] : NO_SCORE_COLOR;
+  const color = healthTierColor(tier);
 
   return { hasData: total > 0, progressPct, healthScore: score, verdict, tier, color, completed, total, open, blocked, overdue };
 }

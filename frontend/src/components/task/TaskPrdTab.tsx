@@ -37,14 +37,6 @@ const textBtn: React.CSSProperties = {
   background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer',
 };
 
-function ExpandIcon() {
-  return (
-    <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-    </svg>
-  );
-}
-
 export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: number }) {
   const t = useTranslations('taskPrd');
   const tCommon = useTranslations('common');
@@ -176,7 +168,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
         )}
         {viewToggle}
         <button type="button" style={iconBtn} title={t('expandFullScreen')} aria-label={t('expandFullScreen')} onClick={() => setFullscreen(true)}>
-          <ExpandIcon />
+          <Icon name="maximize" size={16} />
         </button>
       </div>
 

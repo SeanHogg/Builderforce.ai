@@ -10,6 +10,7 @@
  * getTranslations) owns localization — this component ships no hardcoded copy.
  */
 import { Icon } from '@/components/ui/Icon';
+import { toneColor, type StatusTone } from '@/lib/statusTone';
 export interface Soc2AuditVisualLabels {
   title: string;
   scoreLabel: string;      // e.g. "Defined"
@@ -22,14 +23,18 @@ export interface Soc2AuditVisualLabels {
   prBadge: string;
 }
 
+const stateColors = (tone: StatusTone) => ({
+  fg: toneColor(tone, 'solid'), bg: toneColor(tone, 'bg'), border: toneColor(tone, 'border'),
+});
+
 const STATE_COLORS: Record<'pass' | 'partial' | 'gap', { fg: string; bg: string; border: string }> = {
   // The soft ground and edge of each status come from the SAME family as the ink
   // above them. They were hand-mixed alphas of the dark-theme hue, so on paper a
   // "pass" chip printed a green wash that the darkened light-mode green no longer
   // matched — a chip whose border and its text were different greens.
-  pass: { fg: 'var(--success)', bg: 'var(--success-bg)', border: 'var(--success-border)' },
-  partial: { fg: 'var(--warning)', bg: 'var(--warning-bg)', border: 'var(--warning-border)' },
-  gap: { fg: 'var(--error)', bg: 'var(--error-bg)', border: 'var(--error-border)' },
+  pass: stateColors('success'),
+  partial: stateColors('warning'),
+  gap: stateColors('danger'),
 };
 
 export function Soc2AuditVisual({ labels }: { labels: Soc2AuditVisualLabels }) {

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ createAssetFromSource: vi.fn() }));
 vi.mock('./growthApi', () => ({ growthApi: { createAssetFromSource: mocks.createAssetFromSource } }));
 
-const { canvasMediaSource, isCanvasMediaKind, isPubliclyFetchable, resolvePublicMediaUrls } =
+const { canvasMediaSource, describePublicMediaProblem, isCanvasMediaKind, isPubliclyFetchable, resolvePublicMediaUrls } =
   await import('./canvasPublicMedia');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
@@ -74,8 +74,21 @@ describe('resolvePublicMediaUrls', () => {
   it('names a blob URL as tab-local instead of uploading an empty file', async () => {
     const resolved = await resolvePublicMediaUrls(['blob:https://builderforce.ai/8f2c']);
     expect(resolved.urls).toEqual([]);
-    expect(resolved.problems[0]!.reason).toContain('browser tab');
+    expect(resolved.problems[0]!.code).toBe('tabOnly');
+    expect(describePublicMediaProblem(resolved.problems[0]!)).toContain('browser tab');
     expect(mocks.createAssetFromSource).not.toHaveBeenCalled();
+  });
+
+  /** A CODE, not a sentence: a person's surface translates it, and only the
+   *  model-facing describer spells it in English. */
+  it('codes a source that is neither https nor inline media', async () => {
+    const resolved = await resolvePublicMediaUrls(['http://images.example/a.jpg']);
+    expect(resolved.problems).toEqual([{ source: 'http://images.example/a.jpg', code: 'notPublic' }]);
+    expect(describePublicMediaProblem(resolved.problems[0]!)).toContain('public https URL');
+  });
+
+  it('describes an upload that failed without a message in English for the model', () => {
+    expect(describePublicMediaProblem({ source: 'data:…', code: 'uploadFailed' })).toBe('That file could not be published to a public URL.');
   });
 
   /** One bad picture must not lose the campaign — the other one still publishes,
@@ -87,7 +100,9 @@ describe('resolvePublicMediaUrls', () => {
     const resolved = await resolvePublicMediaUrls([PNG, PNG]);
     expect(resolved.urls).toEqual(['https://public/ok']);
     expect(resolved.problems).toHaveLength(1);
-    expect(resolved.problems[0]!.reason).toContain('2 MB');
+    expect(resolved.problems[0]!.code).toBe('uploadFailed');
+    expect(resolved.problems[0]!.detail).toContain('2 MB');
+    expect(describePublicMediaProblem(resolved.problems[0]!)).toContain('2 MB');
   });
 
   it('does not put megabytes of base64 into the reason it reports', async () => {

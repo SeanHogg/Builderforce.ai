@@ -32,10 +32,11 @@ import {
   type WithdrawalVerification,
 } from '@/lib/earningsApi';
 import { faultMessage } from '@/lib/apiClient';
-const VERIFICATION_TONE: Record<WithdrawalVerification, string> = {
-  verified: 'var(--success)',
-  unverified: 'var(--text-secondary)',
-  failed: 'var(--danger)',
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+const VERIFICATION_TONE: StatusToneMap<WithdrawalVerification> = {
+  verified: 'success',
+  unverified: 'neutral',
+  failed: 'danger',
 };
 
 export function WithdrawalMethods({
@@ -155,7 +156,7 @@ export function WithdrawalMethods({
               </span>
               <span style={{
                 fontSize: 'var(--font-size-eyebrow)', fontWeight: 600,
-                color: VERIFICATION_TONE[method.verification],
+                color: statusColor(VERIFICATION_TONE, method.verification),
               }}>{t(`verification.${method.verification}`)}</span>
               {method.verificationDetail && (
                 <span style={{ flexBasis: '100%', color: 'var(--danger)', fontSize: 'var(--font-size-eyebrow)' }}>

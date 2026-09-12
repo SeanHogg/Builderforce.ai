@@ -18,7 +18,8 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminBroadcast, type AdminBroadcastInput } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { AdminError, errText } from '@/components/admin/adminShared';
+import { AdminError } from '@/components/admin/adminShared';
+import { usePanelTask } from '@/hooks/usePanelTask';
 
 type Tone = AdminBroadcast['tone'];
 type Status = AdminBroadcast['status'];
@@ -69,14 +70,14 @@ export function BroadcastComposer({
   const [dismissible, setDismissible] = useState(true);
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
+  const { clear: clearTask } = task;
 
   // Reset from the subject every time the drawer opens, so a previous edit can
   // never bleed into the next one.
   useEffect(() => {
     if (!open) return;
-    setError(null);
+    clearTask();
     setMessage(broadcast?.message ?? '');
     setTone(broadcast?.tone ?? 'info');
     // A message aimed at one visitor is written to be sent, not filed.
@@ -88,16 +89,14 @@ export function BroadcastComposer({
     setDismissible(broadcast?.dismissible ?? true);
     setStartsAt(toLocalInput(broadcast?.startsAt ?? null));
     setEndsAt(toLocalInput(broadcast?.endsAt ?? null));
-  }, [open, broadcast, targetVisitorId]);
+  }, [open, broadcast, targetVisitorId, clearTask]);
 
   const visitorIds = targetVisitorId
     ? [targetVisitorId]
     : (broadcast?.audience.visitorIds ?? []);
 
   async function save() {
-    if (!message.trim()) { setError(t('messageRequired')); return; }
-    setSaving(true);
-    setError(null);
+    if (!message.trim()) { task.fail(t('messageRequired')); return; }
     const input: AdminBroadcastInput = {
       message: message.trim(),
       tone,
@@ -109,15 +108,13 @@ export function BroadcastComposer({
       startsAt: fromLocalInput(startsAt),
       endsAt: fromLocalInput(endsAt),
     };
-    try {
+    const saved = await task.run(async () => {
       if (broadcast) await adminApi.updateBroadcast(broadcast.id, input);
       else await adminApi.createBroadcast(input);
-      onSaved();
-    } catch (err) {
-      setError(errText(err));
-    } finally {
-      setSaving(false);
-    }
+      return true;
+    });
+    if (saved === undefined) return;
+    onSaved();
   }
 
   const field: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 };
@@ -130,13 +127,13 @@ export function BroadcastComposer({
       title={broadcast ? t('editTitle') : t('composeTitle')}
       widthStorageKey="broadcast-composer"
       headerActions={
-        <button type="button" className="btn-primary" onClick={() => void save()} disabled={saving}>
-          {saving ? t('saving') : t('save')}
+        <button type="button" className="btn-primary" onClick={() => void save()} disabled={task.busy}>
+          {task.busy ? t('saving') : t('save')}
         </button>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <AdminError message={error} />
+        <AdminError message={task.error} />
 
         {targetVisitorId && (
           <p className="text-muted" style={{ fontSize: 12, margin: 0, overflowWrap: 'anywhere' }}>

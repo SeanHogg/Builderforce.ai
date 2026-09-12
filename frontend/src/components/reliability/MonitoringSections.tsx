@@ -42,8 +42,10 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { SECTION_CARD as card, SectionEmpty, SectionError, SectionLoading } from '@/components/ui/SectionState';
 import { SEVERITIES, SEVERITY_BADGE } from '@/lib/reliability/severity';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 const MONITOR_TYPES: MonitorType[] = ['heartbeat', 'http_check', 'webhook', 'metric_threshold', 'manual'];
 const METRICS: MonitorMetric[] = [
@@ -57,12 +59,11 @@ const METRICS: MonitorMetric[] = [
 ];
 const COMPARATORS: MonitorComparator[] = ['gt', 'lt', 'gte', 'lte'];
 
-// Status → theme token colour for pins/badges. ok=success, breached=error,
-// unknown=muted. All resolve in both light and dark themes.
-const STATUS_COLOR: Record<MonitorStatus, { bg: string; fg: string }> = {
-  ok: { bg: 'var(--success)', fg: 'var(--success-text)' },
-  breached: { bg: 'var(--error)', fg: 'var(--error-text)' },
-  unknown: { bg: 'var(--muted)', fg: 'var(--text-muted)' },
+// Monitor status → tone. Pins and list dots render `solid`, the status label `text`.
+const STATUS_TONE: StatusToneMap<MonitorStatus> = {
+  ok: 'success',
+  breached: 'danger',
+  unknown: 'neutral',
 };
 
 
@@ -111,6 +112,7 @@ export function MonitoringReporting() {
 /* ─────────────────────────── Boards ─────────────────────────── */
 
 function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }) {
+  const errorMessage = useErrorMessage();
   const [boards, setBoards] = useState<MonitoringBoard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +141,7 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
       load();
       setSelectedId(board.id);
     } catch (e) {
-      setError(faultMessage(e, 'Create failed'));
+      setError(errorMessage(e));
     } finally {
       setCreating(false);
     }
@@ -195,7 +197,7 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
               >
                 <div style={{ height: 120, background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {b.imageKey
-                    ? <img src={brain.uploadUrl(b.imageKey)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={brain.uploadUrl(b.imageKey)} alt="" width={220} height={120} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontSize: 32, opacity: 0.4 }}><Icon source="🗺️" size="1em" /></span>}
                 </div>
                 <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -219,6 +221,7 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
 /* ─────────────────────────── Board canvas ─────────────────────────── */
 
 function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canManage: boolean; boardId: string; onBack: () => void }) {
+  const errorMessage = useErrorMessage();
   const confirm = useConfirm();
   const [board, setBoard] = useState<MonitoringBoard | null>(null);
   const [monitors, setMonitors] = useState<Monitor[]>([]);
@@ -322,7 +325,7 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
       await monitoringApi.deleteBoard(boardId);
       onBack();
     } catch (e) {
-      setError(faultMessage(e, 'Delete failed'));
+      setError(errorMessage(e));
     }
   };
 
@@ -411,7 +414,7 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={brain.uploadUrl(board.imageKey)} alt={board.name} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
+              <img src={brain.uploadUrl(board.imageKey)} alt={board.name} width={900} height={Math.round(900 / aspect)} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
               {monitors.map((m) => (
                 <MonitorPin
                   key={m.id}
@@ -435,12 +438,12 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
                   onClick={() => setSelectedMonitorId(m.id)}
                   style={{ ...card, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
                 >
-                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: STATUS_COLOR[m.status].bg, flexShrink: 0 }} />
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor(STATUS_TONE, m.status, 'solid'), flexShrink: 0 }} />
                   <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{m.label}</span>
                   <span className={SEVERITY_BADGE[m.severity]}>{t(`severity.${m.severity}`)}</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t(`type.${m.monitorType}`)}</span>
                   <span style={{ flex: 1 }} />
-                  <span style={{ fontSize: 12, color: STATUS_COLOR[m.status].fg }}>{t(`status.${m.status}`)}</span>
+                  <span style={{ fontSize: 12, color: statusColor(STATUS_TONE, m.status, 'text') }}>{t(`status.${m.status}`)}</span>
                 </button>
               ))}
             </div>
@@ -477,7 +480,7 @@ function MonitorPin({
   onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: (e: React.PointerEvent) => void;
 }) {
-  const color = STATUS_COLOR[monitor.status];
+  const dot = statusColor(STATUS_TONE, monitor.status, 'solid');
   return (
     <div
       onPointerDown={onPointerDown}
@@ -501,7 +504,7 @@ function MonitorPin({
           width: 18,
           height: 18,
           borderRadius: '50%',
-          background: color.bg,
+          background: dot,
           border: '2px solid var(--bg-base)',
           boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
           flexShrink: 0,
@@ -540,6 +543,7 @@ function MonitorPanel({
   const fmt = useFormat();
   const confirm = useConfirm();
   const isNew = monitorId === null;
+  const errorMessage = useErrorMessage();
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -664,7 +668,7 @@ function MonitorPanel({
       else if (monitorId) await monitoringApi.updateMonitor(monitorId, body);
       onChanged();
     } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -677,7 +681,7 @@ function MonitorPanel({
       await monitoringApi.deleteMonitor(monitorId);
       onChanged();
     } catch (e) {
-      setError(faultMessage(e, 'Delete failed'));
+      setError(errorMessage(e));
     }
   };
 
@@ -692,7 +696,7 @@ function MonitorPanel({
         setCurrentIncidentId(r.monitor.currentIncidentId);
       }
     } catch (e) {
-      setError(faultMessage(e, 'Signal failed'));
+      setError(errorMessage(e));
     }
   };
 

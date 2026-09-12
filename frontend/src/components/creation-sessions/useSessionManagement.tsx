@@ -82,13 +82,9 @@ export function useSessionManagement({ session, mergeCandidates = [], folders = 
       if (editor === 'merge' && onMerge) {
         const source = mergeCandidates.find((candidate) => candidate.id === value);
         if (!source) { setError(t('required')); return; }
-        const approved = await confirm({
-          title: t('mergeConfirmTitle'),
-          message: t(localOnly ? 'mergeConfirmMessageLocal' : 'mergeConfirmMessageSaved', { source: source.title, target: session.title }),
-          confirmLabel: t('merge'),
-          destructive: false,
-        });
-        if (!approved) return;
+        // No modal: the panel's submit IS the deliberate step, and its description
+        // already states the consequence for the chosen source. Nothing is lost —
+        // the source's content moves into this session before it is archived.
         await onMerge(source.id);
       }
       setEditor(null);
@@ -109,6 +105,9 @@ export function useSessionManagement({ session, mergeCandidates = [], folders = 
     if (approved) await onDelete();
   };
 
+  // The merge panel names what will happen to the CHOSEN source, live as it changes.
+  const mergeSource = editor === 'merge' ? mergeCandidates.find((candidate) => candidate.id === value) : undefined;
+
   const actions: SessionMenuAction[] = [
     { id: 'rename', label: t('rename'), icon: 'edit', run: () => openEditor('rename') },
     { id: 'move', label: t('move'), icon: 'folder', run: () => openEditor('move') },
@@ -124,7 +123,9 @@ export function useSessionManagement({ session, mergeCandidates = [], folders = 
       <SessionEditorPanel
         open
         title={t(`${editor}Title`)}
-        description={t(`${editor}Description`)}
+        description={mergeSource
+          ? t(localOnly ? 'mergeConfirmMessageLocal' : 'mergeConfirmMessageSaved', { source: mergeSource.title, target: session.title })
+          : t(`${editor}Description`)}
         submitLabel={editor === 'project' ? t('done') : t(editor)}
         busy={busy}
         error={error}

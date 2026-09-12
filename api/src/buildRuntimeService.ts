@@ -44,14 +44,14 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
   // instance it belongs to; it is only ever invoked after construction completes.
   let runtimeService: RuntimeService;
-  runtimeService = new RuntimeService(
-    new ExecutionRepository(db),
-    new TaskRepository(db),
-    new AgentRepository(db),
-    new AuditRepository(db, env),
-    (e) => recordRunFailureEvent(db, e),
-    (info) => syncExecutionTaskLifecycle(env, db, info),
-    async (e) => {
+  runtimeService = new RuntimeService({
+    executions: new ExecutionRepository(db),
+    tasks: new TaskRepository(db),
+    agents: new AgentRepository(db),
+    audit: new AuditRepository(db, env),
+    onTerminalFailure: (e) => recordRunFailureEvent(db, e),
+    onTaskStatusSync: (info) => syncExecutionTaskLifecycle(env, db, info),
+    onCloudOrphan: async (e) => {
       // Read-path self-heal: re-queue a stale cloud run once on the durable executor
       // before it is failed (shares the cron's logic via cloudSelfHeal).
       const input = await loadCloudRunForSelfHeal(db, e.id);
@@ -64,20 +64,20 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // each handoff. maybeAutoRunOnLaneEntry awaits the executor kickoff internally
     // (the new agent's heavy loop then runs in its own DO/container), so awaiting it
     // here outlives setup without depending on a request `executionCtx`.
-    async (info) => {
+    onLaneEntry: async (info) => {
       await maybeAutoRunOnLaneEntry(env, db, runtimeService, { ...info, submittedBy: 'system:lane-auto' });
     },
     // Config-driven completion advance: move the ticket into the board's next
     // swimlane by position (not a hardcoded in_review), so a custom lane sequence
     // flows correctly. Null → the default in_review applies (non-board task).
-    (info) => resolveNextTaskStatus(db, info.projectId, info.fromStatus),
+    resolveNextStatus: (info) => resolveNextTaskStatus(db, info.projectId, info.fromStatus),
     // Run milestones → linked Brain chats: narrate a cloud-agent run's progress
     // (started ▸ completed ▸ failed) back into every chat the ticket is linked to, so
     // "the devs provide updates as they work" is visible in the conversation that spawned
     // the work. Runtime chat-awareness. Best-effort (postRunMilestone swallows its own
     // errors + dedupes per execution+phase); the extra guard keeps a construction/throw
     // from ever bubbling into RuntimeService.update.
-    (info) => new ChatTicketService(db, env).postRunMilestone(info.tenantId, {
+    onRunMilestone: (info) => new ChatTicketService(db, env).postRunMilestone(info.tenantId, {
       kind: info.taskType, ref: String(info.taskId), agentRef: info.agentRef,
       phase: info.phase, executionId: info.executionId,
       toStatus: info.toStatus, resultText: info.resultText, errorMessage: info.errorMessage,
@@ -89,8 +89,8 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // it ran AS participated on the ticket's manifest (linked to the execution), then
     // attests what that finished run MEANS — producer credit written to the sign-off
     // ledger, or a reviewer's non-answer counted toward escalation. Best-effort.
-    (info) => attributeRunToManifest(env, db, info),
-    async (info) => {
+    onRunFinalized: (info) => attributeRunToManifest(env, db, info),
+    onManagedRunStatus: async (info) => {
       const board = await findCanonicalBoard(db, info.projectId, info.tenantId);
       if (!board?.lifecycleManaged) return { managed: false, toStatus: info.fromStatus };
 
@@ -115,15 +115,15 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // (migration 0348) and `evaluatePolicyGate` at the engine's tool seam — the
     // enforcement machinery already existed but never received gates. Cached
     // read-through, invalidated on every pack/gate write.
-    (scope) => resolvePolicyGates(env, db, scope),
-    async (id, tenantId) => {
+    resolvePolicyGates: (scope) => resolvePolicyGates(env, db, scope),
+    resolveAgentRegistration: async (id, tenantId) => {
       const [row] = await db.select({ status: agentRegistrations.status })
         .from(agentRegistrations)
         .where(and(eq(agentRegistrations.id, id), eq(agentRegistrations.tenantId, tenantId)))
         .limit(1);
       return row ? { active: row.status === 'active' } : null;
     },
-    async (tenantId) => {
+    isAgentExecutionEnabled: async (tenantId) => {
       if (env.AGENT_EXECUTION_ENABLED?.trim().toLowerCase() === 'false') return false;
       const [row] = await db.select({ enabled: tenants.agentExecutionEnabled })
         .from(tenants)
@@ -137,7 +137,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // the board's own lanes rather than the `in_progress` constant. On a board with no
     // such lane the ticket now stays where it is instead of being written to a status
     // that renders in no column. See `swimlane/nextLane.resolveRunningLaneKey`.
-    (info) => resolveRunningTaskStatus(db, info.projectId, info.fromStatus, info.dispatchedLaneKey),
-  );
+    resolveRunningStatus: (info) => resolveRunningTaskStatus(db, info.projectId, info.fromStatus, info.dispatchedLaneKey),
+  });
   return runtimeService;
 }

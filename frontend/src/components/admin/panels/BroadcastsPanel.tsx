@@ -22,11 +22,13 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { AdminError, AdminLoading, AdminPanelHeader, errText, useAdminData } from '@/components/admin/adminShared';
 import { useAdminFormat } from '@/components/admin/adminShared';
 import { BroadcastComposer } from './BroadcastComposer';
+import { Badge } from '@/components/ui';
+import { statusTone, type StatusToneMap } from '@/lib/statusTone';
 
-const STATUS_BADGE: Record<AdminBroadcast['status'], string> = {
-  live: 'badge-success',
-  draft: 'badge-neutral',
-  archived: 'badge-neutral',
+const STATUS_TONE: StatusToneMap<AdminBroadcast['status']> = {
+  live: 'success',
+  draft: 'neutral',
+  archived: 'neutral',
 };
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -148,8 +150,8 @@ export default function BroadcastsPanel() {
                   <td style={{ maxWidth: 320 }}>
                     <div style={{ fontSize: 13, overflowWrap: 'anywhere' }}>{broadcast.message}</div>
                     <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <span className={`badge ${STATUS_BADGE[broadcast.status]}`}>{t(`status.${broadcast.status}`)}</span>
-                      <span className="badge badge-neutral">{t(`tone.${broadcast.tone}`)}</span>
+                      <Badge tone={statusTone(STATUS_TONE, broadcast.status)}>{t(`status.${broadcast.status}`)}</Badge>
+                      <Badge tone="neutral">{t(`tone.${broadcast.tone}`)}</Badge>
                     </div>
                   </td>
                   <td style={{ fontSize: 12 }}>

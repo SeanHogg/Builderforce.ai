@@ -25,6 +25,7 @@ import { ProposalEvalLensPanel } from '@/components/talent/ProposalEvalLensPanel
 import { inviteToJob } from '@/lib/freelance/invites';
 import { listMyJobs, type JobPosting } from '@/lib/freelance/postings';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 16, minWidth: 0,
@@ -44,12 +45,13 @@ export default function ShortlistClient() {
   const [jobId, setJobId] = useState<string>('');
   const [section, setSection] = useState<Section>('recommendations');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The invite's error/notice; a failed postings read lands in the same error slot.
+  const task = usePanelTask();
+  const { run: taskRun, fail: taskFail, clear: taskClear } = task;
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    taskClear();
     try {
       const mine = await listMyJobs();
       // Only OPEN postings can be invited to — the API refuses an invite to a filled one
@@ -59,11 +61,12 @@ export default function ShortlistClient() {
       setJobs(open);
       setJobId((current) => current || (open[0]?.id ?? ''));
     } catch (e) {
-      setError(faultMessage(e, t('shortlist.loadError')));
+      const message = faultMessage(e, t('shortlist.loadError'));
+      if (message) taskFail(message);
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, taskClear, taskFail]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -71,15 +74,11 @@ export default function ShortlistClient() {
 
   /** Invite straight off the shortlist, onto whichever posting is selected. */
   const inviteFromShortlist = async (freelancerUserId: string) => {
-    if (!jobId) { setError(t('invite.pickJobFirst')); return; }
-    setError(null);
-    setNotice(null);
-    try {
-      await inviteToJob(jobId, { freelancerUserId });
-      setNotice(t('invite.sentNotice'));
-    } catch (e) {
-      setError(faultMessage(e, t('invite.failed')));
-    }
+    if (!jobId) { taskFail(t('invite.pickJobFirst')); return; }
+    await taskRun(
+      () => inviteToJob(jobId, { freelancerUserId }),
+      { success: t('invite.sentNotice'), failure: t('invite.failed') },
+    );
   };
 
   const SECTIONS: Array<{ id: Section; label: string }> = [
@@ -99,8 +98,8 @@ export default function ShortlistClient() {
         </p>
       </div>
 
-      {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{error}</div>}
-      {notice && <div style={{ ...cardStyle, color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{notice}</div>}
+      {task.error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{task.error}</div>}
+      {task.notice && <div style={{ ...cardStyle, color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{task.notice}</div>}
 
       <section style={{ marginBottom: 28 }}>
         <ShortlistPanel onInvite={(entry) => void inviteFromShortlist(entry.freelancerUserId)} />

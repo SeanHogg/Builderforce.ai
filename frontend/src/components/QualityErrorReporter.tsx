@@ -16,6 +16,15 @@ import { init, type QualityClient } from '@seanhogg/builderforce-quality';
 import { API_ERROR_EVENT, type ApiErrorEvent } from '@/lib/errors/apiErrorEvent';
 import { reportProductApiError } from '@/lib/reportError';
 
+/**
+ * The Quality-feed title for a browser error that carried no `Error` object (a
+ * thrown string, a cross-origin "Script error."). It fills the class-name slot an
+ * `Error` supplies (`TypeError`, `RangeError`) in a record ENGINEERS triage — never
+ * shown to the person using the app — so it stays English, like the class names
+ * beside it. Not a UI fallback: see `useErrorMessage` for those.
+ */
+const BROWSER_ERROR_TITLE = 'BrowserError';
+
 interface Props {
   apiKey: string;
   endpoint: string;
@@ -49,7 +58,7 @@ export function QualityErrorReporter({ apiKey, endpoint, environment, release }:
     // The SDK handles browser exceptions when its optional source key exists.
     // The product endpoint is the keyless fallback used in local development.
     const captureBrowserError = (event: ErrorEvent) => persist({
-      title: event.error instanceof Error ? event.error.name : 'BrowserError',
+      title: event.error instanceof Error ? event.error.name : BROWSER_ERROR_TITLE,
       message: event.message || 'Unknown browser error',
       url: event.filename || window.location.href,
       level: 'error',

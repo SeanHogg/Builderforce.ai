@@ -20,6 +20,7 @@ import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 };
@@ -38,6 +39,7 @@ const sectionTitle: React.CSSProperties = { fontWeight: 600, fontSize: 'var(--fo
  */
 export function QualityCollectorsManager() {
   const t = useTranslations('quality');
+  const errorMessage = useErrorMessage();
   const { projects, currentProjectId } = useProjectScope();
   const [collectors, setCollectors] = useState<QualityCollector[]>([]);
   const [catalog, setCatalog] = useState<QualitySourceCatalogEntry[]>([]);
@@ -53,9 +55,9 @@ export function QualityCollectorsManager() {
     setLoading(true);
     Promise.all([qualityApi.collectors.list(), qualityApi.sourceCatalog()])
       .then(([cols, cat]) => { setCollectors(cols); setCatalog(cat); setError(null); })
-      .catch((e) => setError(faultMessage(e, 'Failed to load collectors')))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
   useEffect(() => { load(); }, [load]);
 
   const active = useMemo(
@@ -73,7 +75,7 @@ export function QualityCollectorsManager() {
       });
       setCreated(res); setName(''); load();
     } catch (e) {
-      setError(faultMessage(e, 'Failed to create collector'));
+      setError(errorMessage(e));
     } finally {
       setCreating(false);
     }
@@ -266,6 +268,7 @@ function IntegrationsSection({ collector, catalog, setError, t }: {
   const [apiToken, setApiToken] = useState('');
   const [scope, setScope] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const errorMessage = useErrorMessage();
   const [busy, setBusy] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -285,7 +288,7 @@ function IntegrationsSection({ collector, catalog, setError, t }: {
         baseUrl: provider === 'sentry' ? baseUrl.trim() || null : null,
       });
       reset(); setAdding(false); load();
-    } catch (e) { setError(faultMessage(e, 'Failed to connect provider')); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   };
   const remove = async (p: string) => { await qualityApi.collectors.integrations.remove(collector.id, p); load(); };
@@ -352,6 +355,7 @@ function MappingSection({ collector, projects, projName, onChanged, setError, t 
 }) {
   const FIELDS = ['service', 'release', 'environment', 'url'];
   const OPS = ['equals', 'contains', 'prefix'];
+  const errorMessage = useErrorMessage();
   const [rules, setRules] = useState<QualityMappingRule[]>([]);
   const [adding, setAdding] = useState(false);
   const [matchField, setMatchField] = useState('service');
@@ -372,7 +376,7 @@ function MappingSection({ collector, projects, projName, onChanged, setError, t 
     try {
       await qualityApi.collectors.rules.create(collector.id, { matchField, matchOp, matchValue: matchValue.trim(), projectId: Number(projectId), priority });
       setMatchValue(''); setProjectId(''); setPriority(100); setAdding(false); load();
-    } catch (e) { setError(faultMessage(e, 'Failed to add rule')); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   };
   const remove = async (id: string) => { await qualityApi.collectors.rules.remove(collector.id, id); load(); };

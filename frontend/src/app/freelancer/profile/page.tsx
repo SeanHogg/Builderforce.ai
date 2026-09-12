@@ -15,7 +15,8 @@ import {
 import { getMyFreelancerProfile, updateMyFreelancerProfile, checkMySlug, type FreelancerProfile, type MyResume, type ResumeSuggestions, type SlugCheck } from '@/lib/freelance/talentProfile';
 import { ProfileResumePanel } from '@/components/freelance/ProfileResumePanel';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { usePanelTask } from '@/hooks/usePanelTask';
 const DISCIPLINES = TALENT_DISCIPLINES;
 const AVAILABILITIES = TALENT_AVAILABILITIES;
 const SEEKING_MODES = TALENT_SEEKING_MODES;
@@ -24,11 +25,14 @@ const SENIORITIES = TALENT_SENIORITIES;
 
 export default function FreelancerProfilePage() {
   const t = useTranslations('freelancer');
+  const tc = useTranslations('common');
+  const errorMessage = useErrorMessage();
   const [profile, setProfile] = useState<FreelancerProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
+  // The save action's busy/error/notice. A failed first load lands in the same error
+  // slot, which is what the `!profile` fallback below reads.
+  const task = usePanelTask();
+  const { run: taskRun, fail: taskFail, clear: taskClear } = task;
   const [nameText, setNameText] = useState('');
   const [skillsText, setSkillsText] = useState('');
   const [rateDollars, setRateDollars] = useState('');
@@ -47,7 +51,7 @@ export default function FreelancerProfilePage() {
   const { copied, copy } = useCopyToClipboard(1500);
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true); taskClear();
     try {
       const p = await getMyFreelancerProfile();
       setProfile(p);
@@ -59,11 +63,12 @@ export default function FreelancerProfilePage() {
       setSalaryMinText(p.desiredSalaryMinCents != null ? (p.desiredSalaryMinCents / 100).toString() : '');
       setSalaryMaxText(p.desiredSalaryMaxCents != null ? (p.desiredSalaryMaxCents / 100).toString() : '');
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load'));
+      const message = errorMessage(e);
+      if (message) taskFail(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [errorMessage, taskClear, taskFail]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -89,11 +94,11 @@ export default function FreelancerProfilePage() {
 
   const save = async () => {
     if (!profile) return;
-    setSaving(true); setError(null); setOk(false);
-    try {
-      const hourlyRateCents = rateDollars ? Math.round(parseFloat(rateDollars) * 100) : undefined;
-      const trimmedSlug = slugText.trim();
-      await updateMyFreelancerProfile({
+    const hourlyRateCents = rateDollars ? Math.round(parseFloat(rateDollars) * 100) : undefined;
+    const trimmedSlug = slugText.trim();
+    // `.then(() => true)`: the write resolves to void, and `undefined` is how the task
+    // reports a failure.
+    const saved = await taskRun(() => updateMyFreelancerProfile({
         displayName: nameText.trim(),
         headline: profile.headline, bio: profile.bio, discipline: profile.discipline,
         skills: currentSkills, hourlyRateCents, currency: profile.currency, visibility: profile.visibility,
@@ -110,16 +115,11 @@ export default function FreelancerProfilePage() {
         openToRelocation: profile.openToRelocation === true,
         // Only send slug when it changed (empty string clears it).
         ...(trimmedSlug !== (profile.slug ?? '') ? { slug: trimmedSlug } : {}),
-      });
-      setOk(true);
-      setSlugCheck(null);
-      // Reflect the persisted name/slug locally without a full reload.
-      setProfile((p) => (p ? { ...p, displayName: nameText.trim() || null, slug: trimmedSlug || null, skills: currentSkills } : p));
-    } catch (e) {
-      setError(faultMessage(e, 'Failed to save'));
-    } finally {
-      setSaving(false);
-    }
+    }).then(() => true), { success: t('saved'), failure: tc('actionFailed') });
+    if (!saved) return;
+    setSlugCheck(null);
+    // Reflect the persisted name/slug locally without a full reload.
+    setProfile((p) => (p ? { ...p, displayName: nameText.trim() || null, slug: trimmedSlug || null, skills: currentSkills } : p));
   };
 
   // The résumé panel owns upload, style and version; the only thing the FORM needs
@@ -156,7 +156,7 @@ export default function FreelancerProfilePage() {
   }, [profile, nameText, slugText, currentSkills, rateDollars, myResume]);
 
   if (loading) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--text-muted)' }}>{t('loading')}</p></PageContainer>;
-  if (!profile) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--coral-bright)' }}>{error ?? t('loadFailed')}</p></PageContainer>;
+  if (!profile) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--coral-bright)' }}>{task.error ?? t('loadFailed')}</p></PageContainer>;
 
   const slugMsg = slugText.trim() && slugText.trim() !== (profile.slug ?? '') && slugCheck;
 
@@ -358,11 +358,11 @@ export default function FreelancerProfilePage() {
           </div>
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', paddingTop: 6, flexWrap: 'wrap' }}>
-            <Button type="button" variant="primary" onClick={save} loading={saving}>
-              {saving ? t('saving') : t('save')}
+            <Button type="button" variant="primary" onClick={save} loading={task.busy}>
+              {task.busy ? t('saving') : t('save')}
             </Button>
-            {ok && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--success-text)' }}>{t('saved')}</span>}
-            {error && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }}>{error}</span>}
+            {task.notice && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--success-text)' }}>{task.notice}</span>}
+            {task.error && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }}>{task.error}</span>}
           </div>
         </Surface>
 

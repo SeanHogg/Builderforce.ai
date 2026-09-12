@@ -63,8 +63,10 @@ export function classifyTransportFailure(error: unknown): TransportFailureReason
 /**
  * The non-localized diagnostic text. This is what lands in the Quality feed and in
  * a copied support ticket, so it names the real candidates instead of the CORS
- * wording the console prints. The string a PERSON reads is localized separately by
- * the toast, keyed off {@link ApiTransportError.reason}.
+ * wording the console prints. The string a PERSON reads is localized separately,
+ * keyed off {@link ApiTransportError.reason} (`globalError.transport.<reason>`): by
+ * the toast, and by `useErrorMessage()` for every surface that shows a caught
+ * error — so this English never reaches a reader through `error.message`.
  */
 export function describeTransportFailure(reason: TransportFailureReason): string {
   switch (reason) {

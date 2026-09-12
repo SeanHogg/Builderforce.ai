@@ -5,7 +5,7 @@ import { getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
 import { meetingsApi } from './builderforceApi';
 import { acquireUserMedia, stopStream } from './mediaCapture';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * useMediaRoom — mesh-P2P WebRTC for a live meeting / ceremony.
  *
@@ -193,6 +193,10 @@ export function useMediaRoom(
   const iceRef = useRef<RTCIceServer[]>([{ urls: 'stun:stun.l.google.com:19302' }]);
   const meRef = useRef(me);
   useEffect(() => { meRef.current = me; }, [me]);
+  // Read through a ref so a locale change never tears down the live room effect.
+  const errorMessage = useErrorMessage();
+  const errorMessageRef = useRef(errorMessage);
+  useEffect(() => { errorMessageRef.current = errorMessage; }, [errorMessage]);
 
   // Re-render tiles from the peer map.
   const syncTiles = useCallback(() => {
@@ -379,7 +383,7 @@ export function useMediaRoom(
         setCamOn(!audioOnly && stream.getVideoTracks().length > 0);
         setMicOn(true);
       } catch (e) {
-        setMediaError(faultMessage(e, 'Camera/microphone unavailable'));
+        setMediaError(errorMessageRef.current(e));
       }
       // 2) ICE config (best-effort; STUN default already set).
       try {

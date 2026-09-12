@@ -17,7 +17,10 @@ import {
   type AdvisoryFeedOption,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { usePanelTask } from '@/hooks/usePanelTask';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { SEVERITY_COLOR } from './securitySeverity';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -26,9 +29,6 @@ const cardStyle: React.CSSProperties = {
 };
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
 
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: 'var(--error)', high: 'var(--orange-bright)', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
-};
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 
 /** Score band → colour (>=80 good, >=50 fair, else poor). */
@@ -61,13 +61,13 @@ function ScoreGauge({ score, label }: { score: number; label: string }) {
   );
 }
 
-/** Stage status → the token that colours its dot. `not_run` is deliberately NOT an
- *  error colour: the stage did not fail, it did not happen, and painting it red would
- *  train people to ignore it. */
-const STAGE_COLOR: Record<WebScanStage['status'], string> = {
-  ran: 'var(--success)',
-  requested: 'var(--warning)',
-  not_run: 'var(--text-muted)',
+/** Stage status → the tone of its dot. `not_run` is deliberately NOT an error tone:
+ *  the stage did not fail, it did not happen, and painting it red would train people
+ *  to ignore it. */
+const STAGE_TONE: StatusToneMap<WebScanStage['status']> = {
+  ran: 'success',
+  requested: 'warning',
+  not_run: 'neutral',
 };
 
 /**
@@ -99,7 +99,7 @@ function StageCoverage({ stages, dense = false }: { stages: WebScanStage[] | nul
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {stages.map((s) => (
           <div key={s.stage} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
-            <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: STAGE_COLOR[s.status], flexShrink: 0, marginTop: 5 }} />
+            <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor(STAGE_TONE, s.status, 'solid'), flexShrink: 0, marginTop: 5 }} />
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', flexShrink: 0 }}>{label(s.stage)}</span>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>{status(s)}</span>
             {s.status !== 'ran' && s.reason && (
@@ -115,21 +115,29 @@ function StageCoverage({ stages, dense = false }: { stages: WebScanStage[] | nul
 }
 
 export function WebSecurityScanPanel() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('security');
+  const tc = useTranslations('common');
   const [target, setTarget] = useState('');
   const [savedTarget, setSavedTarget] = useState<string | null>(null);
   const [advisoryFeeds, setAdvisoryFeeds] = useState<AdvisoryFeedOption[]>([]);
   const [scans, setScans] = useState<WebScanRun[]>([]);
   const [result, setResult] = useState<WebScanRunResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Saving the target and running a scan are the panel's two actions. Each owns its
+  // busy flag (the buttons label themselves separately); starting one clears the
+  // other's message so the line under the form describes the latest action only.
+  const saveTask = usePanelTask();
+  const scanTask = usePanelTask();
+  const saving = saveTask.busy;
+  const running = scanTask.busy;
+  const error = scanTask.error ?? saveTask.error ?? loadError;
   const [openFinding, setOpenFinding] = useState<string | null>(null);
 
-  const load = () => {
-    setLoading(true);
+  // `loading` starts true, so the mount fetch needs no synchronous setState.
+  useEffect(() => {
     Promise.all([securityAgentApi.getWebScanConfig(), securityAgentApi.listWebScans()])
       .then(([cfg, list]) => {
         setSavedTarget(cfg.targetUrl);
@@ -137,36 +145,34 @@ export function WebSecurityScanPanel() {
         setTarget((prev) => prev || cfg.targetUrl || '');
         setScans(list);
       })
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setLoadError(errorMessage(e)))
       .finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
+  }, [errorMessage]);
 
   const saveTarget = async () => {
-    setSaving(true); setError(null);
-    try {
-      const res = await securityAgentApi.setWebScanTarget(target.trim() || null);
-      setSavedTarget(res.targetUrl);
-      if (res.targetUrl) setTarget(res.targetUrl);
-    } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
-    } finally {
-      setSaving(false);
-    }
+    setLoadError(null);
+    scanTask.clear();
+    const res = await saveTask.run(
+      () => securityAgentApi.setWebScanTarget(target.trim() || null),
+      { failure: tc('actionFailed') },
+    );
+    if (!res) return;
+    setSavedTarget(res.targetUrl);
+    if (res.targetUrl) setTarget(res.targetUrl);
   };
 
   const runScan = async () => {
-    setRunning(true); setError(null); setResult(null);
-    try {
-      const res = await securityAgentApi.runWebScan(target.trim() || undefined);
-      setResult(res);
-      setSavedTarget(res.targetUrl);
-      securityAgentApi.listWebScans().then(setScans).catch(() => {});
-    } catch (e) {
-      setError(faultMessage(e, 'Scan failed'));
-    } finally {
-      setRunning(false);
-    }
+    setLoadError(null);
+    saveTask.clear();
+    setResult(null);
+    const res = await scanTask.run(
+      () => securityAgentApi.runWebScan(target.trim() || undefined),
+      { failure: tc('actionFailed') },
+    );
+    if (!res) return;
+    setResult(res);
+    setSavedTarget(res.targetUrl);
+    securityAgentApi.listWebScans().then(setScans).catch(() => {});
   };
 
   const sortedFindings = (fs: WebScanFinding[]) =>

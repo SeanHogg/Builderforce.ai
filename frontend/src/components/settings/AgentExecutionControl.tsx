@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { runtimeApi } from '@/lib/builderforceApi';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 export default function AgentExecutionControl() {
+  const t = useTranslations('agentExecution');
   const confirm = useConfirm();
+  const errorText = useErrorText();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
@@ -17,17 +20,17 @@ export default function AgentExecutionControl() {
       setEnabled(state.enabled);
       setNotice('');
     } catch (error) {
-      setNotice(faultText(error, 'Could not load agent execution control.'));
+      setNotice(errorText(error));
     }
-  }, []);
+  }, [errorText]);
 
   useEffect(() => { void load(); }, [load]);
 
   const change = useCallback(async (next: boolean) => {
     if (!next && !(await confirm({
-      title: 'Disable all agent execution?',
-      message: 'This immediately cancels queued, running, or paused tenant agents and blocks manual, scheduled, and autonomous platform runs until a manager enables execution again. VS Code and Brain chats, Canvas/Create, and page MCP tools remain available.',
-      confirmLabel: 'Disable and stop all agents',
+      title: t('confirmTitle'),
+      message: t('confirmBody'),
+      confirmLabel: t('disableAll'),
       destructive: true,
     }))) return;
 
@@ -39,35 +42,33 @@ export default function AgentExecutionControl() {
       if (!next) {
         const stopped = result.stopped;
         setNotice(stopped?.failed.length
-          ? `Execution is disabled. ${stopped.cancelled} runs stopped; ${stopped.failed.length} could not be cancelled.`
-          : `Execution is disabled. ${stopped?.cancelled ?? 0} active runs stopped.`);
+          ? t('stoppedSome', { cancelled: stopped.cancelled, failed: stopped.failed.length })
+          : t('stoppedAll', { count: stopped?.cancelled ?? 0 }));
       } else {
-        setNotice('Agent execution is enabled.');
+        setNotice(t('enabledNotice'));
       }
     } catch (error) {
-      setNotice(faultText(error, 'Could not update agent execution control.'));
+      setNotice(errorText(error));
       await load();
     } finally {
       setSaving(false);
     }
-  }, [confirm, load]);
+  }, [confirm, load, errorText, t]);
 
   const disabled = enabled === false;
   return (
     <div style={{
-      background: disabled ? 'rgba(244,114,94,0.08)' : 'var(--bg-base)',
+      background: disabled ? 'var(--danger-bg)' : 'var(--bg-base)',
       border: `1px solid ${disabled ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
       borderRadius: 'var(--radius-lg)', padding: 20, marginTop: 20,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 420px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
-            Agent execution kill switch
+            {t('title')}
           </div>
           <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--text-muted)' }}>
-            {disabled
-              ? 'Tenant agent execution is blocked. VS Code and Brain chats, Canvas/Create, and page MCP tools remain available.'
-              : 'Emergency workspace override. Disabling stops tenant agents and blocks manual, scheduled, integration, and autonomous platform runs; interactive VS Code and Brain work remains available.'}
+            {disabled ? t('disabledBody') : t('enabledBody')}
           </p>
         </div>
         <RoleGate capability="runtime.control">
@@ -78,18 +79,18 @@ export default function AgentExecutionControl() {
             style={{
               minHeight: 40, padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 700,
               border: `1px solid ${disabled ? 'var(--accent)' : 'var(--coral-bright)'}`,
-              background: disabled ? 'var(--accent)' : 'rgba(244,114,94,0.1)',
+              background: disabled ? 'var(--accent)' : 'var(--danger-bg)',
               color: disabled ? 'var(--text-on-accent)' : 'var(--coral-bright)',
               cursor: saving || enabled == null ? 'default' : 'pointer',
               opacity: saving || enabled == null ? 0.6 : 1,
             }}
           >
-            {saving ? 'Updating…' : disabled ? 'Enable agent execution' : 'Disable and stop all agents'}
+            {saving ? t('updating') : disabled ? t('enable') : t('disableAll')}
           </button>
         </RoleGate>
       </div>
       <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: disabled ? 'var(--coral-bright)' : 'var(--text-secondary)' }}>
-        Status: {enabled == null ? 'Loading…' : enabled ? 'Execution enabled' : 'EXECUTION DISABLED'}
+        {enabled == null ? t('statusLoading') : enabled ? t('statusEnabled') : t('statusDisabled')}
       </div>
       {notice && <div role="status" style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>{notice}</div>}
     </div>

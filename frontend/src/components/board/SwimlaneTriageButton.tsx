@@ -5,6 +5,7 @@ import { useState, useCallback, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, type AutoRunDiagnostic, type AutoRunReason } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';
+import { statusColor, type StatusTone } from '@/lib/statusTone';
 
 /** Minimal ticket shape the triage control needs from the board. */
 export interface TriageTask {
@@ -24,43 +25,40 @@ interface Props {
   onDispatched: () => void;
 }
 
-/** Reason → theme tone (drives the chip colour, both light + dark via tokens). */
-const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
-  will_run: 'ok',
-  already_running: 'info',
+/**
+ * Reason → status tone (drives the chip dot, both light + dark via tokens). A full
+ * `Record` rather than a partial map on purpose: a new gate reason must be CLASSIFIED
+ * here, not silently fall back to neutral. "In motion" states take the brand accent.
+ */
+const REASON_TONE: Readonly<Record<AutoRunReason, StatusTone>> = {
+  will_run: 'success',
+  already_running: 'accent',
   // Transient and self-clearing (the next lane entry is a different lane), so it
   // reads like the other "in motion" states rather than as a problem.
-  same_lane_reentry: 'info',
-  human_gate: 'warn',
-  capability_mismatch: 'warn',
-  run_cap_exhausted: 'warn',
+  same_lane_reentry: 'accent',
+  human_gate: 'warning',
+  capability_mismatch: 'warning',
+  run_cap_exhausted: 'warning',
   // A billing stop, not backpressure: it will not clear by waiting or by clicking
-  // Run now, so it reads as a warning that needs a decision — never as 'info'.
-  cloud_run_limit: 'warn',
+  // Run now, so it reads as a warning that needs a decision — never as in motion.
+  cloud_run_limit: 'warning',
   // Same class of stop, and it holds the WHOLE workspace rather than this ticket.
-  tenant_token_limit: 'warn',
-  cooldown_active: 'info',
-  no_agent: 'muted',
+  tenant_token_limit: 'warning',
+  cooldown_active: 'accent',
+  no_agent: 'neutral',
   // A CONFIGURATION defect, not a quiet "nothing staffed": on a managed board this
   // means no dispatch is possible at all until the stage gets a role-capable
-  // participant, so it must not read as muted the way `no_agent` does.
-  managed_no_role: 'warn',
+  // participant, so it must not read as neutral the way `no_agent` does.
+  managed_no_role: 'warning',
   // Stronger still: `managed_no_role` can be staffed its way out of, this one cannot —
   // the stage names no role to staff, so somebody has to configure the lane (0386).
-  lane_unconfigured: 'warn',
-  no_board: 'muted',
-  no_lane: 'muted',
-  terminal_lane: 'muted',
-  not_executable: 'muted',
-  pending_approval: 'warn',
-  lane_requirement_gate: 'warn',
-};
-
-const TONE_COLOR: Record<'ok' | 'warn' | 'muted' | 'info', string> = {
-  ok: 'var(--success)',
-  warn: 'var(--warning)',
-  info: 'var(--coral-bright)',
-  muted: 'var(--text-muted)',
+  lane_unconfigured: 'warning',
+  no_board: 'neutral',
+  no_lane: 'neutral',
+  terminal_lane: 'neutral',
+  not_executable: 'neutral',
+  pending_approval: 'warning',
+  lane_requirement_gate: 'warning',
 };
 
 /**
@@ -222,7 +220,6 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
           {!loading && !error && candidates.map((tk) => {
             const d = diagnostics.get(tk.id);
             const reason = d?.reason;
-            const tone = reason ? REASON_TONE[reason] : 'muted';
             const isRunning = running.has(tk.id);
             const canRun = !!d?.candidate && !d.liveExecution;
             return (
@@ -241,7 +238,7 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
                     {tk.key ? `${tk.key} · ` : ''}{tk.title}
                   </div>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: TONE_COLOR[tone], flexShrink: 0 }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor(REASON_TONE, reason, 'solid'), flexShrink: 0 }} />
                     <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                       {reason ? t(`reason.${reason}`) : '—'}
                     </span>

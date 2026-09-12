@@ -39,6 +39,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { completeForTenant } from '../llm/tenantProxy';
+import { readProxyChoice } from '../llm/LlmProxyService';
 import { readTenantEntities } from './entityRead';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { checkSlidingWindow } from '../ratelimit/slidingWindow';
@@ -249,11 +250,7 @@ export function ingressRuntimeDeps(env: Env, db: Db, tenantId: number, projectId
         { meterUseCase: 'project_backend_handler' },
       );
       if (result.response.status >= 400) return '';
-      const raw = (await result.response.json().catch(() => null)) as
-        | { choices?: Array<{ message?: { content?: unknown } }> }
-        | null;
-      const content = raw?.choices?.[0]?.message?.content;
-      return typeof content === 'string' ? content : '';
+      return (await readProxyChoice(result)).content;
     },
 
     callConnector(args) {

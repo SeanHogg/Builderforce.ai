@@ -124,7 +124,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   // ---------------------------------------------------------------------------
   // GET /api/chats?limit=&offset=   — tenant JWT; all sessions across all agentHosts
   // ---------------------------------------------------------------------------
-  router.get('/chats', authMiddleware as never, async (c) => {
+  router.get('/chats', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const limit  = limitParam(c.req.query('limit'), 50, 100);
     const offset = offsetParam(c.req.query('offset'));
@@ -154,7 +154,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   // ---------------------------------------------------------------------------
   // GET /api/chats/:sessionId/messages?limit=   — tenant JWT; messages for session
   // ---------------------------------------------------------------------------
-  router.get('/chats/:sessionId/messages', authMiddleware as never, async (c) => {
+  router.get('/chats/:sessionId/messages', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const sessionId = Number(c.req.param('sessionId'));
     const limit = limitParam(c.req.query('limit'), 100, 200);
@@ -193,7 +193,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   // GET /api/agent-hosts/:agentHostId/sessions/:sessionKey/messages?limit=   — JWT auth
   // Browser client fetches history for the active session by key.
   // ---------------------------------------------------------------------------
-  router.get('/agentHosts/:agentHostId/sessions/:sessionKey/messages', authMiddleware as never, async (c) => {
+  router.get('/agentHosts/:agentHostId/sessions/:sessionKey/messages', authMiddleware, async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const agentHostId    = Number(c.req.param('agentHostId'));
     const sessionKey = c.req.param('sessionKey');

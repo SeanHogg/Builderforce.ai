@@ -10,6 +10,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { formatCents } from '@/lib/canvasMoney';
 import { sendSms } from '@/lib/phoneApi';
 import { usePhone } from '@/lib/usePhone';
+import { usePanelTask } from '@/hooks/usePanelTask';
 import styles from './phone.module.css';
 
 /**
@@ -37,9 +38,7 @@ export function SmsComposer() {
   const { overview, refresh } = usePhone();
   const [to, setTo] = useState('');
   const [body, setBody] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const { busy, error, notice, run } = usePanelTask();
 
   if (!overview?.plan.active) return null;
 
@@ -49,27 +48,24 @@ export function SmsComposer() {
   const mayCostMore = /[^ -~\n\r]/.test(body);
 
   const send = async () => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      const sent = await sendSms(to.trim(), body);
-      setNotice(t('compose.sent', {
-        segments: sent.segments,
-        amount: formatCents(sent.costCents, { locale }),
-      }));
+    await run(async () => {
+      const sent = await sendSms(to.trim(), body).catch((cause: unknown) => {
+        // Each refusal needs a different move from the operator — see the docstring.
+        const reason = (cause as { reason?: string }).reason;
+        if (reason === 'no_sending_number') throw new Error(t('compose.noNumber'));
+        if (reason === 'insufficient_credit') throw new Error(t('compose.noCredit'));
+        throw cause;
+      });
       setBody('');
       await refresh();
-    } catch (cause) {
-      const reason = (cause as { reason?: string }).reason;
-      setError(
-        reason === 'no_sending_number' ? t('compose.noNumber')
-          : reason === 'insufficient_credit' ? t('compose.noCredit')
-            : cause instanceof Error ? cause.message : t('compose.failed'),
-      );
-    } finally {
-      setBusy(false);
-    }
+      return sent;
+    }, {
+      success: (sent) => t('compose.sent', {
+        segments: sent.segments,
+        amount: formatCents(sent.costCents, { locale }),
+      }),
+      failure: t('compose.failed'),
+    });
   };
 
   return (

@@ -31,6 +31,7 @@ import {
   tenantComplianceSummary,
 } from '../../application/legal/termsAcceptance';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -254,7 +255,7 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
       body.kind,
       body.version ?? '',
       {
-        tenantId: (c.get('tenantId') as number | undefined) ?? null,
+        tenantId: optionalTenantId(c),
         ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
         userAgent: (c.req.header('user-agent') ?? '').slice(0, 500) || null,
         documentHash: body.documentHash ?? null,

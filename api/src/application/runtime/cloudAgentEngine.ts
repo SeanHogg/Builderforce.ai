@@ -81,8 +81,8 @@ import { notifyExecutionSubscribers } from './executionEvents';
 import { coercePausedLoopState, pauseExecutionForQuestion, withPausedToolResults, PAUSED_TOOL_RESULT_NOTE } from './executionPause';
 import {
   CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
-  MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
-  CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
+  MAX_PLACEHOLDER_FINISH_BLOCKS,
+  assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
 import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
@@ -1086,7 +1086,11 @@ async function runCloudToolLoop(
     { role: 'user', content: userContent },
   ];
   const startStep = opts?.resume?.step ?? 0;
-  const maxThisCall = opts?.maxSteps ?? MAX_CLOUD_TOOL_STEPS;
+  // Steps THIS invocation may take before yielding (the DO passes 1 per alarm tick).
+  // Undefined = the whole run in one call. There is no absolute step cap on a run: it
+  // ends when it finishes, is cancelled, or trips the kernel's consecutive-tool-failure
+  // breaker — a run is not wrong for being long, only for being stuck.
+  const maxThisCall = opts?.maxSteps;
 
   // Resolve the tenant's plan routing once (which model pool / vendor key), then
   // dispatch through THAT plan proxy — so a Pro cloud agent reaches premium coding
@@ -1680,7 +1684,7 @@ async function runCloudToolLoop(
     loop = await runAgentLoop<Row>({
       messages, codec, ports, hooks,
       signal: abortController.signal,
-      budget: { startStep, maxSteps: maxThisCall, stepCap: MAX_CLOUD_TOOL_STEPS },
+      budget: { startStep, ...(maxThisCall != null ? { maxSteps: maxThisCall } : {}) },
     });
   } catch (error) {
     // A thrown tool/LLM path is terminal for this invocation. Hand leases back now;
@@ -1748,12 +1752,12 @@ async function runCloudToolLoop(
     };
   }
 
-  // Durable (DO) surface: the per-tick budget is exhausted but the run isn't done
-  // (not finished, not cancelled, more steps remain). Hand back the resume state
-  // for the next alarm tick WITHOUT shipping — finalize only happens once the run
-  // truly finishes. (The Worker surface never sets deferFinalize, so it always
-  // falls through to the finalize below — behavior unchanged.)
-  const runDone = finished || cancelled || step >= MAX_CLOUD_TOOL_STEPS;
+  // Durable (DO) surface: the per-tick budget is spent but the run isn't done (not
+  // finished, not cancelled, not stopped by the failure breaker). Hand back the resume
+  // state for the next alarm tick WITHOUT shipping — finalize only happens once the run
+  // truly ends. (The Worker surface never sets deferFinalize, so it always falls through
+  // to the finalize below — behavior unchanged.)
+  const runDone = finished || cancelled || loop.exhausted;
   if (!runDone && opts?.deferFinalize) {
     return {
       ok: true,

@@ -244,14 +244,15 @@ export const CLOUD_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CLOUD_
 /** Container schema array — derived. Kept stable for the container image's loop. */
 export const CONTAINER_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CONTAINER_SURFACE_CAPS);
 
-// Read→edit→write workflows on a multi-file task need many turns: explore the
-// repo, read several files, then write each change — 10 was too few (a real run
-// burned all 10 just exploring and shipped a PRD-only PR). The durable (DO)
-// surface runs ONE step per alarm tick and heartbeats `executions.updated_at`
-// every tick, so the orphan reaper measures liveness from the heartbeat, not the
-// total step count — a long, healthy run never trips it. 30 gives room to finish
-// real edits (the long-lived Container surface allows 40).
-export const MAX_CLOUD_TOOL_STEPS = 30;
+// There is NO step cap on a cloud run (the durable and Worker surfaces). It used to be
+// 30: a real run burned all of an earlier 10 just exploring and shipped a PRD-only PR,
+// and 30 still cut off multi-file work mid-edit. The durable surface runs ONE step per
+// alarm tick and heartbeats `executions.updated_at` every tick, so the orphan reaper
+// measures liveness from the heartbeat, never the step count — a long, healthy run
+// trips nothing. What ends a run that is NOT healthy is the loop kernel's
+// consecutive-tool-failure breaker (`@builderforce/agent-loop`), the same one every
+// other surface stops on. The Container image still carries its own ceiling
+// ({@link CONTAINER_MAX_STEPS}) because its loop is in the deployed image, not here.
 
 // Anti-stub finish gate: how many finish attempts THIS RUN will have blocked for
 // still shipping placeholder/stub code before letting the PR open anyway (human-

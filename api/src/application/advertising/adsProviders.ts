@@ -321,7 +321,7 @@ export interface AdsProvider {
  */
 export {
   AdsProviderError, isRetryableAdStatus,
-  rec, list, text, count, toCents, fromCents, toISO, toDay, ask, requireField,
+  list, text, count, toCents, fromCents, toISO, toDay, ask, requireField,
   mapObjective, unmapObjective, totalInsights,
 } from './adsNormalize';
 

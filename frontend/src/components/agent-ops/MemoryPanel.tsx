@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { forgetMemory, isMemoryLapsed, listMemories, purgeExpiredMemories, type GovernedMemory } from '@/lib/agentOpsApi';
 import { button, card, cardGrid, chip, emptyState, mono, muted, sectionTitle, table, tableScroll, td, th } from './agentOpsStyles';
@@ -66,14 +67,9 @@ export function MemoryPanel() {
     await load();
   };
 
+  // Only facts agents already stopped recalling are removed, so no run changes —
+  // an inline two-step (InlineConfirmButton), not a destructive modal.
   const onPurge = async () => {
-    const ok = await confirm({
-      title: t('memory.purgeTitle'),
-      message: t('memory.purgeConfirm'),
-      confirmLabel: t('memory.purge'),
-      destructive: false,
-    });
-    if (!ok) return;
     await purgeExpiredMemories();
     await load();
   };
@@ -94,9 +90,9 @@ export function MemoryPanel() {
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ ...sectionTitle, marginBottom: 0 }}>{t('memory.tableTitle')}</h2>
           <RoleGate capability="facts.manage">
-            <button type="button" style={button()} onClick={() => void onPurge()} disabled={busy}>
+            <InlineConfirmButton style={button()} onConfirm={onPurge} disabled={busy} hint={t('memory.purgeConfirm')}>
               {t('memory.purge')}
-            </button>
+            </InlineConfirmButton>
           </RoleGate>
         </div>
 

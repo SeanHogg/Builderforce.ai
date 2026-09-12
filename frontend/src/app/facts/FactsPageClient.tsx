@@ -7,6 +7,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { factsApi, type Fact, type FactInput } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
@@ -29,6 +30,7 @@ const EMPTY: FactInput = { subject: '', predicate: '', object: '', source: '', c
 
 export default function FactsPageClient() {
   const t = useTranslations('factsPage');
+  const errorMessage = useErrorMessage();
   const role = useRole();
   const canManage = hasMinRole(role, 'developer');
 
@@ -85,7 +87,7 @@ export default function FactsPageClient() {
       setPanelOpen(false);
       load();
     } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -93,7 +95,7 @@ export default function FactsPageClient() {
 
   const remove = async (f: Fact) => {
     try { await factsApi.remove(f.id); setFacts((prev) => prev.filter((x) => x.id !== f.id)); }
-    catch (e) { setError(faultMessage(e, 'Delete failed')); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   const hasFilters = useMemo(() => !!(q || subject || predicate), [q, subject, predicate]);

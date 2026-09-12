@@ -632,6 +632,8 @@ export function Canvas3DView<T extends Canvas3DNode>({
                   {...(solid ? { style: { transform: `rotateY(${-orbit.yaw}deg) rotateX(${-orbit.pitch}deg)` } } : {})}
                   src={solid ?? card.preview}
                   alt={t('threeD.previewAlt', { label: card.label })}
+                  width={320}
+                  height={190}
                   loading="lazy"
                   draggable={false}
                 />}

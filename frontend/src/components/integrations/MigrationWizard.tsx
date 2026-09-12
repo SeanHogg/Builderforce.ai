@@ -15,6 +15,7 @@ import {
 import type { Project } from '@/lib/types';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Migration wizard — connect → discover → map/combine projects → map item types
  * → map users → stage & review → import. Nothing lands in real projects/tasks/
@@ -73,6 +74,7 @@ function stepForStatus(status: MigrationRunDetail['run']['status']): Step {
 
 export function MigrationWizard({ open, onClose, provider, providerLabel, credentials, onImported, side = 'right', initialRunId = null }: MigrationWizardProps) {
   const t = useTranslations('integrations');
+  const errorMessage = useErrorMessage();
   const confirm = useConfirm();
   const [step, setStep] = useState<Step>('connect');
   const [busy, setBusy] = useState(false);
@@ -95,10 +97,10 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
     setBusy(true);
     migrationsApi.get(initialRunId)
       .then((d) => { if (!cancelled) { setDetail(d); setStep(stepForStatus(d.run.status)); } })
-      .catch((e) => { if (!cancelled) setError(faultMessage(e, 'Could not load migration run')); })
+      .catch((e) => { if (!cancelled) setError(errorMessage(e)); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
-  }, [open, initialRunId]);
+  }, [open, initialRunId, errorMessage]);
 
   const reset = useCallback(() => {
     setStep('connect'); setDetail(null); setError(null); setBusy(false); setMode('both');

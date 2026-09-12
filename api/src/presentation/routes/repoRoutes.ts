@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
@@ -632,7 +633,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       tenantId, prId: id, method: body.method, mergedBy: userId ?? null,
     });
     if (!result.ok) {
-      return c.json({ error: result.error, code: result.code }, result.httpStatus as 409);
+      return statusResponse(c, { error: result.error, code: result.code }, result.httpStatus, { source: 'presentation/routes/repoRoutes.ts', operation: 'mergePullRequest' });
     }
     if (result.alreadyMerged) return c.json({ ok: true, alreadyMerged: true, pullRequest: result.pullRequest });
 
@@ -735,7 +736,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
 
     const result = await ensureAgentWorkflow(c.env as Env, db, tenantId, id);
     if (!result.ok) {
-      return c.json({ error: result.reason, code: result.code }, result.code === 'unsupported' ? 400 : 502);
+      return statusResponse(c, { error: result.reason, code: result.code }, result.code === 'unsupported' ? 400 : 502, { source: 'presentation/routes/repoRoutes.ts', operation: 'ensureAgentWorkflow' });
     }
     return c.json({ ok: true, created: result.created, path: AGENT_WORKFLOW_PATH });
   });
@@ -761,7 +762,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
 
     const result = await ingestOpenAlertsForRepo(c.env as Env, db, tenantId, id);
     if (!result.ok) {
-      return c.json({ error: result.reason, code: result.code }, result.code === 'forbidden' ? 403 : 502);
+      return statusResponse(c, { error: result.reason, code: result.code }, result.code === 'forbidden' ? 403 : 502, { source: 'presentation/routes/repoRoutes.ts', operation: 'ingestAlerts' });
     }
     return c.json(result);
   });

@@ -13,6 +13,7 @@ import { BrandPaletteEditor } from './BrandPaletteEditor';
 import type { Project } from '@/lib/types';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * RfpContent — the RFP/RFQ Response surface, rendered as a tab UNDER Projects
@@ -65,6 +66,7 @@ function money(fmt: Formatter, cents: number | null | undefined): string {
 export default function RfpContent() {
   const fmt = useFormat();
   const t = useTranslations('rfpPage');
+  const errorMessage = useErrorMessage();
   const router = useRouter();
   const role = useRole();
   const canManage = hasMinRole(role, 'developer');
@@ -110,7 +112,7 @@ export default function RfpContent() {
       setBrandIsDefault(false);
       setBrandOpen(false);
     } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
+      setError(errorMessage(e));
     } finally {
       setSavingBrand(false);
     }
@@ -130,7 +132,7 @@ export default function RfpContent() {
       setPanelOpen(false);
       router.push(`/projects/rfp/${created.id}`);
     } catch (e) {
-      setError(faultMessage(e, 'Save failed'));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }

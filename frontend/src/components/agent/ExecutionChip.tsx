@@ -1,7 +1,8 @@
 'use client';
 
 import { RoleGate } from '@/components/RoleGate';
-import { EXECUTION_STATUS_COLOR, rerunAffordance, type RerunAffordance } from '../board/AgentChip';
+import { EXECUTION_STATUS_TONE, rerunAffordance, type RerunAffordance } from '../board/AgentChip';
+import { statusColor } from '@/lib/statusTone';
 import { BuildStatusBadge } from '../board/BuildStatusBadge';
 import type { TaskBuildStatus } from '@/lib/builderforceApi';
 
@@ -50,7 +51,7 @@ const ICON: Record<RerunAffordance, { path: string; title: string }> = {
 };
 
 export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunning, agentName, buildStatus }: ExecutionChipProps) {
-  const color = EXECUTION_STATUS_COLOR[status] ?? 'var(--text-secondary)';
+  const color = statusColor(EXECUTION_STATUS_TONE, status);
   const affordance = onRerun ? rerunAffordance(status) : null;
 
   return (

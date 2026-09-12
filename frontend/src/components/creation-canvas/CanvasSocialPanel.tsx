@@ -28,10 +28,11 @@ import {
   type SocialNetworkOption,
 } from '@/lib/socialApi';
 import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/connectorsApi';
-import { resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
+import { resolvePublicMediaUrls, type PublicMediaProblem } from '@/lib/canvasPublicMedia';
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
 import { PanelTabs } from './PanelTabs';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 export interface CanvasSocialPanelProps {
   /** Put a live feed tile on the board. Same helper the canvas tools use. */
   onAddFeed: (filter: SocialFeedFilter) => Promise<void> | void;
@@ -57,8 +58,11 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
   const [networks, setNetworks] = useState<SocialNetworkOption[]>([]);
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run: runTask, fail: failTask } = usePanelTask();
+  // Publishing's success line names what the API DID (pending review, how many posts
+  // went out, how many targets were scheduled), which `run`'s up-front `success` cannot
+  // carry — so the notice stays local and is cleared as each action starts, the same
+  // moment `run` clears the error.
   const [notice, setNotice] = useState<string | null>(null);
 
   // Connect form
@@ -90,11 +94,12 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       // everywhere" — and unticking is cheaper than ticking five boxes.
       setSelected(accountList.accounts.filter((a) => a.ready).map((a) => a.id));
     } catch (failure) {
-      setError(faultMessage(failure, t('loadFailed')));
+      const message = faultMessage(failure, t('loadFailed'));
+      if (message) failTask(message);
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, failTask]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -102,63 +107,53 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
 
   const beginConnect = useCallback(async (option: SocialNetworkOption) => {
     setConnecting(option);
-    setError(null);
     setValues({});
     setConnectionName(option.label);
-    try {
-      const detail = await connectorsApi.get(option.connectorKey);
-      setFields(authFieldsFor(detail.manifest));
-    } catch (failure) {
-      setError(faultMessage(failure, t('loadFailed')));
-      setFields([]);
-    }
-  }, [t]);
+    setNotice(null);
+    const detail = await runTask(() => connectorsApi.get(option.connectorKey), { failure: t('loadFailed') });
+    setFields(detail ? authFieldsFor(detail.manifest) : []);
+  }, [runTask, t]);
 
   const submitConnect = useCallback(async () => {
     if (!connecting) return;
-    setBusy(true);
-    setError(null);
-    try {
+    const target = connecting;
+    setNotice(null);
+    const connected = await runTask(async () => {
       await connectorsApi.createConnection({
-        connectorKey: connecting.connectorKey,
-        name: connectionName.trim() || connecting.label,
+        connectorKey: target.connectorKey,
+        name: connectionName.trim() || target.label,
         credentials: values,
       });
       setConnecting(null);
-      setNotice(t('connected', { network: connecting.label }));
       await load();
-    } catch (failure) {
-      setError(faultMessage(failure, t('connectFailed')));
-    } finally {
-      setBusy(false);
-    }
-  }, [connecting, connectionName, load, t, values]);
+      return true;
+    }, { failure: t('connectFailed') });
+    if (connected) setNotice(t('connected', { network: target.label }));
+  }, [connecting, connectionName, load, runTask, t, values]);
 
   const disconnect = useCallback(async (account: SocialAccount) => {
-    setBusy(true);
-    setError(null);
-    try {
+    setNotice(null);
+    await runTask(async () => {
       await connectorsApi.removeConnection(account.id);
       await load();
-    } catch (failure) {
-      setError(faultMessage(failure, t('disconnectFailed')));
-    } finally {
-      setBusy(false);
-    }
-  }, [load, t]);
+    }, { failure: t('disconnectFailed') });
+  }, [load, runTask, t]);
 
   const addFeed = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
+    setNotice(null);
+    const added = await runTask(async () => {
       await onAddFeed({});
-      onClose();
-    } catch (failure) {
-      setError(faultMessage(failure, t('feedFailed')));
-    } finally {
-      setBusy(false);
-    }
-  }, [onAddFeed, onClose, t]);
+      return true;
+    }, { failure: t('feedFailed') });
+    if (added) onClose();
+  }, [onAddFeed, onClose, runTask, t]);
+
+  /** A media problem in the reader's language — the resolver returns a code. */
+  const mediaProblemText = useCallback((problem: PublicMediaProblem): string => {
+    if (problem.code === 'tabOnly') return t('mediaTabOnly');
+    if (problem.code === 'notPublic') return t('mediaNotPublic');
+    return problem.detail ? t('mediaUploadFailedReason', { reason: problem.detail }) : t('mediaUploadFailed');
+  }, [t]);
 
   /**
    * One account and no schedule publishes IMMEDIATELY; anything else becomes a
@@ -168,11 +163,11 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
    */
   const publish = useCallback(async () => {
     const copy = text.trim();
-    if (!copy) { setError(t('needsText')); return; }
-    if (selected.length === 0) { setError(t('needsAccount')); return; }
-    setBusy(true);
-    setError(null);
-    try {
+    if (!copy) { failTask(t('needsText')); return; }
+    if (selected.length === 0) { failTask(t('needsAccount')); return; }
+    setNotice(null);
+    // Resolves to the success line, which only the API's answer can word.
+    const outcome = await runTask(async () => {
       // The SAME resolver `canvas_create_social_campaign` uses, so a post a person
       // composes and one a model drafts attach the identical URL. A picked board
       // object contributes its own source; the URL box still works for something
@@ -182,10 +177,9 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
         ...(mediaUrl.trim() ? [mediaUrl.trim()] : []),
       ], { name: copy.slice(0, 60) });
       if (resolved.problems.length && resolved.urls.length === 0) {
-        setError(resolved.problems[0]!.reason);
-        return;
+        throw new Error(mediaProblemText(resolved.problems[0]!));
       }
-      if (resolved.problems.length) setNotice(resolved.problems[0]!.reason);
+      if (resolved.problems.length) setNotice(mediaProblemText(resolved.problems[0]!));
       const media = resolved.urls;
       if (selected.length === 1 && !scheduledAt) {
         const result = await socialApi.publish({
@@ -194,36 +188,30 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
           ...(linkUrl.trim() ? { linkUrl: linkUrl.trim() } : {}),
           ...(media.length ? { mediaUrls: media } : {}),
         });
-        setNotice(result.pending ? t('publishPending') : t('published'));
-      } else {
-        const { campaign } = await socialApi.createCampaign({
-          name: copy.slice(0, 60),
-          body: copy,
-          connectionIds: selected,
-          ...(linkUrl.trim() ? { linkUrl: linkUrl.trim() } : {}),
-          ...(media.length ? { mediaUrls: media } : {}),
-          ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
-        });
-        onAddCampaign(campaign);
-        if (!scheduledAt) {
-          const batch = await socialApi.publishCampaign(campaign.id);
-          if (batch.campaign) onAddCampaign(batch.campaign);
-          setNotice(t('campaignPublished', { published: batch.published, targets: campaign.targets }));
-        } else {
-          setNotice(t('campaignScheduled', { count: campaign.targets }));
-        }
+        return result.pending ? t('publishPending') : t('published');
       }
-      setText('');
-      setLinkUrl('');
-      setMediaUrl('');
-      setMediaObjectIds([]);
-      setScheduledAt('');
-    } catch (failure) {
-      setError(faultMessage(failure, t('publishFailed')));
-    } finally {
-      setBusy(false);
-    }
-  }, [boardMedia, linkUrl, mediaObjectIds, mediaUrl, onAddCampaign, scheduledAt, selected, t, text]);
+      const { campaign } = await socialApi.createCampaign({
+        name: copy.slice(0, 60),
+        body: copy,
+        connectionIds: selected,
+        ...(linkUrl.trim() ? { linkUrl: linkUrl.trim() } : {}),
+        ...(media.length ? { mediaUrls: media } : {}),
+        ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
+      });
+      onAddCampaign(campaign);
+      if (scheduledAt) return t('campaignScheduled', { count: campaign.targets });
+      const batch = await socialApi.publishCampaign(campaign.id);
+      if (batch.campaign) onAddCampaign(batch.campaign);
+      return t('campaignPublished', { published: batch.published, targets: campaign.targets });
+    }, { failure: t('publishFailed') });
+    if (outcome === undefined) return;
+    setNotice(outcome);
+    setText('');
+    setLinkUrl('');
+    setMediaUrl('');
+    setMediaObjectIds([]);
+    setScheduledAt('');
+  }, [boardMedia, failTask, linkUrl, mediaObjectIds, mediaProblemText, mediaUrl, onAddCampaign, runTask, scheduledAt, selected, t, text]);
 
   const toggleAccount = useCallback((id: string) => {
     setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
@@ -339,7 +327,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
                 of guesses about which picture is which. `alt` is empty because the
                 label beside it already names the object; announcing it twice is
                 noise to a screen reader. */}
-            {item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className={styles.socialMediaThumb} />}
+            {item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" width={26} height={26} className={styles.socialMediaThumb} />}
             <span>{item.title}</span>
           </label>)}
           <small>{t('boardMediaHelp')}</small>

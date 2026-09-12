@@ -21,6 +21,7 @@ import { SessionList } from '@/components/security/SessionList';
 import PasskeysPanel from '@/components/security/PasskeysPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { formatElapsedBetween } from '@/lib/duration';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -38,6 +39,7 @@ const sectionTitle: React.CSSProperties = {
 export default function AccountSecurityPanel() {
   const fmt = useFormat();
   const t = useTranslations('security');
+  const errorMessage = useErrorMessage();
 
   const [mySessions, setMySessions] = useState<MySession[]>([]);
   const [loadingMine, setLoadingMine] = useState(true);
@@ -63,7 +65,7 @@ export default function AccountSecurityPanel() {
         ids.includes(s.id) ? { ...s, isActive: false, revokedAt: new Date().toISOString() } : s
       ));
     } catch (e) {
-      setMyError(faultMessage(e, 'Revoke failed'));
+      setMyError(errorMessage(e));
     }
   };
 

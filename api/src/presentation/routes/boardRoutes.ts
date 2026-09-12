@@ -36,6 +36,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { authMiddleware, isManager, requireRole } from '../middleware/authMiddleware';
+import { requireTenantId } from '../middleware/tenantContext';
 import { TenantRole } from '../../domain/shared/types';
 import { ForbiddenError, RequestValidationError } from '../../domain/shared/errors';
 import {
@@ -234,7 +235,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // ── Boards CRUD ───────────────────────────────────────────────────────────
 
   router.post('/', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const body = await parseBody(c, CreateBoardBody);
 
     // One board per project (UNIQUE(project_id), migration 0111): find-or-create
@@ -260,7 +261,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.get('/', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     // Stable order: the frontend resolves a project's board with `find(byProjectId)`,
     // and both the kanban and the config panel must pick the same one when a
     // project happens to have more than one board. Without an explicit order the
@@ -276,7 +277,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.get('/:boardId', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const [board] = await db
       .select()
@@ -298,7 +299,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.patch('/:boardId', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const body = await parseBody(c, PatchBoardBody);
 
@@ -335,7 +336,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.delete('/:boardId', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     await db.delete(boards).where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
     return c.body(null, 204);
@@ -352,7 +353,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   }
 
   router.get('/:boardId/swimlanes', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
     const lanes = await db
@@ -370,7 +371,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // says No swimlanes yet, board still shows columns" bug). onConflictDoNothing
   // guards the UNIQUE(board_id, key) constraint if two heals race.
   router.post('/:boardId/swimlanes/ensure-defaults', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const [board] = await db
       .select({ id: boards.id, segmentId: boards.segmentId })
@@ -405,7 +406,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // configuration is DEVELOPER — the tier `runtime.execute` uses, and the tier the
   // `board.manageLanes` capability advertises in the editor. Reads stay open.
   router.post('/:boardId/swimlanes', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
 
@@ -466,7 +467,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.patch('/:boardId/swimlanes/:laneId', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
 
@@ -548,7 +549,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // the parameter existed, folding `Ready` into `To Do` silently sent its tickets
   // wherever the policy pointed, which is a different board than the operator asked for.
   router.delete('/:boardId/swimlanes/:laneId', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     const reassignTo = c.req.query('into')?.trim() || null;
@@ -590,7 +591,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // the board component could even count it.
 
   router.get('/:boardId/orphaned-tasks', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const [board] = await db
       .select({ projectId: boards.projectId })
@@ -604,7 +605,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // Re-home them onto a lane the operator names — the same contract as deleting a
   // lane with `?into=`: where stranded work goes is a decision, not a policy.
   router.post('/:boardId/orphaned-tasks/adopt', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
     const { into: targetKey } = await parseBody(c, AdoptOrphansBody);
@@ -630,7 +631,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   }
 
   router.get('/:boardId/swimlanes/:laneId/agents', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
@@ -645,7 +646,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/:boardId/swimlanes/:laneId/agents', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
@@ -739,7 +740,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
    * runs, and doing so for a whole lane at once is emphatically not a read.
    */
   router.post('/:boardId/swimlanes/:laneId/run-lane', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     const laneKey = await loadLaneKey(tenantId, boardId, laneId);
@@ -758,7 +759,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.delete('/:boardId/swimlanes/:laneId/agents/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const laneId = c.req.param('laneId');
     const id = c.req.param('id');
     await db
@@ -777,7 +778,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // so a running board's requirements evolve without re-applying a template.
 
   router.get('/:boardId/swimlanes/:laneId/requirements', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
@@ -791,7 +792,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/:boardId/swimlanes/:laneId/requirements', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     if (!boardId || !laneId) return c.json({ error: 'Swimlane not found' }, 404);
@@ -817,7 +818,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/:boardId/swimlanes/:laneId/requirements/:reqId', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     const reqId = c.req.param('reqId');
@@ -841,7 +842,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
   router.delete('/:boardId/swimlanes/:laneId/requirements/:reqId', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const laneId = c.req.param('laneId');
     const reqId = c.req.param('reqId');
     if (!laneId || !reqId) return c.body(null, 204);
@@ -854,7 +855,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // ── Tickets (lifecycle) ────────────────────────────────────────────────────
 
   router.post('/:boardId/tickets', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
 
@@ -875,7 +876,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.get('/:boardId/tickets', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
     const rows = await db
@@ -891,7 +892,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   // status pill per task without an N+1. NOT cached: dispatch status is volatile
   // live-execution state — caching it would show stale pending/running pills.
   router.get('/:boardId/dispatches', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
     const rows = await db
@@ -926,7 +927,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   }
 
   router.post('/tickets/:ticketRunId/advance', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const ticketRunId = c.req.param('ticketRunId');
     if (!(await assertTicketRun(tenantId, ticketRunId))) return c.json({ error: 'Ticket run not found' }, 404);
 
@@ -947,7 +948,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/tickets/:ticketRunId/approve', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const ticketRunId = c.req.param('ticketRunId');
     if (!(await assertTicketRun(tenantId, ticketRunId))) return c.json({ error: 'Ticket run not found' }, 404);
     try {
@@ -959,7 +960,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/tickets/:ticketRunId/retry', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const ticketRunId = c.req.param('ticketRunId');
     if (!(await assertTicketRun(tenantId, ticketRunId))) return c.json({ error: 'Ticket run not found' }, 404);
     try {

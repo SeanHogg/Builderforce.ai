@@ -24,8 +24,9 @@ interface Props {
  *
  * A slide-out rather than a centered modal because that is the app-wide
  * convention (`components/SlideOutPanel`): a modal is reserved for terminal
- * destructive approvals, which these are not — the delete and merge
- * CONFIRMATIONS still go through `useConfirm`.
+ * destructive approvals, which these are not. Submitting the panel IS the
+ * deliberate step for a merge (its description states the consequence); only a
+ * DELETE still goes through `useConfirm`.
  */
 export function SessionEditorPanel({ open, title, description, submitLabel, busy = false, error, onSubmit, onClose, children }: Props) {
   const t = useTranslations('sessionManagement');

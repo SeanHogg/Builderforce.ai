@@ -2,8 +2,9 @@
 
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
+import { statusColor } from '@/lib/statusTone';
 import {
-  DEADLINE_COLORS,
+  DEADLINE_TONE,
   daysBetween,
   formatShort,
   parseDate,
@@ -211,7 +212,7 @@ export function ScheduleGantt<T extends Schedulable & { id: string | number }>({
                   1,
                   daysBetween(schedule.start!, schedule.end!) + 1 + preview.width,
                 );
-                const color = DEADLINE_COLORS[schedule.status];
+                const color = statusColor(DEADLINE_TONE, schedule.status, 'solid');
                 const label = getLabel(item);
                 const dragging = drag?.item.id === item.id;
                 return (

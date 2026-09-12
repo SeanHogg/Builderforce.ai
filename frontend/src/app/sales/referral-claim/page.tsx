@@ -4,13 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { salesApi } from '@/lib/salesApi';
 import { safeRedirectPath } from '@/lib/safeRedirect';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /** OAuth returns here with a verified web session so referral attribution cannot
  * be lost when a prospect chooses Google/GitHub/LinkedIn/Microsoft signup. */
 export default function ReferralClaimPage() {
   const router = useRouter();
   const params = useSearchParams();
   const started = useRef(false);
+  const errorMessage = useErrorMessage();
   const [error, setError] = useState<string | null>(null);
   const claim = useCallback(async () => {
     const code = params.get('ref')?.trim();
@@ -20,8 +21,8 @@ export default function ReferralClaimPage() {
     try {
       await salesApi.claimReferral(code);
       router.replace(next);
-    } catch (cause) { setError(faultMessage(cause, 'Could not record referral attribution.')); }
-  }, [params, router]);
+    } catch (cause) { setError(errorMessage(cause)); }
+  }, [params, router, errorMessage]);
   useEffect(() => {
     if (started.current) return;
     started.current = true;

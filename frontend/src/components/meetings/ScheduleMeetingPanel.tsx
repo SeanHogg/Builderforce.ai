@@ -7,7 +7,7 @@ import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { listWorkforceDirectory, listTeams, type WorkforceOption, type TeamSummary } from '@/lib/teams';
 import { meetingsApi, type MeetingDetail, type MeetingKind, type TimeSlot } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const KINDS: MeetingKind[] = ['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review'];
 /** Kinds the backend backs with a team chat by default (mirrors TEAM_CEREMONY_KINDS
  *  server-side) — used only to seed the toggle; the explicit choice always wins. */
@@ -45,6 +45,7 @@ export function ScheduleMeetingPanel({
   projectId?: number | null;
 }) {
   const t = useTranslations('meetings');
+  const errorMessage = useErrorMessage();
   const { user } = useAuth();
   const [kind, setKind] = useState<MeetingKind>('adhoc');
   const [title, setTitle] = useState('');
@@ -109,9 +110,9 @@ export function ScheduleMeetingPanel({
       const { slots: found } = await meetingsApi.suggest(humanRefs, durationMinutes, from.toISOString(), to.toISOString(), 6);
       setSlots(found);
     } catch (e) {
-      setError(faultMessage(e, 'Could not find a time'));
+      setError(errorMessage(e));
     } finally { setFinding(false); }
-  }, [humanRefs, durationMinutes]);
+  }, [humanRefs, durationMinutes, errorMessage]);
 
   const submit = useCallback(async () => {
     setBusy(true);
@@ -136,9 +137,9 @@ export function ScheduleMeetingPanel({
       setTitle(''); setScheduledAt(''); setSelected(new Set()); setKind('adhoc'); setSlots(null);
       setLinkChatTouched(false); setTeamId(null);
     } catch (e) {
-      setError(faultMessage(e, 'Could not create meeting'));
+      setError(errorMessage(e));
     } finally { setBusy(false); }
-  }, [others, selected, kind, title, projectId, scheduled, scheduledAt, durationMinutes, videoEnabled, linkChat, teamId, user, onCreated, onClose]);
+  }, [others, selected, kind, title, projectId, scheduled, scheduledAt, durationMinutes, videoEnabled, linkChat, teamId, user, onCreated, onClose, errorMessage]);
 
   const field: React.CSSProperties = { fontSize: 13, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', width: '100%' };
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, display: 'block' };

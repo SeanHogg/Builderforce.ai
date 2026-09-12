@@ -215,7 +215,7 @@ import { expandTemplateWorkflows } from './expandTemplateWorkflows';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
 import { canvasSocialToolRedirect, isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
-import { canvasMediaSource, isCanvasMediaKind, resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
+import { canvasMediaSource, describePublicMediaProblem, isCanvasMediaKind, resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -438,6 +438,8 @@ import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteTheme
 import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage, faultText } from '@/lib/apiClient';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
+import { useErrorText } from '@/i18n/useErrorMessage';
 const Canvas3DView = dynamic(
   () => import('@/components/canvas/Canvas3DView')
     .then((module) => module.Canvas3DView as ComponentType<Canvas3DViewProps<CreationFlowNode>>),
@@ -998,6 +1000,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId }) {
   const fmt = useFormat();
   const t = useTranslations('creationCanvas');
+  const errorText = useErrorText();
   /**
    * The plain-module translator, built ONCE.
    *
@@ -4006,7 +4009,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         notices.push(imported.notice);
         if (!suggestion) suggestion = imported.suggestedPrompt;
       } catch (error) {
-        importDone({ ok: false, detail: `unreadable — ${error instanceof Error ? error.message : 'import failed'}` });
+        importDone({ ok: false, detail: `unreadable — ${toolErrorMessage(error, 'import failed')}` });
         setNodes((current) => current.map((node) => node.id === stub.id
           ? { ...node, data: { ...node.data, status: importLabel('statusUnreadable'), importPending: false } as CreationNodeData }
           : node));
@@ -4388,7 +4391,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setNotice(t('noticeMockupDelivered'));
         }
       }).catch((error) => {
-        const message = error instanceof Error ? error.message : 'Could not create delivery task';
+        const message = errorText(error);
         const failed: CreationDeliverable = { ...deliverable, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
         setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivery failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'failed', projectId, artifactId: selectedNode.id, durationMs: performance.now() - deliveryStartedAt }).catch(() => undefined);
@@ -4398,7 +4401,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     addTaskNode(`draft-task:${crypto.randomUUID()}`, 'Draft');
     setNotice(t('noticeNeedProjectForDelivery'));
-  }, [nodes, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes]);
+  }, [errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes]);
 
   const expandMockupSet = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'mockupSet') return;
@@ -5058,7 +5061,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             const page = await getEntityRows(domain, entity.name, { limit: Math.min(limit, 50) });
             return { entity, rows: page.rows, total: page.total };
           } catch (error) {
-            return { entity, rows: [], total: entity.count, error: error instanceof Error ? error.message : 'Entity rows unavailable' };
+            return { entity, rows: [], total: entity.count, error: toolErrorMessage(error, 'Entity rows unavailable') };
           }
         }));
         return { domain, summary, matchedEntities: entityEvidence, items, metrics };
@@ -7447,7 +7450,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           skipped: source.rows.length - examples.length,
         };
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That dataset could not be promoted to a training corpus.' };
+        return { error: toolErrorMessage(error, 'That dataset could not be promoted to a training corpus.') };
       }
     },
   }, {
@@ -7498,7 +7501,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         schema = await dataSourceApi.schema(source.id, args.dataset);
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That data source could not be read.' };
+        return { error: toolErrorMessage(error, 'That data source could not be read.') };
       }
       if (!schema.tables.length) return { error: `${source.name} reported no tables${args.dataset ? ` in dataset "${args.dataset}"` : ''}.` };
 
@@ -7568,7 +7571,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         result = await dataSourceApi.query(resolved.source.id, String(args.sql ?? ''), args.limit);
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That query could not be run.' };
+        return { error: toolErrorMessage(error, 'That query could not be run.') };
       }
       const payload = {
         ok: true, source: result.source, sql: result.sql,
@@ -7677,7 +7680,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         read = await mailboxApi.listMessages(resolved.connection.id, filter);
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
+        return { error: toolErrorMessage(error, 'That mailbox could not be read.') };
       }
 
       const node = stage.createObject('inbox', args);
@@ -7685,7 +7688,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       node.data = {
         ...node.data,
         title: args.title?.trim().slice(0, 160) || read.accountEmail,
-        subtitle: describeMailboxFilter(filter),
+        // No `subtitle`: the card renders the persisted `filter` in the reader's
+        // language (InboxBody); a baked-in English sentence would be one locale forever.
         status: `${read.triage.length} message${read.triage.length === 1 ? '' : 's'}`,
         connectionId: resolved.connection.id,
         accountEmail: read.accountEmail,
@@ -7704,6 +7708,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ok: true, proposed: true,
         object: { id: node.id, kind: 'inbox', title: node.data.title },
         accountEmail: read.accountEmail,
+        filter: describeMailboxFilter(filter),
         total: read.triage.length,
         unread: unreadCount,
         messages: read.triage,
@@ -7732,7 +7737,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         read = await mailboxApi.listMessages(connectionId, (target.data.filter as MailboxFilter) ?? {});
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
+        return { error: toolErrorMessage(error, 'That mailbox could not be read.') };
       }
       const unreadCount = read.triage.filter((m) => m.unread).length;
       const patch = {
@@ -7771,7 +7776,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         message = await mailboxApi.getMessage(connectionId, args.messageId);
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That message could not be read.' };
+        return { error: toolErrorMessage(error, 'That message could not be read.') };
       }
 
       const node = stage.createObject('email', { x: source.position.x + 500, y: source.position.y });
@@ -7929,7 +7934,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         read = await socialApi.feed((target.data.filter as SocialFeedFilter) ?? {});
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'Those accounts could not be read.' };
+        return { error: toolErrorMessage(error, 'Those accounts could not be read.') };
       }
       const patch = socialFeedPatch(read);
       stage.updateObject(`Refresh social feed ${target.id}`, target.id, patch);
@@ -8013,7 +8018,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         accounts = await socialApi.accounts();
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'The connected accounts could not be read.' };
+        return { error: toolErrorMessage(error, 'The connected accounts could not be read.') };
       }
       const wanted = (args.networks ?? []).filter(isSocialNetworkName);
       const targets = accounts.accounts
@@ -8077,7 +8082,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ...(persistence === 'server' && sessionId ? { sessionId } : {}),
         });
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That campaign could not be drafted.' };
+        return { error: toolErrorMessage(error, 'That campaign could not be drafted.') };
       }
 
       const node = stage.createObject('socialCampaign', args);
@@ -8096,7 +8101,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // Reported rather than thrown: one unusable picture must not lose the
         // campaign, and the model has to be able to say WHICH one and why —
         // "Instagram was skipped" with no reason is the answer this replaces.
-        ...(media.problems.length ? { mediaProblems: media.problems } : {}),
+        ...(media.problems.length ? { mediaProblems: media.problems.map((problem) => ({ source: problem.source, reason: describePublicMediaProblem(problem) })) } : {}),
         ...(missingObjects.length ? { mediaObjectsWithoutPictures: missingObjects } : {}),
       };
     },
@@ -8123,7 +8128,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         batch = await socialApi.publishCampaign(campaignId);
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'That campaign could not be published.' };
+        return { error: toolErrorMessage(error, 'That campaign could not be published.') };
       }
       if (batch.campaign) {
         stage.updateObject(`Publish social campaign ${target.id}`, target.id, socialCampaignNodeData(batch.campaign));
@@ -8161,7 +8166,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           referencePage: `/tools/${entry.id}`,
         })) };
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'The diagnostics catalog could not be read.' };
+        return { error: toolErrorMessage(error, 'The diagnostics catalog could not be read.') };
       }
     },
   }, {
@@ -8208,7 +8213,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         try {
           result = await toolsApi.compute(toolId, input);
         } catch (error) {
-          return { error: error instanceof Error ? error.message : 'That diagnostic could not be scored.' };
+          return { error: toolErrorMessage(error, 'That diagnostic could not be scored.') };
         }
       }
 
@@ -8256,7 +8261,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const { targets } = await listRealizationTargets();
         return { targets };
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'The realization catalog could not be read.' };
+        return { error: toolErrorMessage(error, 'The realization catalog could not be read.') };
       }
     },
   }, {
@@ -8304,7 +8309,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           if (!top) return { error: 'No realization target matched that idea. Call canvas_list_realization_targets and name one with targetKey.' };
           targetKey = top.key;
         } catch (error) {
-          return { error: error instanceof Error ? error.message : 'The idea could not be read.' };
+          return { error: toolErrorMessage(error, 'The idea could not be read.') };
         }
       }
 
@@ -8312,7 +8317,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       try {
         realization = (await createCanvasRealization({ idea, targetKey, sessionId })).realization;
       } catch (error) {
-        return { error: error instanceof Error ? error.message : `That could not be planned as a "${targetKey}".` };
+        return { error: toolErrorMessage(error, `That could not be planned as a "${targetKey}".`) };
       }
 
       const doc = primaryRealizationDoc(realization.plan.files ?? {});
@@ -8375,7 +8380,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const node = stageImageAsset(asset, { title: imageTitle, prompt: query, at: args });
         return { ok: true, proposed: true, object: { id: node.id, kind: 'image', title: node.data.title }, source: asset.source, provider: asset.provider, imageUrl: asset.url };
       } catch (error) {
-        return { error: error instanceof Error ? error.message : 'The image could not be resolved' };
+        return { error: toolErrorMessage(error, 'The image could not be resolved') };
       }
     },
   }, {
@@ -8447,7 +8452,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // The service's message names the REAL reason (unconfigured / timed out / too
         // large). Relaying it verbatim is the entire contract — a generic failure is
         // what sends the model back to inventing a limitation of its own.
-        return { error: error instanceof Error ? error.message : 'The page could not be captured' };
+        return { error: toolErrorMessage(error, 'The page could not be captured') };
       }
     },
   }, {
@@ -8494,7 +8499,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // model — so its failure is reported rather than quietly downgraded into
         // an HTML game the user did not ask for.
         if (platform === 'roblox') {
-          return { error: error instanceof Error ? error.message : 'The Roblox place could not be generated' };
+          return { error: toolErrorMessage(error, 'The Roblox place could not be generated') };
         }
         artifact = { ...buildBrowserCreativeArtifact(seed), provider: 'builderforce-browser' };
       }
@@ -9241,7 +9246,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             }),
           );
         } catch (error) {
-          failures.push({ title: String(testCase.data.title), reason: error instanceof Error ? error.message : 'publish failed' });
+          failures.push({ title: String(testCase.data.title), reason: toolErrorMessage(error, 'publish failed') });
         }
       }
       if (!published.length) return { error: `No case could be published: ${failures.map((failure) => `${failure.title} (${failure.reason})`).join('; ')}` };
@@ -9469,7 +9474,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const confirmCanvasAction = ({ name, args }: { name: string; args: unknown }) => {
         let preview = '';
         try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
-        return confirm({ title: t('approveAgentActionTitle'), message: `${t('approveAgentActionBody', { action: name.replaceAll('_', ' ') })}${preview ? `\n\n${preview}` : ''}`, confirmLabel: t('approveAgentActionConfirm'), destructive: false });
+        return confirm({ title: t('approveAgentActionTitle'), message: `${t('approveAgentActionBody', { action: name.replaceAll('_', ' ') })}${preview ? `\n\n${preview}` : ''}`, confirmLabel: t('approveAgentActionConfirm') });
       };
       const runGroupTurn = async () => {
         // Stop is honoured between every phase of the turn, not only inside the model
@@ -10362,13 +10367,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         };
         pollRun(30);
       }).catch((error) => {
-        const message = error instanceof Error ? error.message : 'Workflow could not be started';
+        const message = errorText(error);
         const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
         setNotice(message);
       });
     })();
-  }, [canRun, compileWorkflow, persistence, resolveWorkflowNode, setNodes, t]);
+  }, [canRun, compileWorkflow, errorText, persistence, resolveWorkflowNode, setNodes, t]);
 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
@@ -10465,13 +10470,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeWebsitePublished', { url: site.url }));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'succeeded', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { url: site.url, versionToken: site.versionToken } }).catch(() => undefined);
     }).catch((error) => {
-      const message = error instanceof Error ? error.message : 'Website publish failed';
+      const message = errorText(error);
       const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
       setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publish failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
       setNotice(message);
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'failed', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt }).catch(() => undefined);
     });
-  }, [sessionId, setNodes, t]);
+  }, [errorText, sessionId, setNodes, t]);
 
   /**
    * The canonical project an object acts against, PROVISIONING one when the board
@@ -10659,13 +10664,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeVideoGenerated', { frames: media.frameCount, model: model.name }));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { model: model.slug, frameCount: media.frameCount } }).catch(() => undefined);
     }).catch((error) => {
-      const message = error instanceof Error ? error.message : 'Video generation failed';
+      const message = errorText(error);
       const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
       setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generation failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
       setNotice(message);
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'failed', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt }).catch(() => undefined);
     });
-  }, [nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
+  }, [errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
 
   const runCreativeAction = useCallback((objectId?: string, action = 'generate') => {
     const target = nodes.find((node) => node.id === objectId && CREATIVE_GENERATOR_KINDS.has(node.data.kind))
@@ -13710,7 +13715,7 @@ function VideoInspectorSection({ data, onChange, onGenerateVideo }: KindSectionP
     <label>{t('publishedEvermindModel')}<input value={typeof data.modelSlug === 'string' ? data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label>
     <label>{t('frames')}<input type="number" min="1" max="64" value={typeof data.maxFrames === 'number' ? data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label>
     <button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>
-    {typeof data.videoUrl === 'string' && <img src={data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 'var(--radius-lg)' }} />}
+    {typeof data.videoUrl === 'string' && <img src={data.videoUrl} alt={t('videoFirstFrame')} width={1280} height={720} style={{ width: '100%', height: 'auto', borderRadius: 'var(--radius-lg)' }} />}
   </>;
 }
 

@@ -29,7 +29,10 @@
  * a broken feature.
  */
 
-import { executeCloudNode, type CloudExecutorEnv, type NodeInput, type OutboundPort } from '../workflow/cloudExecutor';
+import { asJsonRecord } from '../../domain/shared/json';
+import { executeCloudNode } from '../workflow/cloudExecutor';
+import type { NodeInput, OutboundPort } from '../workflow/nodes/types';
+import type { Env } from '../../env';
 import { sandboxOutboundPort } from '../workflow/sandboxOutboundPort';
 import type { StageCheck } from '@builderforce/creation-canvas-contract';
 
@@ -51,10 +54,6 @@ const EXECUTABLE_KINDS: ReadonlySet<string> = new Set([
   'router', 'switch', 'iterator', 'assert', 'regex-match', 'html-to-text', 'html-table', 'html-elements',
   'match-elements', 'match-pattern-advanced', 'replace', 'chunk-text', 'compose-string', 'convert-encoding',
 ]);
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
 
 function rows(value: unknown): ReadonlyArray<Record<string, unknown>> {
   return Array.isArray(value)
@@ -84,11 +83,11 @@ function check(severity: StageCheck['severity'], label: string, detail?: string)
  * configured".
  */
 export async function dryRunSystemSteps(
-  env: CloudExecutorEnv,
+  env: Env,
   objects: readonly { canvasData: unknown; content: unknown }[],
   outbound: OutboundPort = sandboxOutboundPort(),
 ): Promise<StageCheck[]> {
-  const steps = objects.flatMap((object) => rows({ ...record(object.content), ...record(object.canvasData) }.steps));
+  const steps = objects.flatMap((object) => rows({ ...asJsonRecord(object.content), ...asJsonRecord(object.canvasData) }.steps));
   const runnable = steps.filter((step) => EXECUTABLE_KINDS.has(String(step.kind ?? '').trim().toLowerCase()));
   if (!runnable.length) return [];
 

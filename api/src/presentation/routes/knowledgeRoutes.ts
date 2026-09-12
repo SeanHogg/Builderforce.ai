@@ -1,3 +1,4 @@
+import { InternalError } from '../../domain/shared/errors';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Knowledge Management — SOPs, processes & documents (migration 0227).
@@ -43,7 +44,9 @@ import {
   startKnowledgeCheckout,
 } from '../../application/knowledge/knowledgeCommerce';
 import { ListingError } from '../../application/marketplace/creationListings';
-import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
+import { ideProxy, newTraceId, readProxyChoice } from '../../application/llm/LlmProxyService';
+import { completeJson } from '../../application/llm/completeJson';
+import { asJsonObject, extractJsonPayload } from '../../domain/shared/json';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
 import { wrapStreamForTrace } from '../../application/llm/streamTrace';
@@ -420,7 +423,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         updatedBy: userId,
       })
       .returning();
-    if (!doc) return c.json({ error: 'Failed to create document' }, 500);
+    if (!doc) throw new InternalError('Failed to create document');
 
     const tags = normaliseTags(body.tags ?? tmpl?.tags);
     if (tags.length) {
@@ -1004,27 +1007,15 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const userMsg = `Title: ${doc.title}\n\n--- Document ---\n${doc.content}`;
 
     const traceId = newTraceId();
-    const requestBody = {
-      messages: [
-        { role: 'system' as const, content: system },
-        { role: 'user' as const, content: userMsg },
-      ],
-      stream: false as const,
-      temperature: 0.4,
-    };
+    const analysisRequest = { system, user: userMsg, temperature: 0.4, maxTokens: ANALYSIS_MAX_TOKENS, useCase: 'knowledge_analysis', traceId };
 
     // Document analysis is the tenant's own doc work → prefer their connected BYO account.
     const { proxy: analyzeProxy } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
-    let result;
-    try {
-      result = await analyzeProxy.complete(requestBody, undefined, traceId);
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'Analysis failed' }, 502);
-    }
-    const json = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: string } }> }
-      | null;
-    const raw = json?.choices?.[0]?.message?.content ?? '';
+    const out = await completeJson({ kind: 'proxy', proxy: analyzeProxy }, analysisRequest, analysisFromJson);
+    const result = out.result;
+    // No envelope at all means dispatch itself threw: nothing to trace, nothing to read.
+    if (!result) return c.json({ error: out.ok ? 'Analysis failed' : out.detail }, 502);
+    const choice = await readProxyChoice(result);
 
     logTrace(c.env, c.executionCtx, {
       traceId,
@@ -1036,15 +1027,17 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       requestIp: c.req.header('cf-connecting-ip') ?? null,
       origin: c.req.header('Origin') ?? null,
       userAgent: c.req.header('User-Agent') ?? null,
-      requestBody: requestBody as unknown as Record<string, unknown>,
+      requestBody: analysisRequest,
       // The parsed envelope is already in hand — a non-streamed trace has no reason
       // to record a null body.
-      responseBody: json,
-      errorMessage: raw ? null : 'empty response',
+      responseBody: choice.body,
+      errorMessage: choice.content ? null : 'empty response',
     });
 
-    if (!raw.trim()) return c.json({ error: 'Model returned an empty response' }, 502);
-    return c.json({ ...parseAnalysis(raw), model: result.resolvedModel });
+    if (out.ok) return c.json({ ...out.value, model: result.resolvedModel });
+    // Prose instead of JSON still answers: the text becomes the summary.
+    if (out.reason === 'unparseable' || out.reason === 'invalid') return c.json({ ...parseAnalysis(out.content ?? ''), model: result.resolvedModel });
+    return c.json({ error: out.reason === 'empty' ? 'Model returned an empty response' : 'The analysis model is unavailable right now' }, 502);
   });
 
   // =====================================================================
@@ -1232,7 +1225,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         updatedBy: userId,
       })
       .returning();
-    if (!doc) return c.json({ error: 'Failed to install listing' }, 500);
+    if (!doc) throw new InternalError('Failed to install listing');
 
     const tags = parseTags(listing.tags);
     if (tags.length) {
@@ -1266,33 +1259,24 @@ export interface AnalysisResult {
 
 const ANALYSIS_CATEGORIES: AnalysisCategory[] = ['inefficiency', 'gap', 'risk', 'clarity'];
 const ANALYSIS_SEVERITIES = ['low', 'medium', 'high'] as const;
+/** The reply carries a full Markdown rewrite of the procedure, so it is not a short one. */
+const ANALYSIS_MAX_TOKENS = 4096;
 
 /**
  * Parse the model's analysis response into a validated shape. Tolerates a
- * ```json fenced block or surrounding prose; falls back to a summary-only result
- * (raw text) when no valid JSON object is present, so the endpoint never 500s on
- * a non-conforming model.
+ * ```json fenced block or surrounding prose (the ONE reader, `extractJsonPayload`);
+ * falls back to a summary-only result (raw text) when no valid JSON object is
+ * present, so the endpoint never 500s on a non-conforming model.
  */
 export function parseAnalysis(raw: string): AnalysisResult {
-  const empty: AnalysisResult = { summary: '', findings: [], improvedFlow: '' };
-  if (!raw?.trim()) return empty;
+  if (!raw?.trim()) return { summary: '', findings: [], improvedFlow: '' };
+  return analysisFromJson(extractJsonPayload(raw)) ?? { summary: raw.trim().slice(0, 2000), findings: [], improvedFlow: '' };
+}
 
-  // Pull the outermost {...} (handles fences / leading prose).
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  let parsed: unknown = null;
-  if (start !== -1 && end > start) {
-    try {
-      parsed = JSON.parse(raw.slice(start, end + 1));
-    } catch {
-      parsed = null;
-    }
-  }
-  if (!parsed || typeof parsed !== 'object') {
-    return { summary: raw.trim().slice(0, 2000), findings: [], improvedFlow: '' };
-  }
-
-  const obj = parsed as Record<string, unknown>;
+/** A parsed reply → the validated shape; `null` (refused) when it is not an object. */
+function analysisFromJson(value: unknown): AnalysisResult | null {
+  const obj = asJsonObject(value);
+  if (!obj) return null;
   const findings: AnalysisFinding[] = Array.isArray(obj.findings)
     ? obj.findings
         .filter((f): f is Record<string, unknown> => !!f && typeof f === 'object')

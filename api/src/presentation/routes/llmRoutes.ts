@@ -1,3 +1,4 @@
+import { statusResponse } from '../middleware/errorResponse';
 import { isClientError, statusOf } from '../../domain/shared/errors';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
@@ -142,7 +143,7 @@ import type { FailoverEvent, ByoDiagnostics } from '../../application/llm/LlmPro
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { hashSecret } from '../../infrastructure/auth/HashService';
-import { TenantRole, TenantPlan } from '../../domain/shared/types';
+import { TenantRole, TenantPlan, ROLE_ORDER } from '../../domain/shared/types';
 import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
 import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBody } from '../../domain/tenant/planFeatures';
 import { resolveTenantPlan, type TenantPlanSnapshot } from '../../application/tenant/tenantPlanSnapshot';
@@ -337,10 +338,14 @@ export type TenantAccess = TenantPlanSnapshot & {
   /** Endpoint scopes of the authenticating `bfk_*` key. null = unrestricted
    *  (full-tenant key) or a non-key auth path (agentHost / JWT). See migration 0070. */
   tenantApiKeyScopes: string[] | null;
+  /** The caller's role in the tenant. A `bfk_*` key carries its CREATOR's membership
+   *  role (it is that member's editor credential), and `userId` names the creator;
+   *  `clk_*`/`bfa_*` agent-host keys are anonymous DEVELOPERs. */
   role: TenantRole;
-  /** True when the JWT carries `sa: true`. Bypasses plan-cap and strict-pin
-   *  gates so platform admins can use the gateway without hitting tenant caps.
-   *  Always false for `clk_*` and `bfk_*` machine-credential paths. */
+  /** True when `users.isSuperadmin` holds for the caller — the JWT's subject, or the
+   *  creator of a `bfk_*` key. Bypasses plan-cap and strict-pin gates so platform
+   *  admins can use the gateway without hitting tenant caps. Always false for the
+   *  `clk_*`/`bfa_*` agent-host path. */
   isSuperadmin: boolean;
 };
 
@@ -672,6 +677,19 @@ async function loadTenantApiKeyByHash(env: HonoEnv['Bindings'], keyHash: string)
       // A key minted by a superadmin (e.g. the IDE editor key) inherits the
       // superadmin's unlimited budget — mirrors the JWT path's users.isSuperadmin.
       creatorIsSuperadmin: users.isSuperadmin,
+      // ── THE KEY ACTS AS ITS CREATOR ─────────────────────────────────────────────
+      // A `bfk_*` key is a person's editor credential: the device sign-in mints one for
+      // the signed-in member, and `/auth/tenant-api-key-token` already exchanges it for a
+      // session AS that member. Yet the gateway auth path resolved every such key to an
+      // anonymous DEVELOPER, so a platform tool the VS Code chat replayed through
+      // `/v1/mcp/call` ran as a role its owner never held. Measured on chat #103: the
+      // workspace OWNER, directing the agent from the editor, asked it to coordinate a
+      // ticket and was answered `403 manager role required` — by their own workspace.
+      // Only the creator's ID lives in this long-lived entry (it never changes). Their
+      // ROLE is resolved per request through the short-TTL membership resolver the JWT
+      // path uses ({@link resolveMembership}), so a demotion or removal takes effect
+      // within its self-heal window rather than the year this entry may live.
+      createdByUserId: tenantApiKeys.createdByUserId,
     })
     .from(tenantApiKeys)
     .leftJoin(users, eq(users.id, tenantApiKeys.createdByUserId))
@@ -683,7 +701,71 @@ async function loadTenantApiKeyByHash(env: HonoEnv['Bindings'], keyHash: string)
   // shared coercer (which tolerates both the parsed array and a legacy stringified row)
   // rather than a second private JSON.parse that only handled the legacy shape.
   const allowlist: string[] | null = coerceStringArrayOrNull(r.allowedOrigins);
-  return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
+  return {
+    ok: true,
+    payload: {
+      id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes),
+      isSuperadmin: r.creatorIsSuperadmin === true,
+      createdByUserId: r.createdByUserId ?? null,
+    },
+  };
+}
+
+/** A member's standing in a tenant, as the membership resolver answers it. */
+interface ResolvedMembership {
+  isSuperadmin: boolean;
+  /** The member's role in this tenant — a value the vocabulary knows, or null. */
+  role: TenantRole | null;
+}
+
+/**
+ * THE membership read behind gateway auth: is this user an active member of this
+ * tenant, are they a superadmin, and what is their role. KV-cached (~1ms hit vs ~30-80ms
+ * Neon round-trip), keyed on tenant+user so every credential the user holds for the
+ * tenant shares one entry. Short TTL — see `JWT_TTL_SECONDS` — because tenant_members
+ * has no single mutation hook; a removed/demoted member keeps cached access for at most
+ * that window. Falls through to DB when AUTH_CACHE_KV is unbound.
+ *
+ * Shared by the JWT path (which reads the superadmin flag) and the `bfk_*` path (which
+ * reads the key creator's role), so the two can never disagree about who a member is.
+ */
+async function resolveMembership(c: Context<HonoEnv>, tenantId: number, userId: string): Promise<ResolvedMembership | null> {
+  const resolved = await resolveKeyCached(
+    c.env,
+    'jwt',
+    jwtMembershipHash(tenantId, userId),
+    async () => {
+      const db = requestDb(c);
+      const [membership] = await db
+        .select({
+          userId: tenantMembers.userId,
+          role: tenantMembers.role,
+          isSuperadmin: users.isSuperadmin,
+        })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(and(
+          eq(tenantMembers.tenantId, tenantId),
+          eq(tenantMembers.userId, userId),
+          eq(tenantMembers.isActive, true),
+        ))
+        .limit(1);
+      if (!membership) return { ok: false, reason: 'User is not an active member of this tenant' };
+      return {
+        ok: true,
+        payload: {
+          isSuperadmin: membership.isSuperadmin === true,
+          role: ROLE_ORDER.includes(membership.role as TenantRole) ? membership.role : null,
+        },
+      };
+    },
+  );
+  if (!resolved.ok) return null;
+  const payload = resolved.payload as { isSuperadmin?: unknown; role?: unknown };
+  return {
+    isSuperadmin: payload.isSuperadmin === true,
+    role: ROLE_ORDER.includes(payload.role as TenantRole) ? (payload.role as TenantRole) : null,
+  };
 }
 
 /**
@@ -760,8 +842,8 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, () => loadTenantApiKeyByHash(c.env, keyHash));
 
     if (!resolved.ok) throw new Error(resolved.reason);
-    const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist, scopes: keyScopes, isSuperadmin: keyIsSuperadmin } =
-      resolved.payload as { id: string; tenantId: number; allowedOrigins: string[] | null; scopes?: string[] | null; isSuperadmin?: boolean };
+    const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist, scopes: keyScopes, isSuperadmin: keyIsSuperadmin, createdByUserId } =
+      resolved.payload as { id: string; tenantId: number; allowedOrigins: string[] | null; scopes?: string[] | null; isSuperadmin?: boolean; createdByUserId?: string | null };
 
     // Origin allowlist enforcement (single source: tenantApiKeyService.originAllowed).
     const origin = c.req.header('Origin') ?? null;
@@ -784,15 +866,21 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
         }),
     );
 
+    // The key acts as the member who minted it (see `loadTenantApiKeyByHash`): their id
+    // and their CURRENT role in this workspace, from the short-TTL membership resolver.
+    // A key whose creator is gone, or who is no longer an active member, keeps the
+    // anonymous DEVELOPER floor it always had.
+    const creator = createdByUserId ? await resolveMembership(c, keyTenantId, createdByUserId) : null;
+
     return {
-      userId: null,
+      userId: creator ? createdByUserId ?? null : null,
       tenantId: keyTenantId,
       agentHostId: null,
       agentHostTokenDailyLimit: null,
       tenantApiKeyId: keyId,
       tenantApiKeyScopes: keyScopes ?? null,
-      role: TenantRole.DEVELOPER,
-      isSuperadmin: keyIsSuperadmin === true,
+      role: creator?.role ?? TenantRole.DEVELOPER,
+      isSuperadmin: keyIsSuperadmin === true || creator?.isSuperadmin === true,
       ...(await resolveTenantPlan(c.env, keyTenantId)),
     };
   }
@@ -815,38 +903,11 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   // membership check was already paying for).
   let dbIsSuperadmin = false;
   if (!isServiceToken) {
-    // KV-cached membership resolution (~1ms hit vs ~30-80ms Neon round-trip).
-    // Keyed on tenant+user (not the raw token) so every JWT the user holds for
-    // this tenant shares one entry. Short TTL — see `JWT_TTL_SECONDS` — because
-    // tenant_members has no single mutation hook; a removed/demoted member
-    // keeps cached access for at most that window. Falls through to DB when
-    // AUTH_CACHE_KV is unbound.
-    const resolved = await resolveKeyCached(
-      c.env,
-      'jwt',
-      jwtMembershipHash(payload.tid, payload.sub),
-      async () => {
-        const db = requestDb(c);
-        const [membership] = await db
-          .select({
-            userId: tenantMembers.userId,
-            isSuperadmin: users.isSuperadmin,
-          })
-          .from(tenantMembers)
-          .innerJoin(users, eq(users.id, tenantMembers.userId))
-          .where(and(
-            eq(tenantMembers.tenantId, payload.tid),
-            eq(tenantMembers.userId, payload.sub),
-            eq(tenantMembers.isActive, true),
-          ))
-          .limit(1);
-        if (!membership) return { ok: false, reason: 'User is not an active member of this tenant' };
-        return { ok: true, payload: { isSuperadmin: membership.isSuperadmin === true } };
-      },
-    );
-
-    if (!resolved.ok) throw new Error(resolved.reason);
-    dbIsSuperadmin = (resolved.payload as { isSuperadmin: boolean }).isSuperadmin === true;
+    // The ONE membership read (see `resolveMembership`): active membership is required,
+    // and the superadmin flag is read live rather than trusted from the JWT.
+    const membership = await resolveMembership(c, payload.tid, payload.sub);
+    if (!membership) throw new Error('User is not an active member of this tenant');
+    dbIsSuperadmin = membership.isSuperadmin;
   }
 
   return {
@@ -1937,10 +1998,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // a 4xx now surfaces as itself; anything unmapped (500) stays 502, because from
       // the caller's side it is the relay that failed.
       const status = statusOf(e);
-      return c.json(
-        { error: e instanceof Error ? e.message : 'MCP call failed' },
-        isClientError(status) ? (status as 400) : 502,
-      );
+      return statusResponse(c, { error: e instanceof Error ? e.message : 'MCP call failed' }, isClientError(status) ? status : 502, { source: 'presentation/routes/llmRoutes.ts', operation: 'gatewayMcpCall' }, e);
     }
   });
 
@@ -3168,7 +3226,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     } catch (err) {
       // 400 bad payload — failover won't help, surface as-is.
       if (err instanceof VendorFatalError) {
-        return c.json(envelope({ error: err.message }), err.status as 400);
+        return statusResponse(c, envelope({ error: err.message }), err.status, { source: 'presentation/routes/llmRoutes.ts', operation: 'vendorFatal' }, err);
       }
       // Every vendor failed (outage on all configured providers).
       if (err instanceof EmbeddingCascadeExhaustedError) {

@@ -64,7 +64,7 @@ import { type LegalObjectKind } from '@builderforce/creation-canvas-contract';
 // resolution is a live lookup rather than a stored id. `placement.client` reuses it from
 // the hiring vocabulary on the same argument.
 import { COUNTERPARTY_HINT, counterpartyAccountField } from './founderObjects';
-import { deriveNumber, registerSpecObjectSet, SUMMARY_FIELD, type SpecObjectSpec } from './specObjects';
+import { deriveNumber, registerSpecObjectSet, specVerdict, SUMMARY_FIELD, type SpecObjectSpec } from './specObjects';
 
 /** i18n namespace for every legal label, field and status. */
 export const LEGAL_NAMESPACE = 'creationCanvas.legal';
@@ -298,12 +298,10 @@ export const LEGAL_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         derive: (data) => {
           const from = typeof data.assignedFrom === 'string' ? data.assignedFrom.trim() : '';
           const at = typeof data.assignedAt === 'string' ? data.assignedAt.trim() : '';
-          if (!from) {
-            return 'NOT ASSIGNED. No assignor is recorded, so on this record the right still belongs to whoever created it. That is a diligence finding, not a missing field — record the assignment or say plainly that there is none.';
-          }
+          if (!from) return specVerdict('assignment.none');
           return at
-            ? `Assigned from ${from} on ${at.slice(0, 10)}.`
-            : `Assigned from ${from}, with NO execution date recorded — an assignment nobody dated is one a counterparty can put after the filing.`;
+            ? specVerdict('assignment.dated', { from, at: at.slice(0, 10) })
+            : specVerdict('assignment.undated', { from });
         },
       },
       { name: 'notes', render: 'text', label: 'notes', hint: `Whatever the record's own notes column holds. ${PROJECTED}`, bookkeeping: true },
@@ -343,9 +341,7 @@ export const LEGAL_OBJECT_SPECS: readonly SpecObjectSpec[] = [
           const exposure = deriveNumber(data.exposureAmount);
           if (spend === undefined || exposure === undefined || exposure <= 0) return undefined;
           const share = Math.round((spend / exposure) * 100);
-          return share >= 100
-            ? `Spend to date is ${share}% of the estimated exposure — more has gone on arguing this than it is estimated to be worth. That is a settlement conversation, not a budget line.`
-            : `Spend to date is ${share}% of the estimated exposure.`;
+          return specVerdict(share >= 100 ? 'spend.over' : 'spend.under', { share });
         },
       },
       { name: 'openedAt', render: 'stat', label: 'openedAt', hint: `ISO date the matter opened. ${PROJECTED}`, bookkeeping: true },

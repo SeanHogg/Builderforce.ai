@@ -34,6 +34,7 @@
     "check:methodology": "node scripts/check-methodology.mjs",
     "check:primitives": "node scripts/check-primitive-duplication.mjs",
     "check:silent-catches": "node ../scripts/check-silent-catches.mjs --target frontend/src",
+    "check:error-fallbacks": "node scripts/check-error-fallbacks.mjs",
     "check:react-hooks": "node scripts/check-react-hooks-ratchet.mjs --changed"
   },
   "dependencies": {

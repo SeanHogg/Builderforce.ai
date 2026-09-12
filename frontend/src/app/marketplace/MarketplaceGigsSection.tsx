@@ -24,7 +24,10 @@ import { MilestoneLinesEditor, MilestoneLinesPreview } from '@/components/freela
 import type { MilestoneDraft, MilestoneRow } from '@/lib/milestonesApi';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
+import { ENGAGEMENT_TONE } from '@/lib/freelance/statusTones';
+import { usePanelTask } from '@/hooks/usePanelTask';
 // The "Find work" surface (open jobs to bid on, my proposals, my engagements) is now
 // a category of the marketplace rather than a standalone /freelancer/gigs page — same
 // shared search box, one merged surface, matching the Talent + Models consolidation.
@@ -52,13 +55,13 @@ const chip: React.CSSProperties = {
   background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)',
 };
 
-const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  invited: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  interviewing: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-text, var(--warning))' },
-  active: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
-  submitted: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  accepted: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
-  declined: { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' },
+/** A bid's status. Engagements are coloured by the shared {@link ENGAGEMENT_TONE}. */
+const PROPOSAL_TONE: StatusToneMap<JobProposal['status']> = {
+  submitted: 'info',
+  shortlisted: 'info',
+  accepted: 'success',
+  declined: 'neutral',
+  withdrawn: 'neutral',
 };
 
 type Tab = 'work' | 'foryou' | 'invites' | 'saved' | 'proposals' | 'engagements' | 'alerts';
@@ -90,7 +93,12 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   // "Fixed bid" is a second thing to keep in step across five catalogues.
   const tt = useTranslations('talent');
   const tg = useTranslations('gigs');
+  const tc = useTranslations('common');
+  const errorMessage = useErrorMessage();
   const { isAuthenticated } = useAuth();
+  // Every bid / save / withdraw / accept on this surface: one in flight at a time,
+  // and its failure lands in the same banner as a failed read.
+  const task = usePanelTask();
   const [tab, setTab] = useState<Tab>('work');
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [proposals, setProposals] = useState<JobProposal[]>([]);
@@ -100,8 +108,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const [recommended, setRecommended] = useState<PostingMatch[]>([]);
   const [filters, setFilters] = useState<BrowseFilters>(NO_FILTERS);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [bidFor, setBidFor] = useState<string | null>(null);
   const [bid, setBid] = useState<{ note: string; rate: string }>({ note: '', rate: '' });
   // The bidder's COUNTER-PROPOSED schedule. Held here and sent with the bid, because
@@ -119,7 +126,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const [jobAttachments, setJobAttachments] = useState<JobPosting['attachments']>([]);
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true); setLoadError(null);
     try {
       // Open jobs for everyone; the two "mine" reads only when there is a token to
       // send. Asking for them signed-out is not a read that comes back empty — it is
@@ -138,20 +145,16 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       setJobs(j); setProposals(p); setEngagements(e); setSaved(sv);
       setInvites(inv); setRecommended(rec);
     } catch (err) {
-      setError(faultMessage(err, 'Failed to load'));
+      setLoadError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, filters]);
+  }, [isAuthenticated, filters, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const act = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key); setError(null);
-    try { await fn(); await load(); }
-    catch (e) { setError(faultMessage(e, 'Action failed')); }
-    finally { setBusy(null); }
-  };
+  const act = (fn: () => Promise<void>) =>
+    task.run(async () => { await fn(); await load(); }, { failure: tc('actionFailed') });
 
   /**
    * Open the bid form for one posting.
@@ -191,9 +194,8 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
     } catch { /* a schedule we could not read is one the bidder simply authors themselves */ }
   };
 
-  const submitBid = async (jobId: string) => {
-    setBusy(`bid:${jobId}`); setError(null);
-    try {
+  const submitBid = (jobId: string) =>
+    task.run(async () => {
       await bidJob(jobId, {
         coverNote: bid.note || undefined,
         rateCents: bid.rate ? Math.round(parseFloat(bid.rate) * 100) : undefined,
@@ -207,9 +209,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       setBidFor(null); setBid({ note: '', rate: '' }); setBidLines([]); setPublished(null);
       setScreening([]); setAnswers({});
       await load();
-    } catch (e) { setError(faultMessage(e, 'Failed')); }
-    finally { setBusy(null); }
-  };
+    }, { failure: tc('actionFailed') });
 
   /**
    * What a posting costs, in the unit its SHAPE implies.
@@ -239,20 +239,15 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
    *  bidder sees is the bid form on that posting — an invite that lands inside the flow
    *  rather than at a dead end. */
   const answerInvite = async (invite: JobInvite, accept: boolean) => {
-    setBusy(`invite:${invite.id}`); setError(null);
-    try {
+    const answered = await task.run(async () => {
       await respondToInvite(invite.id, accept);
       await load();
-      if (accept) {
-        const job = jobs.find((entry) => entry.id === invite.jobId);
-        setTab('work');
-        if (job) await openBid(job);
-      }
-    } catch (e) {
-      setError(faultMessage(e, 'Failed'));
-    } finally {
-      setBusy(null);
-    }
+      return true;
+    }, { failure: tc('actionFailed') });
+    if (!answered || !accept) return;
+    const job = jobs.find((entry) => entry.id === invite.jobId);
+    setTab('work');
+    if (job) await openBid(job);
   };
 
   // The marketplace's shared search box filters this section too, so the one input
@@ -292,10 +287,9 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
     ? saved.filter((row) => (row.jobTitle ?? '').toLowerCase().includes(q))
     : saved;
 
-  const pill = (s: string) => {
-    const c = STATUS_COLORS[s] ?? { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' };
-    return <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: c.bg, color: c.fg, flexShrink: 0 }}>{t(`status.${s}`)}</span>;
-  };
+  const pill = (s: string, tones: StatusToneMap) => (
+    <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', ...statusPillStyle(tones, s), flexShrink: 0 }}>{t(`status.${s}`)}</span>
+  );
 
   /** The two tabs that are about the VIEWER rather than about the work on offer. */
   const guestWall = !isAuthenticated && tab !== 'work' ? (
@@ -324,7 +318,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
         ))}
       </div>
 
-      {error && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{error}</div>}
+      {(loadError ?? task.error) && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{loadError ?? task.error}</div>}
       {loading && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('loading')}</p>}
 
       {/* An account, not an empty list — the two private tabs have nothing to show a
@@ -384,7 +378,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
               <div key={j.id} style={card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                   <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{j.title}</div>
-                  {j.myProposal && pill(j.myProposal.status)}
+                  {j.myProposal && pill(j.myProposal.status, PROPOSAL_TONE)}
                 </div>
                 <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span>{j.tenantName} · {priceLabel(j)}</span>
@@ -413,9 +407,9 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                   {/* Shortlisting is available to anyone signed in, including before
                       they are ready to bid — which is the whole point of a shortlist. */}
                   {isAuthenticated && !j.myProposal && (
-                    <button type="button" disabled={busy === `save:${j.id}`}
+                    <button type="button" disabled={task.busy}
                       aria-pressed={savedIds.has(j.id)}
-                      onClick={() => act(`save:${j.id}`, () => (savedIds.has(j.id) ? unsaveJob(j.id) : saveJob(j.id)))}
+                      onClick={() => act(() => (savedIds.has(j.id) ? unsaveJob(j.id) : saveJob(j.id)))}
                       title={savedIds.has(j.id) ? t('jobs.unsave') : t('jobs.save')}
                       style={{ padding: '7px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
                         border: `1px solid ${savedIds.has(j.id) ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
@@ -486,7 +480,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                         </p>
                       )}
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" onClick={() => submitBid(j.id)} disabled={busy === `bid:${j.id}` || unansweredRequired(screening, answers).length > 0}
+                        <button type="button" onClick={() => submitBid(j.id)} disabled={task.busy || unansweredRequired(screening, answers).length > 0}
                           style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>{t('jobs.submitBid')}</button>
                         <button type="button" onClick={() => setBidFor(null)} style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>{t('cancel')}</button>
                       </div>
@@ -524,12 +518,12 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                   </div>
                   {(invite.status === 'sent' || invite.status === 'viewed') ? (
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button type="button" disabled={busy === `invite:${invite.id}`}
+                      <button type="button" disabled={task.busy}
                         onClick={() => { void markInviteViewed(invite.id); void answerInvite(invite, true); }}
                         style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>
                         {t('gigs.inviteAccept')}
                       </button>
-                      <button type="button" disabled={busy === `invite:${invite.id}`}
+                      <button type="button" disabled={task.busy}
                         onClick={() => void answerInvite(invite, false)}
                         style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
                         {t('gigs.inviteDecline')}
@@ -589,8 +583,8 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                     <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{row.jobTitle ?? '—'}</div>
                     <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{t('jobs.savedOn', { date: row.createdAt ? fmt.date(row.createdAt) : '—' })}</div>
                   </div>
-                  <button type="button" disabled={busy === `unsave:${row.jobId}`}
-                    onClick={() => act(`unsave:${row.jobId}`, () => unsaveJob(String(row.jobId)))}
+                  <button type="button" disabled={task.busy}
+                    onClick={() => act(() => unsaveJob(String(row.jobId)))}
                     style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
                     {t('jobs.unsave')}
                   </button>
@@ -614,9 +608,9 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                   {p.rateCents != null && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>{formatCents(p.rateCents, { currency: p.currency, maximumFractionDigits: 0 })}{t('perHour')}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  {pill(p.status)}
+                  {pill(p.status, PROPOSAL_TONE)}
                   {(p.status === 'submitted' || p.status === 'shortlisted') && (
-                    <button type="button" onClick={() => act(`wd:${p.id}`, () => withdrawProposal(p.id))} disabled={busy === `wd:${p.id}`}
+                    <button type="button" onClick={() => act(() => withdrawProposal(p.id))} disabled={task.busy}
                       style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>{t('proposals.withdraw')}</button>
                   )}
                 </div>
@@ -634,15 +628,15 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
               <div key={e.id} style={card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
                   <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{e.tenantName ?? t('gigs.workspace')}</div>
-                  {pill(e.status)}
+                  {pill(e.status, ENGAGEMENT_TONE)}
                 </div>
                 {e.title && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginBottom: 6 }}>{e.title}</div>}
                 <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('gigs.rate')}: <strong style={{ color: 'var(--text-primary)' }}>{e.rateCents != null ? `${formatCents(e.rateCents, { currency: e.currency, maximumFractionDigits: 0 })}/hr` : '—'}</strong></div>
                 {(e.status === 'invited' || e.status === 'interviewing') && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <button type="button" onClick={() => act(`acc:${e.id}`, () => respondEngagement(e.id, true))} disabled={busy === `acc:${e.id}`}
+                    <button type="button" onClick={() => act(() => respondEngagement(e.id, true))} disabled={task.busy}
                       style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>{t('gigs.accept')}</button>
-                    <button type="button" onClick={() => act(`dec:${e.id}`, () => respondEngagement(e.id, false))} disabled={busy === `dec:${e.id}`}
+                    <button type="button" onClick={() => act(() => respondEngagement(e.id, false))} disabled={task.busy}
                       style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>{t('gigs.decline')}</button>
                   </div>
                 )}

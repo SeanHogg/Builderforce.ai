@@ -39,7 +39,7 @@ import { studioVoiceClones } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { dryRunSystemSteps } from './systemDryRun';
 import type { Db } from '../../infrastructure/database/connection';
-import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
+import type { Env } from '../../env';
 import type { DeploymentProbe, DeploymentProbeResult, SystemDryRunProbe, VoiceCloneTransferProbe } from './stageChecks';
 
 /** `https://x.example/` → `https://x.example`, so joining a path cannot double a slash. */
@@ -148,7 +148,7 @@ export function voiceCloneProbe(db: Db, tenantId: number): VoiceCloneTransferPro
  * file is the seam `stageChecks.ts` reaches through for every check that needs
  * I/O the pure module itself must not perform.
  */
-export function systemDryRunProbe(env: CloudExecutorEnv): SystemDryRunProbe {
+export function systemDryRunProbe(env: Env): SystemDryRunProbe {
   return (objects) => dryRunSystemSteps(env, objects);
 }
 

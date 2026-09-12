@@ -46,6 +46,7 @@ import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { promptLibraryApi, type PromptEntry, type PromptVariable, type PromptVersion } from '@/lib/builderforceApi';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 /** Cap on how many entries one listing returns. The library page is where the whole
  *  catalogue belongs; a turn needs enough to pick one. */
@@ -226,7 +227,7 @@ export function canvasPromptLibraryActions(ctx: CanvasFounderOpsContext): BrainA
           try {
             entries = await readList();
           } catch (error) {
-            return { promptsFound: false, error: error instanceof Error ? error.message : 'The prompt library could not be read.' };
+            return { promptsFound: false, error: toolErrorMessage(error, 'The prompt library could not be read.') };
           }
           const query = text(args.query, 200);
           const matching = query ? entries.filter((entry) => promptMatchesQuery(entry, query)) : entries;
@@ -263,7 +264,7 @@ export function canvasPromptLibraryActions(ctx: CanvasFounderOpsContext): BrainA
         try {
           entry = await readEntry(entryId);
         } catch (error) {
-          return { error: error instanceof Error ? error.message : `No prompt with id ${entryId} is readable from this workspace.` };
+          return { error: toolErrorMessage(error, `No prompt with id ${entryId} is readable from this workspace.`) };
         }
         const at = new Date().toISOString();
         const current = currentVersionOf(entry);
@@ -337,7 +338,7 @@ export function canvasPromptLibraryActions(ctx: CanvasFounderOpsContext): BrainA
           try {
             created = await promptLibraryApi.create({ title, body, variables, notes, ...(model ? { model } : {}), visibility: 'private' });
           } catch (error) {
-            return { versionSaved: false, error: error instanceof Error ? error.message : 'The prompt could not be saved to the library.' };
+            return { versionSaved: false, error: toolErrorMessage(error, 'The prompt could not be saved to the library.') };
           }
           invalidateClientCache(PROMPT_LIBRARY_CACHE_PREFIX);
           const entry = await promptLibraryApi.get(created.id).catch(() => ({ ...created, versions: [] as PromptVersion[] }));
@@ -359,7 +360,7 @@ export function canvasPromptLibraryActions(ctx: CanvasFounderOpsContext): BrainA
         } catch (error) {
           return {
             versionSaved: false,
-            error: error instanceof Error ? error.message : 'That prompt could not be read from the library.',
+            error: toolErrorMessage(error, 'That prompt could not be read from the library.'),
             instruction: `This card names library entry ${existingId}, which this workspace does not have. Say so and ask whether it was deleted or belongs to another workspace. Do NOT clear the id and save it as a new prompt: that would split its history from the original.`,
           };
         }
@@ -384,7 +385,7 @@ export function canvasPromptLibraryActions(ctx: CanvasFounderOpsContext): BrainA
         try {
           saved = await promptLibraryApi.addVersion(existingId, { body, variables, notes, ...(model ? { model } : {}) });
         } catch (error) {
-          return { versionSaved: false, error: error instanceof Error ? error.message : 'The new version could not be saved.' };
+          return { versionSaved: false, error: toolErrorMessage(error, 'The new version could not be saved.') };
         }
         invalidateClientCache(PROMPT_LIBRARY_CACHE_PREFIX);
         const at = new Date().toISOString();

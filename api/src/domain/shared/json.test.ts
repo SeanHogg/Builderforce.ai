@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractJsonObject, extractJsonPayload } from './json';
+import { asJsonObject, asJsonRecord, extractJsonObject, extractJsonPayload } from './json';
 
 describe('extractJsonPayload — the one model-output reader', () => {
   it('parses a bare JSON document (the strict response_format happy path)', () => {
@@ -30,5 +30,21 @@ describe('extractJsonPayload — the one model-output reader', () => {
     expect(extractJsonObject('[1]')).toBeNull();
     expect(extractJsonObject('42')).toBeNull();
     expect(extractJsonObject('{"ok":true}')).toEqual({ ok: true });
+  });
+});
+
+describe('asJsonObject — the completeJson object validator', () => {
+  it('admits a plain object as-is and refuses everything else', () => {
+    const value = { a: 1 };
+    expect(asJsonObject(value)).toBe(value);
+    for (const refused of [null, undefined, [], [{ a: 1 }], 'x', 0, 42, true]) {
+      expect(asJsonObject(refused)).toBeNull();
+    }
+  });
+
+  it('asJsonRecord is the same narrowing with {} instead of null', () => {
+    const value = { a: 1 };
+    expect(asJsonRecord(value)).toBe(value);
+    for (const refused of [null, undefined, [], 'x', 0, true]) expect(asJsonRecord(refused)).toEqual({});
   });
 });

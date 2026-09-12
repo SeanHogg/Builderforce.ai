@@ -9,7 +9,7 @@ import { listIdeContainers, updateIdeProject } from '@/lib/api';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * Builder project details — rename and (re)assign the parent Project.
  *
@@ -39,10 +39,10 @@ export function BuilderProjectDetailsModal({
   const [workflowDefinitionId, setWorkflowDefinitionId] = useState<string | null>(ideProject.workflowDefinitionId);
   const [containers, setContainers] = useState<IdeContainerOption[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState<'fork' | 'run' | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
+  // Which action the in-flight `task` is — only so the right button says "working".
+  const [pending, setPending] = useState<'fork' | 'run' | 'save' | null>(null);
+  const busyAs = task.busy ? pending : null;
 
   const selectedWorkflow = workflows.find((w) => w.id === workflowDefinitionId) ?? null;
   // A shared/global definition can be customized (forked) for this project; an
@@ -52,38 +52,29 @@ export function BuilderProjectDetailsModal({
   // Fork the assigned shared workflow into a project-scoped custom copy and
   // re-point this project at it — the "modify → custom workflow" path.
   const customize = async () => {
-    if (!selectedWorkflow || busy) return;
-    setBusy('fork');
-    setError(null);
-    try {
-      const fork = await workflowDefinitions.fork(selectedWorkflow.id, { projectId: containerProjectId });
-      setWorkflows((prev) => [fork as WorkflowDefinitionSummary, ...prev]);
-      setWorkflowDefinitionId(fork.id);
-      setNotice(t('workflowForked'));
-    } catch (err) {
-      setError(faultMessage(err, t('saveFailed')));
-    } finally {
-      setBusy(null);
-    }
+    if (!selectedWorkflow || task.busy) return;
+    setPending('fork');
+    const fork = await task.run(
+      () => workflowDefinitions.fork(selectedWorkflow.id, { projectId: containerProjectId }),
+      { success: t('workflowForked'), failure: t('saveFailed') },
+    );
+    if (fork === undefined) return;
+    setWorkflows((prev) => [fork as WorkflowDefinitionSummary, ...prev]);
+    setWorkflowDefinitionId(fork.id);
   };
 
   // Run the assigned workflow using its own saved run target.
   const run = async () => {
-    if (!selectedWorkflow || busy) return;
-    setBusy('run');
-    setError(null);
-    try {
-      await workflowDefinitions.run(selectedWorkflow.id, {
+    if (!selectedWorkflow || task.busy) return;
+    setPending('run');
+    await task.run(
+      () => workflowDefinitions.run(selectedWorkflow.id, {
         runtime: selectedWorkflow.runTargetRuntime ?? 'host',
         agentHostId: selectedWorkflow.runTargetAgentHostId ?? null,
         cloudAgentRef: selectedWorkflow.runTargetCloudAgentRef ?? null,
-      });
-      setNotice(t('workflowRunStarted'));
-    } catch (err) {
-      setError(faultMessage(err, t('saveFailed')));
-    } finally {
-      setBusy(null);
-    }
+      }),
+      { success: t('workflowRunStarted'), failure: t('saveFailed') },
+    );
   };
 
   useEffect(() => {
@@ -102,22 +93,19 @@ export function BuilderProjectDetailsModal({
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await updateIdeProject(ideProject.id, {
+    if (!name.trim() || task.busy) return;
+    setPending('save');
+    const updated = await task.run(
+      () => updateIdeProject(ideProject.id, {
         name: name.trim(),
         containerProjectId,
         ...(isEvermind ? { workflowDefinitionId } : {}),
-      });
-      onSaved(updated);
-      onClose();
-    } catch (err) {
-      setError(faultMessage(err, t('saveFailed')));
-    } finally {
-      setSaving(false);
-    }
+      }),
+      { failure: t('saveFailed') },
+    );
+    if (updated === undefined) return;
+    onSaved(updated);
+    onClose();
   };
 
   return (
@@ -136,9 +124,9 @@ export function BuilderProjectDetailsModal({
           {t('detailedConfigHint')}
         </p>
 
-        {error && (
+        {task.error && (
           <div style={{ borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
-            {error}
+            {task.error}
           </div>
         )}
 
@@ -174,7 +162,7 @@ export function BuilderProjectDetailsModal({
               <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowLabel')}</label>
               <Select
                 value={workflowDefinitionId ?? ''}
-                onChange={(e) => { setWorkflowDefinitionId(e.target.value || null); setNotice(null); }}
+                onChange={(e) => { setWorkflowDefinitionId(e.target.value || null); task.clear(); }}
                 style={inputStyle}
               >
                 <option value="">{t('noWorkflow')}</option>
@@ -186,16 +174,16 @@ export function BuilderProjectDetailsModal({
               {selectedWorkflow && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   {canCustomize && (
-                    <button type="button" onClick={customize} disabled={busy !== null} style={secondaryBtn}>
-                      {busy === 'fork' ? t('working') : t('customizeWorkflow')}
+                    <button type="button" onClick={customize} disabled={task.busy} style={secondaryBtn}>
+                      {busyAs === 'fork' ? t('working') : t('customizeWorkflow')}
                     </button>
                   )}
-                  <button type="button" onClick={run} disabled={busy !== null} style={secondaryBtn}>
-                    {busy === 'run' ? t('working') : t('runWorkflow')}
+                  <button type="button" onClick={run} disabled={task.busy} style={secondaryBtn}>
+                    {busyAs === 'run' ? t('working') : t('runWorkflow')}
                   </button>
                 </div>
               )}
-              {notice && <p style={{ fontSize: 12, color: 'var(--success-text, var(--coral-bright))', marginTop: 8 }}>{notice}</p>}
+              {task.notice && <p style={{ fontSize: 12, color: 'var(--success-text, var(--coral-bright))', marginTop: 8 }}>{task.notice}</p>}
             </div>
           )}
 
@@ -205,16 +193,16 @@ export function BuilderProjectDetailsModal({
             </button>
             <button
               type="submit"
-              disabled={saving || !name.trim()}
+              disabled={task.busy || !name.trim()}
               style={{
                 padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600,
                 background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
                 color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)',
-                cursor: saving || !name.trim() ? 'not-allowed' : 'pointer',
-                opacity: saving || !name.trim() ? 0.7 : 1,
+                cursor: task.busy || !name.trim() ? 'not-allowed' : 'pointer',
+                opacity: task.busy || !name.trim() ? 0.7 : 1,
               }}
             >
-              {saving ? t('saving') : t('save')}
+              {busyAs === 'save' ? t('saving') : t('save')}
             </button>
           </div>
         </form>

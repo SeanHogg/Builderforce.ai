@@ -1,3 +1,270 @@
+## ✅ RESOLVED 2026-09-12 — A person directing the agent from chat is the authority; no tool-call limit (api 2026.9.23 · VSIX 2026.9.44 · agent-loop 2026.9.12 · brain-embedded 2026.9.12)
+
+Diagnosed from VS Code chat #103 (project 11), where the owner told the agent to assign the open
+tickets to agents, complete, merge and push — and got `403 manager role required`, then `409` "the
+dispatcher gave no reason" (`no_agent`), on a ticket whose agent had resolved.
+
+- **`bfk_*` editor keys act as their creator.** `requireTenantAccess` hard-coded `role: DEVELOPER`
+  and `userId: null` for every tenant API key, so a platform tool the editor chat replayed through
+  `/v1/mcp/call` ran as an anonymous developer whatever the person's role — the owner's own
+  workspace refused them the Coordinator. The key's creator id lives in the long-lived key cache;
+  their CURRENT role comes from ONE membership resolver (`resolveMembership`, the same short-TTL
+  read the JWT path already made — extracted, not duplicated), so a demotion takes effect within
+  its 60 s window. `replayRoute` then mints the in-process token AS that person
+  (`resolveReplayAuth` → `kind: 'user'`, `signOpaqueJwt`, no `jti`/`sv`: the token never leaves
+  the isolate), so `isManager` passes for a manager and the recorded override authority names a
+  real user instead of `agentHost:mcp`.
+- **A thrown dispatch is a refusal with a reason.** `requestRoleRun` `.catch`ed the dispatcher into
+  `{ executionId: null }`; the Run-now route, which reports the dispatcher's own verdict, then
+  had none and coded it `no_agent`. New `dispatch_error` refusal (`dispatchError()` in
+  `dispatchCloudRun.ts`) carries the message.
+- **Run now / `chats.dispatch_agent` honour the person over every governance gate.** The route
+  now dispatches under a recorded human authority (`humanDirected`, `force`, lifecycle-neutral,
+  audited by the managed guard) for EVERY evaluator reason except `already_running`, and falls
+  back to that same authority when the role-attributed dispatch is refused for a non-entitlement
+  reason. `ENTITLEMENT_REFUSALS` (cloud-run / token allowance) is the ONE set a person cannot click
+  past, answered 402. The response carries `overrode: <reason>` so the chat can say which gate was
+  stepped past; the tool description tells the model so.
+- **No tool-call limit — a failure-streak breaker instead, in the kernel.** `LoopBudget.stepCap`
+  is optional (unbounded by default) and `failureStreakCap` (default
+  `DEFAULT_TOOL_FAILURE_STREAK` = 5 consecutive `isError` dispatches; a success resets; control
+  signals never count) is the only stop; `LoopResult.exhaustedBy: 'steps' | 'failures'` and
+  `failureStreak` report it. Removed: `MAX_TOOL_ITERATIONS` (25) + `iterationCap` +
+  `BrainRunRequest.maxIterations` (brain-embedded), `MAX_ITERATIONS` (40, native participant),
+  `MAX_ITERS` (6, `BrainService.agentReply`), `MAX_CLOUD_TOOL_STEPS` (30, cloud engine — the
+  durable surface's `runDone` reads `loop.exhausted`). The forced final synthesis and the VSIX
+  dispatch hint now say what kept failing rather than "reached its tool budget". The delegated
+  sub-agent keeps `SUBAGENT_MAX_STEPS` (bounded by design) and gains the breaker; the Container
+  image's ceiling is logged on the roadmap (needs an image rebuild).
+- Tests: kernel (`loop.test.ts` — unbounded default, streak trip, reset, short-circuit counting,
+  disable), Brain (`brainRunStore.test.ts` — 60-call run, 5-failure stop with the closing prompt,
+  interleaved reset), native run (`nativeBrainRun.test.ts`), replay auth
+  (`builtinMcpService.test.ts`), `bfk_` access (`llmRoutes.test.ts`).
+
+## ✅ RESOLVED 2026-09-12 — Roadmap cleanup: closure notes moved out of ROADMAP.md
+
+ROADMAP.md now carries open work only. Every "(Closed …, see DONE.md …)" note, "shipped"
+banner and "the X half is done" clause was removed from it. Those that already pointed here
+are recorded in their dated sections below. The ones that were NOT recorded anywhere are:
+
+- **Real-time co-editing (2026-08-23).** `CollaborationRoomDO` moved out of the never-deployed
+  `worker/` script into the api Worker. The WebSocket upgrade goes through `authMiddleware`
+  plus the per-room authorization registry `application/collab/collabScopes.ts` (a
+  client-named room used to be trusted outright). A block-level per-document CRDT replaced
+  the single-`Y.Text` channel, and the client derives the room URL from the API origin
+  (no `NEXT_PUBLIC_COLLAB_WS_URL`). Still open on the roadmap: the live 2-client smoke
+  after deploy.
+- **Developer Portal, PRD 24 Phases 2 and 4 (migration 1119).**
+  - Install-scoped tokens (`extensionInstallTokens`): five-minute JWTs re-read against the
+    install on every call, so an uninstall revokes immediately.
+  - Paid plans on the package's `catalog_items` row (`extensionPlans`).
+  - Vendor webhooks `extension.installation.created|updated|removed`.
+  - Metered usage as `ledger_entries` in the `extension_units` denomination, invoiced via
+    `PaymentProvider.addInvoiceItem`.
+  - The payout leg: `PayoutAccountService` generalised to a `LedgerAccount` + destination
+    pair, which also gave `agentCommerce` sellers their first payout path.
+  - Publisher tracks and Featured placement (`tenants.publisher_track` /
+    `publisher_featured_at`), and a benefits registry.
+  - The §9 decisions answered with existing platform rules: the
+    `MARKETPLACE_TAKE_RATE_THRESHOLD_CENTS` rev-share threshold, and ONE `mayCharge`
+    predicate gating price-setting, review and checkout.
+  - Still open on the roadmap: a live card run and the hyperscaler seller accounts.
+- **Decided, so no longer tracked as gaps:**
+  - A Miroverse-scale template import is not legally available and will not be attempted.
+    The supported path is copying a template into one's own Miro account and importing that
+    board (`CanvasMiroPanel`).
+  - The Evermind diagnostics report body (`diagnosticsReport.ts`) stays English-only, like a
+    stack trace; its controls are localized.
+  - `countReconciledMemories`'s lexical-overlap heuristic is accepted as display-only; it
+    never gates learning.
+
+## ✅ RESOLVED 2026-09-12 — English fallbacks, lib prose, non-destructive modals
+
+### ONE `useErrorMessage()` and a guard
+- `i18n/useErrorMessage.ts` (+ `useErrorText`) falls back to the new `common.actionFailed` and
+  also translates transport failures (offline, unreachable), whose own text stays English for
+  the Quality feed.
+- Model-facing tool results use `lib/toolErrorMessage.ts` and stay English on purpose.
+- Hardcoded-English catch fallbacks 188 → 0 across 75 files, all of `src/`.
+- `check:error-fallbacks` holds that at zero: it is in `npm run check` and the post-write hook.
+- `usePanelTask` produces its error text through `useErrorMessage`.
+
+### Surfaces and lib prose localized
+- `StakeholderAlignmentPanel` and `HumanRequestsView` are fully localized (65 keys); the leaked
+  "All agentHosts" now reads "All agent hosts".
+- Spec-object verdicts are translatable descriptors: `SpecVerdict` + `formatSpecVerdict` in
+  `lib/specObjects.ts`, one formatter for the card (reader's language) and the model (English).
+  - 15 derivations migrated, 58 keys.
+  - `specVerdictKeys.test.ts` asserts every key the derives can emit exists in all five locales,
+    because `check:i18n-keys` cannot see runtime-built keys.
+- `mailboxApi` and `canvasPublicMedia` return codes the card and social panel translate. The
+  inbox card now shows its filter line; it never displayed it before.
+- Left in English deliberately: `canvasTriggers` (read only by the model) and
+  `managerDiagnostics` (a pasteable English support artefact).
+- These files, modified this pass, are now localized (100 keys), with their literal `rgba`
+  replaced by tokens: the four AgentHost content views, `RepoSyncControl`, `Soc2Content`,
+  `WorkflowDagView` and `AgentExecutionControl`. The sequence progress bars translate through a
+  `labelKey`.
+
+### A modal is only a destructive approval
+- `destructive: false` sites 19 → 0. `destructive` is now typed `true`-only, so a neutral modal
+  cannot be written again.
+- Reversible actions (resubscribe, maintenance vacuums, revert, approve, reset password, replace
+  card …) use the new shared `InlineConfirmButton`: two-step, self-disarming, `aria-live`.
+  Merges and serve-preview need no confirm.
+- Irreversible sends and spends stay modals, now correctly destructive with an action label.
+  - `MilestoneSchedulePanel` showed a neutral modal for fund and release, which move money
+    irreversibly; all three milestone actions are now destructive.
+- Nine catalog keys orphaned by the change are deleted (zero references in frontend, api or
+  packages).
+
+### Verified
+- `tsgo` 0 errors; 14 catalog/verdict files / 372 tests; 53 files beside changes 716/717.
+- The one failure is the agent-loop step-budget test owned by another session (see the Gap
+  Register).
+- `check:i18n-keys`, `check-error-fallbacks`, `native-dialogs` and `design-tokens` pass.
+
+## ✅ RESOLVED 2026-09-12 — frontend primitives adopted: status tones, icons, panel providers, usePanelTask
+
+### Status → colour: ONE `lib/statusTone.ts`
+- Six tones, the same six `ui/Badge` uses, each drawn as a text, solid, background or border
+  token, so it works in both themes.
+- 64 files import it. The family maps each live once:
+  - work-item status: `WORK_ITEM_STATUS_TONE` in `pmShared`;
+  - workflow status: in `workflowRunUi`;
+  - health tier: `healthTierColor`, down from four copies;
+  - DORA tier: `lib/doraTiers.ts`;
+  - engagement status: `lib/freelance/statusTones.ts`;
+  - security severity: `components/security/securitySeverity.ts`.
+- **Bugs fixed on the way:**
+  - `BroadcastsPanel` used badge classes that did not exist;
+  - two components appended hex alpha to a CSS variable, so their tints never rendered;
+  - raw `rgba` colours were replaced by tokens.
+- Deliberately not status tones: capex/opex colours (categories) and 5-step score ramps.
+
+### The rest of the shared components
+- The freelancer dashboard's private `EmptyState` is deleted in favour of the shared one.
+- Private icon components 16 → 0 (nine new `ui/Icon` names).
+- `<img>` without dimensions 22 → 0. `DocumentEditor` is exempt: its `<img>` is saved into the
+  document's HTML.
+- One `createPanelProvider` factory: the four insights providers went from ~350 lines to ~25
+  each. The zero-reference `getFinancePanel`/`FinancePanelApi` are deleted.
+- `usePanelTask` consumers 7 → 50, and `success` may now be built from the result.
+  Components whose busy state is per row or per button, or whose errors are a list of field
+  messages, stay hand-rolled on purpose.
+- Nine files that listed `task.run`/`task.fail`/`task.clear` in dependency arrays now take the
+  stable callbacks out once, so the hooks ratchet is green on every touched file.
+- The DORA band classifiers (`tierDeployFreq`/`tierLeadTime`/`tierCfr`/`tierMttr`), copied in
+  `DoraLens` and `deliveryWidgets`, now live once in `lib/doraTiers.ts`, pinned by
+  `doraTiers.test.ts`.
+- Tests: `statusTone.test.ts`, `createPanelProvider.test.tsx`, `usePanelTask.test.tsx`,
+  `doraTiers.test.ts`; 99/99 in the touched suites.
+
+## ✅ RESOLVED 2026-09-12 — api: structured-LLM calls, reported 500s, middleware casts, missing tenants
+
+### Structured-LLM completions all go through `completeJson`
+- Most of this had landed unrecorded on 2026-09-06 (18 sites). The four copies that pass missed
+  now use it too, taking it to 22, and their private JSON readers are gone:
+  - `SecurityReviewService`;
+  - `resumeAi.ask`;
+  - knowledge `/analyze`;
+  - the `projectRoutes` recommendation. It fed an unguarded `JSON.parse` and called the
+    Worker's own `/llm` route over HTTP; it now uses tenant dispatch.
+- The "plain object or null" validator ×7 → one `asJsonObject` in `domain/shared/json.ts`.
+- **Bugs fixed on the way:**
+  - A security review whose gateway failed returned 200 "0 finding(s)", which reads as a clean
+    review. It now returns 503.
+  - Knowledge `/analyze` sent no `max_tokens` and no use case.
+
+### Every route-level 500 is reported
+- The seven local error→status mappers were already `failResponse` + `statusOf`.
+- 31 unreported 500s → 0:
+  - 24 "insert/update returned nothing" checks throw the new `InternalError` (500,
+    caller-facing message, underlying `cause` reported);
+  - five caught errors answer through `failResponse`;
+  - `publicExtensionApiService` rethrows to the global handler, so vendors no longer see
+    internal text;
+  - `mcpServerRoutes` keeps its JSON-RPC body and reports through `reportServerError`.
+- VACUUM no longer echoes the raw database error.
+
+### The same pass's residuals — object checks, reply readers, variable-status 5xx
+- **Plain-object-or-`{}` checks:** 17 private copies → 0. That was 14 private
+  `rec`/`asRecord`/`record`/`obj` helpers plus 3 inline copies. They became ONE `asJsonRecord`
+  in `domain/shared/json.ts` (≡ `asJsonObject(v) ?? {}`), across 298 call sites. The exported
+  `adsNormalize.rec` and `providerPayload.asRecord` are deleted and their importers migrated.
+- **Hand-read model replies:** `gatewayExtractor.ts` and `backend/ingress.ts` now read through
+  `readProxyChoice`, the one unwrap; the text is now trimmed.
+- **5xx answered with a status held in a variable:** 51 unreported → 0. A compiler-typed audit
+  of 191 variable-status calls found them. The new `statusResponse(c, body, status, details,
+  cause?)` returns the body and status unchanged and reports ≥500. 46 sites across 21 route
+  files use it.
+  - Left as they are, deliberately: the guest proxy forwarding the gateway's own upstream
+    answer, and the idempotency replay of an already-reported response.
+- Verified: api `tsgo` clean; 24 suites / 352 tests.
+
+### `requireRole` needs no cast
+- `requireRole` is generic over the router's env and `isManager` takes any role-bearing context.
+- 81 casts removed:
+  - 19 `requireRole(...) as never` and 29 `authMiddleware as never`;
+  - 33 related context casts in `atsRoutes`, `hiringRoutes`, `managerRoutes`, `approvalRoutes`
+    and a test.
+- The review's "×131" counted unrelated `as never`, which stay.
+
+### Missing-tenant queries — `optionalTenantId` / `requireTenantId`
+- New `presentation/middleware/tenantContext.ts`. The review's `boardRoutes` example was behind
+  full auth (its 26 reads moved onto the accessor anyway). The real defects were elsewhere:
+  - `salesRoutes` `/reports`, `/payouts`, `/leads` queried `tenant_id = undefined` on the
+    person-level token. They now answer an explicit empty result.
+  - `sellMotionRoutes`' web-token gate never published a tenant, so a seller's own board could
+    never be found. It is now behind `authMiddleware` + `requireTenantId`.
+  - `atsRoutes` and `hiringRoutes` fell back to tenant `0`. They now use `requireTenantId`.
+- Guest-facing optional-auth handlers moved onto `optionalTenantId` with unchanged behaviour.
+- Tests: `tenantContext`, `boardRoutes.tenant` (401 before any database access) and
+  `sellMotionRoutes.tenant`.
+
+## ✅ RESOLVED 2026-09-12 — api runtime: RuntimeService options, the cloud node registry, PeerRelay
+
+### `RuntimeService` takes one options object
+- It was constructed with 16 positional callbacks. It now takes one typed `RuntimeServiceOptions`:
+  four required repositories plus twelve optional named ports, declared in the new
+  `application/runtime/ports.ts`.
+- Every construction site is migrated: `buildRuntimeService.ts` and the laneChaining,
+  policyGates and runMilestones tests.
+
+### `executeCloudNode` is a registry, and the false `Env` narrowing is gone
+- `CloudExecutorEnv` is deleted. Every caller already passed a full `Env`, so the executor is
+  typed on `Env`, which removes the `env as unknown as Env` casts ×12 and two
+  `as unknown as CloudExecutorEnv` casts in `creationListings`/`creationReleases`.
+- The 40-case switch is replaced by a `NODE_HANDLERS` map merged from
+  `workflow/nodes/{transform,control,ai,io}.ts` (16/9/4/12 kinds), with shared `nodes/helpers.ts`
+  for the payload-tag ×4, JSON-array config ×2, fan-in ×4 and proxy/usage/settle ×2 copies.
+- A duplicate kind across families throws at module load. An unknown kind, `constructor`
+  included, still throws "not supported on the cloud runtime".
+- `cloudExecutor.ts` 1,323 → 630 lines. `cloudExecutor.registry.test.ts` pins the 41 kinds.
+
+### `AgentHostRelayDO` fans out through `PeerRelay`
+- The private client-socket set and `broadcast` are gone; browser clients register on a
+  `PeerRelay`.
+- `CollaborationRoomDO` stays off it on purpose:
+  - its sockets are hibernatable and its roster is re-read from the runtime, whereas
+    `PeerRelay`'s in-memory peer map would come back empty after eviction;
+  - it sends binary Yjs frames, which `PeerRelay` cannot send.
+- Verified: 77 files / 869 tests (runtime, workflow, systemDryRun, both DOs, peerRelay).
+
+### `CollaborationRoomDO` gained a per-socket frame budget (found in the same pass)
+- The room fanned every frame out to the whole room with no limit, so one flooding client was
+  an N× amplifier. `PeerRelay` had a token bucket; the room did not.
+- The bucket arithmetic is now ONE pure `infrastructure/relay/tokenBucket.ts` that both relays
+  spend.
+- The room keeps its buckets in a `WeakMap`. That is correct across hibernation, because the
+  object only hibernates when idle, and an idle bucket is full anyway.
+- Over budget (`COLLAB_FRAME_RATE` 60/s, burst 240):
+  - an awareness/presence frame is dropped, and the next heartbeat corrects it;
+  - a Yjs sync or terminal frame is never dropped, since that would silently fork the room.
+    The socket closes with 1008 instead, and the client reconnects and re-syncs.
+- Tests: `tokenBucket.test.ts` (3); the room suite gained drop, close and steady-rate cases.
+  38/38 relay tests pass.
+
 ## ✅ RESOLVED 2026-09-12 — Codebase review 2026-09-05 residuals: four duplicates closed
 
 ### Session durations — ONE `formatElapsedBetween`

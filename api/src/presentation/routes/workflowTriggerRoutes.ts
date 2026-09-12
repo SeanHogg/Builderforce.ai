@@ -1,3 +1,4 @@
+import { parseJsonObject } from '../../domain/shared/json';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Public workflow trigger entrypoints — /api/workflow-triggers
@@ -25,18 +26,6 @@ import { verifyTwilioSignature } from '../../application/backend/webhookVerifica
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-/** A trigger's stored node config. Malformed JSON is an empty config rather than
- *  a 500 — a row written by an older builder must not break its own webhook. */
-function parseTriggerConfig(raw: string | null | undefined): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
-
 export function createWorkflowTriggerRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -55,7 +44,7 @@ export function createWorkflowTriggerRoutes(db: Db): Hono<HonoEnv> {
     // `X-Signature` HMAC — it signs the URL plus the sorted form parameters with
     // its own scheme, so without this a Twilio number simply could not start a
     // workflow no matter what secret was configured.
-    const config = parseTriggerConfig(row.config);
+    const config = parseJsonObject(row.config);
     const isTwilio = config.verify === 'twilio';
 
     if (isTwilio) {

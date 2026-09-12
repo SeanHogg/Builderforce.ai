@@ -49,13 +49,8 @@ export function SessionBulkBar({ selected, archived, onMerge, onArchive, onDelet
     const keep = selected.find((session) => session.id === target);
     if (!keep) { setError(t('required')); return; }
     const sources = ids.filter((id) => id !== keep.id);
-    const approved = await confirm({
-      title: t('bulkMergeConfirmTitle'),
-      message: t('bulkMergeConfirmMessage', { count: sources.length, target: keep.title }),
-      confirmLabel: t('merge'),
-      destructive: false,
-    });
-    if (!approved) return;
+    // No modal: the slide-out's own submit IS the deliberate step, and it already
+    // states the consequence. Nothing is lost — sources are archived, restorable.
     setBusy(true);
     setError('');
     try {
@@ -99,7 +94,9 @@ export function SessionBulkBar({ selected, archived, onMerge, onArchive, onDelet
         <SessionEditorPanel
           open
           title={t('bulkMergeTitle')}
-          description={t('bulkMergeDescription')}
+          description={selected.some((session) => session.id === target)
+            ? t('bulkMergeConfirmMessage', { count: ids.length - 1, target: selected.find((session) => session.id === target)?.title ?? '' })
+            : t('bulkMergeDescription')}
           submitLabel={t('merge')}
           busy={busy}
           error={error}

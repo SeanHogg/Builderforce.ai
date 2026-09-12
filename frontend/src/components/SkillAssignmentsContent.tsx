@@ -9,7 +9,7 @@ import {
 import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
 import { Icon } from '@/components/ui/Icon';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface SkillAssignmentsContentProps {
   scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
   scopeId: number;
@@ -26,6 +26,7 @@ type MergedSkill = {
 };
 
 export function SkillAssignmentsContent({ scope, scopeId, className, style }: SkillAssignmentsContentProps) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [catalog, setCatalog] = useState<MergedSkill[]>([]);
@@ -60,11 +61,11 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
       }));
       setCatalog([...apiSkills, ...builtins]);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load'));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [scope, scopeId]);
+  }, [scope, scopeId, errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -76,7 +77,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
       await artifactAssignments.assign('skill', slug, scope, scopeId);
       await load();
     } catch (e) {
-      setError(faultMessage(e, 'Assign failed'));
+      setError(errorMessage(e));
     }
   };
 
@@ -86,7 +87,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
       await artifactAssignments.unassign('skill', slug, scope, scopeId);
       setAssigned((prev) => prev.filter((a) => a.artifactSlug !== slug));
     } catch (e) {
-      setError(faultMessage(e, 'Unassign failed'));
+      setError(errorMessage(e));
     }
   };
 

@@ -26,6 +26,8 @@
  * that cannot post says so before anything is attempted rather than 400ing at the API.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
+
 /** The networks this deployment can read and publish to. */
 export const SOCIAL_NETWORKS = [
   'x', 'linkedin', 'facebook', 'instagram', 'tiktok',
@@ -167,9 +169,6 @@ export function isRetryableStatus(status: number): boolean {
 // Shared normalization
 // ---------------------------------------------------------------------------
 
-const rec = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
 const text = (value: unknown): string => (value == null ? '' : String(value));
@@ -223,7 +222,7 @@ const x: SocialProvider = {
   network: 'x', label: 'X', connectorKey: 'x-social', publishMode: 'text',
   accountFields: [],
   async identity(call) {
-    const me = rec((await ask(call, 'get_me', { 'user.fields': 'id,name,username' })).data);
+    const me = asJsonRecord((await ask(call, 'get_me', { 'user.fields': 'id,name,username' })).data);
     return { externalId: text(me.id), handle: text(me.username), displayName: text(me.name) || text(me.username) };
   },
   async listPosts(call, _fields, { limit, identity }) {
@@ -236,8 +235,8 @@ const x: SocialProvider = {
       'tweet.fields': 'created_at,public_metrics,entities',
     });
     return list(result.data).map((raw) => {
-      const post = rec(raw);
-      const pm = rec(post.public_metrics);
+      const post = asJsonRecord(raw);
+      const pm = asJsonRecord(post.public_metrics);
       const id = text(post.id);
       return {
         id,
@@ -259,8 +258,8 @@ const x: SocialProvider = {
     const body = draft.linkUrl && !draft.text.includes(draft.linkUrl)
       ? `${draft.text}\n\n${draft.linkUrl}`
       : draft.text;
-    const data = rec((await ask(call, 'create_post', { text: body })).data);
-    const created = rec(data.data);
+    const data = asJsonRecord((await ask(call, 'create_post', { text: body })).data);
+    const created = asJsonRecord(data.data);
     const id = text(created.id) || text(data.id);
     return {
       externalId: id,
@@ -282,7 +281,7 @@ const linkedin: SocialProvider = {
     help: 'urn:li:organization:123 to post as a company page, or urn:li:person:… to post as yourself.',
   }],
   async identity(call, fields) {
-    const me = rec((await ask(call, 'get_profile')).data);
+    const me = asJsonRecord((await ask(call, 'get_profile')).data);
     const authored = (fields.authorUrn ?? '').trim();
     // The URN the tenant configured WINS: a company-page grant authenticates as a
     // member, so trusting `sub` here would publish to the wrong feed.
@@ -298,14 +297,14 @@ const linkedin: SocialProvider = {
     if (!author) return [];
     const result = await ask(call, 'find_posts', { q: 'author', author: encodeURIComponent(author), count: limit });
     return list(result.data).map((raw) => {
-      const post = rec(raw);
+      const post = asJsonRecord(raw);
       const id = text(post.id);
       return {
         id,
         authorName: identity.displayName,
         text: text(post.commentary),
         permalink: id ? `https://www.linkedin.com/feed/update/${id}` : null,
-        publishedAtISO: toISO(rec(post.createdAt).time ?? post.createdAt ?? rec(post.lastModifiedAt).time),
+        publishedAtISO: toISO(asJsonRecord(post.createdAt).time ?? post.createdAt ?? asJsonRecord(post.lastModifiedAt).time),
         mediaUrls: [],
         thumbnailUrl: null,
         // Engagement is a per-post endpoint (`get_engagement`). Fanning that out
@@ -324,7 +323,7 @@ const linkedin: SocialProvider = {
     // an empty body, so without capturing it the campaign ledger could never link
     // to what it published.
     const result = await ask(call, 'create_post', { author, commentary, visibility: 'PUBLIC', lifecycleState: 'PUBLISHED' }, { captureHeaders: [LINKEDIN_POST_ID_HEADER] });
-    const id = text(result.headers?.[LINKEDIN_POST_ID_HEADER] ?? rec(result.data).id);
+    const id = text(result.headers?.[LINKEDIN_POST_ID_HEADER] ?? asJsonRecord(result.data).id);
     return { externalId: id, permalink: id ? `https://www.linkedin.com/feed/update/${id}` : null };
   },
 };
@@ -337,7 +336,7 @@ const facebook: SocialProvider = {
   network: 'facebook', label: 'Facebook Pages', connectorKey: 'facebook-pages', publishMode: 'text',
   accountFields: [{ key: 'pageId', label: 'Page ID', help: 'The numeric id of the Facebook Page the token administers.' }],
   async identity(call, fields) {
-    const me = rec((await ask(call, 'get_account', { fields: 'id,name' })).data);
+    const me = asJsonRecord((await ask(call, 'get_account', { fields: 'id,name' })).data);
     return {
       externalId: (fields.pageId ?? '').trim() || text(me.id),
       handle: text(me.id),
@@ -355,7 +354,7 @@ const facebook: SocialProvider = {
       limit,
     });
     return list(result.data).map((raw) => {
-      const post = rec(raw);
+      const post = asJsonRecord(raw);
       const picture = text(post.full_picture);
       return {
         id: text(post.id),
@@ -366,9 +365,9 @@ const facebook: SocialProvider = {
         mediaUrls: picture ? [picture] : [],
         thumbnailUrl: picture || null,
         metrics: metrics({
-          likes: rec(rec(post.likes).summary).total_count,
-          comments: rec(rec(post.comments).summary).total_count,
-          shares: rec(post.shares).count,
+          likes: asJsonRecord(asJsonRecord(post.likes).summary).total_count,
+          comments: asJsonRecord(asJsonRecord(post.comments).summary).total_count,
+          shares: asJsonRecord(post.shares).count,
         }),
       };
     });
@@ -376,7 +375,7 @@ const facebook: SocialProvider = {
   async publish(call, fields, draft, identity) {
     const pageId = (fields.pageId ?? '').trim() || identity.externalId;
     if (!pageId) throw new SocialProviderError('This connection is missing the Page ID. Add it to the connection and try again.', 409, false);
-    const data = rec((await ask(call, 'create_post', {
+    const data = asJsonRecord((await ask(call, 'create_post', {
       page_id: pageId,
       message: draft.text,
       ...(draft.linkUrl ? { link: draft.linkUrl } : {}),
@@ -394,7 +393,7 @@ const instagram: SocialProvider = {
   network: 'instagram', label: 'Instagram', connectorKey: 'instagram-business', publishMode: 'media',
   accountFields: [{ key: 'igUserId', label: 'Instagram account ID', help: 'The professional account id (IG user id) that owns the media.' }],
   async identity(call, fields) {
-    const me = rec((await ask(call, 'get_account', { fields: 'id,username,account_type' })).data);
+    const me = asJsonRecord((await ask(call, 'get_account', { fields: 'id,username,account_type' })).data);
     return {
       externalId: (fields.igUserId ?? '').trim() || text(me.id),
       handle: text(me.username),
@@ -410,7 +409,7 @@ const instagram: SocialProvider = {
       limit,
     });
     return list(result.data).map((raw) => {
-      const media = rec(raw);
+      const media = asJsonRecord(raw);
       const url = text(media.media_url);
       const thumb = text(media.thumbnail_url) || (text(media.media_type) === 'VIDEO' ? '' : url);
       return {
@@ -436,14 +435,14 @@ const instagram: SocialProvider = {
     // Both are here rather than in the caller so "publish" means the same thing
     // on every network.
     const isVideo = /\.(mp4|mov|m4v)(\?|$)/i.test(media[0]!);
-    const container = rec((await ask(call, 'create_media', {
+    const container = asJsonRecord((await ask(call, 'create_media', {
       ig_user_id: igUserId,
       ...(isVideo ? { video_url: media[0], media_type: 'REELS' } : { image_url: media[0] }),
       caption: draft.linkUrl && !draft.text.includes(draft.linkUrl) ? `${draft.text}\n\n${draft.linkUrl}` : draft.text,
     })).data);
     const creationId = text(container.id);
     if (!creationId) throw new SocialProviderError('Instagram did not return a media container id.', 502, true);
-    const published = rec((await ask(call, 'publish_media', { ig_user_id: igUserId, creation_id: creationId })).data);
+    const published = asJsonRecord((await ask(call, 'publish_media', { ig_user_id: igUserId, creation_id: creationId })).data);
     const id = text(published.id);
     return {
       externalId: id,
@@ -459,7 +458,7 @@ const instagram: SocialProvider = {
 /** TikTok answers 200 with its own error envelope, so HTTP status alone is not
  *  whether the call worked. `ok` is the ONLY code meaning success. */
 function assertTikTokOk(payload: Record<string, unknown>): void {
-  const error = rec(payload.error);
+  const error = asJsonRecord(payload.error);
   const code = text(error.code);
   if (code && code !== 'ok') {
     const retryable = code === 'rate_limit_exceeded' || code.startsWith('internal');
@@ -471,9 +470,9 @@ const tiktok: SocialProvider = {
   network: 'tiktok', label: 'TikTok', connectorKey: 'tiktok-social', publishMode: 'media',
   accountFields: [],
   async identity(call) {
-    const payload = rec((await ask(call, 'creator_info')).data);
+    const payload = asJsonRecord((await ask(call, 'creator_info')).data);
     assertTikTokOk(payload);
-    const info = rec(rec(payload.data));
+    const info = asJsonRecord(asJsonRecord(payload.data));
     return {
       externalId: text(info.creator_username),
       handle: text(info.creator_username),
@@ -487,7 +486,7 @@ const tiktok: SocialProvider = {
     });
     // `resultPath: data.videos` already unwrapped the envelope on success.
     return list(result.data).map((raw) => {
-      const video = rec(raw);
+      const video = asJsonRecord(raw);
       const cover = text(video.cover_image_url);
       return {
         id: text(video.id),
@@ -509,12 +508,12 @@ const tiktok: SocialProvider = {
     if (media.length === 0) {
       throw new SocialProviderError('TikTok cannot publish a text-only post — attach a video URL.', 400, false);
     }
-    const payload = rec((await ask(call, 'direct_post', {
+    const payload = asJsonRecord((await ask(call, 'direct_post', {
       post_info: { title: draft.text.slice(0, 2200), privacy_level: 'PUBLIC_TO_EVERYONE' },
       source_info: { source: 'PULL_FROM_URL', video_url: media[0] },
     })).data);
     assertTikTokOk(payload);
-    const publishId = text(rec(payload.data).publish_id);
+    const publishId = text(asJsonRecord(payload.data).publish_id);
     // TikTok transcodes asynchronously: accepting the job is not publishing it, so
     // this reports `pending` rather than claiming a live post.
     return { externalId: publishId, permalink: null, pending: true };
@@ -529,8 +528,8 @@ const youtube: SocialProvider = {
   network: 'youtube', label: 'YouTube', connectorKey: 'youtube', publishMode: 'none',
   accountFields: [],
   async identity(call) {
-    const channel = rec(list((await ask(call, 'get_my_channel')).data)[0]);
-    const snippet = rec(channel.snippet);
+    const channel = asJsonRecord(list((await ask(call, 'get_my_channel')).data)[0]);
+    const snippet = asJsonRecord(channel.snippet);
     return {
       externalId: text(channel.id),
       handle: text(snippet.customUrl).replace(/^@/, ''),
@@ -539,18 +538,18 @@ const youtube: SocialProvider = {
   },
   async listPosts(call, _fields, { limit, identity }) {
     const found = list((await ask(call, 'search_my_videos', { maxResults: Math.min(Math.max(limit, 1), 50) })).data);
-    const ids = found.map((raw) => text(rec(rec(raw).id).videoId)).filter(Boolean);
+    const ids = found.map((raw) => text(asJsonRecord(asJsonRecord(raw).id).videoId)).filter(Boolean);
     if (ids.length === 0) return [];
     // Search does NOT return statistics, so view and like counts need a second call —
     // ONE call for every id, never one per video.
     const details = list((await ask(call, 'get_videos', { id: ids.join(',') })).data);
     return details.map((raw) => {
-      const video = rec(raw);
-      const snippet = rec(video.snippet);
-      const stats = rec(video.statistics);
+      const video = asJsonRecord(raw);
+      const snippet = asJsonRecord(video.snippet);
+      const stats = asJsonRecord(video.statistics);
       const id = text(video.id);
-      const thumbnails = rec(snippet.thumbnails);
-      const thumb = text(rec(thumbnails.high ?? thumbnails.default).url);
+      const thumbnails = asJsonRecord(snippet.thumbnails);
+      const thumb = text(asJsonRecord(thumbnails.high ?? thumbnails.default).url);
       return {
         id,
         authorName: identity.displayName,
@@ -581,7 +580,7 @@ const reddit: SocialProvider = {
     help: 'Without the r/ prefix. Reddit has no default destination — every post names one.',
   }],
   async identity(call) {
-    const me = rec((await ask(call, 'get_me')).data);
+    const me = asJsonRecord((await ask(call, 'get_me')).data);
     const name = text(me.name);
     return { externalId: text(me.id) || name, handle: name, displayName: name ? `u/${name}` : 'Reddit' };
   },
@@ -590,7 +589,7 @@ const reddit: SocialProvider = {
     const children = list((await ask(call, 'list_submitted', { username: identity.handle, limit: Math.min(Math.max(limit, 1), 100), sort: 'new' })).data);
     return children.map((raw) => {
       // Reddit wraps every listing element as `{kind, data}`.
-      const post = rec(rec(raw).data);
+      const post = asJsonRecord(asJsonRecord(raw).data);
       const permalink = text(post.permalink);
       const thumbnail = text(post.thumbnail);
       return {
@@ -621,7 +620,7 @@ const reddit: SocialProvider = {
         ? { kind: 'link', url: draft.linkUrl }
         : { kind: 'self', text: restLines.join('\n').trim() || draft.text }),
     });
-    const data = rec(rec(rec(payload.data).json).data);
+    const data = asJsonRecord(asJsonRecord(asJsonRecord(payload.data).json).data);
     return { externalId: text(data.id) || text(data.name), permalink: text(data.url) || null };
   },
 };
@@ -637,16 +636,16 @@ const pinterest: SocialProvider = {
     help: 'The board new pins are created on. A pin cannot exist without one.',
   }],
   async identity(call) {
-    const account = rec((await ask(call, 'get_account')).data);
+    const account = asJsonRecord((await ask(call, 'get_account')).data);
     const username = text(account.username);
     return { externalId: text(account.id) || username, handle: username, displayName: username || 'Pinterest' };
   },
   async listPosts(call, _fields, { limit, identity }) {
     const items = list((await ask(call, 'list_pins', { page_size: Math.min(Math.max(limit, 1), 100) })).data);
     return items.map((raw) => {
-      const pin = rec(raw);
-      const images = rec(rec(pin.media).images);
-      const image = text(rec(images['1200x'] ?? images.originals).url);
+      const pin = asJsonRecord(raw);
+      const images = asJsonRecord(asJsonRecord(pin.media).images);
+      const image = text(asJsonRecord(images['1200x'] ?? images.originals).url);
       const id = text(pin.id);
       return {
         id,
@@ -673,7 +672,7 @@ const pinterest: SocialProvider = {
       // beats a 400 from the API that names neither the board nor the reason.
       throw new SocialProviderError('Pinterest video pins need an uploaded media id rather than a URL. Use an image for now.', 400, false);
     }
-    const pin = rec((await ask(call, 'create_pin', {
+    const pin = asJsonRecord((await ask(call, 'create_pin', {
       board_id: boardId,
       title: draft.text.slice(0, 100),
       description: draft.text,
@@ -693,7 +692,7 @@ const threads: SocialProvider = {
   network: 'threads', label: 'Threads', connectorKey: 'threads-social', publishMode: 'text',
   accountFields: [],
   async identity(call) {
-    const me = rec((await ask(call, 'get_me')).data);
+    const me = asJsonRecord((await ask(call, 'get_me')).data);
     const username = text(me.username);
     return { externalId: text(me.id), handle: username, displayName: text(me.name) || username || 'Threads' };
   },
@@ -703,7 +702,7 @@ const threads: SocialProvider = {
       limit: Math.min(Math.max(limit, 1), 100),
     })).data);
     return items.map((raw) => {
-      const post = rec(raw);
+      const post = asJsonRecord(raw);
       const media = text(post.media_url);
       return {
         id: text(post.id),
@@ -724,7 +723,7 @@ const threads: SocialProvider = {
     const isVideo = media.length > 0 && /\.(mp4|mov|m4v)(\?|$)/i.test(media[0]!);
     // Threads publishes in two steps by design — a container, then the publish — for
     // the same reason Instagram does, and both live here so "publish" means one thing.
-    const container = rec((await ask(call, 'create_container', {
+    const container = asJsonRecord((await ask(call, 'create_container', {
       media_type: media.length === 0 ? 'TEXT' : isVideo ? 'VIDEO' : 'IMAGE',
       text: draft.text,
       ...(media.length === 0 && draft.linkUrl ? { link_attachment: draft.linkUrl } : {}),
@@ -732,7 +731,7 @@ const threads: SocialProvider = {
     })).data);
     const creationId = text(container.id);
     if (!creationId) throw new SocialProviderError('Threads did not return a post container id.', 502, true);
-    const published = rec((await ask(call, 'publish_container', { creation_id: creationId })).data);
+    const published = asJsonRecord((await ask(call, 'publish_container', { creation_id: creationId })).data);
     const id = text(published.id);
     return {
       externalId: id,
@@ -752,7 +751,7 @@ const threads: SocialProvider = {
  * overwrite the `Authorization` header this adapter sets from that exchange.
  */
 async function blueskySession(call: SocialCall): Promise<{ jwt: string; did: string; handle: string }> {
-  const session = rec((await ask(call, 'create_session')).data);
+  const session = asJsonRecord((await ask(call, 'create_session')).data);
   const jwt = text(session.accessJwt);
   if (!jwt) throw new SocialProviderError('Bluesky did not return a session token. Check the handle and app password on this connection.', 401, false);
   return { jwt, did: text(session.did), handle: text(session.handle) };
@@ -776,8 +775,8 @@ const bluesky: SocialProvider = {
       Authorization: `Bearer ${jwt}`,
     })).data);
     return feed.map((raw) => {
-      const post = rec(rec(raw).post);
-      const record = rec(post.record);
+      const post = asJsonRecord(asJsonRecord(raw).post);
+      const record = asJsonRecord(post.record);
       const uri = text(post.uri);
       const rkey = blueskyRkey(uri);
       return {
@@ -797,7 +796,7 @@ const bluesky: SocialProvider = {
     const body = draft.linkUrl && !draft.text.includes(draft.linkUrl)
       ? `${draft.text}\n\n${draft.linkUrl}`
       : draft.text;
-    const created = rec((await ask(call, 'create_record', {
+    const created = asJsonRecord((await ask(call, 'create_record', {
       repo: did || identity.externalId,
       collection: 'app.bsky.feed.post',
       // 300 GRAPHEMES is the real limit; slicing here keeps a long post from being
@@ -838,8 +837,8 @@ const googleBusiness: SocialProvider = {
     const locationName = requireField(fields, 'locationName', 'the location resource name');
     const posts = list((await ask(call, 'list_local_posts', { location_name: locationName, pageSize: Math.min(Math.max(limit, 1), 100) })).data);
     return posts.map((raw) => {
-      const post = rec(raw);
-      const media = list(post.media).map((item) => text(rec(item).googleUrl)).filter(Boolean);
+      const post = asJsonRecord(raw);
+      const media = list(post.media).map((item) => text(asJsonRecord(item).googleUrl)).filter(Boolean);
       return {
         id: text(post.name),
         authorName: identity.displayName,
@@ -856,7 +855,7 @@ const googleBusiness: SocialProvider = {
   async publish(call, fields, draft, identity) {
     const locationName = requireField(fields, 'locationName', 'the location resource name');
     const media = (draft.mediaUrls ?? []).filter(Boolean);
-    const created = rec((await ask(call, 'create_local_post', {
+    const created = asJsonRecord((await ask(call, 'create_local_post', {
       location_name: locationName,
       summary: draft.text.slice(0, 1500),
       languageCode: 'en',

@@ -12,6 +12,7 @@ import {
   type ManagerChatHandle, type BrainMessage,
 } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * ASK THE MANAGER — the conversation where a person holds the AI Manager to account.
  *
@@ -88,12 +89,12 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
   const [messages, setMessages] = useState<BrainMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
-  const [thinking, setThinking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The ask is the action; the chat resolve on mount shares its error slot via `fail`.
+  const { busy: thinking, error, run, fail, clear } = usePanelTask();
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
+    clear();
     try {
       const h = await managerApi.chat(projectId);
       setHandle(h);
@@ -101,11 +102,12 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
       // than loading a conversation it will not show.
       if (!compact) setMessages(await brain.getMessages(h.chatId, 60));
     } catch (e) {
-      setError(faultMessage(e, t('error')));
+      const message = faultMessage(e, t('error'));
+      if (message) fail(message);
     } finally {
       setLoading(false);
     }
-  }, [projectId, compact, t]);
+  }, [projectId, compact, t, clear, fail]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -121,35 +123,36 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
     if (!text || !handle || thinking) return;
     // No agent resolved ⇒ nobody can answer. Posting the question anyway would leave it
     // sitting unanswered forever, which reads as the manager ignoring it.
-    if (!handle.agentRef) return;
+    const agentRef = handle.agentRef;
+    if (!agentRef) return;
+    const { chatId, agentName } = handle;
 
     setDraft('');
-    setThinking(true);
-    setError(null);
-    try {
-      // The question is ADDRESSED to the manager — the same `addressedTo` convention an
-      // @agent mention uses, so the transcript records who it was put to.
-      const posted = await brain.sendMessages(handle.chatId, [{
-        role: 'user',
-        content: text,
-        metadata: JSON.stringify({ addressedTo: { kind: 'agent', ref: handle.agentRef, name: handle.agentName } }),
-      }]);
-      setMessages((prev) => [...prev, ...posted]);
-      const reply = await brain.requestAgentReply(handle.chatId, {
-        agentRef: handle.agentRef,
-        ...(handle.agentName ? { agentName: handle.agentName } : {}),
-      });
-      setMessages((prev) => [...prev, reply]);
-    } catch (e) {
-      setError(faultMessage(e, t('error')));
-      // Re-read rather than trusting the optimistic append: the question may well have
-      // persisted even though the reply failed, and dropping it would show the user a
-      // conversation that lost their message.
-      if (handle) await brain.getMessages(handle.chatId, 60).then(setMessages).catch(() => undefined);
-    } finally {
-      setThinking(false);
-    }
-  }, [handle, thinking, t]);
+    await run(async () => {
+      try {
+        // The question is ADDRESSED to the manager — the same `addressedTo` convention an
+        // @agent mention uses, so the transcript records who it was put to.
+        const posted = await brain.sendMessages(chatId, [{
+          role: 'user',
+          content: text,
+          metadata: JSON.stringify({ addressedTo: { kind: 'agent', ref: agentRef, name: agentName } }),
+        }]);
+        setMessages((prev) => [...prev, ...posted]);
+        const reply = await brain.requestAgentReply(chatId, {
+          agentRef,
+          ...(agentName ? { agentName } : {}),
+        });
+        setMessages((prev) => [...prev, reply]);
+      } catch (e) {
+        // Re-read rather than trusting the optimistic append: the question may well have
+        // persisted even though the reply failed, and dropping it would show the user a
+        // conversation that lost their message. Inside the action so the composer stays
+        // disabled until the re-read lands.
+        await brain.getMessages(chatId, 60).then(setMessages).catch(() => undefined);
+        throw e;
+      }
+    }, { failure: t('error') });
+  }, [handle, thinking, t, run]);
 
   // Fire the handed-in question exactly once, after the chat + its agent resolve. The
   // ref (not state) is what makes it once: `ask` is re-created on every state change it

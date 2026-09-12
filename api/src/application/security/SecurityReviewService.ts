@@ -5,13 +5,16 @@
  * security agent assignment actually do something: a workforce agent routes the
  * review to its own model; otherwise the gateway's default cascade is used.
  *
- * Mirrors ArchitectAnalysisService's gateway-JSON pattern (response_format
- * json_object) so even a weak model yields a clean, structured finding list.
+ * Structured output goes through `completeJson` (json_object) like every other
+ * gateway-JSON call, so even a weak model yields a clean, structured finding list —
+ * and a gateway failure is a failure, never "0 finding(s)".
  */
 import { TenantAiService } from '../llm/tenantProxy';
-import { readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, JSON_OBJECT_FORMAT } from '../llm/completeJson';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveAssignedAgent, type AgentKind } from '../swimlane/resolveAssignedAgent';
+import { ServiceUnavailableError } from '../../domain/shared/errors';
+import { asJsonObject } from '../../domain/shared/json';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -38,6 +41,9 @@ const SYSTEM_PROMPT =
   'deserialization, path traversal, crypto misuse, etc.). Respond ONLY with a JSON object: ' +
   '{ "summary": string, "findings": [ { "severity": "critical|high|medium|low|info", "title": string, ' +
   '"detail": string, "location": string, "recommendation": string } ] }. If nothing is found, return an empty findings array.';
+
+/** What the summary says when the model answered but not with a finding list. */
+export const UNREADABLE_REVIEW_SUMMARY = 'The reviewer returned no readable finding list — treat this review as not run.';
 
 export class SecurityReviewService extends TenantAiService {
   private readonly assignments: AgentAssignmentService;
@@ -71,46 +77,34 @@ export class SecurityReviewService extends TenantAiService {
       ? `Context: ${input.context}\n\n----\n${input.code}`
       : input.code;
 
-    // The security agent reviewing the tenant's code → the base class runs it on the
+    // The security agent reviewing the tenant's code → the tenant dispatch runs it on the
     // tenant's connected BYO account when present; the agent's configured base model is
     // honored only when it preempts the BYO seed (its own account), else the connected
-    // flagship leads. Metering handled by the base class.
-    const result = await this.completeForTenant(tenantId, {
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: user },
-      ],
-      temperature: 0.1,
-      max_tokens: 2048,
-      response_format: { type: 'json_object' },
-      useCase: 'security_review',
-    }, { meterUseCase: 'security_review', explicitModel: preferredModel });
+    // flagship leads. Metered under `security_review`.
+    const out = await completeJson(
+      { kind: 'tenant', env: this.aiEnv, tenantId, opts: { meterUseCase: 'security_review', explicitModel: preferredModel } },
+      { system: SYSTEM_PROMPT, user, schema: JSON_OBJECT_FORMAT, temperature: 0.1, maxTokens: 2048, useCase: 'security_review' },
+      asJsonObject,
+    );
+    // A review that never ran is not a clean review: answering "0 finding(s)" for a
+    // gateway failure read, to whoever asked, as a clean bill of health.
+    if (!out.ok && out.reason === 'gateway') {
+      throw new ServiceUnavailableError('The security review model is unavailable right now.');
+    }
 
-    const { content } = await readProxyChoice(result);
-    const parsed = content ? safeParse(content) : null;
+    const parsed = out.ok ? out.value : null;
     const findings = normalizeFindings(parsed?.findings);
     const summary =
       typeof parsed?.summary === 'string' && parsed.summary.trim()
         ? parsed.summary
-        : `${findings.length} finding(s).`;
+        : parsed ? `${findings.length} finding(s).` : UNREADABLE_REVIEW_SUMMARY;
 
     return {
       findings,
       summary,
-      model: result.resolvedModel ?? null,
+      model: (out.ok ? out.model : out.result?.resolvedModel) ?? null,
       ranAsAssignedAgent: preferredModel != null,
     };
-  }
-}
-
-
-function safeParse(text: string): { summary?: unknown; findings?: unknown } | null {
-  try {
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    const jsonText = fenced?.[1] ?? text;
-    return JSON.parse(jsonText.trim());
-  } catch {
-    return null;
   }
 }
 

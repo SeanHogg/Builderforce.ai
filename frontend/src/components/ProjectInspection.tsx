@@ -10,7 +10,7 @@ import {
   type InspectionDimension,
   type InspectionRecommendation,
 } from '@/lib/projectInspection';
-import type { HealthTier } from '@/lib/projectHealth';
+import { healthTierColor, type HealthTier } from '@/lib/projectHealth';
 import { diagnosticScoreColor } from '@/lib/diagnosticScore';
 import type { ProjectPanelTab } from './project-details/projectPanelTabs';
 import { BandedMetricBar, type MetricTier } from './charts/BandedMetricBar';
@@ -30,12 +30,6 @@ import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 
 /** Best→worst tier order the banded bars are drawn in (matches DORA convention). */
 const TIER_ORDER: HealthTier[] = ['healthy', 'watch', 'at_risk', 'critical'];
-const TIER_HEX: Record<HealthTier, string> = {
-  healthy: 'var(--success)',
-  watch: 'var(--yellow-bright)',
-  at_risk: 'var(--warning)',
-  critical: 'var(--error)',
-};
 
 /** Index into TIER_ORDER for a dimension's tier (null → no data → all dimmed). */
 function activeIndex(tier: HealthTier | null): number | null {
@@ -64,7 +58,7 @@ export function ProjectInspectionGrade({ project, onOpen }: ProjectInspectionGra
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           width: 40, height: 40, borderRadius: 'var(--radius-md)', flexShrink: 0,
-          background: `${insp.color}22`, border: `1px solid ${insp.color}`,
+          background: `color-mix(in srgb, ${insp.color} 13%, transparent)`, border: `1px solid ${insp.color}`,
         }}
       >
         <span style={{ fontSize: 18, fontWeight: 800, lineHeight: 1, color: insp.color }}>{insp.grade}</span>
@@ -170,7 +164,7 @@ export function ProjectInspectionSummary({ project }: { project: Project }) {
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           width: 64, height: 64, borderRadius: 'var(--radius-lg)', flexShrink: 0,
-          background: `${insp.color}22`, border: `2px solid ${insp.color}`,
+          background: `color-mix(in srgb, ${insp.color} 13%, transparent)`, border: `2px solid ${insp.color}`,
         }}
       >
         <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, color: insp.color }}>{insp.grade}</span>
@@ -206,7 +200,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
   const maturityScore = maturity?.result.score ?? null;
 
   const tiers: MetricTier[] = TIER_ORDER.map((tier) => ({
-    key: tier, label: t(`tier.${tier}`), color: TIER_HEX[tier],
+    key: tier, label: t(`tier.${tier}`), color: healthTierColor(tier),
   }));
 
   const dimLabel = (d: InspectionDimension) => t(`dim.${d.key}.label`);

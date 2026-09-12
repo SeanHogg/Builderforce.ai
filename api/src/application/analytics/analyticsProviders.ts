@@ -16,6 +16,8 @@
  * Search Console gets an honest absence rather than a fabricated 0.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
+
 /** Measures, normalized across the four platforms. */
 export const ANALYTICS_MEASURES = [
   'sessions', 'users', 'pageviews', 'conversions', 'revenueCents',
@@ -105,9 +107,6 @@ export class AnalyticsProviderError extends Error {
 // Shared normalization
 // ---------------------------------------------------------------------------
 
-const rec = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
 const text = (value: unknown): string => (value == null ? '' : String(value));
@@ -160,12 +159,12 @@ function refuseDimension(provider: AnalyticsProvider, dimension: AnalyticsDimens
 /** GA4 answers with parallel `dimensionHeaders` / `rows[].dimensionValues` arrays, so
  *  a row is only readable alongside the header order that produced it. */
 function ga4Rows(payload: unknown): Array<{ dimensions: string[]; metrics: string[] }> {
-  const body = rec(payload);
+  const body = asJsonRecord(payload);
   return list(body.rows).map((raw) => {
-    const row = rec(raw);
+    const row = asJsonRecord(raw);
     return {
-      dimensions: list(row.dimensionValues).map((v) => text(rec(v).value)),
-      metrics: list(row.metricValues).map((v) => text(rec(v).value)),
+      dimensions: list(row.dimensionValues).map((v) => text(asJsonRecord(v).value)),
+      metrics: list(row.metricValues).map((v) => text(asJsonRecord(v).value)),
     };
   });
 }
@@ -270,7 +269,7 @@ const searchConsole: AnalyticsProvider = {
     const result = await ask(call, 'query_search_analytics', {
       site_url: encodeURIComponent(siteUrl), startDate: query.since, endDate: query.until, rowLimit: 1,
     });
-    const row = rec(list(result.data)[0]);
+    const row = asJsonRecord(list(result.data)[0]);
     return searchConsoleMeasures(row);
   },
 
@@ -281,7 +280,7 @@ const searchConsole: AnalyticsProvider = {
       dimensions: ['date'], rowLimit: 400,
     });
     return list(result.data).flatMap((raw) => {
-      const row = rec(raw);
+      const row = asJsonRecord(raw);
       const date = normalizeDay(list(row.keys)[0]);
       return date ? [{ date, measures: searchConsoleMeasures(row) }] : [];
     });
@@ -296,7 +295,7 @@ const searchConsole: AnalyticsProvider = {
       dimensions: [name], rowLimit: query.limit ?? 50,
     });
     return list(result.data).map((raw) => {
-      const row = rec(raw);
+      const row = asJsonRecord(raw);
       return { key: text(list(row.keys)[0]) || '(not set)', measures: searchConsoleMeasures(row) };
     });
   },
@@ -309,10 +308,10 @@ const searchConsole: AnalyticsProvider = {
 const PLAUSIBLE_METRICS = 'visitors,visits,pageviews,events';
 
 const plausibleMeasures = (row: Record<string, unknown>): AnalyticsMeasures => ({
-  users: int(rec(row.visitors).value ?? row.visitors),
-  sessions: int(rec(row.visits).value ?? row.visits),
-  pageviews: int(rec(row.pageviews).value ?? row.pageviews),
-  conversions: int(rec(row.events).value ?? row.events),
+  users: int(asJsonRecord(row.visitors).value ?? row.visitors),
+  sessions: int(asJsonRecord(row.visits).value ?? row.visits),
+  pageviews: int(asJsonRecord(row.pageviews).value ?? row.pageviews),
+  conversions: int(asJsonRecord(row.events).value ?? row.events),
 });
 
 const PLAUSIBLE_DIMENSION: Record<AnalyticsDimension, string | null> = {
@@ -334,7 +333,7 @@ const plausible: AnalyticsProvider = {
     const result = await ask(call, 'aggregate', {
       site_id: siteId, period: 'custom', date: `${query.since},${query.until}`, metrics: PLAUSIBLE_METRICS,
     });
-    return plausibleMeasures(rec(result.data));
+    return plausibleMeasures(asJsonRecord(result.data));
   },
 
   async daily(call, fields, query) {
@@ -344,7 +343,7 @@ const plausible: AnalyticsProvider = {
       metrics: PLAUSIBLE_METRICS, interval: 'date',
     });
     return list(result.data).flatMap((raw) => {
-      const row = rec(raw);
+      const row = asJsonRecord(raw);
       const date = normalizeDay(row.date);
       return date ? [{ date, measures: plausibleMeasures(row) }] : [];
     });
@@ -359,7 +358,7 @@ const plausible: AnalyticsProvider = {
       metrics: PLAUSIBLE_METRICS, limit: query.limit ?? 50,
     });
     return list(result.data).map((raw) => {
-      const row = rec(raw);
+      const row = asJsonRecord(raw);
       // The dimension's own value comes back under its property name, minus the prefix.
       const key = text(row[property.split(':')[1] ?? property] ?? row.name ?? row.source);
       return { key: key || '(not set)', measures: plausibleMeasures(row) };
@@ -374,7 +373,7 @@ const plausible: AnalyticsProvider = {
 /** PostHog answers a HogQL query with `results` as positional arrays plus a `columns`
  *  header, so a column is only addressable through its index in that header. */
 function hogRows(payload: unknown): { columns: string[]; rows: unknown[][] } {
-  const body = rec(payload);
+  const body = asJsonRecord(payload);
   return {
     columns: list(body.columns).map(text),
     rows: list(body.results).map((row) => (Array.isArray(row) ? row : [row])),

@@ -15,6 +15,7 @@ import { RatingSummaryCard } from './RatingSummaryCard';
 import { ReviewList } from './ReviewList';
 import styles from './employers.module.css';
 import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * One employer: what it scores, what people said, and the form to say something.
  *
@@ -39,9 +40,7 @@ export function EmployerReviewPanel({ employerId }: { employerId: number }) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [axisScores, setAxisScores] = useState<Record<string, number>>({});
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const { busy, error, notice, run, fail } = usePanelTask();
 
   const load = useCallback(() => {
     fetchEmployer(employerId)
@@ -56,26 +55,23 @@ export function EmployerReviewPanel({ employerId }: { employerId: number }) {
           setAxisScores(next.mine.subRatings ?? {});
         }
       })
-      .catch((cause) => setError(faultText(cause, t('detail.failed'))));
-  }, [employerId, t]);
+      .catch((cause) => fail(faultText(cause, t('detail.failed'))));
+  }, [employerId, t, fail]);
 
   useEffect(() => { load(); }, [load]);
 
   if (!detail) return null;
 
   const save = async () => {
-    setBusy(true); setError(''); setNotice('');
-    try {
+    const done = await run(async () => {
       await submitEmployerReview(employerId, {
         rating, title: title.trim(), body: body.trim(), subRatings: axisScores,
       });
+      return true;
       // Moderated, so it does NOT appear on the public list yet. Saying so here
       // is the difference between "nothing happened" and "it is with a reviewer".
-      setNotice(t('form.submittedPending'));
-      load();
-    } catch (cause) {
-      setError(faultText(cause, t('form.failed')));
-    } finally { setBusy(false); }
+    }, { success: t('form.submittedPending'), failure: t('form.failed') });
+    if (done) load();
   };
 
   const withdraw = async () => {
@@ -86,14 +82,13 @@ export function EmployerReviewPanel({ employerId }: { employerId: number }) {
       destructive: true,
     });
     if (!ok) return;
-    setBusy(true); setError(''); setNotice('');
-    try {
+    const done = await run(async () => {
       await withdrawEmployerReview(employerId);
-      setRating(0); setTitle(''); setBody(''); setAxisScores({});
-      load();
-    } catch (cause) {
-      setError(faultText(cause, t('form.withdrawFailed')));
-    } finally { setBusy(false); }
+      return true;
+    }, { failure: t('form.withdrawFailed') });
+    if (!done) return;
+    setRating(0); setTitle(''); setBody(''); setAxisScores({});
+    load();
   };
 
   const { employer, mine } = detail;

@@ -33,15 +33,16 @@ import {
   type MediatorAuthority,
 } from '@/lib/disputesApi';
 import { faultMessage } from '@/lib/apiClient';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 /** Which side is looking. Decided by the surface that mounted this, from the token it
  *  holds — never guessed from the dispute row. */
 export type DisputeViewer = 'client' | 'freelancer';
 
-const STATUS_TONE: Record<Dispute['status'], string> = {
-  open: 'var(--warning-text)',
-  mediating: 'var(--cyan-bright)',
-  resolved: 'var(--success)',
-  withdrawn: 'var(--text-muted)',
+const STATUS_TONE: StatusToneMap<Dispute['status']> = {
+  open: 'warning',
+  mediating: 'info',
+  resolved: 'success',
+  withdrawn: 'neutral',
 };
 
 export interface DisputePanelActions {
@@ -124,7 +125,7 @@ export function DisputePanel({
         </span>
         <span style={{
           fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, letterSpacing: '.08em',
-          textTransform: 'uppercase', color: STATUS_TONE[dispute.status],
+          textTransform: 'uppercase', color: statusColor(STATUS_TONE, dispute.status),
         }}>{t(`status.${dispute.status}`)}</span>
       </header>
 

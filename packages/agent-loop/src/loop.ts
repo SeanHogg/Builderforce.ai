@@ -12,15 +12,16 @@
  * rethrown, because every surface treated it that way.
  */
 
-import type {
-  AfterToolCallsDecision,
-  LoopDispatchResult,
-  LoopResult,
-  LoopRunArgs,
-  LoopTurn,
-  LoopTurnResult,
-  ParsedToolCall,
-  TurnContext,
+import {
+  DEFAULT_TOOL_FAILURE_STREAK,
+  type AfterToolCallsDecision,
+  type LoopDispatchResult,
+  type LoopResult,
+  type LoopRunArgs,
+  type LoopTurn,
+  type LoopTurnResult,
+  type ParsedToolCall,
+  type TurnContext,
 } from "./types.js";
 import { parseToolCall } from "./parseToolCall.js";
 
@@ -28,6 +29,7 @@ class Ctx<M> implements TurnContext<M> {
   step = 0;
   stepInCall = 0;
   output = "";
+  failureStreak = 0;
   constructor(
     readonly messages: M[],
     readonly signal: AbortSignal | undefined,
@@ -40,18 +42,23 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
   const ctx = new Ctx<M>(args.messages, signal);
   const startStep = Math.max(0, budget.startStep ?? 0);
   const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
+  const stepCap = budget.stepCap ?? Number.POSITIVE_INFINITY;
+  const failureStreakCap = budget.failureStreakCap ?? DEFAULT_TOOL_FAILURE_STREAK;
   ctx.step = startStep;
   ctx.output = args.initialOutput ?? "";
 
   let ok = true;
   let finished = false;
   let cancelled = false;
+  // The tool-failure breaker tripped: the run's last `failureStreakCap` dispatches all
+  // failed, so it is stuck, not working. The ONLY limit a conversational run has.
+  let failuresTripped = false;
   let awaitingInput: LoopResult["awaitingInput"];
 
   const isCancelled = async (): Promise<boolean> =>
     Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
 
-  for (; ctx.step < budget.stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
+  for (; ctx.step < stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
     if (await isCancelled()) {
       cancelled = true;
       break;
@@ -133,6 +140,11 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
         awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
       }
 
+      // A control signal is the run steering itself, not a tool failing; only a dispatch
+      // the surface flagged as an error counts, and any success clears the streak. The
+      // skipped remainder of a steered turn is not counted either — those calls never ran.
+      if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
+
       const row = codec.tool(call, result);
       ctx.messages.push(row);
       const post = await hooks.afterDispatch?.(call, result, row, ctx);
@@ -146,15 +158,26 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
     const after: AfterToolCallsDecision | void = await hooks.afterToolCalls?.(ctx, finished);
     if (after && after.finished !== undefined) finished = after.finished;
     if (awaitingInput) break;
+    if (!finished && ctx.failureStreak >= failureStreakCap) {
+      // The turn ran, so it is counted (the for-update is skipped by `break`); a
+      // tripped breaker is terminal, so nothing resumes from this index anyway.
+      ctx.step++;
+      ctx.stepInCall++;
+      failuresTripped = true;
+      break;
+    }
   }
 
+  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap);
   return {
     ok,
     output: ctx.output,
     finished,
     cancelled,
     step: ctx.step,
-    exhausted: !finished && !cancelled && !awaitingInput && ctx.step >= budget.stepCap,
+    exhausted,
+    ...(exhausted ? { exhaustedBy: failuresTripped ? ("failures" as const) : ("steps" as const) } : {}),
+    failureStreak: ctx.failureStreak,
     ...(awaitingInput ? { awaitingInput } : {}),
   };
 }

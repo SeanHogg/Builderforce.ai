@@ -27,7 +27,8 @@ import { cycleEdges, edgeKey, layoutDag, type GraphEdgeRef } from '@/lib/graphLa
 import { usePmScope } from '@/lib/pm/scope';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { usePmData } from '@/lib/pm/usePmData';
-import { PmEmpty, PmError } from './pmShared';
+import { PmEmpty, PmError, WORK_ITEM_STATUS_TONE } from './pmShared';
+import { statusColor } from '@/lib/statusTone';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
@@ -44,10 +45,8 @@ import { faultMessage } from '@/lib/apiClient';
  * heading — so the Flow view is never a dead-end when no single project is picked.
  */
 
-const STATUS_COLOR: Record<string, string> = {
-  done: 'var(--success)', shipped: 'var(--success)', in_progress: 'var(--info)',
-  in_review: 'var(--violet-bright)', blocked: 'var(--error)', backlog: 'var(--text-muted)',
-};
+/** A task's node stroke / 3D accent — the ONE PM status map, drawn as a mark. */
+const statusStroke = (status: string): string => statusColor(WORK_ITEM_STATUS_TONE, status, 'solid');
 
 const COL_W = 230;
 const ROW_H = 90;
@@ -113,7 +112,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       data: { label: `${t.key} · ${t.title}` },
       style: {
         borderRadius: 'var(--radius-md)',
-        border: `2px solid ${STATUS_COLOR[t.status] ?? 'var(--text-muted)'}`,
+        border: `2px solid ${statusStroke(t.status)}`,
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
         fontSize: 12,
@@ -171,7 +170,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       label: task.title,
       sublabel: task.key,
       group: statusLabel(task.status),
-      accent: STATUS_COLOR[task.status] ?? STATUS_COLOR.backlog!,
+      accent: statusStroke(task.status),
       depthOffset: canvas3dDepthOffset(node),
     };
   }, [statusLabel, taskById]);

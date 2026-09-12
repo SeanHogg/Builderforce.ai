@@ -94,7 +94,7 @@ function TeammateChip({ member, locallyAvailable = false, compact = false }: { m
       aria-label={label}
     >
       {member.avatarUrl
-        ? <img className={styles.avatar} src={member.avatarUrl} alt="" />
+        ? <img className={styles.avatar} src={member.avatarUrl} alt="" width={20} height={20} />
         : <span className={styles.initials} aria-hidden="true">{initials(member.seat ?? member.name)}</span>}
       {/* The name and the availability dot are what a BAND has room for. The compact
           strip keeps the accessible name — which already carries both — and drops only

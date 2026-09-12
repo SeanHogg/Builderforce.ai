@@ -11,6 +11,15 @@ import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetr
 import { DonutChart } from '@/components/charts/DonutChart';
 import { TrendChart, type TrendSeries } from '@/components/charts/TrendChart';
 import { hrs, pct } from './format';
+import {
+  DORA_TIER_COLOR,
+  DORA_TIER_ORDER,
+  tierCfr,
+  tierDeployFreq,
+  tierLeadTime,
+  tierMttr,
+  type DoraTierKey,
+} from '@/lib/doraTiers';
 
 /**
  * LENS #2 — DORA four-keys over deployment_events (+ task lead time), now
@@ -20,33 +29,9 @@ import { hrs, pct } from './format';
  * thresholds are the well-known DORA bands; classification is pure + presentation.
  */
 
-type TierKey = 'elite' | 'high' | 'medium' | 'low';
-const TIER_ORDER: TierKey[] = ['elite', 'high', 'medium', 'low'];
-const TIER_COLOR: Record<TierKey, string> = {
-  elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: 'var(--error)',
-};
-
-// ── DORA tier classification (index 0=Elite … 3=Low) ─────────────────────────
-/** Deployment frequency, per day — higher is better (daily → Elite, weekly →
- *  High, monthly → Medium, less → Low). */
-function tierDeployFreq(perDay: number): number {
-  if (perDay >= 1) return 0;
-  if (perDay >= 1 / 7) return 1;
-  if (perDay >= 1 / 30) return 2;
-  return 3;
-}
-/** Lead time for changes, hours — lower is better (<1d / <1w / <1m / ≥1m). */
-function tierLeadTime(h: number): number {
-  return h < 24 ? 0 : h < 168 ? 1 : h < 730 ? 2 : 3;
-}
-/** Change-failure rate, % — lower is better (≤5 / ≤15 / ≤30 / >30). */
-function tierCfr(p: number): number {
-  return p <= 5 ? 0 : p <= 15 ? 1 : p <= 30 ? 2 : 3;
-}
-/** Time to restore, hours — lower is better (<1h / <1d / <1w / ≥1w). */
-function tierMttr(h: number): number {
-  return h < 1 ? 0 : h < 24 ? 1 : h < 168 ? 2 : 3;
-}
+type TierKey = DoraTierKey;
+const TIER_ORDER = DORA_TIER_ORDER;
+const TIER_COLOR = DORA_TIER_COLOR;
 
 export function DoraLens() {
   const { currentProjectId } = useProjectScope();

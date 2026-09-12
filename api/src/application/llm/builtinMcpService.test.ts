@@ -38,17 +38,33 @@ beforeEach(() => vi.clearAllMocks());
 describe('route replay authentication', () => {
   it('mints a machine token for a cloud agent instead of forwarding its launching user session', () => {
     expect(resolveReplayAuth({ authToken: 'expired.user.jwt', agentRef: 'agent-ada' })).toEqual({
+      kind: 'machine',
+      subject: 'agentHost:mcp',
+    });
+    // An agent run's `userId` is its own ref — never a person to act as.
+    expect(resolveReplayAuth({ authToken: 'bfk_secret', agentRef: 'agent-ada', userId: 'agent-ada' })).toEqual({
+      kind: 'machine',
       subject: 'agentHost:mcp',
     });
   });
 
-  it('mints a machine token for gateway-key and server-side callers', () => {
-    expect(resolveReplayAuth({ authToken: 'bfk_secret' })).toEqual({ subject: 'agentHost:mcp' });
-    expect(resolveReplayAuth({})).toEqual({ subject: 'agentHost:mcp' });
+  it('mints a machine token for gateway-key and server-side callers nobody can be named for', () => {
+    expect(resolveReplayAuth({ authToken: 'bfk_secret' })).toEqual({ kind: 'machine', subject: 'agentHost:mcp' });
+    expect(resolveReplayAuth({})).toEqual({ kind: 'machine', subject: 'agentHost:mcp' });
+    // A machine-shaped id is not a person either.
+    expect(resolveReplayAuth({ authToken: 'bfk_secret', userId: 'agentHost:5' })).toEqual({ kind: 'machine', subject: 'agentHost:mcp' });
+  });
+
+  // The VS Code editor calls with its `bfk_*` key; the gateway resolved that key to the
+  // member who minted it. The replay runs AS that member — otherwise a workspace owner
+  // directing the agent was told `manager role required` by their own workspace.
+  it('acts as the person a gateway key resolved to', () => {
+    expect(resolveReplayAuth({ authToken: 'bfk_secret', userId: 'user-owner' })).toEqual({ kind: 'user', subject: 'user-owner' });
   });
 
   it('preserves a real human bearer so revocation and user permissions still apply', () => {
     expect(resolveReplayAuth({ authToken: 'header.payload.signature' })).toEqual({
+      kind: 'forward',
       forwardToken: 'header.payload.signature',
       subject: 'agentHost:mcp',
     });

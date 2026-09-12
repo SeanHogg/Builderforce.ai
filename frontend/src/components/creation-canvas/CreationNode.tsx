@@ -33,7 +33,7 @@ import { canvasNodeDensity, canvasNodeDensityActionKey, nextCanvasNodeDensity, t
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
-import { Icon } from '@/components/ui/Icon';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { networkGlyph } from '@/lib/networkGlyph';
 import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
 import { recalculateSheet } from '@/lib/canvasSheet';
@@ -56,6 +56,7 @@ import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
 import { canvasViewport, resourceIdOfType } from '@builderforce/creation-canvas-contract';
 import { formatBytes } from '@/lib/formatBytes';
+import { mailboxFilterParts, type MailboxFilter } from '@/lib/mailboxApi';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardProbabilityPercent, cardsAt, pipelineTotals, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
 import {
@@ -345,7 +346,7 @@ function CreativeStudioBody({ data }: { data: CreationNodeData }) {
   const output = textValue(data.outputFormat, data.kind === 'resume' ? 'PDF / DOCX' : t('chooseOnExport'));
   const thumbnail = creativePreviewImageUrl(data);
   return <div className={styles.creativeStudioBody}>
-    {thumbnail ? <img src={thumbnail} alt={t('previewAlt', { title: data.title })} /> : <div className={styles.creativeStudioPreview} aria-hidden="true"><span><Icon source={creationObjectDefinition(data.kind).icon} size={24} /></span><i /><i /><i /></div>}
+    {thumbnail ? <img src={thumbnail} alt={t('previewAlt', { title: data.title })} width={240} height={118} /> :<div className={styles.creativeStudioPreview} aria-hidden="true"><span><Icon source={creationObjectDefinition(data.kind).icon} size={24} /></span><i /><i /><i /></div>}
     <AuthoredContent data={data} fallback={t('creativeFallback')} />
     <div className={styles.widgetSettings}>
       <span><small>{t('studio')}</small><b>{mediaKind.replaceAll('_', ' ')}</b></span>
@@ -372,6 +373,27 @@ function InboxBody({ data }: { data: CreationNodeData }) {
   const account = textValue(data.accountEmail);
   const fetchedAt = typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt) : null;
   const unread = Number(data.unreadCount) || 0;
+  // The filter, worded in the READER's language from the persisted `filter`. A
+  // legacy tile also carries an English `subtitle` written at creation; it is read
+  // only when there is no filter to word, so it never shows beside (or instead of)
+  // the translated line.
+  const filter = data.filter && typeof data.filter === 'object' && !Array.isArray(data.filter) ? data.filter as MailboxFilter : null;
+  const day = (value: string) => Number.isNaN(Date.parse(value)) ? value : fmt.dateWith(value, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const filterParts = filter ? mailboxFilterParts(filter).map((part) => {
+    switch (part.kind) {
+      case 'unread': return t('inboxFilterUnread');
+      case 'attachments': return t('inboxFilterAttachments');
+      case 'from': return t('inboxFilterFrom', { value: part.value });
+      case 'subject': return t('inboxFilterSubject', { value: part.value });
+      case 'matching': return t('inboxFilterMatching', { value: part.value });
+      case 'since': return t('inboxFilterSince', { date: day(part.value) });
+      case 'before': return t('inboxFilterBefore', { date: day(part.value) });
+    }
+  }) : [];
+  const filterText = filterParts.length ? fmt.list(filterParts) : '';
+  const filterLabel = !filter ? textValue(data.subtitle)
+    : filterText ? filterText.charAt(0).toLocaleUpperCase(fmt.locale) + filterText.slice(1)
+    : t('inboxFilterAll');
 
   if (!account) {
     return <div className={styles.taskContext}><p className={styles.taskEmpty}>{t('inboxNotConnected')}</p></div>;
@@ -379,6 +401,7 @@ function InboxBody({ data }: { data: CreationNodeData }) {
   return <div className={styles.inboxBody}>
     <div className={styles.inboxMeta}>
       <span title={account}>{account}</span>
+      {filterLabel && <small title={filterLabel}>{filterLabel}</small>}
       {unread > 0 && <b className={styles.inboxUnreadBadge}>{t('inboxUnread', { count: unread })}</b>}
       {fetchedAt && <small>{t('inboxReadAt', { time: fmt.time(fetchedAt) })}</small>}
     </div>
@@ -472,7 +495,7 @@ function EmailTemplateBody({ data }: { data: CreationNodeData }) {
   const fields = Array.isArray(data.mergeFields) ? data.mergeFields.map(String) : [];
   const logoUrl = textValue(data.logoUrl);
   return <div className={styles.taskBody}>
-    {logoUrl && <img className={styles.templateLogo} src={logoUrl} alt="" />}
+    {logoUrl && <img className={styles.templateLogo} src={logoUrl} alt="" width={136} height={34} />}
     <div className={styles.taskContext}>
       <small>{t('templateSubject')}</small>
       <b>{textValue(data.subject, t('templateNoSubject'))}</b>
@@ -569,7 +592,7 @@ function SocialPostBody({ data }: { data: CreationNodeData }) {
       <span><small>{t('socialAccount')}</small><b>{`${networkGlyph(data.network)} ${textValue(data.accountName, '—')}`}</b></span>
       <span><small>{t('socialPublished')}</small><b>{data.publishedAt ? fmt.date(String(data.publishedAt)) : '—'}</b></span>
     </div>
-    {thumbnail && <img className={styles.socialMedia} src={thumbnail} alt="" />}
+    {thumbnail && <img className={styles.socialMedia} src={thumbnail} alt="" width={240} height={120} />}
     <div className={styles.taskContext}>
       <small>{t('socialPostText')}</small>
       {textValue(data.text)
@@ -1747,7 +1770,7 @@ function FileBody({ data }: { data: CreationNodeData }) {
       {Number.isFinite(size) && size > 0 && <span><small>{t('fileSize')}</small><b>{formatBytes(size)}</b></span>}
     </div>
     {image
-      ? <img className={styles.filePreviewImage} src={image} alt={t('filePreviewAlt', { name })} />
+      ? <img className={styles.filePreviewImage} src={image} alt={t('filePreviewAlt', { name })} width={440} height={330} style={{ height: 'auto' }} />
       : preview
         ? <pre className={`${styles.filePreview} nowheel nodrag`} tabIndex={0}>{preview.slice(0, 4_000)}</pre>
         : <p className={styles.filePreviewEmpty}>{t('filePreviewUnavailable')}</p>}
@@ -2379,7 +2402,7 @@ function GameBody({ data, onPlayFull }: { data: CreationNodeData; onPlayFull?: (
   if (!runtime) {
     return <div className={styles.creativeStudioBody}>
       {poster
-        ? <img src={poster} alt={t('previewAlt', { title: data.title })} />
+        ? <img src={poster} alt={t('previewAlt', { title: data.title })} width={240} height={118} />
         : <div className={styles.creativeStudioPreview} aria-hidden="true"><span><Icon source={creationObjectDefinition(data.kind).icon} size={24} /></span><i /><i /><i /></div>}
       <AuthoredContent data={data} fallback={t('gameNotGenerated')} />
       <div className={styles.pills}><span>{t('gameGenerateFirst')}</span></div>
@@ -2744,30 +2767,16 @@ function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
  * the mark has to say which of the three you are in — full rows, one row plus a rule, or a
  * dot — or the only way to know is to press it and watch.
  */
-/** A clock, drawn at badge size. Not `Icon name="clock"` — this sits INSIDE a 26px
- *  circle that already carries a fill, so it needs a heavier stroke than the icon set's
- *  general-purpose glyph to survive at that size on a tinted plate. */
-function ClockBadgeIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M8 4.9V8l2.2 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>;
-}
+const DENSITY_ICON: Record<CanvasNodeDensity, IconName> = {
+  minimized: 'density-minimized',
+  preview: 'density-preview',
+  expanded: 'density-expanded',
+};
 
-function DensityIcon({ density }: { density: CanvasNodeDensity }) {
-  if (density === 'minimized') return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r="3.1" fill="currentColor" />
-  </svg>;
-  if (density === 'preview') return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <rect x="2.6" y="3.4" width="10.8" height="3" rx="1" fill="currentColor" />
-    <path d="M2.6 9.6h10.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>;
-  return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <rect x="2.6" y="3" width="10.8" height="2.6" rx="1" fill="currentColor" />
-    <rect x="2.6" y="6.8" width="10.8" height="2.6" rx="1" fill="currentColor" opacity=".55" />
-    <rect x="2.6" y="10.6" width="10.8" height="2.6" rx="1" fill="currentColor" opacity=".3" />
-  </svg>;
-}
+/** The schedule badge's clock sits INSIDE a 26px circle that already carries a fill, so
+ *  it takes a heavier stroke than the set's general-purpose 1.8 to survive at that size on
+ *  a tinted plate. */
+const CLOCK_BADGE_STROKE = 2.2;
 
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal, onOpenFrame, onDeleteNode }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
@@ -2845,7 +2854,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       aria-label={schedule.enabled ? t('scheduledEvery', { minutes: schedule.everyMinutes }) : t('scheduleThis')}
       title={schedule.enabled ? t('scheduledEvery', { minutes: schedule.everyMinutes }) : t('scheduleThis')}
       onClick={openPanel('schedule')}
-    ><ClockBadgeIcon /></button>
+    ><Icon name="clock" size={14} strokeWidth={CLOCK_BADGE_STROKE} /></button>
     {/* Severity-coloured and COUNTED. A badge that says "2" without saying how bad is a
         badge you have to open to triage, which defeats putting it on the card. */}
     {worstSeverity && <button
@@ -2880,7 +2889,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
     aria-label={densityAction}
     title={densityAction}
     onClick={(event) => { event.stopPropagation(); onEditData(id, { density: nextCanvasNodeDensity(density) }); }}
-  ><DensityIcon density={density} /></button> : null;
+  ><Icon name={DENSITY_ICON[density]} size={14} /></button> : null;
 
   // Built once and drawn on BOTH the card and the orb, for the same reason the badges
   // are: a folded board is exactly where someone reaches for "get rid of this", and an

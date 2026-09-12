@@ -38,6 +38,8 @@ export default function ShoutoutsView({ all }: { all: Testimonial[] }) {
                 src={item.avatar || `https://unavatar.io/x/${item.author}`}
                 alt={item.author}
                 loading="lazy"
+                width={40}
+                height={40}
                 className="cc-shoutout-avatar"
               />
               <div className="cc-shoutout-content">
@@ -67,6 +69,8 @@ export default function ShoutoutsView({ all }: { all: Testimonial[] }) {
                         src={item.avatar || `https://unavatar.io/x/${item.author}`}
                         alt={item.author}
                         loading="lazy"
+                        width={28}
+                        height={28}
                         className="cc-shoutout-tavatar"
                       />
                       {item.author}

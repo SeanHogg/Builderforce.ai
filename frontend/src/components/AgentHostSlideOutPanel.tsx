@@ -25,6 +25,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
 import { PanelWidthControl, resolvePanelWidth, usePanelWidth, type PanelWidth } from '@/components/panelWidthControl';
 import { PanelCloseButton } from '@/components/PanelCloseButton';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 
 export type AgentHostPanelTab =
   | 'details'
@@ -101,6 +102,12 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
+/** Registration status → tone for the header pill; `offline` and anything else read neutral. */
+const STATUS_TONE: StatusToneMap = {
+  active: 'success',
+  suspended: 'danger',
+};
+
 export function AgentHostSlideOutPanel({
   agentHost,
   open,
@@ -173,12 +180,6 @@ export function AgentHostSlideOutPanel({
 
   const statusLabel = agentHost.status ?? (agentHost.online ? 'active' : 'offline');
   const slug = agentHost.slug;
-  const statusColor =
-    statusLabel === 'active'
-      ? 'var(--success-bg, rgba(34,197,94,0.15))'
-      : statusLabel === 'suspended'
-        ? 'var(--danger-bg, rgba(239,68,68,0.15))'
-        : 'var(--bg-elevated)';
 
   // Chat tab needs full height; other tabs scroll naturally
   const bodyStyle: React.CSSProperties =
@@ -232,8 +233,7 @@ export function AgentHostSlideOutPanel({
                 textTransform: 'uppercase',
                 padding: '4px 8px',
                 borderRadius: 'var(--radius-sm)',
-                background: statusColor,
-                color: 'var(--text-secondary)',
+                ...statusPillStyle(STATUS_TONE, statusLabel),
               }}
             >
               {statusLabel}

@@ -47,10 +47,15 @@ import { recordUsage } from '../developer/extensionUsage';
 import { openPeriodFor } from '../developer/extensionBilling';
 import { EXTENSION_WEBHOOK_EVENTS } from '../seams/webhookService';
 
-/** Map this surface's one error type onto a status, in one place. */
-function fail(error: unknown): { body: { error: string }; status: 400 | 401 | 403 | 404 | 500 } {
+/**
+ * This surface's one refusal type as an answer, in one place. Anything else is not a
+ * refusal but a failure: it is rethrown to `app.onError`, which reports it and answers a
+ * generic 500 — the old `{ error: error.message }` 500 told the vendor our internals
+ * and told us nothing.
+ */
+function fail(error: unknown): { body: { error: string }; status: 400 | 401 | 403 | 404 } {
   if (error instanceof InstallTokenError) return { body: { error: error.message }, status: error.status };
-  return { body: { error: error instanceof Error ? error.message : 'unexpected error' }, status: 500 };
+  throw error;
 }
 
 export function createPublicExtensionRoutes(db: Db): Hono<HonoEnv> {
@@ -158,7 +163,7 @@ export function createPublicExtensionRoutes(db: Db): Hono<HonoEnv> {
    */
   async function withInstall(
     c: { req: { header: (k: string) => string | undefined }; env: unknown },
-  ): Promise<{ ok: true; install: ResolvedInstall } | { ok: false; error: string; status: 400 | 401 | 403 | 404 | 500 }> {
+  ): Promise<{ ok: true; install: ResolvedInstall } | { ok: false; error: string; status: 400 | 401 | 403 | 404 }> {
     try {
       return { ok: true, install: await resolveInstallToken(db, c.env as Env, c.req.header('Authorization')) };
     } catch (error) {

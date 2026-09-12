@@ -6,7 +6,8 @@ import { qualityApi, type QualityStats } from '@/lib/builderforceApi';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
-import { levelColor, statusColor, sourceColor } from './qualityColors';
+import { levelColor, sourceColor, STATUS_TONE } from './qualityColors';
+import { statusColor } from '@/lib/statusTone';
 import { useFormat } from "@/i18n/useFormat";
 
 /**
@@ -43,7 +44,7 @@ export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number
     .map((l) => ({ key: l.level, label: t(`level.${l.level}`), value: l.events, color: levelColor(l.level) }));
   const statusSegments = stats.byStatus
     .filter((s) => s.groups > 0)
-    .map((s) => ({ key: s.status, label: t(`status.${s.status}`), value: s.groups, color: statusColor(s.status) }));
+    .map((s) => ({ key: s.status, label: t(`status.${s.status}`), value: s.groups, color: statusColor(STATUS_TONE, s.status, 'solid') }));
   const collectorBars = stats.byCollector
     .filter((c) => c.events > 0)
     .sort((a, b) => b.events - a.events)

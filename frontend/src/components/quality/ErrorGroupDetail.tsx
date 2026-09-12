@@ -7,7 +7,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { qualityApi, type ErrorGroupDetail as Detail } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const overlay: React.CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
   display: 'flex', justifyContent: 'flex-end',
@@ -52,6 +52,7 @@ function renderStack(stack: unknown): string {
 export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: string; onClose: () => void; onChanged: () => void }) {
   const fmt = useFormat();
   const t = useTranslations('quality');
+  const errorMessage = useErrorMessage();
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,8 +61,8 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
   const load = useCallback(() => {
     qualityApi.groups.get(groupId)
       .then((d) => { setDetail(d); setError(null); })
-      .catch((e) => setError(faultMessage(e, 'Failed to load detail')));
-  }, [groupId]);
+      .catch((e) => setError(errorMessage(e)));
+  }, [groupId, errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -72,7 +73,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
       onChanged();
       load();
     } catch (e) {
-      setError(faultMessage(e, 'Failed to update status'));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -86,7 +87,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
       onChanged();
       load();
     } catch (e) {
-      setError(faultMessage(e, 'Failed to dispatch fix'));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

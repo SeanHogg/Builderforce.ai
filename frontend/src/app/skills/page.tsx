@@ -25,7 +25,7 @@ import { WorkspaceSkillReview } from '@/components/skills/WorkspaceSkillReview';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 function loadUserSkills(tenantId: string): UserSkill[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -44,6 +44,7 @@ type SkillItem = { slug: string; name: string; description: string; category?: s
 export default function SkillsPage() {
   const t = useTranslations('skillsPage');
   const tc = useTranslations('common');
+  const errorText = useErrorText();
   const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
@@ -92,11 +93,11 @@ export default function SkillsPage() {
         setStats(s);
       }
     } catch (e) {
-      setError(faultText(e, 'Failed to load'));
+      setError(errorText(e));
     } finally {
       setLoading(false);
     }
-  }, [tenantNum]);
+  }, [tenantNum, errorText]);
 
   useEffect(() => {
     setUserSkills(loadUserSkills(tenantId));
@@ -116,7 +117,7 @@ export default function SkillsPage() {
         return [...prev, { slug, name }];
       });
     } catch (e) {
-      setError(faultText(e, 'Assign failed'));
+      setError(errorText(e));
     }
   };
 
@@ -133,7 +134,7 @@ export default function SkillsPage() {
       const updated = await marketplaceStats.getStats('skill', [slug]).catch(() => ({}));
       setStats((s) => ({ ...s, ...updated }));
     } catch (e) {
-      setError(faultText(e, 'Unassign failed'));
+      setError(errorText(e));
     }
   };
 
@@ -143,7 +144,7 @@ export default function SkillsPage() {
       const prev = stats[slug] ?? { likes: 0, installs: 0, liked: false };
       setStats((s) => ({ ...s, [slug]: { ...prev, liked, likes: liked ? prev.likes + 1 : Math.max(0, prev.likes - 1) } }));
     } catch (e) {
-      setError(faultText(e, 'Like failed'));
+      setError(errorText(e));
     }
   };
 

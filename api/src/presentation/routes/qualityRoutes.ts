@@ -12,6 +12,7 @@
  * ingest engine's version-token bump (per project + per tenant).
  */
 
+import { InternalError } from '../../domain/shared/errors';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { and, asc, desc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm';
@@ -199,7 +200,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       if (isUniqueViolation(e)) return c.json({ error: 'This project already has an error collector' }, 409);
       throw e;
     }
-    if (!row) return c.json({ error: 'Failed to create collector' }, 500);
+    if (!row) throw new InternalError('Failed to create collector');
 
     return c.json({
       collector: row,

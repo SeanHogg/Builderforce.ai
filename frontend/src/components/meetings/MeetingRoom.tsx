@@ -15,6 +15,7 @@ import { BrainPanel } from '@/components/brain/BrainPanel';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Select } from '@/components/Select';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const TILE_SIZE_KEY = 'bf.meetingTileSize';
 
 function readTileSize(): 'small' | 'large' {
@@ -33,6 +34,7 @@ function readTileSize(): 'small' | 'large' {
  */
 export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose: () => void }) {
   const t = useTranslations('meetings');
+  const errorMessage = useErrorMessage();
   const { user, tenant } = useAuth();
   const media = useLiveSession();
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
@@ -71,10 +73,10 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
         setVideoEnabled(info.videoEnabled);
         setDetail(info.meeting);
       })
-      .catch((e) => { if (!cancelled) setError(faultMessage(e, 'Could not join')); });
+      .catch((e) => { if (!cancelled) setError(errorMessage(e)); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetingId]);
+  }, [meetingId, errorMessage]);
 
   useEffect(() => {
     if (!roomKey) return;

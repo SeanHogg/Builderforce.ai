@@ -45,6 +45,7 @@
  * teaches sellers to ignore the panel, which costs more than the warnings save.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import {
   resolveListingHarness,
   type ListingDelivery,
@@ -151,18 +152,12 @@ export interface StageInput {
 // Small readers — every one of them tolerates a payload the model mangled
 // ---------------------------------------------------------------------------
 
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
 /** Canvas cards keep authored fields on `canvasData` and generated bodies on
  *  `content`, and which one holds a given field has changed over time. Reading the
  *  merge rather than picking one is what stops a check passing on a card whose
  *  content simply lives on the other side. */
 function fields(object: StageObject): Record<string, unknown> {
-  return { ...record(object.content), ...record(object.canvasData) };
+  return { ...asJsonRecord(object.content), ...asJsonRecord(object.canvasData) };
 }
 
 function rows(value: unknown): ReadonlyArray<Record<string, unknown>> {

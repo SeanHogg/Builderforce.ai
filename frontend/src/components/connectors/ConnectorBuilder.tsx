@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useErrorMessage, useErrorText } from '@/i18n/useErrorMessage';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import {
@@ -86,6 +87,8 @@ export function ConnectorBuilder({ open, editKey, onClose, onSaved }: {
   const t = useTranslations('connectors');
   const tc = useTranslations('common');
   const confirm = useConfirm();
+  const errorMessage = useErrorMessage();
+  const errorText = useErrorText();
 
   const [tab, setTab] = useState<BuilderTab>('import');
   const [json, setJson] = useState(() => JSON.stringify(STARTER, null, 2));
@@ -122,17 +125,17 @@ export function ConnectorBuilder({ open, editKey, onClose, onSaved }: {
         setStatus(d.status);
         setTab('manifest');
       })
-      .catch((e) => setErrors([e instanceof Error ? e.message : 'Failed to load connector']));
-  }, [open, editKey, reset]);
+      .catch((e) => { const message = errorMessage(e); setErrors(message ? [message] : []); });
+  }, [open, editKey, reset, errorMessage]);
 
   /** Local JSON validity — the server is authoritative, this just avoids a round-trip. */
   const parsed = useMemo<{ ok: true; value: ConnectorManifest } | { ok: false; message: string }>(() => {
     try {
       return { ok: true, value: JSON.parse(json) as ConnectorManifest };
     } catch (e) {
-      return { ok: false, message: e instanceof Error ? e.message : 'Invalid JSON' };
+      return { ok: false, message: errorText(e) };
     }
-  }, [json]);
+  }, [json, errorText]);
 
   const runImport = async () => {
     setBusy(true); setErrors([]); setNotice(null); setWarnings([]);

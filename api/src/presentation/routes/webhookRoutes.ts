@@ -1,3 +1,5 @@
+import { InternalError } from '../../domain/shared/errors';
+import { failResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * POST /api/webhooks/payment
@@ -207,8 +209,7 @@ export function createWebhookRoutes(
         }
         return c.json({ received: true, processed: known });
       } catch (err) {
-        reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] card validation update failed:', details: err } });
-        return c.json({ error: 'Processing failed' }, 500);
+        return failResponse(c, new InternalError('Processing failed', { cause: err }), { source: 'presentation/routes/webhookRoutes.ts', operation: 'cardValidation', context: { logMessage: '[webhook] card validation update failed:' } });
       }
     }
 
@@ -344,9 +345,8 @@ export function createWebhookRoutes(
         await markDiscountRedeemed(requestDb(c), event.tenantId, event.discountRedemptionId);
       }
     } catch (err) {
-      reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] handleWebhookEvent failed:', details: err } });
-      // Return 500 so the provider retries
-      return c.json({ error: 'Processing failed' }, 500);
+      // 500 so the provider retries.
+      return failResponse(c, new InternalError('Processing failed', { cause: err }), { source: 'presentation/routes/webhookRoutes.ts', operation: 'handleWebhookEvent', context: { logMessage: '[webhook] handleWebhookEvent failed:' } });
     }
 
     // Cancelling a subscription does NOT remove the card-validation profile.

@@ -35,7 +35,7 @@ import {
 import { loadPlanVerdictsForTasks } from '../../application/planning/planVerdictStore';
 import { pmoVersionKey } from './pmoRoutes';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
-import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../application/runtime/dispatchCloudRun';
+import { dispatchCloudRunForTask, ENTITLEMENT_REFUSALS, type CloudDispatchOutcome, type CloudDispatchRefusalReason } from '../../application/runtime/dispatchCloudRun';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { resolveLaneAgentHostId } from '../../application/swimlane/laneAgentHost';
@@ -482,58 +482,65 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const tokenBlock = await executionTokenGate(c, db);
     if (tokenBlock) return tokenBlock;
     const tenantId = c.get('tenantId');
-    const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now';
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+    const submittedBy = userId ?? 'system:run-now';
+
+    // ── THE PERSON DIRECTING THE RUN IS THE AUTHORITY ────────────────────────────
+    //
+    // Every reason the evaluator can decline a ticket — an unstaffed lane, a managed
+    // stage with no bound role, a capability mismatch, a human gate, a tripped breaker,
+    // a cooldown — is a fact about the board's CONFIGURATION or about what AUTONOMY
+    // should do, not about whether this ticket can be worked. A person with `task:assign`
+    // clicking Run now, or telling the agent in chat "I am the manager, do the work",
+    // is the approval every one of those gates was waiting for. Answering them with the
+    // gate's remedy ("staff the lane, pin the role") is a dead end from the VS Code
+    // client, which shows none of that configuration and cannot edit it.
+    //
+    // So a human Run now dispatches under an explicit, RECORDED human authority: WHO
+    // directed it and WHY (the reason it would otherwise have been refused). No agent
+    // is pinned — on a managed board the assignee is the Coordinator, never an executor
+    // — so the dispatcher resolves the workspace's default cloud agent, exactly as it
+    // does for any other unpinned run. The managed guard admits it, writes the audit
+    // row, and marks the run lifecycle-neutral: it does the work but cannot move the
+    // ticket past a sign-off it did not earn. What a person may NOT click past is a
+    // billing entitlement ({@link ENTITLEMENT_REFUSALS}) — those still refuse, as 402.
+    const dispatchOnHumanAuthority = (why: string): Promise<CloudDispatchOutcome> => dispatchCloudRunForTask(
+      c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
+      {
+        taskId: id,
+        tenantId,
+        payload: stampExecutionAuthority(
+          JSON.stringify({ laneKey: row.status, ...(chatId != null ? { chatId } : {}) }),
+          humanDirected(userId, why),
+        ),
+        submittedBy,
+        force: true,
+      },
+    );
+    // The dispatcher's OWN verdict ships: reporting `ok: true, executionId: null` would
+    // tell the user work had started when nothing had, and reporting the WRONG refusal
+    // sends them to fix a bill that is not the problem. 402 stays reserved for the
+    // entitlement refusals a payment actually clears.
+    const refused = (outcome: CloudDispatchOutcome, overrode?: CloudDispatchRefusalReason) => {
+      const reason = outcome.refusal?.reason ?? ('no_agent' satisfies AutoRunReason);
+      return c.json({
+        error: outcome.refusal?.message
+          ?? 'The run could not be started and the dispatcher gave no reason — see the ticket\'s Lifecycle panel for the recorded verdict.',
+        reason,
+        ...(overrode ? { overrode } : {}),
+      }, ENTITLEMENT_REFUSALS.has(reason) ? 402 : 409);
+    };
+
     if (!evaln.candidate) {
-      // ── A MANAGED BOARD WITH NO BOUND ROLE IS NOT "NOTHING TO RUN AS" ────────────
-      //
-      // `managed_no_role` / `lane_unconfigured` mean the STAGE has no role bound to an
-      // agent — a fact about the board's configuration, not about this ticket being
-      // unrunnable. Answering a person's explicit Run now with "staff the lane, pin the
-      // role" is a dead end from the VS Code client: that surface does not show whether
-      // a board is lifecycle-managed and offers no way to edit its configuration, so the
-      // remedy names something the user cannot reach.
-      //
-      // A person with `task:assign` directing a run IS the authority. Dispatch it under
-      // an explicit, recorded human authority instead of refusing. No agent is pinned —
-      // the ticket's assignee on a managed board is the Coordinator, never an executor —
-      // so the dispatcher resolves the workspace's default cloud agent, exactly as it
-      // does for any other unpinned run. The guard admits it, records WHO overrode it,
-      // and marks the run lifecycle-neutral, so it can do the work but cannot move the
-      // ticket past a sign-off it did not earn.
-      if (evaln.reason === 'managed_no_role' || evaln.reason === 'lane_unconfigured') {
-        const overridden = await dispatchCloudRunForTask(
-          c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
-          {
-            taskId: id,
-            tenantId,
-            payload: stampExecutionAuthority(
-              JSON.stringify({ laneKey: row.status, ...(chatId != null ? { chatId } : {}) }),
-              humanDirected(
-                (c as { get(k: 'userId'): string | undefined }).get('userId'),
-                `Run now on a lifecycle-managed ticket whose stage has no role bound to an agent (${evaln.reason}).`,
-              ),
-            ),
-            submittedBy,
-            force: true,
-          },
-        );
-        if (overridden.executionId == null) {
-          const reason = overridden.refusal?.reason ?? ('no_agent' satisfies AutoRunReason);
-          const entitlement = reason === 'cloud_run_limit' || reason === 'tenant_token_limit';
-          return c.json({
-            error: overridden.refusal?.message ?? 'The run could not be started and the dispatcher gave no reason.',
-            reason,
-          }, entitlement ? 402 : 409);
-        }
-        // `agentRef: null` is the honest answer: nothing was pinned, so the dispatcher
-        // resolved the default. `managedOverride` lets a caller say the run went ahead
-        // WITHOUT stage attribution rather than implying it satisfied the stage.
-        return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true }, 202);
-      }
-      // Nothing to run as — surface the precise reason so the UI can prompt the fix
-      // (assign an agent, staff the lane, or relax the capability requirement).
-      const reason: AutoRunReason = evaln.reason === 'will_run' ? 'no_agent' : evaln.reason;
-      return c.json({ error: 'No agent is configured to run this ticket. Assign a cloud agent (or staff this lane), then try again.', reason }, 400);
+      const overridden = await dispatchOnHumanAuthority(
+        `Run now on a ticket autonomy would not dispatch (${evaln.reason}): a person with dispatch permission directed it.`,
+      );
+      if (overridden.executionId == null) return refused(overridden, evaln.reason);
+      // `agentRef: null` is the honest answer: nothing was pinned, so the dispatcher
+      // resolved the default. `managedOverride` lets a caller say the run went ahead
+      // WITHOUT stage attribution rather than implying it satisfied the stage; `overrode`
+      // names the gate the person stepped past, so a chat can report it plainly.
+      return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true, overrode: evaln.reason }, 202);
     }
     const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string; chatId?: number; runtime?: string } = {
       cloudAgentRef: evaln.candidate.agentRef,
@@ -602,18 +609,21 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
           force: true,
         },
       );
-    // Reporting `ok: true, executionId: null` would tell the user work had started when
-    // nothing had. Reporting the WRONG refusal sends them to fix a bill that is not the
-    // problem. Both are the same lie, so the dispatcher's own verdict is what ships --
-    // and 402 stays reserved for the entitlement refusals a payment actually clears.
     if (outcome.executionId == null) {
       const reason = outcome.refusal?.reason ?? ('no_agent' satisfies AutoRunReason);
-      const entitlement = reason === 'cloud_run_limit' || reason === 'tenant_token_limit';
-      return c.json({
-        error: outcome.refusal?.message
-          ?? 'The run could not be started and the dispatcher gave no reason — see the ticket\'s Lifecycle panel for the recorded verdict.',
-        reason,
-      }, entitlement ? 402 : 409);
+      // The role-attributed / lane dispatch declined for a GOVERNANCE reason (the managed
+      // guard, a role the stage does not authorize, an agent not capable of the role) or
+      // failed outright. The person directing the run overrides that exactly as they
+      // override an evaluator refusal above: same authority, same audit row, same
+      // lifecycle-neutral run. Only an entitlement refusal stands.
+      if (!ENTITLEMENT_REFUSALS.has(reason)) {
+        const overridden = await dispatchOnHumanAuthority(
+          `Run now: the role-attributed dispatch was refused (${reason}${outcome.refusal ? `: ${outcome.refusal.message}` : ''}); the person directing the run overrides.`,
+        );
+        if (overridden.executionId == null) return refused(overridden, reason);
+        return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true, overrode: reason }, 202);
+      }
+      return refused(outcome);
     }
     return c.json({ ok: true, executionId: outcome.executionId, agentRef: evaln.candidate.agentRef }, 202);
   });

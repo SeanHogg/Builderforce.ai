@@ -5,7 +5,7 @@ import { Select } from '@/components/Select';
 import { useState, useMemo } from 'react';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { dispatchApi } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 interface FleetMeshContentProps {
   agentHosts: AgentHost[];
 }
@@ -35,6 +35,7 @@ function truncate(s: string, n: number) {
 }
 
 export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
+  const errorMessage = useErrorMessage();
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [dispatchPayload, setDispatchPayload] = useState('{"type":"ping"}');
   const [dispatching, setDispatching] = useState(false);
@@ -68,7 +69,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
       const result = await dispatchApi.send(selectedAgentHost.id, payload);
       setDispatchResult(JSON.stringify(result, null, 2));
     } catch (e) {
-      setDispatchError(faultMessage(e, 'Dispatch failed'));
+      setDispatchError(errorMessage(e));
     } finally {
       setDispatching(false);
     }

@@ -25,6 +25,7 @@
 
 import { Hono, type Context } from 'hono';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { scope } from './segmentTrackerRoutes';
 import { isDomain, type Domain } from '../../application/kernel/ObjectRegistry';
 import type { DomainService } from '../../application/kernel/DomainService';
@@ -67,7 +68,7 @@ export function createDomainRoutes(
    * everything below still gets the full gate.
    */
   router.get('/roster/team', optionalAuthMiddleware, async (c) => {
-    return c.json({ members: await team.list(c.get('tenantId') ?? null) });
+    return c.json({ members: await team.list(optionalTenantId(c)) });
   });
 
   router.use('*', authMiddleware);

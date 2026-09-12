@@ -27,7 +27,8 @@ import {
   type SeatCapMode,
 } from '@/lib/spendLimits';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage, faultText } from '@/lib/apiClient';
+import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -169,8 +170,8 @@ function TeamSpendInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [defaultDraft, setDefaultDraft] = useState('');
-  const [savingDefault, setSavingDefault] = useState(false);
-  const [notice, setNotice] = useState('');
+  // The save actions; `loading`/`error` above are the initial read, which replaces the panel.
+  const task = usePanelTask();
 
   const applyOverview = useCallback((o: TeamSpendOverview) => {
     setOverview(o);
@@ -187,30 +188,23 @@ function TeamSpendInner() {
 
   const saveDefault = async () => {
     if (!tenant) return;
-    setSavingDefault(true);
-    setNotice('');
-    try {
-      const amountUsd = defaultDraft.trim() === '' ? null : Number(defaultDraft);
-      const o = await setDefaultSpendLimit(tenant.id, amountUsd);
-      applyOverview(o);
-      setNotice(t('spendSaved'));
-    } catch (e) {
-      setNotice(faultText(e, t('spendSaveFailed')));
-    } finally {
-      setSavingDefault(false);
-    }
+    const amountUsd = defaultDraft.trim() === '' ? null : Number(defaultDraft);
+    const o = await task.run(
+      () => setDefaultSpendLimit(tenant.id, amountUsd),
+      { success: t('spendSaved'), failure: t('spendSaveFailed') },
+    );
+    if (o === undefined) return;
+    applyOverview(o);
   };
 
   const saveSeat = async (userId: string, mode: SeatCapMode, amountUsd?: number) => {
     if (!tenant) return;
-    setNotice('');
-    try {
-      const o = await setSeatSpendLimit(tenant.id, userId, mode, amountUsd);
-      applyOverview(o);
-      setNotice(t('spendSaved'));
-    } catch (e) {
-      setNotice(faultText(e, t('spendSaveFailed')));
-    }
+    const o = await task.run(
+      () => setSeatSpendLimit(tenant.id, userId, mode, amountUsd),
+      { success: t('spendSaved'), failure: t('spendSaveFailed') },
+    );
+    if (o === undefined) return;
+    applyOverview(o);
   };
 
   if (!tenant) return null;
@@ -242,17 +236,17 @@ function TeamSpendInner() {
               <input
                 type="number" min={0} step={1} inputMode="decimal"
                 value={defaultDraft}
-                disabled={!allowed || savingDefault}
+                disabled={!allowed || task.busy}
                 onChange={(e) => setDefaultDraft(e.target.value)}
                 placeholder={t('spendNoDefaultPlaceholder')}
                 aria-label={t('spendDefaultLabel')}
                 style={inputStyle}
               />
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('spendPerSeatMonth')}</span>
-              <button type="button" onClick={() => void saveDefault()} disabled={!allowed || savingDefault} style={{ ...primaryBtn, opacity: !allowed || savingDefault ? 0.6 : 1 }}>
-                {savingDefault ? t('spendSaving') : t('spendSave')}
+              <button type="button" onClick={() => void saveDefault()} disabled={!allowed || task.busy} style={{ ...primaryBtn, opacity: !allowed || task.busy ? 0.6 : 1 }}>
+                {task.busy ? t('spendSaving') : t('spendSave')}
               </button>
-              {notice && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{notice}</span>}
+              {(task.error ?? task.notice) && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{task.error ?? task.notice}</span>}
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0' }}>{t('spendDefaultHint')}</p>
           </div>

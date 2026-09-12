@@ -50,6 +50,7 @@
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { atsApi, type CanvasPosting, type CanvasPostingDraft } from '@/lib/hiringApi';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 /** Cap on how many requisitions one sync will author. A board is a working surface; an
  *  agency's whole req list is an export, and the Recruiter seat is where that belongs.
@@ -252,7 +253,7 @@ export function canvasHiringPostingActions(ctx: CanvasFounderOpsContext): BrainA
             // and nothing about the board looks wrong afterwards.
             return {
               postingSynced: false,
-              error: error instanceof Error ? error.message : 'That posting could not be synced.',
+              error: toolErrorMessage(error, 'That posting could not be synced.'),
               ...(existingId ? {
                 instruction: `This card names posting ${existingId}, which this workspace does not have. Say so and ask whether it was deleted or belongs to another workspace. Do NOT clear the id and create a new posting — that would split the applications already recorded against the original.`,
               } : {}),
@@ -285,7 +286,7 @@ export function canvasHiringPostingActions(ctx: CanvasFounderOpsContext): BrainA
         try {
           postings = await atsApi.postings.list(args.status ? { status: args.status } : {});
         } catch (error) {
-          return { postingsFound: false, error: error instanceof Error ? error.message : 'The workspace postings could not be read.' };
+          return { postingsFound: false, error: toolErrorMessage(error, 'The workspace postings could not be read.') };
         }
 
         if (!postings.length) {

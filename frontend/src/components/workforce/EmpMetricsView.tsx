@@ -22,6 +22,7 @@ import { hrs, pct } from '@/components/insights/format';
 import { useInsightFormat } from '@/components/insights/format';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { toneColor, type StatusTone } from '@/lib/statusTone';
 
 /**
  * Team analytics — the extended member / EMP metrics lenses (EMP-12..19) on one
@@ -269,7 +270,10 @@ function LaborCostPanel({ days }: { days: number }) {
 }
 
 // ── EMP-16 — performer tiers + coaching ──────────────────────────────────────
-const TIER_COLOR: Record<PerformerTier, string> = { high: OK, solid: 'var(--accent)', watch: DANGER };
+const PERFORMER_TIER_TONE: Record<PerformerTier, StatusTone> = { high: 'success', solid: 'accent', watch: 'danger' };
+const TIER_COLOR = Object.fromEntries(
+  Object.entries(PERFORMER_TIER_TONE).map(([tier, tone]) => [tier, toneColor(tone, 'solid')]),
+) as Record<PerformerTier, string>;
 
 function CoachingNotes({ member }: { member: PerformerRow }) {
   const fmt = useFormat();

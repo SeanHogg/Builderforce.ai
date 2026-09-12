@@ -10,7 +10,7 @@ import {
   type AgentExecutionScope,
 } from '@/lib/builderforceApi';
 import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface AgentAssignmentPanelProps {
   /** Which platform aspect agents are being assigned to. */
   scope: AgentAssignmentScope;
@@ -39,6 +39,7 @@ export function AgentAssignmentPanel({
   className,
   style,
 }: AgentAssignmentPanelProps) {
+  const errorMessage = useErrorMessage();
   const [assignments, setAssignments] = useState<AgentAssignment[]>([]);
   const [pool, setPool] = useState<PoolAgent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,11 +58,11 @@ export function AgentAssignmentPanel({
       setAssignments(list);
       setPool(poolAgents);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load assignments'));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [scope, scopeId]);
+  }, [errorMessage, scope, scopeId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -91,7 +92,7 @@ export function AgentAssignmentPanel({
       });
       setAssignments((prev) => [...prev.filter((a) => a.id !== created.id), created]);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to assign'));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -109,7 +110,7 @@ export function AgentAssignmentPanel({
       });
       setAssignments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
     } catch (e) {
-      setError(faultMessage(e, 'Failed to update'));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -122,7 +123,7 @@ export function AgentAssignmentPanel({
       await agentAssignmentsApi.remove(a.id);
       setAssignments((prev) => prev.filter((x) => x.id !== a.id));
     } catch (e) {
-      setError(faultMessage(e, 'Failed to remove'));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

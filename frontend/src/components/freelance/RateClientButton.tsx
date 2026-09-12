@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { reviewClient } from '@/lib/freelance/engagements';
-import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * Freelancer-side "Rate client" control — the reverse review direction. Self-contained
  * (owns its own panel + form + submit), so any engagement row can drop it in without
@@ -17,15 +17,14 @@ export function RateClientButton({ engagementId, clientName }: { engagementId: s
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [again, setAgain] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
 
   const submit = async () => {
-    setBusy(true); setError(null);
-    try { await reviewClient(engagementId, rating, comment || undefined, again); setDone(true); setTimeout(() => setOpen(false), 900); }
-    catch (e) { setError(faultMessage(e)); }
-    finally { setBusy(false); }
+    const result = await task.run(async () => { await reviewClient(engagementId, rating, comment || undefined, again); return true; });
+    if (result === undefined) return;
+    setDone(true);
+    setTimeout(() => setOpen(false), 900);
   };
 
   return (
@@ -54,10 +53,10 @@ export function RateClientButton({ engagementId, clientName }: { engagementId: s
                 <input type="checkbox" checked={again} onChange={(e) => setAgain(e.target.checked)} />
                 {t('wouldWorkAgain')}
               </label>
-              {error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</div>}
-              <button type="button" onClick={() => void submit()} disabled={busy}
-                style={{ alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: busy ? 'wait' : 'pointer' }}>
-                {busy ? t('submitting') : t('submit')}
+              {task.error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{task.error}</div>}
+              <button type="button" onClick={() => void submit()} disabled={task.busy}
+                style={{ alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 14, cursor: task.busy ? 'wait' : 'pointer' }}>
+                {task.busy ? t('submitting') : t('submit')}
               </button>
             </>
           )}

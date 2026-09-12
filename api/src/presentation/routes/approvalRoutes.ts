@@ -291,7 +291,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
   // was the hole. Answering a question steers a run that is ALREADY approved and
   // running, so it stays at the run tier — split with the shared `isManager`
   // predicate rather than a second gating mechanism.
-  router.patch('/:id', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+  router.patch('/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const userId    = c.get('userId') as string;
     const id        = c.req.param('id');
@@ -316,7 +316,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     // resolution (role defaults → overrides → per-user grants/revocations) as
     // `requirePermission`, just applied where the branch actually is.
     if (body.status !== 'answered') {
-      if (!isManager(c as never)) {
+      if (!isManager(c)) {
         return c.json({
           error: `Requires at least '${TenantRole.MANAGER}' role to approve or reject a request`,
         }, 403);

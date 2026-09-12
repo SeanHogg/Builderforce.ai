@@ -124,6 +124,29 @@ describe('SpecObjectBody', () => {
     expect(screen.getByText('No Gulf Coast coverage')).toBeInTheDocument();
   });
 
+  /**
+   * A COMPUTED verdict is a catalog key, not English prose built in code: the card asks
+   * for `<namespace>.verdict.<key>` so every locale reads its own sentence. The mock
+   * translator returns the key path, which is exactly what this asserts.
+   */
+  it('translates a computed verdict through its vocabulary\'s verdict key', () => {
+    const { container } = render(<SpecObjectBody data={node({ kind: 'ipAsset', title: 'BUILDERFORCE word mark' })} />);
+    expect(container.querySelector('[class*="founderVerdict"]')).toBeTruthy();
+    expect(screen.getByText('creationCanvas.legal.verdict.assignment.none')).toBeInTheDocument();
+  });
+
+  it('passes a verdict\'s values through to the translator', () => {
+    render(<SpecObjectBody data={node({ kind: 'legalMatter', spendToDate: '15000', exposureAmount: '60000' })} />);
+    expect(screen.getByText('creationCanvas.legal.verdict.spend.under 25')).toBeInTheDocument();
+  });
+
+  /** The shared counterparty resolver keeps its words in the founder catalog, once —
+   *  so a LEGAL kind carrying it still asks for the founder key. */
+  it('resolves a shared resolver\'s verdict under the vocabulary that owns it', () => {
+    render(<SpecObjectBody data={node({ kind: 'legalMatter', counterparty: 'Acme Holdings Ltd' })} />);
+    expect(screen.getByText(/^creationCanvas\.founder\.verdict\.boardRef\.notFound account Acme Holdings Ltd$/)).toBeInTheDocument();
+  });
+
   it('renders a number stat with thousands grouping', () => {
     render(<SpecObjectBody data={node({ kind: 'company', headcount: 1200 })} />);
     expect(screen.getByText('1,200')).toBeInTheDocument();

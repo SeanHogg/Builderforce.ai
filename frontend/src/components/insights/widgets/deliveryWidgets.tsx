@@ -28,6 +28,7 @@ import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetr
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { hrs, pct } from '../format';
+import { DORA_TIER_COLOR, DORA_TIER_ORDER, tierCfr, tierDeployFreq, tierLeadTime, tierMttr } from '@/lib/doraTiers';
 import { useDora, useLifecycle, useVelocity } from '../insightsSources';
 
 // Both lenses live behind the same Delivery hub slide-out.
@@ -37,16 +38,9 @@ const DRILL_DORA: ComponentDrill = { kind: 'panel', hub: 'delivery', panel: 'dor
 const CAP_DELIVERY = 'insights.delivery' as const;
 const CAP_DORA = 'insights.delivery' as const;
 
-const TIER_ORDER = ['elite', 'high', 'medium', 'low'] as const;
-type TierKey = (typeof TIER_ORDER)[number];
-const TIER_COLOR: Record<TierKey, string> = { elite: 'var(--success)', high: 'var(--success)', medium: 'var(--warning)', low: 'var(--error)' };
+const TIER_ORDER = DORA_TIER_ORDER;
+const TIER_COLOR = DORA_TIER_COLOR;
 const PHASE_ORDER: LifecyclePhase[] = ['refinement', 'work', 'review', 'deploy'];
-
-// DORA tier classification (index 0=Elite … 3=Low) — same thresholds as DoraLens.
-const tierDeployFreq = (perDay: number) => (perDay >= 1 ? 0 : perDay >= 1 / 7 ? 1 : perDay >= 1 / 30 ? 2 : 3);
-const tierLeadTime = (h: number) => (h < 24 ? 0 : h < 168 ? 1 : h < 730 ? 2 : 3);
-const tierCfr = (p: number) => (p <= 5 ? 0 : p <= 15 ? 1 : p <= 30 ? 2 : 3);
-const tierMttr = (h: number) => (h < 1 ? 0 : h < 24 ? 1 : h < 168 ? 2 : 3);
 
 /** Compact hours → "Xd Yh" / "Yh" / "Zm" for lifecycle phase durations. */
 function fmtDur(hours: number): string {

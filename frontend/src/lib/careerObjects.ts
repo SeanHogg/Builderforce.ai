@@ -38,7 +38,7 @@ import {
   type CareerObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import {
-  deriveDaysBetween, deriveNumber, deriveRows, derivePercent,
+  deriveDaysBetween, deriveNumber, deriveRows, derivePercent, specVerdict,
   registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD, specRefKey,
   type SpecDeriveBoard, type SpecField, type SpecObjectSpec,
 } from './specObjects';
@@ -321,7 +321,13 @@ export const CAREER_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       {
         name: 'pressure', render: 'verdict', label: 'pressure',
         hint: 'The urgency band the rest of the search is paced against: none | comfortable | planning | urgent | critical. Graded from the weeks by the SAME thresholds `application/career/runway.ts` uses, so a card authored offline lands where the tool would have put it.',
-        derive: (data, board) => careerRunwayBand(specCareerWeeks(data, board)),
+        // The band is a TOKEN the model reasons over (see the hint), and the English
+        // catalog keeps it verbatim so the prompt is unchanged; every other locale reads
+        // its own word for it instead of "critical".
+        derive: (data, board) => {
+          const band = careerRunwayBand(specCareerWeeks(data, board));
+          return band ? specVerdict(`pressure.${band}`) : undefined;
+        },
       },
       { name: 'assumptions', render: 'list', label: 'assumptions', hint: 'What this projection takes for granted: {title, detail}. Every runway is wrong in a way its owner knows about, and writing it down is what stops the number being quoted as certainty.' },
       SUMMARY_FIELD,

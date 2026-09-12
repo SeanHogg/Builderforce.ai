@@ -8,6 +8,8 @@ import type {
   ProjectConnectionReason,
 } from '@/lib/projectConnections';
 import { useFormat } from "@/i18n/useFormat";
+import { Icon, type IconName } from '@/components/ui/Icon';
+import { statusTone, toneColor, tonePillStyle, type StatusTone, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * ProjectConnectionsStrip — the SINGLE surface for "what is this project wired
@@ -31,49 +33,27 @@ export interface ProjectConnectionsStripProps {
   max?: number;
 }
 
-type Tone = 'good' | 'bad' | 'warn' | 'info' | 'muted';
-
-/** Tone → theme tokens. Border uses the solid token, background the translucent
- *  one, so each tone reads correctly in BOTH themes without a hardcoded hex. */
-const TONE: Record<Tone, { fg: string; bg: string; border: string }> = {
-  good: { fg: 'var(--success)', bg: 'var(--success-bg)', border: 'var(--success)' },
-  bad: { fg: 'var(--error)', bg: 'var(--error-bg)', border: 'var(--error-border)' },
-  warn: { fg: 'var(--warning)', bg: 'var(--warning-bg)', border: 'var(--warning-border)' },
-  info: { fg: 'var(--info)', bg: 'var(--info-bg)', border: 'var(--info-border)' },
-  muted: { fg: 'var(--text-muted)', bg: 'var(--bg-base)', border: 'var(--border-subtle)' },
+/** Connection health → tone; each chip takes its ink, ground and edge from ONE tone. */
+const HEALTH_TONE: StatusToneMap<ProjectConnectionHealth> = {
+  ok: 'success',
+  degraded: 'warning',
+  error: 'danger',
+  unknown: 'neutral',
 };
 
-const HEALTH_TONE: Record<ProjectConnectionHealth, Tone> = {
-  ok: 'good',
-  degraded: 'warn',
-  error: 'bad',
-  unknown: 'muted',
-};
-
-const BUILD_TONE: Record<Exclude<ProjectBuildStatus, null>, Tone> = {
-  success: 'good',
-  failure: 'bad',
+const BUILD_TONE: StatusToneMap<Exclude<ProjectBuildStatus, null>> = {
+  success: 'success',
+  failure: 'danger',
   pending: 'info',
-  cancelled: 'muted',
+  cancelled: 'neutral',
 };
 
 /** Provider-neutral glyphs: one per connection kind, so a new provider needs no
  *  new artwork. The provider name itself rides in the chip's tooltip. */
-function KindIcon({ kind }: { kind: ProjectConnection['kind'] }) {
-  const common = { width: 12, height: 12, viewBox: '0 0 24 24', stroke: 'currentColor', fill: 'none', strokeWidth: 2.2 } as const;
-  return kind === 'source_control' ? (
-    <svg {...common} aria-hidden style={{ flexShrink: 0 }}>
-      <circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="8" r="2.5" />
-      <path d="M6 8.5v7M8.5 6.6C12 6 15.5 6.6 15.5 10c0 3-3 3.5-6 4" />
-    </svg>
-  ) : (
-    <svg {...common} aria-hidden style={{ flexShrink: 0 }}>
-      <rect x="3" y="4" width="5" height="16" rx="1" />
-      <rect x="10" y="4" width="5" height="10" rx="1" />
-      <rect x="17" y="4" width="4" height="13" rx="1" />
-    </svg>
-  );
-}
+const KIND_ICON: Record<ProjectConnection['kind'], IconName> = {
+  source_control: 'branch',
+  board: 'board',
+};
 
 /** Provider-correct pull-request listing URL for a repo's web page. */
 function pullsUrl(url: string | null, provider: string): string | null {
@@ -99,19 +79,18 @@ const chipBase: React.CSSProperties = {
 function Chip({
   tone, href, onClick, title, ariaLabel, children,
 }: {
-  tone: Tone;
+  tone: StatusTone;
   href?: string | null;
   onClick?: () => void;
   title?: string;
   ariaLabel?: string;
   children: React.ReactNode;
 }) {
-  const t = TONE[tone];
   const style: React.CSSProperties = {
     ...chipBase,
-    color: t.fg,
-    background: t.bg,
-    border: `1px solid ${t.border}`,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    ...tonePillStyle(tone),
   };
   const stop = (e: React.MouseEvent) => e.stopPropagation();
   if (href) {
@@ -154,7 +133,7 @@ export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: Proj
       aria-label={t('title')}
     >
       {shown.map((c) => {
-        const tone = HEALTH_TONE[c.health];
+        const tone = statusTone(HEALTH_TONE, c.health);
         const status = healthText(c.health, c.reason);
         const syncedTitle = c.lastSyncedAt ? ` · ${t('lastSynced', { date: fmt.dateTime(c.lastSyncedAt) })}` : '';
         const prs = c.openPullRequests;
@@ -169,20 +148,21 @@ export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: Proj
               title={`${c.provider} · ${c.label} — ${status}${c.isDefault ? ` · ${t('defaultRepo')}` : ''}${syncedTitle}`}
               ariaLabel={t('connectionAria', { provider: c.provider, label: c.label, status })}
             >
-              <KindIcon kind={c.kind} />
+              {/* Heavier than the set's 1.8: at 12px a thinner stroke fades into the tinted chip. */}
+              <Icon name={KIND_ICON[c.kind]} size={12} strokeWidth={2.2} />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
                 {c.label}
               </span>
               <span
                 aria-hidden
-                style={{ width: 6, height: 6, borderRadius: 'var(--radius-full)', background: TONE[tone].fg, flexShrink: 0 }}
+                style={{ width: 6, height: 6, borderRadius: 'var(--radius-full)', background: toneColor(tone, 'solid'), flexShrink: 0 }}
               />
             </Chip>
 
             {/* Latest CI verdict on the connected repo's default branch. */}
             {c.buildStatus && (
               <Chip
-                tone={BUILD_TONE[c.buildStatus]}
+                tone={statusTone(BUILD_TONE, c.buildStatus)}
                 href={c.buildUrl}
                 title={`${t('buildTitle', {
                   status: t(`build.${c.buildStatus}`),
@@ -218,7 +198,7 @@ export function ProjectConnectionsStrip({ connections, onManage, max = 3 }: Proj
         );
       })}
       {overflow > 0 && (
-        <Chip tone="muted" onClick={onManage} title={t('moreTitle', { count: overflow })}>
+        <Chip tone="neutral" onClick={onManage} title={t('moreTitle', { count: overflow })}>
           {t('more', { count: overflow })}
         </Chip>
       )}

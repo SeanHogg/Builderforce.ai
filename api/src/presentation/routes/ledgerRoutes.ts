@@ -20,6 +20,7 @@
  * decision sitting where no other caller can reuse it and no use-case test covers it.
  */
 
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
@@ -266,9 +267,8 @@ export function createLedgerRoutes(db: Db): Hono<HonoEnv> {
         summary: await readLedgerSummary(db, c.env as Env, tenantId),
       });
     } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/ledgerRoutes.ts', operation: 'sync' });
       const status = error instanceof AccountingProviderError && error.retryable ? 503 : 502;
-      return c.json({ error: 'Those books could not be synced right now.' }, status);
+      return statusResponse(c, { error: 'Those books could not be synced right now.' }, status, { source: 'presentation/routes/ledgerRoutes.ts', operation: 'sync' }, error);
     }
   });
 

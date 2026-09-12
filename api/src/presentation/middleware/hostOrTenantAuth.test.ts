@@ -13,6 +13,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
+import type { HonoEnv } from '../../env';
 
 const authMiddleware = vi.fn(async (c: any, next: any) => {
   c.set('tenantId', 900);
@@ -66,13 +67,13 @@ const probe = (c: any) =>
  * path parameters for the middleware to read.
  */
 function app(idPathParam?: string) {
-  const router = new Hono();
+  const router = new Hono<HonoEnv>();
   if (idPathParam) {
-    router.get('/:id/probe', hostOrTenantAuth(db, idPathParam) as never, probe);
-    router.get('/probe', hostOrTenantAuth(db, idPathParam) as never, probe);
+    router.get('/:id/probe', hostOrTenantAuth(db, idPathParam), probe);
+    router.get('/probe', hostOrTenantAuth(db, idPathParam), probe);
     return router;
   }
-  router.use('*', hostOrTenantAuth(db) as never);
+  router.use('*', hostOrTenantAuth(db));
   router.get('/probe', probe);
   router.get('/:id/probe', probe);
   return router;

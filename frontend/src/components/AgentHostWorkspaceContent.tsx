@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { workspaceApi, type AgentHostDirectory, type AgentHostDirectoryFile } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { formatBytes } from '@/lib/formatBytes';
+import { Icon, type IconName } from '@/components/ui/Icon';
+import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 
 interface AgentHostWorkspaceContentProps {
   agentHostId: number;
@@ -17,38 +20,32 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  synced: 'var(--cyan-bright, var(--cyan-bright))',
-  pending: 'var(--text-muted)',
-  error: 'var(--coral-bright)',
+const STATUS_TONE: StatusToneMap<AgentHostDirectory['status']> = {
+  synced: 'info',
+  pending: 'neutral',
+  error: 'danger',
 };
 
-function FileIcon({ path }: { path: string }) {
-  const ext = path.split('.').pop()?.toLowerCase() ?? '';
-  const icons: Record<string, string> = {
-    ts: '𝘛𝘚', tsx: '⚛', js: 'JS', jsx: '⚛', json: '{}',
-    md: '📝', css: '🎨', html: '🌐', py: '🐍', rs: 'RS',
-    go: 'Go', sh: '⚙', yaml: '⚙', yml: '⚙', env: '🔐',
-  };
-  return (
-    <span
-      style={{
-        fontSize: 10,
-        fontWeight: 700,
-        fontFamily: 'var(--font-mono)',
-        color: 'var(--text-muted)',
-        width: 24,
-        flexShrink: 0,
-        display: 'inline-block',
-      }}
-    >
-      {icons[ext] ?? '📄'}
-    </span>
-  );
+/** A file row's glyph, picked by extension: source → code, prose → edit, styles →
+ *  image, markup → workspace, config → settings, secrets → lock, anything else →
+ *  document. Rendered through the shared icon set, never an OS emoji. */
+const FILE_ICON_BY_EXT: Record<string, IconName> = {
+  ts: 'code', tsx: 'code', js: 'code', jsx: 'code', json: 'code', py: 'code', rs: 'code', go: 'code',
+  md: 'edit', css: 'image', html: 'workspace',
+  sh: 'settings', yaml: 'settings', yml: 'settings', env: 'lock',
+};
+
+function fileIconName(path: string): IconName {
+  return FILE_ICON_BY_EXT[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'document';
 }
+
+const fileIconStyle: React.CSSProperties = { color: 'var(--text-muted)', width: 24, flexShrink: 0 };
 
 export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceContentProps) {
   const fmt = useFormat();
+  const tc = useTranslations('common');
+  const t = useTranslations('agentHostTabs');
+  const errorMessage = useErrorMessage();
   const [directories, setDirectories] = useState<AgentHostDirectory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,9 +60,9 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
     workspaceApi
       .listDirectories(agentHostId)
       .then(setDirectories)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [agentHostId]);
+  }, [agentHostId, errorMessage]);
 
   const openDir = async (dir: AgentHostDirectory) => {
     setSelectedDir(dir);
@@ -96,8 +93,8 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
     }
   };
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading workspace…</div>;
-  if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>;
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{tc('loading')}</div>;
+  if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>{t('errorPrefix', { message: error })}</div>;
 
   if (selectedDir) {
     return (
@@ -117,7 +114,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
               cursor: 'pointer',
             }}
           >
-            ← Back
+            {t('back')}
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
@@ -133,24 +130,24 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
             >
               {selectedDir.absPath}
             </div>
-            <div style={{ fontSize: 11, color: STATUS_COLORS[selectedDir.status], marginTop: 2 }}>
-              {selectedDir.status}
+            <div style={{ fontSize: 11, color: statusColor(STATUS_TONE, selectedDir.status), marginTop: 2 }}>
+              {t('workspace.status', { status: selectedDir.status })}
               {selectedDir.lastSyncedAt
-                ? ` · synced ${fmt.dateTime(selectedDir.lastSyncedAt)}`
+                ? ` · ${t('workspace.syncedAt', { when: fmt.dateTime(selectedDir.lastSyncedAt) })}`
                 : ''}
             </div>
           </div>
         </div>
 
         {loadingFiles ? (
-          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading files…</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{tc('loading')}</div>
         ) : files.length === 0 ? (
           <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-            No files synced yet.
+            {t('workspace.noFiles')}
           </div>
         ) : (
           <div style={cardStyle}>
-            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{files.length} files</div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{t('workspace.fileCount', { count: files.length })}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {files.map((file) => (
                 <div
@@ -164,7 +161,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
                     fontSize: 12,
                   }}
                 >
-                  <FileIcon path={file.relPath} />
+                  <Icon name={fileIconName(file.relPath)} size={14} style={fileIconStyle} />
                   <span
                     style={{
                       flex: 1,
@@ -192,11 +189,11 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-        Synced Directories ({directories.length})
+        {t('workspace.heading', { count: directories.length })}
       </div>
       {directories.length === 0 ? (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-          No directories synced. Directories are synced when a agentHost registers its workspace.
+          {t('workspace.empty')}
         </div>
       ) : (
         directories.map((dir) => (
@@ -230,7 +227,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
               </div>
               {dir.lastSyncedAt && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                  Last synced: {fmt.dateTime(dir.lastSyncedAt)}
+                  {t('workspace.lastSynced', { when: fmt.dateTime(dir.lastSyncedAt) })}
                 </div>
               )}
             </div>
@@ -242,11 +239,11 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
                 padding: '3px 8px',
                 borderRadius: 'var(--radius-sm)',
                 background: 'var(--bg-elevated)',
-                color: STATUS_COLORS[dir.status] ?? 'var(--text-muted)',
+                color: statusColor(STATUS_TONE, dir.status),
                 flexShrink: 0,
               }}
             >
-              {dir.status}
+              {t('workspace.status', { status: dir.status })}
             </span>
             <button
               type="button"
@@ -264,7 +261,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
                 flexShrink: 0,
               }}
             >
-              {syncing === dir.id ? '…' : '⟳ Sync'}
+              {syncing === dir.id ? '…' : t('workspace.sync')}
             </button>
           </button>
         ))

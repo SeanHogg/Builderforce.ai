@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cronApi, type CronJob } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -32,6 +32,7 @@ export function CronJobsContent({
   className,
   style,
 }: CronJobsContentProps) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,11 +51,11 @@ export function CronJobsContent({
       const list = await cronApi.list(agentHostId, projectId, projectAgentId);
       setJobs(list);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to load cron jobs'));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [agentHostId, projectId, projectAgentId]);
+  }, [agentHostId, projectId, projectAgentId, errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -76,7 +77,7 @@ export function CronJobsContent({
       setFormProjectId(projectId != null ? String(projectId) : '');
       setShowCreate(false);
     } catch (e) {
-      setError(faultMessage(e, 'Failed to create cron job'));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -87,7 +88,7 @@ export function CronJobsContent({
       const updated = await cronApi.update(agentHostId, job.id, { enabled: !job.enabled });
       setJobs((prev) => prev.map((j) => (j.id === job.id ? updated : j)));
     } catch (e) {
-      setError(faultMessage(e, 'Failed to update'));
+      setError(errorMessage(e));
     }
   };
 
@@ -96,7 +97,7 @@ export function CronJobsContent({
       await cronApi.delete(agentHostId, jobId);
       setJobs((prev) => prev.filter((j) => j.id !== jobId));
     } catch (e) {
-      setError(faultMessage(e, 'Failed to delete'));
+      setError(errorMessage(e));
     }
   };
 

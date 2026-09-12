@@ -6,6 +6,7 @@ import { usePermission } from '@/lib/rbac';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { computeDeliveryVerdict, type Verdict, type ReasonTone } from '@/lib/deliveryVerdict';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
+import { statusColor, statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 import { useDora, useLifecycle, useBottlenecks } from './insightsSources';
 
 /**
@@ -28,8 +29,8 @@ import { useDora, useLifecycle, useBottlenecks } from './insightsSources';
  * carried by the left accent rule, not by a second card border.
  */
 
-const TONE_COLOR: Record<ReasonTone, string> = { good: 'var(--success)', warn: 'var(--warning)', bad: 'var(--error)' };
-const VERDICT_COLOR: Record<Verdict, string> = { yes: 'var(--success)', at_risk: 'var(--warning)', no: 'var(--error)', no_data: 'var(--text-muted)' };
+const REASON_TONE: StatusToneMap<ReasonTone> = { good: 'success', warn: 'warning', bad: 'danger' };
+const VERDICT_TONE: StatusToneMap<Verdict> = { yes: 'success', at_risk: 'warning', no: 'danger', no_data: 'neutral' };
 
 export function DeliveryVerdict({ days }: { days: number }) {
   const t = useTranslations('insights.delivhub.verdict');
@@ -55,7 +56,9 @@ function VerdictInner({ t, days }: { t: ReturnType<typeof useTranslations>; days
   if (!dora.data || !life.data || !bott.data) return <PmEmpty message={t('loading')} />;
 
   const result = computeDeliveryVerdict(dora.data, life.data, bott.data);
-  const color = VERDICT_COLOR[result.verdict];
+  // The rule and the gauge are marks (`solid`); the headline is ink (`text`, AA on paper).
+  const color = statusColor(VERDICT_TONE, result.verdict, 'solid');
+  const ink = statusColor(VERDICT_TONE, result.verdict);
 
   return (
     <div style={{ borderLeft: `5px solid ${color}`, paddingLeft: 16 }}>
@@ -64,7 +67,7 @@ function VerdictInner({ t, days }: { t: ReturnType<typeof useTranslations>; days
           <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
             {t('eyebrow')}
           </div>
-          <div style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, lineHeight: 1.1, color, margin: '2px 0 6px' }}>
+          <div style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, lineHeight: 1.1, color: ink, margin: '2px 0 6px' }}>
             {t(`headline.${result.verdict}`)}
           </div>
           <div style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)' }}>
@@ -78,7 +81,7 @@ function VerdictInner({ t, days }: { t: ReturnType<typeof useTranslations>; days
                   key={r.key}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600,
-                    color: TONE_COLOR[r.tone], background: 'var(--bg-base)', border: `1px solid ${TONE_COLOR[r.tone]}`,
+                    borderWidth: 1, borderStyle: 'solid', ...statusPillStyle(REASON_TONE, r.tone),
                     padding: '4px 10px', borderRadius: 'var(--radius-full)',
                   }}
                 >

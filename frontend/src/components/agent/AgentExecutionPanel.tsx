@@ -28,7 +28,8 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ApprovalResolveControl } from '../humanRequests/ApprovalResolveControl';
 import { ChatMessageBubble } from '../ChatMessageBubble';
-import { EXECUTION_STATUS_COLOR as STATUS_COLOR, rerunAffordance } from '../board/AgentChip';
+import { EXECUTION_STATUS_TONE, rerunAffordance } from '../board/AgentChip';
+import { statusColor } from '@/lib/statusTone';
 import { ExecutionChip } from './ExecutionChip';
 import { EvermindRunChip } from './EvermindRunChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
@@ -779,7 +780,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
         <div style={card}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600, fontSize: 13 }}>{t('executionHeader', { id: selected.id })}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: STATUS_COLOR[status ?? ''] ?? 'var(--text-muted)' }}>{status}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: statusColor(EXECUTION_STATUS_TONE, status) }}>{status}</span>
             {runAgentName && (
               <span
                 title={t('agentThatRan')}

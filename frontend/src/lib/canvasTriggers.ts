@@ -56,13 +56,16 @@ export function evaluateCanvasTriggers(
 }
 
 /**
- * A human-readable account of what a trigger could not do.
+ * A model-readable account of what a trigger could not do — English by contract.
  *
- * Here rather than at each call site because the same sentence is owed in three places —
- * the tool result, the card badge and the sweep's digest line — and an `unbound` a reader
- * cannot act on is the same silence the object exists to break. The deadline reasons name
- * the FIELDS the watched kind actually declares, which is the difference between "no
- * deadline" and "this contract has no renewsAt set".
+ * Its one reader is the `canvas_evaluate_triggers` tool result, where it sits beside the
+ * tool's English `instruction` and the model relays it; a person never sees this string
+ * (the trigger card's own state label is translated from `founderTriggerState_*`). A
+ * surface that ever shows it to a person must translate `evaluation.reason` instead of
+ * quoting this. An `unbound` the model cannot explain is the same silence the object
+ * exists to break. The deadline reasons name the FIELDS the watched kind actually
+ * declares, which is the difference between "no deadline" and "this contract has no
+ * renewsAt set".
  */
 export function triggerUnboundHint(resolved: ResolvedTrigger): string | null {
   const { reason } = resolved.evaluation;

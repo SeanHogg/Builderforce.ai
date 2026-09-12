@@ -82,6 +82,8 @@ export interface TurnContext<M> {
   readonly signal: AbortSignal | undefined;
   /** Best output so far: the latest non-empty assistant content, or a finish summary. */
   readonly output: string;
+  /** Consecutive tool dispatches flagged `isError`, across turns. A successful dispatch resets it. */
+  readonly failureStreak: number;
 }
 
 export interface LoopPorts<M> {
@@ -143,13 +145,42 @@ export interface LoopHooks<M> {
   afterToolCalls?(ctx: TurnContext<M>, finished: boolean): Promise<AfterToolCallsDecision | void> | AfterToolCallsDecision | void;
 }
 
+/**
+ * Consecutive failed tool dispatches after which a run is stopped, when the surface
+ * names no other number. ONE value, owned here, so every surface stops for the same
+ * reason at the same point.
+ *
+ * ── WHY A FAILURE STREAK, AND NOT A STEP COUNT ──────────────────────────────────
+ * A run is not wrong for being long. A bulk ticket clean-up, a rename across a
+ * repository, a review of forty branches — each is a hundred honest tool calls, and a
+ * step ceiling stopped every one of them mid-task with "kept calling tools without
+ * finishing". The ceiling existed to catch a run that had stopped making progress, and
+ * that condition has a direct signal: tool calls that keep FAILING. So the only limit
+ * the kernel applies is this one — a run whose last N dispatches all failed is stuck,
+ * and stopping it is what the step cap was always trying to do by proxy. Five is past
+ * the point where the repeat-failure advisories (nudge at 2, instruct at 3) have had
+ * their say and been ignored.
+ */
+export const DEFAULT_TOOL_FAILURE_STREAK = 5;
+
 export interface LoopBudget {
   /** Absolute step to resume from (0 for a fresh run). */
   startStep?: number;
   /** Steps this invocation may take before yielding (tick-driven runners pass 1). Unbounded when omitted. */
   maxSteps?: number;
-  /** Absolute cap across the whole run. */
-  stepCap: number;
+  /**
+   * Absolute cap across the whole run. UNBOUNDED when omitted — the default, and the
+   * right one for every conversational and coding surface: a run stops when it
+   * finishes, when a human stops it, or when its tools keep failing
+   * ({@link failureStreakCap}), never because it worked for too long. A surface that
+   * is bounded BY DESIGN (a delegated sub-agent brief) states its number here.
+   */
+  stepCap?: number;
+  /**
+   * Consecutive `isError` dispatches that end the run. Defaults to
+   * {@link DEFAULT_TOOL_FAILURE_STREAK}; pass `Number.POSITIVE_INFINITY` to disable.
+   */
+  failureStreakCap?: number;
 }
 
 export interface LoopRunArgs<M> {
@@ -171,8 +202,12 @@ export interface LoopResult {
   cancelled: boolean;
   /** Absolute step index after this invocation — feed it back as `startStep` to resume. */
   step: number;
-  /** The absolute cap was hit without finishing. */
+  /** The run was stopped by a budget without finishing — see `exhaustedBy` for which. */
   exhausted: boolean;
+  /** `steps`: the absolute step cap. `failures`: the tool-failure streak. Absent unless `exhausted`. */
+  exhaustedBy?: "steps" | "failures";
+  /** Consecutive failed dispatches at the end of this invocation (what tripped a `failures` stop). */
+  failureStreak: number;
   /** A tool asked a human; the caller pauses and resumes once answered. */
   awaitingInput?: { approvalId?: string; question: string; callId: string };
 }

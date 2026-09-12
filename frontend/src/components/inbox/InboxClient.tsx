@@ -20,6 +20,7 @@ import {
 import styles from './InboxClient.module.css';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 type Folder = 'all' | 'unread' | 'attachments';
 const EMPTY_RULE: MailboxAutomationRuleInput = {
   name: '', enabled: true, fromContains: '', subjectContains: '', agentRef: null,
@@ -36,9 +37,7 @@ export function InboxClient() {
   const [folder, setFolder] = useState<Folder>('all');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const { busy, error, notice, run, fail, clear } = usePanelTask();
   const [reply, setReply] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [rules, setRules] = useState<MailboxAutomationRule[]>([]);
@@ -57,13 +56,13 @@ export function InboxClient() {
         setConnectionId(mailbox.connections.find((item) => item.status === 'connected')?.id ?? mailbox.connections[0]?.id ?? null);
         setAgents(ownedAgents);
       })
-      .catch((cause) => setError(faultText(cause, t('loadFailed'))))
+      .catch((cause) => fail(faultText(cause, t('loadFailed'))))
       .finally(() => setLoading(false));
-  }, [t]);
+  }, [t, fail]);
 
   const loadMessages = useCallback(async () => {
     if (connectionId == null) return;
-    setLoading(true); setError('');
+    setLoading(true); clear();
     const filter: MailboxFilter = {
       q: query || undefined,
       unread: folder === 'unread',
@@ -75,9 +74,9 @@ export function InboxClient() {
       setMessages(result.messages);
       setSelected((current) => result.messages.find((message) => message.id === current?.id) ?? result.messages[0] ?? null);
     } catch (cause) {
-      setError(faultText(cause, t('loadFailed')));
+      fail(faultText(cause, t('loadFailed')));
     } finally { setLoading(false); }
-  }, [connectionId, folder, query, t]);
+  }, [connectionId, folder, query, t, clear, fail]);
 
   useEffect(() => { void loadMessages(); }, [loadMessages]);
   const loadAutomation = useCallback(async () => {
@@ -92,7 +91,7 @@ export function InboxClient() {
   useEffect(() => { void loadAutomation(); }, [loadAutomation]);
 
   const openMessage = async (message: MailboxMessage) => {
-    setSelected(message); setReply(''); setError('');
+    setSelected(message); setReply(''); clear();
     if (message.unread && connectionId != null) {
       void mailboxApi.setUnread(connectionId, message.id, false).then(() => {
         setMessages((current) => current.map((item) => item.id === message.id ? { ...item, unread: false } : item));
@@ -101,7 +100,7 @@ export function InboxClient() {
     }
     if (!message.bodyText && connectionId != null) {
       try { setSelected(await mailboxApi.getMessage(connectionId, message.id)); }
-      catch (cause) { setError(faultText(cause, t('loadFailed'))); }
+      catch (cause) { fail(faultText(cause, t('loadFailed'))); }
     }
   };
 
@@ -112,61 +111,51 @@ export function InboxClient() {
   const generateReply = async () => {
     if (!selected) return;
     const agent = agents.find((item) => String(item.id) === (matchingRule?.agentRef ?? ruleDraft.agentRef)) ?? activeAgent;
-    setBusy(true); setError('');
-    try {
-      const result = await llmChat([
+    const result = await run(() => llmChat([
         { role: 'system', content: `${t('draftSystem')}\n${agent ? `${t('actingAs')}: ${agent.name}${agent.title ? ` — ${agent.title}` : ''}. ${agent.bio ?? ''}` : ''}\n${matchingRule?.instructions ?? ''}` },
         { role: 'user', content: `${t('from')}: ${selected.from}\n${t('subject')}: ${selected.subject}\n\n${selected.bodyText || selected.snippet}` },
-      ], { temperature: 0.3, maxTokens: 900 });
-      setReply(result.content);
-    } catch (cause) { setError(faultText(cause, t('draftFailed'))); }
-    finally { setBusy(false); }
+      ], { temperature: 0.3, maxTokens: 900 }), { failure: t('draftFailed') });
+    if (result) setReply(result.content);
   };
 
   const sendReply = async () => {
     if (!selected || connectionId == null || !reply.trim()) return;
-    setBusy(true); setError('');
-    try {
+    const sent = await run(async () => {
       await mailboxApi.send(connectionId, {
         to: replyAddress(selected.from),
         subject: /^re:/i.test(selected.subject) ? selected.subject : `Re: ${selected.subject}`,
         html: htmlFromText(reply),
       });
-      setReply(''); setNotice(t('sent')); window.setTimeout(() => setNotice(''), 3500);
-    } catch (cause) { setError(faultText(cause, t('sendFailed'))); }
-    finally { setBusy(false); }
+      return true;
+    }, { success: t('sent'), failure: t('sendFailed') });
+    if (sent) setReply('');
   };
 
   const saveRule = async () => {
     if (connectionId == null || !ruleDraft.name.trim()) return;
-    setBusy(true); setError('');
-    try {
-      const created = await mailboxApi.createRule(connectionId, ruleDraft);
-      setRules((current) => [...current, created]); setRuleDraft(EMPTY_RULE); setNotice(t('ruleSaved'));
-    } catch (cause) { setError(faultText(cause, t('ruleFailed'))); }
-    finally { setBusy(false); }
+    const created = await run(() => mailboxApi.createRule(connectionId, ruleDraft), { success: t('ruleSaved'), failure: t('ruleFailed') });
+    if (!created) return;
+    setRules((current) => [...current, created]); setRuleDraft(EMPTY_RULE);
   };
 
   const createAgent = async () => {
     if (!newAgentName.trim()) return;
-    setBusy(true); setError('');
-    try {
-      const agent = await createCloudAgent({ name: newAgentName.trim(), title: t('emailAgentTitle'), skills: ['email', 'customer-communication'], published: false });
-      setAgents((current) => [...current, agent]);
-      setRuleDraft((current) => ({ ...current, agentRef: String(agent.id) }));
-      setNewAgentName(''); setNotice(t('agentCreated'));
-    } catch (cause) { setError(faultText(cause, t('agentFailed'))); }
-    finally { setBusy(false); }
+    const agent = await run(
+      () => createCloudAgent({ name: newAgentName.trim(), title: t('emailAgentTitle'), skills: ['email', 'customer-communication'], published: false }),
+      { success: t('agentCreated'), failure: t('agentFailed') },
+    );
+    if (!agent) return;
+    setAgents((current) => [...current, agent]);
+    setRuleDraft((current) => ({ ...current, agentRef: String(agent.id) }));
+    setNewAgentName('');
   };
 
   const runAutomation = async () => {
-    setBusy(true); setError('');
-    try {
+    await run(async () => {
       const result = await mailboxApi.runAutomation();
       if (connectionId != null) setExecutions((await mailboxApi.listAutomation(connectionId)).executions);
-      setNotice(t('automationResult', result));
-    } catch (cause) { setError(faultText(cause, t('automationFailed'))); }
-    finally { setBusy(false); }
+      return result;
+    }, { success: (result) => t('automationResult', result), failure: t('automationFailed') });
   };
 
   if (!loading && connections.length === 0) return <main className={styles.shell}>

@@ -14,6 +14,7 @@ import {
 } from '@/lib/adminApi';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
+import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
 import { formatElapsedBetween } from '@/lib/duration';
@@ -96,8 +97,9 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
     }
   }
 
+  // Sends a sign-in link; the password is NOT changed and nobody is locked out, so
+  // the deliberate second click is the inline two-step on the button, not a modal.
   async function doResetPassword() {
-    if (!(await confirm({ message: t('users.drawer.confirmResetPassword', { email: user.email }), destructive: false }))) return;
     setResetPwBusy(true);
     setErrorMsg('');
     try {
@@ -249,14 +251,14 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     >
                       {forceLogoutBusy ? t('users.drawer.forceLogoutBusy') : t('users.drawer.forceLogout')}
                     </button>
-                    <button
-                      type="button"
+                    <InlineConfirmButton
                       className="admin-tab"
                       disabled={resetPwBusy}
-                      onClick={doResetPassword}
+                      onConfirm={doResetPassword}
+                      hint={t('users.drawer.confirmResetPassword', { email: user.email })}
                     >
                       {resetPwBusy ? t('users.drawer.resetPasswordBusy') : t('users.drawer.resetPassword')}
-                    </button>
+                    </InlineConfirmButton>
                     <button
                       type="button"
                       className="admin-tab"

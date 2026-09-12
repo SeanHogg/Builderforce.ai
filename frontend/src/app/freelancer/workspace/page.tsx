@@ -15,6 +15,8 @@ import NotificationsPanel from '@/components/freelance/NotificationsPanel';
 import { submitDeliverable, listMyDeliverables, type Deliverable } from '@/lib/freelance/deliverables';
 import { listEngagementBoard, listEngagementTasks, requestReview, type EngagementBoard, type EngagementTask } from '@/lib/freelance/engagements';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
 };
@@ -38,15 +40,16 @@ function ScoreChip({ score }: { score: number }) {
   return <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: `rgba(${hue},0.16)`, color: fg, flexShrink: 0 }}>{Math.round(score)}</span>;
 }
 
-const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  submitted: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  in_review: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-text, var(--warning))' },
-  accepted: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
-  changes_requested: { bg: 'rgba(239,68,68,0.14)', fg: 'var(--error)' },
+const DELIVERABLE_TONE: StatusToneMap<Deliverable['status']> = {
+  submitted: 'info',
+  in_review: 'warning',
+  accepted: 'success',
+  changes_requested: 'danger',
 };
 
 export default function FreelancerWorkspacePage() {
   const tg = useTranslations('gigs');
+  const errorMessage = useErrorMessage();
   const [boards, setBoards] = useState<EngagementBoard[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [tasks, setTasks] = useState<EngagementTask[]>([]);
@@ -88,7 +91,7 @@ export default function FreelancerWorkspacePage() {
     if (!selected) return;
     setBusy(`rev:${taskId}`); setError(null);
     try { await requestReview(selected, taskId); setReviewed((m) => ({ ...m, [taskId]: true })); }
-    catch (e) { setError(faultMessage(e, 'Failed')); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
 
@@ -100,14 +103,13 @@ export default function FreelancerWorkspacePage() {
       setProposeFor(null); setDraft({ title: '', body: '' });
       const ds = await listMyDeliverables(selected).catch(() => myDeliverables);
       setMyDeliverables(ds);
-    } catch (e) { setError(faultMessage(e, 'Failed')); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(null); }
   };
 
-  const statusPill = (s: string) => {
-    const c = STATUS_COLORS[s] ?? { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' };
-    return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: c.bg, color: c.fg, flexShrink: 0 }}>{tg(`deliverables.status.${s}`)}</span>;
-  };
+  const statusPill = (s: Deliverable['status']) => (
+    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', ...statusPillStyle(DELIVERABLE_TONE, s), flexShrink: 0 }}>{tg(`deliverables.status.${s}`)}</span>
+  );
 
   return (
     <PageContainer width="full" style={{ padding: '32px 40px' }}>

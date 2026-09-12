@@ -14,8 +14,9 @@
  *   3. MONEY IS MICROS. `cost_micros: 1_230_000` is $1.23.
  */
 
+import { asJsonRecord } from '../../../domain/shared/json';
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, unmapObjective,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, requireField, text, toCents, toDay, unmapObjective,
 } from '../adsNormalize';
 import {
   AD_MAX_AGE, ageFromBuckets, bucketedAgeKeys, mapTargetingValues, requireTargetingSupport,
@@ -91,7 +92,7 @@ const customerId = (value: string): string => value.replace(/\D/g, '');
 
 async function search(call: Parameters<AdsProvider['identity']>[0], customer: string, query: string): Promise<Record<string, unknown>[]> {
   const result = await ask(call, 'search', { customer_id: customer, query, pageSize: 1000 });
-  return list(result.data).map(rec);
+  return list(result.data).map(asJsonRecord);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,11 +164,11 @@ async function resolveGeoTargets(call: AdCall, countries: readonly string[]): Pr
       locale: 'en',
       countryCode: country,
       locationNames: { names: [country] },
-    })).data).map(rec);
+    })).data).map(asJsonRecord);
     // The suggest endpoint answers with places INSIDE the country as well, so the
     // country itself is picked by target type rather than by taking the first row.
     const match = suggestions
-      .map((entry) => rec(entry.geoTargetConstant))
+      .map((entry) => asJsonRecord(entry.geoTargetConstant))
       .find((constant) => text(constant.targetType).toUpperCase() === 'COUNTRY'
         && text(constant.countryCode).toUpperCase() === country);
     const resourceName = match ? text(match.resourceName) : '';
@@ -208,7 +209,7 @@ export const googleAdsProvider: AdsProvider = {
   async identity(call, fields) {
     const customer = customerId(requireField(fields, 'adAccountId', 'the customer ID'));
     const rows = await search(call, customer, 'SELECT customer.id, customer.descriptive_name, customer.currency_code FROM customer LIMIT 1');
-    const c = rec(rows[0]?.customer);
+    const c = asJsonRecord(rows[0]?.customer);
     return {
       externalId: customer,
       name: text(c.descriptiveName) || customer,
@@ -224,8 +225,8 @@ export const googleAdsProvider: AdsProvider = {
       'campaign_budget.total_amount_micros FROM campaign WHERE campaign.status != \'REMOVED\'',
     ].join(' '));
     return rows.map((row) => {
-      const c = rec(row.campaign);
-      const budget = rec(row.campaignBudget);
+      const c = asJsonRecord(row.campaign);
+      const budget = asJsonRecord(row.campaignBudget);
       const native = text(c.advertisingChannelType) || null;
       return {
         externalId: text(c.id),
@@ -267,7 +268,7 @@ export const googleAdsProvider: AdsProvider = {
         },
       }],
     })).data);
-    const budgetResource = text(rec(budgetResults[0]).resourceName);
+    const budgetResource = text(asJsonRecord(budgetResults[0]).resourceName);
     if (!budgetResource) throw new AdsProviderError('Google Ads created the budget but did not return its resource name.', 502, true);
 
     const campaignResults = list((await ask(call, 'mutate_campaigns', {
@@ -287,7 +288,7 @@ export const googleAdsProvider: AdsProvider = {
         },
       }],
     })).data);
-    const resourceName = text(rec(campaignResults[0]).resourceName);
+    const resourceName = text(asJsonRecord(campaignResults[0]).resourceName);
     const id = resourceName.split('/').pop() ?? '';
     if (!id) throw new AdsProviderError('Google Ads accepted the campaign but did not return its id.', 502, true);
 
@@ -322,7 +323,7 @@ export const googleAdsProvider: AdsProvider = {
     const dailyMicros = fromCents(patch.dailyBudgetCents, MICROS);
     if (dailyMicros) {
       const rows = await search(call, customer, `SELECT campaign_budget.resource_name FROM campaign WHERE campaign.id = ${gaqlString(externalId)}`);
-      const budgetResource = text(rec(rows[0]?.campaignBudget).resourceName);
+      const budgetResource = text(asJsonRecord(rows[0]?.campaignBudget).resourceName);
       if (!budgetResource) throw new AdsProviderError('That Google Ads campaign has no budget to change.', 404, false);
       await ask(call, 'mutate_campaign_budgets', {
         customer_id: customer,
@@ -354,23 +355,23 @@ export const googleAdsProvider: AdsProvider = {
     const excludedAgesByGroup = new Map<string, Set<string>>();
     const excludedGendersByGroup = new Map<string, Set<string>>();
     for (const row of criteria) {
-      const criterion = rec(row.adGroupCriterion);
+      const criterion = asJsonRecord(row.adGroupCriterion);
       const group = idOf(text(criterion.adGroup));
       if (!group) continue;
-      const keyword = text(rec(criterion.keyword).text);
+      const keyword = text(asJsonRecord(criterion.keyword).text);
       if (keyword && criterion.negative !== true) {
         keywordsByGroup.set(group, [...(keywordsByGroup.get(group) ?? []), keyword]);
       }
       if (criterion.negative === true) {
-        const age = text(rec(criterion.ageRange).type);
+        const age = text(asJsonRecord(criterion.ageRange).type);
         if (age) excludedAgesByGroup.set(group, (excludedAgesByGroup.get(group) ?? new Set()).add(age));
-        const gender = text(rec(criterion.gender).type);
+        const gender = text(asJsonRecord(criterion.gender).type);
         if (gender) excludedGendersByGroup.set(group, (excludedGendersByGroup.get(group) ?? new Set()).add(gender));
       }
     }
 
     return rows.map((row) => {
-      const group = rec(row.adGroup);
+      const group = asJsonRecord(row.adGroup);
       const id = text(group.id);
       const targeting: {
         ageMin?: number; ageMax?: number; genders?: AdGender[]; interests?: string[];
@@ -400,7 +401,7 @@ export const googleAdsProvider: AdsProvider = {
 
       return {
         externalId: id,
-        externalCampaignId: text(rec(row.campaign).id) || null,
+        externalCampaignId: text(asJsonRecord(row.campaign).id) || null,
         name: text(group.name),
         status: toStatus(group.status),
         targeting,
@@ -434,7 +435,7 @@ export const googleAdsProvider: AdsProvider = {
         },
       }],
     })).data);
-    const adGroupResource = text(rec(results[0]).resourceName);
+    const adGroupResource = text(asJsonRecord(results[0]).resourceName);
     const id = idOf(adGroupResource);
     if (!id) throw new AdsProviderError('Google Ads accepted the ad group but did not return its id.', 502, true);
 
@@ -526,18 +527,18 @@ export const googleAdsProvider: AdsProvider = {
       `WHERE ad_group_ad.status != 'REMOVED'${scope}`,
     ].join(' '));
     return rows.map((row) => {
-      const adGroupAd = rec(row.adGroupAd);
-      const ad = rec(adGroupAd.ad);
-      const rsa = rec(ad.responsiveSearchAd);
-      const headlines = list(rsa.headlines).map((entry) => text(rec(entry).text)).filter(Boolean);
-      const descriptions = list(rsa.descriptions).map((entry) => text(rec(entry).text)).filter(Boolean);
+      const adGroupAd = asJsonRecord(row.adGroupAd);
+      const ad = asJsonRecord(adGroupAd.ad);
+      const rsa = asJsonRecord(ad.responsiveSearchAd);
+      const headlines = list(rsa.headlines).map((entry) => text(asJsonRecord(entry).text)).filter(Boolean);
+      const descriptions = list(rsa.descriptions).map((entry) => text(asJsonRecord(entry).text)).filter(Boolean);
       return {
         // The COMPOSITE `adGroupId~adId`, which is what `adGroupAds` is addressed by and
         // what `createAd` below already returns. The bare `ad.id` cannot be updated:
         // Google has no `adGroupAds/{adId}` resource, so storing it would produce ids
         // that read back fine and 404 on the first pause.
         externalId: idOf(text(adGroupAd.resourceName)) || text(ad.id),
-        externalAdSetId: text(rec(row.adGroup).id) || null,
+        externalAdSetId: text(asJsonRecord(row.adGroup).id) || null,
         name: text(ad.name) || headlines[0] || text(ad.id),
         status: toStatus(adGroupAd.status),
         headline: headlines.join('\n') || null,
@@ -584,7 +585,7 @@ export const googleAdsProvider: AdsProvider = {
         },
       }],
     })).data);
-    const id = idOf(text(rec(results[0]).resourceName));
+    const id = idOf(text(asJsonRecord(results[0]).resourceName));
     if (!id) throw new AdsProviderError('Google Ads accepted the ad but did not return its id.', 502, true);
 
     return {
@@ -625,10 +626,10 @@ export const googleAdsProvider: AdsProvider = {
       `WHERE segments.date BETWEEN ${gaqlString(query.since)} AND ${gaqlString(query.until)}${scope}`,
     ].join(' '));
     return rows.flatMap((row) => {
-      const externalCampaignId = text(rec(row.campaign).id);
-      const date = toDay(rec(row.segments).date);
+      const externalCampaignId = text(asJsonRecord(row.campaign).id);
+      const date = toDay(asJsonRecord(row.segments).date);
       if (!externalCampaignId || !date) return [];
-      const metrics = rec(row.metrics);
+      const metrics = asJsonRecord(row.metrics);
       return [{
         date,
         externalCampaignId,

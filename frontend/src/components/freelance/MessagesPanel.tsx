@@ -13,6 +13,7 @@ import {
 } from '@/lib/messagingApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { usePanelTask } from '@/hooks/usePanelTask';
 /**
  * In-platform messaging drawer — employer<->freelancer threads. ONE component both
  * sides share (the `side` prop swaps the web/tenant token + endpoints); it decides its
@@ -52,10 +53,16 @@ export function MessagesPanel({ open, onClose, side, context }: {
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
   const [draft, setDraft] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy: sending, error, run: runTask, fail: failTask, clear: clearTask } = usePanelTask();
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  /** A thread read or attachment that failed lands in the send's slot — and stays
+   *  silent for a signed-out read, as `faultMessage` decides. */
+  const report = useCallback((e: unknown) => {
+    const message = faultMessage(e);
+    if (message) failTask(message); else clearTask();
+  }, [failTask, clearTask]);
 
   const refreshList = useCallback(async () => {
     try { const r = await listConversations(side); setItems(r.items); } catch { /* best-effort */ }
@@ -64,16 +71,16 @@ export function MessagesPanel({ open, onClose, side, context }: {
   const openThread = useCallback(async (id: string) => {
     setSelected(id);
     setLoading(true);
-    setError(null);
+    clearTask();
     try {
       const r = await getConversationThread(side, id);
       setConversation(r.conversation);
       setMessages(r.messages);
       await markConversationRead(side, id).catch(() => {});
       setItems((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
-    } catch (e) { setError(faultMessage(e)); }
+    } catch (e) { report(e); }
     finally { setLoading(false); }
-  }, [side]);
+  }, [side, clearTask, report]);
 
   // On open: load the list, and honour a launch context (open or start the thread).
   useEffect(() => {
@@ -95,7 +102,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
           await refreshList();
           if (alive) await openThread(id);
         }
-      } catch (e) { if (alive) setError(faultMessage(e)); }
+      } catch (e) { if (alive) report(e); }
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,22 +130,20 @@ export function MessagesPanel({ open, onClose, side, context }: {
 
   const send = async () => {
     if (!selected || (!draft.trim() && !file) || sending) return;
-    setSending(true);
-    setError(null);
-    try {
-      await sendConversationMessage(side, selected, { body: draft.trim(), file });
+    const threadId = selected;
+    await runTask(async () => {
+      await sendConversationMessage(side, threadId, { body: draft.trim(), file });
       setDraft('');
       setFile(null);
-      const r = await getConversationThread(side, selected);
+      const r = await getConversationThread(side, threadId);
       setMessages(r.messages);
       void refreshList();
-    } catch (e) { setError(faultMessage(e)); }
-    finally { setSending(false); }
+    });
   };
 
   const openAttachment = async (m: ConversationMessage) => {
     try { const url = await fetchConversationAttachment(side, m.id); window.open(url, '_blank', 'noopener'); }
-    catch (e) { setError(faultMessage(e)); }
+    catch (e) { report(e); }
   };
 
   const counterpartName = (c: ConversationSummary) =>

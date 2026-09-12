@@ -49,10 +49,6 @@ export const FINANCE_PANELS: FinancePanelDef[] = [
 
 export const FINANCE_PANEL_IDS = FINANCE_PANELS.map((p) => p.id);
 
-export function getFinancePanel(id: string | null | undefined): FinancePanelDef | undefined {
-  return id == null ? undefined : FINANCE_PANELS.find((p) => p.id === id);
-}
-
 export function isFinancePanelId(v: unknown): v is FinancePanelId {
   return typeof v === 'string' && FINANCE_PANELS.some((p) => p.id === v);
 }

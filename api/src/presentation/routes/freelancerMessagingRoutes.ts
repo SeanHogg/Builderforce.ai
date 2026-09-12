@@ -24,6 +24,7 @@
 import { Hono } from 'hono';
 import { and, asc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { optionalWebUserId } from '../middleware/webAuthMiddleware';
 import { notify } from '../../application/notifications/notify';
@@ -212,7 +213,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     if (webUserId && webUserId === row.freelancerUserId) authorized = true;
     if (!authorized) {
       await optionalAuthMiddleware(c, async () => {});
-      const tenantId = c.get('tenantId');
+      const tenantId = optionalTenantId(c);
       if (tenantId != null && Number(tenantId) === Number(row.tenantId)) authorized = true;
     }
     if (!authorized) return c.json({ error: 'Forbidden' }, 403);

@@ -73,6 +73,7 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { optionalTenantId } from '../middleware/tenantContext';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import type { Env, HonoEnv } from '../../env';
 import {
@@ -197,7 +198,7 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
 
   const ctx = (c: { get: (k: string) => unknown; env: Env }) => ({
     userId: c.get('userId') as string | undefined,
-    tenantId: c.get('tenantId') as number | undefined,
+    tenantId: optionalTenantId(c) ?? undefined,
     env: c.env,
   });
 

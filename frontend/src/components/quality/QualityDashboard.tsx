@@ -13,9 +13,11 @@ import { buildQualityDiagnosticsReport } from '@/lib/qualityDiagnostics';
 import { ErrorGroupDetail } from './ErrorGroupDetail';
 import { QualityStatsPanel } from './QualityStatsPanel';
 import { ErrorConsumptionCard } from './ErrorConsumptionCard';
-import { LEVELS, STATUSES, LEVEL_COLOR, STATUS_COLOR } from './qualityColors';
+import { LEVELS, STATUSES, LEVEL_COLOR, STATUS_TONE } from './qualityColors';
+import { statusColor } from '@/lib/statusTone';
+import { usePanelTask } from '@/hooks/usePanelTask';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
@@ -41,6 +43,7 @@ export function QualityDashboard() {
   const fmt = useFormat();
   const t = useTranslations('quality');
   const tCommon = useTranslations('common');
+  const errorMessage = useErrorMessage();
   const { currentProjectId } = useProjectScope();
   const [groups, setGroups] = useState<ErrorGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,28 +53,32 @@ export function QualityDashboard() {
   const [level, setLevel] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
+  // Paging is a user action (the Load more button), so it runs through the shared
+  // task: its busy flag drives the button, its failure lands beside the list.
+  const { run: runLoadMore, busy: loadingMore, error: loadMoreError, clear: clearLoadMore } = usePanelTask();
 
   const PAGE = 50;
 
   const load = useCallback(() => {
     setLoading(true);
+    clearLoadMore();
     qualityApi.groups
       .list({ projectId: currentProjectId, status: status || undefined, level: level || undefined, limit: PAGE })
       .then((p) => { setGroups(p.groups); setNextCursor(p.nextCursor); setError(null); })
-      .catch((e) => setError(faultMessage(e, 'Failed to load errors')))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [currentProjectId, status, level]);
+  }, [currentProjectId, status, level, clearLoadMore, errorMessage]);
 
-  const loadMore = useCallback(() => {
+  const loadMore = useCallback(async () => {
     if (!nextCursor) return;
-    setLoadingMore(true);
-    qualityApi.groups
-      .list({ projectId: currentProjectId, status: status || undefined, level: level || undefined, limit: PAGE, cursor: nextCursor })
-      .then((p) => { setGroups((prev) => [...prev, ...p.groups]); setNextCursor(p.nextCursor); })
-      .catch((e) => setError(faultMessage(e, 'Failed to load errors')))
-      .finally(() => setLoadingMore(false));
-  }, [nextCursor, currentProjectId, status, level]);
+    const page = await runLoadMore(
+      () => qualityApi.groups.list({ projectId: currentProjectId, status: status || undefined, level: level || undefined, limit: PAGE, cursor: nextCursor }),
+      { failure: tCommon('actionFailed') },
+    );
+    if (!page) return;
+    setGroups((prev) => [...prev, ...page.groups]);
+    setNextCursor(page.nextCursor);
+  }, [nextCursor, currentProjectId, status, level, runLoadMore, tCommon]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -134,7 +141,7 @@ export function QualityDashboard() {
         <ViewToggle value={view} onChange={setView} card table />
       </div>
 
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
+      {(error ?? loadMoreError) && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error ?? loadMoreError}</div>}
 
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
@@ -161,7 +168,7 @@ export function QualityDashboard() {
                     {g.type && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.type}</div>}
                   </td>
                   <td style={tdStyle}><Badge text={t(`level.${g.level}`)} color={LEVEL_COLOR[g.level] ?? 'var(--text-muted)'} /></td>
-                  <td style={tdStyle}><Badge text={t(`status.${g.status}`)} color={STATUS_COLOR[g.status] ?? 'var(--text-muted)'} /></td>
+                  <td style={tdStyle}><Badge text={t(`status.${g.status}`)} color={statusColor(STATUS_TONE, g.status)} /></td>
                   <td style={tdStyle}>{g.eventCount}</td>
                   <td style={tdStyle}>{g.userCount}</td>
                   <td style={tdStyle}>{fmt.dateTime(g.lastSeen)}</td>
@@ -176,7 +183,7 @@ export function QualityDashboard() {
             <button key={g.id} type="button" style={{ ...cardStyle, textAlign: 'left', cursor: 'pointer' }} onClick={() => setOpenId(g.id)}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                 <Badge text={t(`level.${g.level}`)} color={LEVEL_COLOR[g.level] ?? 'var(--text-muted)'} />
-                <Badge text={t(`status.${g.status}`)} color={STATUS_COLOR[g.status] ?? 'var(--text-muted)'} />
+                <Badge text={t(`status.${g.status}`)} color={statusColor(STATUS_TONE, g.status)} />
               </div>
               <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{g.title}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -194,7 +201,7 @@ export function QualityDashboard() {
             type="button"
             style={{ ...inputStyle, cursor: 'pointer', fontWeight: 600 }}
             disabled={loadingMore}
-            onClick={loadMore}
+            onClick={() => void loadMore()}
           >
             {loadingMore ? t('loading') : t('loadMore')}
           </button>

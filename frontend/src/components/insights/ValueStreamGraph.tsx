@@ -15,6 +15,7 @@ import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from
 import { pmoApi, type ValueStream, type ValueStreamInitiative, type ValueStreamEdge } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
+import { statusColor, toneColor, type StatusToneMap } from '@/lib/statusTone';
 
 /**
  * Value stream — the cross-artifact value-delivery graph: initiatives as nodes
@@ -37,12 +38,20 @@ const Canvas3DView = dynamic(
   { ssr: false },
 );
 
-const STATUS_COLOR: Record<string, string> = {
-  // Two greys, and they have to stay two: `proposed` is work that has not begun
-  // and `archived` is work that never will, so the second reads a step fainter.
-  proposed: 'var(--text-secondary)', active: 'var(--info)', completed: 'var(--success)', archived: 'var(--text-muted)',
-};
-const CRITICAL_COLOR = 'var(--error)';
+type InitiativeStatus = 'proposed' | 'active' | 'completed' | 'archived';
+
+const STATUS_TONE: StatusToneMap<InitiativeStatus> = { active: 'info', completed: 'success', archived: 'neutral' };
+/**
+ * Two greys, and they have to stay two: `proposed` is work that has not begun and
+ * `archived` is work that never will, so the second reads a step fainter. The six
+ * tones carry only ONE grey (`neutral`, which `archived` takes), so `proposed` keeps
+ * the one step-stronger grey as a documented local rung rather than collapsing into it.
+ */
+const PROPOSED_COLOR = 'var(--text-secondary)';
+/** Node stroke / 3D accent for an initiative status (unknown → `proposed`). */
+const statusStroke = (status: string): string =>
+  status in STATUS_TONE ? statusColor(STATUS_TONE, status, 'solid') : PROPOSED_COLOR;
+const CRITICAL_COLOR = toneColor('danger', 'solid');
 const COL_W = 240;
 const ROW_H = 96;
 
@@ -98,7 +107,7 @@ export function ValueStreamGraph() {
       data: { label: `${n.name} · ${n.completionPct}%` },
       style: {
         borderRadius: 'var(--radius-md)',
-        border: `${n.onCriticalPath ? 3 : 2}px solid ${n.onCriticalPath ? CRITICAL_COLOR : (STATUS_COLOR[n.status] ?? 'var(--text-muted)')}`,
+        border: `${n.onCriticalPath ? 3 : 2}px solid ${n.onCriticalPath ? CRITICAL_COLOR : statusStroke(n.status)}`,
         background: 'var(--bg-elevated)',
         color: 'var(--text-primary)',
         fontSize: 12,
@@ -141,7 +150,7 @@ export function ValueStreamGraph() {
       sublabel: t('deliv.valueStream.completion', { pct: initiative.completionPct }),
       group: t(`deliv.valueStream.status.${initiative.status}` as 'deliv.valueStream.status.active'),
       icon: initiative.onCriticalPath ? '⚠' : '◆',
-      accent: initiative.onCriticalPath ? CRITICAL_COLOR : (STATUS_COLOR[initiative.status] ?? STATUS_COLOR.proposed!),
+      accent: initiative.onCriticalPath ? CRITICAL_COLOR : statusStroke(initiative.status),
       depthOffset: canvas3dDepthOffset(node),
     };
   }, [initiativeById, t]);

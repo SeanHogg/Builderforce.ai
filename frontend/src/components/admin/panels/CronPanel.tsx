@@ -74,7 +74,6 @@ export default function CronPanel() {
         title: t('confirm.title'),
         message: t('confirm.dispatch', { target, count: dispatching.length }),
         confirmLabel: t('confirm.confirmLabel'),
-        destructive: false,
       });
       if (!ok) return;
     }

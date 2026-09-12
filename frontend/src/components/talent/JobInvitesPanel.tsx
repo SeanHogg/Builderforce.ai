@@ -18,17 +18,18 @@ import { useFormat } from '@/i18n/useFormat';
 import { inviteStatusKey } from './jobVocabulary';
 import { listJobInvites, withdrawJobInvite, type JobInvite } from '@/lib/freelance/invites';
 import { faultMessage } from '@/lib/apiClient';
+import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 14, minWidth: 0,
 };
 
-const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
-  sent: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  viewed: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  accepted: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
-  declined: { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' },
-  expired: { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' },
+const STATUS_TONE: StatusToneMap<JobInvite['status']> = {
+  sent: 'info',
+  viewed: 'info',
+  accepted: 'success',
+  declined: 'neutral',
+  expired: 'neutral',
 };
 
 export function JobInvitesPanel({ jobId }: { jobId: string }) {
@@ -69,7 +70,6 @@ export function JobInvitesPanel({ jobId }: { jobId: string }) {
         <div style={{ ...card, color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('invite.emptyForJob')}</div>
       ) : (
         invites.map((invite) => {
-          const tone = STATUS_TONE[invite.status] ?? STATUS_TONE.declined!;
           return (
             <div key={invite.id} style={{ ...card, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <Link
@@ -78,7 +78,7 @@ export function JobInvitesPanel({ jobId }: { jobId: string }) {
               >
                 {invite.freelancerName ?? t('match.unnamed')}
               </Link>
-              <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: tone.bg, color: tone.fg }}>
+              <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', ...statusPillStyle(STATUS_TONE, invite.status) }}>
                 {t(inviteStatusKey(invite.status))}
               </span>
               {invite.expiresAt && (invite.status === 'sent' || invite.status === 'viewed') && (

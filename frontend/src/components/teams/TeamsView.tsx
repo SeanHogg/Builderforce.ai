@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/lib/AuthContext';
 import {
   listTeams,
@@ -61,27 +62,11 @@ const labelStyle: React.CSSProperties = {
 };
 const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, margin: '0 0 10px' };
 
-/** Pencil-in-square "manage" glyph. Kept always-visible (not hover-only) so the
- *  card reads as interactive on touch devices too; it tints coral on hover. */
-function ManageIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      width={16}
-      height={16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={active ? 'var(--coral-bright)' : 'var(--text-muted)'}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      style={{ flexShrink: 0, transition: 'stroke 120ms' }}
-    >
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  );
-}
+/** The "manage" glyph's tint. Kept always-visible (not hover-only) so the card
+ *  reads as interactive on touch devices too; it tints coral on hover. */
+const manageIconStyle = (active: boolean): React.CSSProperties => ({
+  flexShrink: 0, color: active ? 'var(--coral-bright)' : 'var(--text-muted)', transition: 'color 120ms',
+});
 
 /** A team's avatar — the uploaded image, or its initials on a tinted disc when
  *  none is set. Shared by the card, the list row, and the manage panel. */
@@ -93,7 +78,7 @@ function TeamAvatar({ name, url, size = 30 }: { name: string; url?: string | nul
   };
   if (url) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt="" style={{ ...box, objectFit: 'cover', border: '1px solid var(--border-subtle)' }} />;
+    return <img src={url} alt="" width={size} height={size} style={{ ...box, objectFit: 'cover', border: '1px solid var(--border-subtle)' }} />;
   }
   return (
     <span style={{
@@ -384,7 +369,7 @@ export function TeamsView() {
                     <TeamAvatar name={team.name} url={team.avatarUrl} />
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</div>
                   </div>
-                  <ManageIcon active={hoveredId === team.id} />
+                  <Icon name="edit" size={16} style={manageIconStyle(hoveredId === team.id)} />
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', minHeight: 32, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {team.description || t('noDescription')}
@@ -427,7 +412,7 @@ export function TeamsView() {
                     <td style={tdStyle}>{team.memberCount}</td>
                     <td style={tdStyle}>{team.projectCount}</td>
                     <td style={{ ...tdStyle, textAlign: 'right', width: 40 }}>
-                      <ManageIcon active={hoveredId === team.id} />
+                      <Icon name="edit" size={16} style={manageIconStyle(hoveredId === team.id)} />
                     </td>
                   </tr>
                 ))}

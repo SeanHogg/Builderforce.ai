@@ -11,6 +11,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { EmbedConsentModal } from './EmbedConsentModal';
 import { EmbedInstallSnippet } from './EmbedInstallSnippet';
 import { EmbedSurfaceCatalog } from './EmbedSurfaceCatalog';
+import { usePanelTask } from '@/hooks/usePanelTask';
 
 /**
  * "BuilderForce surfaces": enablement for the embedded integration — turn on
@@ -57,9 +58,9 @@ export function EmbedIntegrationSettings() {
   const [requiredVersion, setRequiredVersion] = useState(0);
   const [persisted, setPersisted] = useState<Persisted>({ enabled: false, capabilities: [] });
   const [fetching, setFetching] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const task = usePanelTask();
+  // Stable — the config fetch keys on `connected`, never on `task`.
+  const { fail } = task;
   const [consentOpen, setConsentOpen] = useState(false);
 
   useEffect(() => {
@@ -76,36 +77,31 @@ export function EmbedIntegrationSettings() {
         setConsentVersion(cfg.consentVersion);
         setRequiredVersion(cfg.consentRequiredVersion);
       })
-      .catch(() => !cancelled && setError(t('loadError')))
+      .catch(() => { if (!cancelled) fail(t('loadError')); })
       .finally(() => !cancelled && setFetching(false));
     return () => {
       cancelled = true;
     };
-  }, [connected, t]);
+  }, [connected, t, fail]);
 
   const loading = canManage && (!tenantToken || fetching);
   const needsConsent = enabled && consentVersion !== requiredVersion;
 
   const toggleCapability = (cap: EmbedCapability) => {
-    setSaved(false);
+    task.clear();
     setCapabilities((prev) => (prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]));
   };
 
   // Persist the current form. `acknowledged` is forwarded only when the consent
   // panel was just confirmed, so the server stamps the consent version.
   const persist = async (acknowledged: boolean) => {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await embedApi.setConfig({ enabled, capabilities, consentAcknowledged: acknowledged });
-      setConsentVersion(res.consentVersion);
-      setPersisted({ enabled: res.enabled, capabilities });
-      setSaved(true);
-    } catch {
-      setError(t('saveError'));
-    } finally {
-      setSaving(false);
-    }
+    const res = await task.run(
+      () => embedApi.setConfig({ enabled, capabilities, consentAcknowledged: acknowledged }),
+      { success: t('saved'), failure: t('saveError') },
+    );
+    if (res === undefined) return;
+    setConsentVersion(res.consentVersion);
+    setPersisted({ enabled: res.enabled, capabilities });
   };
 
   const onSave = () => {
@@ -148,7 +144,7 @@ export function EmbedIntegrationSettings() {
                 type="checkbox"
                 checked={enabled}
                 onChange={(e) => {
-                  setSaved(false);
+                  task.clear();
                   setEnabled(e.target.checked);
                 }}
               />
@@ -174,17 +170,17 @@ export function EmbedIntegrationSettings() {
               <button
                 type="button"
                 onClick={onSave}
-                disabled={saving}
+                disabled={task.busy}
                 style={{
                   padding: '6px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600,
                   background: 'var(--accent)', color: 'var(--text-on-accent)',
-                  border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer',
+                  border: 'none', borderRadius: 'var(--radius-md)', cursor: task.busy ? 'default' : 'pointer',
                 }}
               >
-                {saving ? t('saving') : needsConsent ? t('reviewEnable') : t('save')}
+                {task.busy ? t('saving') : needsConsent ? t('reviewEnable') : t('save')}
               </button>
-              {saved && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--success-text)' }}>{t('saved')} <Icon source="✓" size="1em" /></span>}
-              {error && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }} role="alert">{error}</span>}
+              {task.notice && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--success-text)' }}>{task.notice} <Icon source="✓" size="1em" /></span>}
+              {task.error && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }} role="alert">{task.error}</span>}
             </div>
           </>
         )}

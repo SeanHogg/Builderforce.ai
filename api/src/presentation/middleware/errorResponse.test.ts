@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import {
   ConflictError,
   DomainError,
+  InternalError,
   NotFoundError,
   RequestValidationError,
   ServiceUnavailableError,
@@ -16,7 +17,7 @@ import {
   resetCaughtErrorReporterForTests,
 } from '../../application/observability/caughtErrorReporter';
 import { errorHandler } from './errorHandler';
-import { GENERIC_SERVER_ERROR, errorResponseBody, failResponse, refusalResponse } from './errorResponse';
+import { GENERIC_SERVER_ERROR, errorResponseBody, failResponse, refusalResponse, reportServerError, statusResponse } from './errorResponse';
 import type { HonoEnv } from '../../env';
 
 class PublisherLikeError extends Error {
@@ -67,6 +68,14 @@ describe('errorResponseBody', () => {
     expect(errorResponseBody(new Error('relation "x" does not exist'))).toEqual({ status: 500, body: { error: GENERIC_SERVER_ERROR } });
     expect(errorResponseBody({ status: 502, message: 'upstream said so' })).toEqual({ status: 502, body: { error: GENERIC_SERVER_ERROR } });
   });
+
+  it('answers an InternalError with its authored message, never its cause', () => {
+    const error = new InternalError('Failed to create template', { cause: new Error('relation "x" does not exist') });
+    expect(statusOf(error)).toBe(500);
+    expect(errorResponseBody(error)).toEqual({ status: 500, body: { error: 'Failed to create template' } });
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(new InternalError('no cause').cause).toBeUndefined();
+  });
 });
 
 describe('errorHandler + failResponse', () => {
@@ -86,6 +95,15 @@ describe('errorHandler + failResponse', () => {
     a.get('/throw-500', () => { throw new Error('secret db text'); });
     a.get('/catch-500', (c) => failResponse(c, new Error('secret db text'), { source: 't', operation: 'op' }));
     a.get('/catch-404', (c) => failResponse(c, new NotFoundError('Thing', 1), { source: 't', operation: 'op' }, { sourceFileKey: 'k' }));
+    a.get('/throw-internal', () => { throw new InternalError('Failed to create user', { cause: new Error('insert returned no row') }); });
+    a.get('/catch-internal', (c) => failResponse(c, new InternalError('Processing failed', { cause: new Error('db down') }), { source: 't', operation: 'op', context: { logMessage: 'webhook' } }));
+    a.get('/rpc-500', (c) => {
+      reportServerError(c, new Error('boom'), { source: 't', operation: 'rpc' });
+      return c.json({ jsonrpc: '2.0', error: { code: -32603, message: 'boom' } }, 500);
+    });
+    a.get('/status-503', (c) => statusResponse(c, { error: 'Mailbox unreachable', code: 'upstream' }, 503, { source: 't', operation: 'mailbox' }, new Error('ECONNRESET')));
+    a.get('/status-409', (c) => statusResponse(c, { error: 'Already merged' }, 409, { source: 't', operation: 'merge' }));
+    a.get('/status-200', (c) => statusResponse(c, { ok: true }, 200, { source: 't', operation: 'op' }));
     a.get('/refuse', (c) => refusalResponse(c, 'wrong_party', { not_found: 404, wrong_party: 403 }));
     a.get('/refuse-unmapped', (c) => refusalResponse(c, 'weird', { not_found: 404 }, { field: 'x' }));
     const env = { CORS_ORIGINS: '' };
@@ -122,6 +140,49 @@ describe('errorHandler + failResponse', () => {
     const client = await a.request('/catch-404');
     expect(client.status).toBe(404);
     expect(await client.json()).toEqual({ error: "Thing '1' not found", sourceFileKey: 'k' });
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it('a thrown InternalError keeps its body and is reported with its cause', async () => {
+    const res = await app().request('/throw-internal');
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Failed to create user' });
+    expect(sink).toHaveBeenCalledTimes(1);
+    const record = sink.mock.calls[0]![0] as { message: string; handled: boolean; context: { cause?: { message?: string } } };
+    expect(record).toMatchObject({ message: 'Failed to create user', handled: false });
+    expect(record.context.cause?.message).toBe('insert returned no row');
+  });
+
+  it('failResponse with an InternalError keeps the authored body and reports the cause', async () => {
+    const res = await app().request('/catch-internal');
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Processing failed' });
+    const record = sink.mock.calls[0]![0] as { handled: boolean; source: string; context: { logMessage?: string; cause?: { message?: string } } };
+    expect(record).toMatchObject({ handled: true, source: 't' });
+    expect(record.context).toMatchObject({ logMessage: 'webhook', cause: { message: 'db down' } });
+  });
+
+  it('reportServerError reports without rendering, for protocol-shaped bodies', async () => {
+    const res = await app().request('/rpc-500');
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ jsonrpc: '2.0', error: { code: -32603, message: 'boom' } });
+    expect(sink).toHaveBeenCalledWith(expect.objectContaining({ message: 'boom', handled: true, operation: 'rpc' }));
+  });
+
+  it('statusResponse renders body and status as given and reports only a 5xx, with its cause', async () => {
+    const a = app();
+    const server = await a.request('/status-503');
+    expect(server.status).toBe(503);
+    expect(await server.json()).toEqual({ error: 'Mailbox unreachable', code: 'upstream' });
+    expect(sink).toHaveBeenCalledTimes(1);
+    const record = sink.mock.calls[0]![0] as { message: string; handled: boolean; operation: string; context: { cause?: { message?: string } } };
+    expect(record).toMatchObject({ message: 'Mailbox unreachable', handled: true, operation: 'mailbox' });
+    expect(record.context.cause?.message).toBe('ECONNRESET');
+    sink.mockReset();
+    const client = await a.request('/status-409');
+    expect(client.status).toBe(409);
+    expect(await client.json()).toEqual({ error: 'Already merged' });
+    expect((await a.request('/status-200')).status).toBe(200);
     expect(sink).not.toHaveBeenCalled();
   });
 

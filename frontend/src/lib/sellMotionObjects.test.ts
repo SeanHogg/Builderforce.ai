@@ -70,6 +70,29 @@ describe('sell-motion vocabulary', () => {
     expect(derived.totalCents).toBeUndefined();
     expect(derived.subtotalCents).toBeUndefined();
   });
+
+  /**
+   * A worded derivation returns a verdict DESCRIPTOR (so the card can translate it), and
+   * the model's snapshot formats that descriptor in English — the model reads the same
+   * sentence it always did, never the descriptor.
+   */
+  it('hands the model an English sentence for a worded derivation', () => {
+    const overdue = specDerivedValues('mutualActionPlan', {
+      milestones: [
+        { title: 'Security review', dueAtISO: '2020-01-01', sellerOwner: 'Sam', buyerOwner: '', state: 'pending' },
+        { title: 'Contract', dueAtISO: '2999-01-01', sellerOwner: 'Sam', buyerOwner: 'Jo', state: 'pending' },
+      ],
+    });
+    expect(overdue.planRisk).toBe('At risk — 1 overdue, 1 with no owner on the buyer\'s side.');
+
+    const packet = specDerivedValues('trustPacket', {
+      questionnaire: [
+        { question: 'SSO?', answer: 'Yes', evidence: '', state: 'answered' },
+        { question: 'Pen test?', answer: '', evidence: '', state: 'gap' },
+      ],
+    });
+    expect(packet.openGaps).toBe('2 (1 gap, 1 unevidenced)');
+  });
 });
 
 describe('quote arithmetic', () => {

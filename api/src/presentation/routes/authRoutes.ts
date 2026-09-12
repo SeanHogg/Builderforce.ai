@@ -1,3 +1,4 @@
+import { InternalError } from '../../domain/shared/errors';
 import { Hono, type Context } from 'hono';
 import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
@@ -399,7 +400,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       .returning({ id: privacyRequests.id });
 
     if (!created) {
-      return c.json({ error: 'Failed to create privacy request' }, 500);
+      throw new InternalError('Failed to create privacy request');
     }
 
     return c.json({ ok: true, id: created.id });
@@ -730,7 +731,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       })
       .returning();
 
-    if (!created) return c.json({ error: 'Failed to create user' }, 500);
+    if (!created) throw new InternalError('Failed to create user');
 
     const referralCode = typeof body.referralCode === 'string' ? body.referralCode.trim().toUpperCase().slice(0, 32) : '';
     if (referralCode) {
@@ -1149,7 +1150,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       })
       .where(eq(users.id, userId))
       .returning();
-    if (!row) return c.json({ error: 'Failed to update account type' }, 500);
+    if (!row) throw new InternalError('Failed to update account type');
 
     // Picking Hired provisions the same for-hire profile stub the register path creates.
     if (accountType === 'freelancer') {

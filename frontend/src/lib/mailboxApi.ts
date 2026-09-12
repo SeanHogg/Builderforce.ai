@@ -127,26 +127,51 @@ export function mailboxFilterQuery(filter: MailboxFilter = {}): string {
   return query ? `?${query}` : '';
 }
 
+/** One clause of what a filter selects — data, so each surface words it in its
+ *  own reader's language. `since`/`before` carry a `YYYY-MM-DD` day. */
+export type MailboxFilterPart =
+  | { kind: 'unread' }
+  | { kind: 'attachments' }
+  | { kind: 'from' | 'subject' | 'matching' | 'since' | 'before'; value: string };
+
 /**
- * A one-line, human description of what a filter selects.
+ * What a filter selects, as structured parts (empty = all recent mail).
  *
- * Used as the inbox tile's subtitle. A tile labelled only "Inbox" is a lie once
+ * The inbox tile shows this, translated. A tile labelled only "Inbox" is a lie once
  * a filter is applied — the reader has no way to tell a filtered view from the
  * whole mailbox, and would take "3 messages" to mean they have three emails.
+ * Parts rather than a sentence because the tile's data is persisted: a sentence
+ * written into it would stay in the locale of whoever created the tile.
  */
+export function mailboxFilterParts(filter: MailboxFilter = {}): MailboxFilterPart[] {
+  const parts: MailboxFilterPart[] = [];
+  if (filter.unread) parts.push({ kind: 'unread' });
+  if (filter.from?.trim()) parts.push({ kind: 'from', value: filter.from.trim() });
+  if (filter.subject?.trim()) parts.push({ kind: 'subject', value: filter.subject.trim() });
+  if (filter.q?.trim()) parts.push({ kind: 'matching', value: filter.q.trim() });
+  if (filter.hasAttachments) parts.push({ kind: 'attachments' });
+  if (filter.after) parts.push({ kind: 'since', value: filter.after.slice(0, 10) });
+  if (filter.before) parts.push({ kind: 'before', value: filter.before.slice(0, 10) });
+  return parts;
+}
+
+/** The English one-liner a MODEL reads (a canvas tool result). A person's surface
+ *  renders {@link mailboxFilterParts} through its translations instead. */
 export function describeMailboxFilter(filter: MailboxFilter = {}): string {
-  const parts: string[] = [];
-  if (filter.unread) parts.push('Unread');
-  if (filter.from?.trim()) parts.push(`from ${filter.from.trim()}`);
-  if (filter.subject?.trim()) parts.push(`subject “${filter.subject.trim()}”`);
-  if (filter.q?.trim()) parts.push(`matching “${filter.q.trim()}”`);
-  if (filter.hasAttachments) parts.push('with attachments');
-  if (filter.after) parts.push(`since ${filter.after.slice(0, 10)}`);
-  if (filter.before) parts.push(`before ${filter.before.slice(0, 10)}`);
+  const parts = mailboxFilterParts(filter).map((part) => {
+    switch (part.kind) {
+      case 'unread': return 'Unread';
+      case 'attachments': return 'with attachments';
+      case 'from': return `from ${part.value}`;
+      case 'subject': return `subject “${part.value}”`;
+      case 'matching': return `matching “${part.value}”`;
+      case 'since': return `since ${part.value}`;
+      case 'before': return `before ${part.value}`;
+    }
+  });
   if (parts.length === 0) return 'All recent mail';
-  // Capitalise only when "Unread" did not already lead.
   const text = parts.join(', ');
-  return filter.unread ? text : text.charAt(0).toUpperCase() + text.slice(1);
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /**

@@ -19,6 +19,7 @@ import { formatDuration } from '@/lib/duration';
 import { dominantLane, laneOccupancy } from '@/lib/laneOccupancy';
 import { LifecycleSwimlane } from '@/components/charts/LifecycleSwimlane';
 import { faultMessage } from '@/lib/apiClient';
+import { toneColor, type StatusTone } from '@/lib/statusTone';
 
 /**
  * TicketLifecyclePanel — the per-ticket AUTONOMY PROOF.
@@ -44,39 +45,29 @@ import { faultMessage } from '@/lib/apiClient';
 const DRAWER_STACK_BASE = 10010;
 
 /**
- * The visual vocabulary. `agent` = autonomy did it, `accent` = a person did it — that
- * one contrast is what the whole panel is trying to communicate, so it is applied
- * consistently to tiles, event dots and the banner. Accents are layered on
- * `color-mix` fills so both themes get a legible tint (same approach as the audit
- * trail); every base colour is a theme token.
+ * The visual vocabulary — the shared status tones. `success` = autonomy did it,
+ * `accent` = a person did it — that one contrast is what the whole panel is trying to
+ * communicate, so it is applied consistently to tiles, event dots and the banner.
+ * Ink is the tone's `text` rendering; fills are `color-mix` tints of its `solid` mark
+ * so both themes get a legible wash (same approach as the audit trail).
  */
-type Tone = 'agent' | 'accent' | 'warn' | 'danger' | 'muted';
-
-const TONE_COLOR: Record<Tone, string> = {
-  agent: 'var(--success)',
-  accent: 'var(--coral-bright)',
-  warn: 'var(--warning)',
-  danger: 'var(--error)',
-  muted: 'var(--text-muted)',
-};
-
-const tint = (tone: Tone, pct: number): string =>
-  `color-mix(in srgb, ${TONE_COLOR[tone]} ${pct}%, transparent)`;
+const tint = (tone: StatusTone, pct: number): string =>
+  `color-mix(in srgb, ${toneColor(tone, 'solid')} ${pct}%, transparent)`;
 
 /** Event kind → glyph + default tone. Lane moves are re-toned per actor below. */
-const KIND_STYLE: Record<LifecycleEventKind, { glyph: string; tone: Tone }> = {
-  created:                  { glyph: '✚', tone: 'muted' },
-  lane_moved:               { glyph: '→', tone: 'agent' },
+const KIND_STYLE: Record<LifecycleEventKind, { glyph: string; tone: StatusTone }> = {
+  created:                  { glyph: '✚', tone: 'neutral' },
+  lane_moved:               { glyph: '→', tone: 'success' },
   run_dispatched:           { glyph: '▶', tone: 'accent' },
-  run_completed:            { glyph: '✔', tone: 'agent' },
+  run_completed:            { glyph: '✔', tone: 'success' },
   run_failed:               { glyph: '✖', tone: 'danger' },
-  autorun_dispatched:       { glyph: '⚡', tone: 'agent' },
-  autorun_skipped:          { glyph: '⊘', tone: 'warn' },
+  autorun_dispatched:       { glyph: '⚡', tone: 'success' },
+  autorun_skipped:          { glyph: '⊘', tone: 'warning' },
   autorun_error:            { glyph: '⚠', tone: 'danger' },
-  autorun_awaiting_approval:{ glyph: '⏳', tone: 'warn' },
+  autorun_awaiting_approval:{ glyph: '⏳', tone: 'warning' },
   // Not a failure and not progress — the run existed but was not advancing.
-  run_lifecycle:            { glyph: '⏸', tone: 'warn' },
-  role_event:               { glyph: '◆', tone: 'muted' },
+  run_lifecycle:            { glyph: '⏸', tone: 'warning' },
+  role_event:               { glyph: '◆', tone: 'neutral' },
 };
 
 /** Which banner a verdict earns. PURE, and ordered strictly — the first branch that
@@ -84,19 +75,19 @@ const KIND_STYLE: Record<LifecycleEventKind, { glyph: string; tone: Tone }> = {
 interface Banner {
   /** Message key under `ticketLifecycle.verdict`. */
   key: string;
-  tone: Tone;
+  tone: StatusTone;
   values: Record<string, number>;
 }
 
 export function verdictBanner(v: TicketAutonomyVerdict): Banner {
   const totalHops = v.autonomousHops + v.humanHops;
   // The only unqualified "yes": terminal lane, zero human hops.
-  if (v.fullyAutonomous) return { key: 'fullyAutonomous', tone: 'agent', values: { hops: v.autonomousHops } };
+  if (v.fullyAutonomous) return { key: 'fullyAutonomous', tone: 'success', values: { hops: v.autonomousHops } };
   // Nothing ever moved it — say that before making claims about who moved it.
-  if (totalHops === 0) return { key: 'noMovement', tone: v.stalled ? 'warn' : 'muted', values: {} };
+  if (totalHops === 0) return { key: 'noMovement', tone: v.stalled ? 'warning' : 'neutral', values: {} };
   if (v.progressedAutonomously && !v.reachedTerminal) {
     return v.stalled
-      ? { key: 'partialStalled', tone: 'warn', values: { hops: v.autonomousHops } }
+      ? { key: 'partialStalled', tone: 'warning', values: { hops: v.autonomousHops } }
       : { key: 'partialRunning', tone: 'accent', values: { hops: v.autonomousHops } };
   }
   if (v.autonomousHops === 0) return { key: 'humanDriven', tone: 'accent', values: { hops: v.humanHops } };
@@ -227,14 +218,14 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
   );
   const dominant = useMemo(() => dominantLane(occupancy), [occupancy]);
 
-  const tiles: Array<{ key: string; value: number; tone: Tone; hint?: string }> = verdict
+  const tiles: Array<{ key: string; value: number; tone: StatusTone; hint?: string }> = verdict
     ? [
-      { key: 'autonomousHops', value: verdict.autonomousHops, tone: 'agent', hint: t('stats.autonomousHopsHint') },
+      { key: 'autonomousHops', value: verdict.autonomousHops, tone: 'success', hint: t('stats.autonomousHopsHint') },
       { key: 'humanHops', value: verdict.humanHops, tone: 'accent', hint: t('stats.humanHopsHint') },
-      { key: 'runsDispatched', value: verdict.runsDispatched, tone: 'muted' },
-      { key: 'runsCompleted', value: verdict.runsCompleted, tone: verdict.runsCompleted > 0 ? 'agent' : 'muted' },
-      { key: 'runsFailed', value: verdict.runsFailed, tone: verdict.runsFailed > 0 ? 'danger' : 'muted' },
-      { key: 'backwardHops', value: verdict.backwardHops, tone: verdict.backwardHops > 0 ? 'warn' : 'muted', hint: t('stats.backwardHopsHint') },
+      { key: 'runsDispatched', value: verdict.runsDispatched, tone: 'neutral' },
+      { key: 'runsCompleted', value: verdict.runsCompleted, tone: verdict.runsCompleted > 0 ? 'success' : 'neutral' },
+      { key: 'runsFailed', value: verdict.runsFailed, tone: verdict.runsFailed > 0 ? 'danger' : 'neutral' },
+      { key: 'backwardHops', value: verdict.backwardHops, tone: verdict.backwardHops > 0 ? 'warning' : 'neutral', hint: t('stats.backwardHopsHint') },
     ]
     : [];
 
@@ -302,7 +293,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                   <span
                     style={{
                       fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                      color: TONE_COLOR.accent, background: tint('accent', 14),
+                      color: toneColor('accent'), background: tint('accent', 14),
                       border: `1px solid ${tint('accent', 34)}`, whiteSpace: 'nowrap',
                     }}
                   >
@@ -318,7 +309,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
             {/* A manager grooming card is NOT executable by design, so "it never ran"
                 is the intended behaviour and must never read as an autonomy failure. */}
             {verdict.origin === 'manager_card' && (
-              <div style={{ ...cardStyle, background: tint('muted', 8) }}>
+              <div style={{ ...cardStyle, background: tint('neutral', 8) }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                   {t('verdict.managerCardTitle')}
                 </div>
@@ -334,7 +325,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                 dispatch and how deep the failure streak is are what a fix changes. */}
             {verdict.stalled && (
               <div
-                style={{ ...cardStyle, background: tint('warn', 12), borderColor: tint('warn', 38) }}
+                style={{ ...cardStyle, background: tint('warning', 12), borderColor: tint('warning', 38) }}
                 title={verdict.stallText ?? undefined}
               >
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
@@ -350,7 +341,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                         <dt style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{label}</dt>
                         <dd style={{
                           margin: 0, fontSize: 12, fontWeight: 600, overflowWrap: 'anywhere',
-                          color: alarming ? TONE_COLOR.danger : 'var(--text-primary)',
+                          color: alarming ? toneColor('danger') : 'var(--text-primary)',
                         }}>
                           {value}
                         </dd>
@@ -376,7 +367,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                   {data.failures.map((f) => (
                     <div key={f.signature} style={{ ...cardStyle, borderColor: tint('danger', 30), background: tint('danger', 8) }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: TONE_COLOR.danger }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: toneColor('danger') }}>
                           {t('failures.runs', { count: f.runs })}
                         </span>
                         <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
@@ -425,7 +416,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                       <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
                         {d.submittedBy}
                       </span>
-                      <span style={{ marginLeft: 'auto', fontSize: 11.5, color: d.failed > 0 ? TONE_COLOR.danger : 'var(--text-secondary)' }}>
+                      <span style={{ marginLeft: 'auto', fontSize: 11.5, color: d.failed > 0 ? toneColor('danger') : 'var(--text-secondary)' }}>
                         {t('dispatchers.counts', { runs: d.runs, completed: d.completed, failed: d.failed })}
                       </span>
                     </li>
@@ -472,7 +463,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                     style={{ ...cardStyle, padding: '10px 12px', borderColor: tint(tile.tone, 30), background: tint(tile.tone, 8) }}
                     {...(tile.hint ? { title: tile.hint } : {})}
                   >
-                    <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1, color: TONE_COLOR[tile.tone] }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1, color: toneColor(tile.tone) }}>
                       {tile.value}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>
@@ -530,8 +521,8 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                   {data.events.map((e, i) => {
                     const style = KIND_STYLE[e.kind] ?? KIND_STYLE.role_event;
                     // A lane move is re-toned by WHO made it: that split is the evidence.
-                    const tone: Tone = e.kind === 'lane_moved'
-                      ? (e.actorKind === 'human' ? 'accent' : 'agent')
+                    const tone: StatusTone = e.kind === 'lane_moved'
+                      ? (e.actorKind === 'human' ? 'accent' : 'success')
                       : style.tone;
                     const glyph = e.kind === 'lane_moved' && e.isBackward === true ? '↩' : style.glyph;
                     const lane = e.fromStatus
@@ -550,7 +541,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                             style={{
                               width: 26, height: 26, borderRadius: 'var(--radius-full)', flexShrink: 0,
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 12, lineHeight: 1, color: TONE_COLOR[tone],
+                              fontSize: 12, lineHeight: 1, color: toneColor(tone),
                               background: tint(tone, 14),
                               border: `1px solid ${tint(tone, 40)}`,
                             }}
@@ -568,8 +559,8 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                             {e.isBackward === true && (
                               <span style={{
                                 fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-full)',
-                                color: TONE_COLOR.warn, background: tint('warn', 14),
-                                border: `1px solid ${tint('warn', 34)}`, whiteSpace: 'nowrap',
+                                color: toneColor('warning'), background: tint('warning', 14),
+                                border: `1px solid ${tint('warning', 34)}`, whiteSpace: 'nowrap',
                               }}>
                                 {t('timeline.backward')}
                               </span>
@@ -581,7 +572,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
 
                           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, overflowWrap: 'anywhere' }}>
                             {/* Actor first: the panel is about attribution. */}
-                            <span style={{ color: TONE_COLOR[tone], fontWeight: 600 }}>{actorLabel(e.actorKind)}</span>
+                            <span style={{ color: toneColor(tone), fontWeight: 600 }}>{actorLabel(e.actorKind)}</span>
                             {e.actorName ? ` · ${e.actorName}` : ''}
                             {lane ? ` · ${lane}` : ''}
                             {e.executionId != null ? ` · ${t('timeline.run', { id: e.executionId })}` : ''}

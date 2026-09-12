@@ -28,6 +28,7 @@
  * chooser actually saw — not to any other read in the session's history.
  */
 
+import { asJsonRecord } from '../../domain/shared/json';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { creationOutcomeEvents } from '../../infrastructure/database/schema';
@@ -117,15 +118,11 @@ function toIso(value: Date | string): string {
   return Number.isNaN(d.getTime()) ? String(value) : d.toISOString();
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
 function parseRecommendations(metadata: Record<string, unknown>): ProofJourneyRecommendation[] {
   const raw = metadata.recommendations;
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((entry) => asRecord(entry))
+    .map((entry) => asJsonRecord(entry))
     .filter((entry) => typeof entry.key === 'string')
     .map((entry) => ({
       key: entry.key as string,
@@ -290,7 +287,7 @@ export async function buildProofJourney(db: Db, args: { tenantId: number; sessio
     unit: row.unit ?? null,
     artifactId: row.artifactId ?? null,
     durationMs: row.durationMs ?? null,
-    metadata: asRecord(row.metadata),
+    metadata: asJsonRecord(row.metadata),
     occurredAt: toIso(row.occurredAt),
   }));
 

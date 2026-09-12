@@ -16,6 +16,7 @@
  *   POST /seed         — initialize the project's base model (manager, JWT only)
  *   PATCH /mode        — connected | offline-frozen (manager, JWT only)
  */
+import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and } from 'drizzle-orm';
@@ -610,7 +611,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const result = await reindexProjectEvermindRecall(c.env as Env, tenantId, projectId);
-    return c.json(result.body, result.status as never);
+    return statusResponse(c, result.body, result.status, { source: 'presentation/routes/projectEvermindRoutes.ts', operation: 'reindexRecall' });
   });
 
   /**
@@ -697,7 +698,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const result = await flushProjectEvermind(c.env as Env, tenantId, projectId);
-    return c.json(result.body, result.status as never);
+    return statusResponse(c, result.body, result.status, { source: 'presentation/routes/projectEvermindRoutes.ts', operation: 'flush' });
   });
 
   return router;
