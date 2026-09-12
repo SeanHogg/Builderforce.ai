@@ -4,9 +4,12 @@
 import { useTranslations } from 'next-intl';
 import type { Formatter } from '@/i18n/format';
 import {
-  EMPTY_SPEC_BOARD, formatSpecVerdict, isSpecVerdictResult, specFieldValue, specObjectNamespace, specObjectSpec,
-  type SpecDeriveBoard, type SpecField, type SpecVerdictResult, type SpecVerdictTranslate,
+  EMPTY_SPEC_BOARD, specFieldValue, specObjectNamespace, specObjectSpec,
+  type SpecDeriveBoard, type SpecField,
 } from '@/lib/specObjects';
+import {
+  formatSpecVerdict, isSpecVerdictResult, type SpecVerdictResult, type SpecVerdictTranslate,
+} from '@/lib/specVerdict';
 // The vocabularies register themselves as an import SIDE EFFECT, so this component only
 // renders a kind whose set has already been imported by SOMEONE. In the app that
 // happened by accident — `CreationNode` pulls in `creationObjectRegistry`, which pulls in

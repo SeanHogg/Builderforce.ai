@@ -16,7 +16,7 @@ import { pmoFocusDomId } from '@seanhogg/builderforce-brain-embedded';
 import { ObjectiveCard } from './ObjectiveCard';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { windowState, windowStateLabelKey } from '@/lib/pm/planning';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * PMO management surface — the single place portfolios, initiatives, projects AND
  * OKR objectives live together (the OKRs tab was merged in so an objective sits
@@ -54,6 +54,7 @@ type DragItem = { kind: 'initiative' | 'objective'; id: string };
 export interface PmoFocus { kind: 'objective' | 'initiative' | 'portfolio'; id: string }
 
 export function PmoStructure({ tree, onChange, focus }: { tree: PmoTree; onChange: () => void; focus?: PmoFocus | null }) {
+  const errorMessage = useErrorMessage();
   /** True for the one card the URL points at, so exactly one ring can be lit. */
   const isFocused = (kind: PmoFocus['kind'], id: string) => focus?.kind === kind && focus.id === id;
   const t = useTranslations('pmo');
@@ -93,7 +94,7 @@ export function PmoStructure({ tree, onChange, focus }: { tree: PmoTree; onChang
     setBusy(true);
     setErr(null);
     try { await fn(); onChange(); reloadObjectives(); }
-    catch (e) { setErr(faultMessage(e)); }
+    catch (e) { setErr(errorMessage(e)); }
     finally { setBusy(false); }
   };
 

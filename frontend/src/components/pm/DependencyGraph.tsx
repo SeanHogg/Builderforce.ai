@@ -21,7 +21,7 @@ import type { Canvas3DMove } from '@/components/canvas/Canvas3DView';
 // The cast keeps the component's node-type generic, which `dynamic()` erases.
 const Canvas3DView = dynamic(() => import('@/components/canvas/Canvas3DView').then((m) => m.Canvas3DView), { ssr: false }) as typeof import('@/components/canvas/Canvas3DView').Canvas3DView;
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
-import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/lib/canvas/canvas3d';
 import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';
 import { cycleEdges, edgeKey, layoutDag, type GraphEdgeRef } from '@/lib/graphLayout';
 import { usePmScope } from '@/lib/pm/scope';
@@ -32,7 +32,7 @@ import { statusColor } from '@/lib/statusTone';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Task dependency / epic-flow graph. Nodes are tasks; solid edges are precedence
  * dependencies (predecessor → successor); dashed edges are epic → child
@@ -74,6 +74,7 @@ function precedenceRefs(deps: DependencyEdge[]): GraphEdgeRef[] {
 
 /** The dependency graph for ONE project. `readOnly` hides the editor (rollup use). */
 function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number; readOnly?: boolean }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('pm');
   const statusLabel = useTaskStatusLabel();
   // The app's own confirmation, not the browser's: `window.confirm` is blocked in
@@ -196,7 +197,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       setPredId(''); setSuccId('');
       reload();
     } catch (e) {
-      setFormError(faultMessage(e));
+      setFormError(errorMessage(e));
     } finally {
       setBusy(false);
     }

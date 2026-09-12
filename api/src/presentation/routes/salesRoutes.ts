@@ -7,11 +7,7 @@ import type { Env, HonoEnv } from '../../env';
 import { TenantService } from '../../application/tenant/TenantService';
 import { commissionPercentToBps } from '../../application/sales/salesPolicy';
 import { SalesWorkspaceService, type SalesWorkspaceDb } from '../../application/sales/SalesWorkspaceService';
-import {
-  buildSalesReport, earnedCommissionCents, isSalesReportWindow, recentReferrals, windowStart,
-} from '../../application/sales/salesReports';
-import { PayoutAccountService } from '../../application/payouts/PayoutAccountService';
-import { userAccount } from '../../application/kernel/ledgerAccount';
+import { isSalesReportWindow } from '../../application/sales/salesReports';
 
 const STAGES = new Set(['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost']);
 const CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'active', 'complete']);
@@ -192,21 +188,24 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
    *
    * A second endpoint for the admin flavour would be a second definition of
    * "conversion rate" waiting to disagree with this one.
+   *
+   * The person-level web token names no workspace, so the population is every
+   * workspace, keyed by the associate's own attribution — an associate sees every
+   * referral attributed to them, and the superadmin aggregate spans the programme.
    */
   r.get('/reports', async (c) => {
     const current = await viewer(c);
     if (!current) return c.json({ error: 'Authentication required' }, 401);
     const requested = c.req.query('associateId');
-    // A web token carries no workspace, so this is usually null: the report then
-    // has no workspace-scoped referral facts, rather than querying with undefined.
     const tenantId = optionalTenantId(c);
-    if (current.isSuperadmin) {
-      const report = await sales.report(tenantId, requested || null);
-      return c.json({ report, scope: requested ? 'associate' : 'aggregate' });
+    if (current.isSuperadmin && !requested) {
+      return c.json({ report: await sales.report(c.env as Env, tenantId, null), scope: 'aggregate' });
     }
+    // `owner` is the one authorisation: yourself, or a superadmin opening a sales
+    // associate. Nobody else's attribution is reachable through `associateId`.
     const target = await owner(c);
     if (!target) return c.json({ error: 'Sales workspace access required' }, 403);
-    return c.json({ report: await sales.report(tenantId, target.id), scope: 'associate' });
+    return c.json({ report: await sales.report(c.env as Env, tenantId, target.id), scope: 'associate' });
   });
 
   /**
@@ -219,20 +218,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   r.get('/payouts', async (c) => {
     const target = await owner(c);
     if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const tenantId = optionalTenantId(c);
-    // Payout accounts and ledger rows are workspace-scoped; with no workspace there
-    // are none, and the balance is the honest zero rather than a NULL-tenant read.
-    if (tenantId == null) {
-      return c.json({ balance: { earnedCents: 0, paidCents: 0, availableCents: 0 }, payouts: [], accounts: [] });
-    }
-    const payouts = new PayoutAccountService(db, c.env as Env);
-    const earned = await earnedCommissionCents(db, tenantId, target.id);
-    const [balance, history, accounts] = await Promise.all([
-      payouts.balance(tenantId, userAccount(target.id), earned),
-      payouts.payouts(tenantId, userAccount(target.id)),
-      payouts.list(tenantId, target.id),
-    ]);
-    return c.json({ balance, payouts: history, accounts });
+    return c.json(await sales.payouts(c.env as Env, optionalTenantId(c), target.id));
   });
 
   /** GET /leads — referrals that signed up inside a window (default: this month). */
@@ -241,10 +227,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     if (!target) return c.json({ error: 'Forbidden' }, 403);
     const requested = c.req.query('window');
     const window = isSalesReportWindow(requested) ? requested : 'month';
-    return c.json({
-      window,
-      leads: await recentReferrals(db, optionalTenantId(c), target.id, windowStart(window, new Date())),
-    });
+    return c.json(await sales.leads(c.env as Env, optionalTenantId(c), target.id, window));
   });
 
   r.post('/notes', async (c) => {

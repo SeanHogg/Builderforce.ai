@@ -51,7 +51,7 @@ import {
   experienceKey, projectLengthKey, specialtyKey,
 } from '@/components/talent/jobVocabulary';
 import { ScreeningQuestionsEditor, type ScreeningQuestionDraft } from '@/components/talent/ScreeningQuestionsEditor';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -141,6 +141,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 export default function PublishGigClient() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('publishGig');
   // The posting-type / engagement-type / visibility vocabularies already have labels in
   // the `gigs` namespace (the board's publish modal renders the same three lists), and
@@ -173,8 +174,8 @@ export default function PublishGigClient() {
         setProjects(list);
         setProjectId((current) => current ?? (list[0] ? Number(list[0].id) : null));
       })
-      .catch((e: unknown) => setError(faultMessage(e)));
-  }, []);
+      .catch((e: unknown) => setError(errorMessage(e)));
+  }, [errorMessage]);
 
   const loadTasks = useCallback(async () => {
     if (projectId == null) { setTasks([]); setLoading(false); return; }
@@ -183,11 +184,11 @@ export default function PublishGigClient() {
     try {
       setTasks(await tasksApi.list(projectId));
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, errorMessage]);
 
   useEffect(() => { void loadTasks(); }, [loadTasks]);
 
@@ -228,7 +229,7 @@ export default function PublishGigClient() {
       });
       setPublished((prev) => ({ ...prev, [task.id]: result.jobId }));
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setPublishing(null);
     }

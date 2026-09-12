@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useFormat } from '@/i18n/useFormat';
 import { consentApi, DOCUMENT_KINDS, type ConsentAcceptance, type DocumentKind } from '@/lib/consentApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * The person's own standing against every published legal document kind: the
@@ -12,6 +12,7 @@ import { faultMessage } from '@/lib/apiClient';
  * it mounts under /security beside the other personal panels with no props.
  */
 export function LegalAgreementsPanel() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('security.agreements');
   const fmt = useFormat();
   const [acceptances, setAcceptances] = useState<ConsentAcceptance[] | null>(null);
@@ -26,9 +27,9 @@ export function LegalAgreementsPanel() {
         setAcceptances(mine);
         setOutstanding(new Set(owed.outstanding));
       })
-      .catch((e: unknown) => { if (live) setError(faultMessage(e) ?? t('error')); });
+      .catch((e: unknown) => { if (live) setError(errorMessage(e) ?? t('error')); });
     return () => { live = false; };
-  }, [t]);
+  }, [t, errorMessage]);
 
   const latestByKind = new Map<string, ConsentAcceptance>();
   for (const row of acceptances ?? []) {

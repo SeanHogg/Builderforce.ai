@@ -20,16 +20,9 @@ import PageContainer from '@/components/PageContainer';
 import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import { Button } from '@/components/ui';
 import { RoleGate } from '@/components/RoleGate';
-import {
-  getStoredUser,
-  getStoredTenant,
-  getStoredWebToken,
-  getLinkedAccounts,
-  unlinkProvider,
-  getOAuthUrl,
-  getMe,
-  updateMyPersonality,
-} from '@/lib/auth';
+import { getStoredUser, getStoredTenant, getStoredWebToken } from '@/lib/auth';
+import { getOAuthUrl } from '@/lib/auth/credentials';
+import { profileApi } from '@/lib/auth/session';
 import ProfileIdentityCard from '@/components/profile/ProfileIdentityCard';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import PersonalitySummary from '@/components/PersonalitySummary';
@@ -42,7 +35,7 @@ import AgentExecutionControl from '@/components/settings/AgentExecutionControl';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 import NavigationFeaturesSettings from '@/components/settings/NavigationFeaturesSettings';
-import { faultMessage, faultText } from '@/lib/apiClient';
+import { faultText } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Self-gating nav link to the API Keys page. Per product rule we don't hide the
@@ -120,13 +113,12 @@ export default function SettingsClient() {
   const [personalityNotice, setPersonalityNotice] = useState('');
 
   useEffect(() => {
-    const token = getStoredWebToken();
-    if (!token) { setLoadingAccounts(false); return; }
-    getLinkedAccounts(token)
+    if (!getStoredWebToken()) { setLoadingAccounts(false); return; }
+    profileApi.linkedAccounts()
       .then(({ accounts, hasPassword: hp }) => { setLinkedAccounts(accounts); setHasPassword(hp); })
-      .catch((e: Error) => setAccountsError(faultMessage(e)))
+      .catch((e: Error) => setAccountsError(errorMessage(e)))
       .finally(() => setLoadingAccounts(false));
-    getMe(token)
+    profileApi.me()
       .then(({ psychometric }) => setPersonality(psychometric ?? undefined))
       .catch(() => { /* best-effort — the editor still lets the user set one */ });
 
@@ -136,7 +128,7 @@ export default function SettingsClient() {
     if (err === 'already_linked_other') {
       setConnectError(t('providerAlreadyLinked'));
     }
-  }, [t]);
+  }, [t, errorMessage]);
 
   const handleConnect = (providerId: string) => {
     const token = getStoredWebToken();
@@ -145,11 +137,10 @@ export default function SettingsClient() {
   };
 
   const handleUnlink = async (provider: string) => {
-    const token = getStoredWebToken();
-    if (!token) return;
+    if (!getStoredWebToken()) return;
     setUnlinking(provider);
     try {
-      await unlinkProvider(token, provider);
+      await profileApi.unlinkProvider(provider);
       setLinkedAccounts((prev) => prev.filter((a) => a.provider !== provider));
     } catch (e) {
       setAccountsError(errorMessage(e));
@@ -159,12 +150,11 @@ export default function SettingsClient() {
   };
 
   const savePersonality = async () => {
-    const token = getStoredWebToken();
-    if (!token) return;
+    if (!getStoredWebToken()) return;
     setPersonalitySaving(true);
     setPersonalityNotice('');
     try {
-      const saved = await updateMyPersonality(token, personality ?? null);
+      const saved = await profileApi.updatePersonality(personality ?? null);
       setPersonality(saved ?? undefined);
       // Invalidate the session-cached chat personality block so the new tone is
       // picked up on the next Brain message instead of only after a reload.

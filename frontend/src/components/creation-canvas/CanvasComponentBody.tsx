@@ -6,7 +6,7 @@
  * ── WHAT THIS IS ─────────────────────────────────────────────────────────────
  * The card renders the SAME component the app renders and the same one an
  * entrepreneur embeds in the product they publish: one declaration in
- * `lib/components/registry.ts`, addressed here by `componentId`. Not a preview,
+ * `components/widgets/registry.ts`, addressed here by `componentId`. Not a preview,
  * not a screenshot, not a second implementation drawn for the board — the live,
  * tenant-scoped surface, on the canvas.
  *
@@ -36,8 +36,8 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { getComponentForMount } from '@/lib/components/registry';
-import { useComponentLabel } from '@/lib/components/useComponentCatalog';
+import { getComponentForMount } from '@/components/widgets/registry';
+import { useComponentLabel } from '@/components/widgets/useComponentCatalog';
 import { ComponentScopeProvider } from '@/lib/components/scope';
 import { ComponentPicker } from '@/components/component-picker/ComponentPicker';
 import { ComponentChooseAction } from '@/components/component-picker/ComponentChooseAction';

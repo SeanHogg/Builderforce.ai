@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CreationNode } from './CreationNode';
 import { creationObjectAiContext, creationObjectDefinition, sanitizeCreationObjectPatch } from './creationObjectRegistry';
-import { CREATION_TEMPLATES } from './creationTemplates';
+import { CREATION_TEMPLATES } from '@/lib/templates/creationTemplates';
 import { canvasExportActionsFor } from './CanvasExportActions';
 import type { CreationNodeData } from './types';
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useFormat } from '@/i18n/useFormat';
 import { customerFeedbackApi, type CustomerFeedbackRow } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 type Status = CustomerFeedbackRow['status'];
 const STATUSES: Status[] = ['new', 'triaged', 'dismissed'];
@@ -14,6 +14,7 @@ const STATUSES: Status[] = ['new', 'triaged', 'dismissed'];
  * on it. Self-contained: it loads, filters and triages its own rows.
  */
 export function CustomerFeedbackInbox() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('feedback.voc');
   const fmt = useFormat();
   const [status, setStatus] = useState<Status>('new');
@@ -24,8 +25,8 @@ export function CustomerFeedbackInbox() {
   const load = useCallback(() => {
     customerFeedbackApi.list(status)
       .then((r) => { setRows(r.feedback ?? []); setError(null); })
-      .catch((e: unknown) => setError(faultMessage(e) ?? t('error')));
-  }, [status, t]);
+      .catch((e: unknown) => setError(errorMessage(e) ?? t('error')));
+  }, [status, t, errorMessage]);
   useEffect(() => { load(); }, [load]);
 
   const triage = async (row: CustomerFeedbackRow, next: Status) => {
@@ -34,7 +35,7 @@ export function CustomerFeedbackInbox() {
       await customerFeedbackApi.triage(row.id, { status: next });
       load();
     } catch (e: unknown) {
-      setError(faultMessage(e) ?? t('error'));
+      setError(errorMessage(e) ?? t('error'));
     } finally {
       setBusyId(null);
     }

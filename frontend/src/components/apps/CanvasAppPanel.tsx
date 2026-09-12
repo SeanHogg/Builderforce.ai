@@ -62,7 +62,7 @@ import {
 import { AppAddressField } from './AppAddressField';
 import { AppAddress, AppStatement } from './AppStatement';
 import styles from './appPanels.module.css';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CanvasAppPanelProps {
   /**
    * The SERVER session id. A local board passes null/undefined and this renders
@@ -80,6 +80,7 @@ export interface CanvasAppPanelProps {
 }
 
 export function CanvasAppPanel({ sessionId, onOpenChange }: CanvasAppPanelProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('canvas.app');
   const [state, setState] = useState<SessionAppState | null>(null);
   const [open, setOpen] = useState(false);
@@ -130,11 +131,11 @@ export function CanvasAppPanel({ sessionId, onOpenChange }: CanvasAppPanelProps)
       // next mount would make and there is no second version of the truth.
       setState(await embeddedAppsApi.sessionAppState(sessionId));
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [sessionId, address]);
+  }, [sessionId, address, errorMessage]);
 
   if (!sessionId || !state) return null;
 

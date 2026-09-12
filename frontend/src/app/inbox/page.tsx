@@ -1,7 +1,13 @@
 import { PhoneConsole } from '@/components/phone/PhoneConsole';
 import { InboxClient } from '@/components/inbox/InboxClient';
+import { routeTeaserMetadata } from '@/lib/routeTeaserMetadata';
 
 export const runtime = 'edge';
+
+/** The sitemap submits this URL from the teaser registry; see `routeTeaserMetadata`. */
+export async function generateMetadata() {
+  return routeTeaserMetadata('/inbox');
+}
 
 /**
  * `/inbox` — messaging, whichever wire it arrives on.

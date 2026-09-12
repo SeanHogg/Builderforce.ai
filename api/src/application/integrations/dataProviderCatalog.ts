@@ -26,21 +26,17 @@
  * `transport: 'http'` providers work end to end here.
  */
 
+// The field shape and its labels are ONE vocabulary shared with the legacy
+// connect forms — see credentialFields.ts.
+import { credentialField, type CredentialField } from './credentialFields';
+
 /** Which half of the catalog a provider belongs to. */
 export type ProviderFamily = 'data' | 'marketing' | 'enrichment';
 
 /** How the provider is reached from a Worker. See the transport note above. */
 export type ProviderTransport = 'http' | 'tcp';
 
-/** One credential input on the connect form. */
-export interface CredentialField {
-  key: string;
-  label: string;
-  /** `secret` fields are masked on read-back. */
-  secret: boolean;
-  required: boolean;
-  placeholder?: string;
-}
+export type { CredentialField } from './credentialFields';
 
 /** A concrete HTTP call, or a stated refusal. */
 export type ProviderRequest =
@@ -181,15 +177,9 @@ export function neonSqlRequest(connectionString: string, statement: string, para
 }
 
 /** Credential field presets, so 24 providers do not each re-describe "API key". */
-const API_KEY_FIELD: CredentialField = { key: 'apiKey', label: 'API key', secret: true, required: true };
-const DSN_FIELD: CredentialField = {
-  key: 'connectionString',
-  label: 'Connection string',
-  secret: true,
-  required: true,
-  placeholder: 'postgres://user:password@host/dbname',
-};
-const ACCESS_TOKEN_FIELD: CredentialField = { key: 'accessToken', label: 'Access token', secret: true, required: true };
+const API_KEY_FIELD: CredentialField = credentialField('apiKey');
+const DSN_FIELD: CredentialField = credentialField('connectionString', { placeholder: 'postgres://user:password@host/dbname' });
+const ACCESS_TOKEN_FIELD: CredentialField = credentialField('accessToken');
 
 /** A provider we can store + validate but not reach from this runtime. */
 function tcpProvider(
@@ -255,8 +245,8 @@ const SUPABASE: ProviderSpec = {
   family: 'data',
   transport: 'http',
   credentialFields: [
-    { key: 'projectUrl', label: 'Project URL', secret: false, required: true, placeholder: 'https://abc.supabase.co' },
-    { key: 'serviceKey', label: 'Service role key', secret: true, required: true },
+    credentialField('projectUrl', { secret: false, placeholder: 'https://abc.supabase.co' }),
+    credentialField('serviceKey'),
   ],
   operations: [
     { id: 'list-rows', label: 'List rows' },
@@ -331,7 +321,7 @@ const ELASTICSEARCH: ProviderSpec = {
   family: 'data',
   transport: 'http',
   credentialFields: [
-    { key: 'endpoint', label: 'Endpoint', secret: false, required: true, placeholder: 'https://my-cluster.es.io:9243' },
+    credentialField('endpoint', { secret: false, placeholder: 'https://my-cluster.es.io:9243' }),
     API_KEY_FIELD,
   ],
   operations: [
@@ -367,9 +357,9 @@ const CLICKHOUSE: ProviderSpec = {
   family: 'data',
   transport: 'http',
   credentialFields: [
-    { key: 'endpoint', label: 'HTTP endpoint', secret: false, required: true, placeholder: 'https://host:8443' },
-    { key: 'username', label: 'Username', secret: false, required: true },
-    { key: 'password', label: 'Password', secret: true, required: false },
+    credentialField('endpoint', { secret: false, placeholder: 'https://host:8443' }),
+    credentialField('username', { secret: false }),
+    credentialField('password', { required: false }),
   ],
   operations: [{ id: 'query', label: 'Run SQL' }],
   testOperation: 'query',
@@ -396,7 +386,7 @@ const BIGQUERY: ProviderSpec = {
   family: 'data',
   transport: 'http',
   credentialFields: [
-    { key: 'projectId', label: 'GCP project id', secret: false, required: true },
+    credentialField('projectId', { secret: false }),
     ACCESS_TOKEN_FIELD,
   ],
   operations: [
@@ -617,7 +607,7 @@ const MAILCHIMP: ProviderSpec = {
   label: 'Mailchimp',
   family: 'marketing',
   transport: 'http',
-  credentialFields: [{ ...API_KEY_FIELD, placeholder: 'xxxxxxxx-us21' }],
+  credentialFields: [credentialField('apiKey', { placeholder: 'xxxxxxxx-us21' })],
   operations: [
     { id: 'whoami', label: 'Check connection' },
     { id: 'list-audiences', label: 'List audiences' },
@@ -802,9 +792,9 @@ const SPECS: ProviderSpec[] = [
   tcpProvider('planetscale', 'PlanetScale', 'data'),
   tcpProvider('google_cloud_sql', 'Google Cloud SQL', 'data'),
   tcpProvider('snowflake', 'Snowflake', 'data', [
-    { key: 'account', label: 'Account identifier', secret: false, required: true },
-    { key: 'username', label: 'Username', secret: false, required: true },
-    { key: 'password', label: 'Password', secret: true, required: true },
+    credentialField('account', { secret: false }),
+    credentialField('username', { secret: false }),
+    credentialField('password'),
   ]),
   // marketing
   ...MARKETING_PROVIDER_SPECS.map(bearerMarketingProvider),

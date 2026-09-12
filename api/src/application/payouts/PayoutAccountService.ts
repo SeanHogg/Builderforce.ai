@@ -28,10 +28,13 @@
  * to keep in sync.
  */
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { connections, credentials, ledgerEntries } from '../../infrastructure/database/schema';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidatePersonPayouts, personPayoutsVersionKey } from './personPayoutsCache';
 import { credentialSecret, decryptCredentials, encryptCredentials } from '../integrations/credentialCrypto';
 import { bumpTaxReportVersion } from '../finance/taxCacheVersion';
 import { createPayout as createWebhookPayout, isPayoutsConfigured } from '../integrations/payments';
@@ -42,7 +45,7 @@ import {
   type PayoutResult,
 } from './payoutProviders';
 import { USD_CENTS } from '../kernel/denominations';
-import type { LedgerAccount } from '../kernel/ledgerAccount';
+import { userAccount, type LedgerAccount } from '../kernel/ledgerAccount';
 
 
 /**
@@ -89,6 +92,39 @@ export interface PayoutBalance {
   earnedCents: number;
   paidCents: number;
   availableCents: number;
+}
+
+/** Earned − paid, floored at zero. The ONE arithmetic, shared by the workspace
+ *  balance and the person-level one, so "available" cannot mean two things. */
+export function payoutBalance(earnedCents: number, paidCents: number): PayoutBalance {
+  return { earnedCents, paidCents, availableCents: Math.max(0, earnedCents - paidCents) };
+}
+
+/** Everything that has left a person's account, in every workspace. */
+export interface PersonPayoutLedger {
+  paidCents: number;
+  payouts: PayoutRecord[];
+}
+
+/**
+ * The `payout` rows on one account.
+ *
+ * `tenantId` null reads EVERY workspace, which is only honest for a PERSON: money
+ * follows the person (an associate referred into five workspaces has one bank
+ * account), and the access predicate is `account_ref = <that person>`. A workspace
+ * or partner account belongs to one tenant, so asking for it everywhere is a bug,
+ * and it throws rather than quietly reading another workspace's balance.
+ */
+function payoutRowsOf(tenantId: number | null, account: LedgerAccount): SQL | undefined {
+  if (tenantId == null && account.kind !== 'user') {
+    throw new Error(`A ${account.kind} account belongs to one workspace; it has no cross-workspace payouts`);
+  }
+  return and(
+    eq(ledgerEntries.accountKind, account.kind),
+    eq(ledgerEntries.accountRef, account.ref),
+    eq(ledgerEntries.entryKind, 'payout'),
+    eq(ledgerEntries.denomination, USD_CENTS),
+  );
 }
 
 /** The kernel capability that makes a `connections` row a payout destination. */
@@ -143,16 +179,16 @@ export class PayoutAccountService {
   constructor(private readonly db: Db, private readonly env: Env) {}
 
   /** Every destination this person has connected IN THIS WORKSPACE, default
-   *  first. Scoped to the tenant like every other connection: the row carries a
-   *  tenant-derived encryption key, so reading one from another workspace would
-   *  mean decrypting that workspace's credential here. */
-  async list(tenantId: number, userId: string): Promise<PayoutAccountView[]> {
+   *  first — or, with `tenantId` null, in every workspace (the person-level view:
+   *  the rows are the caller's own, `connections.user_id = <them>`). Listing is
+   *  safe across workspaces because `view` never opens a credential; anything that
+   *  DOES decrypt (`pay`) stays scoped to the tenant whose key sealed it. */
+  async list(tenantId: number | null, userId: string): Promise<PayoutAccountView[]> {
+    const own = and(eq(connections.userId, userId), eq(connections.capability, PAYOUT));
     const rows = await this.db.select().from(connections)
-      .where(and(
-        eq(connections.tenantId, tenantId),
-        eq(connections.userId, userId),
-        eq(connections.capability, PAYOUT),
-      ))
+      .where(tenantId == null
+        ? acrossTenants(connections, 'subject_own_rows', own)
+        : scopedToTenant(connections, tenantId, own))
       .orderBy(desc(IS_DEFAULT), desc(connections.createdAt));
     return rows.map(view);
   }
@@ -309,16 +345,14 @@ export class PayoutAccountService {
     return blob as unknown as PayoutCredential;
   }
 
-  /** Money that has actually left THIS workspace, newest first. */
-  async payouts(tenantId: number, account: LedgerAccount, limit = 50): Promise<PayoutRecord[]> {
+  /** Money that has actually left THIS workspace, newest first. `tenantId` null =
+   *  every workspace, for a person's account only (see `payoutRowsOf`). */
+  async payouts(tenantId: number | null, account: LedgerAccount, limit = 50): Promise<PayoutRecord[]> {
+    const own = payoutRowsOf(tenantId, account);
     const rows = await this.db.select().from(ledgerEntries)
-      .where(and(
-        eq(ledgerEntries.tenantId, tenantId),
-        eq(ledgerEntries.accountKind, account.kind),
-        eq(ledgerEntries.accountRef, account.ref),
-        eq(ledgerEntries.entryKind, 'payout'),
-        eq(ledgerEntries.denomination, USD_CENTS),
-      ))
+      .where(tenantId == null
+        ? acrossTenants(ledgerEntries, 'subject_own_rows', own)
+        : scopedToTenant(ledgerEntries, tenantId, own))
       .orderBy(desc(ledgerEntries.occurredAt))
       .limit(Math.min(200, Math.max(1, limit)));
     return rows.map((row) => {
@@ -360,25 +394,42 @@ export class PayoutAccountService {
    * existing row correct with no backfill: an escrow release IS a payout to the
    * freelancer's balance, it is simply not a withdrawal.
    */
-  async paidCents(tenantId: number, account: LedgerAccount): Promise<number> {
+  async paidCents(tenantId: number | null, account: LedgerAccount): Promise<number> {
+    const own = and(
+      payoutRowsOf(tenantId, account),
+      sql`(${ledgerEntries.reference} is null or ${ledgerEntries.reference} not like 'escrow:%')`,
+    );
     const [row] = await this.db.select({ total: sql<string>`coalesce(sum(abs(${ledgerEntries.amount})), 0)` })
       .from(ledgerEntries)
-      .where(and(
-        eq(ledgerEntries.tenantId, tenantId),
-        eq(ledgerEntries.accountKind, account.kind),
-        eq(ledgerEntries.accountRef, account.ref),
-        eq(ledgerEntries.entryKind, 'payout'),
-        eq(ledgerEntries.denomination, USD_CENTS),
-        sql`(${ledgerEntries.reference} is null or ${ledgerEntries.reference} not like 'escrow:%')`,
-      ));
+      .where(tenantId == null
+        ? acrossTenants(ledgerEntries, 'subject_own_rows', own)
+        : scopedToTenant(ledgerEntries, tenantId, own));
     return Math.round(Number(row?.total ?? 0));
   }
 
   /** Earned − paid. `earnedCents` is the caller's domain fact (commission, an
    *  invoice total); this service never guesses at it. */
-  async balance(tenantId: number, account: LedgerAccount, earnedCents: number): Promise<PayoutBalance> {
-    const paid = await this.paidCents(tenantId, account);
-    return { earnedCents, paidCents: paid, availableCents: Math.max(0, earnedCents - paid) };
+  async balance(tenantId: number | null, account: LedgerAccount, earnedCents: number): Promise<PayoutBalance> {
+    return payoutBalance(earnedCents, await this.paidCents(tenantId, account));
+  }
+
+  /**
+   * What has left a PERSON's account in every workspace — paid total and history —
+   * read-through cached under a version token keyed by the person, which `pay`
+   * bumps on every recorded payout to a `user` account.
+   */
+  async personLedger(userId: string): Promise<PersonPayoutLedger> {
+    const account = userAccount(userId);
+    const version = await getCacheVersion(this.env, personPayoutsVersionKey(userId));
+    return getOrSetCached(
+      this.env,
+      `payouts:person:v1:${userId}:v:${version}`,
+      async () => {
+        const [paidCents, payouts] = await Promise.all([this.paidCents(null, account), this.payouts(null, account)]);
+        return { paidCents, payouts };
+      },
+      { kvTtlSeconds: 300, l1TtlMs: 15_000 },
+    );
   }
 
   /**
@@ -505,7 +556,11 @@ export class PayoutAccountService {
     // New money in the year invalidates every cached year-end tax report for the
     // workspace. Only on a real insert: the idempotent retry changed nothing, and
     // bumping on it would throw the cache away for no reason.
-    if (inserted.length > 0) await bumpTaxReportVersion(this.env, input.tenantId);
+    if (inserted.length > 0) {
+      await bumpTaxReportVersion(this.env, input.tenantId);
+      // A person's cross-workspace payout read (`personLedger`) is cached per person.
+      if (input.account.kind === 'user') await invalidatePersonPayouts(this.env, input.account.ref);
+    }
 
     return { ...result, recorded: inserted.length > 0 };
   }

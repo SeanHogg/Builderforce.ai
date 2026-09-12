@@ -5,7 +5,7 @@ import {
   pitchQaCoverage, pitchQaItems, pitchReadiness, pitchReadinessTone, pitchRuntimeSeconds, pitchSpokenSeconds,
   pitchTimingTone, pitchWeakestCriteria,
 } from './pitchCompetition';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const object = (data: Partial<CreationNodeData> & { kind: CreationNodeData['kind'] }): CreationNodeData => ({ title: 'Untitled', ...data });
 

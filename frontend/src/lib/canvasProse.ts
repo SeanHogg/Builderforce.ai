@@ -1,4 +1,4 @@
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import { creationObjectContentFields } from '@/components/creation-canvas/creationObjectRegistry';
 
 /**

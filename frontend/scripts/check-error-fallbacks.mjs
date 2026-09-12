@@ -20,6 +20,17 @@
  *      template literal as the fallback argument (an empty `''` is not prose);
  *   2. `… instanceof Error ? … : '<literal>'` — a literal on the else arm.
  *
+ * Flagged in a COMPONENT FILE (a `.tsx`, or a `.ts` that imports from `react` —
+ * a hook module):
+ *   3. a BARE `faultMessage(e)` / `faultText(e)` — one argument, no fallback.
+ *      It has no English literal of its own, but it still shows English: a
+ *      request that never reached the server throws an `ApiTransportError`
+ *      whose message is the engineer-facing sentence the Quality feed files
+ *      (English BY DESIGN), and only `useErrorMessage()` reads that as the
+ *      localized `globalError.transport.<reason>`. ~200 such sites were migrated
+ *      on 2026-09-12. A plain lib function has no hook to call — it takes the
+ *      message function from its caller, or returns a code the caller translates.
+ *
  * ZERO baseline, not a ratchet: every site was migrated on 2026-09-12.
  */
 import { readdirSync, readFileSync } from 'node:fs';
@@ -34,6 +45,17 @@ const srcDir = resolve(here, '../src');
 const FAULT_LITERAL = /\bfault(?:Message|Text)\(\s*[^,()]*(?:\([^()]*\)[^,()]*)*,\s*(['"`])(?!\1)/g;
 /** An `instanceof Error` ternary whose else arm is a non-empty literal. */
 const TERNARY_LITERAL = /\binstanceof\s+Error\s*\?[^:;]*?:\s*(['"`])(?!\1)/g;
+/** `faultMessage(` / `faultText(` with ONE argument (one level of nested parens) — no fallback. */
+const FAULT_BARE = /\bfault(?:Message|Text)\(\s*[^,()]*(?:\([^()]*\)[^,()]*)*\)/g;
+
+/** A file that renders or is a hook: `.tsx`, or a `.ts` importing from `react`. */
+const isComponentFile = (rel, code) => /\.tsx$/.test(rel) || /\bfrom\s+['"]react['"]/.test(code);
+
+/**
+ * Component files where a bare call is genuinely not a surface a person reads —
+ * each entry `'path/under/src.tsx': 'reason'`. Empty: no such site exists.
+ */
+const BARE_ALLOWED = new Map([]);
 
 function collect(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -57,7 +79,9 @@ for (const file of collect(srcDir)) {
   const rel = relative(srcDir, file).split('\\').join('/');
   if (/\.test\.tsx?$/.test(rel)) continue;
   const code = stripComments(readFileSync(file, 'utf8'));
-  for (const pattern of [FAULT_LITERAL, TERNARY_LITERAL]) {
+  const patterns = [FAULT_LITERAL, TERNARY_LITERAL];
+  if (isComponentFile(rel, code) && !BARE_ALLOWED.has(rel)) patterns.push(FAULT_BARE);
+  for (const pattern of patterns) {
     pattern.lastIndex = 0;
     for (const match of code.matchAll(pattern)) {
       const line = code.slice(0, match.index).split('\n').length;
@@ -67,7 +91,7 @@ for (const file of collect(srcDir)) {
 }
 
 if (sites.length > 0) {
-  console.error(`❌  ${sites.length} hardcoded-English error fallback${sites.length === 1 ? '' : 's'} — use useErrorMessage()/useErrorText() (@/i18n/useErrorMessage) on a surface a person reads, or toolErrorMessage() (@/lib/toolErrorMessage) in a tool result the model reads:\n`);
+  console.error(`❌  ${sites.length} hardcoded-English error fallback${sites.length === 1 ? '' : 's'} (a literal fallback, or a bare faultMessage(e)/faultText(e) in a component file) — use useErrorMessage()/useErrorText() (@/i18n/useErrorMessage) on a surface a person reads, or toolErrorMessage() (@/lib/toolErrorMessage) in a tool result the model reads:\n`);
   for (const site of [...new Set(sites)].sort()) console.error(`   ${site}`);
   process.exit(1);
 }

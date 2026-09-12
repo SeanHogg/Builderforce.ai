@@ -24,15 +24,7 @@ import {
   deleteAgent,
   unhireAgent,
 } from '@/lib/api';
-import {
-  listTenantMembers,
-  removeTenantMember,
-  updateMemberRole,
-  listInvitations,
-  revokeInvitation,
-  type TenantMember,
-  type PendingInvitation,
-} from '@/lib/auth';
+import { membersApi, type TenantMember, type PendingInvitation } from '@/lib/auth/members';
 import { RoleGate } from '@/components/RoleGate';
 import { SplitButton } from '@/components/ui/SplitButton';
 import { usePermission } from '@/lib/rbac';
@@ -220,8 +212,8 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     setLoadingPeople(true);
     try {
       const [memberList, inviteList] = await Promise.all([
-        listTenantMembers(tenantToken, String(tenant.id)),
-        listInvitations(tenantToken, String(tenant.id)).catch(() => [] as PendingInvitation[]),
+        membersApi.list(String(tenant.id)),
+        membersApi.listInvitations(String(tenant.id)).catch(() => [] as PendingInvitation[]),
       ]);
       setMembers(memberList);
       setPendingInvites(inviteList);
@@ -355,7 +347,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     if (!tenant || !tenantToken) return;
     setRemovingMemberId(member.id);
     try {
-      await removeTenantMember(tenantToken, String(tenant.id), member.id);
+      await membersApi.remove(String(tenant.id), member.id);
       setMembers((prev) => prev.filter((m) => m.id !== member.id));
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);
@@ -370,7 +362,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     if (!tenant || !tenantToken || role === member.role) return;
     setChangingRoleId(member.id);
     try {
-      await updateMemberRole(tenantToken, String(tenant.id), member.id, role);
+      await membersApi.updateRole(String(tenant.id), member.id, role);
       setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)));
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);

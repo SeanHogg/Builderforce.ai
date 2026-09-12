@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Canvas3DDepthMode } from './canvas3d';
+import type { Canvas3DDepthMode } from '@/lib/canvas/canvas3d';
 
 /**
  * The view commands a 3D scene hands to the canvas chrome that is already there.

@@ -4,7 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { resendVerificationCode } from '@/lib/auth';
+import { resendVerificationCode } from '@/lib/auth/credentials';
 
 interface EmailVerificationStepProps {
   /** Address the code was sent to — shown in the copy and submitted with the code. */

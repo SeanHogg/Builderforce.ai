@@ -6,8 +6,8 @@ import { Icon } from '@/components/ui/Icon';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { pmoApi, type Holiday, type WorkingCalendarSettings as Settings } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * The workspace's WORKING CALENDAR — which weekdays this workspace works, and the
  * days nobody does.
@@ -28,6 +28,7 @@ import { usePanelTask } from '@/hooks/usePanelTask';
 const WEEKDAY_NUMBERS = [0, 1, 2, 3, 4, 5, 6] as const;
 
 export function WorkingCalendarSettings() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('workingCalendar');
   const confirm = useConfirm();
 
@@ -42,10 +43,10 @@ export function WorkingCalendarSettings() {
     try {
       setSettings(await pmoApi.workingCalendar());
     } catch (e) {
-      const message = faultMessage(e);
+      const message = errorMessage(e);
       if (message) fail(message);
     }
-  }, [clear, fail]);
+  }, [clear, fail, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 

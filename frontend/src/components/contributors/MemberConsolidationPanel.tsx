@@ -3,11 +3,12 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { TenantMember } from '@/lib/auth';
+import type { TenantMember } from '@/lib/auth/members';
 import { contributorsApi, type ContributorRow } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ContributorConsolidation } from './ContributorConsolidation';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Consolidate the people selected (by checkbox) in the Workforce directory list.
@@ -43,6 +44,7 @@ export function MemberConsolidationPanel({
   members: TenantMember[];
   onMerged?: () => void;
 }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('workforce.consolidate');
   const [contributors, setContributors] = useState<ContributorRow[] | null>(null);
   const [survivorId, setSurvivorId] = useState<number | null>(null);
@@ -55,8 +57,8 @@ export function MemberConsolidationPanel({
     setError(null);
     contributorsApi.list()
       .then((r) => setContributors(r.contributors.filter((c) => c.kind === 'human')))
-      .catch((e: unknown) => setError(faultMessage(e)));
-  }, []);
+      .catch((e: unknown) => setError(errorMessage(e)));
+  }, [errorMessage]);
 
   useEffect(() => { if (open) { load(); setResult(null); } }, [open, load, reloadKey]);
 

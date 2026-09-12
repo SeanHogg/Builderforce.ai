@@ -1,17 +1,16 @@
 'use client';
 
-import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 
-import { useCallback, useEffect, useState } from 'react';
-import {
-  integrationsApi,
-  type IntegrationCredential,
-  type IntegrationProvider,
-} from '@/lib/builderforceApi';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { integrationsApi, type IntegrationCredential } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { faultMessage } from '@/lib/apiClient';
+import { useConnectableCatalog, type ConnectableProvider } from '@/lib/connectableCatalog';
+import { CredentialKeyForm, type CredentialKeyEdit } from './CredentialKeyForm';
+import { credentialsPayload, type CredentialDraft } from './credentialDraft';
+import { btnPrimary, btnSubtle, panelCard } from './integrationStyles';
 /**
  * Shared credential manager used by BOTH the workspace Settings page (global
  * keys) and the project detail "Integrations" tab (project-scoped keys). The
@@ -22,118 +21,19 @@ import { faultMessage } from '@/lib/apiClient';
  *   projectId set        → that project's creds, plus inherited workspace-global
  *                          creds shown read-only.
  *
+ * WHICH providers can be connected, and what each asks for, comes from the
+ * server's connect catalog (`useConnectableCatalog`) — this file names no
+ * provider. The form itself is `CredentialKeyForm`.
+ *
  * Self-gating on role (owner/manager) — writes are also role-gated server-side
  * (requireRole(MANAGER)), so callers need no `canManage` prop.
  */
 
-interface SecretField {
-  key: string;
-  label: string;
-  /** 'text' for non-secret fields like an email; defaults to password. */
-  type?: 'text' | 'password';
-  placeholder?: string;
-}
-
-interface ProviderMeta {
-  label: string;
-  secrets: SecretField[];
-  /** Whether a base URL is needed: 'required', 'optional', or false. */
-  baseUrl: 'required' | 'optional' | false;
-  /**
-   * Present when this provider can be connected as a synced board. Drives the
-   * BoardConnectionsManager picker + external-board-id hint so that surface
-   * derives from this single source instead of its own provider list.
-   */
-  board?: { externalId: 'required' | 'optional'; hint: string };
-}
-
-export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
-  github: { label: 'GitHub', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'ghp_…' }], board: { externalId: 'required', hint: 'Repository — owner/repo (e.g. octocat/hello-world)' } },
-  gitlab: { label: 'GitLab', baseUrl: 'optional', secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'glpat-…' }] },
-  bitbucket: { label: 'Bitbucket', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Access token' }] },
-  jira: { label: 'Jira', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }], board: { externalId: 'optional', hint: 'Project key (e.g. ENG) — blank syncs all' } },
-  confluence: { label: 'Confluence', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }] },
-  freshservice: { label: 'Freshservice', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }], board: { externalId: 'optional', hint: 'Workspace ID (optional) — blank syncs all tickets' } },
-  freshdesk: { label: 'Freshdesk', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }], board: { externalId: 'optional', hint: 'Freshdesk domain (e.g. https://yourco.freshdesk.com)' } },
-  servicenow: { label: 'ServiceNow', baseUrl: 'required', secrets: [{ key: 'username', label: 'Username', type: 'text' }, { key: 'password', label: 'Password' }], board: { externalId: 'optional', hint: 'Table name (default: incident)' } },
-  linear: { label: 'Linear', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lin_api_…' }], board: { externalId: 'optional', hint: 'Team ID (optional) — blank syncs all teams' } },
-  sentry: { label: 'Sentry', baseUrl: 'optional', secrets: [{ key: 'token', label: 'Auth token', placeholder: 'sntrys_…' }], board: { externalId: 'required', hint: 'organization-slug/project-slug' } },
-  pagerduty: { label: 'PagerDuty', baseUrl: false, secrets: [{ key: 'apiToken', label: 'API token' }, { key: 'fromEmail', label: 'From email (for write-back)', type: 'text', placeholder: 'you@company.com' }], board: { externalId: 'optional', hint: 'Service ID (optional) — blank syncs all services' } },
-  monday: { label: 'monday.com', baseUrl: false, secrets: [{ key: 'token', label: 'API token' }], board: { externalId: 'required', hint: 'Board ID (numeric)' } },
-  asana: { label: 'Asana', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token' }], board: { externalId: 'required', hint: 'Project GID' } },
-  clickup: { label: 'ClickUp', baseUrl: false, secrets: [{ key: 'token', label: 'API token', placeholder: 'pk_…' }], board: { externalId: 'required', hint: 'List ID' } },
-  // Not a board/ticket source: this key WIDENS research from the keyless encyclopedic
-  // index (which every workspace, and every logged-out visitor, already gets) to a
-  // general web index. Search bills per query, so the key is yours — with none saved,
-  // agents and the canvas still research, just against narrower coverage.
-  // The label is the BRAND NAME only: it is substituted into localized sentences
-  // ("Add {provider} key", "Edit {provider} key"), so an English parenthetical here
-  // both breaks those sentences and ships untranslatable copy through the catalog.
-  tavily: { label: 'Tavily', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'tvly-…' }] },
-  // The BACKUP tried right after Tavily — see webSearchVendors.ts.
-  ollama: { label: 'Ollama', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key' }] },
-  exa: { label: 'Exa', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'exa_…' }] },
-  linkup: { label: 'Linkup', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lp_…' }] },
-  // Google connectors — OAuth offline credentials (client id/secret + a refresh
-  // token from Google's OAuth playground or your own consent flow). Gmail backs
-  // the email workflow node; Drive can back a project's file storage.
-  gmail: { label: 'Gmail', baseUrl: false, secrets: [
-    { key: 'clientId', label: 'OAuth client ID', type: 'text', placeholder: '…apps.googleusercontent.com' },
-    { key: 'clientSecret', label: 'OAuth client secret' },
-    { key: 'refreshToken', label: 'OAuth refresh token' },
-    { key: 'fromEmail', label: 'Send-as email', type: 'text', placeholder: 'you@gmail.com' },
-  ] },
-  google_drive: { label: 'Google Drive', baseUrl: false, secrets: [
-    { key: 'clientId', label: 'OAuth client ID', type: 'text', placeholder: '…apps.googleusercontent.com' },
-    { key: 'clientSecret', label: 'OAuth client secret' },
-    { key: 'refreshToken', label: 'OAuth refresh token' },
-    { key: 'rootFolderId', label: 'Root folder ID (optional)', type: 'text', placeholder: 'blank = Drive root' },
-  ] },
-  // Person-enrichment vendors. Same shape as the search keys above and for the
-  // same reason: they bill per lookup, so the key is yours. Every lookup is
-  // served through `enrichment_cache` (application/enrichment/enrichContact.ts),
-  // so asking for the same person twice costs nothing and /revenue-intel can
-  // report exactly how much that saved.
-  clearbit: { label: 'Clearbit', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'sk_…' }] },
-  people_data_labs: { label: 'People Data Labs', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key' }] },
-  apollo: { label: 'Apollo.io', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key' }] },
-};
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 20,
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  fontSize: 13,
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-md)',
-  background: 'var(--bg-deep)',
-  color: 'var(--text-primary)',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600,
-  background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
-  border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-};
-
-const btnSubtle: React.CSSProperties = {
-  padding: '6px 10px', fontSize: 12, fontWeight: 600,
-  background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-};
-
 export interface IntegrationCredentialsManagerProps {
   /** Omit for workspace-global keys; set to scope keys to a single project. */
   projectId?: number;
-  /** Restrict the provider dropdown (e.g. source-control contexts). */
-  providers?: IntegrationProvider[];
+  /** Restrict to these provider ids (e.g. one gallery card). Omit for every catalog provider. */
+  providers?: string[];
   /** Optional heading; pass null to render headerless (e.g. inside a tab). */
   heading?: string | null;
 }
@@ -153,30 +53,28 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
   const t = useTranslations('integrationCredentials');
   const role = getStoredTenant()?.role;
   const canManage = role === 'owner' || role === 'manager';
+  const { catalog, byId, loading: catalogLoading, failed: catalogFailed } = useConnectableCatalog();
 
-  const providerList = providers ?? (Object.keys(PROVIDER_META) as IntegrationProvider[]);
-  // A stable primitive keeps the loader in sync when a gallery drawer switches
-  // providers even though callers commonly pass a fresh one-item array.
-  const providerFilterKey = providerList.join('|');
+  // A stable primitive keeps the loader in sync even though callers commonly pass
+  // a fresh one-item array. null = no restriction.
+  const providerFilterKey = providers ? providers.join('|') : null;
+  const offered = useMemo<ConnectableProvider[]>(() => {
+    if (providerFilterKey == null) return catalog?.providers ?? [];
+    return providerFilterKey.split('|').map((id) => byId.get(id)).filter((p): p is ConnectableProvider => p != null);
+  }, [providerFilterKey, catalog, byId]);
 
   const [scoped, setScoped] = useState<IntegrationCredential[]>([]);
   const [inherited, setInherited] = useState<IntegrationCredential[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  // When set, the add-form is in EDIT mode for this credential id (rotate key /
-  // rename / change base URL) rather than creating a new one.
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // When set, the form is in EDIT mode for this credential (rotate key / rename /
+  // change base URL) rather than creating a new one.
+  const [editing, setEditing] = useState<CredentialKeyEdit | null>(null);
+  const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
-
-  // Add-form state
-  const [provider, setProvider] = useState<IntegrationProvider>(providerList[0]);
-  const [name, setName] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
-  const [secrets, setSecrets] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
     if (!canManage) return;
@@ -187,80 +85,56 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
     const inheritedP = projectId != null
       ? integrationsApi.list({ scope: 'global' })
       : Promise.resolve<IntegrationCredential[]>([]);
+    const keep = (rows: IntegrationCredential[]) =>
+      providerFilterKey == null ? rows : filterCredentialsByProvider(rows, providerFilterKey);
     Promise.all([scopedP, inheritedP])
       .then(([s, i]) => {
-        setScoped(filterCredentialsByProvider(s, providerFilterKey));
-        setInherited(filterCredentialsByProvider(i, providerFilterKey));
+        setScoped(keep(s));
+        setInherited(keep(i));
       })
       .catch(() => setError(t('loadError')))
       .finally(() => setLoading(false));
-  }, [canManage, projectId, providerFilterKey]);
+  }, [canManage, projectId, providerFilterKey, t]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    setProvider(providerList[0]);
-    setAdding(false);
-    setEditingId(null);
-  }, [providerFilterKey]);
 
   if (!canManage) return null;
 
-  const meta = PROVIDER_META[provider];
   // undefined default → localized fallback heading; null → headerless; string → as given.
   const resolvedHeading = heading === undefined ? t('heading') : heading;
-
-  const editing = editingId != null;
-
-  const resetForm = () => {
-    setName(''); setBaseUrl(''); setSecrets({}); setProvider(providerList[0]);
-  };
+  const editingDescriptor = editing ? byId.get(editing.provider) : undefined;
 
   const closeForm = () => {
-    setAdding(false); setEditingId(null); resetForm(); setError(null);
+    setAdding(false); setEditing(null); setError(null);
   };
 
-  // Pre-fill the form to edit an existing key. Secrets are never returned in the
-  // clear (GET masks them), so the token fields start blank: blank = keep the
-  // current key, any value = rotate it. Provider can't change on an existing key.
   const openEdit = (c: IntegrationCredential) => {
-    setProvider(c.provider);
-    setName(c.name);
-    setBaseUrl(c.baseUrl ?? '');
-    setSecrets({});
-    setEditingId(c.id);
+    setEditing({ id: c.id, provider: c.provider, name: c.name, baseUrl: c.baseUrl });
     setError(null);
     setAdding(true);
   };
 
-  const save = async () => {
+  const save = async (draft: CredentialDraft, rotating: boolean) => {
+    const descriptor = byId.get(draft.provider);
+    if (!descriptor) return;
     setSaving(true);
     setError(null);
+    const name = draft.name.trim() || t('defaultKeyName', { provider: descriptor.label });
+    const baseUrl = descriptor.baseUrl === 'none' ? null : draft.baseUrl.trim() || null;
     try {
-      if (meta.baseUrl === 'required' && !baseUrl.trim()) { setError(t('baseUrlRequired')); setSaving(false); return; }
-      // The credential blob is stored/replaced wholesale, so secrets are
-      // all-or-nothing: required on create, and on edit only when rotating (if any
-      // secret field is filled, every one must be, else we'd drop the others).
-      const anySecret = meta.secrets.some((f) => secrets[f.key]?.trim());
-      if (!editing || anySecret) {
-        const missing = meta.secrets.find((f) => !secrets[f.key]?.trim());
-        if (missing) {
-          setError(editing ? t('rotateFieldMissing', { field: missing.label }) : t('fieldRequired', { field: missing.label }));
-          setSaving(false); return;
-        }
-      }
-      if (editingId !== null) {
-        await integrationsApi.update(editingId, {
-          name: name.trim() || t('defaultKeyName', { provider: meta.label }),
-          baseUrl: meta.baseUrl ? baseUrl.trim() || null : null,
-          ...(anySecret ? { credentials: secrets } : {}),
+      if (editing) {
+        await integrationsApi.update(editing.id, {
+          name,
+          baseUrl,
+          ...(rotating ? { credentials: credentialsPayload(descriptor, draft) } : {}),
         });
       } else {
         await integrationsApi.create({
-          provider,
-          name: name.trim() || t('defaultKeyName', { provider: meta.label }),
-          baseUrl: meta.baseUrl ? baseUrl.trim() || null : null,
+          provider: descriptor.id,
+          name,
+          baseUrl,
           projectId: projectId ?? null,
-          credentials: secrets,
+          credentials: credentialsPayload(descriptor, draft),
         });
       }
       closeForm();
@@ -308,11 +182,11 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
     const result = testResult[c.id];
     const ok = result ? result.ok : c.lastTestOk;
     return (
-      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
+      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 78 }}>
-          {PROVIDER_META[c.provider]?.label ?? c.provider}
+          {byId.get(c.provider)?.label ?? c.provider}
         </span>
-        <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1, minWidth: 120 }}>
           {c.name}
           {readOnly && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{t('workspaceTag')}</span>}
         </span>
@@ -337,9 +211,13 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
             <button type="button" style={btnSubtle} disabled={testing === c.id || !c.isEnabled} onClick={() => test(c.id)}>
               {testing === c.id ? t('testing') : t('test')}
             </button>
-            <button type="button" style={btnSubtle} onClick={() => openEdit(c)}>
-              {tc('edit')}
-            </button>
+            {/* Editing needs the provider's form; a key for a provider the catalog
+                no longer describes can still be tested and deleted. */}
+            {byId.has(c.provider) && (
+              <button type="button" style={btnSubtle} onClick={() => openEdit(c)}>
+                {tc('edit')}
+              </button>
+            )}
             <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={() => remove(c.id)}>
               {tc('delete')}
             </button>
@@ -349,8 +227,10 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
     );
   };
 
+  const formProviders = editingDescriptor ? [editingDescriptor] : offered;
+
   return (
-    <div style={cardStyle}>
+    <div style={panelCard}>
       {resolvedHeading && <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{resolvedHeading}</div>}
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
         {projectId != null
@@ -358,7 +238,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
           : t('globalDescription')}
       </div>
 
-      {loading ? (
+      {loading || catalogLoading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>{tc('loading')}</div>
       ) : (
         <div style={{ marginTop: 12 }}>
@@ -370,59 +250,26 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
         </div>
       )}
 
-      {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
+      {error && !adding && <div role="alert" style={{ fontSize: 12, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}
 
-      {adding ? (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 'var(--radius-lg)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{editing ? t('editKeyTitle', { provider: meta.label }) : t('addKeyTitle')}</div>
-          <Select
-            value={provider}
-            onChange={(e) => { setProvider(e.target.value as IntegrationProvider); setSecrets({}); }}
-            style={inputStyle}
-            // Provider is fixed once a key exists — rotating/renaming only.
-            disabled={editing}
-          >
-            {providerList.map((p) => (
-              <option key={p} value={p}>{PROVIDER_META[p].label}</option>
-            ))}
-          </Select>
-          <input style={inputStyle} placeholder={t('labelPlaceholder')} value={name} onChange={(e) => setName(e.target.value)} />
-          {meta.baseUrl && (
-            <input
-              style={inputStyle}
-              placeholder={meta.baseUrl === 'required' ? t('baseUrlRequiredPlaceholder') : t('baseUrlOptionalPlaceholder')}
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-            />
-          )}
-          {meta.secrets.map((f) => (
-            <input
-              key={f.key}
-              style={inputStyle}
-              type={f.type === 'text' ? 'text' : 'password'}
-              placeholder={editing ? t('secretEditPlaceholder', { field: f.label }) : (f.placeholder ?? f.label)}
-              value={secrets[f.key] ?? ''}
-              onChange={(e) => setSecrets((prev) => ({ ...prev, [f.key]: e.target.value }))}
-            />
-          ))}
-          {editing && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {meta.secrets.length > 1 ? t('rotateHintMulti') : t('rotateHintSingle')}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" style={btnPrimary} disabled={saving} onClick={save}>
-              {saving ? tc('saving') : editing ? t('saveChanges') : t('saveKey')}
-            </button>
-            <button type="button" style={btnSubtle} onClick={closeForm}>
-              {tc('cancel')}
-            </button>
-          </div>
-        </div>
-      ) : (
+      {catalogLoading ? null : adding && formProviders.length > 0 ? (
+        <CredentialKeyForm
+          key={editing?.id ?? 'new'}
+          providers={formProviders}
+          editing={editing}
+          saving={saving}
+          serverError={error}
+          onSave={(draft, rotating) => void save(draft, rotating)}
+          onCancel={closeForm}
+        />
+      ) : offered.length > 0 ? (
         <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={() => setAdding(true)}>
           {t('addKey')}
         </button>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
+          {catalogFailed ? t('catalogLoadError') : t('notConnectable')}
+        </div>
       )}
     </div>
   );

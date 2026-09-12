@@ -32,7 +32,7 @@ import {
 import { readSvgShapes } from './diagramSvg';
 import type { DiagramGraph } from './diagramGraph';
 import type { DrawioImageAsset } from './drawioImageCanvas';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 export type DiagramConvertSource =
   | { kind: 'graph'; graph: DiagramGraph; from: CanvasDiagramFormat | null }

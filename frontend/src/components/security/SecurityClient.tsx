@@ -28,7 +28,6 @@ import IdentityProvidersPanel from '@/components/security/IdentityProvidersPanel
 import LegalAgreementsPanel from '@/components/security/LegalAgreementsPanel';
 import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import PageContainer from '@/components/PageContainer';
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -64,7 +63,7 @@ export default function SecurityClient() {
     setError(null);
     securityApi.listUsers(tenantId)
       .then(setUsers)
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 

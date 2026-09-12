@@ -6,7 +6,6 @@ import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { factsApi, type Fact, type FactInput } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
@@ -61,9 +60,9 @@ export default function FactsPageClient() {
         setSubjects(schema.subjects);
         setPredicates(schema.predicates);
       })
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [q, subject, predicate]);
+  }, [q, subject, predicate, errorMessage]);
 
   useEffect(() => { load(); }, [subject, predicate]); // eslint-disable-line react-hooks/exhaustive-deps
 

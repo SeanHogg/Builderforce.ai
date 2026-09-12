@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { listMyAgents, listPurchasedAgents } from '@/lib/api';
-import { listTenantMembers } from '@/lib/auth';
+import { membersApi } from '@/lib/auth/members';
 import { listEngagements } from '@/lib/freelance/engagements';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { Select } from '@/components/Select';
@@ -60,7 +60,7 @@ export function useAssignableWorkforce(enabled = true): AssignableWorkforce {
       setAgents([...byId.values()]);
 
       if (tenant && tenantToken) {
-        const members = await listTenantMembers(tenantToken, String(tenant.id)).catch(() => []);
+        const members = await membersApi.list(String(tenant.id)).catch(() => []);
         setHumans(members.map((m) => ({ ref: m.id, name: m.displayName ?? m.username ?? m.email })));
       } else {
         setHumans([]);

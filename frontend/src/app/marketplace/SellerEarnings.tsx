@@ -36,8 +36,9 @@ import {
   type CreationListing,
   type SellerEarnings as Earnings,
 } from '@/lib/creationListings';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export function SellerEarnings() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('marketplaceCreations');
   const confirm = useConfirm();
   const { hasTenant } = useAuth();
@@ -86,11 +87,11 @@ export function SellerEarnings() {
         : result.error ?? t('payoutFailed'));
       if (result.ok) await load();
     } catch (cause) {
-      setNotice(faultMessage(cause));
+      setNotice(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [load, t]);
+  }, [load, t, errorMessage]);
 
   const withdraw = useCallback(async (listing: CreationListing) => {
     // Removing a product from sale is irreversible for anyone mid-purchase, so it

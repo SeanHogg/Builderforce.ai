@@ -12,7 +12,6 @@ import {
   type RfpRegisterEntry, type RfpRegisterRollup, type RfpDeepFreshness,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
@@ -64,7 +63,7 @@ export default function RfpDetailClient() {
       await rfpApi.deleteRequest(id);
       router.push('/projects?tab=rfp');
     } catch (e: unknown) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
       setDiscarding(false);
     }
   };
@@ -85,9 +84,9 @@ export default function RfpDetailClient() {
     setError(null);
     rfpApi.getRequest(id)
       .then((r) => { setRequest(r.request); setResponses(r.responses); })
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 

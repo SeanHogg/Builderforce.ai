@@ -25,6 +25,7 @@ import {
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from '@/i18n/useFormat';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -61,6 +62,7 @@ const quietButton: React.CSSProperties = {
 };
 
 export default function PasskeysPanel() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('passkeys');
   const fmt = useFormat();
   const confirm = useConfirm();
@@ -84,9 +86,9 @@ export default function PasskeysPanel() {
     void hasPlatformAuthenticator().then(setPlatform);
     passkeysApi.list()
       .then(setPasskeys)
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
 
   const enrol = useCallback(async () => {
     setError(null);

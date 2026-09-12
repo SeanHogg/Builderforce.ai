@@ -22,13 +22,11 @@ import { githubStatusMessage } from './githubTestError';
 import { exaSearchVendor, linkupSearchVendor, ollamaSearchVendor, tavilySearchVendor, type WebSearchVendor } from '../runtime/webSearchVendors';
 import { testGmail, testGoogleDrive } from './googleOAuth';
 import {
-  CATALOG_PROVIDER_IDS,
-  describeProviders,
   providerSpec,
   testCatalogProvider,
   validateCredentials,
-  type ProviderDescriptor,
 } from './dataProviderCatalog';
+import { connectableCatalog, type LegacyProviderId } from './connectableCatalog';
 
 export interface TestResult {
   ok: boolean;
@@ -221,8 +219,12 @@ async function testClickUp(creds: Record<string, unknown>): Promise<TestResult> 
 // The registry
 // ---------------------------------------------------------------------------
 
-/** Hand-written probes, keyed by provider id. */
-const LEGACY_TESTS: Record<string, ProviderTest> = {
+/**
+ * Hand-written probes, keyed by provider id. Typed by the legacy CONNECT FORMS
+ * (connectableCatalog.ts), so a probe without a form — or a form without a
+ * probe — is a compile error rather than a provider the gallery cannot render.
+ */
+const LEGACY_TESTS: Record<LegacyProviderId, ProviderTest> = {
   github: testGitHub,
   gitlab: testGitLab,
   jira: testJira,
@@ -246,17 +248,14 @@ const LEGACY_TESTS: Record<string, ProviderTest> = {
 };
 
 /**
- * Every provider a credential can be stored for. Derived — the catalog half is
- * not re-listed here, so adding a provider to the catalog cannot leave the
- * connect endpoint rejecting it.
+ * Every provider a credential can be stored for. Derived from the ONE connect
+ * catalog — the same list the connect UI renders — so adding a provider there
+ * cannot leave this endpoint rejecting it, nor the reverse.
  *
  * `google_calendar`, `rally` and `freshworks` are deliberately absent: they are
  * managed by their own OAuth/board-sync flows, not this CRUD.
  */
-export const CONNECTABLE_PROVIDERS: readonly string[] = [
-  ...Object.keys(LEGACY_TESTS),
-  ...CATALOG_PROVIDER_IDS,
-];
+export const CONNECTABLE_PROVIDERS: readonly string[] = connectableCatalog().map((entry) => entry.id);
 
 const CONNECTABLE_SET = new Set(CONNECTABLE_PROVIDERS);
 
@@ -275,7 +274,7 @@ export async function testProviderCredential(
   creds: Record<string, unknown>,
   baseUrl: string | null,
 ): Promise<TestResult> {
-  const legacy = LEGACY_TESTS[provider];
+  const legacy = (LEGACY_TESTS as Record<string, ProviderTest | undefined>)[provider];
   if (legacy) return legacy(creds, baseUrl);
   if (providerSpec(provider)) return testCatalogProvider(provider, creds);
   return { ok: false, message: `Connectivity test not available for provider: ${provider}` };
@@ -284,8 +283,10 @@ export async function testProviderCredential(
 /**
  * Validate a credential blob before it is encrypted and stored.
  *
- * Only catalog providers declare their fields, so only they can be checked;
- * legacy providers keep today's behaviour (their probe is the validation).
+ * Only catalog providers are checked here. Legacy providers now DESCRIBE their
+ * fields too (connectableCatalog.ts, for the form), but their stored blobs
+ * predate that description, so they keep today's behaviour: the probe is the
+ * validation.
  */
 export function validateProviderCredentials(
   provider: string,
@@ -294,9 +295,4 @@ export function validateProviderCredentials(
   const spec = providerSpec(provider);
   if (!spec) return { ok: true };
   return validateCredentials(spec, creds);
-}
-
-/** The catalog descriptors the connect UI renders. */
-export function connectableCatalog(): ProviderDescriptor[] {
-  return describeProviders();
 }

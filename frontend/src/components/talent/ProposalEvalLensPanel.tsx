@@ -23,7 +23,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getProposalEvalLens, type ProposalEvalLens } from '@/lib/freelance/matching';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 14, minWidth: 0,
@@ -37,6 +37,7 @@ const stat = (label: string, value: string) => (
 );
 
 export function ProposalEvalLensPanel({ jobId }: { jobId: string }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('gigs');
   const [lens, setLens] = useState<ProposalEvalLens | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,10 +49,10 @@ export function ProposalEvalLensPanel({ jobId }: { jobId: string }) {
     setError(null);
     getProposalEvalLens(jobId)
       .then((result) => { if (!cancelled) setLens(result); })
-      .catch((e: Error) => { if (!cancelled) setError(faultMessage(e)); })
+      .catch((e: Error) => { if (!cancelled) setError(errorMessage(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [jobId]);
+  }, [jobId, errorMessage]);
 
   if (loading) return <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('evalLens.loading')}</p>;
   if (error) return <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)' }}>{error}</div>;

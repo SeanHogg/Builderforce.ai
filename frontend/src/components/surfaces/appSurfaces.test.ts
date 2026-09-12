@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EMBED_VIEW_KEYS } from '@seanhogg/builderforce-embedded';
 import en from '@/i18n/messages/en.json';
-import { listComponents, listComponentsForMount, getComponentForMount } from '@/lib/components/registry';
+import { listComponents, listComponentsForMount, getComponentForMount } from '@/components/widgets/registry';
 import { mountsOf } from '@/lib/components/types';
 
 /**

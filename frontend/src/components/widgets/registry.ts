@@ -1,5 +1,5 @@
-import type { ComponentDef, ComponentMount } from './types';
-import { supportsMount } from './types';
+import type { ComponentDef, ComponentMount } from '@/lib/components/types';
+import { supportsMount } from '@/lib/components/types';
 import { ALL_COMPONENTS } from './allComponents';
 
 /**

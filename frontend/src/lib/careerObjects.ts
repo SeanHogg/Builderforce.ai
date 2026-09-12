@@ -38,10 +38,11 @@ import {
   type CareerObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import {
-  deriveDaysBetween, deriveNumber, deriveRows, derivePercent, specVerdict,
+  deriveDaysBetween, deriveNumber, deriveRows, derivePercent,
   registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD, specRefKey,
   type SpecDeriveBoard, type SpecField, type SpecObjectSpec,
 } from './specObjects';
+import { specVerdict } from './specVerdict';
 
 /** i18n namespace for every career label, status, field and column. */
 export const CAREER_NAMESPACE = 'creationCanvas.career';

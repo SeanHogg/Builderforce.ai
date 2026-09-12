@@ -59,14 +59,12 @@ import {
   registerSpecObjectSet,
   specMutableFields,
   specRefKey,
-  specVerdict,
   sumColumn,
   type SpecDeriveBoard,
   type SpecField,
   type SpecObjectSpec,
-  type SpecVerdict,
-  type SpecVerdictResult,
 } from './specObjects';
+import { specVerdict, type SpecVerdict, type SpecVerdictResult } from './specVerdict';
 
 /** i18n namespace for every founder label, status, field, column and verdict. Named
  *  because `boardRefField` resolves its sentences here even when a legal or hiring kind

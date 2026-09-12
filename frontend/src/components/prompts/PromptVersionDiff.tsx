@@ -7,7 +7,7 @@ import { Select } from '@/components/Select';
 import { promptLibraryApi, type PromptVersion } from '@/lib/builderforceApi';
 import { diffLines, diffStat, sideBySide, type DiffRow } from '@/lib/textDiff';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * PromptVersionDiff — version history + line diff for a prompt, in the canonical
  * SlideOutPanel. Lists every version and shows a unified OR side-by-side line
@@ -25,6 +25,7 @@ export interface PromptVersionDiffProps {
 }
 
 export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiffProps) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('promptHistory');
   const [versions, setVersions] = useState<PromptVersion[] | null>(null);
@@ -48,9 +49,9 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
         setFromV(prev);
         setToV(last);
       })
-      .catch((e: Error) => alive && setError(faultMessage(e)));
+      .catch((e: Error) => alive && setError(errorMessage(e)));
     return () => { alive = false; };
-  }, [open, promptId]);
+  }, [open, promptId, errorMessage]);
 
   const byVersion = useMemo(() => {
     const m = new Map<number, PromptVersion>();

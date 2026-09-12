@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import { getComponent } from '@/lib/components/registry';
+import { getComponent } from '@/components/widgets/registry';
 import type { ComponentSize } from '@/lib/components/types';
 import { WidgetCard } from './WidgetCard';
 

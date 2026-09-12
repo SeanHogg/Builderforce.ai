@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ACADEMIC_OBJECT_KINDS, CREATION_OBJECT_KINDS, isAcademicObjectKind } from '@builderforce/creation-canvas-contract';
 import { ACADEMIC_LABELS, ACADEMIC_NAMESPACE, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from './academicObjects';
 import {
-  allSpecObjectSpecs, isSpecObjectKind, makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specValueInEnglish,
+  allSpecObjectSpecs, isSpecObjectKind, makeSpecDeriveBoard, specFieldGuidance, specFieldValue,
   specMutableFields, specObjectNamespace, specObjectSpec, specReadableFields, specSetGuidance,
 } from './specObjects';
+import { specValueInEnglish } from './specVerdict';
 import {
   CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData,
   creationObjectDefinition, creationObjectAiContext, creationObjectMutableFields,

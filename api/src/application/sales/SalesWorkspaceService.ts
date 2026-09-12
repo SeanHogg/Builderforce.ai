@@ -7,7 +7,12 @@ import {
   salesReferrals, salesWeeklyGoals, users,
 } from '../../infrastructure/database/schema';
 import { notify } from '../notifications/notify';
-import { buildSalesReport } from './salesReports';
+import { PayoutAccountService, payoutBalance } from '../payouts/PayoutAccountService';
+import { userAccount } from '../kernel/ledgerAccount';
+import {
+  buildSalesReport, earnedCommissionCents, recentReferrals, windowStart, type SalesReportWindow,
+} from './salesReports';
+import { invalidateSalesReferrals } from './salesReferralFacts';
 
 export type SalesWorkspaceDb = Db;
 
@@ -60,10 +65,41 @@ export class SalesWorkspaceService {
       .from(users).where(eq(users.accountType, 'sales')).orderBy(desc(users.createdAt));
   }
 
-  /** The CRO report, for one workspace. `associateUserId` null = every associate
-   *  in it (the aggregate); `tenantId` null = no workspace, so no referral facts. */
-  report(tenantId: number | null, associateUserId: string | null) {
-    return buildSalesReport(this.db, tenantId, { associateUserId });
+  /**
+   * The CRO report. `associateUserId` null = every associate (the aggregate).
+   * `tenantId` null — the person-level token — spans every workspace, keyed by the
+   * associate's own attribution; a number keeps the workspace-scoped view.
+   */
+  report(env: Env | undefined, tenantId: number | null, associateUserId: string | null) {
+    return buildSalesReport(this.db, tenantId, { associateUserId, env });
+  }
+
+  /** Referrals that signed up inside `window`, attributed to `associateUserId`. */
+  async leads(env: Env | undefined, tenantId: number | null, associateUserId: string, window: SalesReportWindow) {
+    return { window, leads: await recentReferrals(this.db, env, tenantId, associateUserId, windowStart(window, new Date())) };
+  }
+
+  /**
+   * Earned, paid, available, the payout history and the destinations.
+   *
+   * "Earned" is the sales domain's fact (converted commission), "paid" the ledger's.
+   * With no workspace both span every workspace, keyed by the associate — commission
+   * by attribution, payouts by the associate's own `user` ledger account.
+   */
+  async payouts(env: Env, tenantId: number | null, associateUserId: string) {
+    const payouts = new PayoutAccountService(this.db, env);
+    const earned = await earnedCommissionCents(this.db, env, tenantId, associateUserId);
+    if (tenantId == null) {
+      const [ledger, accounts] = await Promise.all([payouts.personLedger(associateUserId), payouts.list(null, associateUserId)]);
+      return { balance: payoutBalance(earned, ledger.paidCents), payouts: ledger.payouts, accounts };
+    }
+    const account = userAccount(associateUserId);
+    const [balance, history, accounts] = await Promise.all([
+      payouts.balance(tenantId, account, earned),
+      payouts.payouts(tenantId, account),
+      payouts.list(tenantId, associateUserId),
+    ]);
+    return { balance, payouts: history, accounts };
   }
 
   async claimReferral(userId: string, referralCode: string, env: Env) {
@@ -74,6 +110,7 @@ export class SalesWorkspaceService {
       .from(salesAssociateSettings).where(or(eq(salesAssociateSettings.referralCode, referralCode), eq(salesAssociateSettings.salesCode, referralCode))).limit(1);
     if (!associate || associate.ownerUserId === current.id) return { authenticated: true, claimed: false };
     const [created] = await this.db.insert(salesReferrals).values({ associateUserId: associate.ownerUserId, referredUserId: current.id, attributionType: referralCode === associate.salesCode ? 'sales' : 'referral', signupNotifiedAt: new Date() }).onConflictDoNothing({ target: salesReferrals.referredUserId }).returning();
+    if (created) await invalidateSalesReferrals(env, associate.ownerUserId);
     if (created && associate.notifyOnSignup) void notify(this.db, env, { userId: associate.ownerUserId, kind: 'sales.referral_signup', title: 'A referred user signed up', body: `${current.displayName || current.email} verified a Builderforce account through OAuth.`, ref: '/sales' });
     return { authenticated: true, claimed: Boolean(created) };
   }

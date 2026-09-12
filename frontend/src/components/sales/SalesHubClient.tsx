@@ -100,7 +100,10 @@ export default function SalesHubClient() {
   const [codes, setCodes] = useState<{ referralCode: string | null; salesCode: string | null; sessionId: string | null }>({ referralCode: null, salesCode: null, sessionId: null });
   const [report, setReport] = useState<SalesReport | null>(null);
   const [window_, setWindow] = useState<SalesReportWindow>('month');
-  const [leads, setLeads] = useState<SalesLead[]>([]);
+  // null = still loading. The hub's figures are every referral attributed to this
+  // person across every workspace, so an empty list means "none yet", never "no
+  // workspace selected".
+  const [leads, setLeads] = useState<SalesLead[] | null>(null);
   const [balance, setBalance] = useState<PayoutBalance | null>(null);
   const [payoutHistory, setPayoutHistory] = useState<PayoutRecord[]>([]);
   const [error, setError] = useState('');
@@ -122,18 +125,24 @@ export default function SalesHubClient() {
       .catch((cause) => setError(faultText(cause, t('loadFailed'))));
   }, [t]);
 
+  // A failed read says so. Swallowing it rendered the same blank as "nothing
+  // attributed to you", which is the one reading a person must never be left with.
   useEffect(() => {
-    salesApi.report().then(({ report: row }) => setReport(row)).catch(() => undefined);
-  }, []);
+    salesApi.report().then(({ report: row }) => setReport(row))
+      .catch((cause) => setError(faultText(cause, t('loadFailed'))));
+  }, [t]);
 
   useEffect(() => {
     if (sub !== 'leads') return;
-    salesApi.leads(window_).then((result) => setLeads(result.leads)).catch(() => undefined);
-  }, [sub, window_]);
+    setLeads(null);
+    salesApi.leads(window_).then((result) => setLeads(result.leads))
+      .catch((cause) => { setLeads([]); setError(faultText(cause, t('loadFailed'))); });
+  }, [sub, window_, t]);
 
   const loadPayouts = useCallback(() => {
-    salesApi.payouts().then((result) => { setBalance(result.balance); setPayoutHistory(result.payouts); }).catch(() => undefined);
-  }, []);
+    salesApi.payouts().then((result) => { setBalance(result.balance); setPayoutHistory(result.payouts); })
+      .catch((cause) => setError(faultText(cause, t('loadFailed'))));
+  }, [t]);
   useEffect(() => { if (sub === 'payouts' || sub === '') loadPayouts(); }, [loadPayouts, sub]);
 
   const subTabs: IndexItem[] = [
@@ -207,10 +216,18 @@ export default function SalesHubClient() {
     </>
   );
 
+  /** Says whose figures these are — the population is attribution, not a workspace. */
+  const scopeNote = (
+    <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '-4px 0 12px', lineHeight: 1.5 }}>{t('attributedScope')}</p>
+  );
+
   const renderLeads = () => (
     <div style={cardStyle}>
       <p style={captionStyle}>{t('leadsTitle')}</p>
-      {leads.length === 0 ? (
+      {scopeNote}
+      {leads == null ? (
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('loading')}</p>
+      ) : leads.length === 0 ? (
         <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('leadsEmpty')}</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
@@ -246,6 +263,7 @@ export default function SalesHubClient() {
       {balance && (
         <div style={cardStyle}>
           <p style={captionStyle}>{t('balanceTitle')}</p>
+          {scopeNote}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))', gap: 12 }}>
             {[
               { label: t('earned'), value: money(balance.earnedCents) },
@@ -327,7 +345,7 @@ export default function SalesHubClient() {
       {!railHasTabs && <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />}
       {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{error}</p>}
       {sub === 'leads' ? renderLeads()
-        : sub === 'reports' ? (report ? <SalesReportView report={report} window={window_} onWindowChange={setWindow} /> : <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)' }}>{t('loading')}</p>)
+        : sub === 'reports' ? (report ? <SalesReportView report={report} window={window_} onWindowChange={setWindow} /> : error ? null : <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)' }}>{t('loading')}</p>)
           : sub === 'payouts' ? renderPayouts()
             // The whole webmail client, in the hub — an opportunity that arrives
             // by email is a sales opportunity, and making the associate leave to

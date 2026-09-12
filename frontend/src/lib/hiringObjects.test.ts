@@ -5,8 +5,9 @@ import { SHARED_OBJECT_SPECS } from './sharedCanvasObjects';
 import './specObjectSets';
 import {
   makeSpecDeriveBoard, specFieldNames, specFieldValue, specMutableFields,
-  specObjectNamespace, specReadableFields, specRestrictedFields, specValueInEnglish,
+  specObjectNamespace, specReadableFields, specRestrictedFields,
 } from './specObjects';
+import { specValueInEnglish } from './specVerdict';
 
 describe('hiring vocabulary', () => {
   it('declares one spec per contract kind, and no more', () => {

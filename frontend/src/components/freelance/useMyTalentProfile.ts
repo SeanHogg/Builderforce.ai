@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { getMyFreelancerProfileCached, invalidateMyFreelancerProfile, updateMyFreelancerProfile, type FreelancerProfile } from '@/lib/freelance/talentProfile';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Read-through cache for the signed-in user's own for-hire profile.
  *
@@ -32,6 +32,7 @@ export interface MyTalentProfileState {
 }
 
 export function useMyTalentProfile(): MyTalentProfileState {
+  const errorMessage = useErrorMessage();
   const [profile, setProfile] = useState<FreelancerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,10 +43,10 @@ export function useMyTalentProfile(): MyTalentProfileState {
     let alive = true;
     loadMyTalentProfile()
       .then((p) => { if (alive) setProfile(p); })
-      .catch((e) => { if (alive) setError(faultMessage(e)); })
+      .catch((e) => { if (alive) setError(errorMessage(e)); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, []);
+  }, [errorMessage]);
 
   const patch = useCallback((p: Partial<FreelancerProfile>) => {
     setSaved(false);
@@ -61,12 +62,12 @@ export function useMyTalentProfile(): MyTalentProfileState {
       setSaved(true);
       return true;
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
       return false;
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [errorMessage]);
 
   return { profile, loading, saving, saved, error, patch, save };
 }

@@ -18,8 +18,8 @@ import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { formatDuration } from '@/lib/duration';
 import { dominantLane, laneOccupancy } from '@/lib/laneOccupancy';
 import { LifecycleSwimlane } from '@/components/charts/LifecycleSwimlane';
-import { faultMessage } from '@/lib/apiClient';
 import { toneColor, type StatusTone } from '@/lib/statusTone';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * TicketLifecyclePanel — the per-ticket AUTONOMY PROOF.
@@ -108,6 +108,7 @@ export interface TicketLifecyclePanelProps {
 }
 
 export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('ticketLifecycle');
   const tCommon = useTranslations('common');
   // Reused catalogs — the actor vocabulary and the auto-run gate reasons are already
@@ -134,9 +135,9 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
     setError(null);
     tasksApi.lifecycle(taskId)
       .then((r) => setData(r))
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [taskId]);
+  }, [taskId, errorMessage]);
 
   useEffect(() => {
     setData(null);

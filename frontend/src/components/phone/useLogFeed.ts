@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePhone } from '@/lib/usePhone';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 /**
  * "Load a log, and reload it when the phone state moves."
  *
@@ -22,6 +22,7 @@ import { faultText } from '@/lib/apiClient';
  * list somebody is reading; the error is shown beside the stale rows instead.
  */
 export function useLogFeed<T>(load: () => Promise<T[]>): { rows: T[]; error: string } {
+  const errorText = useErrorText();
   const { overview } = usePhone();
   const [rows, setRows] = useState<T[]>([]);
   const [error, setError] = useState('');
@@ -31,12 +32,12 @@ export function useLogFeed<T>(load: () => Promise<T[]>): { rows: T[]; error: str
     let active = true;
     load()
       .then((next) => { if (active) { setRows(next); setError(''); } })
-      .catch((cause) => { if (active) setError(faultText(cause)); });
+      .catch((cause) => { if (active) setError(errorText(cause)); });
     return () => { active = false; };
     // `load` is a module-level function in every call site, so it is stable; the
     // snapshot identity is the real dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overview]);
+  }, [overview, errorText]);
 
   return { rows, error };
 }

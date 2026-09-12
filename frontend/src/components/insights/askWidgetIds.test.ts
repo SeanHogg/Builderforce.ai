@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getComponent } from '@/lib/components/registry';
+import { getComponent } from '@/components/widgets/registry';
 
 /**
  * THE SEAM TEST: every widget id the SERVER can name must resolve in THIS registry.

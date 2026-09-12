@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Tenant } from '@/lib/types';
-import { completeOnboarding, saveOnboardingProgress, type OnboardingProgress } from '@/lib/auth';
+import { profileApi, type OnboardingProgress } from '@/lib/auth/session';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
@@ -24,7 +24,6 @@ import { useIsFreelancer } from '@/lib/rbac';
 // ---------------------------------------------------------------------------
 
 interface OnboardingStepperProps {
-  webToken: string;
   tenantToken?: string | null;
   tenant?: Tenant | null;
   /** Persisted step progress (from `useOnboardingPrompt`) — resumes the wizard
@@ -109,13 +108,13 @@ export function OnboardingStepper({
   // helper swallows failures, which only ever cost the resume position.
   const persistProgress = useCallback(
     (completed: Set<StepId>, active: StepId | undefined) => {
-      void saveOnboardingProgress(webToken, {
+      void profileApi.saveOnboardingProgress({
         track,
         completed: [...completed],
         activeStep: active ?? null,
       });
     },
-    [webToken, track],
+    [track],
   );
 
   const markComplete = (stepId: StepId | undefined, nextActive?: StepId) => {
@@ -145,7 +144,7 @@ export function OnboardingStepper({
     try {
       // The whole reason the intent step exists: this call had been losing the
       // one thing it carries.
-      await completeOnboarding(webToken, intent.length ? intent : undefined);
+      await profileApi.completeOnboarding(intent.length ? intent : undefined);
     } catch {
       // Non-fatal — user has completed onboarding visually regardless
     }
@@ -156,7 +155,7 @@ export function OnboardingStepper({
     try {
       // Dismissing still records what was chosen — someone who answered the
       // first question and then closed the wizard has told us something.
-      await completeOnboarding(webToken, intent.length ? intent : undefined);
+      await profileApi.completeOnboarding(intent.length ? intent : undefined);
     } catch {
       // Non-fatal
     }

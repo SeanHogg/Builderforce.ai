@@ -33,10 +33,11 @@
 import { type OperationsObjectKind } from '@builderforce/creation-canvas-contract';
 import { formatMoney, sumRowColumn, type MoneyTotal } from './canvasMoney';
 import {
-  deriveDaysBetween, deriveNumber, derivePercent, registerSpecObjectSet, specVerdict, sumColumn,
+  deriveDaysBetween, deriveNumber, derivePercent, registerSpecObjectSet, sumColumn,
   SOURCES_FIELD, SUMMARY_FIELD,
   type SpecField, type SpecObjectSpec,
 } from './specObjects';
+import { specVerdict } from './specVerdict';
 
 /** i18n namespace for every operations label, status, field and column. */
 export const OPERATIONS_NAMESPACE = 'creationCanvas.operations';

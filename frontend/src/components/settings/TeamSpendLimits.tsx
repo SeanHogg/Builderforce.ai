@@ -27,8 +27,8 @@ import {
   type SeatCapMode,
 } from '@/lib/spendLimits';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -161,6 +161,7 @@ function SeatRow({
 }
 
 function TeamSpendInner() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('settings');
   const tenant = getStoredTenant();
@@ -182,9 +183,9 @@ function TeamSpendInner() {
     if (!tenant) { setLoading(false); return; }
     getSpendLimits(tenant.id)
       .then(applyOverview)
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [tenant, applyOverview]);
+  }, [tenant, applyOverview, errorMessage]);
 
   const saveDefault = async () => {
     if (!tenant) return;

@@ -24,7 +24,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
-import { getStoredUser, getStoredWebToken, updateMyDisplayName } from '@/lib/auth';
+import { getStoredUser, getStoredWebToken } from '@/lib/auth';
+import { profileApi } from '@/lib/auth/session';
 import { uploadMyAvatar } from '@/lib/freelance/talentProfile';
 import { initialsOf } from '@/lib/initials';
 import { faultText } from '@/lib/apiClient';
@@ -113,7 +114,7 @@ export function ProfileIdentityCard({
     setSaving(true);
     setNotice('');
     try {
-      await updateMyDisplayName(token, ownName);
+      await profileApi.updateDisplayName(ownName);
       setNotice(t('saved'));
     } catch (error) {
       setNotice(faultText(error, t('saveFailed')));

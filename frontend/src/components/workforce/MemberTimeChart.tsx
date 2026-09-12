@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { timeApi, pmoApi, type MemberDailyHours, type MemberKind, type SpineNode } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * A member's activity chart — daily LOGGED hours (real time entries, migration
@@ -25,6 +25,7 @@ function fmtH(h: number): string { return h >= 10 ? `${Math.round(h)}h` : `${h.t
 function fmtMins(m: number): string { return m >= 60 ? `${(m / 60).toFixed(m % 60 ? 1 : 0)}h` : `${m}m`; }
 
 export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; refId: string; days?: number }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('timeTracking');
   const [data, setData] = useState<MemberDailyHours | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +37,8 @@ export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; 
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
-    timeApi.member(kind, refId, days).then(setData).catch((e: unknown) => setError(faultMessage(e)));
-  }, [kind, refId, days, reload]);
+    timeApi.member(kind, refId, days).then(setData).catch((e: unknown) => setError(errorMessage(e)));
+  }, [kind, refId, days, reload, errorMessage]);
 
   useEffect(() => {
     // Task picker options come from the spine (epics + tasks) — reuse, don't refetch a task list.
@@ -53,13 +54,13 @@ export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; 
     try {
       await timeApi.log({ taskId: Number(taskId), minutes, entryDate, memberKind: kind, memberRef: refId });
       setHours(''); setReload((r) => r + 1);
-    } catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   };
 
   const del = async (id: string) => {
     setBusy(true);
     try { await timeApi.remove(id); setReload((r) => r + 1); }
-    catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
+    catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   };
 
   return (

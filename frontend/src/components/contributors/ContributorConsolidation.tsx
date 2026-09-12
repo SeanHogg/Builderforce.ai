@@ -11,6 +11,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Contributor consolidation — merge duplicate human profiles that activity
@@ -29,6 +30,7 @@ const btn = (primary = false): React.CSSProperties => ({
   color: primary ? 'var(--text-on-accent)' : 'var(--text-secondary)',
 });
 export function ContributorConsolidation() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('contributorMerge');
   const tc = useTranslations('common');
@@ -61,7 +63,7 @@ export function ContributorConsolidation() {
         setMerges(m.merges);
         setUsers(u);
       })
-      .catch((e: unknown) => setError(faultMessage(e)));
+      .catch((e: unknown) => setError(errorMessage(e)));
   };
   useEffect(() => { load(); }, []);
 

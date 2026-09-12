@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { usageApi, type UsageSnapshot } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 interface AgentHostUsageContentProps {
   agentHostId: number;
@@ -39,6 +39,7 @@ function BarFill({ value, max, color }: { value: number; max: number; color: str
 }
 
 export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProps) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [snapshots, setSnapshots] = useState<UsageSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,9 +52,9 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
     usageApi
       .list(agentHostId)
       .then(setSnapshots)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [agentHostId]);
+  }, [agentHostId, errorMessage]);
 
   if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading usage…</div>;
   if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>;

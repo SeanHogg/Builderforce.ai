@@ -35,7 +35,7 @@ import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
-import { faultMessage, faultText } from '@/lib/apiClient';
+import { faultText } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const fieldInput: React.CSSProperties = {
@@ -108,14 +108,14 @@ export default function ToolRunner({
         setInput(initialInput && Object.keys(initialInput).length ? initialInput : defaultInput(d));
         onDefinitionLoad?.(d);
       })
-      .catch((e: Error) => { if (active) setError(faultMessage(e)); });
+      .catch((e: Error) => { if (active) setError(errorMessage(e)); });
     return () => { active = false; };
     // The definition is keyed by the tool alone. `initialInput` / `onDefinitionLoad`
     // are deliberately out: both change identity on every host render, and a
     // definition fetch that re-runs per render is what made the tool card sit on
     // "Loading…" forever while the board around it moved.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toolId]);
+  }, [toolId, errorMessage]);
 
   const setVal = (id: string, v: number) => {
     const next = { ...input, [id]: v };

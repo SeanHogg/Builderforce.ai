@@ -31,7 +31,7 @@
  * concept — a managed seat's card is still what decides whether it is managed.
  */
 
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 export type SettingsControl =
   | 'text' | 'textarea' | 'select' | 'number' | 'switch' | 'color' | 'file' | 'checkbox' | 'chips';

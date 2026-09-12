@@ -18,12 +18,14 @@ import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
  * on behalf of any tenant. Renders nothing unless its parent tab is active —
  * so the parent doesn't pass a `canShow` prop, the component decides.
  */
 export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
@@ -53,10 +55,10 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
         setTenants(list);
         if (tenantId == null && list.length > 0) setTenantId(list[0].id);
       })
-      .catch((e: Error) => !cancelled && setError(faultMessage(e)));
+      .catch((e: Error) => !cancelled && setError(errorMessage(e)));
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, errorMessage]);
 
   // Load keys for the selected tenant.
   useEffect(() => {
@@ -66,10 +68,10 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
     setError(null);
     adminApi.listTenantApiKeys(tenantId)
       .then((rows) => !cancelled && setKeys(rows ?? []))
-      .catch((e: Error) => !cancelled && setError(faultMessage(e)))
+      .catch((e: Error) => !cancelled && setError(errorMessage(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [active, tenantId]);
+  }, [active, tenantId, errorMessage]);
 
   if (!active) return null;
 

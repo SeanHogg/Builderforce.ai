@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
+import { AUTH_API_URL, persistSession } from '@/lib/auth';
+import { resolveAndSelectTenant } from '@/lib/auth/credentials';
 import { safeRedirectPath } from '@/lib/safeRedirect';
 import type { AuthUser } from '@/lib/types';
 

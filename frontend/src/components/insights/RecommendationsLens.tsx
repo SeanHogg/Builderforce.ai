@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { recommendationsApi, type RecommendationsResult, type Recommendation, type RecSeverity } from '@/lib/recommendationsApi';
+import { recommendationsApi, type RecommendationsResult, type Recommendation } from '@/lib/recommendationsApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
 import { DaysWindowSelect } from './LensShell';
-import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { statusColor } from '@/lib/statusTone';
+import { REC_SEVERITY_TONE } from './recSeverityTone';
 
 /**
  * AI-driven Recommendations lens — the prescriptive layer over the read-only
@@ -14,13 +15,6 @@ import { statusColor, type StatusToneMap } from '@/lib/statusTone';
  * the prescriptive action) with a Dismiss button that acknowledges a rec and
  * refetches so it drops off the list.
  */
-
-/** Recommendation severity → tone. Shared with the AI Insights summary chips. */
-export const REC_SEVERITY_TONE: StatusToneMap<RecSeverity> = {
-  critical: 'danger',
-  warning: 'warning',
-  info: 'info',
-};
 
 export function RecommendationsLens() {
   const t = useTranslations('insights');

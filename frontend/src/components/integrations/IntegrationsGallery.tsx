@@ -7,16 +7,19 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ClickableCard } from '@/components/ClickableCard';
 import { ConnectToggleButton } from '@/components/integrations/ConnectToggleButton';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
-import { IntegrationCredentialsManager, PROVIDER_META } from '@/components/integrations/IntegrationCredentialsManager';
+import { IntegrationCredentialsManager } from '@/components/integrations/IntegrationCredentialsManager';
 import { MigrationWizard } from '@/components/integrations/MigrationWizard';
+import { buildGalleryCards, groupGalleryCards, type GalleryCard } from '@/components/integrations/galleryCards';
+import { useBoardConnectionStatusLabel } from '@/components/integrations/useBoardConnectionStatusLabel';
+import { btnPrimary, btnSubtle } from '@/components/integrations/integrationStyles';
 import {
   boardConnectionsApi,
   integrationsApi,
   type BoardProviderMeta,
   type BoardConnection,
   type IntegrationCredential,
-  type IntegrationProvider,
 } from '@/lib/builderforceApi';
+import { loadBoardProviders, useConnectableCatalog } from '@/lib/connectableCatalog';
 import { getStoredTenant } from '@/lib/auth';
 import { useConsumption } from '@/lib/useConsumption';
 import { useFormat } from "@/i18n/useFormat";

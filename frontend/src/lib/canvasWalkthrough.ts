@@ -1,4 +1,4 @@
-import { graphLayerRanks } from '@/components/canvas/canvasGraph';
+import { graphLayerRanks } from '@/lib/canvas/canvasGraph';
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
 /**

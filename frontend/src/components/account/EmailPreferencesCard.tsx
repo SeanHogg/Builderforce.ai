@@ -31,6 +31,7 @@ import {
   type LifecycleToggle,
 } from '@/lib/emailPreferencesApi';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -92,6 +93,7 @@ function ToggleRow({ label, help, checked, disabled, onChange }: {
 }
 
 export default function EmailPreferencesCard() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('settings');
 
   const [prefs, setPrefs] = useState<EmailPreferences | null>(null);
@@ -105,9 +107,9 @@ export default function EmailPreferencesCard() {
     setLoading(true);
     emailPreferencesApi.get()
       .then((res) => { setPrefs(res.preferences); setLocale(res.locale); setError(null); })
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
 
   useEffect(load, [load]);
 

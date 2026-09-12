@@ -20,7 +20,7 @@ import {
   type CreationListing,
 } from '@/lib/creationListings';
 import { SkeletonGrid } from './SkeletonGrid';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * `kind` comes from the storefront's ONE kind control (the chip row under the
  * families). This section used to own a second chip row of its own, which meant
@@ -30,6 +30,7 @@ import { faultMessage } from '@/lib/apiClient';
  * of the catalogue's filter.
  */
 export function CreationsSection({ search, kind }: { search: string; kind: string }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('marketplaceCreations');
   const [listings, setListings] = useState<CreationListing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +41,10 @@ export function CreationsSection({ search, kind }: { search: string; kind: strin
       const result = await publicListingApi.browse({ q: search, kind, limit: 24 });
       setListings(result.listings);
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
       setListings([]);
     }
-  }, [search, kind]);
+  }, [search, kind, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 

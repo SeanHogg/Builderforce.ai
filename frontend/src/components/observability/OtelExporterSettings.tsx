@@ -18,8 +18,8 @@ import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { usePermission } from '@/lib/rbac';
-import { faultMessage } from '@/lib/apiClient';
 import { observabilityExportApi, type OtelExporter } from '@/lib/observabilityExportApi';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -48,6 +48,7 @@ const subtle: React.CSSProperties = {
 };
 
 export function OtelExporterSettings() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('otelExport');
   const confirm = useConfirm();
   const { allowed, required } = usePermission('integrations.manage');
@@ -67,11 +68,11 @@ export function OtelExporterSettings() {
       setExporters(await observabilityExportApi.list());
       setError(null);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [allowed]);
+  }, [allowed, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -91,7 +92,7 @@ export function OtelExporterSettings() {
       setName(''); setEndpoint(''); setHeaderName(''); setHeaderValue('');
       await load();
     } catch (err) {
-      setError(faultMessage(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -100,7 +101,7 @@ export function OtelExporterSettings() {
   const act = async (work: () => Promise<unknown>) => {
     setBusy(true);
     try { await work(); await load(); }
-    catch (e) { setError(faultMessage(e)); }
+    catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   };
 

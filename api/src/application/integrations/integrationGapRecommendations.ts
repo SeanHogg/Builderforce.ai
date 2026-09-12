@@ -2,7 +2,8 @@ import { eq, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { integrationCredentials } from '../../infrastructure/database/schema';
 import { BOARD_PROVIDERS } from '../boardsync/providerCatalog';
-import { CONNECTABLE_PROVIDERS, connectableCatalog } from './providerTests';
+import { CONNECTABLE_PROVIDERS } from './providerTests';
+import { connectableCatalog } from './connectableCatalog';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export interface IntegrationCatalogCandidate {
@@ -48,6 +49,10 @@ const CATEGORY_VALUE: Record<string, string> = {
   incident: 'Create and update incident work from operational events.',
   data: 'Use live business data in agents and workflows.',
   marketing: 'Connect campaign execution and measurement to the work loop.',
+  knowledge: 'Ground agents in the team’s existing documentation.',
+  search: 'Widen agent research from the encyclopedic index to the full web.',
+  productivity: 'Let workflows send email and read the team’s files.',
+  enrichment: 'Fill contact records with roles, education and company data.',
   other: 'Use this service from Builderforce agents and workflows.',
 };
 
@@ -66,7 +71,7 @@ export function integrationRecommendationCatalog(): IntegrationCatalogCandidate[
     return {
       provider,
       label: board?.label ?? descriptor?.label ?? fallbackLabel(provider),
-      category: board?.category ?? descriptor?.family ?? 'other',
+      category: descriptor?.category ?? board?.category ?? 'other',
       transport: descriptor?.transport ?? 'http',
       supportsWebhook: board?.supportsWebhook ?? false,
     };

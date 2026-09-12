@@ -5,7 +5,7 @@ import { adsApi, type AdAccount, type AdNetworkOption } from '@/lib/adsApi';
 import {
   getOrSetClientCached, invalidateClientCache, readClientCached,
 } from '@/infrastructure/http/readThrough';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * THE client read of this workspace's ad accounts — every paid-media surface asks here.
  *
@@ -64,6 +64,7 @@ export interface AdAccountsState extends AdAccountsRead {
 }
 
 export function useAdAccounts(): AdAccountsState {
+  const errorMessage = useErrorMessage();
   const cached = readClientCached<AdAccountsRead>(KEY);
   const [read, setRead] = useState<AdAccountsRead>(cached ?? { accounts: [], networks: [] });
   const [loading, setLoading] = useState(cached == null);
@@ -76,11 +77,11 @@ export function useAdAccounts(): AdAccountsState {
     load()
       .then(notify)
       .catch((failure: unknown) => {
-        if (live) setError(faultMessage(failure));
+        if (live) setError(errorMessage(failure));
       })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; subscribers.delete(notify); };
-  }, []);
+  }, [errorMessage]);
 
   return {
     ...read,

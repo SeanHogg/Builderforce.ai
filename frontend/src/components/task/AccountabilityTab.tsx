@@ -11,8 +11,8 @@ import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * "Sign-off & Accountability" tab of the ticket detail — the operator's headline
  * surface (PRD-coordinated-role-participation.md §5.9). For every required role it
@@ -120,6 +120,7 @@ type HumanVerdict = (typeof HUMAN_VERDICTS)[number];
 const NEEDS_REASON = new Set<HumanVerdict>(['waived']);
 
 export function AccountabilityTab({ taskId }: { taskId: number }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('accountability');
   const canManage = usePermission('manager.manage').allowed;
@@ -141,9 +142,9 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
     setLoading(true);
     kanbanApi.accountability(taskId)
       .then((r) => { setReport(r); setError(null); })
-      .catch((e) => setError(faultMessage(e)))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [taskId]);
+  }, [taskId, errorMessage]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { kanbanApi.listRoles().then(setRoles).catch(() => setRoles([])); }, []);
@@ -161,14 +162,14 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
       await kanbanApi.assessResource(taskId, { roleKey: addRole, note: addNote || undefined });
       setAddRole(''); setAddNote('');
       load();
-    } catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
-  }, [taskId, addRole, addNote, load]);
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  }, [taskId, addRole, addNote, load, errorMessage]);
 
   const materialize = useCallback(async () => {
     setBusy(true);
     try { await kanbanApi.materializeParticipants(taskId); load(); }
-    catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
-  }, [taskId, load]);
+    catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  }, [taskId, load, errorMessage]);
 
   /**
    * Record the open slot's sign-off. The SERVER is the authority on who may sign as
@@ -190,8 +191,8 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
       setSigning(null); setSummary(''); setVerdict('approved');
       setError(null);
       load();
-    } catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
-  }, [taskId, signing, verdict, summary, load]);
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  }, [taskId, signing, verdict, summary, load, errorMessage]);
 
   const verdictLabel = (v: string) => t.has(`verdict.${v}` as never) ? t(`verdict.${v}` as never) : v;
   const stateLabel = (s: string) => t.has(`state.${s}` as never) ? t(`state.${s}` as never) : s;

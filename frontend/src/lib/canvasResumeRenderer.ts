@@ -13,7 +13,7 @@ import {
   type ResumePageSize,
   type ResumeTemplateDefinition,
 } from './canvasResume';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 export const RESUME_DOCUMENT_STYLES = `
   .canvasResumeDocument {

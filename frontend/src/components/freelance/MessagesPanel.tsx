@@ -12,8 +12,8 @@ import {
   type ConversationSummary, type ConversationMessage, type MessagingSide,
 } from '@/lib/messagingApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * In-platform messaging drawer — employer<->freelancer threads. ONE component both
  * sides share (the `side` prop swaps the web/tenant token + endpoints); it decides its
@@ -45,6 +45,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
   side: MessagingSide;
   context?: MessagesLaunchContext | null;
 }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('messaging');
   const [items, setItems] = useState<ConversationSummary[]>([]);
@@ -60,9 +61,9 @@ export function MessagesPanel({ open, onClose, side, context }: {
   /** A thread read or attachment that failed lands in the send's slot — and stays
    *  silent for a signed-out read, as `faultMessage` decides. */
   const report = useCallback((e: unknown) => {
-    const message = faultMessage(e);
+    const message = errorMessage(e);
     if (message) failTask(message); else clearTask();
-  }, [failTask, clearTask]);
+  }, [failTask, clearTask, errorMessage]);
 
   const refreshList = useCallback(async () => {
     try { const r = await listConversations(side); setItems(r.items); } catch { /* best-effort */ }

@@ -75,13 +75,25 @@ function declaredKinds() {
   return kinds;
 }
 
-/** The kinds a read path accepts but no surface offers — never palette entries. */
+/**
+ * The kinds a read path accepts but no surface offers — never palette entries.
+ *
+ * Found by scanning every contract source rather than one named file, for the same reason
+ * `declaredKinds()` does: the block used to live in `index.ts`, moved to `objectKinds.ts`
+ * when the entry point became a barrel, and a guard reading a fixed filename would have
+ * gone quietly blind at that move. Missing entirely is a hard failure, not an empty set.
+ */
 function renamedAwayKinds() {
-  const text = readFileSync(join(contractDir, 'index.ts'), 'utf8');
-  const block = text.match(/RENAMED_OBJECT_KINDS[^=]*=\s*\{([\s\S]*?)\n\}/);
-  if (!block) return new Set();
-  const body = block[1].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-  return new Set([...body.matchAll(/^\s*([a-zA-Z][\w-]*)\s*:/gm)].map(([, key]) => key));
+  for (const name of readdirSync(contractDir).filter((file) => file.endsWith('.ts'))) {
+    const text = readFileSync(join(contractDir, name), 'utf8').replace(/\r\n/g, '\n');
+    const block = text.match(/export const RENAMED_OBJECT_KINDS[^=]*=\s*\{([\s\S]*?)\n\}/);
+    if (!block) continue;
+    const body = block[1].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    return new Set([...body.matchAll(/^\s*([a-zA-Z][\w-]*)\s*:/gm)].map(([, key]) => key));
+  }
+  console.error('❌  Canvas kind labels: RENAMED_OBJECT_KINDS was not found in the contract package.');
+  console.error('    It was renamed or reshaped — this guard can no longer tell a legacy alias from a real kind.');
+  process.exit(1);
 }
 
 const catalogs = Object.fromEntries(

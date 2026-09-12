@@ -32,8 +32,8 @@ import {
   type AuditReport,
 } from '@/lib/finopsApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { AuditReportRunsList } from './AuditReportRunsList';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 // 'finops.manage' is added to the RBAC capability map by the orchestrator-owned
 // rbac.ts merge; cast keeps this client typesafe until that lands.
 export const FINOPS_CAP = 'finops.manage' as Capability;
@@ -103,6 +103,7 @@ export function FinopsLens({ initialTab = 'rd' }: { initialTab?: FinopsTab }) {
 // ── R&D Tax Credit ───────────────────────────────────────────────────────────
 
 function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; canManage: boolean }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [config, setConfig] = useState<RdTaxCreditConfig | null>(null);
   const [report, setReport] = useState<RdTaxCreditReport | null>(null);
@@ -122,9 +123,9 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
       setCats(cfg.qualifiedCategories.join(', '));
       setActions(cfg.qualifiedActionTypes.join(', '));
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     }
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -141,7 +142,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
       const rep = await getRdTaxReport();
       setReport(rep);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -225,6 +226,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
 const STATUS_OPTIONS: SocControlStatus[] = ['implemented', 'partial', 'gap'];
 
 function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; canManage: boolean }) {
+  const errorMessage = useErrorMessage();
   const [coverage, setCoverage] = useState<ControlCoverage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -234,9 +236,9 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
     try {
       setCoverage(await getSocControls());
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     }
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -253,7 +255,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
           setCoverage(cov);
         }
       } catch (e) {
-        setError(faultMessage(e));
+        setError(errorMessage(e));
       } finally {
         setBusy(false);
       }
@@ -263,7 +265,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
     try {
       setCoverage(await updateSocControl(ctrl.id, change));
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -342,6 +344,7 @@ function currentMonth(): string {
 }
 
 function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [period, setPeriod] = useState(currentMonth());
   const [report, setReport] = useState<AuditReport | null>(null);
@@ -356,11 +359,11 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
     try {
       setReport(await getAuditReport(p));
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { void load(period); }, [load, period]);
 
@@ -369,7 +372,7 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
       await downloadAuditReport(format, period);
       setRunsKey((k) => k + 1);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     }
   };
 

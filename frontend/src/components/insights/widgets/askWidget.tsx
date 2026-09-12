@@ -39,7 +39,7 @@ import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import type { ComponentDef } from '@/lib/components/types';
 import { dashboardsApi, type ComposedAnswer, type QueryAnswer } from '@/lib/dashboardsApi';
 import { useInsightFormat, type InsightFormatters } from '../format';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * THE REGISTRY EDGE IS ASYNC ON PURPOSE.
  *
@@ -158,6 +158,7 @@ function Answer({ answer, days }: { answer: ComposedAnswer; days: number }) {
 }
 
 function AskCard() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('dashboards');
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<ComposedAnswer | null>(null);
@@ -172,7 +173,7 @@ function AskCard() {
     try {
       setAnswer(await dashboardsApi.query(question.trim()));
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setAsking(false);
     }

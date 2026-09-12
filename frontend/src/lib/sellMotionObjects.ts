@@ -48,9 +48,10 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import { formatCents } from './canvasMoney';
 import {
-  deriveDaysBetween, deriveNumber, registerSpecObjectSet, specVerdict, SUMMARY_FIELD, type SpecVerdict,
+  deriveDaysBetween, deriveNumber, registerSpecObjectSet, SUMMARY_FIELD,
   type SpecField, type SpecObjectSpec,
 } from './specObjects';
+import { specVerdict, type SpecVerdict } from './specVerdict';
 
 /** i18n namespace for every sell-motion label, field, column and status. */
 export const SELL_MOTION_NAMESPACE = 'creationCanvas.sellMotion';

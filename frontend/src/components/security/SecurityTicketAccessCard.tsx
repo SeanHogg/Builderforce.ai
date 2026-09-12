@@ -13,7 +13,6 @@ import {
   type SecurityAccessConfig,
   type SecurityAudiences,
 } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
@@ -50,9 +49,9 @@ export function SecurityTicketAccessCard() {
         setUserIds((c.allowUserIds ?? []).join('\n'));
         setAgentRefs((c.allowAgentRefs ?? []).join('\n'));
       })
-      .catch((e: Error) => { const message = faultMessage(e); if (message) fail(message); })
+      .catch((e: Error) => { const message = errorMessage(e); if (message) fail(message); })
       .finally(() => setLoading(false));
-  }, [fail]);
+  }, [fail, errorMessage]);
 
   const toggle = (key: keyof SecurityAudiences) => {
     if (!cfg) return;

@@ -12,7 +12,6 @@ import { rfpApi, type RfpRequestListRow, type RfpRequestInput, type BrandPalette
 import { BrandPaletteEditor } from './BrandPaletteEditor';
 import type { Project } from '@/lib/types';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
@@ -91,9 +90,9 @@ export default function RfpContent() {
     setError(null);
     rfpApi.list()
       .then((r) => setRows(r.requests))
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {

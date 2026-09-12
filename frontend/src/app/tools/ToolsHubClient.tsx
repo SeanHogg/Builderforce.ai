@@ -11,7 +11,7 @@ import {
 import { getStoredTenantToken } from '@/lib/auth';
 import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
 import { Icon } from '@/components/ui/Icon';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 // `career` sits last: the four before it diagnose a WORKSPACE and are what a
 // signed-in operator came for, while the career analyzers are personal and
@@ -35,6 +35,7 @@ const CATEGORY_ORDER: ToolCategory[] = ['delivery', 'finops', 'governance', 'qua
  * diagnostic ships without anyone editing a list.
  */
 export default function ToolsHubClient() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('tools');
   const [tools, setTools] = useState<ToolSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -44,13 +45,13 @@ export default function ToolsHubClient() {
   useEffect(() => {
     toolsApi.list()
       .then(setTools)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoaded(true));
     // Workspace rating (project diagnostics rolled up) — best-effort, manager+ only.
     if (getStoredTenantToken()) {
       toolsApi.rollup().then(setRollup).catch(() => setRollup(null));
     }
-  }, []);
+  }, [errorMessage]);
 
   // agentic-maturity is featured above, so keep it out of the category grid.
   const gridTools = tools.filter((tool) => tool.id !== 'agentic-maturity');

@@ -5,8 +5,9 @@ import {
 } from './legalObjects';
 import {
   isSpecObjectKind, makeSpecDeriveBoard, specDeadlineFields, specFieldValue, specMutableFields,
-  specObjectNamespace, specValueInEnglish,
+  specObjectNamespace,
 } from './specObjects';
+import { specValueInEnglish } from './specVerdict';
 import {
   ipAssetFieldsFrom, legalEntityFieldsFrom, legalMatterFieldsFrom, registrationRowsFor,
 } from './canvasLegalRecordTools';

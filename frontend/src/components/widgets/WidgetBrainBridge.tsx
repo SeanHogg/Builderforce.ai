@@ -24,8 +24,8 @@ import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRegisterBrainActions, type BrainAction } from '@/lib/brain';
 import { useOptionalPins } from '@/lib/widgets/PinsProvider';
-import { getComponent, listComponents } from '@/lib/components/registry';
-import { useComponentLabel } from '@/lib/components/useComponentCatalog';
+import { getComponent, listComponents } from '@/components/widgets/registry';
+import { useComponentLabel } from '@/components/widgets/useComponentCatalog';
 import { dashboardsApi } from '@/lib/dashboardsApi';
 
 export function WidgetBrainBridge() {

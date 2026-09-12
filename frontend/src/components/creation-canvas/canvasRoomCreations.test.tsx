@@ -15,7 +15,7 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 ));
 
 // The board's depth projection has its own tests; the room only needs one to exist.
-vi.mock('@/components/canvas/canvas3d', () => ({
+vi.mock('@/lib/canvas/canvas3d', () => ({
   canvas3dScene: () => ({ cards: [], links: [], layers: [], plane: { width: 0, height: 0 }, depthMode: 'flow' }),
 }));
 

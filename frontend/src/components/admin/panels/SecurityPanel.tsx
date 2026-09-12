@@ -22,8 +22,9 @@ import { downloadText } from '@/lib/download';
 import { Select } from '@/components/Select';
 import { AdminError, errText } from '../adminShared';
 import { useAdminFormat } from '../adminShared';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 export default function SecurityPanel() {
+  const errorText = useErrorText();
   const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
@@ -201,7 +202,7 @@ export default function SecurityPanel() {
                         setErrorMsg(t('security.scanQrInstruction'));
                         handleSecurityUserSelect(securityUserId);
                       } catch (e) {
-                        setErrorMsg(faultText(e));
+                        setErrorMsg(errorText(e));
                       }
                     }}
                   >
@@ -239,7 +240,7 @@ export default function SecurityPanel() {
                             setErrorMsg('');
                             handleSecurityUserSelect(securityUserId);
                           } catch (e) {
-                            setErrorMsg(faultText(e));
+                            setErrorMsg(errorText(e));
                           }
                         }}
                       >
@@ -284,7 +285,7 @@ export default function SecurityPanel() {
                             setSecurityRecoveryCode('');
                             handleSecurityUserSelect(securityUserId);
                           } catch (e) {
-                            setErrorMsg(faultText(e));
+                            setErrorMsg(errorText(e));
                           }
                         }}
                       >
@@ -315,7 +316,7 @@ export default function SecurityPanel() {
                             setSecurityRecoveryCodes(r.recoveryCodes ?? []);
                             handleSecurityUserSelect(securityUserId);
                           } catch (e) {
-                            setErrorMsg(faultText(e));
+                            setErrorMsg(errorText(e));
                           }
                         }}
                       >
@@ -356,7 +357,7 @@ export default function SecurityPanel() {
                         await adminApi.securityRevokeAllSessions(securityTenantId!, securityUserId!);
                         handleSecurityUserSelect(securityUserId);
                       } catch (e) {
-                        setErrorMsg(faultText(e));
+                        setErrorMsg(errorText(e));
                       }
                     }}
                   >
@@ -393,7 +394,7 @@ export default function SecurityPanel() {
                                   await adminApi.securityRevokeSession(securityTenantId!, securityUserId!, s.id);
                                   handleSecurityUserSelect(securityUserId);
                                 } catch (e) {
-                                  setErrorMsg(faultText(e));
+                                  setErrorMsg(errorText(e));
                                 }
                               }}
                             >
@@ -438,7 +439,7 @@ export default function SecurityPanel() {
                                   await adminApi.securityRevokeToken(securityTenantId!, securityUserId!, tok.jti);
                                   handleSecurityUserSelect(securityUserId);
                                 } catch (e) {
-                                  setErrorMsg(faultText(e));
+                                  setErrorMsg(errorText(e));
                                 }
                               }}
                             >

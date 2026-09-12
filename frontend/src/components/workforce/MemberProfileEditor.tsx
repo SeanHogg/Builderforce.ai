@@ -9,7 +9,7 @@ import { MemberTimeChart } from './MemberTimeChart';
 import { taskStatusBadgeClass } from '@/lib/taskStatus';
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 export interface MemberProfileTask {
   id: number;
@@ -51,6 +51,7 @@ function textToStrings(s: string): string[] {
 export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved }: {
   kind: MemberKind; refId: string; name: string; tasks?: MemberProfileTask[]; onClose: () => void; onSaved?: () => void;
 }) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('memberProfile');
   const statusLabel = useTaskStatusLabel();
@@ -77,9 +78,9 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
           setTaskTypesText(tagsToText(r.profile.preferredTaskTypes));
         }
       })
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [kind, refId]);
+  }, [kind, refId, errorMessage]);
 
   const set = <K extends keyof MemberProfile>(k: K, v: MemberProfile[K]) => setP((prev) => ({ ...prev, [k]: v }));
   const num = (s: string): number | null => (s.trim() === '' ? null : Number(s));
@@ -97,7 +98,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
         setCalMsg(r.message ?? t('syncFailed'));
       }
     } catch (e) {
-      setCalMsg(faultMessage(e));
+      setCalMsg(errorMessage(e));
     } finally {
       setSyncing(false);
     }
@@ -115,7 +116,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
       onSaved?.();
       onClose();
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }

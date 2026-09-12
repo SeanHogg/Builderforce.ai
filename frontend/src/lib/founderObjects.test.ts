@@ -5,8 +5,9 @@ import {
   capTablePercentBalance, counterpartyAccountField, founderMutableFields,
 } from './founderObjects';
 import {
-  makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specObjectSpec, specSetGuidance, specValueInEnglish,
+  makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specObjectSpec, specSetGuidance,
 } from './specObjects';
+import { specValueInEnglish } from './specVerdict';
 import {
   createDefaultCreationData, creationObjectAiContext, creationObjectContentFields,
   creationObjectDefinition, creationObjectMutableFields, emptyShellProblem,

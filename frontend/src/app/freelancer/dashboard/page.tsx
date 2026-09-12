@@ -10,7 +10,7 @@ import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 import { ENGAGEMENT_TONE } from '@/lib/freelance/statusTones';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
-import { cumulativeDailySeries, cumulativeDailyTotals } from '@/components/dashboard/seriesFromTimestamps';
+import { cumulativeDailySeries, cumulativeDailyTotals } from '@/lib/seriesFromTimestamps';
 import { TabCountBadge } from '@/components/TabCountBadge';
 import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { RateClientButton } from '@/components/freelance/RateClientButton';

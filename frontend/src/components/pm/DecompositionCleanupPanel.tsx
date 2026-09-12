@@ -13,7 +13,7 @@ import {
   type CleanupGroup,
   type CleanupSelection,
 } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * The decomposition-cleanup REVIEW.
  *
@@ -43,6 +43,7 @@ export function DecompositionCleanupPanel({
   /** Fired after a successful apply so the caller can refresh its own counts. */
   onApplied?: () => void;
 }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('cleanup');
   const tPlanning = useTranslations('planning');
   const confirm = useConfirm();
@@ -63,9 +64,9 @@ export function DecompositionCleanupPanel({
       // they never saw the current state of.
       setSelected(new Set());
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     }
-  }, [projectId]);
+  }, [projectId, errorMessage]);
 
   useEffect(() => {
     if (open) { setResult(null); void load(); }
@@ -115,7 +116,7 @@ export function DecompositionCleanupPanel({
       await load();
       onApplied?.();
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

@@ -50,8 +50,8 @@
  */
 
 import type { Edge } from '@xyflow/react';
-import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
-import type { CreationNodeData, CreationObjectKind } from '@/components/creation-canvas/types';
+import type { CanvasObject as CreationFlowNode } from '@/domains/canvas/domain/canvasObject';
+import type { CanvasObjectData as CreationNodeData, CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
 import { STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 
 // ---------------------------------------------------------------------------

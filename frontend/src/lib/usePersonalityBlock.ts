@@ -15,7 +15,8 @@
  * the server's `buildPsychometricBlock`), never execution params.
  */
 import { useEffect, useState } from 'react';
-import { getStoredWebToken, getMe } from './auth';
+import { getStoredWebToken } from './auth';
+import { profileApi } from './auth/session';
 import { fetchPersonalityBlock } from './personalityApi';
 import type { PsychometricProfile } from './psychometric';
 import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
@@ -31,9 +32,8 @@ const CACHE_KEY = 'personality:session';
 async function loadOnce(): Promise<string> {
   const session = await getOrSetClientCached<PersonalitySession>(CACHE_KEY, async () => {
     try {
-      const token = getStoredWebToken();
-      if (!token) return { block: '', profile: null };
-      const me = await getMe(token);
+      if (!getStoredWebToken()) return { block: '', profile: null };
+      const me = await profileApi.me();
       return { block: await fetchPersonalityBlock(me.psychometric), profile: me.psychometric ?? null };
     } catch {
       return { block: '', profile: null };

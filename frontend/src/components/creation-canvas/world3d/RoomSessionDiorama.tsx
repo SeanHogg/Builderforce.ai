@@ -4,7 +4,7 @@
  */
 import { useMemo } from 'react';
 import { DoubleSide } from 'three';
-import type { Canvas3DScene } from '@/components/canvas/canvas3d';
+import type { Canvas3DScene } from '@/lib/canvas/canvas3d';
 import type { RoomPalette } from '@/lib/canvas/roomSeating';
 import { roomSessionDiorama, type RoomSessionPlacement, type RoomSessionSpot } from '@/lib/canvas/roomSession';
 import { RoomItemCaption } from './RoomItemCaption';

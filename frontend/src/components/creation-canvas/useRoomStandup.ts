@@ -5,7 +5,7 @@
 import { useCallback, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { ceremonySessionsApi, type CeremonySession } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * The standup happening in this room, if one is.
@@ -76,6 +76,7 @@ export function useRoomStandup(
   projectId: number | null,
   participants: readonly RoomStandupParticipant[],
 ): RoomStandupState {
+  const errorMessage = useErrorMessage();
   const [session, setSession] = useState<CeremonySession | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,9 +119,9 @@ export function useRoomStandup(
     setError(null);
     ceremonySessionsApi.start(projectId, 'standup', participants.map(({ kind, ref, name }) => ({ kind, ref, name })))
       .then((detail) => setSession(detail.session?.status === 'active' ? detail.session : null))
-      .catch((cause) => setError(faultMessage(cause)))
+      .catch((cause) => setError(errorMessage(cause)))
       .finally(() => setBusy(false));
-  }, [busy, participants, projectId]);
+  }, [busy, participants, projectId, errorMessage]);
 
   const finish = useCallback(() => {
     if (!sessionId || busy) return;
@@ -128,9 +129,9 @@ export function useRoomStandup(
     setError(null);
     ceremonySessionsApi.complete(sessionId)
       .then(() => setSession(null))
-      .catch((cause) => setError(faultMessage(cause)))
+      .catch((cause) => setError(errorMessage(cause)))
       .finally(() => setBusy(false));
-  }, [busy, sessionId]);
+  }, [busy, sessionId, errorMessage]);
 
   const dismissError = useCallback(() => setError(null), []);
 

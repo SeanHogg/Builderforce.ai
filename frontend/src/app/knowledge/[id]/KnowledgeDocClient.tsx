@@ -35,7 +35,6 @@ import {
   statusColorStyle,
 } from '../knowledgeStyles';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { formatCents, KNOWN_CURRENCIES } from '@/lib/canvasMoney';
 
@@ -46,6 +45,7 @@ const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_erro
 const KNOWLEDGE_LISTING_CURRENCIES = Array.from(KNOWN_CURRENCIES);
 
 export default function KnowledgeDocClient({ docId }: { docId: string }) {
+  const toErrorMessage = useErrorMessage();
   const t = useTranslations('knowledge');
   const router = useRouter();
   const { user } = useAuth();
@@ -112,8 +112,8 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         setTags(d.tags);
         setMode(d.canEdit ? 'edit' : 'preview');
       })
-      .catch((e: unknown) => setError(faultMessage(e)));
-  }, [docId]);
+      .catch((e: unknown) => setError(toErrorMessage(e)));
+  }, [docId, toErrorMessage]);
 
   useEffect(() => {
     reload();

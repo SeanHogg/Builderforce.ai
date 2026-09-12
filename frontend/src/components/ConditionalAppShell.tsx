@@ -61,7 +61,7 @@ const FeedbackTab = dynamic(() => import('./feedback/FeedbackTab').then((m) => m
  *
  * It renders null — it exists only to register `list_widgets` / `pin_widget` /
  * `show_widget` / `answer_with_widgets` — but it reads `listComponents()`, and
- * that pulls the WHOLE app-wide component registry (`lib/components/registry` →
+ * that pulls the WHOLE app-wide component registry (`components/widgets/registry` →
  * `allComponents` → every insights, catalog, workforce and canvas surface behind
  * it) in through a STATIC edge from this shell. That was 180 modules and ~32k
  * lines parsed on the first paint of every route, marketing pages included, to

@@ -17,7 +17,7 @@
 import { createIdeProject } from '@/lib/api';
 import { DEFAULT_MODALITY, getModality, type ProjectModality } from '@/lib/modality';
 import type { IdeProject } from '@/lib/types';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 /** Legacy `resourceId` prefix for a Canvas Builder binding. */
 export const BUILD_RESOURCE_PREFIX = 'ideProject:';

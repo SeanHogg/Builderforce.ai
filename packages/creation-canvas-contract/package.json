@@ -3,9 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Transport contract (object kinds, command types, connection kinds) shared by the web Creation Canvas and the VS Code canvas webview. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "description": "Transport contract (object kinds, command types, connection kinds) shared by the web Creation Canvas and the VS Code canvas webview. Source-only: every consumer aliases the bare specifier straight at src/index.ts, which is only a barrel; the object vocabulary and the creative capabilities are also reachable as their own subpaths.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./objectKinds": "./src/objectKinds.ts",
+    "./creativeCapabilities": "./src/creativeCapabilities.ts"
   },
   "types": "./src/index.ts"
 }

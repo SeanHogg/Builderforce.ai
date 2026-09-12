@@ -16,8 +16,8 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { useFormat } from "@/i18n/useFormat";
-import { faultText } from '@/lib/apiClient';
 import { formatElapsedBetween } from '@/lib/duration';
+import { useErrorText } from '@/i18n/useErrorMessage';
 type DrawerTab = 'profile' | 'permissions' | 'sessions' | 'security' | 'access';
 
 interface Props {
@@ -32,6 +32,7 @@ function fmtDateTime(fmt: Formatter, d: string) {
 }
 
 export default function UserDetailDrawer({ user, tenants, onClose, onStartImpersonate }: Props) {
+  const errorText = useErrorText();
   const fmt = useFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
@@ -70,12 +71,12 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
           setAdminAccess(r.sessions);
         }
       } catch (e) {
-        setErrorMsg(faultText(e));
+        setErrorMsg(errorText(e));
       } finally {
         setLoading(false);
       }
     },
-    [user.id, selectedTenantId],
+    [user.id, selectedTenantId, errorText],
   );
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
       setErrorMsg('');
       toast.success(t('users.drawer.forceLogoutDone'));
     } catch (e) {
-      setErrorMsg(faultText(e));
+      setErrorMsg(errorText(e));
     } finally {
       setForceLogoutBusy(false);
     }
@@ -106,7 +107,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
       await adminApi.resetPassword(user.id);
       toast.success(t('users.drawer.resetPasswordDone'));
     } catch (e) {
-      setErrorMsg(faultText(e));
+      setErrorMsg(errorText(e));
     } finally {
       setResetPwBusy(false);
     }
@@ -120,7 +121,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
       await adminApi.setUserStatus(user.id, suspend);
       toast.success(suspend ? t('users.drawer.suspendDone') : t('users.drawer.unsuspendDone'));
     } catch (e) {
-      setErrorMsg(faultText(e));
+      setErrorMsg(errorText(e));
     } finally {
       setStatusBusy(false);
     }
@@ -395,7 +396,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                               .securityRevokeAllSessions(selectedTenantId, user.id)
                               .then(() => adminApi.securityDetails(selectedTenantId, user.id))
                               .then(setSecDetails)
-                              .catch((e) => setErrorMsg(faultText(e)))
+                              .catch((e) => setErrorMsg(errorText(e)))
                               .finally(() => setLoading(false));
                           }}
                         >

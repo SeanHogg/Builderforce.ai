@@ -13,6 +13,7 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { TenantActivityPanel } from './TenantActivityPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -139,6 +140,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
  * (checkbox-select members → merge), so this surface is activity-only.
  */
 export function ContributorsView() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('contributors');
   const [data, setData] = useState<ActivityCalendar | null>(null);
@@ -153,7 +155,7 @@ export function ContributorsView() {
     setError(null);
     analyticsApi.activityCalendar()
       .then(setData)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 

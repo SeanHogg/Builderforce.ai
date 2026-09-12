@@ -15,7 +15,7 @@ import {
 } from '@/lib/builderforceApi';
 import { CAMPAIGN_BLOCKERS } from '@/lib/growthApi';
 import { HEALTH_SIGNALS } from '@/lib/pm/portfolioHealth';
-import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
+import { CREATION_TEMPLATES } from '@/lib/templates/creationTemplates';
 import {
   NAV_GROUPS,
   FOR_HIRE_NAV_GROUPS,
@@ -43,7 +43,7 @@ import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 import { CANVAS_SESSION_ACTIONS } from '@/lib/canvasSessionActions';
 import { OUTCOME_METRIC_FAMILY_ORDER, OUTCOME_METRIC_MESSAGE_KEYS } from '@/lib/outcomeMetrics';
 
-import { listComponents } from '@/lib/components/registry';
+import { listComponents } from '@/components/widgets/registry';
 import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
 import { DELIVERY_PANELS } from '@/components/insights/deliveryPanels';
 import { DEVEX_PANELS } from '@/components/insights/devexPanels';

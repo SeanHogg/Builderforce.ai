@@ -6,8 +6,8 @@ import { pmoApi, type Objective } from '@/lib/builderforceApi';
 import { usePermission } from '@/lib/rbac';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
-import { faultMessage } from '@/lib/apiClient';
 import { contextCard, contextLabel, contextLinkButton } from './ticketContextStyles';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * LINK THIS TICKET TO AN OBJECTIVE, from the ticket.
@@ -78,6 +78,7 @@ export interface TicketObjectiveLinkPickerProps {
 }
 
 export function TicketObjectiveLinkPicker({ taskId, projectId, onLinked }: TicketObjectiveLinkPickerProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('ticketContext');
   const { allowed } = usePermission(LINK_CAPABILITY);
   const [list, setList] = useState<ListState>({ status: 'loading' });
@@ -90,9 +91,9 @@ export function TicketObjectiveLinkPicker({ taskId, projectId, onLinked }: Ticke
     let alive = true;
     pmoApi.objectives.list()
       .then((rows) => { if (alive) setList({ status: 'ready', rows }); })
-      .catch((e) => { if (alive) setList({ status: 'failed', detail: faultMessage(e) }); });
+      .catch((e) => { if (alive) setList({ status: 'failed', detail: errorMessage(e) }); });
     return () => { alive = false; };
-  }, [attempt]);
+  }, [attempt, errorMessage]);
 
   const retry = useCallback(() => {
     setList({ status: 'loading' });
@@ -110,9 +111,9 @@ export function TicketObjectiveLinkPicker({ taskId, projectId, onLinked }: Ticke
     setError(null);
     pmoApi.objectives.addLink(choice, { linkKind: 'task', taskId })
       .then(() => { setChoice(''); onLinked(); })
-      .catch((e) => setError(faultMessage(e)))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setBusy(false));
-  }, [choice, allowed, taskId, onLinked]);
+  }, [choice, allowed, taskId, onLinked, errorMessage]);
 
   const empty = list.status === 'ready' && list.rows.length === 0;
   const selectDisabled = !allowed || busy || list.status !== 'ready' || empty;

@@ -13,12 +13,14 @@ import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { ShortlistToggle } from '@/components/talent/ShortlistToggle';
 import { Icon } from '@/components/ui/Icon';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
 
 export default function TalentDetailClient() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('talent');
   const params = useParams();
   const id = String(params?.id ?? '');
@@ -31,8 +33,8 @@ export default function TalentDetailClient() {
 
   useEffect(() => {
     if (!id) return;
-    getFreelancer(id).then(setProfile).catch((e: unknown) => setError(faultMessage(e))).finally(() => setLoading(false));
-  }, [id]);
+    getFreelancer(id).then(setProfile).catch((e: unknown) => setError(errorMessage(e))).finally(() => setLoading(false));
+  }, [id, errorMessage]);
 
   const doHire = async (status: 'active' | 'interviewing') => {
     if (!profile) return;

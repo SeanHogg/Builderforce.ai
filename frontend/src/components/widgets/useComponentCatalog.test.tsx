@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useComponentCatalog, useComponentLabel } from './useComponentCatalog';
-import type { ComponentMount } from './types';
+import type { ComponentMount } from '@/lib/components/types';
 
 /**
  * REFERENTIAL STABILITY, WHICH IS A CORRECTNESS PROPERTY HERE AND NOT A

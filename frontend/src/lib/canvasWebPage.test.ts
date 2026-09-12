@@ -4,7 +4,7 @@ import {
   normalizeWebPageUrl, webPageHost,
 } from './canvasWebPage';
 import { CANVAS_VIEWPORT_WIDTHS, canvasViewport } from '@builderforce/creation-canvas-contract';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const page = (data: Partial<CreationNodeData>): CreationNodeData => ({ kind: 'browser', title: 'Page', ...data });
 

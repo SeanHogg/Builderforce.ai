@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { useComponentCatalog, useComponentLabel } from '@/lib/components/useComponentCatalog';
+import { useComponentCatalog, useComponentLabel } from '@/components/widgets/useComponentCatalog';
 import type { ComponentDef, ComponentMount } from '@/lib/components/types';
 
 /**

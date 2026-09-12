@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, canvasSlides, paginateDocument, plainText } from './canvasDocuments';
 import { formatBytes } from './formatBytes';
 import { PAGE_BREAK_MARKER } from './officeFormats';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const object = (data: Partial<CreationNodeData> & { kind: CreationNodeData['kind'] }): CreationNodeData => ({ title: 'Untitled', ...data } as CreationNodeData);
 

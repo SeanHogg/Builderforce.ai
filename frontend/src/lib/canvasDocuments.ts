@@ -14,7 +14,7 @@ import { detectDiagramSource, diagramNotation, type CanvasDiagramSource } from '
 import { tabularFromObject } from './canvasTabularData';
 import { PAGE_BREAK_MARKER } from './officeFormats';
 import { pitchObjectMarkdown } from './pitchCompetition';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const WORDS_PER_PAGE = 450;
 const WORDS_PER_MINUTE = 220;

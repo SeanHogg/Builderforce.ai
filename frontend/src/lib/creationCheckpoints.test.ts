@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
-import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
+import type { CanvasObject as CreationFlowNode } from '@/domains/canvas/domain/canvasObject';
 import {
   LOCAL_CHECKPOINT_LIMIT, localCheckpointSummaries,
   readLocalCheckpoint, readLocalCheckpoints, saveLocalCheckpoint, withCheckpoint,

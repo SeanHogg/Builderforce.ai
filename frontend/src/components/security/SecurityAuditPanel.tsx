@@ -13,7 +13,6 @@ import {
   type SecurityAuditFinding,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { SEVERITY_COLOR } from './securitySeverity';
 const cardStyle: React.CSSProperties = {
@@ -52,7 +51,7 @@ export function SecurityAuditPanel() {
     setLoading(true);
     securityAgentApi.listAudits()
       .then(setAudits)
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);

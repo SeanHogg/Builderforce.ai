@@ -125,9 +125,9 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
     setError(null);
     monitoringApi.listBoards()
       .then(setBoards)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -240,9 +240,9 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
     setError(null);
     monitoringApi.getBoard(boardId)
       .then((r) => { setBoard(r.board); setMonitors(r.monitors); })
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [boardId]);
+  }, [boardId, errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -614,9 +614,9 @@ function MonitorPanel({
         setSignalUrl(r.signalUrl);
         setCurrentIncidentId(m.currentIncidentId);
       })
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [isNew, monitorId]);
+  }, [isNew, monitorId, errorMessage]);
 
   const buildConfig = (): Record<string, unknown> => {
     switch (monitorType) {
@@ -874,6 +874,7 @@ function MonitorPanel({
 /* ─────────────────────────── Reporting ─────────────────────────── */
 
 function ReportingSection({ t }: { t: T }) {
+  const toErrorMessage = useErrorMessage();
   const [report, setReport] = useState<MonitoringReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -883,9 +884,9 @@ function ReportingSection({ t }: { t: T }) {
     setError(null);
     monitoringApi.getReport()
       .then(setReport)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(toErrorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [toErrorMessage]);
 
   if (loading) return <SectionLoading label={t('loading')} />;
   if (error) return <SectionError error={error} />;

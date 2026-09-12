@@ -3,7 +3,7 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * WebContainer "connect" page. When the user opens the preview URL in a new tab,
  * that tab redirects to this URL (e.g. /webcontainer/connect/61636aac). This page
@@ -13,6 +13,7 @@ import { faultMessage } from '@/lib/apiClient';
  * @see https://github.com/stackblitz/webcontainer-core/issues/1725
  */
 export default function WebContainerConnectPage() {
+  const errorMessage = useErrorMessage();
   const [status, setStatus] = useState<'connecting' | 'ok' | 'error'>('connecting');
   const [error, setError] = useState<string | null>(null);
 
@@ -25,13 +26,13 @@ export default function WebContainerConnectPage() {
         if (!cancelled) setStatus('ok');
       } catch (e) {
         if (!cancelled) {
-          setError(faultMessage(e));
+          setError(errorMessage(e));
           setStatus('error');
         }
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [errorMessage]);
 
   if (status === 'ok') {
     return (

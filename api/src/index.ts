@@ -84,6 +84,8 @@ import { createBiRoutes }          from './presentation/routes/biRoutes';
 import { createTenantApiKeyRoutes } from './presentation/routes/tenantApiKeyRoutes';
 import { createMcpExtensionRoutes, createMcpOAuthCallbackRoutes } from './presentation/routes/mcpExtensionRoutes';
 import { createAuthRoutes }        from './presentation/routes/authRoutes';
+import { createNewsletterRoutes }  from './presentation/routes/newsletterRoutes';
+import { createPrivacyRoutes }     from './presentation/routes/privacyRoutes';
 import { createOAuthRoutes }       from './presentation/routes/oauthRoutes';
 import { createPasskeyLoginRoutes, createPasskeyRoutes } from './presentation/routes/passkeyRoutes';
 import { createAgentRoutes, createSkillRoutes } from './presentation/routes/agentRoutes';
@@ -813,6 +815,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, tenantService, db));
+  // Not authentication, but kept at the `/api/auth` URLs the marketing and legal
+  // pages already call: the newsletter door and the privacy/DSR channel.
+  app.route('/api/auth',    createNewsletterRoutes(db));
+  app.route('/api/auth',    createPrivacyRoutes(db));
   app.route('/api/auth',    createOAuthRoutes(db));
   // Passkeys. Two routers because the halves have opposite auth requirements:
   // enrolment is web-JWT gated (you add a key to an account you are already in),

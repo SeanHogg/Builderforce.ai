@@ -3,7 +3,7 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * WebContainer "connect" page. Must be at exactly /webcontainer/connect (no trailing segment)
  * so that @webcontainer/api's setupConnect() recognises the pathname.
@@ -11,6 +11,7 @@ import { faultMessage } from '@/lib/apiClient';
  * @see https://github.com/stackblitz/webcontainer-core/issues/1725
  */
 export default function WebContainerConnectPage() {
+  const errorMessage = useErrorMessage();
   const [status, setStatus] = useState<'connecting' | 'ok' | 'error'>('connecting');
   const [error, setError] = useState<string | null>(null);
 
@@ -23,13 +24,13 @@ export default function WebContainerConnectPage() {
         if (!cancelled) setStatus('ok');
       } catch (e) {
         if (!cancelled) {
-          setError(faultMessage(e));
+          setError(errorMessage(e));
           setStatus('error');
         }
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [errorMessage]);
 
   if (status === 'ok') {
     return (

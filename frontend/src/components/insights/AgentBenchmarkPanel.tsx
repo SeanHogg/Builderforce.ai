@@ -16,9 +16,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { TrendChart } from '@/components/charts/TrendChart';
-import { faultMessage } from '@/lib/apiClient';
 import { agentBenchmarkApi, type BenchmarkReport } from '@/lib/agentBenchmarkApi';
 import type { ComponentSurfaceProps } from '@/lib/components/types';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -38,6 +38,7 @@ const statLabel: React.CSSProperties = { fontSize: 'var(--font-size-eyebrow)', c
 const pct = (value: number): string => `${Math.round(value * 100)}%`;
 
 export function AgentBenchmarkPanel({ days }: ComponentSurfaceProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('agentBenchmark');
   const [report, setReport] = useState<BenchmarkReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,11 +50,11 @@ export function AgentBenchmarkPanel({ days }: ComponentSurfaceProps) {
       setReport(await agentBenchmarkApi.report(days));
       setError(null);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 

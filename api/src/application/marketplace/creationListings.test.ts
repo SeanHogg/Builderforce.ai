@@ -204,14 +204,21 @@ describe('withdrawal does not repossess', () => {
 });
 
 /** The module's own text — these two rules are one line each and a reader cannot
- *  tell from a mock whether the line is still there. */
+ *  tell from a mock whether the line is still there. The module is split per
+ *  concern under `./listings/` (`creationListings.ts` is only the re-export
+ *  facade), so its text is every file there, read together: a rule that moved
+ *  between two of them is still the module's rule. */
 async function readListingSource(): Promise<string> {
-  const { readFile } = await import('node:fs/promises');
+  const { readFile, readdir } = await import('node:fs/promises');
+  const { join } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   // `new URL(...)` here resolves to the workers-types/DOM `URL`, which is not
   // structurally node:url's `URL`. fileURLToPath accepts a string — same idiom
   // as the sibling source-text tests.
-  return readFile(fileURLToPath(new URL('./creationListings.ts', import.meta.url).href), 'utf8');
+  const dir = fileURLToPath(new URL('./listings/', import.meta.url).href);
+  const files = (await readdir(dir)).filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts')).sort();
+  const texts = await Promise.all(files.map((name) => readFile(join(dir, name), 'utf8')));
+  return texts.join('\n');
 }
 
 describe('kind spec lookup', () => {

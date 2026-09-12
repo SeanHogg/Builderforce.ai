@@ -18,9 +18,6 @@ import {
   authTokens,
   authUserSessions,
   agentHosts,
-  newsletterEvents,
-  newsletterSubscribers,
-  privacyRequests,
   tenants,
   userLegalAcceptances,
   userMfaRecoveryCodes,
@@ -56,11 +53,13 @@ import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateSalesReferrals } from '../../application/sales/salesReferralFacts';
 import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import { createSessionIntrospectRoutes } from './sessionIntrospectRoutes';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { coerceJsonArray } from '../../domain/shared/jsonColumn';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { normalizeEmail } from '../../application/shared/dnsVerification';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -165,10 +164,6 @@ async function provisionFreelancer(
   });
 }
 
-function normalizeEmail(input: string): string {
-  return input.trim().toLowerCase();
-}
-
 async function assertMfa(
   db: Db,
   env: Env,
@@ -244,167 +239,9 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // GET /api/auth/introspect — the legacy worker's session check; own module.
   router.route('/', createSessionIntrospectRoutes());
 
-  // POST /api/auth/newsletter/subscribers
-  // Public endpoint used by marketing surfaces for subscribe/unsubscribe.
-  router.post('/newsletter/subscribers', async (c) => {
-    const body = await c.req.json<{
-      email?: string;
-      action?: 'subscribe' | 'unsubscribe';
-      source?: string;
-      firstName?: string;
-      lastName?: string;
-      reason?: string;
-    }>();
-
-    const rawEmail = body.email ?? '';
-    const email = normalizeEmail(rawEmail);
-    if (!email || !email.includes('@')) {
-      return c.json({ error: 'Valid email is required' }, 400);
-    }
-
-    const action = body.action === 'unsubscribe' ? 'unsubscribe' : 'subscribe';
-    const source = body.source?.trim() || 'marketing_site';
-    const firstName = body.firstName?.trim() || null;
-    const lastName = body.lastName?.trim() || null;
-    const reason = body.reason?.trim() || null;
-
-    const [user] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-
-    const [existing] = await db
-      .select({ id: newsletterSubscribers.id })
-      .from(newsletterSubscribers)
-      .where(eq(newsletterSubscribers.email, email))
-      .limit(1);
-
-    let subscriberId: number;
-
-    if (action === 'subscribe') {
-      if (existing) {
-        const [updated] = await db
-          .update(newsletterSubscribers)
-          .set({
-            userId: user?.id ?? null,
-            firstName,
-            lastName,
-            source,
-            status: 'subscribed',
-            unsubscribedAt: null,
-            unsubscribeReason: null,
-            updatedAt: sql`now()`,
-          })
-          .where(eq(newsletterSubscribers.id, existing.id))
-          .returning({ id: newsletterSubscribers.id });
-        subscriberId = updated!.id;
-      } else {
-        const [created] = await db
-          .insert(newsletterSubscribers)
-          .values({
-            userId: user?.id ?? null,
-            email,
-            firstName,
-            lastName,
-            source,
-            status: 'subscribed',
-          })
-          .returning({ id: newsletterSubscribers.id });
-        subscriberId = created!.id;
-      }
-
-      await db.insert(newsletterEvents).values({
-        subscriberId,
-        eventType: 'subscribed',
-        metadata: JSON.stringify({ source }),
-      });
-
-      return c.json({ ok: true, email, status: 'subscribed', subscribed: true });
-    }
-
-    if (existing) {
-      const [updated] = await db
-        .update(newsletterSubscribers)
-        .set({
-          status: 'unsubscribed',
-          unsubscribedAt: sql`now()`,
-          unsubscribeReason: reason,
-          updatedAt: sql`now()`,
-        })
-        .where(eq(newsletterSubscribers.id, existing.id))
-        .returning({ id: newsletterSubscribers.id });
-      subscriberId = updated!.id;
-    } else {
-      const [created] = await db
-        .insert(newsletterSubscribers)
-        .values({
-          userId: user?.id ?? null,
-          email,
-          source,
-          status: 'unsubscribed',
-          unsubscribedAt: new Date(),
-          unsubscribeReason: reason,
-        })
-        .returning({ id: newsletterSubscribers.id });
-      subscriberId = created!.id;
-    }
-
-    await db.insert(newsletterEvents).values({
-      subscriberId,
-      eventType: 'unsubscribed',
-      metadata: JSON.stringify({ source, reason }),
-    });
-
-    return c.json({ ok: true, email, status: 'unsubscribed', subscribed: false });
-  });
-
-  // POST /api/auth/privacy-requests
-  // Public endpoint for CCPA/GDPR information requests from marketing/legal pages.
-  router.post('/privacy-requests', async (c) => {
-    const body = await c.req.json<{
-      email?: string;
-      requestType?: 'ccpa' | 'gdpr' | 'access' | 'correction' | 'deletion' | 'portability' | 'restriction' | 'objection' | 'opt_out' | 'appeal' | 'automated_decision_review';
-      details?: string;
-      jurisdiction?: string;
-      parentRequestId?: number;
-    }>();
-
-    const rawEmail = body.email ?? '';
-    const email = normalizeEmail(rawEmail);
-    if (!email || !email.includes('@')) {
-      return c.json({ error: 'Valid email is required' }, 400);
-    }
-
-    const allowedTypes = new Set(['ccpa', 'gdpr', 'access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review'] as const);
-    const requestType = allowedTypes.has(body.requestType as never) ? body.requestType! : 'access';
-    const details = body.details?.trim() || null;
-
-    const [user] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-
-    const [created] = await db
-      .insert(privacyRequests)
-      .values({
-        userId: user?.id ?? null,
-        email,
-        requestType,
-        details,
-        jurisdiction: body.jurisdiction?.trim().slice(0, 32) || null,
-        parentRequestId: Number.isInteger(body.parentRequestId) ? body.parentRequestId : null,
-        dueAt: new Date(Date.now() + 45 * 86_400_000),
-      })
-      .returning({ id: privacyRequests.id });
-
-    if (!created) {
-      throw new InternalError('Failed to create privacy request');
-    }
-
-    return c.json({ ok: true, id: created.id });
-  });
+  // The newsletter (`/newsletter/subscribers`) and the privacy/DSR channel
+  // (`/privacy-requests`, `/me/privacy-*`) are mounted at this same `/api/auth`
+  // prefix from their own modules in `index.ts` — neither is authentication.
 
   // GET /api/auth/legal/current
   router.get('/legal/current', async (c) => {
@@ -426,50 +263,6 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       needsAcceptance: status.needsAcceptance,
       terms,
     });
-  });
-
-  // GET /api/auth/me/privacy-export — machine-readable, authenticated access and
-  // portability bundle. Workspace content remains exportable from its owning UI;
-  // this bundle covers the person's identity, memberships, legal record, and DSRs.
-  router.get('/me/privacy-export', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as UserId;
-    const [account] = await db.select({ id: users.id, email: users.email, username: users.username, displayName: users.displayName, accountType: users.accountType, locale: users.locale, createdAt: users.createdAt, updatedAt: users.updatedAt }).from(users).where(eq(users.id, userId)).limit(1);
-    if (!account) return c.json({ error: 'User not found' }, 404);
-    const [memberships, legalAcceptances, requests] = await Promise.all([
-      db.select({ ...getTableColumns(tenantMembers), tenantId: tenantMembers.tenantId }).from(tenantMembers).where(eq(tenantMembers.userId, userId)),
-      db.select().from(userLegalAcceptances).where(eq(userLegalAcceptances.userId, userId)),
-      db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)),
-    ]);
-    c.header('Content-Disposition', `attachment; filename="builderforce-privacy-export-${userId}.json"`);
-    c.header('Cache-Control', 'private, no-store');
-    return c.json({ schemaVersion: 1, exportedAt: new Date().toISOString(), account, memberships, legalAcceptances, privacyRequests: requests });
-  });
-
-  // Authenticated request channel for deletion, correction, objection, appeal,
-  // portability, or human review. Identity is already verified by the WebJWT.
-  router.post('/me/privacy-requests', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ requestType?: string; details?: string; jurisdiction?: string; parentRequestId?: number }>().catch(() => ({} as { requestType?: string; details?: string; jurisdiction?: string; parentRequestId?: number }));
-    const supported = ['access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review'] as const;
-    if (!supported.includes(body.requestType as typeof supported[number])) return c.json({ error: 'Unsupported privacy request type' }, 400);
-    const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-    if (!account) return c.json({ error: 'User not found' }, 404);
-    const isDeletion = body.requestType === 'deletion';
-    const [created] = await db.insert(privacyRequests).values({
-      userId, email: account.email, requestType: body.requestType as typeof supported[number],
-      details: body.details?.trim() || null, jurisdiction: body.jurisdiction?.trim().slice(0, 32) || null,
-      parentRequestId: Number.isInteger(body.parentRequestId) ? body.parentRequestId : null,
-      status: body.requestType === 'appeal' ? 'appealed' : 'processing', verifiedAt: new Date(),
-      dueAt: new Date(Date.now() + 45 * 86_400_000),
-      processorDeletionStatus: isDeletion ? { state: 'queued', providers: 'derived from tenant integrations and subprocessor register' } : null,
-      backupDisposition: isDeletion ? 'Queued for live-system deletion; encrypted backups age out under the retention schedule and are not returned to production except disaster recovery.' : null,
-    }).returning({ id: privacyRequests.id, status: privacyRequests.status, dueAt: privacyRequests.dueAt });
-    return c.json({ ok: true, request: created }, 201);
-  });
-
-  router.get('/me/privacy-requests', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as UserId;
-    return c.json({ requests: await db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)).orderBy(desc(privacyRequests.createdAt)).limit(LIST_ROW_CAP) });
   });
 
   // POST /api/auth/legal/terms/accept (requires WebJWT)
@@ -739,6 +532,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
         .from(salesAssociateSettings).where(or(eq(salesAssociateSettings.referralCode, referralCode), eq(salesAssociateSettings.salesCode, referralCode))).limit(1);
       if (associate && associate.ownerUserId !== created.id) {
         await db.insert(salesReferrals).values({ associateUserId: associate.ownerUserId, referredUserId: created.id, attributionType: referralCode === associate.salesCode ? 'sales' : 'referral' }).onConflictDoNothing();
+        await invalidateSalesReferrals(c.env as Env, associate.ownerUserId);
       }
     }
 
@@ -847,6 +641,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     const [verifiedReferral] = await db.update(salesReferrals).set({ signupNotifiedAt: new Date() })
       .where(and(eq(salesReferrals.referredUserId, user.id), isNull(salesReferrals.signupNotifiedAt))).returning({ ...getTableColumns(salesReferrals), tenantId: salesReferrals.tenantId });
     if (verifiedReferral) {
+      await invalidateSalesReferrals(c.env as Env, verifiedReferral.associateUserId);
       const [associate] = await db.select({ enabled: salesAssociateSettings.notifyOnSignup }).from(salesAssociateSettings)
         .where(eq(salesAssociateSettings.ownerUserId, verifiedReferral.associateUserId)).limit(1);
       if (associate?.enabled !== false) void notify(db, c.env, { userId: verifiedReferral.associateUserId, kind: 'sales.referral_signup', title: 'A referred user signed up', body: `${user.displayName || user.email} verified their Builderforce account.`, ref: '/sales' });

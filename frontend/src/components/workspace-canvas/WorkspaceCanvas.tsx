@@ -19,7 +19,7 @@ import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/com
 import { Icon } from '@/components/ui/Icon';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
-import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/lib/canvas/canvas3d';
 import { WorkspacePanelList } from './WorkspacePanelList';
 import styles from './WorkspaceCanvas.module.css';
 

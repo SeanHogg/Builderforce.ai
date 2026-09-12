@@ -18,8 +18,9 @@
  */
 
 import {
-  deriveNumber, derivePercent, deriveRows, specRefKey, specVerdict, sumColumn, type SpecDeriveBoard,
+  deriveNumber, derivePercent, deriveRows, specRefKey, sumColumn, type SpecDeriveBoard,
 } from '../specObjects';
+import { specVerdict } from '../specVerdict';
 import {
   buildGradebook, columnFromAssignment, gradebookStats, learnersFromCohort, markFromSubmission,
   type GradebookColumn, type GradebookLearner, type GradebookMatrix, type LearnerMark,

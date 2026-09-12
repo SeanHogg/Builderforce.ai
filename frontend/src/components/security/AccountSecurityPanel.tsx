@@ -20,7 +20,6 @@ import {
 import { SessionList } from '@/components/security/SessionList';
 import PasskeysPanel from '@/components/security/PasskeysPanel';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { formatElapsedBetween } from '@/lib/duration';
 const cardStyle: React.CSSProperties = {
@@ -50,13 +49,13 @@ export default function AccountSecurityPanel() {
   useEffect(() => {
     mySessionsApi.list()
       .then(setMySessions)
-      .catch((e: Error) => setMyError(faultMessage(e)))
+      .catch((e: Error) => setMyError(errorMessage(e)))
       .finally(() => setLoadingMine(false));
     myAdminAccessApi.list()
       .then(setAdminAccess)
       .catch(() => undefined) // non-critical; suppress errors
       .finally(() => setLoadingAdmin(false));
-  }, []);
+  }, [errorMessage]);
 
   const revokeMine = async (ids: string[]) => {
     try {

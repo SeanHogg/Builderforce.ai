@@ -30,6 +30,27 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   975 → 977 (`useClientFiles`, 2026-09-12) — commit 99f5576ca landed three new
+ *   directives and the deploy went red at 978. Judged per file, not per importer:
+ *
+ *     - `components/InlineConfirmButton.tsx` STAYS. The inline two-step control that
+ *       replaces a non-destructive "Are you sure?" modal: it holds the armed state,
+ *       runs a disarm timer in an effect and listens for Escape. Client by construction.
+ *     - `components/insights/createPanelProvider.tsx` STAYS. It builds each insights
+ *       hub's drawer provider — a React context, `useState` for the open lens, and a
+ *       `SlideOutPanel`. A provider is client by construction (the "792 → 796" entry),
+ *       and this one REPLACES four hand-written copies of itself: the AI, Delivery,
+ *       DevEx and Finance providers each shrank to one call. So +1 here buys −300 lines
+ *       of duplicated client code.
+ *     - `i18n/useErrorMessage.ts` LOST it, argued in its header: a hook module made
+ *       only of `useTranslations` + `useCallback`, both of which render on the server,
+ *       so the directive declared nothing it needs (the `lib/useRoleText.ts` case in
+ *       the entry below).
+ *
+ *   The same pass split `lib/specObjects.ts` (832 lines, a new `oversizedProductionFiles`
+ *   violation) instead of allowlisting it: the verdict formatter, which that commit added,
+ *   is its own concern with its own readers and now lives in `lib/specVerdict.ts`.
+ *
  *   974 → 975 (`useClientFiles`, 2026-09-12) — three files gained the directive
  *   after 974 was recorded (commits 6d8ce0064..929a68acb), and the frontend deploy
  *   went red at 977. Each was judged on its own terms, not on its importers:

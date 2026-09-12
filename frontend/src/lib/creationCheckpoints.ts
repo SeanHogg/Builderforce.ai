@@ -31,7 +31,7 @@
  */
 
 import type { Edge } from '@xyflow/react';
-import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
+import type { CanvasObject as CreationFlowNode } from '@/domains/canvas/domain/canvasObject';
 import { creationStorageKey } from '@/domains/canvas/infrastructure/localCanvasStore';
 
 /**

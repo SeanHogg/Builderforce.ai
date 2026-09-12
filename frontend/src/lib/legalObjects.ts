@@ -64,7 +64,8 @@ import { type LegalObjectKind } from '@builderforce/creation-canvas-contract';
 // resolution is a live lookup rather than a stored id. `placement.client` reuses it from
 // the hiring vocabulary on the same argument.
 import { COUNTERPARTY_HINT, counterpartyAccountField } from './founderObjects';
-import { deriveNumber, registerSpecObjectSet, specVerdict, SUMMARY_FIELD, type SpecObjectSpec } from './specObjects';
+import { deriveNumber, registerSpecObjectSet, SUMMARY_FIELD, type SpecObjectSpec } from './specObjects';
+import { specVerdict } from './specVerdict';
 
 /** i18n namespace for every legal label, field and status. */
 export const LEGAL_NAMESPACE = 'creationCanvas.legal';

@@ -12,13 +12,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { usePermission, type TenantRole } from '@/lib/rbac';
 import { getStoredTenant } from '@/lib/auth';
-import { faultMessage } from '@/lib/apiClient';
 import {
   mcpExtensionsApi,
   type CreateMcpExtensionInput,
   type McpExtension,
   type UpdateMcpExtensionInput,
 } from '@/lib/mcpExtensionsApi';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 export interface McpServersState {
   /** True when this member may read/write the workspace's registered servers. */
@@ -39,6 +39,7 @@ export interface McpServersState {
 }
 
 export function useMcpServers(): McpServersState {
+  const errorMessage = useErrorMessage();
   const { allowed, required: requiredRole } = usePermission('mcp.manage');
   // `Tenant.id` is the JWT claim's string; every tenant-scoped client takes the
   // numeric id (see `BillingClient`), so the narrowing happens here rather than
@@ -56,11 +57,11 @@ export function useMcpServers(): McpServersState {
       setServers(await mcpExtensionsApi.list(tenantId));
       setError(null);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [allowed, tenantId]);
+  }, [allowed, tenantId, errorMessage]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -73,10 +74,10 @@ export function useMcpServers(): McpServersState {
       await reload();
       return result;
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
       return null;
     }
-  }, [allowed, tenantId, reload]);
+  }, [allowed, tenantId, reload, errorMessage]);
 
   return {
     allowed,
@@ -95,7 +96,7 @@ export function useMcpServers(): McpServersState {
         setError(null);
         return authUrl;
       } catch (e) {
-        setError(faultMessage(e));
+        setError(errorMessage(e));
         return null;
       }
     },

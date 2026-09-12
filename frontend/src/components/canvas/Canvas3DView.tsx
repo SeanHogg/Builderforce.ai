@@ -27,9 +27,9 @@ import {
   type Canvas3DDragAxis,
   type Canvas3DNode,
   type Canvas3DOrbit,
-} from './canvas3d';
+} from '@/lib/canvas/canvas3d';
 import { usePublishCanvas3DControls, type Canvas3DControls } from './canvas3dControls';
-import type { CanvasGraphEdge } from './canvasGraph';
+import type { CanvasGraphEdge } from '@/lib/canvas/canvasGraph';
 import { loadMeshTriangles, meshProjectionUrl } from '@/lib/meshPreviewCache';
 import styles from './Canvas3DView.module.css';
 

@@ -46,22 +46,38 @@ import {
 
 const NO_TENANT = 'This needs a signed-in, saved canvas session: it reads and writes a real workspace record, and an anonymous board has no workspace behind it. Say so in one sentence and keep building what this canvas can hold; never claim it ran.';
 
-/** Plain-English subtitle for the card's common `status` field, kept in step with
- *  the derived `documentStatus` this same patch writes — see `legalObjects.ts` for
- *  why the two are separate fields. */
-function statusLabel(status: LegalDocumentDetail['status']): string {
-  switch (status) {
-    case 'shared': return 'Shared';
-    case 'awaiting_signature': return 'Awaiting signature';
-    case 'declined': return 'Declined';
-    case 'signed': return 'Signed';
-    default: return 'Draft';
-  }
+/** The catalog key (under `creationCanvas`) for each document status. Exported so the
+ *  test can prove every status the API can return has a word. */
+export const LEGAL_DOCUMENT_STATUS_KEYS: Readonly<Record<LegalDocumentDetail['status'], string>> = {
+  draft: 'legal.documentStatus.draft',
+  shared: 'legal.documentStatus.shared',
+  awaiting_signature: 'legal.documentStatus.awaitingSignature',
+  declined: 'legal.documentStatus.declined',
+  signed: 'legal.documentStatus.signed',
+};
+
+const ENGLISH_STATUS: Readonly<Record<LegalDocumentDetail['status'], string>> = {
+  draft: 'Draft', shared: 'Shared', awaiting_signature: 'Awaiting signature', declined: 'Declined', signed: 'Signed',
+};
+
+/**
+ * The card's common `status` field, kept in step with the derived `documentStatus` this
+ * same patch writes — see `legalObjects.ts` for why the two are separate fields.
+ *
+ * `documentStatus` is the machine value the model reads; `status` is the words a PERSON
+ * reads on the card, and it is persisted with the board. So it is resolved with the
+ * board's translator when the surface supplied one — an English status written onto a
+ * zh board stays English after every later sync. English only when there is no
+ * translator to ask (a unit test, a context built without a surface).
+ */
+export function legalDocumentStatusLabel(status: LegalDocumentDetail['status'], translate?: CanvasTextTranslator): string {
+  const known = status in LEGAL_DOCUMENT_STATUS_KEYS ? status : 'draft';
+  return translate ? translate(LEGAL_DOCUMENT_STATUS_KEYS[known]) : ENGLISH_STATUS[known];
 }
 
 /** The full bookkeeping patch a `legalDocument` card takes from a fresh read of its
  *  real record — the ONLY thing that ever writes these fields once a file exists. */
-function patchFromDetail(detail: LegalDocumentDetail): Record<string, unknown> {
+export function patchFromDetail(detail: LegalDocumentDetail, translate?: CanvasTextTranslator): Record<string, unknown> {
   return {
     documentId: detail.id,
     category: detail.category,

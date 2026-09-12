@@ -5,6 +5,7 @@ import { salesAssociateSettings, salesCommissionRules, salesReferrals, tenantMem
 import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 import { notify } from '../notifications/notify';
 import { commissionCents, salesDealRevenueCents } from './salesPolicy';
+import { invalidateSalesReferrals } from './salesReferralFacts';
 
 /** Snapshot first-paid-conversion economics so later policy changes never rewrite earned commission. */
 export async function recordReferralConversion(db: Db, env: Env, event: WebhookEvent): Promise<void> {
@@ -31,6 +32,8 @@ export async function recordReferralConversion(db: Db, env: Env, event: WebhookE
   const [converted] = await db.update(salesReferrals).set({ convertedAt: new Date(), tenantId: tenant.id, plan, billingCycle, revenueCents: revenue, commissionBps, commissionCents: commissionCents(revenue, commissionBps) })
     .where(and(eq(salesReferrals.id, referral.id), isNull(salesReferrals.convertedAt))).returning();
   if (!converted) return;
+  // The commission just became a fact: orphan the associate's cached figures.
+  await invalidateSalesReferrals(env, converted.associateUserId);
   const [settings] = await db.select({ enabled: salesAssociateSettings.notifyOnConversion }).from(salesAssociateSettings).where(eq(salesAssociateSettings.ownerUserId, converted.associateUserId)).limit(1);
   if (settings?.enabled !== false) await notify(db, env, { userId: converted.associateUserId, tenantId: tenant.id, kind: 'sales.referral_conversion', title: 'A referred user converted', body: `${plan.toUpperCase()} ${billingCycle} converted — $${(revenue / 100).toFixed(2)} attributed list-price revenue and $${((converted.commissionCents ?? 0) / 100).toFixed(2)} commission.`, ref: '/sales' });
 }

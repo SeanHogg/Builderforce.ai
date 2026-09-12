@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { listComponentGroups } from './registry';
-import type { ComponentDef, ComponentMount } from './types';
+import type { ComponentDef, ComponentMount } from '@/lib/components/types';
 
 /**
  * BROWSING THE COMPONENT REGISTRY — grouped, searched, and labelled, once.

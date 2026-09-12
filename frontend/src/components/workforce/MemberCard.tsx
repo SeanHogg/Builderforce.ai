@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
-import type { TenantMember, PendingInvitation } from '@/lib/auth';
+import type { TenantMember, PendingInvitation } from '@/lib/auth/members';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import { useRole, ASSIGNABLE_ROLES, type TenantRole } from '@/lib/rbac';

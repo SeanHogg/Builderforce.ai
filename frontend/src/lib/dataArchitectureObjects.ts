@@ -21,7 +21,7 @@
  * its own diagram is precisely the drift this split prevents.
  */
 
-import type { CreationNodeData, CreationObjectKind } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData, CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
 
 /** The six kinds this module owns, named so the registry can PROVE it covered them all
  *  rather than spreading an index-signature map that satisfies any key at all. */

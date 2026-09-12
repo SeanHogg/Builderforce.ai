@@ -21,7 +21,7 @@ import { DonutChart } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { workforcePlanApi, type WorkforcePlan, type WorkforcePlanMember } from '@/lib/personaCadenceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 const HUMAN_COLOR = colorAt(1);
@@ -48,6 +48,7 @@ function memberBars(members: WorkforcePlanMember[], color: string): BarDatum[] {
 }
 
 export function WorkforcePlanView() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('workforcePlan');
   const [plan, setPlan] = useState<WorkforcePlan | null>(null);
@@ -57,9 +58,9 @@ export function WorkforcePlanView() {
     let alive = true;
     workforcePlanApi.get()
       .then((p) => { if (alive) setPlan(p); })
-      .catch((e) => { if (alive) setError(faultMessage(e)); });
+      .catch((e) => { if (alive) setError(errorMessage(e)); });
     return () => { alive = false; };
-  }, []);
+  }, [errorMessage]);
 
   if (error) return <div style={{ fontSize: 13, color: 'var(--coral-bright)' }}>{error}</div>;
   if (!plan) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>;

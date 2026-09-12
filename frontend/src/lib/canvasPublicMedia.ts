@@ -26,7 +26,7 @@
 
 import { fieldsMayCross } from './canvasConfidentiality';
 import { growthApi } from './growthApi';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 /** Object kinds that can carry media worth publishing. Video is on this list on
  *  the same footing as the picture kinds: the asset store holds MP4, MOV and

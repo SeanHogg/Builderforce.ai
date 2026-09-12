@@ -1,6 +1,7 @@
 // Deep-merges a per-locale patch object into each messages/<locale>.json,
 // adding only missing leaf keys (idempotent; never overwrites an existing value).
 // Usage: node scripts/i18n-merge.mjs <patchModule.mjs>
+// The module exports the per-locale object as `PATCHES` or as its default export.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -24,7 +25,11 @@ function mergeMissing(target, patch) {
 }
 
 const patchPath = pathToFileURL(resolve(process.cwd(), process.argv[2])).href;
-const { PATCHES } = await import(patchPath);
+const patchModule = await import(patchPath);
+const PATCHES = patchModule.PATCHES ?? patchModule.default;
+if (!PATCHES || typeof PATCHES !== 'object') {
+  throw new Error(`${process.argv[2]} exports neither PATCHES nor a default per-locale object`);
+}
 
 for (const loc of LOCALES) {
   const file = resolve(MESSAGES, `${loc}.json`);

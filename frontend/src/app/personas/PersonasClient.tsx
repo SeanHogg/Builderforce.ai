@@ -1,0 +1,602 @@
+'use client';
+
+import { Icon } from '@/components/ui/Icon';
+import { slugify } from '@builderforce/creation-canvas-contract';
+import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
+import Link from 'next/link';
+import { useAuth } from '@/lib/AuthContext';
+import { contrastText } from '@/lib/contrastText';
+import {
+  artifactAssignments,
+  marketplaceStats,
+  agentHosts,
+  personasApi,
+  type ArtifactAssignment,
+  type ArtifactStats,
+  type PublicPersona,
+} from '@/lib/builderforceApi';
+import { BUILTIN_PERSONAS, type Persona, type UserPersona } from '@/lib/marketplaceData';
+import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
+import PsychometricEditor from '@/components/PsychometricEditor';
+import type { PsychometricProfile } from '@/lib/psychometric';
+import PageContainer from '@/components/PageContainer';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
+/** Map a server-owned persona (from GET /api/personas/mine) into the flat display
+ *  shape the "My Personas" tab renders. `shared` = the persona is published (public). */
+function serverToUserPersona(p: PublicPersona): UserPersona {
+  const b = p.persona ?? {};
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    description: p.description ?? '',
+    voice: b.voice ?? '',
+    perspective: b.perspective ?? '',
+    decisionStyle: b.decisionStyle ?? '',
+    outputPrefix: b.outputPrefix ?? '',
+    capabilities: b.capabilities ?? [],
+    tags: p.tags ?? [],
+    shared: p.visibility === 'public',
+    image: b.image,
+    likes: p.likeCount ?? 0,
+    downloads: p.installCount ?? 0,
+    createdAt: p.updatedAt ?? new Date().toISOString(),
+    psychometric: p.psychometric ?? undefined,
+  };
+}
+
+/** Map a server-published persona into the marketplace display shape (`Persona`).
+ *  The behaviour fields live NESTED under `persona` (server contract), not flat. */
+function publicToPersona(p: PublicPersona): Persona {
+  const b = p.persona ?? {};
+  return {
+    name: p.slug || p.name,
+    description: p.description ?? '',
+    voice: b.voice || '—',
+    perspective: b.perspective || '—',
+    decisionStyle: b.decisionStyle || '—',
+    outputPrefix: b.outputPrefix ?? '',
+    capabilities: b.capabilities ?? [],
+    source: 'user-global',
+    tags: p.tags ?? [],
+    author: p.authorName ?? 'Community',
+    image: b.image,
+    likes: p.likeCount,
+    downloads: p.installCount,
+    psychometric: p.psychometric ?? undefined,
+  };
+}
+
+export default function PersonasPage() {
+  const t = useTranslations('personasPage');
+  const tc = useTranslations('common');
+  const errorText = useErrorText();
+  const confirm = useConfirm();
+  const { tenant } = useAuth();
+  const tenantId = tenant?.id ?? '';
+  const tenantNum = Number(tenantId);
+
+  const [tab, setTab] = useState<'assigned' | 'marketplace' | 'my-personas'>('assigned');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
+  const [userPersonas, setUserPersonas] = useState<UserPersona[]>([]);
+  // Public personas from the server registry (GET /api/personas/public). Empty on
+  // an older backend; the builtins are always shown so the tab is never blank.
+  const [publicPersonas, setPublicPersonas] = useState<Persona[]>([]);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
+  const [hasAgentHosts, setHasAgentHosts] = useState(true);
+  const [installedSlugs, setInstalledSlugs] = useState<Set<string>>(new Set());
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createPsychometric, setCreatePsychometric] = useState<PsychometricProfile | undefined>(undefined);
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    description: '',
+    voice: '',
+    perspective: '',
+    decisionStyle: '',
+    outputPrefix: '',
+    capabilities: '',
+    tags: '',
+    image: '',
+  });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [all, agentHostList, pub, mine] = await Promise.all([
+        tenantNum ? artifactAssignments.list('tenant', tenantNum, 'persona').catch(() => []) : [],
+        agentHosts.list().catch(() => []),
+        // Public registry is best-effort: [] on 404/older backend so builtins still render.
+        personasApi.listPublic().catch(() => [] as PublicPersona[]),
+        // My Personas are server-backed (private marketplace_personas rows) — durable +
+        // cross-device, and they reach execution via the same capability path.
+        personasApi.listMine().catch(() => [] as PublicPersona[]),
+      ]);
+      setAssigned(all);
+      setUserPersonas(mine.map(serverToUserPersona));
+      setHasAgentHosts(agentHostList.length > 0);
+      setInstalledSlugs(new Set(all.map((a) => a.artifactSlug)));
+      // Server personas first, then builtins not already present (dedup by slug/name).
+      const serverPersonas = pub.map(publicToPersona);
+      const serverSlugs = new Set(serverPersonas.map((p) => p.name));
+      setPublicPersonas(serverPersonas);
+      const slugs = [...serverSlugs, ...BUILTIN_PERSONAS.map((p) => p.name).filter((n) => !serverSlugs.has(n))];
+      if (slugs.length > 0) {
+        const s = await marketplaceStats.getStats('persona', slugs).catch(() => ({}));
+        setStats(s);
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantNum, errorText]);
+
+  useEffect(() => {
+    load();
+  }, [tenantId, load]);
+
+  const assignPersona = async (slug: string) => {
+    if (!tenantNum) return;
+    try {
+      await artifactAssignments.assign('persona', slug, 'tenant', tenantNum);
+      setInstalledSlugs((prev) => new Set([...prev, slug]));
+      await load();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const unassignPersona = async (slug: string) => {
+    if (!tenantNum) return;
+    try {
+      await artifactAssignments.unassign('persona', slug, 'tenant', tenantNum);
+      setInstalledSlugs((prev) => {
+        const next = new Set(prev);
+        next.delete(slug);
+        return next;
+      });
+      setAssigned((prev) => prev.filter((a) => a.artifactSlug !== slug));
+      const updated = await marketplaceStats.getStats('persona', [slug]).catch(() => ({}));
+      setStats((s) => ({ ...s, ...updated }));
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const toggleLike = async (slug: string) => {
+    try {
+      const liked = await marketplaceStats.toggleLike('persona', slug);
+      const prev = stats[slug] ?? { likes: 0, installs: 0, liked: false };
+      setStats((s) => ({
+        ...s,
+        [slug]: { ...prev, liked, likes: liked ? prev.likes + 1 : Math.max(0, prev.likes - 1) },
+      }));
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const savePersona = async () => {
+    const name = createForm.name.trim();
+    if (!name) return;
+    const slug = slugify(name, { maxLength: 80 });
+    setError('');
+    try {
+      await personasApi.create({
+        name,
+        description: createForm.description.trim() || undefined,
+        tags: createForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        persona: {
+          voice: createForm.voice.trim() || 'neutral and helpful',
+          perspective: createForm.perspective.trim() || 'balanced and pragmatic',
+          decisionStyle: createForm.decisionStyle.trim() || 'collaborative',
+          outputPrefix: createForm.outputPrefix.trim() || `${slug.toUpperCase()}:`,
+          capabilities: createForm.capabilities.split(',').map((c) => c.trim()).filter(Boolean),
+          image: createForm.image.trim() || undefined,
+        },
+        psychometric: createPsychometric,
+      });
+      setCreateOpen(false);
+      setCreateForm({ name: '', description: '', voice: '', perspective: '', decisionStyle: '', outputPrefix: '', capabilities: '', tags: '', image: '' });
+      setCreatePsychometric(undefined);
+      setTab('my-personas');
+      await load();
+    } catch (e) {
+      setError(faultText(e, t('createFailed')));
+    }
+  };
+
+  const deleteUserPersona = async (id: string) => {
+    if (!(await confirm(t('confirmDelete')))) return;
+    setError('');
+    try {
+      await personasApi.remove(id);
+      setUserPersonas((prev) => prev.filter((p) => p.id !== id));
+    } catch (e) {
+      setError(faultText(e, t('deleteFailed')));
+    }
+  };
+
+  /** Publish a local draft persona to the public server registry (POST /api/personas),
+   *  then refresh so it appears in the Marketplace tab. Also flips the local `shared`
+   *  flag so the draft layer reflects the published state. Degrades gracefully:
+   *  errors surface in the page banner and leave the draft intact. */
+  const publishPersona = async (p: UserPersona) => {
+    setPublishingId(p.id);
+    setError('');
+    try {
+      // My Personas are already server rows — publishing just flips visibility to
+      // public (PATCH), rather than creating a duplicate.
+      await personasApi.update(p.id, { visibility: 'public' });
+      setUserPersonas((prev) => prev.map((u) => (u.id === p.id ? { ...u, shared: true } : u)));
+      await load();
+    } catch (e) {
+      setError(faultText(e, t('publishFailed')));
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  // Marketplace listing = server registry personas + builtins not already published.
+  const serverSlugs = new Set(publicPersonas.map((p) => p.name));
+  const marketplacePersonas: Persona[] = [
+    ...publicPersonas,
+    ...BUILTIN_PERSONAS.filter((p) => !serverSlugs.has(p.name)),
+  ];
+
+  const filteredMarketplace = marketplacePersonas.filter(
+    (p) =>
+      !search ||
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.description.toLowerCase().includes(search.toLowerCase()) ||
+      (p.tags ?? []).some((t) => t.includes(search.toLowerCase()))
+  );
+
+  const insightsItems: CatalogInsightsItem[] = marketplacePersonas.map((p) => {
+    const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
+    return { key: p.name, name: p.name, group: p.source ?? null, primary: stat.installs, secondary: stat.likes };
+  });
+
+  const sourceBadge = (source: Persona['source']) => {
+    const map: Record<string, { label: string; color: string }> = {
+      builtin: { label: t('sourceBuiltin'), color: 'var(--accent)' },
+      agenthub: { label: t('sourceAgenthub'), color: 'var(--success-text)' },
+      'project-local': { label: t('sourceProject'), color: 'var(--warning-text)' },
+      'user-global': { label: t('sourceUser'), color: 'var(--cyan-bright)' },
+      'agentlink-assigned': { label: t('sourceAssigned'), color: 'var(--pink-bright)' },
+    };
+    const m = map[source] ?? { label: source, color: 'var(--muted)' };
+    return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
+  };
+
+  return (
+    <PageContainer width="readable">
+      <div className="page-header" style={{ marginBottom: 24 }}>
+        <div>
+          <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
+            {t('subtitle')}
+          </p>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
+          {t('newPersona')}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)' }}>{error}</div>
+      )}
+
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
+        <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>
+          {t('tabAssigned', { n: assigned.length })}
+        </button>
+        <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>
+          {t('tabMarketplace', { n: marketplacePersonas.length })}
+        </button>
+        <button type="button" className={`btn ${tab === 'my-personas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-personas')}>
+          {t('tabMyPersonas', { n: userPersonas.length })}
+        </button>
+        {tab !== 'assigned' && (
+          <div style={{ marginLeft: 'auto' }}>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        )}
+      </div>
+
+      {loading && tab !== 'assigned' ? (
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('loading')}</div>
+      ) : tab === 'assigned' ? (
+        tenantNum ? (
+          <PersonaAssignmentsContent scope="tenant" scopeId={tenantNum} />
+        ) : (
+          <div className="empty-state">
+            <div className="empty-state-icon"><Icon source="🔗" size="1em" /></div>
+            <div className="empty-state-title">{t('noTenant')}</div>
+          </div>
+        )
+      ) : tab === 'my-personas' ? (
+        userPersonas.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon"><Icon source="🎭" size="1em" /></div>
+            <div className="empty-state-title">{t('noCustomTitle')}</div>
+            <div className="empty-state-sub">{t('noCustomSub')}</div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newPersonaShort')}</button>
+          </div>
+        ) : viewMode === 'card' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {userPersonas.map((p) => (
+              <div key={p.id} className="card" style={{ overflow: 'hidden' }}>
+                {p.image && <div style={{ width: '100%', height: 100, background: `url('${p.image}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
+                <div style={{ padding: p.image ? 12 : 0 }}>
+                  <div className="card-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
+                      <div>
+                        <div className="card-title">{p.name}</div>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                          {p.tags.slice(0, 3).map((t) => (
+                            <span key={t} className="badge badge-gray">{t}</span>
+                          ))}
+                          {p.shared && <span className="badge badge-green">{t('shared')}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>
+                      {publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishToRegistry')}
+                    </button>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
+                    <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>{t('colName')}</th>
+                  <th style={thStyle}>{t('colDescription')}</th>
+                  <th style={thStyle}>{t('colTags')}</th>
+                  <th style={thStyle}>{t('colActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {userPersonas.map((p) => (
+                  <tr key={p.id} style={trStyle}>
+                    <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
+                      {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>{t('shared')}</span>}
+                    </td>
+                    <td style={tdMutedStyle}>{p.description || '—'}</td>
+                    <td style={tdMutedStyle}>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {p.tags.length ? p.tags.map((t) => <span key={t} className="badge badge-gray">{t}</span>) : '—'}
+                      </div>
+                    </td>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>{publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishShort')}</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
+                        <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        <>
+          <CatalogInsightsBar entity="personas" items={insightsItems} primaryMetric="installs" secondaryMetric="likes" groupKind="source" />
+          <div style={{ marginBottom: 16 }}>
+            <input
+              type="search"
+              className="input"
+              style={{ maxWidth: 320 }}
+              placeholder={t('searchPlaceholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {filteredMarketplace.length === 0 ? (
+            <div className="empty-state"><div className="empty-state-title">{t('noPersonasFound')}</div></div>
+          ) : viewMode === 'card' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              {filteredMarketplace.map((p) => {
+                const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
+                const installed = installedSlugs.has(p.name);
+                const isOpen = expanded === p.name;
+                return (
+                  <div key={p.name} className="card" style={{ overflow: 'hidden', borderColor: isOpen ? 'var(--accent)' : undefined }}>
+                    {p.image && <div style={{ width: '100%', height: 100, background: `url('${p.image}') center/cover`, borderBottom: '1px solid var(--border)' }} />}
+                    <div style={{ padding: p.image ? 12 : 0 }} onClick={() => setExpanded(isOpen ? null : p.name)}>
+                      <div className="card-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
+                          <div>
+                            <div className="card-title">{p.name}</div>
+                            <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                              {sourceBadge(p.source)}
+                              {(p.tags ?? []).slice(0, 2).map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
+                        <span title={t('installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
+                        {p.author && <span>{t('byAuthor', { author: p.author })}</span>}
+                      </div>
+                      {isOpen && (
+                        <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 10 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('voiceLabel')}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.voice}</div>
+                            </div>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('perspectiveLabel')}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.perspective}</div>
+                            </div>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 8 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('decisionStyleLabel')}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.decisionStyle}</div>
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>{t('capabilitiesLabel')}</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{p.capabilities.map((c) => <span key={c} className="badge badge-gray">{c}</span>)}</div>
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 'var(--radius-sm)', fontSize: 11 }}>{p.outputPrefix}</code></div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '0 0 4px' }} onClick={(e) => e.stopPropagation()}>
+                      {installed ? (
+                        <>
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
+                          <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
+                          <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
+                          <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ ...tableWrapStyle, overflowX: 'auto' }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={theadRowStyle}>
+                    <th style={thStyle}>{t('colName')}</th>
+                    <th style={thStyle}>{t('colDescription')}</th>
+                    <th style={thStyle}>{t('colSourceTags')}</th>
+                    <th style={thStyle}>{t('colStats')}</th>
+                    <th style={thStyle}>{t('colActions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMarketplace.map((p) => {
+                    const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
+                    const installed = installedSlugs.has(p.name);
+                    return (
+                      <tr key={p.name} style={trStyle}>
+                        <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
+                        </td>
+                        <td style={tdMutedStyle}>{p.description || '—'}</td>
+                        <td style={tdMutedStyle}>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {sourceBadge(p.source)}
+                            {(p.tags ?? []).slice(0, 2).map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
+                          </div>
+                        </td>
+                        <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(p.name)}>{stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}</button>
+                          <span style={{ marginLeft: 10, fontSize: 11 }}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {installed ? (
+                              <>
+                                <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
+                                <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
+                              </>
+                            ) : (
+                              <>
+                                <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
+                                <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
+                                <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPersonaShort')} width="sheet" widthStorageKey="personas-new">
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label className="label">{t('formName')}</label>
+                <input className="input" placeholder={t('formNamePlaceholder')} value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">{t('formDescription')}</label>
+                <textarea className="input" rows={2} placeholder={t('formDescPlaceholder')} value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="label">{t('formVoice')}</label>
+                  <input className="input" placeholder={t('formVoicePlaceholder')} value={createForm.voice} onChange={(e) => setCreateForm((f) => ({ ...f, voice: e.target.value }))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="label">{t('formOutputPrefix')}</label>
+                  <input className="input" placeholder={t('formOutputPrefixPlaceholder')} value={createForm.outputPrefix} onChange={(e) => setCreateForm((f) => ({ ...f, outputPrefix: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="label">{t('formPerspective')}</label>
+                <input className="input" placeholder={t('formPerspectivePlaceholder')} value={createForm.perspective} onChange={(e) => setCreateForm((f) => ({ ...f, perspective: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">{t('formDecisionStyle')}</label>
+                <input className="input" placeholder={t('formDecisionStylePlaceholder')} value={createForm.decisionStyle} onChange={(e) => setCreateForm((f) => ({ ...f, decisionStyle: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">{t('formCapabilities')}</label>
+                <input className="input" placeholder={t('formCapabilitiesPlaceholder')} value={createForm.capabilities} onChange={(e) => setCreateForm((f) => ({ ...f, capabilities: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">{t('formTags')}</label>
+                <input className="input" placeholder={t('formTagsPlaceholder')} value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">{t('formCoverImage')}</label>
+                <input className="input" placeholder="https://example.com/image.jpg" value={createForm.image} onChange={(e) => setCreateForm((f) => ({ ...f, image: e.target.value }))} />
+              </div>
+              <PsychometricEditor value={createPsychometric} onChange={setCreatePsychometric} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
+                <button type="button" className="btn btn-primary" onClick={savePersona} disabled={!createForm.name.trim()}>{t('savePersona')}</button>
+              </div>
+        </div>
+      </SlideOutPanel>
+    </PageContainer>
+  );
+}

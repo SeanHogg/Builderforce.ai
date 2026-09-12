@@ -42,7 +42,6 @@ import {
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { SECTION_CARD as card, SectionEmpty, SectionError, SectionLoading } from '@/components/ui/SectionState';
 import { SEVERITIES, SEVERITY_BADGE } from '@/lib/reliability/severity';
@@ -118,6 +117,7 @@ interface SectionProps { t: T; tc: T; canManage: boolean; }
 /* ─────────────────────────── Incidents ─────────────────────────── */
 
 function IncidentsSection({ t, tc, canManage }: SectionProps) {
+  const toErrorMessage = useErrorMessage();
   const fmt = useFormat();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [activeOnly, setActiveOnly] = useState(true);
@@ -131,9 +131,9 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
     setError(null);
     incidentsApi.list(activeOnly)
       .then(setIncidents)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(toErrorMessage(e)))
       .finally(() => setLoading(false));
-  }, [activeOnly]);
+  }, [activeOnly, toErrorMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -298,9 +298,9 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
     setLoading(true);
     incidentsApi.get(incidentId)
       .then(({ incident, timeline }) => { setIncident(incident); setTimeline(timeline); setClassifyValue(incident.affectedSystem ?? ''); })
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [incidentId]);
+  }, [incidentId, errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -778,9 +778,9 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
     setLoading(true); setError(null);
     incidentsApi.listRotations()
       .then(setRotations)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
   useEffect(() => { load(); }, [load]);
 
   const createRotation = async () => {
@@ -927,9 +927,9 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
     setLoading(true); setError(null);
     incidentsApi.listPolicies()
       .then(setPolicies)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
   useEffect(() => { load(); }, [load]);
 
   const createPolicy = async () => {
@@ -1107,9 +1107,9 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
     setLoading(true); setError(null);
     incidentsApi.listContacts()
       .then(setContacts)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
   useEffect(() => { load(); }, [load]);
 
   const openCreate = () => { setEditing(null); setDraft(EMPTY_CONTACT); setPanelOpen(true); };

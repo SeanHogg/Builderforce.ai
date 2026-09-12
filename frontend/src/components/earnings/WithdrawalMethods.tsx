@@ -31,8 +31,8 @@ import {
   type WithdrawalMethodsView,
   type WithdrawalVerification,
 } from '@/lib/earningsApi';
-import { faultMessage } from '@/lib/apiClient';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const VERIFICATION_TONE: StatusToneMap<WithdrawalVerification> = {
   verified: 'success',
   unverified: 'neutral',
@@ -46,6 +46,7 @@ export function WithdrawalMethods({
   view: WithdrawalMethodsView;
   onChanged: () => Promise<void> | void;
 }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('earnings');
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -77,11 +78,11 @@ export function WithdrawalMethods({
       setFields({});
       await onChanged();
     } catch (cause) {
-      setNotice(faultMessage(cause));
+      setNotice(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [fields, onChanged, provider, view.methods.length]);
+  }, [fields, onChanged, provider, view.methods.length, errorMessage]);
 
   const makeDefault = useCallback(async (method: WithdrawalMethod) => {
     setBusy(true);
@@ -89,11 +90,11 @@ export function WithdrawalMethods({
       await makeWithdrawalMethodDefault(method.id);
       await onChanged();
     } catch (cause) {
-      setNotice(faultMessage(cause));
+      setNotice(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [onChanged]);
+  }, [onChanged, errorMessage]);
 
   const remove = useCallback(async (method: WithdrawalMethod) => {
     // Removing where somebody's money goes is destructive and irreversible, which is
@@ -110,11 +111,11 @@ export function WithdrawalMethods({
       await removeWithdrawalMethod(method.id);
       await onChanged();
     } catch (cause) {
-      setNotice(faultMessage(cause));
+      setNotice(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [confirm, onChanged, t]);
+  }, [confirm, onChanged, t, errorMessage]);
 
   return (
     <section aria-label={t('methodsHeading')} style={{

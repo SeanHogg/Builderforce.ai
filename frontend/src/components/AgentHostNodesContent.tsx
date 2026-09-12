@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 interface AgentHostNodesContentProps {
   agentHostId: number;
@@ -19,6 +20,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProps) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const confirm = useConfirm();
   const tc = useTranslations('common');
@@ -34,7 +36,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
     agentHostNodesApi
       .list(agentHostId)
       .then(setNodes)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 

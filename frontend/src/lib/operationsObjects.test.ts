@@ -7,8 +7,8 @@ import { OPERATIONS_LABELS, OPERATIONS_OBJECT_SPECS, OPERATIONS_STATUSES } from 
 import './specObjectSets';
 import {
   specDerivedValues, specFieldValue, specMutableFields, specObjectNamespace, specObjectSpec,
-  specValueInEnglish,
 } from './specObjects';
+import { specValueInEnglish } from './specVerdict';
 import en from '@/i18n/messages/en.json';
 
 const spec = (kind: string) => {

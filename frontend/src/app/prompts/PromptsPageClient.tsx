@@ -27,6 +27,7 @@ import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -41,6 +42,7 @@ type Tab = 'public' | 'mine';
 const PAGE_SIZE = 12;
 
 export default function PromptsPage() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('promptsPage');
   const tCommon = useTranslations('common');
@@ -63,7 +65,7 @@ export default function PromptsPage() {
     setError(null);
     promptLibraryApi.browsePublic({ q: search, sort })
       .then(setPrompts)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 
@@ -72,7 +74,7 @@ export default function PromptsPage() {
     setError(null);
     promptLibraryApi.list()
       .then((rows: PromptEntry[]) => setPrompts(rows))
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 

@@ -37,8 +37,25 @@ const CONTRACTS = [
   { provider: 'ToastProvider', hooks: ['useToast'] },
 ];
 
+/**
+ * A module's CODE, with its comments removed.
+ *
+ * A hook named in prose is not a call. `ConfirmProvider`'s doc comment says a
+ * non-destructive action "takes a toast (`useToast()`)", and `ToastProvider`'s says
+ * the destructive path is "`useConfirm()`" — each is the other's documentation, and a
+ * raw-text scan read both as calls. That failed the frontend deploy on a provider tree
+ * that could not throw, and it made the guard's own advice ("move it inside the other
+ * provider") impossible to follow: swapping the two trips the other contract on the
+ * other comment. Comments go before any pattern runs — for the hook calls, the imports
+ * (a commented-out import is not an edge) and the layout's own JSX (`{/* … *\/}`).
+ */
+const COMMENTS = /\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm;
+function codeOf(file) {
+  return readFileSync(file, 'utf8').replace(COMMENTS, '');
+}
+
 const failures = [];
-const layout = readFileSync(layoutFile, 'utf8');
+const layout = codeOf(layoutFile);
 
 // --- Module resolution ------------------------------------------------------
 const CANDIDATE_SUFFIXES = ['', '.tsx', '.ts', '/index.tsx', '/index.ts'];
@@ -57,7 +74,7 @@ function resolveSpecifier(specifier, fromFile) {
 
 /** Every `from '...'` specifier in a module, resolved to a file inside `src`. */
 function importsOf(file) {
-  const text = readFileSync(file, 'utf8');
+  const text = codeOf(file);
   const found = [];
   for (const match of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
     const resolved = resolveSpecifier(match[1], file);
@@ -85,7 +102,7 @@ function reachesHook(file, hooks) {
     const current = queue.shift();
     if (seen.has(current)) continue;
     seen.add(current);
-    const text = readFileSync(current, 'utf8');
+    const text = codeOf(current);
     const index = callsAHook.findIndex((pattern) => pattern.test(text));
     if (index !== -1) hit = { hook: hooks[index], file: current };
     else queue.push(...importsOf(current));

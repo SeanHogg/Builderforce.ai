@@ -20,7 +20,7 @@ import {
 } from '@/lib/personaCadenceApi';
 import { Select } from '@/components/Select';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
@@ -35,6 +35,7 @@ const btn: React.CSSProperties = {
 
 
 export function LensSnapshotsPanel() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('lensSnapshots');
 
@@ -59,11 +60,11 @@ export function LensSnapshotsPanel() {
       setCadences(r.cadences);
       if (!captureLens && r.snapshotableLenses.length) setCaptureLens(r.snapshotableLenses[0]);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [lensFilter, captureLens]);
+  }, [lensFilter, captureLens, errorMessage]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -74,7 +75,7 @@ export function LensSnapshotsPanel() {
       await lensSnapshotsApi.capture(captureLens, captureCadence);
       await reload();
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -87,7 +88,7 @@ export function LensSnapshotsPanel() {
       const r = await lensSnapshotsApi.get(id);
       setPayload(r.snapshot.payload);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     }
   };
 

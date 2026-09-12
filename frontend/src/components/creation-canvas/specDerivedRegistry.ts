@@ -51,6 +51,17 @@ import type { CreationNodeData, CreationObjectGroup, CreationObjectKind } from '
 export interface SpecRegistryEntry {
   kind: CreationObjectKind;
   label: string;
+  /**
+   * The catalog key (under `creationCanvas`) a NEW object of this kind is titled with.
+   *
+   * `createData()` still returns the English label as the title, because it has no
+   * translator and a caller without one (a test, a model-facing default) needs a word.
+   * But that title is PERSISTED — it is the card's own data, saved with the board — so a
+   * zh board that minted every new card from `labels[kind]` held English titles forever.
+   * The key is what lets the caller that DOES hold the board's translator title it in
+   * the board's language at the moment it is created. See `createDefaultCreationData`.
+   */
+  titleKey: string;
   icon: string;
   group: CreationObjectGroup;
   createData: () => CreationNodeData;

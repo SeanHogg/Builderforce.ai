@@ -1,5 +1,5 @@
-import type { Canvas3DScene } from '@/components/canvas/canvas3d';
-import { CANVAS_3D_LAYER_GAP } from '@/components/canvas/canvas3d';
+import type { Canvas3DScene } from '@/lib/canvas/canvas3d';
+import { CANVAS_3D_LAYER_GAP } from '@/lib/canvas/canvas3d';
 import { ROOM_FLOOR_SIZE, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z } from './roomSeating';
 import type { RoomSpot } from './roomSpots';
 

@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, kanbanApi, type TicketContext, type TicketObjective } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
 import { TicketObjectiveLinkPicker } from './TicketObjectiveLinkPicker';
 import { contextCard as card, contextLabel as label, contextLinkButton as linkButton } from './ticketContextStyles';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * The ticket drawer's CONTEXT header — the answer to "why does this matter and
  * how far along is it", above the fold, before any tab.
@@ -123,6 +123,7 @@ export interface TicketContextStripProps {
 }
 
 export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }: TicketContextStripProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('ticketContext');
   const [ctx, setCtx] = useState<TicketContext | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,9 +133,9 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
     let alive = true;
     tasksApi.context(taskId)
       .then((c) => { if (alive) { setCtx(c); setError(null); } })
-      .catch((e) => { if (alive) setError(faultMessage(e)); });
+      .catch((e) => { if (alive) setError(errorMessage(e)); });
     return () => { alive = false; };
-  }, [taskId]);
+  }, [taskId, errorMessage]);
 
   useEffect(() => load(), [load]);
 
@@ -145,9 +146,9 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
     setCoordinating(true);
     kanbanApi.coordinate(taskId)
       .then(() => { load(); onChanged?.(); })
-      .catch((e) => setError(faultMessage(e)))
+      .catch((e) => setError(errorMessage(e)))
       .finally(() => setCoordinating(false));
-  }, [taskId, load, onChanged]);
+  }, [taskId, load, onChanged, errorMessage]);
 
   if (error) {
     return <div style={{ fontSize: 12, color: 'var(--danger-text)', marginBottom: 12 }}>{error}</div>;

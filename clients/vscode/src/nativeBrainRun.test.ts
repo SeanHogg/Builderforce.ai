@@ -468,7 +468,8 @@ describe("a run whose tool calls keep failing", () => {
       tools: [read],
       permissionMode: "acceptEdits",
       script: (ctx) =>
-        ctx.toolless || ctx.turn > 50
+        // `turn` is 0-based: turns 0–49 call a tool, turn 50 answers.
+        ctx.toolless || ctx.turn >= 50
           ? { text: "Done." }
           : { toolCalls: [{ name: "read_file", args: { path: `f${ctx.turn}.ts` } }] },
     });

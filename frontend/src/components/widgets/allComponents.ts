@@ -1,4 +1,4 @@
-import type { ComponentDef } from './types';
+import type { ComponentDef } from '@/lib/components/types';
 import { AI_HUB_COMPONENTS, DELIVERY_HUB_COMPONENTS } from '@/components/insights/widgets/hubWidgets';
 import { ASK_COMPONENTS } from '@/components/insights/widgets/askWidget';
 import { AI_IMPACT_COMPONENTS } from '@/components/insights/widgets/aiImpactWidgets';

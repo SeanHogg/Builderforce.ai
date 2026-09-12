@@ -36,7 +36,7 @@ import {
   type GameTargetsView,
 } from '@/lib/gameTargets';
 import styles from './CreationCanvas.module.css';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CanvasGamePanelProps {
   open: boolean;
   onClose: () => void;
@@ -50,6 +50,7 @@ export interface CanvasGamePanelProps {
 type Busy = GameTargetKey | 'publish' | 'roblox' | null;
 
 export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: CanvasGamePanelProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('creationCanvas.game');
   const [view, setView] = useState<GameTargetsView | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
@@ -66,9 +67,9 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
       if (roblox?.robloxUniverseId) setUniverseId(roblox.robloxUniverseId);
       if (roblox?.robloxPlaceId) setPlaceId(roblox.robloxPlaceId);
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     }
-  }, [projectId]);
+  }, [projectId, errorMessage]);
 
   useEffect(() => {
     if (open) void load();
@@ -90,12 +91,12 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
         onNotice(await work());
         await load();
       } catch (cause) {
-        setError(faultMessage(cause));
+        setError(errorMessage(cause));
       } finally {
         setBusy(null);
       }
     },
-    [load, onNotice],
+    [load, onNotice, errorMessage],
   );
 
   const published = stateFor.get('pwa')?.playUrl ?? null;

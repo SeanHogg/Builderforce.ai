@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { destinationForRoute, getRouteMarketing, isNoindexTeaserRoute, teaserDestinationPitchKey } from '@/lib/routeMarketing';
+import { routeMarketingSchema } from '@/lib/structured-data';
 import { BRAND } from '@/lib/content';
 
 /**
- * THE SERVER HEAD for a route that shows a marketing teaser when signed out.
+ * THE SERVER HEAD for a route the teaser registry markets — ONE helper, called
+ * as the whole body of the route's `generateMetadata`, so a route file carries
+ * one line and never a copy of the copy.
  *
  * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
  * `RouteMarketing` set `document.title`, the description and (for operator
@@ -15,15 +18,24 @@ import { BRAND } from '@/lib/content';
  * like `/admin` ships an indexable head and only stops being indexable once a
  * browser has run the effect.
  *
- * The head has to be decided before the response, which means the route entry,
- * which means a SERVER component. This is the shared body of that
- * `generateMetadata` so 16 route files do not each re-derive the same three
- * facts from the same two registries.
+ * ── WHY IT MATTERS MORE SINCE GUEST PREVIEW ─────────────────────────────────
+ * A signed-out visitor now gets the REAL page on every app route but the
+ * operator-only ones (`isGuestPreviewRoute`), so the teaser — and with it the
+ * per-route title, description and FAQ JSON-LD — no longer renders at the URLs
+ * `indexableTeaserRoutes()` still submits to the sitemap. Those URLs ranked on
+ * the teaser's head; this helper is how the real page keeps it. The ratchet in
+ * `routeTeaserMetadata.test.ts` fails when an indexable app route serves a head
+ * without it.
  *
- * A route entry that is still `'use client'` cannot export `generateMetadata`
- * at all, so it keeps the effect until it is converted — the same conversion
- * the RSC entry tracks. `RouteMarketing`'s effect is therefore a FALLBACK now,
- * not the mechanism.
+ * Localized the way every other `generateMetadata` in the tree is: through
+ * `getTranslations`, which reads the locale cookie. The tier-1 copy in
+ * `lib/routeMarketing.ts` is English by a standing decision about marketing
+ * copy and is used as it is, exactly as the teaser used it; tiers 2 and 3 are
+ * catalog keys and arrive in the visitor's locale.
+ *
+ * A route entry that is still `'use client'` cannot export `generateMetadata`,
+ * so it is split: a server `page.tsx` that exports this and renders the client
+ * island beside it (`app/dashboard/DashboardClient.tsx` and its siblings).
  */
 export async function routeTeaserMetadata(pathname: string): Promise<Metadata> {
   const marketing = getRouteMarketing(pathname);
@@ -40,7 +52,11 @@ export async function routeTeaserMetadata(pathname: string): Promise<Metadata> {
   const title = `${surface} — ${BRAND.name}`;
 
   return {
-    title,
+    // ABSOLUTE, because this string already carries the brand: through the root
+    // layout's `'%s | Builderforce.ai'` template it shipped as "Inbox —
+    // Builderforce.ai | Builderforce.ai". The teaser's `document.title` was
+    // exactly this string, which is the title these URLs ranked under.
+    title: { absolute: title },
     description,
     // The `noindex` half matters as much as the title: every authenticated
     // route renders this teaser to a logged-out visitor, which quietly turned
@@ -50,4 +66,25 @@ export async function routeTeaserMetadata(pathname: string): Promise<Metadata> {
     alternates: { canonical: pathname },
     openGraph: { title, description, url: pathname, siteName: BRAND.name },
   };
+}
+
+/**
+ * The teaser's JSON-LD for a route that carries a FAQ, or `null`.
+ *
+ * The same `routeMarketingSchema` graph the teaser rendered — the feature's
+ * SoftwareApplication node, its FAQPage and a breadcrumb — derived from the same
+ * registry row, so the real page emits what the teaser used to. FAQ routes only:
+ * a route with no FAQ never rendered a FAQPage, and its application node alone
+ * is not worth a second script tag on a product page. Rendered by
+ * `<RouteTeaserJsonLd>` from the server route entry.
+ */
+export function routeTeaserSchema(pathname: string): Record<string, unknown> | null {
+  const marketing = getRouteMarketing(pathname);
+  if (!marketing?.faq?.length) return null;
+  return routeMarketingSchema({
+    path: pathname,
+    title: marketing.title,
+    description: marketing.seoDescription ?? marketing.description,
+    faq: marketing.faq,
+  });
 }

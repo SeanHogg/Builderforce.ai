@@ -40,7 +40,7 @@ import {
   type PublishCandidate,
 } from '@/lib/creationListings';
 import styles from './CreationCanvas.module.css';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CanvasPublishPanelProps {
   open: boolean;
   onClose: () => void;
@@ -61,6 +61,7 @@ export function CanvasPublishPanel({
   focusObjectId,
   onNotice,
 }: CanvasPublishPanelProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('creationCanvas.publish');
   const [view, setView] = useState<CandidatesView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,10 +81,10 @@ export function CanvasPublishPanel({
     creationListingApi.candidates(sessionId)
       .then((next) => { if (live) setView(next); })
       .catch((cause: unknown) => {
-        if (live) setError(faultMessage(cause));
+        if (live) setError(errorMessage(cause));
       });
     return () => { live = false; };
-  }, [open, sessionId]);
+  }, [open, sessionId, errorMessage]);
 
   // Reopening on a different card must not leave the previous card's answers in
   // the form — that is how somebody sells a dashboard under a game's name.
@@ -145,11 +146,11 @@ export function CanvasPublishPanel({
       // next open offers "update" rather than a second competing listing.
       setView(await creationListingApi.candidates(sessionId));
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [selected, kind, name, summary, priceCents, effectiveTrial, sessionId, onNotice, t]);
+  }, [selected, kind, name, summary, priceCents, effectiveTrial, sessionId, onNotice, t, errorMessage]);
 
   const withdraw = useCallback(async () => {
     if (!selected?.existingListingId) return;
@@ -160,11 +161,11 @@ export function CanvasPublishPanel({
       setPublished(null);
       setView(await creationListingApi.candidates(sessionId));
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [selected, sessionId, onNotice, t]);
+  }, [selected, sessionId, onNotice, t, errorMessage]);
 
   const canSubmit = !!selected && !!kind && !!name.trim() && !busy;
 

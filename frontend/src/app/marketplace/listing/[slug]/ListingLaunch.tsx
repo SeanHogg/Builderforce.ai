@@ -36,8 +36,9 @@ import {
   type CreationListing,
   type LaunchPayload,
 } from '@/lib/creationListings';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export function ListingLaunch({ listing }: { listing: CreationListing }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('marketplaceListing');
   const router = useRouter();
   const { user } = useAuth();
@@ -53,9 +54,9 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
     try {
       setLaunch(await publicListingApi.launch(listing.slug, signedIn));
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     }
-  }, [listing.slug, signedIn]);
+  }, [listing.slug, signedIn, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -82,11 +83,11 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         return;
       }
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [free, listing.slug, load]);
+  }, [free, listing.slug, load, errorMessage]);
 
   /**
    * Come back from the processor and settle up.
@@ -109,7 +110,7 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         await load();
       })
       .catch((cause: unknown) => {
-        if (live) setError(faultMessage(cause));
+        if (live) setError(errorMessage(cause));
       })
       .finally(() => {
         if (!live) return;
@@ -119,7 +120,7 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         router.replace(`${window.location.pathname}${query ? `?${query}` : ''}`);
       });
     return () => { live = false; };
-  }, [signedIn, load, router]);
+  }, [signedIn, load, router, errorMessage]);
 
   /** Take a copy onto a board of my own, and go straight to it — an install that
    *  ends on a confirmation the buyer has to act on is an install nobody finishes. */
@@ -130,10 +131,10 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
       const installed = await creationListingApi.install(listing.slug);
       router.push(`/create/${installed.sessionId}`);
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
       setBusy(false);
     }
-  }, [listing.slug, router]);
+  }, [listing.slug, router, errorMessage]);
 
   const entitled = launch?.entitled ?? false;
 

@@ -26,7 +26,8 @@ import PageContainer from '@/components/PageContainer';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
 import { runCodingDispatch, toResultPayload } from '@/lib/browserRuntime/coding';
 import { createCodingDeps } from '@/lib/browserRuntime/factory';
-import { getApiBaseUrl, getAuthHeaders, faultMessage } from '@/lib/apiClient';
+import { getApiBaseUrl, getAuthHeaders } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Default coding handler: for a repo-targeted dispatch, clone + edit + push
@@ -66,6 +67,7 @@ export function AgentWorker({
   transport?: BrowserRuntimeTransport;
   handlers?: RunHandlers;
 }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('agentWorker');
   const [running, setRunning] = useState(false);
   const [outcomes, setOutcomes] = useState<RunOutcome[]>([]);
@@ -79,11 +81,11 @@ export function AgentWorker({
       const h: RunHandlers = handlers ?? { code: defaultCodeHandler(t) };
       setOutcomes(await runLoop(t, { handlers: h }));
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setRunning(false);
     }
-  }, [transport, handlers]);
+  }, [transport, handlers, errorMessage]);
 
   const completed = outcomes.filter((o) => o === 'completed').length;
   const failed = outcomes.filter((o) => o === 'failed').length;

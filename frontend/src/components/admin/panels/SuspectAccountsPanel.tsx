@@ -23,8 +23,9 @@ import { useTranslations } from 'next-intl';
 import { adminApi, type AdminSuspectAccount } from '@/lib/adminApi';
 import { AdminError, AdminLoading, AdminPanelHeader, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export default function SuspectAccountsPanel() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('admin.suspectAccounts');
   const { fmtDateTime } = useAdminFormat();
   const confirm = useConfirm();
@@ -60,7 +61,7 @@ export default function SuspectAccountsPanel() {
       setSelected(new Set());
       reload();
     } catch (caught) {
-      setFailure(faultMessage(caught));
+      setFailure(errorMessage(caught));
     } finally {
       setBusy(false);
     }

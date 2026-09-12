@@ -6,7 +6,7 @@ import { adminApi, type LegalDocument } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { unwrapMarkdownFence } from '@/lib/utils';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 export interface LegalEditorContext {
   docType: 'terms' | 'privacy';
   mode: 'edit' | 'new';
@@ -32,6 +32,7 @@ function bumpPatch(version: string): string {
 }
 
 export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditorDrawerProps) {
+  const errorText = useErrorText();
   const t = useTranslations('admin');
   const DOC_LABEL: Record<LegalEditorContext['docType'], string> = {
     terms: t('legal.editor.termsLabel'),
@@ -91,7 +92,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
       await onPublished();
       onClose();
     } catch (e) {
-      setError(faultText(e));
+      setError(errorText(e));
     } finally {
       setSaving(false);
     }

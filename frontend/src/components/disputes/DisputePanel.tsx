@@ -32,8 +32,8 @@ import {
   type DisputeOutcome,
   type MediatorAuthority,
 } from '@/lib/disputesApi';
-import { faultMessage } from '@/lib/apiClient';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /** Which side is looking. Decided by the surface that mounted this, from the token it
  *  holds — never guessed from the dispute row. */
 export type DisputeViewer = 'client' | 'freelancer';
@@ -72,6 +72,7 @@ export function DisputePanel({
   authority?: MediatorAuthority;
   actions: DisputePanelActions;
 }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('disputes');
   const fmt = useFormat();
   const { formatCents } = useMoneyFormat();
@@ -104,11 +105,11 @@ export function DisputePanel({
     try {
       await work();
     } catch (cause) {
-      setNotice(faultMessage(cause));
+      setNotice(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [errorMessage]);
 
   return (
     <article style={{

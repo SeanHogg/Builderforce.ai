@@ -46,6 +46,37 @@
  *
  * Deliberate raises, so a name in the baseline always has an argument:
  *
+ *   314 → 320 files (2026-09-12) — commit 99f5576ca put five new modules into the
+ *   closure and failed the frontend deploy; this pass cut the one that was not
+ *   load-bearing and argues the rest by name. None of them brings new first-paint WORK:
+ *   each is code that was already in the closure moving into a file with a name.
+ *
+ *     - `components/insights/RecommendationsLens.tsx` was CUT. `AiInsightSummaries`
+ *       (already in the closure via the shell's AI insight panel registry) imported
+ *       `REC_SEVERITY_TONE` from it, dragging the whole lens (its reads, its dismiss
+ *       flow, its cards) into every route to read three words. That map now lives in
+ *       `components/insights/recSeverityTone.ts`, an 18-line leaf with type-only
+ *       imports, and the lens and the summary both read it there.
+ *     - `components/insights/createPanelProvider.tsx` REPLACES the drawer controller
+ *       that the AI, Delivery, DevEx and Finance providers (all four already here) each
+ *       carried inline. Four ~85-line copies became one factory, so the closure grew
+ *       by one name and lost about 250 lines.
+ *     - `lib/statusTone.ts` is the one severity/status → token mapping that the
+ *       summaries' hand-mixed colours moved onto. It is imported by modules that were
+ *       already in the closure.
+ *     - `hooks/usePanelTask.ts` and `i18n/useErrorMessage.ts` arrive through
+ *       `ReportErrorProvider`, the root-level "Report an error" host. It used to hold
+ *       its own busy/error `useState` pair and an English `faultMessage` fallback;
+ *       it now uses the shared task hook, whose failure text is the localized
+ *       `common.actionFailed`. A `dynamic()` here would defer the one panel a visitor
+ *       opens when the app has just failed, which is the worst moment to wait for a
+ *       chunk.
+ *     - `lib/specVerdict.ts` is a SPLIT, not an addition. `lib/specObjects.ts` was
+ *       already in the closure and had crossed the 800-line architecture limit with the
+ *       verdict formatter this same commit added. The formatter is its own concern and
+ *       left with its own name; `specObjects` imports it back, so the same lines are
+ *       reachable under two names instead of one.
+ *
  *   487 → 310 files / 121640 → 90106 lines (2026-09-07) — a CUT, recorded here
  *   because it is the largest this guard has taken and the next raise should be
  *   argued against the shape it leaves. `ConditionalAppShell` imported

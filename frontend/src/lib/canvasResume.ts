@@ -1,4 +1,4 @@
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import {
   DEFAULT_RESUME_TEMPLATE_ID,
   RESUME_TEMPLATE_IDS,

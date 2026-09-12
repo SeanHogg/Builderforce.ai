@@ -9,7 +9,7 @@
  * object connected to — so they are answered here once instead of by a regex
  * re-typed at every call site.
  */
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const PROJECT_REF = /^project:(\d+)$/;
 

@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { listTenantMembers, type TenantMember } from '@/lib/auth';
+import { membersApi, type TenantMember } from '@/lib/auth/members';
 import {
   agentHosts, vscodeConnections, runtimeApi, isVscodeConnectionOnline,
   type AgentHost, type VscodeConnection, type ActiveRun, type Execution,
 } from '@/lib/builderforceApi';
-import { dailyCounts } from '@/components/dashboard/seriesFromTimestamps';
+import { dailyCounts } from '@/lib/seriesFromTimestamps';
 
 /**
  * Live "who's online / what's working" presence across the whole workforce —
@@ -74,7 +74,7 @@ export function useWorkforcePresence(): WorkforcePresence {
     // Members resolve human names/avatars and add web-session presence; they need
     // the tenant token and change slowly, so a failure just degrades gracefully.
     if (tenant && tenantToken) {
-      listTenantMembers(tenantToken, String(tenant.id))
+      membersApi.list(String(tenant.id))
         .then((m) => setMembers(Array.isArray(m) ? m : []))
         .catch(() => { /* keep last */ });
     }

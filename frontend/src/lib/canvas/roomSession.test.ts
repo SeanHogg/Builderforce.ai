@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // The spot is kept in `localStorage`, which the `lib` project's node environment lacks.
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { Canvas3DScene } from '@/components/canvas/canvas3d';
-import { CANVAS_3D_LAYER_GAP } from '@/components/canvas/canvas3d';
+import type { Canvas3DScene } from '@/lib/canvas/canvas3d';
+import { CANVAS_3D_LAYER_GAP } from '@/lib/canvas/canvas3d';
 import { ROOM_FLOOR_SIZE, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z } from './roomSeating';
 import {
   DEFAULT_ROOM_SESSION_SPOT, ROOM_SESSION_FOOTPRINT, ROOM_SESSION_LAYER_STEP,

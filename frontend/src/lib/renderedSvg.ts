@@ -20,7 +20,7 @@
  * document defaults into a standalone drawing. */
 import { canvasStrokes, strokesSvg } from './canvasDrawing';
 import { creativePreviewImageUrl } from './creationDeliverables';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const PRESENTATION_PROPERTIES = [
   'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity',

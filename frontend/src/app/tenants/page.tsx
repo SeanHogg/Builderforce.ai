@@ -5,7 +5,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useRequireAuth } from '@/lib/useRequireAuth';
-import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId, createTenant as apiCreateTenant, renameTenant as apiRenameTenant } from '@/lib/auth';
+import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId } from '@/lib/auth';
+import { workspacesApi } from '@/lib/auth/session';
 import type { Tenant } from '@/lib/types';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /** Auto-select tenant when there is only one or a default is set (BuilderForceAgentsLink-style). Returns the tenant to select or null. */
@@ -121,7 +122,7 @@ export default function TenantsPage() {
     setError(null);
     setIsCreating(true);
     try {
-      const newTenant = await apiCreateTenant(webToken, createName);
+      const newTenant = await workspacesApi.create(createName);
       const hadNoTenants = tenants.length === 0;
       setTenants((prev) => [...prev, newTenant]);
       setCreateName('');

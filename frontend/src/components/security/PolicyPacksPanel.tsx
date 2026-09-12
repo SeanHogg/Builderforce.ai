@@ -33,6 +33,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const EFFECTS: PolicyGateEffect[] = ['inject-directive', 'require-approval', 'block'];
 
 const cardStyle: React.CSSProperties = {
@@ -131,6 +132,7 @@ const emptyGateDraft = (): GateDraft => ({
 });
 
 export default function PolicyPacksPanel() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('policyPacks');
   const confirm = useConfirm();
   const projectScope = useOptionalProjectScope();
@@ -152,9 +154,9 @@ export default function PolicyPacksPanel() {
     setError(null);
     Promise.all([policyPacksApi.list(), policyPacksApi.effective()])
       .then(([list, eff]) => { setPacks(list); setEffective(eff); })
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { load(); }, [load]);
 

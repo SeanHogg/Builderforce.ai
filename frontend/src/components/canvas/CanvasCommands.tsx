@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useCanvas3DControls } from './canvas3dControls';
 import { canvasGridColumns, canvasLayoutViewport, DEFAULT_CANVAS_LAYOUT_WIDTH } from '@/lib/canvasGridFit';
-import { canvasNodeFootprint, graphLayerRanks } from './canvasGraph';
+import { canvasNodeFootprint, graphLayerRanks } from '@/lib/canvas/canvasGraph';
 import styles from './CanvasCommands.module.css';
 
 /*

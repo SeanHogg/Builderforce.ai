@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { colorAt } from '@/components/charts/chartColors';
 import { creationSessionsApi, type AttributedOutcomes, type AttributedOutcomeSeries } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * The ATTRIBUTED half of the Idea→delivery panel.
  *
@@ -36,6 +36,7 @@ export interface CanvasAttributedOutcomesProps {
 const SUBTLE: React.CSSProperties = { fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 };
 
 export function CanvasAttributedOutcomes({ sessionId }: CanvasAttributedOutcomesProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('creationCanvas.attributed');
   const [data, setData] = useState<AttributedOutcomes | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +47,9 @@ export function CanvasAttributedOutcomes({ sessionId }: CanvasAttributedOutcomes
     setError(null);
     creationSessionsApi.attributedOutcomes(sessionId)
       .then((r) => { if (live) setData(r); })
-      .catch((e: Error) => { if (live) setError(faultMessage(e)); });
+      .catch((e: Error) => { if (live) setError(errorMessage(e)); });
     return () => { live = false; };
-  }, [sessionId]);
+  }, [sessionId, errorMessage]);
 
   if (!sessionId) return null;
 

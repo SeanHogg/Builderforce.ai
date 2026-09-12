@@ -1,4 +1,4 @@
-import type { CreationNodeData, CreationObjectKind } from './types';
+import type { CanvasObjectData as CreationNodeData, CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
 import { buildLlmCourse, COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
 import { salesHubTemplate } from '@/lib/sales/salesHubCanvas';
 

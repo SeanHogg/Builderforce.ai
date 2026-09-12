@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BUILD_RESOURCE_PREFIX, canvasBuildBinding, canvasBuildModality, canvasBuildPatch } from './canvasBuild';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import type { IdeProject } from './types';
 
 const ideProject: IdeProject = {

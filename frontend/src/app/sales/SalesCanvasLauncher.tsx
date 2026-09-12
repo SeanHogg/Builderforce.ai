@@ -22,7 +22,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { salesApi } from '@/lib/salesApi';
-import { createTenant } from '@/lib/auth';
+import { workspacesApi } from '@/lib/auth/session';
 import { buildSalesHubGraph } from '@/lib/sales/salesHubCanvas';
 import styles from './salesCanvasLauncher.module.css';
 import { faultMessage } from '@/lib/apiClient';
@@ -43,7 +43,7 @@ export default function SalesCanvasLauncher() {
       void (async () => {
         try {
           const existing = await fetchTenants();
-          const tenant = existing[0] ?? await createTenant(webToken, t('workspaceName', { name: user.name || t('defaultOwner') }));
+          const tenant = existing[0] ?? await workspacesApi.create(t('workspaceName', { name: user.name || t('defaultOwner') }));
           await selectTenant(tenant);
         } catch (cause) {
           setError(faultMessage(cause, t('workspaceFailed')));

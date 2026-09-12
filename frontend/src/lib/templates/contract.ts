@@ -33,7 +33,7 @@
  * another menu.
  */
 
-import type { CreationTemplate } from '@/components/creation-canvas/creationTemplates';
+import type { CreationTemplate } from '@/lib/templates/creationTemplates';
 
 /**
  * Where an entry came from. Drives the badge on a card and nothing else —

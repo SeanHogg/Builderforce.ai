@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import en from '@/i18n/messages/en.json';
 import { ComponentPicker } from './ComponentPicker';
-import { listComponentsForMount } from '@/lib/components/registry';
+import { listComponentsForMount } from '@/components/widgets/registry';
 
 /**
  * ONE PANEL, TWO ERRANDS.

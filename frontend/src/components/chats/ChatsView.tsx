@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 type SessionWithName = ChatSession & { agentHostName?: string };
 
@@ -20,6 +20,7 @@ const cardStyle: React.CSSProperties = {
  * dropped into the Workforce tab strip or any other shell.
  */
 export function ChatsView() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [sessions, setSessions] = useState<SessionWithName[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +34,7 @@ export function ChatsView() {
     setError(null);
     chatSessionsApi.listAll(100)
       .then(setSessions)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 

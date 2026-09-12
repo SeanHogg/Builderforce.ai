@@ -28,10 +28,17 @@
  * Pure functions over rows, so the windows are unit-testable without a database.
  */
 
-import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { salesAssociateSettings, salesContacts, salesReferrals, users } from '../../infrastructure/database/schema';
+import { salesAssociateSettings, salesContacts, users } from '../../infrastructure/database/schema';
 import { DAY_MS } from '../../domain/shared/time';
+import {
+  earnedCents, leadsSince, readReferralRecords, reportFacts,
+  type ReferralFact, type SalesLeadRecord,
+} from './salesReferralFacts';
+
+export type { ReferralFact } from './salesReferralFacts';
 
 export const SALES_REPORT_WINDOWS = ['week', 'month', 'quarter', 'ytd', 'all'] as const;
 export type SalesReportWindow = (typeof SALES_REPORT_WINDOWS)[number];
@@ -87,17 +94,6 @@ export function windowEnd(window: SalesReportWindow, now: Date): Date {
     default:
       return new Date(8_640_000_000_000_000);
   }
-}
-
-/** The referral facts a report reads. Deliberately the narrow subset, so the
- *  windowing functions can be tested with literals. */
-export interface ReferralFact {
-  associateUserId: string;
-  attributionType: string;
-  signedUpAt: Date;
-  convertedAt: Date | null;
-  revenueCents: number | null;
-  commissionCents: number | null;
 }
 
 export interface SalesWindowTotals {
@@ -393,14 +389,20 @@ export function leaderboard(
  * `associateUserId` null means the AGGREGATE (every associate) — which is the
  * superadmin's view, and the only difference between the two audiences.
  *
- * `tenantId` null means the caller has no workspace (a web-token session): the
- * referral facts are workspace-scoped, so there are none to read — the report
- * says so with empty windows rather than querying `tenant_id = NULL`.
+ * `tenantId` picks the POPULATION of referrals, never whose they are:
+ *   • a number — ONE workspace's referrals (the workspace-scoped view, unchanged);
+ *   • null     — every workspace. An associate's figures are keyed by their own
+ *                attribution (`sales_referrals.associate_user_id`), because a
+ *                person-level token names no workspace and an associate is owed on
+ *                every workspace they referred into (operator decision 2026-09-12).
+ *                See `salesReferralFacts.ts` for the scope and the cache.
+ *
+ * `env` enables the read-through cache for the cross-workspace views.
  */
 export async function buildSalesReport(
   db: Db,
   tenantId: number | null,
-  options: { associateUserId?: string | null; now?: Date; quotaWindow?: SalesReportWindow } = {},
+  options: { associateUserId?: string | null; now?: Date; quotaWindow?: SalesReportWindow; env?: Env } = {},
 ): Promise<SalesReport> {
   const now = options.now ?? new Date();
   const associateUserId = options.associateUserId ?? null;
@@ -409,27 +411,13 @@ export async function buildSalesReport(
   // you wait long enough.
   const quotaWindow: SalesReportWindow = options.quotaWindow ?? 'month';
 
-  // The aggregate view is "every associate IN THIS WORKSPACE" — a referral is a
-  // workspace's fact about its own programme, so even the superadmin roll-up is
-  // scoped. Reading across tenants here would total another workspace's revenue
-  // into this one's leaderboard.
-  const referralWhere = associateUserId
-    ? and(eq(salesReferrals.associateUserId, associateUserId), isNotNull(salesReferrals.signupNotifiedAt))
-    : isNotNull(salesReferrals.signupNotifiedAt);
-
   const stalledBefore = new Date(now.getTime() - STALLED_CONTACT_DAYS * DAY_MS);
 
-  const [referralRows, contactRows, peopleRows, goalRows] = await Promise.all([
-    tenantId == null ? Promise.resolve([] as ReferralFact[]) : db.select({
-      associateUserId: salesReferrals.associateUserId,
-      attributionType: salesReferrals.attributionType,
-      signedUpAt: salesReferrals.signedUpAt,
-      convertedAt: salesReferrals.convertedAt,
-      revenueCents: salesReferrals.revenueCents,
-      commissionCents: salesReferrals.commissionCents,
-    }).from(salesReferrals)
-      .where(and(eq(salesReferrals.tenantId, tenantId), referralWhere))
-      .orderBy(desc(salesReferrals.signedUpAt)),
+  const [facts, contactRows, peopleRows, goalRows] = await Promise.all([
+    // With a workspace: that workspace's referrals. Without: the associate's own
+    // attributed referrals in every workspace, or — for the superadmin aggregate —
+    // every associate's, programme-wide. Verified signups only, as always.
+    readReferralRecords(db, options.env, { tenantId, associateUserId }).then(reportFacts),
     // The funnel is a GROUP BY, not a fetch-and-count: a programme-wide contact
     // list is unbounded and there is no reason to carry it into the Worker.
     // The same single fetch now also carries the MONEY, so the weighted pipeline costs no
@@ -458,15 +446,6 @@ export async function buildSalesReport(
         .where(eq(salesAssociateSettings.ownerUserId, associateUserId))
       : db.select({ goalCents: salesAssociateSettings.revenueGoalCents }).from(salesAssociateSettings),
   ]);
-
-  const facts: ReferralFact[] = referralRows.map((row) => ({
-    associateUserId: row.associateUserId,
-    attributionType: row.attributionType,
-    signedUpAt: row.signedUpAt,
-    convertedAt: row.convertedAt,
-    revenueCents: row.revenueCents,
-    commissionCents: row.commissionCents,
-  }));
 
   const funnelCounts = new Map<string, number>();
   let stalled = 0;
@@ -512,37 +491,20 @@ export async function buildSalesReport(
 }
 
 /** Commission EARNED to date (converted referrals), which is what the payout
- *  balance subtracts from. One SUM, and the one definition of "earned".
- *  No workspace (`tenantId` null) means no workspace-scoped referrals: 0. */
-export async function earnedCommissionCents(db: Db, tenantId: number | null, associateUserId: string): Promise<number> {
-  if (tenantId == null) return 0;
-  const rows = await db.select({ commissionCents: salesReferrals.commissionCents })
-    .from(salesReferrals)
-    .where(and(
-      eq(salesReferrals.tenantId, tenantId),
-      eq(salesReferrals.associateUserId, associateUserId),
-      isNotNull(salesReferrals.convertedAt),
-    ));
-  return rows.reduce((sum, row) => sum + (row.commissionCents ?? 0), 0);
+ *  balance subtracts from. `tenantId` null = every workspace the associate
+ *  referred into, keyed by their attribution. */
+export async function earnedCommissionCents(db: Db, env: Env | undefined, tenantId: number | null, associateUserId: string): Promise<number> {
+  return earnedCents(await readReferralRecords(db, env, { tenantId, associateUserId }));
 }
 
 /** Referrals that signed up since `from` — the "current leads" list the hub shows.
- *  No workspace (`tenantId` null) means none, rather than a `tenant_id = NULL` read. */
-export async function recentReferrals(db: Db, tenantId: number | null, associateUserId: string, from: Date) {
-  if (tenantId == null) return [];
-  return db.select({
-    id: salesReferrals.id,
-    attributionType: salesReferrals.attributionType,
-    signedUpAt: salesReferrals.signedUpAt,
-    convertedAt: salesReferrals.convertedAt,
-    plan: salesReferrals.plan,
-    revenueCents: salesReferrals.revenueCents,
-    commissionCents: salesReferrals.commissionCents,
-  }).from(salesReferrals)
-    .where(and(
-      eq(salesReferrals.tenantId, tenantId),
-      eq(salesReferrals.associateUserId, associateUserId),
-      gte(salesReferrals.signedUpAt, from),
-    ))
-    .orderBy(desc(salesReferrals.signedUpAt));
+ *  `tenantId` null = every workspace, keyed by the associate's attribution. */
+export async function recentReferrals(
+  db: Db,
+  env: Env | undefined,
+  tenantId: number | null,
+  associateUserId: string,
+  from: Date,
+): Promise<SalesLeadRecord[]> {
+  return leadsSince(await readReferralRecords(db, env, { tenantId, associateUserId }), from);
 }

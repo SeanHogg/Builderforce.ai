@@ -109,8 +109,12 @@ const BASELINE = {
    * paper it kept the dark wash under a label that had already switched to the light
    * `--success-text`. It names `--success-bg` now, found while that file's type ramp
    * was being put on the scale (see `offScaleFontSizes`).
+   *
+   * 168 -> 164 (2026-09-12) — commit 99f5576ca's status-tone pass: `AgentExecutionControl`
+   * (2), `AgentHostSessionsContent` and `EvermindBuildPanel` stopped mixing `rgba()` status
+   * colours by hand and read them through `lib/statusTone.ts`, which names the families.
    */
-  themeLockedColours: 168,
+  themeLockedColours: 164,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -243,8 +247,15 @@ const BASELINE = {
    * pass, and `IncidentsPageClient` and `reliability/MonitoringSections` each shed one
    * literal on the way. Two points of slack on a green tree is budget the next
    * regression spends silently, so the floor takes them too.
+   *
+   * 3,473 -> 3,470 (2026-09-12): commit 99f5576ca and the page-splitting after it. The
+   * freelancer dashboard (-2) and the agent-host config/workspace tabs (-1 each) named
+   * roles; `AgentHostProjectsContent` added one (+1). The `personas`, `skills` and
+   * `content-manager` pages became Server Components over client islands, and their
+   * literals MOVED into `PersonasClient` / `SkillsClient` / `ContentManagerRedirect`
+   * unchanged, which is why the delta shows them as a matched +/− pair and not as work.
    */
-  offScaleFontSizes: 3473,
+  offScaleFontSizes: 3470,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

@@ -10,7 +10,6 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { faultMessage } from '@/lib/apiClient';
 import {
   knowledgeApi,
   type KnowledgeDoc,
@@ -21,6 +20,7 @@ import {
 import { MyTrainingSection, ComplianceAuditSection } from './KnowledgeTraining';
 import { badge, btnGhost, btnPrimary, chip, chipActive, inputStyle, statusColorStyle, tagChip } from './knowledgeStyles';
 import { useCreateKnowledge } from './useCreateKnowledge';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Unified Knowledge home. SOPs, Processes and Documents are no longer separate
@@ -193,6 +193,7 @@ const TYPE_FILTERS: Array<{ id: '' | DocType; labelKey: string }> = [
 ];
 
 function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typeof useTranslations> }) {
+  const errorMessage = useErrorMessage();
   const [docs, setDocs] = useState<KnowledgeDoc[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<'' | DocType>('');
@@ -206,9 +207,9 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
     knowledgeApi
       .list({ type: typeFilter || undefined, project: projectId, tag: tagFilter || undefined, q: search || undefined })
       .then(setDocs)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoaded(true));
-  }, [typeFilter, projectId, tagFilter, search]);
+  }, [typeFilter, projectId, tagFilter, search, errorMessage]);
 
   useEffect(() => {
     load();

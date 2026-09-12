@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canvasProjectId, canvasProjectNodes, canvasProjectPatch, canvasProjectRef, connectedCanvasProjectNode, isCanonicalProjectNode } from './canvasProjectRef';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 function node(id: string, data: Partial<CreationNodeData> & { kind: CreationNodeData['kind'] }) {
   return { id, data: { title: id, ...data } as CreationNodeData };

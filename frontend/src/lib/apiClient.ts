@@ -86,6 +86,29 @@ export function clearEmulationToken(): void {
 }
 
 /**
+ * The workspace an active emulation acts as, or null when nobody is being emulated.
+ *
+ * Read from the token's own `tid` claim — the claim the API's emulation
+ * middleware installs as the request's tenant — so the path a request names and
+ * the tenant the server resolves come from ONE value. A route that refuses a
+ * `:tenantId` other than the caller's (`/api/tenants/:id/…`) would otherwise
+ * answer an emulated request addressed to the superadmin's own workspace with a
+ * 403. Decoding without verifying is fine: this only chooses a URL, and the
+ * server verifies the token it is sent.
+ */
+export function emulatedTenantId(): string | null {
+  if (!_emulationToken) return null;
+  try {
+    const payload = _emulationToken.split('.')[1] ?? '';
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))) as { tid?: unknown };
+    return claims.tid == null ? null : String(claims.tid);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Which credential a request carries.
  *
  *  - `tenant` (default) — the workspace JWT. Everything scoped to a workspace.

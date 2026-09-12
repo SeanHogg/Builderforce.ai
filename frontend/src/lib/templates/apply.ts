@@ -13,7 +13,7 @@
  * doing nothing when somebody presses one.
  */
 
-import type { CreationTemplate } from '@/components/creation-canvas/creationTemplates';
+import type { CreationTemplate } from '@/lib/templates/creationTemplates';
 import type { TemplateEntry } from './contract';
 
 export interface TemplateApplyHandlers {

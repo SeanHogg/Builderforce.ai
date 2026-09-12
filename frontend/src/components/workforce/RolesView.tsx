@@ -18,7 +18,7 @@ import { ROLE_DISCIPLINES, useRoles } from '@/lib/useRoles';
 import type { JobRole, TemplateSummary, RoleAssignment, AssigneeKind, Discipline } from '@/lib/kanban';
 import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)', fontSize: 11, fontWeight: 600, background: bg, color: fg,
@@ -26,6 +26,7 @@ const chip = (bg: string, fg: string): React.CSSProperties => ({
 const input: React.CSSProperties = { background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 13, outline: 'none' };
 
 export function RolesView() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('workforceRoles');
   const confirm = useConfirm();
   const tk = useTranslations('kanban');
@@ -57,9 +58,9 @@ export function RolesView() {
       setTemplates(tpls);
       setAssignments(asg);
       if (!templateId && tpls.length > 0) setTemplateId(tpls[0].id);
-    } catch (e) { setError(faultMessage(e)); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setLoading(false); }
-  }, [templateId, reloadRoles]);
+  }, [templateId, reloadRoles, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -107,7 +108,7 @@ export function RolesView() {
       await kanbanApi.assignRole({ roleKey, ...a }); // projectId omitted → workspace default
       setAssigningRole(null);
       setAssignments(await kanbanApi.listRoleAssignments());
-    } catch (e) { setError(faultMessage(e)); }
+    } catch (e) { setError(errorMessage(e)); }
     finally { setAssignBusy(false); }
   };
 
@@ -116,7 +117,7 @@ export function RolesView() {
     try {
       await kanbanApi.unassignRole(id);
       setAssignments((prev) => prev.filter((a) => a.id !== id));
-    } catch (e) { setError(faultMessage(e)); }
+    } catch (e) { setError(errorMessage(e)); }
   };
 
   const onCreate = async () => {

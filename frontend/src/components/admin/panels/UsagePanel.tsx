@@ -29,7 +29,7 @@ import { errText, AdminError, AdminLoading } from '../adminShared';
 import { useAdminFormat } from '../adminShared';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 
 const VENDOR_HEALTH_TONE: StatusToneMap<VendorHealthStatus> = {
   ok: 'success',
@@ -39,6 +39,7 @@ const VENDOR_HEALTH_TONE: StatusToneMap<VendorHealthStatus> = {
 };
 
 export default function UsagePanel() {
+  const errorText = useErrorText();
   const { fmtDateTime, fmtNum } = useAdminFormat();
   const fmt = useFormat();
   const t = useTranslations('admin');
@@ -424,7 +425,7 @@ export default function UsagePanel() {
           (hours != null ? t('usage.dailyTokenLimitReset', { hours }) : '')
         );
       } else if (err.code === 'agent_host_token_limit_exceeded') {
-        setUsageAiError(faultText(err));
+        setUsageAiError(errorText(err));
       } else {
         setUsageAiError(err.message || String(e));
       }
@@ -598,7 +599,7 @@ export default function UsagePanel() {
                   try {
                     setLlmUsage(await adminApi.llmUsage(days));
                   } catch (err) {
-                    setErrorMsg(faultText(err));
+                    setErrorMsg(errorText(err));
                   } finally {
                     setLoading(false);
                   }

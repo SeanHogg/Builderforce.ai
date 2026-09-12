@@ -24,7 +24,7 @@ import type {
   Discipline, JobRole, KanbanTemplate, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
 } from '@/lib/kanban';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 type Tab = 'mine' | 'marketplace' | 'roles';
 
 const card: React.CSSProperties = {
@@ -45,6 +45,7 @@ const input: React.CSSProperties = {
 };
 
 export function KanbanTemplatesContent() {
+  const errorMessage = useErrorMessage();
   const { formatCents } = useMoneyFormat();
   const t = useTranslations('kanban');
   const canManage = usePermission('agents.create').allowed;
@@ -66,8 +67,8 @@ export function KanbanTemplatesContent() {
       ]);
       setMine(m); setMarket(mk);
       await reloadRoles();
-    } catch (e) { setError(faultMessage(e)); }
-  }, [reloadRoles]);
+    } catch (e) { setError(errorMessage(e)); }
+  }, [reloadRoles, errorMessage]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -79,7 +80,7 @@ export function KanbanTemplatesContent() {
   const openEditor = async (id: string) => {
     setError(null);
     try { setEditing(await kanbanApi.getTemplate(id)); }
-    catch (e) { setError(faultMessage(e)); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   const fork = async (id: string) => {
@@ -89,19 +90,19 @@ export function KanbanTemplatesContent() {
       const created = await kanbanApi.createTemplate({ name: `${src.name} (copy)`, forkFrom: id });
       await reload();
       setEditing(await kanbanApi.getTemplate(created.id));
-    } catch (e) { setError(faultMessage(e)); }
+    } catch (e) { setError(errorMessage(e)); }
   };
 
   const remove = async (id: string) => {
     setError(null);
     try { await kanbanApi.deleteTemplate(id); await reload(); }
-    catch (e) { setError(faultMessage(e)); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   const install = async (id: string) => {
     setError(null);
     try { await kanbanApi.installTemplate(id); await reload(); setTab('mine'); }
-    catch (e) { setError(faultMessage(e)); }
+    catch (e) { setError(errorMessage(e)); }
   };
 
   return (
@@ -223,6 +224,7 @@ function RolesTab({ roles, canManage, rolesCrud }: {
 function TemplateEditor({ template, roles, onClose, onSaved }: {
   template: KanbanTemplate; roles: JobRole[]; onClose: () => void; onSaved: () => Promise<void>;
 }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('kanban');
   const [name, setName] = useState(template.name);
   const [lanes, setLanes] = useState<TemplateLane[]>(template.lanes);
@@ -245,7 +247,7 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
       const priceCents = priceUsd.trim() ? Math.round(parseFloat(priceUsd) * 100) : null;
       await kanbanApi.updateTemplate(template.id, { name, lanes, priceCents });
       await onSaved();
-    } catch (e) { setErr(faultMessage(e)); }
+    } catch (e) { setErr(errorMessage(e)); }
     finally { setSaving(false); }
   };
 
@@ -255,7 +257,7 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
       const priceCents = priceUsd.trim() ? Math.round(parseFloat(priceUsd) * 100) : null;
       await kanbanApi.publishTemplate(template.id, { published, visibility: 'public', priceCents });
       await onSaved();
-    } catch (e) { setErr(faultMessage(e)); }
+    } catch (e) { setErr(errorMessage(e)); }
   };
 
   return (

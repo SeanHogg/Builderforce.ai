@@ -76,7 +76,7 @@ import { CanvasSiteSurface } from './CanvasSiteSurface';
 import { CanvasTimelineSurface } from './CanvasTimelineSurface';
 import { CanvasSurfaceProvider } from './canvasSurfaceContext';
 import { CanvasSurfaceActionsProvider } from './canvasSurfaceActions';
-import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor, type Canvas3DSceneInput } from '@/components/canvas/canvas3d';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor, type Canvas3DSceneInput } from '@/lib/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { CanvasMiroPanel } from './CanvasMiroPanel';
@@ -10173,8 +10173,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }),
       ]);
       setNotice(t('flowStep.opened', { count: stepNodes.length }));
-    }).catch((error: Error) => setNotice(faultText(error)));
-  }, [connectionKind, setEdges, setNodes, setNotice, t]);
+    }).catch((error: Error) => setNotice(errorText(error)));
+  }, [connectionKind, setEdges, setNodes, setNotice, t, errorText]);
 
   /**
    * OPEN A LEGACY WORKFLOW CARD ON THE BOARD — the migration path for every workflow
@@ -10263,7 +10263,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('flowStep.opening'));
       void workflowDefinitions.get(definitionId)
         .then((detail) => placeFlow(boardFlowFromDefinition(detail.definition, target.position), detail.name, detail.id))
-        .catch((error: Error) => setNotice(faultText(error)));
+        .catch((error: Error) => setNotice(errorText(error)));
       return;
     }
     // Never built, so there is no saved graph and the authored list IS the flow. A step
@@ -10279,7 +10279,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       target.data.title || t('flowStep.untitledFlow'),
       '',
     );
-  }, [connectionKind, resolveWorkflowNode, setEdges, setNodes, setNotice, t]);
+  }, [connectionKind, resolveWorkflowNode, setEdges, setNodes, setNotice, t, errorText]);
 
   /**
    * BUILD WHAT IS DRAWN — and there is exactly one thing that compiles a canvas.

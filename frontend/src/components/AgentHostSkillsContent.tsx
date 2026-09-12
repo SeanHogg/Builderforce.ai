@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { faultMessage } from '@/lib/apiClient';
 import {
   agentHostSkillsApi,
   listMarketplaceSkills,
   type AgentHostSkillAssignment,
   type MarketplaceSkill,
 } from '@/lib/builderforceApi';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 interface AgentHostSkillsContentProps {
   agentHostId: number;
@@ -22,6 +22,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkillsContentProps) {
+  const errorMessage = useErrorMessage();
   const [assignments, setAssignments] = useState<AgentHostSkillAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
     agentHostSkillsApi
       .list(agentHostId)
       .then(setAssignments)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 

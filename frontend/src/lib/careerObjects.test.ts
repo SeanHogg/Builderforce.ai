@@ -7,8 +7,9 @@ import {
 import { CAREER_AUTHORED_MONEY_FIELDS, CAREER_LABELS, CAREER_NAMESPACE, CAREER_OBJECT_SPECS, CAREER_STATUSES } from './careerObjects';
 import './specObjectSets';
 import {
-  makeSpecDeriveBoard, specFieldValue, specMutableFields, specObjectNamespace, specReadableFields, specValueInEnglish,
+  makeSpecDeriveBoard, specFieldValue, specMutableFields, specObjectNamespace, specReadableFields,
 } from './specObjects';
+import { specValueInEnglish } from './specVerdict';
 
 /** The one spec lookup every case below needs. Throws rather than returning undefined so
  *  a renamed kind fails on the line that renamed it, not three assertions later. */

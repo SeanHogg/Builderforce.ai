@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { llmApi, dashboardApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse, type DashboardUsage, type UsageByKind } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -32,6 +32,7 @@ const KIND_META: Record<UsageByKind['kind'], { label: string; color: string }> =
 };
 
 export function LlmUsageContent() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('llmUsage');
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
@@ -48,7 +49,7 @@ export function LlmUsageContent() {
     llmApi
       .usage()
       .then(setUsage)
-      .catch((e: unknown) => setErrorUsage(faultMessage(e)))
+      .catch((e: unknown) => setErrorUsage(errorMessage(e)))
       .finally(() => setLoadingUsage(false));
 
     // Cloud-vs-on-prem-vs-web breakdown with estimated cost (manager surface).
@@ -57,14 +58,14 @@ export function LlmUsageContent() {
     llmApi
       .health()
       .then(setHealth)
-      .catch((e: unknown) => setErrorHealth(faultMessage(e)))
+      .catch((e: unknown) => setErrorHealth(errorMessage(e)))
       .finally(() => setLoadingHealth(false));
 
     llmApi
       .models()
       .then((r) => setModels(r.configured ? r.data : []))
       .catch(() => {});
-  }, []);
+  }, [errorMessage]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

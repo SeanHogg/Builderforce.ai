@@ -28,7 +28,7 @@
  */
 
 import { flowStepsFromCanvasSteps } from '@/domains/workflow/domain/flowStepsFromCanvasSteps';
-import type { CreationTemplate } from './creationTemplates';
+import type { CreationTemplate } from '@/lib/templates/creationTemplates';
 
 type TemplateObject = CreationTemplate['objects'][number];
 type TemplateConnection = NonNullable<CreationTemplate['connections']>[number];

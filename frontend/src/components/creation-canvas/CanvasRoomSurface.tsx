@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useTranslations } from 'next-intl';
 import { Canvas } from '@react-three/fiber';
 import type { CanvasPresenceSpatial, CanvasPresenceState } from '@builderforce/creation-canvas-contract';
-import { canvas3dScene, type Canvas3DNode, type Canvas3DSceneInput } from '@/components/canvas/canvas3d';
+import { canvas3dScene, type Canvas3DNode, type Canvas3DSceneInput } from '@/lib/canvas/canvas3d';
 import { useTheme } from '@/lib/useTheme';
 import { spatialPeers, type LivePresenceMap } from '@/lib/canvas/livePresence';
 import {

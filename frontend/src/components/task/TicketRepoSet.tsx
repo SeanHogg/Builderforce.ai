@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { reposApi, type ProjectRepository, type TaskRepoBinding } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * The ticket's REPO SET (migration 0956).
  *
@@ -24,6 +24,7 @@ import { faultMessage } from '@/lib/apiClient';
  * choose from, and an empty control on every ticket would be noise.
  */
 export function TicketRepoSet({ taskId, projectId }: { taskId: number; projectId: number }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('ticketRepoSet');
   const [repos, setRepos] = useState<ProjectRepository[]>([]);
   const [bindings, setBindings] = useState<TaskRepoBinding[]>([]);
@@ -59,7 +60,7 @@ export function TicketRepoSet({ taskId, projectId }: { taskId: number; projectId
       const updated = await reposApi.setTaskRepoBindings(taskId, [...next]);
       setBindings(updated.bindings);
     } catch (e) {
-      setError(faultMessage(e));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }

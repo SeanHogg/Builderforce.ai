@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { analyticsApi, type TenantActivityRollup } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Owner-facing cross-project activity rollup — the whole tenant's activity from
@@ -40,6 +40,7 @@ function Spark({ daily, ariaLabel }: { daily: TenantActivityRollup['daily']; ari
 }
 
 export function TenantActivityPanel() {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('contributors');
   const [days, setDays] = useState(30);
@@ -50,8 +51,8 @@ export function TenantActivityPanel() {
   useEffect(() => {
     setData(null);
     setError(null);
-    analyticsApi.tenantRollup(days).then(setData).catch((e: unknown) => setError(faultMessage(e)));
-  }, [days]);
+    analyticsApi.tenantRollup(days).then(setData).catch((e: unknown) => setError(errorMessage(e)));
+  }, [days, errorMessage]);
 
   return (
     <div style={{ marginBottom: 20 }}>

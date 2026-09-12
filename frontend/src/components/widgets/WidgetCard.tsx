@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useComponentLabel } from '@/lib/components/useComponentCatalog';
+import { useComponentLabel } from '@/components/widgets/useComponentCatalog';
 import { RoleGate } from '@/components/RoleGate';
 import type { ComponentDef } from '@/lib/components/types';
 import { PinButton } from './PinButton';

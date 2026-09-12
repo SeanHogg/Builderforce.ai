@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   convertGraphSource, diagramConvertSource, diagramConvertTargets, diagramImageAsset, svgFromDataUrl,
 } from './canvasDiagramConvert';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const data = (fields: Record<string, unknown>) => ({ title: 'Object', status: '', ...fields }) as unknown as CreationNodeData;
 

@@ -21,8 +21,8 @@ import { InsightStat } from '@/components/dashboard/InsightStat';
 import { hrs, pct } from '@/components/insights/format';
 import { useInsightFormat } from '@/components/insights/format';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
 import { toneColor, type StatusTone } from '@/lib/statusTone';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Team analytics — the extended member / EMP metrics lenses (EMP-12..19) on one
@@ -58,11 +58,12 @@ function ScrollTable({ children }: { children: React.ReactNode }) {
 
 // ── EMP-12 — over-allocation ─────────────────────────────────────────────────
 function AllocationPanel() {
+  const errorMessage = useErrorMessage();
   const { int } = useInsightFormat();
   const t = useTranslations('components');
   const [data, setData] = useState<AllocationHealthResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { empMetricsApi.allocationHealth().then(setData).catch((e: unknown) => setErr(faultMessage(e))); }, []);
+  useEffect(() => { empMetricsApi.allocationHealth().then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [errorMessage]);
 
   return (
     <div style={card}>
@@ -107,11 +108,12 @@ function AllocationPanel() {
 
 // ── EMP-14 — collaboration ───────────────────────────────────────────────────
 function CollaborationPanel({ days }: { days: number }) {
+  const errorMessage = useErrorMessage();
   const { int } = useInsightFormat();
   const t = useTranslations('components');
   const [data, setData] = useState<CollaborationResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { empMetricsApi.collaboration(days).then(setData).catch((e: unknown) => setErr(faultMessage(e))); }, [days]);
+  useEffect(() => { empMetricsApi.collaboration(days).then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [days, errorMessage]);
 
   const top = data?.members[0];
   const radarAxes = top ? [
@@ -169,11 +171,12 @@ function CollaborationPanel({ days }: { days: number }) {
 
 // ── EMP-17 — documentation activity ──────────────────────────────────────────
 function DocActivityPanel({ days }: { days: number }) {
+  const errorMessage = useErrorMessage();
   const { int } = useInsightFormat();
   const t = useTranslations('components');
   const [data, setData] = useState<DocActivityResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { empMetricsApi.docActivity(days).then(setData).catch((e: unknown) => setErr(faultMessage(e))); }, [days]);
+  useEffect(() => { empMetricsApi.docActivity(days).then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [days, errorMessage]);
 
   return (
     <div style={card}>
@@ -211,11 +214,12 @@ function DocActivityPanel({ days }: { days: number }) {
 
 // ── EMP-19 — labour cost ─────────────────────────────────────────────────────
 function LaborCostPanel({ days }: { days: number }) {
+  const errorMessage = useErrorMessage();
   const { usd } = useInsightFormat();
   const t = useTranslations('components');
   const [data, setData] = useState<LaborCostResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { empMetricsApi.laborCost(days).then(setData).catch((e: unknown) => setErr(faultMessage(e))); }, [days]);
+  useEffect(() => { empMetricsApi.laborCost(days).then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [days, errorMessage]);
 
   const projBars: BarDatum[] = (data?.byProject ?? []).slice(0, 8).map((p, i) => ({ key: p.id, label: p.name, value: p.costUsd, color: colorAt(i) }));
   const initBars: BarDatum[] = (data?.byInitiative ?? []).slice(0, 8).map((p, i) => ({ key: p.id, label: p.name, value: p.costUsd, color: colorAt(i) }));
@@ -327,12 +331,13 @@ function CoachingNotes({ member }: { member: PerformerRow }) {
 }
 
 function PerformersPanel({ days }: { days: number }) {
+  const errorMessage = useErrorMessage();
   const { int } = useInsightFormat();
   const t = useTranslations('components');
   const [data, setData] = useState<PerformerTiersResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => { empMetricsApi.performerTiers(days).then(setData).catch((e: unknown) => setErr(faultMessage(e))); }, [days]);
+  useEffect(() => { empMetricsApi.performerTiers(days).then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [days, errorMessage]);
 
   const tierLabel = (tier: PerformerTier) => t(`emp.tier${tier[0].toUpperCase()}${tier.slice(1)}` as 'emp.tierHigh');
 
@@ -399,10 +404,11 @@ function PerformersPanel({ days }: { days: number }) {
 
 // ── EMP-13 — per-member initiative allocation (stacked) ──────────────────────
 function InitiativeAllocationPanel({ days }: { days: number }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('components');
   const [data, setData] = useState<MemberInitiativeAllocResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { empMetricsApi.initiativeAllocation(days).then(setData).catch((e: unknown) => setErr(faultMessage(e))); }, [days]);
+  useEffect(() => { empMetricsApi.initiativeAllocation(days).then(setData).catch((e: unknown) => setErr(errorMessage(e))); }, [days, errorMessage]);
 
   const colorByInit = new Map<string, string>();
   (data?.initiatives ?? []).forEach((i, idx) => colorByInit.set(i.id, i.id === 'unassigned' ? 'var(--border-subtle)' : colorAt(idx)));

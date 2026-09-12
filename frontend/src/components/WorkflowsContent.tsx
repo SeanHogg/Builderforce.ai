@@ -20,6 +20,7 @@ import { tableWrapStyle, tableStyle } from './dataTableStyles';
 import { cardStyle, subtleBtn, StatusPill } from './workflowRunUi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 interface WorkflowsContentProps {
   projectId?: number | null;
@@ -159,6 +160,7 @@ function WorkflowDefCard({
 }
 
 export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const router = useRouter();
   const confirm = useConfirm();
@@ -184,9 +186,9 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     workflowDefinitions
       .list()
       .then(setDefs)
-      .catch((e: unknown) => setError(faultMessage(e)))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => { load(); }, [load]);
   // Refetch when the Brain creates/updates/removes a workflow definition so this

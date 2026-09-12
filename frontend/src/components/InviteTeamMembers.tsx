@@ -6,7 +6,7 @@ import { Select } from '@/components/Select';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { inviteByEmail } from '@/lib/auth';
+import { membersApi } from '@/lib/auth/members';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
 const ROLE_VALUES = ['developer', 'manager', 'viewer'] as const;
@@ -22,7 +22,6 @@ interface Invite {
 
 interface InviteTeamMembersProps {
   tenantId: string;
-  tenantToken: string;
   /** Called when a member invite succeeds — parents can refresh their member list. */
   onInvited?: (email: string, role: string) => void;
   /** Called when the server returns a plan limit 402 — parents can surface the upgrade modal. */
@@ -33,7 +32,7 @@ interface InviteTeamMembersProps {
  * Reusable "Invite team members" component.
  * Looks up users by email and adds them to the workspace.
  */
-export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimit }: InviteTeamMembersProps) {
+export function InviteTeamMembers({ tenantId, onInvited, onPlanLimit }: InviteTeamMembersProps) {
   const t = useTranslations('inviteMembers');
   const [email, setEmail]   = useState('');
   const [role, setRole]     = useState('developer');
@@ -55,7 +54,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
     setAdding(true);
 
     try {
-      const result = await inviteByEmail(tenantToken, tenantId, trimmed, role);
+      const result = await membersApi.inviteByEmail(tenantId, trimmed, role);
       setInvites((prev) =>
         prev.map((i) => (i.email === trimmed ? { ...i, status: result.status === 'pending' ? 'invited' : 'added' } : i))
       );

@@ -17,6 +17,7 @@ import PageContainer from '@/components/PageContainer';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -62,6 +63,7 @@ export type ApiKeysContentProps = {
 };
 
 export function ApiKeysContent({ embedded = false, showProviderKeys = true, search = '', externalViewMode }: ApiKeysContentProps = {}) {
+  const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('apiKeys');
   const router = useRouter();
@@ -91,9 +93,9 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
     if (!isOwner || !Number.isFinite(tenantId)) { setLoading(false); return; }
     tenantApiKeysApi.list(tenantId)
       .then(setKeys)
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  }, [isOwner, tenantId]);
+  }, [isOwner, tenantId, errorMessage]);
 
   useEffect(() => { if (!embedded) router.replace('/settings/integrations'); }, [embedded, router]);
 

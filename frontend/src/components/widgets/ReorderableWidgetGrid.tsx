@@ -3,7 +3,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
-import { getComponent } from '@/lib/components/registry';
+import { getComponent } from '@/components/widgets/registry';
 import type { ComponentSize } from '@/lib/components/types';
 import { usePins } from '@/lib/widgets/PinsProvider';
 import { useDragReorder } from '@/lib/useDragReorder';

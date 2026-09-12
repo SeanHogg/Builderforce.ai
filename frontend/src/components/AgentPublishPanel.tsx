@@ -12,6 +12,7 @@ import { MambaEngine } from '@/lib/mamba-engine';
 import { downloadJson, downloadText } from '@/lib/download';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 const INSTALL_COMMAND = 'iwr -useb https://builderforce.ai/install.ps1 | iex';
 
 interface AgentPublishPanelProps {
@@ -59,6 +60,7 @@ function buildPackage(
 }
 
 export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPanelProps) {
+  const errorMessage = useErrorMessage();
   const [tab, setTab] = useState<PanelTab>('profile');
   const [profile, setProfile] = useState<AgentProfile>(DEFAULT_PROFILE);
   const [skillInput, setSkillInput] = useState('');
@@ -86,11 +88,11 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
       const result = await ingestAgentKnowledge(publishedId, { text: knowledgeText });
       setIngestResult(result);
     } catch (err) {
-      setIngestError(faultMessage(err));
+      setIngestError(errorMessage(err));
     } finally {
       setIsIngesting(false);
     }
-  }, [publishedId, knowledgeText]);
+  }, [publishedId, knowledgeText, errorMessage]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load Mamba snapshot from IndexedDB when toggled on

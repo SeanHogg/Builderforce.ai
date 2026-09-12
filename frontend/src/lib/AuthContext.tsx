@@ -15,18 +15,18 @@ import {
   getStoredTenantToken,
   getStoredUser,
   getStoredWebToken,
+  persistSession,
+  persistTenantSession,
+} from './auth';
+import {
   getTenantToken,
   getMyTenants,
   login as apiLogin,
-  persistSession,
-  persistTenantSession,
   register as apiRegister,
   verifyEmailCode as apiVerifyEmailCode,
-  selectAccountType as apiSelectAccountType,
-  setAvailableForHire as apiSetAvailableForHire,
-  addPassword as apiAddPassword,
   type AuthStepResult,
-} from './auth';
+} from './auth/credentials';
+import { profileApi } from './auth/session';
 import { signInWithPasskey } from './passkeys';
 
 // ---------------------------------------------------------------------------
@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const selectAccountType = useCallback(
     async (accountType: 'standard' | 'freelancer' | 'sales', ageAttested: boolean) => {
       if (!webToken) throw new Error('Not authenticated');
-      const updated = await apiSelectAccountType(webToken, accountType, ageAttested);
+      const updated = await profileApi.selectAccountType(accountType, ageAttested);
       setUser(updated);
       persistSession(webToken, updated);
     },
@@ -174,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setAvailableForHire = useCallback(
     async (available: boolean) => {
       if (!webToken) throw new Error('Not authenticated');
-      const next = await apiSetAvailableForHire(webToken, available);
+      const next = await profileApi.setAvailableForHire(available);
       setUser((prev) => {
         if (!prev) return prev;
         const updated = { ...prev, availableForHire: next };
@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setPassword = useCallback(
     async (password: string) => {
       if (!webToken) throw new Error('Not authenticated');
-      await apiAddPassword(webToken, password);
+      await profileApi.addPassword(password);
       setUser((prev) => {
         if (!prev) return prev;
         const updated = { ...prev, hasPassword: true };

@@ -18,7 +18,7 @@
  * and gets the same scoring, the same timing verdict, and the same exports.
  */
 
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
 /** The four objects this rulebook governs. */

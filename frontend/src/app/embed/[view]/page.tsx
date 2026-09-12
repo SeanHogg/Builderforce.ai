@@ -8,7 +8,7 @@ import { useTranslations } from 'next-intl';
 import { isEmbedView, EMBED_VIEWS, capabilityForView, type EmbedCapability } from '@seanhogg/builderforce-embedded';
 import { useEmbedFrame } from '../../../lib/embed/useEmbedFrame';
 import { embedApi } from '../../../lib/builderforceApi';
-import { getComponentForMount } from '@/lib/components/registry';
+import { getComponentForMount } from '@/components/widgets/registry';
 
 /**
  * The framed BuilderForce surface — `/embed/<id>`, the APP MOUNT.

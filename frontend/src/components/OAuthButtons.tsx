@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { getOAuthUrl } from '@/lib/auth';
+import { getOAuthUrl } from '@/lib/auth/credentials';
 
 const PROVIDERS = [
   { provider: 'google',    label: 'Continue with Google',    icon: 'G' },

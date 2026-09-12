@@ -1,4 +1,4 @@
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 /**
  * Drawing on the canvas: many strokes, more than one tool, and a mark that can

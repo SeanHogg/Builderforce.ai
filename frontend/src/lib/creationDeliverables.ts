@@ -2,8 +2,8 @@ import { brandDirective, escapeHtml as escapeHtmlText, slugify, type BrandBindin
 import { apiRequest } from './apiClient';
 import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type MeshFormat } from './creativeGeometry';
 import { gamePosterDataUrl } from './gamePoster';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
-import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from '@/components/creation-canvas/websiteWysiwyg';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
+import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from '@builderforce/creation-canvas-contract';
 
 export type CreationDeliverableStatus = 'running' | 'delivered' | 'failed';
 

@@ -19,10 +19,10 @@ import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { usePermission } from '@/lib/rbac';
-import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 import { workspaceSkillsApi, type WorkspaceSkill, type WorkspaceSkillStatus } from '@/lib/workspaceSkillsApi';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const FILTERS: readonly WorkspaceSkillStatus[] = ['draft', 'approved', 'rejected'];
 
@@ -63,6 +63,7 @@ const STATUS_TONE: StatusToneMap<WorkspaceSkillStatus> = {
 };
 
 export function WorkspaceSkillReview() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('workspaceSkills');
   const tc = useTranslations('common');
   const confirm = useConfirm();
@@ -81,11 +82,11 @@ export function WorkspaceSkillReview() {
       setSkills(await workspaceSkillsApi.list(status));
       setLoadError(null);
     } catch (e) {
-      setLoadError(faultMessage(e));
+      setLoadError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 

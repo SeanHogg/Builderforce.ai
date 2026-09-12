@@ -12,7 +12,7 @@
 
 import { robloxScriptsFrom, robloxWorldReading, type RobloxScriptSource, type RobloxWorldReading } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import { creativeBrief } from './creationDeliverables';
 
 export type GameTargetKey = 'web' | 'pwa' | 'android' | 'ios' | 'roblox';

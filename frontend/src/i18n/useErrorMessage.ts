@@ -1,10 +1,16 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useCallback } from 'react';
 
 import { faultMessage } from '@/lib/apiClient';
 import { ApiTransportError } from '@/lib/errors/transportFailure';
+
+/*
+ * No `'use client'`, deliberately. A hook module marks no boundary: a hook runs inside
+ * whichever component calls it (the `lib/useTheme.ts` / `lib/useRoleText.ts`
+ * convention). Both hooks here are `useTranslations` + `useCallback`, and both of those
+ * run in a Server Component too, so the directive would only have turned them into
+ * client references that a server-rendered error state could not call.
+ */
 
 /**
  * The message a surface SHOWS for a caught rejection, in the reader's language.

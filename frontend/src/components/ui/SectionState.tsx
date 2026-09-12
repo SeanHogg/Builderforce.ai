@@ -23,7 +23,8 @@
 
 import type { CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
-import { faultMessage, isSignedOutFailure } from '@/lib/apiClient';
+import { isSignedOutFailure } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Off the first paint: this module sits in the root layout's static closure,
@@ -61,8 +62,9 @@ export function SectionLoading({ label }: { label: string }) {
  * the rows would have been, so a caller can mount it unconditionally.
  */
 export function SectionError({ error }: { error: unknown }) {
+  const errorMessage = useErrorMessage();
   if (isSignedOutFailure(error)) return <GuestAccountPrompt />;
-  const message = faultMessage(error);
+  const message = errorMessage(error);
   if (!message) return null;
   return (
     <div style={{ ...SECTION_CARD, borderColor: 'var(--error)', color: 'var(--error-text)' }} role="alert">

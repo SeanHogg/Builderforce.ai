@@ -17,7 +17,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { onTermsGate } from './errors/termsGateEvent';
 import { useAuth } from './AuthContext';
-import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants, type OnboardingProgress } from './auth';
+import { getMyTenants } from './auth/credentials';
+import { profileApi, type OnboardingProgress } from './auth/session';
 import { creationSessionsApi } from './builderforceApi';
 
 /**
@@ -106,7 +107,7 @@ export function useOnboardingPrompt(): OnboardingPrompt {
       return;
     }
 
-    getMe(webToken)
+    profileApi.me()
       .then(({ onboardingCompletedAt, onboardingProgress }) => {
         setProgress(onboardingProgress);
         if (!onboardingCompletedAt) setShow(true);
@@ -192,7 +193,7 @@ export function useOnboardingState(): OnboardingState {
       // Terms + role status resolve together — both gate the chrome.
       const [status, me] = await Promise.all([
         fetchTermsStatus(webToken),
-        getMe(webToken),
+        profileApi.me(),
       ]);
       setTerms(status.terms);
       setNeedsTerms(status.needsAcceptance);

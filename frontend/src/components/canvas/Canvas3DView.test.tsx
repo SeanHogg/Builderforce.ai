@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Canvas3DView, type Canvas3DMove } from './Canvas3DView';
 import { Canvas3DControlsProvider } from './canvas3dControls';
-import type { Canvas3DNode } from './canvas3d';
+import type { Canvas3DNode } from '@/lib/canvas/canvas3d';
 
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();

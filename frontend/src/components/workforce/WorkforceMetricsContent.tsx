@@ -11,7 +11,7 @@ import { assigneeSelectValue } from '@/lib/taskAssignee';
 import { EngagementSection } from './EngagementSection';
 import { fmtHrs, fmtScore, scoreColor, MEMBER_KIND_LABEL } from './workforceFormat';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const DISCIPLINE_OPTIONS = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other'] as const;
 
@@ -53,6 +53,7 @@ const th: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontS
 const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 13, whiteSpace: 'nowrap' };
 
 export function WorkforceMetricsContent() {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('workforce');
   const tw = useTranslations('components');
   const [days, setDays] = useState(7);
@@ -79,9 +80,9 @@ export function WorkforceMetricsContent() {
   useEffect(() => {
     membersApi.metrics(days, discipline || undefined, currentProjectId)
       .then((r) => { setMembers(r.members); setByDiscipline(r.byDiscipline); })
-      .catch((e: unknown) => setError(faultMessage(e)));
+      .catch((e: unknown) => setError(errorMessage(e)));
     membersApi.dora(Math.max(days, 30), currentProjectId).then(setDora).catch(() => { /* optional */ });
-  }, [days, discipline, reloadKey, currentProjectId]);
+  }, [days, discipline, reloadKey, currentProjectId, errorMessage]);
 
   // Localized label for a discipline value (falls back to the raw value / unassigned).
   const disciplineLabel = (d: string | null): string => {

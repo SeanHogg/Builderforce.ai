@@ -26,11 +26,11 @@ import type { Db } from '../../infrastructure/database/connection';
 import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
 import {
   CONNECTABLE_PROVIDERS,
-  connectableCatalog,
   isConnectableProvider,
   testProviderCredential,
   validateProviderCredentials,
 } from '../../application/integrations/providerTests';
+import { CONNECTABLE_CATEGORIES, connectableCatalog } from '../../application/integrations/connectableCatalog';
 import { getMissingIntegrationRecommendations } from '../../application/integrations/integrationGapRecommendations';
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -172,13 +172,17 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     return c.json({ integrations: rows });
   });
 
-  // GET /api/integrations/catalog — what CAN be connected, and how.
+  // GET /api/integrations/connectable — what CAN be connected, and how: every
+  // provider's connect form (label, category, base-URL requirement, fields) plus
+  // the gallery's section order. NOT `/catalog`: that literal path belongs to the
+  // PUBLIC marketing catalog, mounted first in index.ts, which shadowed this
+  // route for as long as it lived there.
   // Registered before `/:id` so the literal path is not swallowed by the param
-  // route. Static data (no tenant state, no I/O), so it is served directly and
-  // cached by the client rather than through the read-through cache.
-  router.get('/catalog', (c) => {
-    c.header('Cache-Control', 'public, max-age=300');
-    return c.json({ providers: connectableCatalog() });
+  // route. The catalog is a frozen module constant (built once at load, no tenant
+  // state, no I/O) — that constant is the cache; the client memoises the fetch.
+  router.get('/connectable', (c) => {
+    c.header('Cache-Control', 'private, max-age=300');
+    return c.json({ providers: connectableCatalog(), categories: CONNECTABLE_CATEGORIES });
   });
 
   // GET /api/integrations/recommendations?projectId=<n>

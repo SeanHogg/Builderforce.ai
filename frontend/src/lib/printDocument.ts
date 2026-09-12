@@ -18,7 +18,7 @@ import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { PICTURE_KINDS } from './canvasExports';
 import { canvasDiagram, canvasObjectMarkdown, canvasSlides, type CanvasSlide } from './canvasDocuments';
 import { creativePreviewImageUrl } from './creationDeliverables';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import { RESUME_DOCUMENT_STYLES, renderedCanvasResume, resumePageCss } from './canvasResumeRenderer';
 
 /**

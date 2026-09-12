@@ -28,6 +28,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
  * frontier-model accounts — Anthropic, OpenAI, and/or Google — and the platform
@@ -701,6 +702,7 @@ function ProviderConnectionCard({
   onHealthChange: (alert: ProviderAuthAlert | null) => void;
   t: TFn;
 }) {
+  const errorMessage = useErrorMessage();
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -722,7 +724,7 @@ function ProviderConnectionCard({
   const disconnect = useProviderDisconnect(t);
   const toast = useToast();
 
-  const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(faultMessage(e)));
+  const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(errorMessage(e)));
   useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
 
   const testConnection = async () => {
@@ -1009,6 +1011,7 @@ function OllamaLocalConnectionCard({
   onHealthChange: (alert: ProviderAuthAlert | null) => void;
   t: TFn;
 }) {
+  const errorMessage = useErrorMessage();
   const config: ProviderConfig = { id: 'ollama-local', label: t('ollamaLocal.title'), keyPlaceholder: '', supportsOauth: false };
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
@@ -1021,7 +1024,7 @@ function OllamaLocalConnectionCard({
   const disconnect = useProviderDisconnect(t);
   const toast = useToast();
 
-  const loadDiagnostic = () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(faultMessage(e)));
+  const loadDiagnostic = () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(errorMessage(e)));
   useEffect(() => { void loadDiagnostic(); }, [configured]);
 
   const testConnection = async () => {
@@ -1162,6 +1165,7 @@ function OpenRouterConnectionsPanel({
   onHealthChange: (connectionId: number, alert: ConnectionAuthAlert | null) => void;
   t: TFn;
 }) {
+  const errorMessage = useErrorMessage();
   const [catalog, setCatalog] = useState<OpenRouterCatalogModel[]>([]);
   const [editing, setEditing] = useState<OpenRouterConnection | null>(null);
   const [creating, setCreating] = useState(false);
@@ -1182,8 +1186,8 @@ function OpenRouterConnectionsPanel({
   useEffect(() => {
     void openRouterConnectionsApi.catalog()
       .then((result) => setCatalog(result.data ?? []))
-      .catch((e: Error) => setError(faultMessage(e)));
-  }, []);
+      .catch((e: Error) => setError(errorMessage(e)));
+  }, [errorMessage]);
 
   const begin = (connection?: OpenRouterConnection) => {
     setEditing(connection ?? null);
@@ -1442,6 +1446,7 @@ export function ProviderKeysSettings({
    *  OpenRouter connection, which has no provider id; see {@link precedenceEntryLabel}. */
   onLeaderChange?: (leaderLabel: string | null) => void;
 }) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('providerKeys');
   const confirm = useConfirm();
   const disconnectProvider = useProviderDisconnect(t);
@@ -1503,7 +1508,7 @@ export function ProviderKeysSettings({
         setOrder(refs);
         onLeaderChange?.(precedenceLeaderLabel(precedenceResult.entries, refs));
       })
-      .catch((e: Error) => setError(faultMessage(e)))
+      .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
   };
 

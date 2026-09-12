@@ -11,7 +11,7 @@
  */
 
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 /** Objects whose BODY is a live web page rather than a description of one. */
 export const WEB_PAGE_KINDS: ReadonlySet<CreationObjectKind> = new Set(['browser', 'url', 'service']);

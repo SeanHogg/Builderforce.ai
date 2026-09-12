@@ -9,7 +9,7 @@ import { KpiGrid } from './LensShell';
 import { pct, score2 } from './format';
 import { useInsightFormat } from './format';
 import { useAiOverview, useLlmUsage, useLlmBySource } from './insightsSources';
-import { REC_SEVERITY_TONE } from './RecommendationsLens';
+import { REC_SEVERITY_TONE } from './recSeverityTone';
 import { statusColor } from '@/lib/statusTone';
 
 /**

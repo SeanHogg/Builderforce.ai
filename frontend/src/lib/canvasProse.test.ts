@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canRelevelCanvasObject, canvasProseText } from './canvasProse';
-import type { CreationNodeData } from '@/components/creation-canvas/types';
+import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 
 const document = (markdown: string): CreationNodeData => ({ kind: 'document', title: 'Photosynthesis', subtitle: 'Biology notes', markdown });
 

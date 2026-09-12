@@ -67,7 +67,7 @@ import {
 } from '@/lib/creationListings.launch';
 import styles from './CreationCanvas.module.css';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CanvasReleasesPanelProps {
   open: boolean;
   onClose: () => void;
@@ -88,6 +88,7 @@ export function CanvasReleasesPanel({
   objectId,
   onNotice,
 }: CanvasReleasesPanelProps) {
+  const errorMessage = useErrorMessage();
   const t = useTranslations('creationCanvas.releases');
   const [rail, setRail] = useState<ReleaseRail | null>(null);
   const [candidate, setCandidate] = useState<PublishCandidate | null>(null);
@@ -150,11 +151,11 @@ export function CanvasReleasesPanel({
           setDelivery(found.delivery);
         }
       } catch (cause) {
-        if (live) setError(faultMessage(cause));
+        if (live) setError(errorMessage(cause));
       }
     })();
     return () => { live = false; };
-  }, [open, sessionId, objectId, loadRail]);
+  }, [open, sessionId, objectId, loadRail, errorMessage]);
 
   const stage = useCallback(async () => {
     if (!candidate?.kinds.length) return;
@@ -175,11 +176,11 @@ export function CanvasReleasesPanel({
       await loadRail();
       onNotice(t('noticeStaged', { version: next.version }));
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [candidate, delivery, sessionId, objectId, loadRail, onNotice, t]);
+  }, [candidate, delivery, sessionId, objectId, loadRail, onNotice, t, errorMessage]);
 
   /**
    * WHILE THE STAGE SANDBOX IS STILL VERIFYING, KEEP RE-READING.
@@ -233,11 +234,11 @@ export function CanvasReleasesPanel({
       await loadRail();
       onNotice(t('noticePublished', { version: listing.version }));
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [staged, candidate, sessionId, objectId, loadRail, onNotice, t]);
+  }, [staged, candidate, sessionId, objectId, loadRail, onNotice, t, errorMessage]);
 
   /**
    * Put an earlier version back on sale.
@@ -257,11 +258,11 @@ export function CanvasReleasesPanel({
       await loadRail();
       onNotice(t('noticeReverted', { version: result.version, from: release.version }));
     } catch (cause) {
-      setError(faultMessage(cause));
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
-  }, [rail, loadRail, onNotice, t]);
+  }, [rail, loadRail, onNotice, t, errorMessage]);
 
   const blockers = useMemo(() => blockingChecks(staged?.checks ?? []), [staged]);
   const canPublish = !!staged && isPublishable(staged.checks) && !busy;

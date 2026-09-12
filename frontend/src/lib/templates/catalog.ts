@@ -22,7 +22,7 @@
  * takes whatever has arrived and the caller loads the rest when it can.
  */
 
-import { CREATION_TEMPLATES, type CreationTemplate } from '@/components/creation-canvas/creationTemplates';
+import { CREATION_TEMPLATES, type CreationTemplate } from '@/lib/templates/creationTemplates';
 import { C_SUITE_CANVAS_USE_CASES, executiveCanvasPrompt, type PromptUseCase } from './promptUseCases';
 import type { TemplateEntry } from './contract';
 import type { TemplateSummary } from './api';
