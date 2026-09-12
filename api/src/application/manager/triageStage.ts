@@ -33,6 +33,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { liveExecution } from '../rehearsal/executionMode';
+import { DEFAULT_MANAGER_POLICY } from './managerPolicy';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -792,7 +793,8 @@ export async function runStallTriage(
         // manager's to close, not a standing escalation — the census asks the same module.
         reviewGateDelegated: managerHoldsReviewGate({
           status: task.status, laneGate: autoRun.laneGate,
-          managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets ?? false,
+          managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets
+            ?? DEFAULT_MANAGER_POLICY.managerMayCloseReviewedTickets,
         }),
       });
 

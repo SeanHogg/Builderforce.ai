@@ -10,7 +10,7 @@ import { TaskStatus } from '../../domain/shared/types';
 /**
  * THE OPERATOR DECISION (2026-09-12): whether the autonomous manager may review and close
  * a ticket through a human-gated review lane is an account-admin, per-workspace setting
- * (`managerMayCloseReviewedTickets`), default OFF.
+ * (`managerMayCloseReviewedTickets`), default ON (the operator flipped it the same day).
  *
  * What these tests pin is that the setting means ONE thing everywhere — the conduct step
  * that closes tickets, the triage that escalates them and the census that counts them all
@@ -30,7 +30,7 @@ describe('decideReviewGate', () => {
     }
   });
 
-  it('holds a human-gated review lane for a person when the setting is OFF (the default)', () => {
+  it('holds a human-gated review lane for a person when the admin turns the setting OFF', () => {
     expect(decideReviewGate({ status: TaskStatus.IN_REVIEW, laneGate: 'human', ...OFF })).toBe('held_for_human');
     expect(managerHoldsReviewGate({ status: TaskStatus.IN_REVIEW, laneGate: 'human', ...OFF })).toBe(false);
   });
@@ -53,21 +53,21 @@ describe('reviewCloseActor — the ledger credits an agent, never a person', () 
   });
 });
 
-describe('the setting is workspace-only and OFF by default', () => {
-  it('defaults to false with no opinion anywhere', () => {
-    expect(DEFAULT_MANAGER_POLICY.managerMayCloseReviewedTickets).toBe(false);
-    expect(resolveTieredManagerPolicy({}).managerMayCloseReviewedTickets).toBe(false);
+describe('the setting is workspace-only and ON by default', () => {
+  it('defaults to true with no opinion anywhere', () => {
+    expect(DEFAULT_MANAGER_POLICY.managerMayCloseReviewedTickets).toBe(true);
+    expect(resolveTieredManagerPolicy({}).managerMayCloseReviewedTickets).toBe(true);
   });
-  it('is granted by the workspace tier', () => {
-    expect(resolveTieredManagerPolicy({ tenant: { managerMayCloseReviewedTickets: true } })
-      .managerMayCloseReviewedTickets).toBe(true);
+  it('is withheld by the workspace tier', () => {
+    expect(resolveTieredManagerPolicy({ tenant: { managerMayCloseReviewedTickets: false } })
+      .managerMayCloseReviewedTickets).toBe(false);
   });
   it('ignores a project tier entirely — it can neither grant nor withhold', () => {
-    expect(resolveTieredManagerPolicy({ project: { managerMayCloseReviewedTickets: true } })
-      .managerMayCloseReviewedTickets).toBe(false);
+    expect(resolveTieredManagerPolicy({ project: { managerMayCloseReviewedTickets: false } })
+      .managerMayCloseReviewedTickets).toBe(true);
     expect(resolveTieredManagerPolicy({
-      tenant: { managerMayCloseReviewedTickets: true }, project: { managerMayCloseReviewedTickets: false },
-    }).managerMayCloseReviewedTickets).toBe(true);
+      tenant: { managerMayCloseReviewedTickets: false }, project: { managerMayCloseReviewedTickets: true },
+    }).managerMayCloseReviewedTickets).toBe(false);
   });
 });
 

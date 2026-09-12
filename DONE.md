@@ -135,7 +135,7 @@ gate and closed review-ready tickets through `completeTaskOnMerge` regardless. D
 2026-09-12: the account admin decides.
 
 - **The setting:** `managerMayCloseReviewedTickets`, a column on `tenant_manager_defaults` (the
-  existing workspace settings row — a project can neither grant nor withhold it), default OFF,
+  existing workspace settings row — a project can neither grant nor withhold it), default ON (operator decision later the same day — see 1161),
   changed through `PATCH /api/manager/defaults` (MANAGER role). Toggle on Settings → AI Manager,
   beside `allowAutoStaffLanes`, disabled-not-hidden for non-admins, with an "in effect" chip;
   five catalogs. Migration `1153_manager_may_close_reviewed_tickets.sql`.
@@ -151,7 +151,7 @@ gate and closed review-ready tickets through `completeTaskOnMerge` regardless. D
   still escalate.
 - **Behaviour change:** with the setting OFF the manager now STOPS closing tickets on human-gated
   review lanes (it silently did before). On tenant 1 every board is human-gated, so after deploy the
-  manager closes nothing there until an admin turns the setting on.
+  manager closes nothing there until an admin turns the setting on. **Superseded the same day:** the operator made it default ON (`DEFAULT_MANAGER_POLICY.managerMayCloseReviewedTickets = true`; migration `1161` corrects the column comment — no row rewritten), so a workspace with no opinion keeps the manager closing reviewed tickets, and an admin sets it OFF to require a person.
 - Tests: api 210/210 (policy, triage, census, triage stages, new gate tests incl. source checks
   that the gate is decided before any close), frontend 47/47.
 

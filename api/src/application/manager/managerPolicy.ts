@@ -328,9 +328,10 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   // in it, and an intake lane is unconfigured on purpose about as often as it is by
   // accident — the platform cannot tell which, so it asks.
   allowAutoStaffLanes: false,
-  // OFF by default (1153). A human-gated review lane keeps meaning "a person signs every
-  // ticket" until the account admin decides otherwise.
-  managerMayCloseReviewedTickets: false,
+  // ON by default (operator decision 2026-09-12, reversing 1153's first default): the
+  // manager's review verdict closes a ticket on a human-gated review lane unless the
+  // account admin turns it OFF, in which case a person signs every ticket there.
+  managerMayCloseReviewedTickets: true,
 };
 
 /**
