@@ -40,11 +40,19 @@ import {
   listCanvasWidgets,
   registerCanvasWidget,
   updateCanvasWidget,
-} from '../canvas/canvasWidgetService';
-import { CANVAS_WEBHOOK_EVENTS } from '../seams/webhookService';
-import { requirePublicApiKey, type PublicApiContext } from './publicApiAuth';
-import { touchTenantApiKey } from '../llm/tenantApiKeyService';
-import { CREATION_UUID_RE as UUID_RE } from '../creation/creationGraphWriter';
+} from '../../application/canvas/canvasWidgetService';
+import { CANVAS_WEBHOOK_EVENTS } from '../../application/seams/webhookService';
+import { requirePublicApiKey, type PublicApiContext } from '../../application/publicApi/publicApiAuth';
+import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
+import { CREATION_UUID_RE as UUID_RE } from '../../application/creation/creationGraphWriter';
+import { parseBody, parseOptionalBody, z, zJsonObject } from './requestBody';
+
+/** Re-point / disable. Each field optional; `updateCanvasWidget` owns the URL and status rules. */
+const WidgetPatchSchema = z.object({
+  entryUrl: z.string().optional(),
+  status: z.string().optional(),
+  iconUrl: z.string().nullable().optional(),
+});
 
 /**
  * The full protocol contract, as data.
@@ -128,7 +136,8 @@ export function createPublicWidgetRoutes(db: Db): Hono<HonoEnv> {
   router.post('/widgets', async (c) => {
     const resolved = await auth(c, 'manage:widgets');
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
-    const manifest = await c.req.json().catch(() => null);
+    // A manifest is a JSON object; `registerCanvasWidget` validates its fields.
+    const manifest = await parseBody(c, zJsonObject);
     const result = await registerCanvasWidget(db, c.env, {
       tenantId: resolved.tenantId,
       keyId: resolved.keyId,
@@ -144,8 +153,7 @@ export function createPublicWidgetRoutes(db: Db): Hono<HonoEnv> {
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return c.json({ error: 'Widget not found' }, 404);
-    const body = await c.req.json<{ entryUrl?: string; status?: string; iconUrl?: string | null }>()
-      .catch(() => ({} as { entryUrl?: string; status?: string; iconUrl?: string | null }));
+    const body = await parseOptionalBody(c, WidgetPatchSchema);
     const result = await updateCanvasWidget(db, c.env, {
       tenantId: resolved.tenantId, widgetId: id,
       entryUrl: body.entryUrl, status: body.status, iconUrl: body.iconUrl,

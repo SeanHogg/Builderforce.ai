@@ -85,6 +85,15 @@ const ALLOWED = new Map([
       'third-party host). Not the Builderforce API at all — sending our auth ' +
       'headers to someone else\'s origin would leak the token.',
   ],
+  [
+    'blogLocale.ts',
+    'Reads a translated blog body published as a static asset on THIS APP\'S OWN ' +
+      'origin (`/blog-i18n/<locale>/<slug>.md`), not the Builderforce API — there is ' +
+      'no credential to attach. It also runs server-side during the post route\'s ' +
+      'render, where apiClient\'s browser-only reads (localStorage, cookies) do not ' +
+      'apply, and it must degrade to the English body on ANY failure (404, network) ' +
+      'rather than raise the transport\'s global error toast for a missing translation.',
+  ],
 ]);
 
 /** `fetch(` that is a real call, not the word inside an identifier or a comment. */

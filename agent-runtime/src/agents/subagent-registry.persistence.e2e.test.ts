@@ -74,11 +74,27 @@ describe("subagent registry persistence", () => {
     await Promise.resolve();
   };
 
+  // Restore reads the registry from disk asynchronously, so a restart is only complete
+  // once `initSubagentRegistry()`'s promise settles — two microtask turns are not enough.
   const restartRegistryAndFlush = async () => {
     resetSubagentRegistryForTests({ persist: false });
-    initSubagentRegistry();
+    await initSubagentRegistry();
     await flushQueuedRegistryWork();
   };
+
+  // Announce outcomes persist fire-and-forget too, so a read straight after a restart can
+  // see the previous file or a half-written one. Poll until the state the assertion
+  // describes has landed on disk.
+  const expectPersistedRuns = <T>(
+    registryPath: string,
+    assert: (runs: Record<string, T> | undefined) => void,
+  ) =>
+    vi.waitFor(async () => {
+      const parsed = JSON.parse(await fs.readFile(registryPath, "utf8")) as {
+        runs?: Record<string, T>;
+      };
+      assert(parsed.runs);
+    });
 
   afterEach(async () => {
     announceSpy.mockClear();
@@ -105,7 +121,8 @@ describe("subagent registry persistence", () => {
     });
 
     const registryPath = path.join(tempStateDir, "subagents", "runs.json");
-    const raw = await fs.readFile(registryPath, "utf8");
+    // Registration persists fire-and-forget (`void persistSubagentRuns()`); wait for the write.
+    const raw = await vi.waitFor(() => fs.readFile(registryPath, "utf8"));
     const parsed = JSON.parse(raw) as { runs?: Record<string, unknown> };
     expect(parsed.runs && Object.keys(parsed.runs)).toContain("run-1");
     const run = parsed.runs?.["run-1"] as
@@ -123,11 +140,7 @@ describe("subagent registry persistence", () => {
 
     // Simulate a process restart: module re-import should load persisted runs
     // and trigger the announce flow once the run resolves.
-    resetSubagentRegistryForTests({ persist: false });
-    initSubagentRegistry();
-
-    // allow queued async wait/cleanup to execute
-    await flushQueuedRegistryWork();
+    await restartRegistryAndFlush();
 
     expect(announceSpy).toHaveBeenCalled();
 
@@ -176,10 +189,7 @@ describe("subagent registry persistence", () => {
     await fs.mkdir(path.dirname(registryPath), { recursive: true });
     await fs.writeFile(registryPath, `${JSON.stringify(persisted)}\n`, "utf8");
 
-    resetSubagentRegistryForTests({ persist: false });
-    initSubagentRegistry();
-
-    await flushQueuedRegistryWork();
+    await restartRegistryAndFlush();
 
     // announce should NOT be called since cleanupHandled was true
     const calls = (announceSpy.mock.calls as unknown as Array<[unknown]>).map((call) => call[0]);
@@ -237,20 +247,21 @@ describe("subagent registry persistence", () => {
     await restartRegistryAndFlush();
 
     expect(announceSpy).toHaveBeenCalledTimes(1);
-    const afterFirst = JSON.parse(await fs.readFile(registryPath, "utf8")) as {
-      runs: Record<string, { cleanupHandled?: boolean; cleanupCompletedAt?: number }>;
-    };
-    expect(afterFirst.runs["run-3"].cleanupHandled).toBe(false);
-    expect(afterFirst.runs["run-3"].cleanupCompletedAt).toBeUndefined();
+    await expectPersistedRuns<{ cleanupHandled?: boolean; cleanupCompletedAt?: number }>(
+      registryPath,
+      (runs) => {
+        expect(runs?.["run-3"]?.cleanupHandled).toBe(false);
+        expect(runs?.["run-3"]?.cleanupCompletedAt).toBeUndefined();
+      },
+    );
 
     announceSpy.mockResolvedValueOnce(true);
     await restartRegistryAndFlush();
 
     expect(announceSpy).toHaveBeenCalledTimes(2);
-    const afterSecond = JSON.parse(await fs.readFile(registryPath, "utf8")) as {
-      runs: Record<string, { cleanupCompletedAt?: number }>;
-    };
-    expect(afterSecond.runs["run-3"].cleanupCompletedAt).toBeDefined();
+    await expectPersistedRuns<{ cleanupCompletedAt?: number }>(registryPath, (runs) => {
+      expect(runs?.["run-3"]?.cleanupCompletedAt).toBeDefined();
+    });
   });
 
   it("keeps delete-mode runs retryable when announce is deferred", async () => {
@@ -266,19 +277,17 @@ describe("subagent registry persistence", () => {
     await restartRegistryAndFlush();
 
     expect(announceSpy).toHaveBeenCalledTimes(1);
-    const afterFirst = JSON.parse(await fs.readFile(registryPath, "utf8")) as {
-      runs: Record<string, { cleanupHandled?: boolean }>;
-    };
-    expect(afterFirst.runs["run-4"]?.cleanupHandled).toBe(false);
+    await expectPersistedRuns<{ cleanupHandled?: boolean }>(registryPath, (runs) => {
+      expect(runs?.["run-4"]?.cleanupHandled).toBe(false);
+    });
 
     announceSpy.mockResolvedValueOnce(true);
     await restartRegistryAndFlush();
 
     expect(announceSpy).toHaveBeenCalledTimes(2);
-    const afterSecond = JSON.parse(await fs.readFile(registryPath, "utf8")) as {
-      runs?: Record<string, unknown>;
-    };
-    expect(afterSecond.runs?.["run-4"]).toBeUndefined();
+    await expectPersistedRuns<unknown>(registryPath, (runs) => {
+      expect(runs?.["run-4"]).toBeUndefined();
+    });
   });
 
   it("uses isolated temp state when BUILDERFORCE_AGENTS_STATE_DIR is unset in tests", async () => {

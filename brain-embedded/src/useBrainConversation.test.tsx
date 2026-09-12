@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
+import { DEFAULT_TOOL_FAILURE_STREAK } from '@builderforce/agent-loop';
 import { useBrainConversation } from './useBrainConversation';
 import { resetBrainRunStore } from './brainRunStore';
 import { streamChatCompletion, type StreamChatResult } from './streamChatCompletion';
@@ -281,14 +282,17 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
   });
 
-  it('errors only when the forced final answer is ALSO empty at the iteration cap', async () => {
-    // The model calls a tool on every turn AND never produces prose — even the
-    // forced no-tools closing turn (mockResolvedValue is unconditional) comes back
-    // empty. Only then do we surface the loop-exhausted error.
+  it('stops a run whose tool keeps FAILING, and errors only when the forced final answer is ALSO empty', async () => {
+    // There is no step cap: a model that keeps calling a tool is stopped only when its
+    // calls keep failing (the kernel's failure-streak breaker). The forced no-tools
+    // closing turn (mockResolvedValue is unconditional) comes back empty too, so the
+    // run ends on the error. This test used to script an always-SUCCEEDING tool
+    // against the retired 25-step cap — with no cap it never ended and ran the worker
+    // out of heap, taking the whole brain-embedded suite down with it.
     mockStream.mockResolvedValue(
       result({ toolCalls: [{ id: 'c', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }),
     );
-    const runTool = vi.fn(async () => ({ ok: true }));
+    const runTool = vi.fn(async () => { throw new Error('boom'); });
     const { result: hook } = renderHook(
       () => useBrainConversation({ chatId: 1, toolSpecs: [TOOL], runTool }),
       { wrapper },
@@ -296,19 +300,17 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     await act(async () => { await hook.current.send('loop'); });
 
-    // 25 tool-loop turns + 1 forced final-synthesis turn (no tools) = 26 completions.
-    expect(mockStream).toHaveBeenCalledTimes(26);
-    // The forced closing turn runs no tools, so tool execution is unchanged at 25.
-    expect(runTool).toHaveBeenCalledTimes(25);
-    // user + 25 durable tool steps persist; no final assistant text (the forced
-    // closing turn was empty too, so no answer bubble).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(51);
-    await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));
+    // N failing tool turns + 1 forced final-synthesis turn (no tools).
+    expect(mockStream).toHaveBeenCalledTimes(DEFAULT_TOOL_FAILURE_STREAK + 1);
+    // The forced closing turn runs no tools.
+    expect(runTool).toHaveBeenCalledTimes(DEFAULT_TOOL_FAILURE_STREAK);
+    await waitFor(() => expect(hook.current.error).toMatch(/tool calls all failed/i));
   });
 
-  it('rescues a tool-budget-exhausted run with a forced final answer instead of erroring', async () => {
-    // 25 turns that only call a tool, then the forced no-tools closing turn produces
-    // prose — that answer is persisted and NO "kept calling tools" error surfaces.
+  it('runs a long, succeeding tool loop to its own answer — no step cap cuts it short', async () => {
+    // 25 turns that only call a tool, then the model answers in prose. Under the
+    // retired 25-step cap that 26th turn was a FORCED synthesis; now it is simply the
+    // model finishing, so the answer is persisted and no error surfaces.
     let call = 0;
     mockStream.mockImplementation(async () => {
       call += 1;
@@ -324,11 +326,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     await act(async () => { await hook.current.send('loop'); });
 
-    expect(mockStream).toHaveBeenCalledTimes(26); // 25 tool turns + forced final synthesis
+    expect(mockStream).toHaveBeenCalledTimes(26); // 25 tool turns + the model's own answer
     expect(runTool).toHaveBeenCalledTimes(25);
     expect(hook.current.error).toBeFalsy();
-    // user + 25 durable tool steps + the forced final answer persist.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(52);
     await waitFor(() =>
       expect(hook.current.messages.map((m) => m.content)).toEqual(['loop', 'Here is what I found so far, and what I could not finish.']),
     );

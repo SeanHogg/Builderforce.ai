@@ -1,0 +1,17 @@
+name: Configure npm publishing
+description: Install npm 11 (provenance publishing) and write the registry token to ~/.npmrc.
+inputs:
+  npm-token:
+    description: The NPM_TOKEN secret. Without it `npm publish` fails at the registry.
+    required: false
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NPM_TOKEN: ${{ inputs.npm-token }}
+      run: |
+        npm install --global npm@11
+        if [ -n "$NPM_TOKEN" ]; then
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+        fi

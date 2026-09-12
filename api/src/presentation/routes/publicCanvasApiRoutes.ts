@@ -64,20 +64,26 @@ import {
   validCreationGraph,
   type GraphConnectionInput,
   type GraphObjectInput,
-} from '../creation/creationGraphWriter';
-import { emitWebhookEvent, type WebhookEvent } from '../seams/webhookService';
-import { requirePublicApiKey, type PublicApiContext } from './publicApiAuth';
-import { touchTenantApiKey } from '../llm/tenantApiKeyService';
+} from '../../application/creation/creationGraphWriter';
+import { emitWebhookEvent, type WebhookEvent } from '../../application/seams/webhookService';
+import { requirePublicApiKey, type PublicApiContext } from '../../application/publicApi/publicApiAuth';
+import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
+import { parseOptionalBody, z } from './requestBody';
 
 
-interface ItemBody {
-  id?: string;
-  kind?: string;
-  geometry?: unknown;
-  content?: unknown;
-  resourceType?: string | null;
-  resourceId?: string | null;
-}
+/**
+ * An item write. Every field is optional — the create handler owns "missing kind"
+ * (`UNSUPPORTED_KIND`) and a patch merges only what it names — but a field that IS
+ * sent must be the right type, so `{ "kind": 7 }` is a 400 naming `kind`.
+ */
+const ItemBodySchema = z.object({
+  id: z.string().optional(),
+  kind: z.string().optional(),
+  geometry: z.unknown().optional(),
+  content: z.unknown().optional(),
+  resourceType: z.string().nullable().optional(),
+  resourceId: z.union([z.string(), z.number()]).nullable().optional(),
+});
 
 /** The public shape of a board. Deliberately narrower than the row: `preview`,
  *  `folder` and the branch pointers are in-product concerns an integrator has no
@@ -326,7 +332,7 @@ export function createPublicCanvasRoutes(db: Db): Hono<HonoEnv> {
     if ('error' in resolved) return resolved.error;
     const { board, auth } = resolved;
 
-    const body = await c.req.json<ItemBody>().catch(() => ({} as ItemBody));
+    const body = await parseOptionalBody(c, ItemBodySchema);
     const kind = typeof body.kind === 'string' ? body.kind.slice(0, 48) : '';
     // NOT a second validator: the same predicate the in-product save path uses.
     if (!isCreationObjectKind(kind)) {
@@ -366,7 +372,7 @@ export function createPublicCanvasRoutes(db: Db): Hono<HonoEnv> {
     if ('error' in resolved) return resolved.error;
     const { board, auth } = resolved;
 
-    const body = await c.req.json<ItemBody>().catch(() => ({} as ItemBody));
+    const body = await parseOptionalBody(c, ItemBodySchema);
     const graph = await readGraph(c, board);
     const itemId = c.req.param('itemId');
     const index = graph.objects.findIndex((o) => o.id.toLowerCase() === itemId.toLowerCase());

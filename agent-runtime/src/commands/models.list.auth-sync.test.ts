@@ -48,7 +48,34 @@ describe("models list auth-profile sync", () => {
       const agentDir = path.join(stateDir, "agents", "main", "agent");
       const configPath = path.join(stateDir, "builderforce.json");
       await fs.mkdir(agentDir, { recursive: true });
-      await fs.writeFile(configPath, "{}\n", "utf8");
+      // The native ModelRegistry has no bundled catalog (see agents/model-discovery.ts):
+      // only providers in models.json are listed. Declare openrouter WITHOUT an apiKey
+      // so the credential can only come from auth-profiles.json.
+      await fs.writeFile(
+        configPath,
+        `${JSON.stringify({
+          models: {
+            providers: {
+              openrouter: {
+                baseUrl: "https://openrouter.ai/api/v1",
+                api: "openai-completions",
+                models: [
+                  {
+                    id: "auth-sync-test-model",
+                    name: "Auth Sync Test Model",
+                    reasoning: false,
+                    input: ["text"],
+                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                    contextWindow: 128000,
+                    maxTokens: 4096,
+                  },
+                ],
+              },
+            },
+          },
+        })}\n`,
+        "utf8",
+      );
 
       process.env.BUILDERFORCE_AGENTS_STATE_DIR = stateDir;
       process.env.BUILDERFORCE_AGENTS_AGENT_DIR = agentDir;
@@ -92,6 +119,11 @@ describe("models list auth-profile sync", () => {
       expect(openrouter).toBeDefined();
       expect(openrouter?.available).toBe(true);
       expect(await pathExists(authPath)).toBe(true);
+      // The provider's missing apiKey was filled from the auth-profile store.
+      const modelsJson = JSON.parse(
+        await fs.readFile(path.join(agentDir, "models.json"), "utf8"),
+      ) as { providers?: Record<string, { apiKey?: string }> };
+      expect(modelsJson.providers?.openrouter?.apiKey).toBeTruthy();
     } finally {
       clearConfigCache();
       restoreEnv(env);

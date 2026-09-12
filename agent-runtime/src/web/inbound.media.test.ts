@@ -88,10 +88,13 @@ vi.mock("./session.js", () => {
 
 import { monitorWebInbox, resetWebInboundDedupe } from "./inbound.js";
 
+// The message only arrives after `saveMediaBuffer` has written the file to disk. 250 ms
+// was enough in isolation but not under the full suite's parallel I/O, where it flaked;
+// `waitFor` resolves as soon as the call lands, so the higher ceiling costs a passing run nothing.
 async function waitForMessage(onMessage: ReturnType<typeof vi.fn>) {
   await vi.waitFor(() => expect(onMessage).toHaveBeenCalledTimes(1), {
-    interval: 1,
-    timeout: 250,
+    interval: 5,
+    timeout: 5_000,
   });
   return onMessage.mock.calls[0][0];
 }

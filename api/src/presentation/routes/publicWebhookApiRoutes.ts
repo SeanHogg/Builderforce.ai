@@ -54,11 +54,12 @@ import {
   WEBHOOK_SIGNATURE_HEADER,
   WEBHOOK_TIMESTAMP_HEADER,
   webhookRetryDelaySec,
-} from '../seams/webhookService';
-import { requirePublicApiKey, type PublicApiContext } from './publicApiAuth';
-import { touchTenantApiKey } from '../llm/tenantApiKeyService';
-import { CREATION_UUID_RE as UUID_RE } from '../creation/creationGraphWriter';
+} from '../../application/seams/webhookService';
+import { requirePublicApiKey, type PublicApiContext } from '../../application/publicApi/publicApiAuth';
+import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
+import { CREATION_UUID_RE as UUID_RE } from '../../application/creation/creationGraphWriter';
 import { limitParam } from '../../domain/shared/boundedInt';
+import { parseOptionalBody, z } from './requestBody';
 
 /** The receiver contract, served as data so an integrator's verification code and
  *  ours are written against the same constants. */
@@ -92,15 +93,21 @@ export const WEBHOOK_SPEC = {
   events: WEBHOOK_EVENTS,
 } as const;
 
-interface SubscriptionBody {
-  url?: string;
-  events?: unknown;
-  secret?: string;
-  boardId?: string | null;
-  description?: string;
-  active?: boolean;
-  rotateSecret?: boolean;
-}
+/**
+ * A subscribe / patch body. The handlers own the domain refusals (https-only url,
+ * at least one known event, secret length) with their own messages; the schema
+ * only refuses a field sent as the wrong type. `events` stays `unknown` so a
+ * non-array still gets the "must include at least one of" answer.
+ */
+const SubscriptionBodySchema = z.object({
+  url: z.string().optional(),
+  events: z.unknown().optional(),
+  secret: z.string().optional(),
+  boardId: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  active: z.boolean().optional(),
+  rotateSecret: z.boolean().optional(),
+});
 
 function subscriptionView(row: {
   id: string; url: string; events: string; active: boolean; sessionId: string | null;
@@ -154,7 +161,7 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
   router.post('/webhooks', async (c) => {
     const resolved = await auth(c);
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
-    const body = await c.req.json<SubscriptionBody>().catch(() => ({} as SubscriptionBody));
+    const body = await parseOptionalBody(c, SubscriptionBodySchema);
 
     const url = (body.url ?? '').trim();
     // https only. A signature proves who sent the body; it does nothing about who
@@ -219,7 +226,7 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return c.json({ error: 'Subscription not found' }, 404);
-    const body = await c.req.json<SubscriptionBody>().catch(() => ({} as SubscriptionBody));
+    const body = await parseOptionalBody(c, SubscriptionBodySchema);
 
     const patch: Partial<typeof webhookSubscriptions.$inferInsert> = { updatedAt: new Date() };
     if (body.url !== undefined) {

@@ -45,6 +45,15 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   326 → 328 files (2026-09-12, team board presence + role vocabulary) — two small,
+ *   pure additions reached through components already in the closure, neither
+ *   deferrable: `lib/canvas/boardAgents.ts` (92 lines) is read by `TeamBar`, which
+ *   is on every route's shell and now orders/rings the strip by who already has a
+ *   card on THIS board — first-paint work, not a chunk a reader can wait on.
+ *   `lib/useRoleText.ts` (33 lines) is the ICU-select replacement for the hardcoded
+ *   `['owner', 'manager', 'developer', 'viewer']` role labels `EmulationBar` used to
+ *   inline; reached the same way `lib/statusTone.ts` was (an already-in-closure
+ *   component picking up the shared vocabulary instead of its own English map).
  *   323 → 326 files (2026-09-12, marketing translation) — `lib/content.ts` (2,001
  *   lines, in the closure through `AppFooter` and the onboarding `RoleChoiceScreen`)
  *   is SPLIT, and only the four modules the shell actually reaches replace it:

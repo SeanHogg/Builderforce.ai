@@ -2205,8 +2205,8 @@ export interface ManagerPolicy {
   allowAutoStaffLanes: boolean;
   /**
    * May the autonomous manager review and close a ticket through a human-gated review
-   * lane (1153)? Workspace-only, set by an account admin. When false a person closes every
-   * ticket on such a lane; the manager still reviews it.
+   * lane (1153)? Workspace-only, set by an account admin; ON by default (1161). When false
+   * a person closes every ticket on such a lane; the manager still reviews it.
    */
   managerMayCloseReviewedTickets: boolean;
 }
@@ -2233,7 +2233,7 @@ export interface ManagerTenantDefaults {
   allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
-  /** Review-and-close authority (1153) — workspace-only; `null` = the built-in `false`. */
+  /** Review-and-close authority (1153) — workspace-only; `null` = the built-in `true` (1161). */
   managerMayCloseReviewedTickets: boolean | null;
 }
 

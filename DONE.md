@@ -1,3 +1,77 @@
+## ✅ RESOLVED 2026-09-12 — The release workflow publishes `@seanhogg/builderforce-agents` (operator go-ahead)
+
+Every CLI installer (`install.sh` / `install.ps1` / `install-cli.sh`, the macOS app) installs
+`@seanhogg/builderforce-agents`, but no workflow published agent-runtime, so a clean-machine install
+failed at the npm step.
+
+- **Its own job.** `.github/workflows/release.yml` gains `package-agents` (separate from the SDK
+  `package-npm` job so neither can hold the other back): `pnpm install --frozen-lockfile` →
+  `pnpm typecheck` → `pnpm test:fast` → `pnpm build && pnpm ui:build` → a CLI smoke test
+  (`node builderforce.mjs --version`) → publish with `--provenance --access public --ignore-scripts`
+  (already built, so `prepack` does not rebuild).
+- **One publish path, not two copies.** The npm auth setup is the composite action
+  `.github/actions/npm-publish-auth`, and the skip-if-already-published / retry-tolerant publish is
+  `.github/scripts/npm-publish-if-new.sh`; both npm jobs use them instead of inline copies.
+- **The gate is green because real bugs were fixed, not tests skipped.** `pnpm test:fast` had 6
+  failures plus a flake, and the persistence e2e had 3:
+  - `resumeSubagentRun` had lost its branch for runs that already ended, so a failed announce retry
+    re-waited on `agent.wait` instead of re-announcing (restored).
+  - `SessionManager.createBranchedSession` wrote the fork but never switched to it, so a forked
+    thread reused its parent's session id (fixed).
+  - `persistSubagentRuns` was fired-and-forgotten from a dozen call sites with no ordering; two
+    writes interleaved bytes in `runs.json` or an older snapshot landed last and resurrected a
+    deleted run. Writes are now chained in call order.
+  - `initSubagentRegistry()` now returns its restore promise (the disk load became async), and the
+    tests that restart the registry await it; `policy-gates` expects the deliberately added `Task`
+    tool; `models.list.auth-sync` declares the model it lists (the built-in catalog was removed on
+    purpose); `inbound.media`'s 250 ms wait on a real disk write was raised so it no longer flakes
+    under load.
+- **The first publish is `2026.9.3`, on the next push to `main`** (the `NPM_TOKEN` secret). It
+  cannot be confirmed from a local session: local npm auth is not configured.
+
+## ✅ RESOLVED 2026-09-12 — Every API request body is validated (operator decision: Zod 4, finish it)
+
+The 2026-09-05 review found no runtime validation anywhere in `api/src`: ~810 `await c.req.json<T>()`
+sites trusted the wire shape, so a body shaped wrong died inside the handler as a 500 instead of a 400.
+
+- **One read, one 400 shape.** `presentation/routes/requestBody.ts` — `parseBody(c, schema)`,
+  `parseOptionalBody` (for endpoints that deliberately accept an absent body) and `parseQuery`, over
+  zod 4 — is the only way a route reads a body. A miss throws `RequestValidationError`, which the
+  global handler answers as `400 { error, issues: [{ path, message }] }`; malformed JSON is the same
+  400. Shared field schemas (`zPositiveInt`, `zNonEmptyString`, `zLimit`, …) use the same predicates
+  as the path/query param readers. (`@hono/zod-validator` was not adopted: the one primitive gives
+  every route the same error envelope without a middleware per route.)
+- **Every site converted.** All presentation route files are at zero raw reads. The last eight lived
+  in the `/api/v1` canvas, webhook, widget and extension routers, which were Hono routers sitting in
+  the application layer; they moved to `presentation/routes/public{Canvas,Webhook,Widget,Extension}ApiRoutes.ts`
+  (their one caller, `publicApiRoutes.ts`, re-pointed) and now read through `parseOptionalBody` /
+  `parseBody` with schemas that refuse a wrong-typed field while leaving the handlers' own domain
+  refusals (https-only webhook url, `UNSUPPORTED_KIND`, `installId is required`) unchanged.
+- **Locked at zero.** `scripts/check-unvalidated-bodies.mjs` (in `npm run check`) is an AST ratchet
+  over all of `src/`; its baseline is now `{}`, so any new raw `c.req.json` read fails the build.
+
+## ✅ RESOLVED 2026-09-12 — Workspace-role gaps found by the contributor-role pass
+
+Adding the `contributor` role surfaced three places with no workspace-role gate: kanban role/template
+writes, the IDE file routes, and admin impersonation (which signed any role). All three are gated,
+with 11 tests; verified green together with the api typecheck (tsc + tsgo) on 2026-09-12.
+
+## ✅ RESOLVED 2026-09-12 — Chat #103 re-triage: three of the pasted report's headline flags were false, and the first visible reply was a fragment
+
+Re-triage of the VSIX `2026.9.44` capture of *"Review the open tickets… rebase, merge to main and close the ticket"*. The ticket-list, pending-changes, recall and HTTP-502 faults in that capture were already fixed on 2026-09-08 (entry below); the paste still carried turns from before them. Five defects remained, all in the report and the reasoning split rather than the run:
+
+1. **False "UNBACKED WRITE CLAIM".** `detectUnbackedWriteClaim` (`brain-embedded/src/brainTriage.ts`) only accepted gateway saves (`attachments.write` / `project_files.save`), so any VS Code run that edited through `write_file` / `edit_file` was flagged — on this capture, beside a ticket that the edit itself had opened. Now `isFileWriteTool` = `isCodeChangeTool || FILE_WRITE_TOOL`. The two notice strings, previously hand-copied into `buildBrainTriageReport` and the VSIX `webview/src/transcript.ts`, are one pair of exported constants (`UNBACKED_WRITE_CLAIM_NOTICE` / `UNBACKED_TICKET_CLAIM_NOTICE`).
+2. **False "learn version mismatch".** The learn gate reports the head it EVALUATED and its queued contribution then bumps that head, so "reported v22 · head v23" fired on every healthy learning chat. `chatDiagnostics.ts` now flags only a head BEHIND the learn step, which is impossible for one head.
+3. **Over-claiming context verdict.** Paged `read_file` windows — lossless, the model is handed the offset that continues them — counted as truncation, and their `bytes` (the whole file) counted as a huge result; the verdict then asserted "the transcript outgrew the model window" on a 46k-token peak against a ~1M-token model. `computeBrainDiagnostics` now counts them as `pagedReadWindows` (`READ_FILE_TOOL` exported from `toolResultBudget.ts`), excludes them from the lossy-result pressure check, and `contextEvidence` makes the verdict line state what tripped it (prompt peak, lossy cuts, downgrades).
+4. **"(no response)" over every reasoning-only step** of the copied VSIX transcript — the UI shows those as one collapsed "Thought" line, so the report now says `_(reasoning only — no reply text this turn)_`.
+5. **A mid-sentence close tag.** MiniMax-M1 closed its block inside a sentence, so the chat's first visible line read "tickets linked to this chat…" with its subject hidden. `packages/agent-loop/src/reasoning.ts` gains `stitchSplitSentence`: when an answer longer than a fragment opens lower-case AND the thought before it ends unfinished, only that trailing sentence moves to the answer (fragment-sized answers stay `promoteSwallowedAnswer`'s call — a first draft without that bound joined `<think>one</think>mid<think>two</think>` and an existing test caught it). Empty `<vendor:tool_call></vendor:tool_call>` husks are dropped from thoughts.
+
+### Found on the way: the full `brain-embedded` suite could not finish
+
+Two tests in `useBrainConversation.test.tsx` still encoded the 25-step cap retired earlier the same day (memory `no-tool-call-limit-failure-streak-breaker`). "Errors only when the forced final answer is ALSO empty at the iteration cap" scripted an always-SUCCEEDING tool and waited for the cap — with no cap it never ended, grew the worker to its 4 GB heap limit, and killed the run at 574/584 with `Worker exited unexpectedly`, so the suite had been unreadable as a pass. Its sibling asserted the retired forced-synthesis turn's persist count. Bisected by running the file in test subsets, then rewritten to the current contract: a tool that keeps FAILING trips the breaker after `DEFAULT_TOOL_FAILURE_STREAK` calls and errors only when the forced tools-free answer is also empty; a long SUCCEEDING loop runs to the model's own answer. No other test in the tree assumed the cap.
+
+**Validation.** Full `brain-embedded` suite 47/47 files, 584/584 tests (37 s, down from a ~10-minute hang) · `packages/agent-loop` 129/129 · `packages/brain-ui` 115/115 (its timeline consumes the split) · `tsgo --noEmit` clean in `brain-embedded` and on `clients/vscode/webview`. Versions staged: brain-embedded `2026.9.14`, agent-loop `2026.9.13`, VSIX `2026.9.46`.
+
 ## ✅ RESOLVED 2026-09-12 — The built-but-unreachable canvas features stand in the 3D Room (operator decision: wire ALL of them into the Room)
 
 The 2026-09-05 review found features built and validated but reachable from nowhere: the approval

@@ -371,6 +371,10 @@ function stitchSplitSentence(segments: ReasoningSegment[]): ReasoningSegment[] {
     const prev = out[i - 1]!;
     const cur = out[i]!;
     if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    // A fragment-sized answer is {@link promoteSwallowedAnswer}'s call, and a word
+    // between two blocks ("<think>one</think>mid<think>two</think>") is not a sentence
+    // the tag cut — only an answer long enough to be a reply in its own right is.
+    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
     if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
     const cut = lastSentenceStart(prev.content);
     const head = prev.content.slice(0, cut).trim();

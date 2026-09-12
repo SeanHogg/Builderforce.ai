@@ -7,11 +7,11 @@
  * reported as a defect — when it was a 400. `presentation/routes/requestBody.ts`
  * (`parseBody`, `parseQuery`) is the one validated read.
  *
- * Migrating every site is not one pass, so this is a RATCHET, exactly like
- * `scripts/check-silent-catches.mjs`: each file's count of raw reads is recorded
- * in `.unvalidated-bodies-baseline.json`; the guard fails when a count RISES, and
- * equally when it FALLS without the baseline being lowered. The number can only
- * go down, and every step down is a recorded diff.
+ * It is a RATCHET, exactly like `scripts/check-silent-catches.mjs`: each file's
+ * count of raw reads is recorded in `.unvalidated-bodies-baseline.json`; the guard
+ * fails when a count RISES, and equally when it FALLS without the baseline being
+ * lowered. Every site was migrated on 2026-09-12, so the baseline is now `{}` and
+ * ANY raw read anywhere under `src/` fails the build.
  *
  *   node scripts/check-unvalidated-bodies.mjs            # CI / `npm test`
  *   node scripts/check-unvalidated-bodies.mjs --update   # after migrating sites
@@ -21,9 +21,10 @@
  *
  * A "raw read" is any call `<expr>.req.json(...)` anywhere under `src/` that is
  * not lexically inside a `parseBody(...)` call. The scan covers all of `src/`,
- * not just `src/presentation`: `application/publicApi/*Service.ts` read Hono
- * contexts too (seeded at their counts when the scope widened), and a guard
- * scoped to one layer is a guard a new site walks around by living in another. The scan is an AST walk
+ * not just `src/presentation`: the `/api/v1` canvas/webhook/widget/extension
+ * routers once lived in `application/publicApi` and read Hono contexts there (they
+ * now live in `presentation/routes`), and a guard scoped to one layer is a guard a
+ * new site walks around by living in another. The scan is an AST walk
  * (borrowing the TypeScript loader from the repo's module-import scanner), so a
  * `c.req.json` inside a string or comment is not a read.
  */

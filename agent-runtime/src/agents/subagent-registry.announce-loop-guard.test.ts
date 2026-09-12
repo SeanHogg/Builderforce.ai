@@ -121,8 +121,9 @@ describe("announce loop guard (#18264)", () => {
 
     loadSubagentRegistryFromDisk.mockReturnValue(new Map([[entry.runId, entry]]));
 
-    // Initialize the registry — this triggers resumeSubagentRun for persisted entries
-    registry.initSubagentRegistry();
+    // Initialize the registry — this triggers resumeSubagentRun for persisted entries.
+    // Restore awaits the (async) disk load, so wait for it before asserting.
+    await registry.initSubagentRegistry();
 
     // The announce flow should NOT be called because the entry has exceeded
     // both the retry count and the expiry window.
@@ -158,7 +159,7 @@ describe("announce loop guard (#18264)", () => {
 
     loadSubagentRegistryFromDisk.mockReturnValue(new Map([[entry.runId, entry]]));
 
-    registry.initSubagentRegistry();
+    await registry.initSubagentRegistry();
 
     expect(announceFn).not.toHaveBeenCalled();
 

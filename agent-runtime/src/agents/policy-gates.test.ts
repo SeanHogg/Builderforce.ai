@@ -4,7 +4,16 @@ import { renderPolicyDirectives } from "@builderforce/agent-tools";
 
 describe("on-prem governance — allowedToolsAfterGates", () => {
   it("returns every SDK tool when there are no gates", () => {
-    expect(allowedToolsAfterGates(undefined)).toEqual(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]);
+    // `Task` (the SDK's subagent tool) is part of the V2 surface — see SDK_TOOLS.
+    expect(allowedToolsAfterGates(undefined)).toEqual([
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Glob",
+      "Grep",
+      "Task",
+    ]);
   });
 
   it("removes a tool a block gate names (case-insensitive)", () => {

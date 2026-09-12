@@ -1,5 +1,6 @@
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/config';
 import { postBody, type BlogPost } from './blogData';
+import { reportProductError } from './reportError';
 
 /**
  * THE ONE PLACE a blog article is put into the reader's language.
@@ -89,7 +90,20 @@ export async function loadPostBody(post: BlogPost, locale: string, origin = ''):
     if (!response.ok) return post.content;
     return postBody(await response.text()) || post.content;
   } catch (error) {
-    console.warn(`[blog] "${post.slug}" body unavailable in ${locale} — rendering ${DEFAULT_LOCALE}.`, error);
+    // A network fault fetching a translated body degrades to the English one — the
+    // reader still gets a page — but the gap needs a durable record or nobody
+    // notices the translation is missing. `reportProductError` is the one sink every
+    // reporter here already writes to; the underlying calls all no-op on the fields
+    // they read (localStorage, cookies, window) rather than throw, so it works from
+    // this server render the same as from a browser tab.
+    await reportProductError({
+      title: 'Blog translation body unavailable',
+      message: `"${post.slug}" body unavailable in ${locale} — rendering ${DEFAULT_LOCALE}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      url: `${origin}/blog/${post.slug}`,
+      level: 'warning',
+    }).catch(() => undefined);
     return post.content;
   }
 }

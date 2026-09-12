@@ -51,7 +51,7 @@
  * server calls us with, and the usage it reports — is not here. It lives on
  * `/api/v1` with every other credentialed machine surface, because a vendor
  * authenticates with a key rather than a session and must not be routed through
- * a door that assumes one. See `publicExtensionApiService.ts`.
+ * a door that assumes one. See `publicExtensionApiRoutes.ts`.
  *
  * Preview and install are separate calls for the same reason `/plan` and `/build`
  * are separate on realizations: showing somebody what they are about to approve

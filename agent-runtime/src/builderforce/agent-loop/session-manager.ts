@@ -659,6 +659,9 @@ export class SessionManager {
         appendFileSync(newSessionFile, `${JSON.stringify(labelEntry)}\n`);
       }
     }
+    // Like pi, the manager now IS the branched session (new id + file), so
+    // `getSessionId()` / `getSessionFile()` describe the fork, not the parent.
+    this.setSessionFile(newSessionFile);
     return newSessionFile;
   }
 }

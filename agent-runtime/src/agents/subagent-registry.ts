@@ -78,12 +78,20 @@ function logAnnounceGiveUp(entry: SubagentRunRecord, reason: "retry-limit" | "ex
   );
 }
 
-async function persistSubagentRuns() {
-  try {
-    await saveSubagentRegistryToDisk(subagentRuns);
-  } catch {
-    // ignore persistence failures
-  }
+// Persists are fired-and-forgotten from a dozen call sites. Unordered, two writes to
+// runs.json interleaved their bytes (a corrupt file the next restore drops) or an older
+// snapshot finished last and resurrected a deleted run. Chaining them makes writes land
+// in call order, and each serializes the map when it runs, so the file ends at the
+// latest state.
+let persistChain: Promise<void> = Promise.resolve();
+
+function persistSubagentRuns(): Promise<void> {
+  persistChain = persistChain
+    .then(() => saveSubagentRegistryToDisk(subagentRuns))
+    .catch(() => {
+      // ignore persistence failures
+    });
+  return persistChain;
 }
 
 const resumedRuns = new Set<string>();
@@ -155,6 +163,21 @@ function resumeSubagentRun(runId: string) {
     setTimeout(() => {
       resumeSubagentRun(runId);
     }, waitMs).unref?.();
+    resumedRuns.add(runId);
+    return;
+  }
+
+  // The run already ended (restored from disk, or a deferred/failed announce being
+  // retried): go straight to the announce flow. Re-waiting on `agent.wait` for a run
+  // that has finished would stall the retry behind the full wait timeout.
+  if (typeof entry.endedAt === "number" && entry.endedAt > 0) {
+    if (suppressAnnounceForSteerRestart(entry)) {
+      resumedRuns.add(runId);
+      return;
+    }
+    if (!startSubagentAnnounceCleanupFlow(runId, entry)) {
+      return;
+    }
     resumedRuns.add(runId);
     return;
   }
@@ -839,6 +862,8 @@ export async function listDescendantRunsForRequester(rootSessionKey: string): Pr
   return descendants;
 }
 
-export function initSubagentRegistry() {
-  void restoreSubagentRunsOnce();
+/** Restores persisted runs. The returned promise settles once restore + resume have
+ *  run (the disk load is async); fire-and-forget callers may ignore it. */
+export function initSubagentRegistry(): Promise<void> {
+  return restoreSubagentRunsOnce();
 }

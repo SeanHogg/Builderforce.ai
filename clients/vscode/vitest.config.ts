@@ -39,5 +39,14 @@ export default defineConfig({
     environment: 'node',
     include: ['harness/**/*.test.ts', 'src/**/*.test.ts', 'webview/src/**/*.test.ts'],
     passWithNoTests: true,
+    // The default worker count is the runner's CPU count (4 on the release job's
+    // `ubuntu-latest`). Each worker independently re-imports this suite's aliased
+    // source packages, and with `NODE_OPTIONS=--max-old-space-size=6144` set on
+    // that job, 4 concurrent workers can reserve up to 24 GiB against a 16 GiB
+    // box — trading the V8 heap-limit crash this was raised to fix for a
+    // harder-to-diagnose OS OOM-kill instead. Capping concurrency keeps the
+    // worst case under the runner's budget. (`poolOptions.forks.maxForks` was
+    // vitest 3; vitest 4 moved this to a top-level option.)
+    maxWorkers: 2,
   },
 });

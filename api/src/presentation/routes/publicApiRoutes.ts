@@ -33,10 +33,10 @@ import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
 // learns to refuse. See `publicApiAuth.ts`.
 import { skillSearchMatches } from '../../application/marketplace/skillSearch';
 import { requirePublicApiKey } from '../../application/publicApi/publicApiAuth';
-import { createPublicCanvasRoutes } from '../../application/publicApi/publicCanvasApiService';
-import { createPublicWebhookRoutes } from '../../application/publicApi/publicWebhookApiService';
-import { createPublicWidgetRoutes } from '../../application/publicApi/publicWidgetApiService';
-import { createPublicExtensionRoutes } from '../../application/publicApi/publicExtensionApiService';
+import { createPublicCanvasRoutes } from './publicCanvasApiRoutes';
+import { createPublicWebhookRoutes } from './publicWebhookApiRoutes';
+import { createPublicWidgetRoutes } from './publicWidgetApiRoutes';
+import { createPublicExtensionRoutes } from './publicExtensionApiRoutes';
 
 // ---------------------------------------------------------------------------
 // Factory

@@ -33,14 +33,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Configure npm publishing
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          npm install --global npm@11
-          if [ -n "$NPM_TOKEN" ]; then
-            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-          fi
+      - uses: ./.github/actions/npm-publish-auth
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
 
       - name: Build, test, and publish packages with new versions
         run: |
@@ -56,14 +51,7 @@ jobs:
             fi
             npm run type-check
             npm test
-
-            version=$(node -p "require('./package.json').version")
-            if npm view "$package_name@$version" version >/dev/null 2>&1; then
-              echo "$package_name@$version already exists; skipping publish."
-            elif ! npm publish --provenance --access public; then
-              # A registry retry can publish successfully and still return an error.
-              npm view "$package_name@$version" version >/dev/null 2>&1 || exit 1
-            fi
+            bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" "$package_name"
             popd
           }
 
@@ -72,6 +60,44 @@ jobs:
           publish_package studio @seanhogg/builderforce-studio
           publish_package studio-embedded @seanhogg/builderforce-studio-embedded
           publish_package voice @seanhogg/builderforce-voice
+
+  # The on-prem agent CLI every installer (install.sh / install.ps1 / install-cli.sh,
+  # the macOS app) fetches from npm. Its own job, not a sixth `publish_package` line:
+  # it is a pnpm workspace with its own script names and a control-UI build, and a
+  # failure here must not hold back the SDK packages above (or the reverse).
+  package-agents:
+    name: Package @seanhogg/builderforce-agents
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-runtime
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/npm-publish-auth
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test:fast
+      - run: pnpm build && pnpm ui:build
+
+      # The tarball's entry point must actually start before it reaches every installer.
+      - name: Smoke-test the CLI
+        run: node builderforce.mjs --version
+
+      # Built above, so skip `prepack` rather than build the same dist twice.
+      - name: Publish if the version is new
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" @seanhogg/builderforce-agents --ignore-scripts
 
   # Marketplace copy lives in distribution/listing.json and is stamped into every
   # channel payload. A listing that contradicts the product is what a buyer reads,
@@ -106,6 +132,15 @@ jobs:
 
       - name: Build and package the VSIX
         working-directory: clients/vscode
+        env:
+          # vitest's default fork inherits Node's default old-space ceiling, which
+          # this suite's many source-package aliases (brain-ui, studio, transformers,
+          # onnxruntime-web, mermaid, xlsx, …) run past mid-run — it OOM'd after 30/31
+          # files with "Ineffective mark-compacts near heap limit" around 4 GiB. Same
+          # fix as the API job above: raise the ceiling to what the runner can spare.
+          # A forked child process inherits NODE_OPTIONS from its own env at spawn,
+          # unlike a worker thread, so setting it here reaches vitest's workers too.
+          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile || pnpm install
           npm run type-check
@@ -386,6 +421,12 @@ jobs:
       - name: Verify and deploy API
         working-directory: api
         env:
+          # tsc's default ~4 GiB heap is no longer enough for api's type graph
+          # (drizzle-orm, zod 4, pdf-lib, pptxgenjs, yjs, …); it OOM'd mid mark-compact.
+          # Same fix as the frontend job below: raise the old-space ceiling to what the
+          # hosted runner can spare. run-checks.mjs spawns tsc/tsgo as child node
+          # processes, which inherit this from the step env.
+          NODE_OPTIONS: --max-old-space-size=6144
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

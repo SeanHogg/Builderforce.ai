@@ -34,18 +34,33 @@ import { Hono } from 'hono';
 
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { touchTenantApiKey } from '../llm/tenantApiKeyService';
-import { requirePublicApiKey } from './publicApiAuth';
+import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
+import { requirePublicApiKey } from '../../application/publicApi/publicApiAuth';
 import {
   InstallTokenError,
   mintInstallToken,
   resolveInstallToken,
   listPublisherInstalls,
   type ResolvedInstall,
-} from '../developer/extensionInstallTokens';
-import { recordUsage } from '../developer/extensionUsage';
-import { openPeriodFor } from '../developer/extensionBilling';
-import { EXTENSION_WEBHOOK_EVENTS } from '../seams/webhookService';
+} from '../../application/developer/extensionInstallTokens';
+import { recordUsage } from '../../application/developer/extensionUsage';
+import { openPeriodFor } from '../../application/developer/extensionBilling';
+import { EXTENSION_WEBHOOK_EVENTS } from '../../application/seams/webhookService';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
+
+/** The install-token exchange. `installId` presence is the handler's own 400. */
+const TokenBodySchema = z.object({
+  installId: z.string().optional(),
+  scopes: z.array(z.string()).optional(),
+});
+
+/** A usage report. `recordUsage` owns the usageId/units rules; `units` was always `Number(...)`d. */
+const UsageBodySchema = z.object({
+  usageId: z.string().optional(),
+  units: zNumberLike.optional(),
+  note: z.string().optional(),
+  occurredAt: z.string().optional(),
+});
 
 /**
  * This surface's one refusal type as an answer, in one place. Anything else is not a
@@ -96,8 +111,7 @@ export function createPublicExtensionRoutes(db: Db): Hono<HonoEnv> {
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
     c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
 
-    type Body = { installId?: string; scopes?: string[] };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
+    const body = await parseOptionalBody(c, TokenBodySchema);
     if (!body.installId) return c.json({ error: 'installId is required' }, 400);
 
     try {
@@ -214,8 +228,7 @@ export function createPublicExtensionRoutes(db: Db): Hono<HonoEnv> {
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
     const { install } = resolved;
 
-    type Body = { usageId?: string; units?: number; note?: string; occurredAt?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
+    const body = await parseOptionalBody(c, UsageBodySchema);
 
     try {
       // The window's floor is the install's own watermark, which `resolveInstallToken`
