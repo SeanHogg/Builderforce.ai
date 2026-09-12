@@ -67,6 +67,8 @@ __export(src_exports, {
   TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND: () => TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE: () => TOOL_ROUTER_INVOKE,
+  UNBACKED_TICKET_CLAIM_NOTICE: () => UNBACKED_TICKET_CLAIM_NOTICE,
+  UNBACKED_WRITE_CLAIM_NOTICE: () => UNBACKED_WRITE_CLAIM_NOTICE,
   UNSCOPED_MUTATION_TOOLS: () => UNSCOPED_MUTATION_TOOLS,
   WEB_FETCH_TOOL_NAME: () => WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter: () => XmlToolCallFilter,
@@ -2441,7 +2443,207 @@ function runProgressVerdict(p) {
   return `${loop}${effect}${remedy}`;
 }
 
+// src/readCoverage.ts
+var REVISIT_NUDGE_AT = 3;
+var REVISIT_HARD_AT = 5;
+var MAX_REMEMBERED_ARGS = 8;
+var ReadCoverage = class _ReadCoverage {
+  visits = /* @__PURE__ */ new Map();
+  /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
+  exact = /* @__PURE__ */ new Map();
+  static exactKey(tool, args) {
+    return `${tool}:${stableStringify(args ?? {})}`;
+  }
+  /**
+   * Has this exact read — same tool, same arguments in any key order — already
+   * SUCCEEDED this run, with nothing since that could have changed its answer? The run
+   * loop answers such a call with a stub instead of re-running it.
+   */
+  isRepeat(tool, args) {
+    return this.exact.has(_ReadCoverage.exactKey(tool, args));
+  }
+  /**
+   * Keep what a SUCCESSFUL read returned, with the transcript message that carried it,
+   * so an exact repeat can be replayed once that message has left the working context.
+   * A no-op for a read that was never recorded (a failure has nothing to replay).
+   */
+  cacheResult(tool, args, cached2) {
+    const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
+    if (read) read.cached = cached2;
+  }
+  /** The cached result of an exact earlier read, or null when none is held. */
+  cachedResult(tool, args) {
+    return this.exact.get(_ReadCoverage.exactKey(tool, args))?.cached ?? null;
+  }
+  /**
+   * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
+   * resulting target visit — or null when the call names no target (nothing to be
+   * circling around; the exact guard still applies).
+   */
+  record(tool, args) {
+    const target = activityTarget(args) ?? null;
+    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, target });
+    if (!target) return null;
+    const key = `${tool}:${target}`;
+    const existing = this.visits.get(key);
+    let argText;
+    try {
+      argText = JSON.stringify(args ?? {});
+    } catch {
+      argText = String(args ?? "");
+    }
+    if (!existing) {
+      const fresh = { count: 1, priorArgs: [argText], mayHaveChanged: false };
+      this.visits.set(key, fresh);
+      return { ...fresh };
+    }
+    existing.count += 1;
+    if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
+      existing.priorArgs.push(argText);
+    }
+    const visit = { ...existing };
+    existing.mayHaveChanged = false;
+    return visit;
+  }
+  /**
+   * A non-read call has run. Forget exactly the reads it could have changed — no more,
+   * no less — for BOTH guards:
+   *
+   * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
+   *   undo) forgets every cached ANSWER: the honest answer to "what did that touch?" is
+   *   "anything", so no exact repeat may be stubbed out afterwards. It does NOT forget
+   *   the visit TALLY, and that distinction is the whole difference between a guard that
+   *   works and one that is inert. The tally counts the MODEL's behaviour — how many
+   *   times it has gone back to one target, with every one of those results still sitting
+   *   in the transcript above it — and a build running in between changes none of that.
+   *   Clearing it wholesale is what made the advisory unreachable in any run that
+   *   verifies its work: read, read, `run_command` (typecheck), read, read, `run_command`
+   *   … never reaches three, so the nudge at 3 and the hard stop at 5 never fired, and a
+   *   run spent 46% of its calls re-reading ground it had already covered with the loop
+   *   guard silent throughout. Instead each target is marked {@link ReadVisit.mayHaveChanged}
+   *   so the NEXT read of it is excused — a re-read after a build is the right move — and
+   *   the one after that is not.
+   * - A file write/edit/delete forgets its own target, across every tool that reads it —
+   *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
+   *   what was just changed is genuinely new information; nagging about it would punish
+   *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
+   *   whole tally on every non-read call is what once let one CSS file be read 14 times
+   *   with the advisory firing on neither it nor its component.
+   * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
+   *   a read observes, so they forget nothing.
+   * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
+   *   returns (a ticket update changes the ticket list), so target-less platform reads
+   *   are forgotten; file reads are not, because a ticket write does not edit source.
+   */
+  invalidate(tool, args) {
+    if (isUnscopedMutationTool(tool)) {
+      this.exact.clear();
+      for (const visit of this.visits.values()) visit.mayHaveChanged = true;
+      return;
+    }
+    if (isCodeChangeTool(tool)) {
+      const target = activityTarget(args);
+      if (!target) return;
+      for (const key of [...this.visits.keys()]) {
+        if (key.slice(key.indexOf(":") + 1) === target) this.visits.delete(key);
+      }
+      for (const [key, read] of [...this.exact.entries()]) {
+        if (read.target === target) this.exact.delete(key);
+      }
+      return;
+    }
+    if (isLocalWorkspaceTool(tool)) return;
+    for (const [key, read] of [...this.exact.entries()]) {
+      if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
+    }
+  }
+};
+function revisitAdvisory(tool, target, visit) {
+  if (visit.count < REVISIT_NUDGE_AT) return null;
+  if (visit.mayHaveChanged) return null;
+  const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
+  if (visit.count >= REVISIT_HARD_AT) {
+    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
+  }
+  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
+}
+function withAdvisory(result, advisory) {
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const existing = result.note;
+    const note = typeof existing === "string" && existing ? `${existing}
+
+${advisory}` : advisory;
+    return { ...result, note };
+  }
+  return { result, note: advisory };
+}
+
+// src/toolResultBudget.ts
+var MAX_TOOL_RESULT_CHARS = 6e3;
+var READ_FILE_RESULT_CHARS = 16e3;
+var READ_FILE_TOOL = "read_file";
+function isReadFileResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
+}
+function withNote(result, advisory) {
+  return advisory ? withAdvisory(result, advisory) : result;
+}
+function trimReadFile(out, advisory) {
+  const lines = out.content.split("\n");
+  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
+  const alreadyPartial = out.truncated === true;
+  const build = (kept, note) => {
+    const lastLine = offset + kept.length - 1;
+    return withNote(
+      { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note },
+      advisory
+    );
+  };
+  const fits = (value) => JSON.stringify(value).length <= READ_FILE_RESULT_CHARS;
+  const whole = withNote({ ...out }, advisory);
+  if (fits(whole)) return { value: whole, truncated: false };
+  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${READ_FILE_RESULT_CHARS.toLocaleString()} chars per read, so a large file arrives in several windows \u2014 call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
+  let lo = 1;
+  let hi = lines.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = lo + hi >> 1;
+    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (best === 0) {
+    const head = lines[0].slice(0, Math.max(0, READ_FILE_RESULT_CHARS - 600));
+    const note = `Line ${offset} of ${totalLines} is longer than the ~${READ_FILE_RESULT_CHARS.toLocaleString()}-char read budget; the first ${head.length.toLocaleString()} of its ${lines[0].length.toLocaleString()} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use search_code for the specific symbol instead.`;
+    return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }, advisory), truncated: true };
+  }
+  return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
+}
+function trimToolResult(tool, out, opts = {}) {
+  const bytes = JSON.stringify(out ?? null).length;
+  if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
+    const trimmed = trimReadFile(out, opts.advisory);
+    return { content: JSON.stringify(trimmed.value), bytes, truncated: trimmed.truncated };
+  }
+  const advised = opts.advisory ? withAdvisory(out ?? null, opts.advisory) : out ?? null;
+  const full = JSON.stringify(advised);
+  if (full.length <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
+  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
+  const head = JSON.stringify(out ?? null).slice(0, MAX_TOOL_RESULT_CHARS);
+  const marker = `\u2026[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
+  const content = `${head}
+${marker}${opts.advisory ? `
+${opts.advisory}` : ""}`;
+  return { content, bytes, truncated: true };
+}
+
 // src/brainTriage.ts
+var CONTEXT_PROMPT_PEAK = 24e3;
+var LARGE_LOSSY_RESULT_BYTES = 2e4;
 function isFailedToolResult(result) {
   if (result == null) return false;
   if (typeof result === "object") {
@@ -2456,12 +2658,17 @@ function isFailedToolResult(result) {
   return false;
 }
 var FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
+function isFileWriteTool(label) {
+  return isCodeChangeTool(label) || FILE_WRITE_TOOL.test(label);
+}
+var UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
+var UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
 var FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
 var TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta/i;
 var TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
 function detectUnbackedWriteClaim(events, messages) {
   const wroteOk = events.some(
-    (e) => e.category === "tool" && FILE_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result)
+    (e) => e.category === "tool" && isFileWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result)
   );
   if (wroteOk) return false;
   return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && FILE_SAVE_CLAIM.test(m.content));
@@ -2666,11 +2873,18 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   }
   let toolResultBytes = 0;
   let truncatedToolResults = 0;
+  let pagedReadWindows = 0;
+  let largestLossyResultBytes = 0;
   let largestToolResult = null;
   for (const ev of toolEvents) {
     const bytes = typeof ev.resultBytes === "number" ? ev.resultBytes : byteLen(ev.result);
     toolResultBytes += bytes;
-    if (ev.truncated) truncatedToolResults += 1;
+    const paged = ev.label === READ_FILE_TOOL;
+    if (ev.truncated) {
+      if (paged) pagedReadWindows += 1;
+      else truncatedToolResults += 1;
+    }
+    if (!paged && bytes > largestLossyResultBytes) largestLossyResultBytes = bytes;
     if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
   }
   const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => ({ label: e.label, message: errorMessageOf(e) }));
@@ -2680,8 +2894,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
   const recoveredTurns = llm.filter((e) => e.recovered).length;
   const turnCoveragePartial = recoveredToolEvents > 0 && recoveredTurns === 0;
-  const contextSignal = promptTokenPeak >= 24e3 || truncatedToolResults > 0 || downgradeEvents > 0 || largestToolResult != null && largestToolResult.bytes >= 2e4;
-  const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < 24e3) && truncatedToolResults === 0;
+  const contextSignal = promptTokenPeak >= CONTEXT_PROMPT_PEAK || truncatedToolResults > 0 || downgradeEvents > 0 || largestLossyResultBytes >= LARGE_LOSSY_RESULT_BYTES;
+  const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < CONTEXT_PROMPT_PEAK) && truncatedToolResults === 0;
   const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
   const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
   const stallRecoveries = stallRecoveriesInTrace(events);
@@ -2707,6 +2921,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     lastPromptTokens,
     toolResultBytes,
     truncatedToolResults,
+    pagedReadWindows,
     largestToolResult,
     modelsUsed,
     evermindUsed,
@@ -2729,9 +2944,17 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
 function kb(bytes) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
+function contextEvidence(d) {
+  const parts = [];
+  if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were cut before the model saw them`);
+  if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
+  if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return parts.length ? parts.join("; ") : "context pressure without a single dominant signal";
+}
 function formatBrainDiagnostics(d) {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
-  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -2748,7 +2971,7 @@ function formatBrainDiagnostics(d) {
     );
   }
   lines.push(
-    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}`
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}${d.pagedReadWindows ? ` \xB7 ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ""}`
   );
   lines.push(...d.progress ? formatRunProgress(d.progress) : []);
   if (d.errorSteps?.length) {
@@ -2795,12 +3018,8 @@ function buildBrainTriageReport(opts) {
   if (error) lines.push(`Last error: ${error}`);
   if (running) lines.push(midRunNotice(activity, Date.parse(capturedAt)));
   lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages, { running })));
-  if (detectUnbackedWriteClaim(events, messages)) {
-    lines.push("", "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.");
-  }
-  if (detectUnbackedTicketClaim(events, messages)) {
-    lines.push("", "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.");
-  }
+  if (detectUnbackedWriteClaim(events, messages)) lines.push("", UNBACKED_WRITE_CLAIM_NOTICE);
+  if (detectUnbackedTicketClaim(events, messages)) lines.push("", UNBACKED_TICKET_CLAIM_NOTICE);
   if (errors.length) {
     lines.push("", `--- Errors (${errors.length}) ---`);
     for (const ev of errors) {
@@ -3352,6 +3571,35 @@ function promoteSwallowedAnswer(segments) {
   for (const s of thoughts) if (s !== richest) promoted.unshift(s);
   return promoted;
 }
+var UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
+var LOWERCASE_OPENER = /^\p{Ll}/u;
+function lastSentenceStart(text) {
+  let cut = text.lastIndexOf("\n") + 1;
+  for (const match of text.matchAll(/[.!?](?=\s)/g)) {
+    const after = (match.index ?? 0) + 1;
+    if (after > cut) cut = after;
+  }
+  return cut;
+}
+function stitchSplitSentence(segments) {
+  const out = [...segments];
+  for (let i = 1; i < out.length; i++) {
+    const prev = out[i - 1];
+    const cur = out[i];
+    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
+    const cut = lastSentenceStart(prev.content);
+    const head = prev.content.slice(0, cut).trim();
+    out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };
+    if (head) {
+      out[i - 1] = { kind: "thought", content: head };
+    } else {
+      out.splice(i - 1, 1);
+      i -= 1;
+    }
+  }
+  return out;
+}
 function answerTextOf(content) {
   return splitReasoningSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
 }
@@ -3716,141 +3964,6 @@ function unshippedChangeNudge() {
   return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
-// src/readCoverage.ts
-var REVISIT_NUDGE_AT = 3;
-var REVISIT_HARD_AT = 5;
-var MAX_REMEMBERED_ARGS = 8;
-var ReadCoverage = class _ReadCoverage {
-  visits = /* @__PURE__ */ new Map();
-  /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
-  exact = /* @__PURE__ */ new Map();
-  static exactKey(tool, args) {
-    return `${tool}:${stableStringify(args ?? {})}`;
-  }
-  /**
-   * Has this exact read — same tool, same arguments in any key order — already
-   * SUCCEEDED this run, with nothing since that could have changed its answer? The run
-   * loop answers such a call with a stub instead of re-running it.
-   */
-  isRepeat(tool, args) {
-    return this.exact.has(_ReadCoverage.exactKey(tool, args));
-  }
-  /**
-   * Keep what a SUCCESSFUL read returned, with the transcript message that carried it,
-   * so an exact repeat can be replayed once that message has left the working context.
-   * A no-op for a read that was never recorded (a failure has nothing to replay).
-   */
-  cacheResult(tool, args, cached2) {
-    const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
-    if (read) read.cached = cached2;
-  }
-  /** The cached result of an exact earlier read, or null when none is held. */
-  cachedResult(tool, args) {
-    return this.exact.get(_ReadCoverage.exactKey(tool, args))?.cached ?? null;
-  }
-  /**
-   * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
-   * resulting target visit — or null when the call names no target (nothing to be
-   * circling around; the exact guard still applies).
-   */
-  record(tool, args) {
-    const target = activityTarget(args) ?? null;
-    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, target });
-    if (!target) return null;
-    const key = `${tool}:${target}`;
-    const existing = this.visits.get(key);
-    let argText;
-    try {
-      argText = JSON.stringify(args ?? {});
-    } catch {
-      argText = String(args ?? "");
-    }
-    if (!existing) {
-      const fresh = { count: 1, priorArgs: [argText], mayHaveChanged: false };
-      this.visits.set(key, fresh);
-      return { ...fresh };
-    }
-    existing.count += 1;
-    if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
-      existing.priorArgs.push(argText);
-    }
-    const visit = { ...existing };
-    existing.mayHaveChanged = false;
-    return visit;
-  }
-  /**
-   * A non-read call has run. Forget exactly the reads it could have changed — no more,
-   * no less — for BOTH guards:
-   *
-   * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
-   *   undo) forgets every cached ANSWER: the honest answer to "what did that touch?" is
-   *   "anything", so no exact repeat may be stubbed out afterwards. It does NOT forget
-   *   the visit TALLY, and that distinction is the whole difference between a guard that
-   *   works and one that is inert. The tally counts the MODEL's behaviour — how many
-   *   times it has gone back to one target, with every one of those results still sitting
-   *   in the transcript above it — and a build running in between changes none of that.
-   *   Clearing it wholesale is what made the advisory unreachable in any run that
-   *   verifies its work: read, read, `run_command` (typecheck), read, read, `run_command`
-   *   … never reaches three, so the nudge at 3 and the hard stop at 5 never fired, and a
-   *   run spent 46% of its calls re-reading ground it had already covered with the loop
-   *   guard silent throughout. Instead each target is marked {@link ReadVisit.mayHaveChanged}
-   *   so the NEXT read of it is excused — a re-read after a build is the right move — and
-   *   the one after that is not.
-   * - A file write/edit/delete forgets its own target, across every tool that reads it —
-   *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
-   *   what was just changed is genuinely new information; nagging about it would punish
-   *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
-   *   whole tally on every non-read call is what once let one CSS file be read 14 times
-   *   with the advisory firing on neither it nor its component.
-   * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
-   *   a read observes, so they forget nothing.
-   * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
-   *   returns (a ticket update changes the ticket list), so target-less platform reads
-   *   are forgotten; file reads are not, because a ticket write does not edit source.
-   */
-  invalidate(tool, args) {
-    if (isUnscopedMutationTool(tool)) {
-      this.exact.clear();
-      for (const visit of this.visits.values()) visit.mayHaveChanged = true;
-      return;
-    }
-    if (isCodeChangeTool(tool)) {
-      const target = activityTarget(args);
-      if (!target) return;
-      for (const key of [...this.visits.keys()]) {
-        if (key.slice(key.indexOf(":") + 1) === target) this.visits.delete(key);
-      }
-      for (const [key, read] of [...this.exact.entries()]) {
-        if (read.target === target) this.exact.delete(key);
-      }
-      return;
-    }
-    if (isLocalWorkspaceTool(tool)) return;
-    for (const [key, read] of [...this.exact.entries()]) {
-      if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
-    }
-  }
-};
-function revisitAdvisory(tool, target, visit) {
-  if (visit.count < REVISIT_NUDGE_AT) return null;
-  if (visit.mayHaveChanged) return null;
-  const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
-  if (visit.count >= REVISIT_HARD_AT) {
-    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
-  }
-  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
-}
-function withAdvisory(result, advisory) {
-  if (result && typeof result === "object" && !Array.isArray(result)) {
-    const existing = result.note;
-    const note = typeof existing === "string" && existing ? `${existing}
-
-${advisory}` : advisory;
-    return { ...result, note };
-  }
-  return { result, note: advisory };
-}
-
 // src/repeatedFailure.ts
 var FAILURE_NUDGE_AT = 2;
 var FAILURE_HARD_AT = 3;
@@ -3886,69 +3999,6 @@ function repeatedFailureAdvisory(tool, attempts, reason) {
     return `STOP CALLING \`${tool}\` WITH THESE ARGUMENTS. This is failure ${attempts} of the identical call in this run.${said} The arguments are the problem, not the timing \u2014 repeating them will fail again and will spend the rest of this run's tool budget. Do ONE of these now: (a) re-read the error above and change the argument it names (a failing tool usually says exactly what to pass instead \u2014 a scope, a path, an id \u2014 so pass it); (b) reach the same goal with a different tool; (c) stop and tell the user plainly what is blocking you and what you need from them. Do not issue this call again.`;
   }
   return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
-}
-
-// src/toolResultBudget.ts
-var MAX_TOOL_RESULT_CHARS = 6e3;
-var READ_FILE_RESULT_CHARS = 16e3;
-var READ_FILE_TOOL = "read_file";
-function isReadFileResult(out) {
-  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
-}
-function withNote(result, advisory) {
-  return advisory ? withAdvisory(result, advisory) : result;
-}
-function trimReadFile(out, advisory) {
-  const lines = out.content.split("\n");
-  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
-  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
-  const alreadyPartial = out.truncated === true;
-  const build = (kept, note) => {
-    const lastLine = offset + kept.length - 1;
-    return withNote(
-      { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note },
-      advisory
-    );
-  };
-  const fits = (value) => JSON.stringify(value).length <= READ_FILE_RESULT_CHARS;
-  const whole = withNote({ ...out }, advisory);
-  if (fits(whole)) return { value: whole, truncated: false };
-  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${READ_FILE_RESULT_CHARS.toLocaleString()} chars per read, so a large file arrives in several windows \u2014 call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
-  let lo = 1;
-  let hi = lines.length;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = lo + hi >> 1;
-    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  if (best === 0) {
-    const head = lines[0].slice(0, Math.max(0, READ_FILE_RESULT_CHARS - 600));
-    const note = `Line ${offset} of ${totalLines} is longer than the ~${READ_FILE_RESULT_CHARS.toLocaleString()}-char read budget; the first ${head.length.toLocaleString()} of its ${lines[0].length.toLocaleString()} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use search_code for the specific symbol instead.`;
-    return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }, advisory), truncated: true };
-  }
-  return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
-}
-function trimToolResult(tool, out, opts = {}) {
-  const bytes = JSON.stringify(out ?? null).length;
-  if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
-    const trimmed = trimReadFile(out, opts.advisory);
-    return { content: JSON.stringify(trimmed.value), bytes, truncated: trimmed.truncated };
-  }
-  const advised = opts.advisory ? withAdvisory(out ?? null, opts.advisory) : out ?? null;
-  const full = JSON.stringify(advised);
-  if (full.length <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
-  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
-  const head = JSON.stringify(out ?? null).slice(0, MAX_TOOL_RESULT_CHARS);
-  const marker = `\u2026[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
-  const content = `${head}
-${marker}${opts.advisory ? `
-${opts.advisory}` : ""}`;
-  return { content, bytes, truncated: true };
 }
 
 // src/turnOptimization.ts
@@ -6187,9 +6237,9 @@ function diagnosticsSignals(d) {
   if (ev && ev.version >= 1 && ev.mode !== "connected") {
     out.push(`\u26A0\uFE0F The chat's project Evermind is "${ev.mode}" (not connected) \u2014 read-only, so turns don't contribute.`);
   }
-  if (d.lastLearn && d.lastLearn.learned && ev && ev.version >= 1 && d.lastLearn.version !== ev.version) {
+  if (d.lastLearn && d.lastLearn.learned && ev && ev.version >= 1 && ev.version < d.lastLearn.version) {
     out.push(
-      `\u26A0\uFE0F Last turn reported learn version v${d.lastLearn.version} but the chat's project head is v${ev.version}. A version mismatch means the learn step and the panel are resolving DIFFERENT projects/heads.`
+      `\u26A0\uFE0F Last turn's learn step evaluated v${d.lastLearn.version} but the chat's project head is v${ev.version} \u2014 BEHIND it. A queued learn only moves a head forward, so the learn step and the panel are resolving DIFFERENT projects/heads.`
     );
   }
   if ((d.agents?.length ?? 0) === 0) {
@@ -6618,6 +6668,8 @@ function PromptInput({
   TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE,
+  UNBACKED_TICKET_CLAIM_NOTICE,
+  UNBACKED_WRITE_CLAIM_NOTICE,
   UNSCOPED_MUTATION_TOOLS,
   WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter,
