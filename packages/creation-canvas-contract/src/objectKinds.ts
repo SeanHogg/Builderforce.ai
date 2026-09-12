@@ -479,6 +479,11 @@ export const CREATION_OBJECT_KINDS = [
   // room's session (a temporary reading of the flat board) — `world` is authored
   // object state of its own, opened full-size the same way `game`/`website` are.
   'world',
+  // THE ROOM'S DESIGN. A place the SESSION meets in — its floor, walls and furniture —
+  // rather than a place a walker explores (`world`). The room surface reads the
+  // board's active `room` object to know what to draw; a session with none meets in
+  // the standup room. See `roomDesign.ts`.
+  'room',
   // AI VIDEO/3D GENERATION, as a canvas object. Opens into the `scene3d` SURFACE
   // (`creationObjectSurfaces.ts`) bound to itself — the product decision that AI
   // video/3D generation lives under the 3D surface rather than under `timeline`

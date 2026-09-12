@@ -9,6 +9,7 @@ import { roomSpotKey } from '@/lib/canvas/roomSpots';
 import { useRoomSpot } from '@/lib/canvas/useRoomSpot';
 import { RoomItemCaption, type RoomItemOpen } from '../world3d/RoomItemCaption';
 import { SurfacePanel } from '../world3d/SurfacePanel';
+import { useRoomGeometry } from '../world3d/roomGeometryContext';
 import { useRoomItemDrag } from '../world3d/useRoomItemDrag';
 
 /**
@@ -46,7 +47,8 @@ export interface RoomStationStandProps {
 
 export function RoomStationStand({ sessionId, stationKey, index, palette, title, hint, face, open, onDragChange }: RoomStationStandProps) {
   const [spot, place] = useRoomSpot(roomSpotKey(sessionId, `station:${stationKey}`), defaultRoomStationSpot(index));
-  const placement = useMemo(() => placeStationInRoom(spot), [spot]);
+  const geometry = useRoomGeometry();
+  const placement = useMemo(() => placeStationInRoom(spot, geometry), [spot, geometry]);
   const drag = useRoomItemDrag(place, onDragChange);
   const [x, y, z] = placement.position;
   const onWall = placement.anchor === 'wall';

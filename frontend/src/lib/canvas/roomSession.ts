@@ -1,6 +1,6 @@
+import { defaultCanvasRoomDesign, restSurfaceAt, roomDesignGeometry, type RoomGeometry } from '@builderforce/creation-canvas-contract';
 import type { Canvas3DScene } from '@/lib/canvas/canvas3d';
 import { CANVAS_3D_LAYER_GAP } from '@/lib/canvas/canvas3d';
-import { ROOM_FLOOR_SIZE, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z } from './roomSeating';
 import type { RoomSpot } from './roomSpots';
 
 /**
@@ -24,7 +24,15 @@ import type { RoomSpot } from './roomSpots';
  * Units are metres and radians, matching the rest of the room.
  */
 
+/** `table` is any surface the design says things REST on — a desk, a counter, an island. */
 export type RoomSessionAnchor = 'table' | 'floor' | 'wall';
+
+/**
+ * The standup room's geometry — what every placement reads when the session has
+ * no designed room. Built once from the contract's default design, so the fallback
+ * IS the default room and not a second description of it.
+ */
+export const DEFAULT_ROOM_GEOMETRY: RoomGeometry = roomDesignGeometry(defaultCanvasRoomDesign());
 
 /** Widest edge of the diorama, in metres, whichever anchor it sits on. */
 export const ROOM_SESSION_FOOTPRINT = 1.6;
@@ -67,22 +75,26 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * Turn a point on the floor plane into a placement.
  *
- * The anchor is DERIVED from the point, never stored beside it: a spot inside the
- * table's radius is on the table, one against the back wall hangs on it, and the
- * rest of the floor is the floor. That is what lets a drag be one gesture — the
+ * The anchor is DERIVED from the point, never stored beside it: a spot over a
+ * surface the design rests things on (the standup table, a boardroom slab, a
+ * kitchen island) is on that surface, one against the back wall hangs on it, and
+ * the rest of the floor is the floor. That is what lets a drag be one gesture — the
  * diorama climbs onto the table as it crosses the edge — and what stops a stored
- * placement from ever disagreeing with itself.
+ * placement from ever disagreeing with itself. The room's own geometry comes from
+ * its design; absent, it is the standup room's.
  */
-export function placeSessionInRoom({ x, z }: RoomSessionSpot): RoomSessionPlacement {
-  const half = ROOM_FLOOR_SIZE / 2 - FLOOR_MARGIN;
-  const cx = clamp(Number.isFinite(x) ? x : 0, -half, half);
-  const cz = clamp(Number.isFinite(z) ? z : 0, ROOM_WALL_Z, half);
+export function placeSessionInRoom({ x, z }: RoomSessionSpot, geometry: RoomGeometry = DEFAULT_ROOM_GEOMETRY): RoomSessionPlacement {
+  const halfX = geometry.halfWidth - FLOOR_MARGIN;
+  const halfZ = geometry.halfDepth - FLOOR_MARGIN;
+  const cx = clamp(Number.isFinite(x) ? x : 0, -halfX, halfX);
+  const cz = clamp(Number.isFinite(z) ? z : 0, geometry.wallZ, halfZ);
 
-  if (Math.hypot(cx, cz) <= ROOM_TABLE_RADIUS) {
-    return { anchor: 'table', position: [cx, ROOM_TABLE_HEIGHT + REST_LIFT, cz], rotation: [-Math.PI / 2, 0, 0] };
+  const rest = restSurfaceAt(geometry, cx, cz);
+  if (rest) {
+    return { anchor: 'table', position: [cx, rest.height + REST_LIFT, cz], rotation: [-Math.PI / 2, 0, 0] };
   }
-  if (cz <= ROOM_WALL_Z + ROOM_SESSION_WALL_REACH) {
-    return { anchor: 'wall', position: [cx, ROOM_SESSION_WALL_HEIGHT, ROOM_WALL_Z], rotation: [0, 0, 0] };
+  if (cz <= geometry.wallZ + ROOM_SESSION_WALL_REACH) {
+    return { anchor: 'wall', position: [cx, ROOM_SESSION_WALL_HEIGHT, geometry.wallZ], rotation: [0, 0, 0] };
   }
   return { anchor: 'floor', position: [cx, REST_LIFT / 2, cz], rotation: [-Math.PI / 2, 0, 0] };
 }

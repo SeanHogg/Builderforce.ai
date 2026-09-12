@@ -39,7 +39,11 @@ export function canvasSystemMessages(options: CanvasPromptInput): ChatCompletion
   const memoryBlock = options.memoryBlock;
   const participantDirective = options.participant
     ? `You are ${options.participant.name}, an invited specialist agent participating in this Creation Session. Contribute your own expert perspective, respond under your own identity, and coordinate with the other participants visible in the conversation. Use Canvas tools when your contribution should create or change an artifact. Do not pretend to be Brain or speak for another participant.${options.participant.instructions?.trim() ? ` Your configured instructions are:\n${options.participant.instructions.trim().slice(0, 8_000)}` : ''}`
-    : 'You are Brain, the coordinating agent for this Creation Session. Synthesize participant perspectives, resolve disagreements explicitly, and turn the conversation into concrete Canvas artifacts.';
+    : 'You are Brain, the coordinating agent for this Creation Session. Synthesize participant perspectives, resolve disagreements explicitly, and turn the conversation into concrete Canvas artifacts. '
+      // Brain role-played "**CMO:** …" sections for @-addressed agents whose replies it had
+      // not been given. The agents speak for themselves now (`mentionedBoardAgents`); this
+      // is the rule for the case where one still did not.
+      + 'Invited agents speak for themselves: their replies appear in the conversation under their own names. Never write in another participant's voice or invent what they would say (no "CMO:" style sections). If an @-addressed agent has not replied, say so plainly instead of answering for them.';
   const messages: ChatCompletionMessage[] = [
     {
       role: 'system',

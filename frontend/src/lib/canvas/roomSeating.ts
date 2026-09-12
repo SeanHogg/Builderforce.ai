@@ -1,4 +1,4 @@
-import type { CanvasPresenceSpatial } from '@builderforce/creation-canvas-contract';
+import { STANDUP_ROOM, type CanvasPresenceSpatial, type RoomSeatSpot } from '@builderforce/creation-canvas-contract';
 
 /**
  * WHERE EVERYBODY STANDS — the room's geometry, as arithmetic.
@@ -22,19 +22,28 @@ import type { CanvasPresenceSpatial } from '@builderforce/creation-canvas-contra
  * `CanvasPresenceSpatial`, so nothing here converts anything.
  */
 
+/*
+ * The STANDUP room's numbers — the room every session had before one could be
+ * designed — read from the contract's own preset rather than restated, so the
+ * default design and these constants cannot drift apart. A DESIGNED room carries
+ * its own geometry (`roomDesignGeometry`); these are the fallback and the tests'
+ * fixed points.
+ */
 /** Radius of the table itself. A standup table, not a boardroom slab. */
-export const ROOM_TABLE_RADIUS = 1.35;
+export const ROOM_TABLE_RADIUS: number = STANDUP_ROOM.tableRadius;
 /** Height of the table top off the floor. */
-export const ROOM_TABLE_HEIGHT = 0.74;
+export const ROOM_TABLE_HEIGHT: number = STANDUP_ROOM.tableHeight;
 /** Radius of the ring of bodies. Far enough out to leave room to stand. */
 export const ROOM_SEAT_RADIUS = 2.35;
+/** Where people who found no chair stand: a wider ring, behind whoever is seated. */
+export const ROOM_STANDING_RADIUS = 4.0;
 /** Eye height of a seated body, used to aim the camera at faces not feet. */
 export const ROOM_EYE_HEIGHT = 1.35;
-/** Square floor edge length. */
-export const ROOM_FLOOR_SIZE = 14;
-/** Where the back wall stands, on -Z. Inside the floor, behind the ring. The one
- *  place in the room the session can hang rather than rest. */
-export const ROOM_WALL_Z = -5.2;
+/** Floor width, along X. */
+export const ROOM_FLOOR_SIZE: number = STANDUP_ROOM.floorWidth;
+/** Where the back wall stands, on -Z. The one place in the room the session can
+ *  hang rather than rest. */
+export const ROOM_WALL_Z: number = -STANDUP_ROOM.floorDepth / 2;
 
 /** One transform on the ring: where a body stands, and which way it faces. */
 export interface RoomPlacement {
@@ -95,6 +104,23 @@ export interface RoomSeat {
 }
 
 /**
+ * The `index`-th place in a room that may have CHAIRS.
+ *
+ * A designed room seats people on its furniture, in the order the designer placed
+ * it (`roomDesignSeats`); the standup room has none and seats everyone on the ring.
+ * Whoever finds no chair — the eleventh person in a ten-chair boardroom — stands on
+ * a wider ring behind the seated, rather than on top of the table the ring would
+ * otherwise cross. One function, so the room, the roster and the viewer's own
+ * announced body all agree about where the `index`-th person is.
+ */
+export function roomSeatPlacement(index: number, count: number, seats: readonly RoomSeatSpot[]): RoomPlacement {
+  const seated = seats[index];
+  if (seated) return { position: seated.position, yaw: seated.yaw };
+  if (seats.length === 0) return seatPlacement(index, count);
+  return seatPlacement(index - seats.length, Math.max(1, count - seats.length), ROOM_STANDING_RADIUS);
+}
+
+/**
  * Seat the roster, letting live bodies override their own chairs.
  *
  * Order is the roster's order, deliberately: it is stable across polls, whereas
@@ -104,17 +130,20 @@ export interface RoomSeat {
  * A peer whose relayed `seat` names a DIFFERENT chair than the roster gave them
  * is honoured, because they are the authority on where they are; their ring
  * position is recomputed from the seat they claim rather than from their row.
+ *
+ * `seats` are the designed room's chairs, if it has any — see `roomSeatPlacement`.
  */
 export function assignRoomSeats(
   occupants: readonly RoomOccupant[],
   live: ReadonlyMap<string, CanvasPresenceSpatial>,
   currentUserId: string | null,
+  seats: readonly RoomSeatSpot[] = [],
 ): RoomSeat[] {
   const count = occupants.length;
   return occupants.map((occupant, index) => {
     const body = live.get(occupant.userId);
     const seatIndex = body?.seat !== undefined ? body.seat : index;
-    const fallback = seatPlacement(seatIndex, count);
+    const fallback = roomSeatPlacement(seatIndex, count, seats);
     const kind = occupant.kind ?? 'human';
     const isSelf = occupant.userId === currentUserId;
     return {

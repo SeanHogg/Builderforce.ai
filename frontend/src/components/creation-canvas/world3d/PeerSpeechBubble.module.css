@@ -1,0 +1,62 @@
+/*
+ * The speech bubble over a seat in the room. Every colour is a theme token, so it reads
+ * in both themes, and nothing in it takes a pointer from the WebGL canvas underneath.
+ */
+
+/* Bottom-centre on the point the scene gives it: `Html` places an element's top-left
+   corner there, so the anchor pulls itself left by half and up by its whole height. */
+.anchor {
+  position: relative;
+  width: max-content;
+  max-width: 240px;
+  transform: translate(-50%, calc(-100% - 8px));
+  pointer-events: none;
+}
+
+.bubble {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised, var(--surface));
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--text-primary) 16%, transparent);
+}
+
+/* The tail, pointing down at the speaker. On the anchor rather than the bubble, because
+   the bubble clips its own overflow to clamp a long reply. */
+.anchor::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised, var(--surface));
+}
+
+.anchor[data-pending='true'] .bubble {
+  color: var(--text-secondary);
+  font-style: italic;
+  animation: speechPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes speechPulse {
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anchor[data-pending='true'] .bubble { animation: none; }
+}

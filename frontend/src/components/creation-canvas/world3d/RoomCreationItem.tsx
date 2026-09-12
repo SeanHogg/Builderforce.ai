@@ -3,6 +3,7 @@
  * `dynamic(..., { ssr: false })` import, since WebGL has no server-side render.
  */
 import { useMemo, type ReactNode } from 'react';
+import { robloxLevelFromUrl } from '@/lib/gameTargets';
 import type { RoomPalette } from '@/lib/canvas/roomSeating';
 import {
   ROOM_MODEL_SIZE, defaultRoomCreationSpot, placeCreationInRoom, type RoomCreation,
@@ -10,21 +11,21 @@ import {
 import { roomSpotKey } from '@/lib/canvas/roomSpots';
 import { useRoomSpot } from '@/lib/canvas/useRoomSpot';
 import { RoomItemCaption, type RoomItemOpen } from './RoomItemCaption';
+import { RoomLevelMiniature } from './RoomLevelMiniature';
 import { RoomMeshModel } from './RoomMeshModel';
 import { SurfacePanel } from './SurfacePanel';
+import { useRoomGeometry } from './roomGeometryContext';
 import { useRoomItemDrag } from './useRoomItemDrag';
 
 /**
  * ONE 3D CREATION, STANDING IN THE ROOM — a game, a world, an AI scene or a model.
  *
- * It is a thing on a stand, not a card: a model is drawn as its own geometry, so
- * orbiting the room turns it; everything else shows the picture of what it produced,
- * standing up to face the table. It is dragged exactly the way the session is
- * (`useRoomItemDrag`) and remembers where THIS viewer left it (`useRoomSpot`), so it
- * owns its own place and needs nothing from the room but the palette.
- *
- * On the floor it stands on a plinth tall enough to meet a seated person's eye; on
- * the table it needs only a base; against the back wall it hangs in a frame.
+ * It is a thing on a stand, not a card: a model is drawn as its own geometry, a
+ * Roblox place as its own LEVEL in miniature (so Play walks you into exactly what
+ * you were looking at), and everything else shows the picture of what it produced.
+ * It is dragged exactly the way the session is (`useRoomItemDrag`), remembers where
+ * THIS viewer left it (`useRoomSpot`), and lands on whatever surface the room's
+ * design has there (`useRoomGeometry`) — so it owns its own place.
  */
 
 const PLINTH_RADIUS = 0.42;
@@ -32,6 +33,9 @@ const PLINTH_RADIUS = 0.42;
 const PLINTH_HEIGHT = { floor: 0.62, table: 0.05 } as const;
 const PANEL_WIDTH = 1.0;
 const PANEL_HEIGHT = 0.72;
+/** Widest side of a level standing on its plinth. */
+const LEVEL_SIZE = 0.8;
+const LEVEL_HEIGHT = 0.45;
 const FRAME_PAD = 0.08;
 const CAPTION_GAP = 0.3;
 
@@ -51,10 +55,13 @@ export interface RoomCreationItemProps {
 }
 
 export function RoomCreationItem({ sessionId, creation, index, palette, title, hint, open, onDragChange }: RoomCreationItemProps) {
+  const geometry = useRoomGeometry();
   const [spot, place] = useRoomSpot(roomSpotKey(sessionId, creation.id), defaultRoomCreationSpot(index));
-  const placement = useMemo(() => placeCreationInRoom(spot), [spot]);
+  const placement = useMemo(() => placeCreationInRoom(spot, geometry), [spot, geometry]);
   const drag = useRoomItemDrag(place, onDragChange);
   const face = creation.accent ?? palette.card;
+  // Read ONCE per place file, by the stand that shows it — never per board change.
+  const level = useMemo(() => (creation.placeUrl ? robloxLevelFromUrl(creation.placeUrl)?.scene ?? null : null), [creation.placeUrl]);
 
   // Base at y = 0 either way, so the stand below and the frame on the wall place it
   // with one number.
@@ -63,12 +70,14 @@ export function RoomCreationItem({ sessionId, creation, index, palette, title, h
       <SurfacePanel width={PANEL_WIDTH} height={PANEL_HEIGHT} color={face} imageUrl={creation.preview} fit="contain" />
     </group>
   );
-  const shown: { height: number; body: ReactNode } = creation.geometry
-    ? {
-      height: ROOM_MODEL_SIZE,
-      body: <RoomMeshModel url={creation.geometry.url} format={creation.geometry.format} color={face} fallback={picture} />,
-    }
-    : { height: PANEL_HEIGHT, body: picture };
+  const shown: { height: number; body: ReactNode } = level
+    ? { height: LEVEL_HEIGHT, body: <RoomLevelMiniature scene={level} size={LEVEL_SIZE} base={face} /> }
+    : creation.geometry
+      ? {
+        height: ROOM_MODEL_SIZE,
+        body: <RoomMeshModel url={creation.geometry.url} format={creation.geometry.format} color={face} fallback={picture} />,
+      }
+      : { height: PANEL_HEIGHT, body: picture };
 
   const [x, y, z] = placement.position;
   const caption = (lift: number) => (

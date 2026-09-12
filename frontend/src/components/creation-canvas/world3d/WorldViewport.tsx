@@ -4,36 +4,42 @@
  * server-side render. A second boundary here would mark an entry point that
  * does not exist.
  */
-import { useEffect, useState, type DragEventHandler, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEventHandler, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Canvas } from '@react-three/fiber';
 import type { CanvasWorldScene } from '@builderforce/creation-canvas-contract';
 import { isTypingTarget } from '@/lib/keyboardTarget';
 import styles from '../CreationCanvas.module.css';
+import { useSpacePresence } from '../canvasSpacePresence';
 import Scene3D from './Scene3D';
 import { DEFAULT_WALKER_COLOR } from './PlayerController';
+import { useDragLook } from './useDragLook';
 import { useWorldPlay } from './useWorldPlay';
+import { WalkerTouchControls } from './WalkerTouchControls';
 
 /**
  * The 3D runtime itself — the `<Canvas>`, the scene in it, and the chrome that
  * belongs to being INSIDE a space rather than to the surface around it.
  *
  * ── WHY IT WAS EXTRACTED ──────────────────────────────────────────────────
- * Two surfaces mount this runtime now: the 3D space, where you build a world
- * and walk it, and the play surface, where a Roblox place is the level you are
- * playing. Both need the same camera toggle, the same respawn, the same
- * pointer-lock hint and the same full-screen control. Written twice, they would
- * be two answers to "press V" and two places to fix a walker that spawns
- * inside the floor — so the runtime is one component and each surface
- * contributes only what is genuinely its own (a palette; a scoreboard's
- * meaning) through props.
+ * Three places mount this runtime: the 3D space, where you build a world and walk
+ * it; the play surface, where a Roblox place is the level you are playing; and the
+ * room, which plays that same level without leaving the room. All need the same
+ * camera toggle, the same respawn, the same pointer-lock hint, the same touch pad —
+ * so the runtime is one component and each host contributes only what is genuinely
+ * its own through props.
+ *
+ * ── WHO ELSE IS HERE ──────────────────────────────────────────────────────
+ * Pass `spaceId` (the object being walked) and the walker is announced in that
+ * space and everyone else walking it is drawn — through `useSpacePresence`, which
+ * reads the canvas's own presence channel. Two people playing one level see each
+ * other; a level played in the room and the same level on its own surface are the
+ * same space, because they are the same object.
  *
  * ── WHY FULL SCREEN IS NOT HERE ───────────────────────────────────────────
  * Because it is not about the viewport. On the 3D space it has to take the
- * palette and the properties rail with it, or the player goes full screen into
- * a space they can no longer edit. Both hosts put it in their surface header
- * (`CanvasFullscreenAction`), pointed at their own stage — the R3F canvas
- * resizes to whatever box it lands in, so nothing here has to know.
+ * palette and the properties rail with it. Both hosts put it in their surface
+ * header (`CanvasFullscreenAction`), pointed at their own stage.
  */
 
 export interface WorldViewportProps {
@@ -53,6 +59,8 @@ export interface WorldViewportProps {
   onDrop?: DragEventHandler<HTMLDivElement>;
   /** What the bottom banner says while building. Absent draws no banner. */
   banner?: string;
+  /** The object this space IS — see the header. Absent: the walker walks alone. */
+  spaceId?: string;
 }
 
 export function WorldViewport({
@@ -64,16 +72,22 @@ export function WorldViewport({
   onDragOver,
   onDrop,
   banner,
+  spaceId,
 }: WorldViewportProps) {
   const t = useTranslations('creationCanvas.surface.world');
   const [cameraView, setCameraView] = useState<'first' | 'third'>('first');
   const [manualRespawn, setManualRespawn] = useState(0);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const walking = mode === 'walk';
 
-  const play = useWorldPlay(scene, mode === 'walk');
+  const play = useWorldPlay(scene, walking);
+  const presence = useSpacePresence(walking ? spaceId : undefined);
+  // A finger turns the head — the mouse is pointer-locked here, so only touch.
+  useDragLook(viewportRef, { buttons: 'touch', enabled: walking });
 
   // `V` flips first/third person, same as the on-canvas button.
   useEffect(() => {
-    if (mode !== 'walk') return;
+    if (!walking) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'KeyV') return;
       if (isTypingTarget(event.target)) return;
@@ -81,7 +95,7 @@ export function WorldViewport({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mode]);
+  }, [walking]);
 
   const respawn = () => {
     setManualRespawn((value) => value + 1);
@@ -89,15 +103,16 @@ export function WorldViewport({
   };
 
   const { state } = play;
-  const scoreboard = mode === 'walk' && state.playable;
+  const scoreboard = walking && state.playable;
 
   return (
     <div
+      ref={viewportRef}
       className={styles.worldViewport}
       {...(onDragOver ? { onDragOver } : {})}
       {...(onDrop ? { onDrop } : {})}
     >
-      <Canvas shadows camera={{ position: [12, 10, 12], fov: 60, near: 0.1, far: 500 }} tabIndex={mode === 'walk' ? 0 : -1}>
+      <Canvas shadows camera={{ position: [12, 10, 12], fov: 60, near: 0.1, far: 500 }} tabIndex={walking ? 0 : -1}>
         <Scene3D
           scene={play.scene}
           mode={mode}
@@ -107,13 +122,14 @@ export function WorldViewport({
           cameraView={cameraView}
           walkerColor={DEFAULT_WALKER_COLOR}
           onPlayerEnter={play.onPlayerEnter}
+          {...(presence ? { peers: presence.peers, onMove: presence.onMove } : {})}
         />
         {mode === 'edit' && sceneExtras}
       </Canvas>
 
       {mode === 'edit' && banner && <div className={styles.worldBanner}>{banner}</div>}
 
-      {mode === 'walk' && <>
+      {walking && <>
         <div className={styles.worldBannerTop}>{t('walkHint')}</div>
         <button type="button" className={styles.worldRespawnAction} onClick={respawn} title={t('respawn')}>
           {t('respawn')}
@@ -126,6 +142,7 @@ export function WorldViewport({
         >
           {cameraView === 'first' ? t('cameraThird') : t('cameraFirst')}
         </button>
+        <WalkerTouchControls />
       </>}
 
       {/* The scoreboard is a live region: a pickup is a thing that HAPPENED, and

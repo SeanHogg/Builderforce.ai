@@ -45,7 +45,8 @@ interface AgentCardLike {
 const text = (value: unknown): string | null =>
   (typeof value === 'string' && value.trim() ? value.trim() : null);
 
-const sameName = (first: string | null, second: string | null): boolean =>
+/** The board's title rule for "the same agent": trimmed upstream, compared case-insensitively. */
+export const sameAgentName = (first: string | null, second: string | null): boolean =>
   !!first && !!second && first.toLowerCase() === second.toLowerCase();
 
 /** Every agent card on the board, in board order. Hidden placements are not on it. */
@@ -69,9 +70,9 @@ export interface TeammateIdentity {
 export function isTeammateOnBoard(member: TeammateIdentity, agents: readonly BoardAgent[]): boolean {
   return agents.some((agent) => (
     agent.ref === member.id
-    || sameName(agent.seat, member.seat)
-    || sameName(agent.name, member.name)
-    || sameName(agent.name, member.seat)
+    || sameAgentName(agent.seat, member.seat)
+    || sameAgentName(agent.name, member.name)
+    || sameAgentName(agent.name, member.seat)
   ));
 }
 
@@ -82,11 +83,24 @@ export function isTeammateOnBoard(member: TeammateIdentity, agents: readonly Boa
  * two cards naming the same agent are one agent at the table.
  */
 export function boardAgentOccupants(agents: readonly BoardAgent[]): RoomOccupant[] {
+  return uniqueBoardAgents(agents).map((agent) => ({ userId: boardAgentOccupantId(agent), displayName: agent.name, kind: 'agent' as const }));
+}
+
+/**
+ * The one identity an agent has in the room: the seat it stands at, and anything said
+ * from that seat (`roomSpeech`). Its roster row when the card names one, else its name.
+ */
+export function boardAgentOccupantId(agent: Pick<BoardAgent, 'ref' | 'name'>): string {
+  return `agent:${agent.ref ?? agent.name.toLowerCase()}`;
+}
+
+/** One entry per agent, in board order — two cards naming the same agent are one agent. */
+export function uniqueBoardAgents(agents: readonly BoardAgent[]): BoardAgent[] {
   const seen = new Set<string>();
-  return agents.flatMap((agent) => {
-    const userId = `agent:${agent.ref ?? agent.name.toLowerCase()}`;
-    if (seen.has(userId)) return [];
-    seen.add(userId);
-    return [{ userId, displayName: agent.name, kind: 'agent' as const }];
+  return agents.filter((agent) => {
+    const id = boardAgentOccupantId(agent);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
   });
 }

@@ -2,6 +2,7 @@
 export * from './video';
 export * from './talktrack';
 export * from './world';
+export * from './roomDesign';
 // The AI video/3D generation request a `scene` object carries, and the clip it
 // produces — see the module header for why it is not folded into `video.ts`.
 export * from './scene';

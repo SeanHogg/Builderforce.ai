@@ -53,6 +53,10 @@ import {
   type StageCheck,
   type StageCheckGroup,
   type StageCheckSeverity,
+  ROOM_FURNITURE_SPECS,
+  roomDesignGeometry,
+  roomDesignOf,
+  roomDesignSummary,
 } from '@builderforce/creation-canvas-contract';
 import { sandboxChecks, type StageSandboxState } from './stageSandboxChecks';
 
@@ -759,6 +763,54 @@ async function deploymentChecks(input: StageInput): Promise<StageCheck[]> {
   return found;
 }
 
+/** 8 · SPACE — a designed room: does the floor hold, does everything stand inside it,
+ *  is there anywhere to be. Reads the design through the contract's own reader, so
+ *  a piece Stage counts is a piece the buyer's room will draw. */
+function spaceChecks(input: StageInput): StageCheck[] {
+  const found: StageCheck[] = [];
+  const source = input.objects.map(fields).find((data) => data.roomDesign || data.roomLayout);
+  if (!source) {
+    found.push(check(
+      'space.design', 'runs', 'block', 'No room design',
+      'The snapshot carries neither a room design nor a layout, so the buyer would install an empty card.',
+    ));
+    return found;
+  }
+  const design = roomDesignOf(source);
+  const summary = roomDesignSummary(design);
+  const geometry = roomDesignGeometry(design);
+  found.push(check('space.floor', 'runs', 'pass', `${design.floor.width} × ${design.floor.depth} m floor`));
+
+  const outside = design.furniture.filter((item) => {
+    const spec = ROOM_FURNITURE_SPECS[item.kind];
+    const halfX = (spec.footprint[0] * item.scale[0]) / 2;
+    const halfZ = (spec.footprint[2] * item.scale[2]) / 2;
+    const reach = Math.max(halfX, halfZ);
+    return Math.abs(item.position[0]) - reach > geometry.halfWidth + 0.01 || Math.abs(item.position[2]) - reach > geometry.halfDepth + 0.01;
+  });
+  found.push(outside.length
+    ? check(
+        'space.bounds', 'runs', 'block', `${outside.length} piece${outside.length === 1 ? '' : 's'} outside the walls`,
+        outside.slice(0, 4).map((item) => item.id).join(', '),
+      )
+    : check('space.bounds', 'runs', 'pass', `${summary.pieces} piece${summary.pieces === 1 ? '' : 's'}, all inside the walls`));
+
+  // Somewhere to be: either the design seats people, or it leaves the ring's radius
+  // free for them to stand in. A room whose furniture fills the ring and seats nobody
+  // puts the whole roster inside a table.
+  const ringBlocked = summary.seats === 0 && geometry.rests.some((rest) => Math.max(rest.halfX, rest.halfZ) > 2.2 && Math.hypot(rest.x, rest.z) < 1);
+  found.push(summary.seats > 0
+    ? check('space.seats', 'runs', 'pass', `Seats ${summary.seats}`)
+    : ringBlocked
+      ? check('space.seats', 'runs', 'block', 'Nowhere to stand', 'The room seats nobody and its centre is a surface, so the ring of people would stand inside it.')
+      : check('space.seats', 'runs', 'warn', 'No seats — people stand in a ring', 'Add chairs, stools or a sofa to seat the roster.'));
+
+  found.push(design.layout === 'custom'
+    ? check('space.layout', 'sells', 'pass', 'A room of its own')
+    : check('space.layout', 'sells', 'warn', `Unchanged ${design.layout} preset`, 'Every session already has this preset; a listing is worth more once it differs from it.'));
+  return found;
+}
+
 /**
  * The runner registry.
  *
@@ -774,6 +826,7 @@ const RUNNERS: Readonly<Record<ListingHarness, (input: StageInput) => StageCheck
   instrument: instrumentChecks,
   system: systemChecks,
   deployment: deploymentChecks,
+  space: spaceChecks,
 };
 
 /**

@@ -2,9 +2,12 @@
  * No `'use client'` — a hook called only from `CreationCanvas.tsx`, inside its own
  * client boundary.
  */
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';
+import { MAX_ADDRESSED_AGENTS, mentionTokens } from '@/lib/canvas/agentMentions';
+import { uniqueBoardAgents, type BoardAgent } from '@/lib/canvas/boardAgents';
 import type { RoomOccupant } from '@/lib/canvas/roomSeating';
 import type { CanvasSessionActionHandler } from './CanvasSessionActions';
 import { useRoomStandup, type RoomStandupParticipant } from './useRoomStandup';
@@ -26,23 +29,45 @@ import { useRoomStandup, type RoomStandupParticipant } from './useRoomStandup';
  * There is no picker any more: walking every project was a mode the bar could not
  * afford, and a standup against the scoped project is what the button is for.
  *
- * ── WHY IT CAN BE SWITCHED OFF ───────────────────────────────────────────────────
- * A standup is a server record, and the hook behind it polls for a live one every
- * 30s once a project resolves. A canvas that lives only in this browser has no
- * record to poll for, so `enabled: false` resolves no project: the button is drawn
- * disabled and nothing is asked of the network.
+ * ── WHO ANSWERS ──────────────────────────────────────────────────────────────────
+ * The agents at the table, each in its own name. Starting a standup sends one turn
+ * into this canvas's conversation that @-addresses every agent on the board — the
+ * same path a person typing "@CMO @CFO …" takes (`mentionedBoardAgents`), with the
+ * same cap — so each gives its update as itself, Brain closes with the summary, and
+ * in the room each update is drawn over the head of the agent who gave it.
  *
- * Returns a handler in the registry's own shape, so the host adds ONE line to its
+ * ── WHEN IT IS OFFERED ───────────────────────────────────────────────────────────
+ * The ceremony record (attendance, the cadence rollup) belongs to a PROJECT, so what
+ * it needs is a workspace to file it in — not a board saved to the server. A signed-in
+ * person on a board that lives on this device still stands up against their scoped
+ * project. It used to be switched off for every device-only board, which drew the
+ * button disabled in a room full of agents with nothing saying why. Now it is disabled
+ * only when there is neither a project to file against nor an agent to ask, or while
+ * an act is in flight. With no workspace no project resolves, so the 30s liveness poll
+ * behind the record never runs.
+ *
+ * Returns a handler in the registry's own shape, so the host adds ONE entry to its
  * map and learns nothing about ceremonies.
  */
-export function useCanvasStandupAction(
-  members: readonly RoomOccupant[],
-  boardProjectId: number | null,
-  enabled: boolean,
-  onError: (message: string) => void,
-): CanvasSessionActionHandler {
+export interface CanvasStandupActionInput {
+  /** The session roster — the people the ceremony record takes attendance of. */
+  members: readonly RoomOccupant[];
+  /** The agent cards on the board — each gives its update in its own name. */
+  agents: readonly BoardAgent[];
+  boardProjectId: number | null;
+  /** Whether there is a workspace to file a ceremony record in. */
+  ceremonyEnabled: boolean;
+  onError: (message: string) => void;
+  /** Send the round to the agents as a turn in this canvas's conversation. */
+  onAgentRound: (prompt: string) => void;
+}
+
+export function useCanvasStandupAction({
+  members, agents, boardProjectId, ceremonyEnabled, onError, onAgentRound,
+}: CanvasStandupActionInput): CanvasSessionActionHandler {
+  const t = useTranslations('creationCanvas');
   const scope = useOptionalProjectScope();
-  const projectId = enabled
+  const projectId = ceremonyEnabled
     ? resolveStandupProject({ scopeProjectId: scope?.currentProjectId ?? null, boardProjectId }).projectId
     : null;
 
@@ -55,6 +80,7 @@ export function useCanvasStandupAction(
 
   const standup = useRoomStandup(projectId, participants);
   const live = !!standup.session;
+  const startCeremony = standup.start;
 
   // A failed start or finish is a notice, the way every other failed session act is —
   // not a second error strip the bar would have to find room for.
@@ -64,11 +90,17 @@ export function useCanvasStandupAction(
     standup.dismissError();
   }, [onError, standup]);
 
+  const roundAgents = useMemo(() => uniqueBoardAgents(agents).slice(0, MAX_ADDRESSED_AGENTS), [agents]);
+  const begin = useCallback(() => {
+    if (projectId != null) startCeremony();
+    if (roundAgents.length) onAgentRound(t('standupRoundPrompt', { mentions: mentionTokens(roundAgents) }));
+  }, [onAgentRound, projectId, roundAgents, startCeremony, t]);
+
   return useMemo<CanvasSessionActionHandler>(() => ({
-    run: live ? standup.finish : standup.start,
+    run: live ? standup.finish : begin,
     active: live,
-    // No project to file it against, or an act already in flight. Disabled rather than
-    // withdrawn: the button that WOULD start it is the explanation.
-    disabled: standup.busy || projectId == null,
-  }), [live, projectId, standup.busy, standup.finish, standup.start]);
+    // Nothing to file it against and nobody to ask, or an act already in flight.
+    // Disabled rather than withdrawn: the button that WOULD start it is the explanation.
+    disabled: standup.busy || (projectId == null && roundAgents.length === 0),
+  }), [begin, live, projectId, roundAgents.length, standup.busy, standup.finish]);
 }

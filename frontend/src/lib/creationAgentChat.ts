@@ -1,18 +1,15 @@
 import { brain, type BrainMessage, type ChatAgentInvite } from './builderforceApi';
+import { mentionsAny } from './canvas/agentMentions';
 
 export interface CanvasAgentParticipant { ref: string; name: string; kind?: string; role?: string }
 
-function mentionKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-/** @mentions narrow a turn; "ask all" and unaddressed group turns reach everyone. */
+/**
+ * @mentions narrow a turn; "ask all" and unaddressed group turns reach everyone. The
+ * matching is the canvas's own (`mentionsAny`), so the group chat and the board agree
+ * on who a prompt names.
+ */
 export function addressedCanvasAgents(prompt: string, agents: readonly CanvasAgentParticipant[]): CanvasAgentParticipant[] {
-  const lower = prompt.toLowerCase();
-  const mentioned = agents.filter((agent) => {
-    const candidates = [agent.name, agent.ref].map(mentionKey).filter(Boolean);
-    return candidates.some((candidate) => lower.includes(`@${candidate.replaceAll(' ', '')}`) || lower.includes(`@${candidate}`));
-  });
+  const mentioned = agents.filter((agent) => mentionsAny(prompt, [agent.name, agent.ref]));
   return mentioned.length ? mentioned : [...agents];
 }
 

@@ -1,0 +1,53 @@
+/*
+ * The walker's touch pad. Fixed to the viewport's lower corners, drawn only for
+ * a coarse pointer, and letting every pointer through except on its own
+ * buttons — so the scene under it is still the scene.
+ *
+ * Every colour is a token with a literal fallback, so both themes are covered.
+ */
+
+.pad {
+  display: none;
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 0 14px 14px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+@media (pointer: coarse) {
+  .pad {
+    display: grid;
+    grid-template-areas:
+      '. up . . . jump'
+      'left down right . . jump';
+    grid-template-columns: 52px 52px 52px 1fr 52px 64px;
+    grid-template-rows: 52px 52px;
+    gap: 6px;
+    align-items: end;
+  }
+}
+
+.button {
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
+  color: var(--text-primary, #f5f5f5);
+  font-size: var(--font-size-card-title);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.button:active { background: var(--accent, #6d5dfc); color: var(--text-on-accent, #fff); }
+
+.button[data-slot='up'] { grid-area: up; }
+.button[data-slot='left'] { grid-area: left; }
+.button[data-slot='right'] { grid-area: right; }
+.button[data-slot='down'] { grid-area: down; }
+.button[data-slot='jump'] { grid-area: jump; width: 64px; height: 110px; border-radius: var(--radius-full); }

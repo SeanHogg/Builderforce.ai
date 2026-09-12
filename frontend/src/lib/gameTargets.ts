@@ -174,8 +174,29 @@ export function robloxPlaceFrom(data: CreationNodeData): string {
  * that mounts this says so rather than implying the scripts are live.
  */
 export function gameWorldFrom(data: CreationNodeData): RobloxWorldReading | null {
-  const place = robloxPlaceFrom(data);
+  return robloxLevelFromUrl(data.outputUrl);
+}
+
+/** The level behind a place's artifact URL, or null. The one reader both the play
+ *  surface and the room's level use, so they cannot disagree about what a place holds. */
+export function robloxLevelFromUrl(url: unknown): RobloxWorldReading | null {
+  const place = robloxPlaceFromUrl(url);
   return place ? robloxWorldReading(place) : null;
+}
+
+/**
+ * Whether an artifact URL is a Roblox place — by its media type ALONE, without
+ * decoding the payload.
+ *
+ * The room asks this of every game on the board each time the board changes, which
+ * is every drag. Decoding and parsing a place there would be the cost of a level
+ * load per pixel moved; the media type answers "is this a place" for free, and the
+ * one that is opened is read once, by the stand that shows it.
+ */
+export function isRobloxPlaceUrl(url: unknown): boolean {
+  if (typeof url !== 'string') return false;
+  const match = /^data:([^,;]*)/.exec(url);
+  return !!match && (match[1] ?? '').includes('xml');
 }
 
 /**

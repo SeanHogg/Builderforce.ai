@@ -32,7 +32,8 @@ import {
 } from '@/lib/canvasNodeAffordances';
 import { canvasNodeDensity, canvasNodeDensityActionKey, nextCanvasNodeDensity, type CanvasNodeDensity } from '@/lib/canvasNodeDensity';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
-import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
+import { BrainSurfaceBody } from './BrainDock';
+import { BrainSurfaceActions } from './BrainSurfaceActions';
 import { useBrainSurface } from './brainSurfaceContext';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { networkGlyph } from '@/lib/networkGlyph';

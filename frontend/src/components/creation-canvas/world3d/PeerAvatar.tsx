@@ -4,6 +4,7 @@
  */
 import { Html } from '@react-three/drei';
 import { AvatarFigure } from './PlayerAvatar';
+import { PeerSpeechBubble } from './PeerSpeechBubble';
 
 /**
  * One other person, drawn where the presence relay says they are.
@@ -31,6 +32,8 @@ import { AvatarFigure } from './PlayerAvatar';
 const FOOT_OFFSET = 0.95;
 /** Where the plate floats, measured from the figure's origin. */
 const PLATE_HEIGHT = 1.15;
+/** Where a speech bubble's bottom edge floats — just clear of the plate. */
+const SPEECH_HEIGHT = 1.45;
 
 export interface PeerAvatarProps {
   position: [number, number, number];
@@ -43,9 +46,12 @@ export interface PeerAvatarProps {
   /** Dims the plate for somebody seated by assumption rather than by a live
    *  frame, so "in the session" and "here right now" are distinguishable. */
   live: boolean;
+  /** What they are saying: an agent's reply to the latest turn, or the translated
+   *  "thinking" line while it works. Absent for everyone who has not spoken. */
+  speech?: { text: string; pending: boolean } | null;
 }
 
-export function PeerAvatar({ position, yaw, color, label, live }: PeerAvatarProps) {
+export function PeerAvatar({ position, yaw, color, label, live, speech }: PeerAvatarProps) {
   return (
     <group position={[position[0], position[1] + FOOT_OFFSET, position[2]]} rotation={[0, yaw, 0]}>
       <AvatarFigure color={color} />
@@ -77,6 +83,7 @@ export function PeerAvatar({ position, yaw, color, label, live }: PeerAvatarProp
           {label}
         </span>
       </Html>
+      {speech && <PeerSpeechBubble text={speech.text} pending={speech.pending} height={SPEECH_HEIGHT} />}
     </group>
   );
 }

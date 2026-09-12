@@ -2,17 +2,20 @@ import { OrbitControls } from '@react-three/drei';
 import { CuboidCollider, Physics, RigidBody } from '@react-three/rapier';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { CanvasWorldProp, CanvasWorldScene } from '@builderforce/creation-canvas-contract';
+import type { WorldPeer } from '../canvasSpacePresence';
+import { PeerAvatar } from './PeerAvatar';
 import PropMesh from './PropMesh';
 import PlayerController from './PlayerController';
 
 /**
  * Scene3D — the R3F `<Canvas>` contents. Mounts lights, sky, ground, every
- * prop, the spawn gizmo (edit mode), and the walker (walk mode). Stays
- * presentational — authoring mutations (place / select / move) are wired by
- * the host `CanvasWorldView` through the props it passes here.
+ * prop, the spawn gizmo (edit mode), the walker (walk mode), and — while walking
+ * — everyone else walking the same space. Stays presentational — authoring
+ * mutations (place / select / move) are wired by the host through its props.
  *
- * Ported from hired.video's `world-3d/Scene3D.tsx`. Trimmed: no multiplayer
- * peers, no challenge/trigger event bus.
+ * Ported from hired.video's `world-3d/Scene3D.tsx`. Trimmed: no challenge/trigger
+ * event bus. Peers came back as `peers`, read from the canvas's own presence
+ * channel by the host (`useSpacePresence`), never from a second socket.
  */
 
 interface Scene3DProps {
@@ -26,9 +29,13 @@ interface Scene3DProps {
   /** Scoring, when this space is being PLAYED rather than authored. Passed
    *  straight to the sensor props — see `useWorldPlay`. */
   onPlayerEnter?: (prop: CanvasWorldProp) => void;
+  /** Everyone else walking this space. Drawn in walk mode only. */
+  peers?: readonly WorldPeer[];
+  /** Where the walker is, every frame it moved. */
+  onMove?: (position: [number, number, number], yaw: number) => void;
 }
 
-export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, respawnNonce = 0, cameraView = 'first', walkerColor, onPlayerEnter }: Scene3DProps) {
+export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, respawnNonce = 0, cameraView = 'first', walkerColor, onPlayerEnter, peers = [], onMove }: Scene3DProps) {
   const sunPosition: [number, number, number] = [
     -scene.lighting.sun.direction[0] * 30,
     -scene.lighting.sun.direction[1] * 30,
@@ -87,9 +94,19 @@ export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, res
         )}
 
         {mode === 'walk' && (
-          <PlayerController spawn={scene.spawn} respawnNonce={respawnNonce} cameraView={cameraView} walkerColor={walkerColor} />
+          <PlayerController
+            spawn={scene.spawn}
+            respawnNonce={respawnNonce}
+            cameraView={cameraView}
+            walkerColor={walkerColor}
+            {...(onMove ? { onMove } : {})}
+          />
         )}
       </Physics>
+
+      {mode === 'walk' && peers.map((peer) => (
+        <PeerAvatar key={peer.userId} position={peer.position} yaw={peer.yaw} color={peer.color} label={peer.label} live />
+      ))}
 
       {mode === 'edit' && (
         <OrbitControls enableDamping dampingFactor={0.1} target={[0, 1, 0]} maxPolarAngle={Math.PI / 2 - 0.05} />

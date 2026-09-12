@@ -48,6 +48,13 @@ export interface CanvasPresenceSpatial {
   position: [number, number, number];
   yaw: number;
   seat?: number;
+  /**
+   * WHICH space the body is in, when it is not the room itself — the id of the
+   * level (a Roblox place) being played. Absent means the room. Two people in the
+   * same session can be in different spaces at once, and a body drawn in the wrong
+   * one is a stranger standing inside a wall; each space draws only its own.
+   */
+  space?: string;
 }
 
 /** What one peer is doing right now. Every field is optional and short-lived. */
@@ -105,7 +112,10 @@ function spatial(value: unknown): CanvasPresenceSpatial | null {
   // A seat is a ring index, so it is a small non-negative integer or nothing.
   const seat = finite(raw.seat, 1_000);
   const seated = seat !== null && Number.isInteger(seat) && seat >= 0;
-  return { position: [x, y, z], yaw, ...(seated ? { seat } : {}) };
+  // A space is an object id: short, and only the characters an id is made of, so
+  // the relay cannot be used to carry arbitrary text between peers.
+  const space = typeof raw.space === 'string' && /^[A-Za-z0-9_:.-]{1,80}$/.test(raw.space) ? raw.space : null;
+  return { position: [x, y, z], yaw, ...(seated ? { seat } : {}), ...(space ? { space } : {}) };
 }
 
 /**

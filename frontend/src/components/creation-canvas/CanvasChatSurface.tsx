@@ -4,7 +4,8 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import { BrainMark } from '@/components/brain/BrainMark';
-import { BrainSurfaceActions, BrainSurfaceBody, type BrainSurfaceBodyProps } from './BrainDock';
+import { BrainSurfaceBody, type BrainSurfaceBodyProps } from './BrainDock';
+import { BrainSurfaceActions } from './BrainSurfaceActions';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import type { CanvasRosterMember } from './types';
 

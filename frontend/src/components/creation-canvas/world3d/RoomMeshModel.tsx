@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 import type { GeometryTriangle, MeshFormat } from '@/lib/creativeGeometry';
 import { loadMeshTriangles } from '@/lib/meshPreviewCache';
-import { fitModelToRoom } from '@/lib/canvas/roomCreations';
+import { ROOM_MODEL_SIZE, fitModelToRoom } from '@/lib/canvas/roomCreations';
 
 export interface RoomMeshModelProps {
   url: string;
@@ -14,6 +14,9 @@ export interface RoomMeshModelProps {
   color: string;
   /** Shown while the file loads, and instead of it when it holds nothing drawable. */
   fallback: ReactNode;
+  /** Metres its largest side is fitted to. A creation on a plinth stands at the
+   *  default; an uploaded piece of furniture is fitted to its own footprint. */
+  size?: number;
 }
 
 /**
@@ -25,7 +28,7 @@ export interface RoomMeshModelProps {
  * (`meshPreviewCache`), so a model already seen on the board costs no second fetch.
  * Its base rests at y = 0 — the stand places it.
  */
-export function RoomMeshModel({ url, format, color, fallback }: RoomMeshModelProps) {
+export function RoomMeshModel({ url, format, color, fallback, size = ROOM_MODEL_SIZE }: RoomMeshModelProps) {
   // Keyed by the url it was read for, so a changed file never shows the old mesh and
   // nothing has to be reset from inside the effect.
   const [loaded, setLoaded] = useState<{ url: string; triangles: readonly GeometryTriangle[] } | null>(null);
@@ -39,13 +42,13 @@ export function RoomMeshModel({ url, format, color, fallback }: RoomMeshModelPro
 
   const geometry = useMemo(() => {
     if (!loaded || loaded.url !== url) return null;
-    const positions = fitModelToRoom(loaded.triangles);
+    const positions = fitModelToRoom(loaded.triangles, size);
     if (!positions.length) return null;
     const built = new BufferGeometry();
     built.setAttribute('position', new Float32BufferAttribute(positions, 3));
     built.computeVertexNormals();
     return built;
-  }, [loaded, url]);
+  }, [loaded, url, size]);
   // A replaced or unmounted mesh gives its GPU buffers back.
   useEffect(() => () => { geometry?.dispose(); }, [geometry]);
 

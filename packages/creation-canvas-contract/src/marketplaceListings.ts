@@ -78,9 +78,16 @@ export type ListingLaunchMode = (typeof LISTING_LAUNCH_MODES)[number];
  *
  * `deployment` is therefore selected by DELIVERY rather than by output shape, and it
  * is the one runner that does I/O. See `resolveListingHarness`.
+ *
+ * ── THE EIGHTH SHAPE ─────────────────────────────────────────────────────────────
+ *  - `space`      a designed PLACE — a room's floor, walls and furniture. Not a mesh
+ *                 (nothing is printed, so `geometry`'s units and manifold questions
+ *                 have no answer), not a document (`runtime` would find nothing to
+ *                 boot). What can be asked of it: does the floor hold, does every
+ *                 piece stand inside the walls, is there anywhere to sit or stand.
  */
 export const LISTING_HARNESSES = [
-  'media', 'runtime', 'paged', 'geometry', 'instrument', 'system', 'deployment',
+  'media', 'runtime', 'paged', 'geometry', 'instrument', 'system', 'deployment', 'space',
 ] as const;
 export type ListingHarness = (typeof LISTING_HARNESSES)[number];
 
@@ -405,6 +412,21 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     pricing: 'either',
     trial: 'preview',
     icon: '📖',
+  },
+  {
+    // A designed room — boardroom, office kitchen, an open floor of cubicles — that
+    // another session installs as the place it meets in. The buyer gets the design
+    // itself (`copy`): a `room` object lands on their board and their room surface
+    // draws it. Previewable before paying, since a room is judged by walking it.
+    id: 'room',
+    launch: 'install',
+    from: ['room'],
+    family: 'asset',
+    harness: 'space',
+    deliveries: ['copy'],
+    pricing: 'either',
+    trial: 'preview',
+    icon: '🏢',
   },
 ] as const;
 
@@ -759,6 +781,8 @@ const HARNESS_BY_OBJECT_KIND: Readonly<Record<string, ListingHarness>> = {
   game: 'runtime',
   website: 'runtime',
   prototype: 'runtime',
+  // A place.
+  room: 'space',
 };
 
 /**

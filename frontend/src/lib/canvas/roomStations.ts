@@ -1,9 +1,9 @@
-import { resourceIdOfType } from '@builderforce/creation-canvas-contract';
+import { resourceIdOfType, type RoomGeometry } from '@builderforce/creation-canvas-contract';
 import { CANVAS_WIDGET_RESOURCE_TYPE } from '@builderforce/canvas-widget-protocol';
 import { auditsKind } from '@/lib/academic/accessibility';
 import { boardMetricDefinitions } from './boardMetrics';
 import { placeCreationInRoom } from './roomCreations';
-import type { RoomSessionPlacement } from './roomSession';
+import { DEFAULT_ROOM_GEOMETRY, type RoomSessionPlacement } from './roomSession';
 import type { RoomSpot } from './roomSpots';
 
 /**
@@ -127,8 +127,8 @@ export function defaultRoomStationSpot(index: number): RoomSpot {
  * to face the table, because a station is something you walk UP to and read: its face
  * pointing at the wall would be a stand showing everyone its back.
  */
-export function placeStationInRoom(spot: RoomSpot): RoomSessionPlacement {
-  const placed = placeCreationInRoom(spot);
+export function placeStationInRoom(spot: RoomSpot, geometry: RoomGeometry = DEFAULT_ROOM_GEOMETRY): RoomSessionPlacement {
+  const placed = placeCreationInRoom(spot, geometry);
   if (placed.anchor === 'wall') return placed;
   const [x, , z] = placed.position;
   const yaw = Math.abs(x) < 1e-6 && Math.abs(z) < 1e-6 ? 0 : Math.atan2(-x, -z);

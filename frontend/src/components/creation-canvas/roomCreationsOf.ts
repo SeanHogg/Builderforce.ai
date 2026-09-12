@@ -1,4 +1,5 @@
 import { creativeMeshGeometry, creativePreviewImageUrl } from '@/lib/creationDeliverables';
+import { isRobloxPlaceUrl } from '@/lib/gameTargets';
 import { isRoomCreationKind, type RoomCreation } from '@/lib/canvas/roomCreations';
 import { creationObjectSurface } from './creationObjectSurfaces';
 import type { CreationNodeData } from './types';
@@ -22,5 +23,6 @@ export function roomCreationsOf(nodes: readonly { id: string; data: CreationNode
       geometry: creativeMeshGeometry(node.data) ?? undefined,
       accent: typeof node.data.accent === 'string' ? node.data.accent : undefined,
       surface: creationObjectSurface(node.data.kind),
+      placeUrl: node.data.kind === 'game' && isRobloxPlaceUrl(node.data.outputUrl) ? String(node.data.outputUrl) : undefined,
     }));
 }

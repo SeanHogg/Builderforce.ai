@@ -141,10 +141,17 @@ export function mergeLivePresence<T extends PresenceMember>(
 export function spatialPeers(
   live: LivePresenceMap,
   currentUserId: string | null,
+  /**
+   * Which space to read — a played level's id — or absent for the room itself.
+   * A body only ever stands in the space it says it is in: someone walking a
+   * Roblox level is not in the room, however near its origin they are.
+   */
+  space?: string,
 ): Array<{ userId: string; spatial: NonNullable<CanvasPresenceState['spatial']> }> {
   const peers: Array<{ userId: string; spatial: NonNullable<CanvasPresenceState['spatial']> }> = [];
   for (const [userId, entry] of Object.entries(live)) {
     if (userId === currentUserId || !entry.spatial) continue;
+    if ((entry.spatial.space ?? undefined) !== space) continue;
     peers.push({ userId, spatial: entry.spatial });
   }
   return peers.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));

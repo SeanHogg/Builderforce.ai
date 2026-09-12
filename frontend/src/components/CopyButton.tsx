@@ -31,10 +31,15 @@ export interface CopyButtonProps {
   compact?: boolean;
   /** How long the confirmation shows, ms. */
   feedbackMs?: number;
+  /**
+   * Icon only, with no chrome of its own — for a toolbar whose buttons are styled by
+   * their container (the Brain header). The accessible name carries the feedback.
+   */
+  bare?: boolean;
 }
 
 export function CopyButton({
-  getText, label, ariaLabel, compact = false, feedbackMs = 2000,
+  getText, label, ariaLabel, compact = false, feedbackMs = 2000, bare = false,
 }: CopyButtonProps) {
   const t = useTranslations('common');
   // The write, the feedback state and the unmount-safe reset all live in the shared hook.
@@ -42,6 +47,17 @@ export function CopyButton({
   const onCopy = useCallback(() => { void copy(getText); }, [copy, getText]);
 
   const text = state === 'copied' ? t('copied') : state === 'error' ? t('copyFailed') : (label ?? t('copy'));
+  const icon = state === 'copied' ? 'check' : state === 'error' ? 'warning' : 'document';
+
+  if (bare) {
+    const name = state === 'idle' ? (ariaLabel ?? text) : text;
+    return (
+      <button type="button" onClick={onCopy} aria-label={name} title={name} data-copy-state={state}>
+        <span aria-hidden="true"><Icon name={icon} size={14} /></span>
+      </button>
+    );
+  }
+
   const tone = state === 'copied' ? 'var(--success)' : state === 'error' ? 'var(--error-text)' : 'var(--text-secondary)';
 
   return (
@@ -63,7 +79,7 @@ export function CopyButton({
         whiteSpace: 'nowrap',
       }}
     >
-      <span aria-hidden="true"><Icon name={state === 'copied' ? 'check' : state === 'error' ? 'warning' : 'document'} size={14} /></span>
+      <span aria-hidden="true"><Icon name={icon} size={14} /></span>
       <span>{text}</span>
     </button>
   );

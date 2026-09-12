@@ -1,7 +1,8 @@
+import type { RoomGeometry } from '@builderforce/creation-canvas-contract';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { MeshFormat } from '@/lib/creativeGeometry';
 import type { CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
-import { placeSessionInRoom, type RoomSessionPlacement } from './roomSession';
+import { DEFAULT_ROOM_GEOMETRY, placeSessionInRoom, type RoomSessionPlacement } from './roomSession';
 import type { RoomSpot } from './roomSpots';
 
 /**
@@ -52,6 +53,15 @@ export interface RoomCreation {
   accent?: string | undefined;
   /** The surface it opens into at full size, or null when the room IS its view. */
   surface: CanvasSurfaceId | null;
+  /**
+   * The artifact URL of a Roblox place — present only for a game whose runtime is the
+   * walkable world. It is what the room plays IN the room: Play on such a game drops
+   * the walker into its level without leaving the surface (`RoomLevelStage`). A web
+   * game has none and opens the play surface. Kept as the URL, not the parsed level,
+   * because this list is rebuilt on every board change and a level is read once, by
+   * the stand and the stage that actually show it.
+   */
+  placeUrl?: string | undefined;
 }
 
 /**
@@ -139,6 +149,6 @@ export function fitModelToRoom(
  * the table at the same edge. What differs is which way up: the session is a SHEET
  * and lies flat, a creation is an OBJECT and always stands upright.
  */
-export function placeCreationInRoom(spot: RoomSpot): RoomSessionPlacement {
-  return { ...placeSessionInRoom(spot), rotation: [0, 0, 0] };
+export function placeCreationInRoom(spot: RoomSpot, geometry: RoomGeometry = DEFAULT_ROOM_GEOMETRY): RoomSessionPlacement {
+  return { ...placeSessionInRoom(spot, geometry), rotation: [0, 0, 0] };
 }
