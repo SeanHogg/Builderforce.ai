@@ -46,7 +46,7 @@ import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
 import { buildTaskProgressBreakdown, normalizeTaskPrState } from '../task/taskProgressBreakdown';
 import { addManagerDirective } from '../manager/managerDirectives';
-import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
+import { createManagerCoachingTask, getEffectiveManagerPolicy, upsertManagerConfig } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';

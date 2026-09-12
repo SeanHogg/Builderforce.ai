@@ -191,6 +191,9 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      '@builderforce/tui':
+        specifier: link:../packages/tui
+        version: link:../packages/tui
       '@grammyjs/types':
         specifier: ^3.24.0
         version: 3.24.0
