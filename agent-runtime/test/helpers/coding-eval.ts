@@ -215,7 +215,9 @@ export function withShell(provider: CapabilityProvider, cwd: string): Capability
           const { stdout, stderr } = await execFileAsync(command, {
             cwd,
             shell: true,
-            timeout: 120_000,
+            // Matches the cloud Container's COMMAND_TIMEOUT_MS: a real `tsc --noEmit` /
+            // `npm test` grading run needs minutes, not the old 120s ceiling.
+            timeout: 10 * 60 * 1000,
             maxBuffer: 8 * 1024 * 1024,
           } as Parameters<typeof execFileAsync>[1]);
           return { ok: true, stdout: `${stdout}${stderr}`, exitCode: 0 };

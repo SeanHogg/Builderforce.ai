@@ -45,7 +45,11 @@ const execFileAsync = promisify(execFile);
 // (never a hard failure), so this only caps how much a single read loads into memory.
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 // run_command: bound a command's wall-clock + the output handed back to the model.
-const RUN_TIMEOUT_MS = 120_000;
+// Matches the cloud Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a
+// build/type-check/test step may legitimately take minutes (e.g. `tsc --noEmit` or
+// `npm test` on a large monorepo), and the old 120s ceiling was killing those runs
+// mid-compile well before they could finish.
+const RUN_TIMEOUT_MS = 10 * 60 * 1000;
 const RUN_MAX_BUFFER = 4 * 1024 * 1024;
 const RUN_MAX_OUTPUT = 60_000;
 // Walks (list_files / search_code): keep bounded so a huge repo can't hang the host.
