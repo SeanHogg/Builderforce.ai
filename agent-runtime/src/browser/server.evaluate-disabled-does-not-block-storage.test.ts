@@ -1,6 +1,6 @@
-import { createServer, type AddressInfo } from "node:net";
 import { fetch as realFetch } from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getFreePort } from "./test-port.js";
 
 let testPort = 0;
 let prevGatewayPort: string | undefined;
@@ -65,18 +65,30 @@ vi.mock("./server-context.js", async (importOriginal) => {
   };
 });
 
-const { startBrowserControlServerFromConfig, stopBrowserControlServer } =
+const { startBrowserControlServerFromConfig: realStartBrowserControlServerFromConfig, stopBrowserControlServer } =
   await import("./server.js");
 
-async function getFreePort(): Promise<number> {
-  const probe = createServer();
-  await new Promise<void>((resolve, reject) => {
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => resolve());
-  });
-  const addr = probe.address() as AddressInfo;
-  await new Promise<void>((resolve) => probe.close(() => resolve()));
-  return addr.port;
+/**
+ * `beforeEach` derives the control port from a port `getFreePort()` merely observed to
+ * be free a moment earlier — the real bind happens later (after config/auth setup), so
+ * a concurrent worker process's own probe-then-bind can claim that exact port first.
+ * `server.ts` treats that as an ordinary EADDRINUSE and returns `null` rather than
+ * throwing, so an unretried caller would fetch a `base` with nothing listening (or
+ * another test's live server) instead of failing loudly. Retry on a freshly re-probed
+ * port instead of trusting the first guess — see the identical rationale in
+ * `server.control-server.test-harness.ts`.
+ */
+async function startBrowserControlServerFromConfig(): Promise<void> {
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const result = await realStartBrowserControlServerFromConfig();
+    if (result) return;
+    if (attempt === maxAttempts) {
+      throw new Error(`startBrowserControlServerFromConfig: failed to bind port ${testPort} after ${maxAttempts} attempts`);
+    }
+    testPort = await getFreePort();
+    process.env.BUILDERFORCE_AGENTS_GATEWAY_PORT = String(testPort - 2);
+  }
 }
 
 describe("browser control evaluate gating", () => {

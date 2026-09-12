@@ -225,8 +225,38 @@ vi.mock("./screenshot.js", () => ({
 }));
 
 const server = await import("./server.js");
-export const startBrowserControlServerFromConfig = server.startBrowserControlServerFromConfig;
 export const stopBrowserControlServer = server.stopBrowserControlServer;
+
+/**
+ * `beforeEach` derives the control port from a port `getFreePort()` merely observed
+ * to be free a moment earlier (see below) — the real bind happens here, after config
+ * loading and auth setup, so there is a real window in which a concurrent worker
+ * process's own probe-then-bind can claim the exact same port first. `server.ts`
+ * swallows that as an ordinary EADDRINUSE and returns `null` rather than throwing, so
+ * an unretried caller would go on to fetch a `baseUrl` that either has nothing
+ * listening or — worse — is now another test's live server, producing wrong statuses
+ * instead of a clear failure. Retry against a freshly re-probed port instead of
+ * trusting the first guess.
+ */
+export async function startBrowserControlServerFromConfig(): ReturnType<
+  typeof server.startBrowserControlServerFromConfig
+> {
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const result = await server.startBrowserControlServerFromConfig();
+    if (result) return result;
+    if (attempt === maxAttempts) {
+      throw new Error(
+        `startBrowserControlServerFromConfig: failed to bind port ${state.testPort} after ${maxAttempts} attempts`,
+      );
+    }
+    state.testPort = await getFreePort();
+    state.cdpBaseUrl = `http://127.0.0.1:${state.testPort + 1}`;
+    process.env.BUILDERFORCE_AGENTS_GATEWAY_PORT = String(state.testPort - 2);
+  }
+  // Unreachable — the loop above always returns or throws.
+  throw new Error("unreachable");
+}
 
 export function makeResponse(
   body: unknown,

@@ -1,3 +1,4 @@
+import { fetch as realFetch } from "undici";
 import { afterEach, describe, expect, it } from "vitest";
 import { startBrowserBridgeServer, stopBrowserBridgeServer } from "./bridge-server.js";
 import type { ResolvedBrowserConfig } from "./config.js";
@@ -51,10 +52,10 @@ describe("startBrowserBridgeServer auth", () => {
     });
     servers.push({ stop: () => stopBrowserBridgeServer(bridge.server) });
 
-    const unauth = await fetch(`${bridge.baseUrl}/`);
+    const unauth = await realFetch(`${bridge.baseUrl}/`);
     expect(unauth.status).toBe(401);
 
-    const authed = await fetch(`${bridge.baseUrl}/`, {
+    const authed = await realFetch(`${bridge.baseUrl}/`, {
       headers: { Authorization: "Bearer secret-token" },
     });
     expect(authed.status).toBe(200);
@@ -67,10 +68,10 @@ describe("startBrowserBridgeServer auth", () => {
     });
     servers.push({ stop: () => stopBrowserBridgeServer(bridge.server) });
 
-    const unauth = await fetch(`${bridge.baseUrl}/`);
+    const unauth = await realFetch(`${bridge.baseUrl}/`);
     expect(unauth.status).toBe(401);
 
-    const authed = await fetch(`${bridge.baseUrl}/`, {
+    const authed = await realFetch(`${bridge.baseUrl}/`, {
       headers: { "x-builderforce-password": "secret-password" },
     });
     expect(authed.status).toBe(200);
