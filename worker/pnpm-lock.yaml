@@ -15,8 +15,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       hono:
-        specifier: ^4.4.0
-        version: 4.12.8
+        specifier: ^4.13.5
+        version: 4.13.5
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20240718.0
@@ -717,8 +717,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  hono@4.12.8:
-    resolution: {integrity: sha512-VJCEvtrezO1IAR+kqEYnxUOoStaQPGrCmX3j4wDTNOcD1uRPFpGlwQUIW8niPuvHXaTUxeOUl5MMDGrl+tmO9A==}
+  hono@4.13.5:
+    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
     engines: {node: '>=16.9.0'}
 
   kleur@4.1.5:
@@ -1548,14 +1548,14 @@ snapshots:
 
   expect-type@1.4.0: {}
 
-  fdir@6.5.0(picomatch@4.0.4):
+  fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
-      picomatch: 4.0.4
+      picomatch: 4.0.5
 
   fsevents@2.3.3:
     optional: true
 
-  hono@4.12.8: {}
+  hono@4.13.5: {}
 
   kleur@4.1.5: {}
 
@@ -1739,8 +1739,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
 
   tinyrainbow@3.1.0: {}
 
