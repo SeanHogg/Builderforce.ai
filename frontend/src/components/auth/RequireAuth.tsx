@@ -4,11 +4,11 @@
  * `<RequireAuth>` — the auth guard as a BOUNDARY rather than as three lines
  * copied into every page.
  *
- * `useRequireAuth()` is the rule (redirect signed-out visitors, wait for the
+ * `useRequireSession()` is the rule (redirect signed-out visitors, wait for the
  * session to rehydrate); this is the rule applied in the one shape six surfaces
  * were writing by hand:
  *
- *     const allowed = useRequireAuth();
+ *     const allowed = mayRender(useRequireSession());
  *     if (!allowed) return null;
  *     return <TheActualPage />;
  *
@@ -31,7 +31,7 @@
  * into it.
  */
 import type { ReactNode } from 'react';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { mayRender, useRequireSession } from '@/lib/useRequireSession';
 
 export function RequireAuth({
   children,
@@ -47,6 +47,6 @@ export function RequireAuth({
   /** Rendered while the session is being read or a redirect is in flight. */
   fallback?: ReactNode;
 }) {
-  const allowed = useRequireAuth({ returnTo, requireTenant });
+  const allowed = mayRender(useRequireSession({ returnTo, requireTenant }));
   return <>{allowed ? children : fallback}</>;
 }

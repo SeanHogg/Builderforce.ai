@@ -105,7 +105,7 @@ export default async function PublishedAgentPage({
         actions={
           <>
             {/* The CTA is a LINK to the one buying surface, not a hire button
-                here. `/workforce/hire` owns auth (`useRequireAuth`) and, for a
+                here. `/workforce/hire` owns auth (`useRequireSession`) and, for a
                 priced agent, the checkout that `POST /hire` refuses without —
                 so a local button would have worked for free agents and 402'd
                 for exactly the ones worth selling. This page's job is to be

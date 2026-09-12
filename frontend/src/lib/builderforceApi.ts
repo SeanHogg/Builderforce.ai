@@ -6985,25 +6985,16 @@ export const rfpApi = {
 // omitted, project-scoped when set (0074).
 // ---------------------------------------------------------------------------
 
-export type IntegrationProvider =
-  | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice' | 'freshdesk'
-  | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup'
-  // BYO web-search vendor keys — widen `web_search` from the keyless encyclopedic
-  // floor to a full open-web index. Optional: search works without any of them.
-  // `ollama` is the BACKUP tried right after `tavily`.
-  | 'tavily' | 'ollama' | 'exa' | 'linkup'
-  // Google connectors (OAuth offline credentials): Gmail powers the email
-  // workflow node; Google Drive can back a project's file storage.
-  | 'gmail' | 'google_drive'
-  // Person-enrichment vendors. Each bills PER LOOKUP, which is why the key is
-  // yours and why every lookup goes through `enrichment_cache` — connect one and
-  // /revenue-intel can fill a contact's roles, education and inferred comp.
-  | 'clearbit' | 'people_data_labs' | 'apollo';
-
+/**
+ * `provider` is a connect-catalog id (`GET /api/integrations/catalog`), not a
+ * union restated here: the catalog is the one list of what a key can be stored
+ * for, and a hand-kept union beside it went stale the first time the server
+ * added a provider.
+ */
 export interface IntegrationCredential {
   id: string;
   projectId: number | null;
-  provider: IntegrationProvider;
+  provider: string;
   name: string;
   baseUrl: string | null;
   isEnabled: boolean;
@@ -7014,7 +7005,7 @@ export interface IntegrationCredential {
 }
 
 export interface CreateIntegrationBody {
-  provider: IntegrationProvider;
+  provider: string;
   name: string;
   baseUrl?: string | null;
   projectId?: number | null;

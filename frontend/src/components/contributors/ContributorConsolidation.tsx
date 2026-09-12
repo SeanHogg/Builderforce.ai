@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -49,7 +49,7 @@ export function ContributorConsolidation() {
   const [targetId, setTargetId] = useState<number | ''>('');
   const [preview, setPreview] = useState<MergePreview | null>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     setError(null);
     Promise.all([
       contributorsApi.list(),
@@ -64,8 +64,8 @@ export function ContributorConsolidation() {
         setUsers(u);
       })
       .catch((e: unknown) => setError(errorMessage(e)));
-  };
-  useEffect(() => { load(); }, []);
+  }, [errorMessage]);
+  useEffect(() => { load(); }, [load]);
 
   const byId = useMemo(() => new Map((contributors ?? []).map((c) => [c.id, c])), [contributors]);
 

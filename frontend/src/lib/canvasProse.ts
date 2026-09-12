@@ -1,5 +1,4 @@
 import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
-import { creationObjectContentFields } from '@/components/creation-canvas/creationObjectRegistry';
 
 /**
  * The words on an object, as a person would read them out.
@@ -75,9 +74,12 @@ export function canvasProseText(data: CreationNodeData): string {
  * content is prose (`markdown` or `content`) can be re-levelled, and a kind
  * whose content is rows, coordinates or credentials cannot. A new prose kind is
  * covered the day it is declared.
+ *
+ * The caller passes the kind's content fields (`creationObjectContentFields`)
+ * rather than this module reading the registry itself: the registry is a
+ * component-layer module, and lib sits below presentation (`check-layering`).
  */
-export function canRelevelCanvasObject(data: CreationNodeData): boolean {
-  const fields = creationObjectContentFields(data.kind);
-  if (!fields.includes('markdown') && !fields.includes('content')) return false;
+export function canRelevelCanvasObject(data: CreationNodeData, contentFields: readonly string[]): boolean {
+  if (!contentFields.includes('markdown') && !contentFields.includes('content')) return false;
   return canvasProseText(data).length >= MIN_PROSE;
 }

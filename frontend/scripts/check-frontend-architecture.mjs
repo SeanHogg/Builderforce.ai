@@ -30,6 +30,26 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   977 → 976 (`useClientFiles`, 2026-09-12, later the same day) — a CUT, recorded
+ *   because the tree had drifted to 980 against 977. `git grep` against 99f5576ca
+ *   names every move:
+ *
+ *     - Nine client pages became Server Components over a `*Client.tsx` island
+ *       (dashboard, insights, personas, skills, content-manager, create, disputes,
+ *       freelancer disputes and earnings) so each could export its own head: a
+ *       matched −1/+1 per page, not a raise.
+ *     - `/webcontainer/connect` and `/webcontainer/connect/[id]` were byte-identical
+ *       client pages; both are Server Components over ONE `WebContainerConnect`
+ *       leaf now (−2 +1).
+ *     - Three HOOK MODULES lost the directive, argued in each header on the
+ *       `useErrorMessage` terms: `lib/connectableCatalog.ts` (typed client + hooks),
+ *       `components/integrations/useBoardConnectionStatusLabel.ts` and
+ *       `lib/useRequireSession.ts` (which replaced `lib/useRequireAuth.ts`, itself a
+ *       directive-carrying hook module). A hook runs in whichever component calls it.
+ *     - `components/integrations/CredentialKeyForm.tsx` is the one genuine +1: the
+ *       connect form rendered from the server's catalog, split out of
+ *       `IntegrationCredentialsManager` so the form is not written twice.
+ *
  *   975 → 977 (`useClientFiles`, 2026-09-12) — commit 99f5576ca landed three new
  *   directives and the deploy went red at 978. Judged per file, not per importer:
  *

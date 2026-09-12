@@ -210,7 +210,7 @@ import { createCloudAgent, updateAgent } from '@/lib/api';
 import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
 import { localCheckpointSummaries, readLocalCheckpoint, saveLocalCheckpoint, type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
 import { CREATION_OBJECT_REGISTRY, canvasEvidencePatch, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS, type CreationObjectGroup } from './creationObjectRegistry';
-import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
+import { CREATION_TEMPLATES, type CreationTemplate } from '@/lib/templates/creationTemplates';
 import { expandTemplateWorkflows } from './expandTemplateWorkflows';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
@@ -683,8 +683,8 @@ export async function persistCanonicalProjectPrd(
   return { ...node, data: { ...data, resourceId: `spec:${saved.id}`, status: saved.status } };
 }
 
-function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
-  return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
+function newNode(kind: CreationObjectKind, position: { x: number; y: number }, t?: CanvasTextTranslator): CreationFlowNode {
+  return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind, t) };
 }
 
 /**
@@ -913,32 +913,42 @@ const SEED = {
   workflowDraftPublish: '00000000-0000-4000-8000-00000000000e',
 };
 
-const INITIAL_NODES: CreationFlowNode[] = [
-  // A SECTION, not a legacy `workflow` card: the canvas IS the workflow, so the
-  // seeded flow is a frame holding the steps it runs. Sized to stay clear of the
-  // website seeded at x=610 — frame containment reads a step's CENTRE against this
-  // rect, so the frame's right edge has to end well short of it.
-  { id: SEED.workflow, type: 'creation', position: { x: 80, y: 45 }, style: { width: 480, height: 260 }, zIndex: -1, data: { kind: 'frame', title: 'Fall campaign workflow', framePurpose: 'The steps of this flow' } },
-  { id: SEED.workflowTrigger, type: 'creation', position: { x: 100, y: 95 }, style: { width: 140, height: 150 }, data: createFlowStepData('trigger', 'Weekday cadence') as CreationNodeData },
-  { id: SEED.workflowDraft, type: 'creation', position: { x: 260, y: 95 }, style: { width: 140, height: 150 }, data: { ...(createFlowStepData('agent', 'Draft campaign copy') as CreationNodeData), stepConfig: { role: 'code-creator', task: 'Draft the fall campaign email and landing copy from the brief.' } } },
-  { id: SEED.workflowPublish, type: 'creation', position: { x: 420, y: 95 }, style: { width: 140, height: 150 }, data: createFlowStepData('output', 'Publish landing page') as CreationNodeData },
-  { id: SEED.website, type: 'creation', position: { x: 610, y: 45 }, data: { kind: 'website', title: 'Campaign landing page', status: 'Draft' } },
-  { id: SEED.dashboard, type: 'creation', position: { x: 1140, y: 55 }, data: { kind: 'dashboard', title: 'Campaign forecast' } },
-  // The Brain Object is 390px wide once the conversation is placed INSIDE it, so
-  // the row beside it starts clear of that — a seeded board that reads well docked
-  // and then overlaps itself the moment Brain goes inline is the first impression.
-  { id: SEED.chat, type: 'creation', position: { x: 80, y: 380 }, data: { kind: 'chat', title: 'Brain' } },
-  { id: SEED.sarah, type: 'creation', position: { x: 520, y: 455 }, data: { kind: 'staff', title: 'Sarah', role: 'Marketing', focus: 'Defining audience segments and writing email copy.', accent: 'var(--canvas-obj-evermind)' } },
-  { id: SEED.jordan, type: 'creation', position: { x: 800, y: 455 }, data: { kind: 'staff', title: 'Jordan', role: 'Design', focus: 'Refining hero section and mobile layout.', accent: 'var(--canvas-obj-staff)' } },
-  { id: SEED.agent, type: 'creation', position: { x: 1080, y: 455 }, data: { kind: 'agent', title: 'Campaign Strategist', status: 'Draft', model: 'gpt-4o', subtitle: 'Defines strategy, messaging, and audience for high-impact campaigns.' } },
-];
+/**
+ * The demo board a LOCAL canvas opens on. A builder over the board's translator rather
+ * than a constant: every title here is persisted with the board, so it is minted in the
+ * board's language (person names and the product name "Brain" stay as written).
+ */
+function initialNodes(t: CanvasTextTranslator): CreationFlowNode[] {
+  const s = (key: string) => t(`seedBoard.${key}`);
+  return [
+    // A SECTION, not a legacy `workflow` card: the canvas IS the workflow, so the
+    // seeded flow is a frame holding the steps it runs. Sized to stay clear of the
+    // website seeded at x=610 — frame containment reads a step's CENTRE against this
+    // rect, so the frame's right edge has to end well short of it.
+    { id: SEED.workflow, type: 'creation', position: { x: 80, y: 45 }, style: { width: 480, height: 260 }, zIndex: -1, data: { kind: 'frame', title: s('workflow'), framePurpose: t('flowStep.framePurpose') } },
+    { id: SEED.workflowTrigger, type: 'creation', position: { x: 100, y: 95 }, style: { width: 140, height: 150 }, data: createFlowStepData('trigger', s('weekdayCadence')) as CreationNodeData },
+    { id: SEED.workflowDraft, type: 'creation', position: { x: 260, y: 95 }, style: { width: 140, height: 150 }, data: { ...(createFlowStepData('agent', s('draftCopy')) as CreationNodeData), stepConfig: { role: 'code-creator', task: s('draftCopyTask') } } },
+    { id: SEED.workflowPublish, type: 'creation', position: { x: 420, y: 95 }, style: { width: 140, height: 150 }, data: createFlowStepData('output', s('publishPage')) as CreationNodeData },
+    { id: SEED.website, type: 'creation', position: { x: 610, y: 45 }, data: { kind: 'website', title: s('landingPage'), status: s('draft') } },
+    { id: SEED.dashboard, type: 'creation', position: { x: 1140, y: 55 }, data: { kind: 'dashboard', title: s('forecast') } },
+    // The Brain Object is 390px wide once the conversation is placed INSIDE it, so
+    // the row beside it starts clear of that — a seeded board that reads well docked
+    // and then overlaps itself the moment Brain goes inline is the first impression.
+    { id: SEED.chat, type: 'creation', position: { x: 80, y: 380 }, data: { kind: 'chat', title: 'Brain' } },
+    { id: SEED.sarah, type: 'creation', position: { x: 520, y: 455 }, data: { kind: 'staff', title: 'Sarah', role: s('marketing'), focus: s('sarahFocus'), accent: 'var(--canvas-obj-evermind)' } },
+    { id: SEED.jordan, type: 'creation', position: { x: 800, y: 455 }, data: { kind: 'staff', title: 'Jordan', role: s('design'), focus: s('jordanFocus'), accent: 'var(--canvas-obj-staff)' } },
+    { id: SEED.agent, type: 'creation', position: { x: 1080, y: 455 }, data: { kind: 'agent', title: s('strategist'), status: s('draft'), model: 'gpt-4o', subtitle: s('strategistSubtitle') } },
+  ];
+}
 
-const INITIAL_EDGES: Edge[] = [
-  { id: SEED.workflowTriggerDraft, source: SEED.workflowTrigger, target: SEED.workflowDraft, type: 'smoothstep', data: { connectionKind: 'control' } },
-  { id: SEED.workflowDraftPublish, source: SEED.workflowDraft, target: SEED.workflowPublish, type: 'smoothstep', data: { connectionKind: 'control' } },
-  { id: SEED.workflowWebsite, source: SEED.workflow, target: SEED.website, label: 'publishes', type: 'smoothstep', data: { connectionKind: 'control' } },
-  { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: 'measures', type: 'smoothstep', data: { connectionKind: 'data' } },
-];
+function initialEdges(t: CanvasTextTranslator): Edge[] {
+  return [
+    { id: SEED.workflowTriggerDraft, source: SEED.workflowTrigger, target: SEED.workflowDraft, type: 'smoothstep', data: { connectionKind: 'control' } },
+    { id: SEED.workflowDraftPublish, source: SEED.workflowDraft, target: SEED.workflowPublish, type: 'smoothstep', data: { connectionKind: 'control' } },
+    { id: SEED.workflowWebsite, source: SEED.workflow, target: SEED.website, label: t('seedBoard.publishes'), type: 'smoothstep', data: { connectionKind: 'control' } },
+    { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: t('seedBoard.measures'), type: 'smoothstep', data: { connectionKind: 'data' } },
+  ];
+}
 
 /**
  * What the board refused to load, gathered so the surface can SAY it.
@@ -1015,6 +1025,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     () => (key, values) => t(key as never, values as never),
     [t],
   );
+  // The proposal stage is built once, so it reads the CURRENT translator through a
+  // ref — a new object's default title is persisted in the board's language.
+  const canvasTextRef = useRef(canvasText);
+  useEffect(() => { canvasTextRef.current = canvasText; }, [canvasText]);
   /** The shared metric vocabulary — labels, units and comparisons, identical to
    *  the superadmin Value outcomes panel. See `lib/outcomeMetrics.ts`. */
   const outcomeText = useTranslations('outcomeMetrics') as unknown as OutcomeTranslator;
@@ -1092,12 +1106,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
-  const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? INITIAL_NODES : []);
+  const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? initialNodes(canvasText) : []);
   const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
   /** A file is being dragged over the board from outside the browser. */
   const [fileDragging, setFileDragging] = useState(false);
   const fileDragDepth = useRef(0);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? INITIAL_EDGES : []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? initialEdges(canvasText) : []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   /**
@@ -2851,7 +2865,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const stageRef = useRef<CanvasProposalStage | null>(null);
   stageRef.current ??= new CanvasProposalStage(
     { nodes: () => nodesRef.current, edges: () => edgesRef.current },
-    { defaults: createDefaultCreationData, position: nextCanvasObjectPosition, viewport: () => layoutViewportRef.current() },
+    { defaults: (kind) => createDefaultCreationData(kind, canvasTextRef.current), position: nextCanvasObjectPosition, viewport: () => layoutViewportRef.current() },
   );
   const stage = stageRef.current;
 
@@ -3008,7 +3022,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // one that still says "Imported dataset.csv" after importing revenue.csv is
       // simply wrong, and every artifact derived from it — "… visualization",
       // the map, the chart — inherits that wrong name.
-      const placeholder = createDefaultCreationData('dataset').title;
+      // Both spellings: a card minted before default titles followed the board's
+      // language still carries the English one.
+      const placeholders = new Set([createDefaultCreationData('dataset').title, createDefaultCreationData('dataset', canvasText).title]);
       // Two facts are stamped at import because neither can be recovered later.
       // `fetchedAt` is what makes staleness computable at all — a dataset with no
       // timestamp is a snapshot of unknown age, and every chart built on it
@@ -3022,7 +3038,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ? { ...node, data: {
           ...node.data, ...fields,
           classifications, fetchedAt: new Date().toISOString(), sourceUri: file.name,
-          ...(node.data.title === placeholder ? { title: file.name } : {}),
+          ...(placeholders.has(node.data.title) ? { title: file.name } : {}),
         } }
         : node)));
       setNotice(governance.piiColumns
@@ -3031,7 +3047,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     } catch (error) {
       setNotice(faultText(error, t('datasetImportFailed')));
     }
-  }, [datasetRowLimit, importLabel, selectedId, setNodes, t]);
+  }, [canvasText, datasetRowLimit, importLabel, selectedId, setNodes, t]);
 
   useEffect(() => {
     if (!hydrated.current || historyApplying.current) return;
@@ -3356,7 +3372,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  how to build an object of a kind (the factory reads the object registry, which
    *  the application layer must not import). */
   const materializeDeps = useMemo(
-    () => ({ t: canvasText, createObject: newNode }),
+    () => ({ t: canvasText, createObject: (kind: CreationObjectKind, position: { x: number; y: number }) => newNode(kind, position, canvasText) }),
     [canvasText],
   );
 
@@ -4192,20 +4208,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     // A SECTION, not a legacy `workflow` card: the canvas IS the workflow. Sized so
     // its steps' centres stay inside it and the 'Next delivery task' card seeded
-    // below it stays clear — see `INITIAL_NODES`' own frame for the same accounting.
+    // below it stays clear — see `initialNodes`' own frame for the same accounting.
     const deliveryFramePosition = { x: project.position.x + 850, y: project.position.y - 150 };
+    // Persisted with the board, so minted in the board's language.
+    const projectTitle = project.data.title ?? '';
+    const deliveryTitle = t('runtimeObject.deliveryWorkflow');
     const related: CreationFlowNode[] = [
-      { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 330, y: project.position.y - 150 }, data: { kind: 'dashboard', title: `${project.data.title} health` } },
-      { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 330, y: project.position.y + 100 }, data: { kind: 'roadmap', title: `${project.data.title} roadmap`, status: 'Live' } },
-      { id: crypto.randomUUID(), type: 'creation', position: deliveryFramePosition, style: { width: 380, height: 220 }, zIndex: -1, data: { kind: 'frame', title: 'Delivery workflow', framePurpose: t('flowStep.framePurpose') } },
-      { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 850, y: project.position.y + 150 }, data: { kind: 'task', title: 'Next delivery task', status: 'Ready', role: 'Campaign Strategist' } },
+      { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 330, y: project.position.y - 150 }, data: { kind: 'dashboard', title: t('runtimeObject.projectHealth', { title: projectTitle }) } },
+      { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 330, y: project.position.y + 100 }, data: { kind: 'roadmap', title: t('runtimeObject.projectRoadmap', { title: projectTitle }), status: t('runtimeObject.status.live') } },
+      { id: crypto.randomUUID(), type: 'creation', position: deliveryFramePosition, style: { width: 380, height: 220 }, zIndex: -1, data: { kind: 'frame', title: deliveryTitle, framePurpose: t('flowStep.framePurpose') } },
+      { id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 850, y: project.position.y + 150 }, data: { kind: 'task', title: t('runtimeObject.nextDeliveryTask'), status: t('runtimeObject.status.ready'), role: t('seedBoard.strategist') } },
     ];
     const additions = related.filter((candidate) => !nodes.some((node) => node.data.kind === candidate.data.kind && node.data.title === candidate.data.title));
     // The frame's own steps, added only when the frame itself was — re-expanding an
     // already-present section must not duplicate what is already inside it.
-    const deliveryFrame = additions.find((candidate) => candidate.data.kind === 'frame' && candidate.data.title === 'Delivery workflow');
-    const deliveryTrigger: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 30, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('trigger', 'Sprint cadence') as CreationNodeData } : null;
-    const deliveryTask: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 200, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('agent', 'Ship next task') as CreationNodeData } : null;
+    const deliveryFrame = additions.find((candidate) => candidate.data.kind === 'frame' && candidate.data.title === deliveryTitle);
+    const deliveryTrigger: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 30, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('trigger', t('runtimeObject.sprintCadence')) as CreationNodeData } : null;
+    const deliveryTask: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 200, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('agent', t('runtimeObject.shipNextTask')) as CreationNodeData } : null;
     const deliverySteps = [deliveryTrigger, deliveryTask].filter((step): step is CreationFlowNode => step !== null);
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [...additions, ...deliverySteps])]);
     setEdges((current) => [
@@ -4815,6 +4834,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     sessionId,
     hasTenant: persistence === 'server',
     canEdit,
+    t: canvasText,
     objects: () => {
       return stage.nodes().map((node) => ({
         id: node.id, kind: node.data.kind, title: node.data.title,
@@ -4831,7 +4851,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const kind = nodesRef.current.find((node) => node.id === objectId)?.data.kind;
       stage.updateObject(label, objectId, sanitizeCreationObjectPatch((kind ?? 'account') as CreationObjectKind, patch));
     },
-  }), [canEdit, persistence, sessionId, stage]);
+  }), [canEdit, canvasText, persistence, sessionId, stage]);
 
   const canvasFounderOpsActionList = useMemo<BrainAction[]>(() => canvasFounderOpsActions(canvasOpsContext), [canvasOpsContext]);
   /** Ownership — fold the cap table, record a grant or a convertible, append a ledger
@@ -9728,8 +9748,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = requestText.toLowerCase();
       if (/\b(?:course|training|lms|academy|learn)\b/.test(request) && /\b(?:llm|language model)\b/.test(request)) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
-        const course: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 420, y: 180 }, data: { kind: 'course', title: 'Build an LLM', status: 'Ready to learn', subtitle: 'From requirements and data to training, evaluation, and deployment.', course: buildLlmCourse() } };
-        const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: 'LLM capstone lab', status: 'Practice workspace', language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
+        const course: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 420, y: 180 }, data: { kind: 'course', title: t('runtimeObject.llmCourse'), status: t('runtimeObject.status.readyToLearn'), subtitle: t('runtimeObject.llmCourseSubtitle'), course: buildLlmCourse() } };
+        const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: t('runtimeObject.llmLab'), status: t('runtimeObject.status.practiceWorkspace'), language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
         setNodes((current) => [...current, ...placeAppendedRef.current(current, [course, lab])]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
         setSelectedId(course.id); openNodeInspector(course.id); setThinking(false); clearComposer(); setNotice(t('noticeLlmCourseAdded')); return;
@@ -9737,22 +9757,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
         const brain = nodes.find((node) => node.data.kind === 'chat');
-        const roadmap: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'roadmap', title: request.includes('executive') ? 'Executive team roadmap' : 'Sales presentation roadmap', status: 'AI generated' } };
-        const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
+        const roadmap: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'roadmap', title: request.includes('executive') ? t('runtimeObject.executiveRoadmap') : t('runtimeObject.salesRoadmap'), status: t('runtimeObject.status.aiGenerated') } };
+        const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? t('runtimeObject.executiveSlides') : t('runtimeObject.salesSlides'), status: t('runtimeObject.status.aiGenerated') } };
         setNodes((current) => [...current, ...placeAppendedRef.current(current, [roadmap, slides])]);
         setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
         setSelectedId(roadmap.id); openNodeInspector(roadmap.id); setThinking(false); clearComposer(); setNotice(t('noticeRoadmapAdded')); return;
       }
       if (request.includes('top 10') || request.includes('requested features')) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
-        const summary: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 500, y: 260 }, data: { kind: 'featureSummary', title: 'Top 10 requested features', status: 'Synthesized' } };
-        const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
+        const summary: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 500, y: 260 }, data: { kind: 'featureSummary', title: t('runtimeObject.featureSummary'), status: t('runtimeObject.status.synthesized') } };
+        const mockupItems = (['onboarding', 'analytics', 'approvals', 'voice', 'dashboards', 'handoffs', 'mobileReview', 'audit', 'templates', 'collaboration'] as const)
+          .map((key) => t(`runtimeObject.mockupItem.${key}`));
+        const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: t('runtimeObject.featureMockups'), status: t('runtimeObject.status.readyForReview'), subtitle: t('runtimeObject.featureMockupsSubtitle'), items: mockupItems, sources: [{ label: t('runtimeObject.feedbackEvidence'), resource: '/api/feedback' }] } };
         setNodes((current) => [...current, ...placeAppendedRef.current(current, [summary, mockups])]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
         setSelectedId(mockups.id); openNodeInspector(mockups.id); setThinking(false); clearComposer(); setNotice(t('noticeFeatureSummaryAdded')); return;
       }
       const evaluationId = crypto.randomUUID();
-      setNodes((current) => [...current, ...placeAppendedRef.current(current, [{ id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }])]);
+      setNodes((current) => [...current, ...placeAppendedRef.current(current, [{ id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: t('runtimeObject.evaluation'), status: t('runtimeObject.status.aiEvaluation') } }])]);
       const workflow = nodes.find((node) => node.data.kind === 'workflow');
       const website = nodes.find((node) => node.data.kind === 'website');
       const brain = nodes.find((node) => node.data.kind === 'chat');

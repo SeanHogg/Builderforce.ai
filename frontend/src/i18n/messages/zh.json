@@ -479,7 +479,13 @@
         "pm": "项目与工作管理",
         "scm": "源代码管理",
         "itsm": "IT 服务管理",
-        "incident": "监控与值班"
+        "incident": "监控与值班",
+        "knowledge": "知识与文档",
+        "search": "网页搜索",
+        "productivity": "生产力",
+        "data": "数据与数据仓库",
+        "marketing": "营销与 CRM",
+        "enrichment": "联系人信息补全"
       }
     },
     "panel": {
@@ -1810,7 +1816,8 @@
       "confirm": "确认",
       "armed": "再次按下以确认，或按 Esc 取消。"
     },
-    "servingPreviewAnyway": "上次检查失败（{summary}）——仍在提供预览。"
+    "servingPreviewAnyway": "上次检查失败（{summary}）——仍在提供预览。",
+    "refresh": "刷新"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -15774,7 +15781,32 @@
     "rotateHintSingle": "将令牌留空以保留当前密钥，或输入新值以进行轮换。",
     "saveChanges": "保存更改",
     "saveKey": "保存密钥",
-    "addKey": "添加密钥"
+    "addKey": "添加密钥",
+    "fields": {
+      "apiKey": "API 密钥",
+      "apiToken": "API 令牌",
+      "accessToken": "访问令牌",
+      "token": "认证令牌",
+      "email": "账户邮箱",
+      "username": "用户名",
+      "password": "密码",
+      "fromEmail": "发件人邮箱",
+      "clientId": "OAuth 客户端 ID",
+      "clientSecret": "OAuth 客户端密钥",
+      "refreshToken": "OAuth 刷新令牌",
+      "rootFolderId": "根文件夹 ID",
+      "connectionString": "连接字符串",
+      "projectUrl": "项目 URL",
+      "serviceKey": "服务角色密钥",
+      "endpoint": "端点",
+      "projectId": "项目 ID",
+      "account": "账户标识"
+    },
+    "optionalField": "{field}（可选）",
+    "providerSelect": "服务提供方",
+    "tcpTransportNote": "{provider} 通过 TCP 连接，而云端运行时无法建立 TCP 连接。密钥会在此存储并验证，但只有自托管运行时才能使用它。",
+    "catalogLoadError": "无法加载可连接的服务列表。",
+    "notConnectable": "此服务无需存储密钥即可连接。"
   },
   "boardConnections": {
     "heading": "外部看板",
@@ -15799,7 +15831,29 @@
     "pollIntervalLabel": "轮询间隔（秒）",
     "connecting": "连接中…",
     "connectAndSync": "连接并同步",
-    "connectExternalBoard": "连接外部看板"
+    "connectExternalBoard": "连接外部看板",
+    "externalBoardIdHint": {
+      "github": "仓库 — owner/repo（留空则在迁移时选择）",
+      "jira": "项目键（例如 ENG）— 留空则同步全部",
+      "linear": "团队 ID（可选）— 留空则同步所有团队",
+      "monday": "看板 ID（数字）",
+      "asana": "项目 GID",
+      "clickup": "列表 ID",
+      "rally": "项目 ObjectID（可选）— 留空则同步全部",
+      "gitlab": "项目 ID 或路径（例如 group/repo）",
+      "bitbucket": "工作区/仓库标识（workspace/repo_slug）",
+      "freshservice": "工作区 ID（可选）— 留空则同步所有工单",
+      "freshdesk": "留空则同步所有服务台工单",
+      "servicenow": "表名（默认：incident）",
+      "sentry": "组织标识/项目标识（organization-slug/project-slug）",
+      "pagerduty": "服务 ID（可选）— 留空则同步所有服务"
+    },
+    "providerSelect": "看板提供方",
+    "status": {
+      "active": "正常",
+      "degraded": "降级",
+      "disabled": "已停用"
+    }
   },
   "sourceControl": {
     "errLoad": "加载仓库失败",
@@ -22542,6 +22596,13 @@
           "over": "迄今支出为预估风险敞口的 {share}%——为此争议花费的已超过其预估价值。这应当是和解的讨论，而不是预算项目。",
           "under": "迄今支出为预估风险敞口的 {share}%。"
         }
+      },
+      "documentStatus": {
+        "draft": "草稿",
+        "shared": "已共享",
+        "awaitingSignature": "等待签署",
+        "declined": "已拒绝",
+        "signed": "已签署"
       }
     },
     "legalUpload": {
@@ -23843,7 +23904,67 @@
       "agent": "智能体"
     },
     "blankCanvasTagline": "一块空白画板。说出你的需求，它便成形。",
-    "startersLabel": "开始方式"
+    "startersLabel": "开始方式",
+    "runtimeObject": {
+      "projectHealth": "{title} 健康度",
+      "projectRoadmap": "{title} 路线图",
+      "deliveryWorkflow": "交付工作流",
+      "nextDeliveryTask": "下一个交付任务",
+      "sprintCadence": "冲刺节奏",
+      "shipNextTask": "交付下一个任务",
+      "llmCourse": "构建一个大语言模型",
+      "llmCourseSubtitle": "从需求与数据，到训练、评估与部署。",
+      "llmLab": "大语言模型毕业实验",
+      "executiveRoadmap": "高管团队路线图",
+      "salesRoadmap": "销售演示路线图",
+      "executiveSlides": "高管团队演示文稿",
+      "salesSlides": "销售演示文稿",
+      "featureSummary": "最受期待的 10 项功能",
+      "featureMockups": "10 项功能的设计稿",
+      "featureMockupsSubtitle": "基于用户反馈生成的十个相互关联的高保真概念。",
+      "feedbackEvidence": "客户反馈证据",
+      "evaluation": "画布评估",
+      "status": {
+        "live": "已上线",
+        "ready": "就绪",
+        "readyToLearn": "可以开始学习",
+        "practiceWorkspace": "练习工作区",
+        "aiGenerated": "AI 生成",
+        "synthesized": "已综合",
+        "readyForReview": "待审阅",
+        "aiEvaluation": "AI 评估"
+      },
+      "mockupItem": {
+        "onboarding": "智能引导",
+        "analytics": "团队分析",
+        "approvals": "审批收件箱",
+        "voice": "语音命令",
+        "dashboards": "自定义仪表板",
+        "handoffs": "智能体交接",
+        "mobileReview": "移动端审阅",
+        "audit": "审计历史",
+        "templates": "模板",
+        "collaboration": "实时协作"
+      }
+    },
+    "seedBoard": {
+      "workflow": "秋季营销活动工作流",
+      "weekdayCadence": "工作日节奏",
+      "draftCopy": "起草活动文案",
+      "draftCopyTask": "根据简报起草秋季活动邮件和落地页文案。",
+      "publishPage": "发布落地页",
+      "landingPage": "活动落地页",
+      "draft": "草稿",
+      "forecast": "活动预测",
+      "marketing": "市场营销",
+      "sarahFocus": "划分受众群体并撰写邮件文案。",
+      "design": "设计",
+      "jordanFocus": "打磨首屏区域和移动端布局。",
+      "strategist": "活动策略师",
+      "strategistSubtitle": "为高影响力的活动制定策略、信息和受众。",
+      "publishes": "发布",
+      "measures": "衡量"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -25703,7 +25824,8 @@
       "heading": "正在搭建您的销售画布",
       "preparing": "正在生成您的管道、目标、演示文稿和 CRO 教练…",
       "retryHint": "请刷新页面重试。"
-    }
+    },
+    "attributedScope": "所有归属于您的推荐，涵盖其注册进入的每一个工作区。"
   },
   "salesAdmin": {
     "title": "销售计划",
@@ -28891,5 +29013,43 @@
   "workflowDag": {
     "empty": "此工作流中还没有任务。",
     "defaultRole": "智能体"
+  },
+  "workspacePicker": {
+    "title": "选择工作区",
+    "subtitle": "选择你要进入的工作区。",
+    "emptyTitle": "还没有工作区。",
+    "emptyBody": "创建一个工作区，开始与团队一起构建。",
+    "createWorkspace": "创建工作区",
+    "createHeading": "创建新工作区",
+    "namePlaceholder": "工作区名称",
+    "creating": "正在创建…",
+    "create": "创建",
+    "backToList": "返回你的工作区",
+    "defaultHint": "下次访问时会自动打开你的默认工作区。",
+    "clearDefault": "清除默认",
+    "defaultBadge": "默认",
+    "renameTitle": "重命名工作区",
+    "rename": "重命名",
+    "clearDefaultTitle": "不再自动打开此工作区",
+    "setDefaultTitle": "下次自动打开此工作区",
+    "setDefault": "设为默认",
+    "newWorkspace": "新建工作区"
+  },
+  "chatsView": {
+    "intro": "此工作区所有智能体主机上的全部聊天会话",
+    "errorPrefix": "错误：{error}",
+    "loadingSessions": "正在加载会话…",
+    "empty": "还没有聊天会话。智能体主机开始接收消息后，聊天记录会显示在这里。",
+    "sessionsHeading": "会话（{count}）",
+    "messageCount": "{count} 条消息",
+    "hostFallback": "智能体主机 {id}",
+    "selectPrompt": "选择一个会话以查看其消息。",
+    "loadingMessages": "正在加载消息…",
+    "noMessages": "没有消息。"
+  },
+  "webcontainerConnect": {
+    "connecting": "正在连接到你的 IDE…",
+    "connected": "已连接。如果预览已显示在你的 IDE 中，可以关闭此标签页。",
+    "failed": "连接失败：{error}"
   }
 }

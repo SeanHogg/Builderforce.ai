@@ -488,7 +488,7 @@
   "Your project's own learned Evermind model.": "Das von deinem Projekt selbst gelernte Evermind-Modell.",
   "Your workspace is on the {plan} plan. Click to manage your plan.": "Ihr Arbeitsbereich nutzt den {plan}-Tarif. Klicken Sie, um Ihren Tarif zu verwalten.",
   "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "Dein {provider}-Konto ist in einem ANDEREN Arbeitsbereich verbunden, daher hat dieser Lauf den gemeinsamen Modell-Pool statt deines eigenen Modells verwendet. Wechsle in diesen Arbeitsbereich oder verbinde es in diesem unter Einstellungen ▸ API-Schlüssel.",
-  "_This turn reached its tool budget. For work this long, dispatch a cloud agent from the board instead — it runs without a turn limit._": "_Dieser Zug hat sein Tool-Budget erreicht. Für so umfangreiche Arbeit solltest du stattdessen einen Cloud-Agenten vom Board aus starten — er läuft ohne Zug-Limit._",
+  "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._": "_Dieser Zug wurde gestoppt, weil seine letzten Tool-Aufrufe alle fehlgeschlagen sind. Lies, was sie geantwortet haben, und antworte mit dem, was sie verlangen — oder übergib die Arbeit vom Board aus an einen Cloud-Agenten, damit sie in seiner eigenen Laufzeitumgebung weiterläuft._",
   "added": "hinzugefügt",
   "approval": "Genehmigung",
   "beta": "Beta",

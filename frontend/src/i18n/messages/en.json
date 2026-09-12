@@ -479,7 +479,13 @@
         "pm": "Project & work management",
         "scm": "Source control",
         "itsm": "IT service management",
-        "incident": "Monitoring & on-call"
+        "incident": "Monitoring & on-call",
+        "knowledge": "Knowledge & docs",
+        "search": "Web search",
+        "productivity": "Productivity",
+        "data": "Data & warehouses",
+        "marketing": "Marketing & CRM",
+        "enrichment": "Contact enrichment"
       }
     },
     "panel": {
@@ -1810,7 +1816,8 @@
       "confirm": "Confirm",
       "armed": "Press again to confirm, or Escape to cancel."
     },
-    "servingPreviewAnyway": "Last checks failed ({summary}) — serving the preview anyway."
+    "servingPreviewAnyway": "Last checks failed ({summary}) — serving the preview anyway.",
+    "refresh": "Refresh"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -15774,7 +15781,32 @@
     "rotateHintSingle": "Leave the token blank to keep the current key, or enter a new value to rotate it.",
     "saveChanges": "Save changes",
     "saveKey": "Save key",
-    "addKey": "Add key"
+    "addKey": "Add key",
+    "fields": {
+      "apiKey": "API key",
+      "apiToken": "API token",
+      "accessToken": "Access token",
+      "token": "Auth token",
+      "email": "Account email",
+      "username": "Username",
+      "password": "Password",
+      "fromEmail": "From email",
+      "clientId": "OAuth client ID",
+      "clientSecret": "OAuth client secret",
+      "refreshToken": "OAuth refresh token",
+      "rootFolderId": "Root folder ID",
+      "connectionString": "Connection string",
+      "projectUrl": "Project URL",
+      "serviceKey": "Service role key",
+      "endpoint": "Endpoint",
+      "projectId": "Project ID",
+      "account": "Account identifier"
+    },
+    "optionalField": "{field} (optional)",
+    "providerSelect": "Provider",
+    "tcpTransportNote": "{provider} connects over TCP, which the cloud runtime cannot open. The key is stored and validated here, and only a self-hosted runtime can use it.",
+    "catalogLoadError": "Could not load the list of services you can connect.",
+    "notConnectable": "This service connects without a stored key."
   },
   "boardConnections": {
     "heading": "External boards",
@@ -15799,7 +15831,29 @@
     "pollIntervalLabel": "Poll interval (seconds)",
     "connecting": "Connecting…",
     "connectAndSync": "Connect & sync",
-    "connectExternalBoard": "Connect external board"
+    "connectExternalBoard": "Connect external board",
+    "externalBoardIdHint": {
+      "github": "Repository — owner/repo (blank = pick during migration)",
+      "jira": "Project key (e.g. ENG) — blank syncs all",
+      "linear": "Team ID (optional) — blank syncs all teams",
+      "monday": "Board ID (numeric)",
+      "asana": "Project GID",
+      "clickup": "List ID",
+      "rally": "Project ObjectID (optional) — blank syncs all",
+      "gitlab": "Project id or path (e.g. group/repo)",
+      "bitbucket": "workspace/repo_slug",
+      "freshservice": "Workspace ID (optional) — blank syncs all tickets",
+      "freshdesk": "Blank syncs all help-desk tickets",
+      "servicenow": "Table name (default: incident)",
+      "sentry": "organization-slug/project-slug",
+      "pagerduty": "Service ID (optional) — blank syncs all services"
+    },
+    "providerSelect": "Board provider",
+    "status": {
+      "active": "Active",
+      "degraded": "Degraded",
+      "disabled": "Disabled"
+    }
   },
   "sourceControl": {
     "errLoad": "Failed to load repositories",
@@ -22542,6 +22596,13 @@
           "over": "Spend to date is {share}% of the estimated exposure — more has gone on arguing this than it is estimated to be worth. That is a settlement conversation, not a budget line.",
           "under": "Spend to date is {share}% of the estimated exposure."
         }
+      },
+      "documentStatus": {
+        "draft": "Draft",
+        "shared": "Shared",
+        "awaitingSignature": "Awaiting signature",
+        "declined": "Declined",
+        "signed": "Signed"
       }
     },
     "legalUpload": {
@@ -23843,7 +23904,67 @@
       "agent": "Agents"
     },
     "blankCanvasTagline": "An empty board. Say what you want and it takes shape.",
-    "startersLabel": "Ways to start"
+    "startersLabel": "Ways to start",
+    "runtimeObject": {
+      "projectHealth": "{title} health",
+      "projectRoadmap": "{title} roadmap",
+      "deliveryWorkflow": "Delivery workflow",
+      "nextDeliveryTask": "Next delivery task",
+      "sprintCadence": "Sprint cadence",
+      "shipNextTask": "Ship next task",
+      "llmCourse": "Build an LLM",
+      "llmCourseSubtitle": "From requirements and data to training, evaluation, and deployment.",
+      "llmLab": "LLM capstone lab",
+      "executiveRoadmap": "Executive team roadmap",
+      "salesRoadmap": "Sales presentation roadmap",
+      "executiveSlides": "Executive team presentation",
+      "salesSlides": "Sales presentation",
+      "featureSummary": "Top 10 requested features",
+      "featureMockups": "Top 10 feature mockups",
+      "featureMockupsSubtitle": "Ten linked high-fidelity concepts generated from user feedback.",
+      "feedbackEvidence": "Customer feedback evidence",
+      "evaluation": "Canvas evaluation",
+      "status": {
+        "live": "Live",
+        "ready": "Ready",
+        "readyToLearn": "Ready to learn",
+        "practiceWorkspace": "Practice workspace",
+        "aiGenerated": "AI generated",
+        "synthesized": "Synthesized",
+        "readyForReview": "Ready for review",
+        "aiEvaluation": "AI evaluation"
+      },
+      "mockupItem": {
+        "onboarding": "Smart onboarding",
+        "analytics": "Team analytics",
+        "approvals": "Approval inbox",
+        "voice": "Voice commands",
+        "dashboards": "Custom dashboards",
+        "handoffs": "Agent handoffs",
+        "mobileReview": "Mobile review",
+        "audit": "Audit history",
+        "templates": "Templates",
+        "collaboration": "Live collaboration"
+      }
+    },
+    "seedBoard": {
+      "workflow": "Fall campaign workflow",
+      "weekdayCadence": "Weekday cadence",
+      "draftCopy": "Draft campaign copy",
+      "draftCopyTask": "Draft the fall campaign email and landing copy from the brief.",
+      "publishPage": "Publish landing page",
+      "landingPage": "Campaign landing page",
+      "draft": "Draft",
+      "forecast": "Campaign forecast",
+      "marketing": "Marketing",
+      "sarahFocus": "Defining audience segments and writing email copy.",
+      "design": "Design",
+      "jordanFocus": "Refining hero section and mobile layout.",
+      "strategist": "Campaign Strategist",
+      "strategistSubtitle": "Defines strategy, messaging, and audience for high-impact campaigns.",
+      "publishes": "publishes",
+      "measures": "measures"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -25703,7 +25824,8 @@
       "heading": "Setting up your selling canvas",
       "preparing": "Building your pipeline, targets, deck and CRO coach…",
       "retryHint": "Reload the page to try again."
-    }
+    },
+    "attributedScope": "Every referral attributed to you, in every workspace it signed up into."
   },
   "salesAdmin": {
     "title": "Sales programme",
@@ -28891,5 +29013,43 @@
   "workflowDag": {
     "empty": "No tasks in this workflow yet.",
     "defaultRole": "agent"
+  },
+  "workspacePicker": {
+    "title": "Select a workspace",
+    "subtitle": "Choose the workspace you want to work in.",
+    "emptyTitle": "No workspaces yet.",
+    "emptyBody": "Create one to start building with your team.",
+    "createWorkspace": "Create a workspace",
+    "createHeading": "Create a new workspace",
+    "namePlaceholder": "Workspace name",
+    "creating": "Creating…",
+    "create": "Create",
+    "backToList": "Back to your workspaces",
+    "defaultHint": "Your default workspace opens automatically on your next visit.",
+    "clearDefault": "Clear default",
+    "defaultBadge": "Default",
+    "renameTitle": "Rename workspace",
+    "rename": "Rename",
+    "clearDefaultTitle": "Stop opening this workspace automatically",
+    "setDefaultTitle": "Open this workspace automatically next time",
+    "setDefault": "Set as default",
+    "newWorkspace": "New workspace"
+  },
+  "chatsView": {
+    "intro": "All chat sessions across the agent hosts in this workspace",
+    "errorPrefix": "Error: {error}",
+    "loadingSessions": "Loading sessions…",
+    "empty": "No chat sessions yet. Chat history appears here once agent hosts start receiving messages.",
+    "sessionsHeading": "Sessions ({count})",
+    "messageCount": "{count, plural, one {# message} other {# messages}}",
+    "hostFallback": "Agent host {id}",
+    "selectPrompt": "Select a session to view its messages.",
+    "loadingMessages": "Loading messages…",
+    "noMessages": "No messages."
+  },
+  "webcontainerConnect": {
+    "connecting": "Connecting to your IDE…",
+    "connected": "Connected. You can close this tab if the preview is showing in your IDE.",
+    "failed": "Connection failed: {error}"
   }
 }

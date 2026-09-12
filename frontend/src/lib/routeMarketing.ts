@@ -96,10 +96,7 @@ const extra: Record<string, RouteMarketing> = {
   // headed "This is part of Builderforce.ai" with three Brain Storm highlights
   // under it. A DETAILS key without a base row is now a test failure.
   '/brainstorm': { icon: '🧠', title: 'Brain Storm', description: 'Describe what you want to build in plain language and turn it into projects, tasks, datasets, and agent work.' },
-  '/training': { icon: '🎓', title: 'Training', description: 'Generate a dataset, fine-tune a model, have an independent judge score it, then publish the result to your workforce.' },
   '/workflows': { icon: '🔀', title: 'Workflow Builder', description: 'Compose agents and tools into repeatable, approval-gated workflows.' },
-  '/tasks': { icon: '▦', title: 'Tasks', description: 'A task board for your agent workforce — plan, prioritize, and assign tasks to agents, then watch them flow through every status.' },
-  '/contributors': { icon: '📈', title: 'Contributors', description: 'Dev analytics and team intelligence — reconcile developer identity across tools, track activity and PR cycle time, and roll up engagement across your tenant.' },
   '/settings': { icon: '⚙', title: 'Settings', description: 'Manage your workspace, members, API keys, and preferences.' },
   '/tenants': { icon: '🏢', title: 'Workspaces', description: 'Create and switch between multi-tenant workspaces with per-seat roles.' },
   '/admin': { icon: '⚙', title: 'Platform Admin', description: 'Platform administration, LLM traces, and operator tooling.' },
@@ -127,21 +124,6 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
       { question: 'Do I need to set anything up to start brainstorming?', answer: 'No. Sign in, open Brain Storm, and type. You can optionally pin a project so answers are grounded in that codebase and context, but a blank prompt is enough to start turning an idea into a plan.' },
     ],
   },
-  '/training': {
-    relatedSurface: 'training',
-    seoDescription:
-      'Use supported WebGPU LoRA fine-tuning on compatible devices, evaluate the result, and publish through the hosted workflow when required.',
-    highlights: [
-      { title: 'Fine-tune in the browser', desc: 'Supported WebGPU LoRA training runs on the local device. Hardware limits, remote evaluation, and publishing are disclosed separately.' },
-      { title: 'Generate datasets in seconds', desc: 'Author an instruction-tuning dataset from a single capability prompt with streaming progress, then train on it without leaving the page.' },
-      { title: 'Evaluate, then publish', desc: 'An independent AI judge scores correctness, reasoning, and hallucination rate. Publish the trained agent to the Workforce Registry and call it from inside your own agent.' },
-    ],
-    faq: [
-      { question: 'How does in-browser training work without a GPU server?', answer: 'Supported training steps run on a compatible local device through WebGPU. Remote evaluation, collaboration, publishing, and connected services are separate operations with their own data boundaries.' },
-      { question: 'What can I do with a trained agent?', answer: 'After the AI evaluation engine scores it, you publish the agent to the Workforce Registry with a profile, skills, and eval score. Then you hire it and call it from inside your own agent — your trained specialists become tools your main agent delegates to.' },
-      { question: 'Do I need a dataset before I start?', answer: 'No. The dataset generation wizard creates an instruction-tuning dataset from a single capability prompt in under 30 seconds, which you can refine and then train on in the same workflow.' },
-    ],
-  },
   '/workflows': {
     relatedSurface: 'workflows',
     seoDescription:
@@ -161,12 +143,6 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
     relatedSurface: 'projects',
     seoDescription:
       'Projects / Tasks is the work-management surface of Builderforce.ai — organize work into AI project workspaces, then plan, assign, and track tasks across your agent workforce with board, table, calendar, and Gantt views.',
-    faq: PROJECTS_TASKS_FAQ,
-  },
-  '/tasks': {
-    relatedSurface: 'projects',
-    seoDescription:
-      'The Tasks board is where your agent workforce gets work done on Builderforce.ai — plan, prioritize, and assign tasks to agents, then track them across board, table, calendar, and Gantt views with approval gates and full observability.',
     faq: PROJECTS_TASKS_FAQ,
   },
   '/workforce': {
@@ -241,20 +217,6 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
       { question: 'How does Builderforce.ai govern what agents can do?', answer: 'Through human-in-the-loop approval gates: agents request approval before high-impact actions, execution suspends until a person approves or rejects, and every outcome is recorded in a full audit trail. Auto-approval rules let low-risk actions through automatically.' },
       { question: 'How are my credentials and data protected?', answer: 'Integration credentials are encrypted with AES-256-GCM and scoped per tenant. All resources — projects, datasets, models, and agents — are isolated per tenant with no cross-tenant access, and inter-host dispatch is HMAC-signed and Bearer-authenticated.' },
       { question: 'Can Builderforce.ai run air-gapped?', answer: 'The MIT-licensed BuilderForce Agents runtime can be deployed on private infrastructure and can use local models. A fully air-gapped environment requires disabling hosted collaboration, publishing, remote evaluation, and other connected services; validate the required workflow against the deployment guide before making a compliance commitment.' },
-    ],
-  },
-  '/contributors': {
-    relatedSurface: 'contributors',
-    seoDescription:
-      'Contributors brings dev analytics and team intelligence to Builderforce.ai — reconcile developer identity across GitHub, Jira, and Bitbucket, track activity and PR cycle time, and roll up engagement across your whole tenant.',
-    highlights: [
-      { title: 'One identity across tools', desc: 'Reconcile each developer\'s identity across GitHub, Jira, and Bitbucket, with reversible, tenant-wide contributor merge.' },
-      { title: 'Activity and cycle time', desc: 'Ingest PR, commit, review, and issue events with weighted activity scoring and end-to-end PR cycle time.' },
-      { title: 'Engagement, rolled up', desc: 'Fold external activity, platform usage, and delivery into one engagement score per member across every project.' },
-    ],
-    faq: [
-      { question: 'What does the Contributors surface track?', answer: 'It reconciles developer identity across GitHub, Jira, and Bitbucket, ingests PR/commit/review/issue activity with weighted daily scoring and PR cycle time, and rolls engagement up across your whole tenant — so humans and agents are measured on the same board.' },
-      { question: 'Can I merge duplicate contributor records?', answer: 'Yes. Contributor consolidation is tenant-wide and reversible — merge duplicates that represent the same person, with an undo snapshot, and re-point their activity automatically.' },
     ],
   },
   '/dashboard': {

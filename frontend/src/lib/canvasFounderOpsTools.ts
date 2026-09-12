@@ -38,6 +38,7 @@ import { DEFAULT_LOCALE } from '@/i18n/config';
 import { formatterFor } from '@/i18n/format';
 import { ACCOUNT_RELATIONSHIPS, partyRef } from '@builderforce/creation-canvas-contract';
 import { getEntityRows } from '@/lib/kernel/kernelApi';
+import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import { ROUND_INSTRUMENTS, ROUND_STATUSES, ROUND_TYPES, accountHistory, listPayRuns, logDealTouch, moveDeal, openDeal, payRunLines, planFundingRound, readPipeline, syncPayRuns, type AccountHistory, type PayRunSummary, type ProjectedPipeline } from '@/lib/founderOpsApi';
 
 /** What the canvas hands these tools so they can author onto the board. */
@@ -68,6 +69,12 @@ export interface CanvasFounderOpsContext {
   addObject: (kind: string, fields: Record<string, unknown>, at?: { x?: number; y?: number }) => { objectId: string };
   /** Stage an object update for review. */
   updateObject: (objectId: string, patch: Record<string, unknown>, label: string) => void;
+  /**
+   * The board's `creationCanvas` translator, for words a tool PERSISTS onto a card (a
+   * status a person reads). Optional: a context built without a surface — a unit test —
+   * falls back to English rather than failing.
+   */
+  t?: CanvasTextTranslator;
 }
 
 /** Cap on how many counterparties one sync will author. A board is a working

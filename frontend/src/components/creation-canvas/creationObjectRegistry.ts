@@ -61,6 +61,9 @@ import type { CreationObjectGroup } from './types';
 export interface CreationObjectDefinition {
   kind: CreationObjectKind;
   label: string;
+  /** Catalog key (under `creationCanvas`) a new object's default title is minted from
+   *  when the caller holds the board's translator. See `createDefaultCreationData`. */
+  titleKey?: string;
   icon: string;
   group: CreationObjectGroup;
   createData: () => CreationNodeData;
@@ -960,6 +963,7 @@ export function canvasEvidencePatch(
  */
 export { creationObjectAiContext } from './creationObjectContext';
 import { creationObjectAiContext } from './creationObjectContext';
+import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 
 export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...BASE_CREATION_OBJECT_REGISTRY,
@@ -978,6 +982,10 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...MARKETING_REGISTRY,
 ].map((definition) => ({
   ...definition,
+  // A hand-declared kind whose default title IS its label is titled with the key the
+  // palette already shows that label under. A kind with a bespoke default ("Imported
+  // dataset.csv") keeps it: there is no catalog word for it to be minted from.
+  ...(!('titleKey' in definition) && definition.createData().title === definition.label ? { titleKey: `object.${definition.kind}` } : {}),
   ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),
   renderer: 'creation' as const,
   inspector: 'creation' as const,
@@ -995,8 +1003,19 @@ export function creationObjectDefinition(kind: CreationObjectKind): CreationObje
   return definition;
 }
 
-export function createDefaultCreationData(kind: CreationObjectKind): CreationNodeData {
-  return creationObjectDefinition(kind).createData();
+/**
+ * A new object's data.
+ *
+ * The default title is PERSISTED with the board, so it is minted in the board's language
+ * when the caller passes its `creationCanvas` translator — an English default written
+ * onto a zh board stays English after every later edit. Without one (a test, a
+ * model-facing default) it is the English label. A kind whose title IS its content
+ * (`TITLE_IS_CONTENT_KINDS`) starts blank either way.
+ */
+export function createDefaultCreationData(kind: CreationObjectKind, t?: CanvasTextTranslator): CreationNodeData {
+  const definition = creationObjectDefinition(kind);
+  const data = definition.createData();
+  return t && definition.titleKey && data.title ? { ...data, title: t(definition.titleKey) } : data;
 }
 
 /**

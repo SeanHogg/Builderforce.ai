@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -724,8 +724,12 @@ function ProviderConnectionCard({
   const disconnect = useProviderDisconnect(t);
   const toast = useToast();
 
-  const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(errorMessage(e)));
-  useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
+  const loadDiagnostic = useCallback(
+    () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(errorMessage(e))),
+    [config.id, errorMessage],
+  );
+  // `authType` is a re-read trigger: a connect or disconnect changes what status reports.
+  useEffect(() => { void loadDiagnostic(); }, [loadDiagnostic, authType]);
 
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setError(null);
@@ -1024,8 +1028,12 @@ function OllamaLocalConnectionCard({
   const disconnect = useProviderDisconnect(t);
   const toast = useToast();
 
-  const loadDiagnostic = () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(errorMessage(e)));
-  useEffect(() => { void loadDiagnostic(); }, [configured]);
+  const loadDiagnostic = useCallback(
+    () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(errorMessage(e))),
+    [errorMessage],
+  );
+  // `configured` is a re-read trigger: saving or removing the endpoint changes the status.
+  useEffect(() => { void loadDiagnostic(); }, [loadDiagnostic, configured]);
 
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setError(null);

@@ -18,7 +18,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { mayRender, useRequireSession } from '@/lib/useRequireSession';
 import PageContainer from '@/components/PageContainer';
 import { AgentCheckoutPanel } from '@/components/marketplace/AgentCheckoutPanel';
 import { listAgents, listPurchasedAgents } from '@/lib/api';
@@ -26,7 +26,7 @@ import type { PublishedAgent } from '@/lib/types';
 import { faultMessage } from '@/lib/apiClient';
 function WorkforceHirePageInner() {
   const t = useTranslations('agentCheckout');
-  const allowed = useRequireAuth();
+  const allowed = mayRender(useRequireSession());
   const { tenant } = useAuth();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 

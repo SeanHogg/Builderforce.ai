@@ -479,7 +479,13 @@
         "pm": "Gestion de projet et du travail",
         "scm": "Gestion de code source",
         "itsm": "Gestion des services informatiques",
-        "incident": "Surveillance et astreinte"
+        "incident": "Surveillance et astreinte",
+        "knowledge": "Connaissances et documentation",
+        "search": "Recherche web",
+        "productivity": "Productivité",
+        "data": "Données et entrepôts",
+        "marketing": "Marketing et CRM",
+        "enrichment": "Enrichissement des contacts"
       }
     },
     "panel": {
@@ -1810,7 +1816,8 @@
       "confirm": "Confirmer",
       "armed": "Appuyez à nouveau pour confirmer, ou sur Échap pour annuler."
     },
-    "servingPreviewAnyway": "Les dernières vérifications ont échoué ({summary}) — l’aperçu est tout de même servi."
+    "servingPreviewAnyway": "Les dernières vérifications ont échoué ({summary}) — l’aperçu est tout de même servi.",
+    "refresh": "Actualiser"
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -15774,7 +15781,32 @@
     "rotateHintSingle": "Laissez le jeton vide pour conserver la clé actuelle, ou saisissez une nouvelle valeur pour la renouveler.",
     "saveChanges": "Enregistrer les modifications",
     "saveKey": "Enregistrer la clé",
-    "addKey": "Ajouter une clé"
+    "addKey": "Ajouter une clé",
+    "fields": {
+      "apiKey": "Clé d’API",
+      "apiToken": "Jeton d’API",
+      "accessToken": "Jeton d’accès",
+      "token": "Jeton d’authentification",
+      "email": "E-mail du compte",
+      "username": "Nom d’utilisateur",
+      "password": "Mot de passe",
+      "fromEmail": "E-mail de l’expéditeur",
+      "clientId": "ID client OAuth",
+      "clientSecret": "Secret client OAuth",
+      "refreshToken": "Jeton d’actualisation OAuth",
+      "rootFolderId": "ID du dossier racine",
+      "connectionString": "Chaîne de connexion",
+      "projectUrl": "URL du projet",
+      "serviceKey": "Clé de rôle de service",
+      "endpoint": "Point de terminaison",
+      "projectId": "ID du projet",
+      "account": "Identifiant du compte"
+    },
+    "optionalField": "{field} (facultatif)",
+    "providerSelect": "Fournisseur",
+    "tcpTransportNote": "{provider} se connecte en TCP, ce que l’environnement d’exécution cloud ne peut pas ouvrir. La clé est enregistrée et validée ici, et seul un environnement auto-hébergé peut l’utiliser.",
+    "catalogLoadError": "Impossible de charger la liste des services que vous pouvez connecter.",
+    "notConnectable": "Ce service se connecte sans clé enregistrée."
   },
   "boardConnections": {
     "heading": "Tableaux externes",
@@ -15799,7 +15831,29 @@
     "pollIntervalLabel": "Intervalle d'interrogation (secondes)",
     "connecting": "Connexion…",
     "connectAndSync": "Connecter et synchroniser",
-    "connectExternalBoard": "Connecter un tableau externe"
+    "connectExternalBoard": "Connecter un tableau externe",
+    "externalBoardIdHint": {
+      "github": "Dépôt — owner/repo (vide = choisir pendant la migration)",
+      "jira": "Clé du projet (ex. ENG) — vide synchronise tout",
+      "linear": "ID d’équipe (facultatif) — vide synchronise toutes les équipes",
+      "monday": "ID du tableau (numérique)",
+      "asana": "GID du projet",
+      "clickup": "ID de la liste",
+      "rally": "ObjectID du projet (facultatif) — vide synchronise tout",
+      "gitlab": "ID ou chemin du projet (ex. group/repo)",
+      "bitbucket": "Espace de travail/dépôt (workspace/repo_slug)",
+      "freshservice": "ID de l’espace de travail (facultatif) — vide synchronise tous les tickets",
+      "freshdesk": "Vide synchronise tous les tickets du support",
+      "servicenow": "Nom de la table (par défaut : incident)",
+      "sentry": "Organisation/projet (organization-slug/project-slug)",
+      "pagerduty": "ID du service (facultatif) — vide synchronise tous les services"
+    },
+    "providerSelect": "Fournisseur de tableaux",
+    "status": {
+      "active": "Actif",
+      "degraded": "Dégradé",
+      "disabled": "Désactivé"
+    }
   },
   "sourceControl": {
     "errLoad": "Échec du chargement des dépôts",
@@ -22542,6 +22596,13 @@
           "over": "Les dépenses à ce jour représentent {share} % de l’exposition estimée — on a déjà dépensé plus pour plaider cette affaire que ce qu’elle est censée valoir. C’est une discussion de transaction, pas une ligne budgétaire.",
           "under": "Les dépenses à ce jour représentent {share} % de l’exposition estimée."
         }
+      },
+      "documentStatus": {
+        "draft": "Brouillon",
+        "shared": "Partagé",
+        "awaitingSignature": "En attente de signature",
+        "declined": "Refusé",
+        "signed": "Signé"
       }
     },
     "legalUpload": {
@@ -23843,7 +23904,67 @@
       "agent": "Agents"
     },
     "blankCanvasTagline": "Un tableau vide. Dites ce que vous voulez et il prend forme.",
-    "startersLabel": "Façons de démarrer"
+    "startersLabel": "Façons de démarrer",
+    "runtimeObject": {
+      "projectHealth": "Santé de {title}",
+      "projectRoadmap": "Feuille de route de {title}",
+      "deliveryWorkflow": "Flux de livraison",
+      "nextDeliveryTask": "Prochaine tâche de livraison",
+      "sprintCadence": "Cadence de sprint",
+      "shipNextTask": "Livrer la tâche suivante",
+      "llmCourse": "Construire un LLM",
+      "llmCourseSubtitle": "Des exigences et des données à l’entraînement, l’évaluation et le déploiement.",
+      "llmLab": "Atelier final LLM",
+      "executiveRoadmap": "Feuille de route de l’équipe de direction",
+      "salesRoadmap": "Feuille de route de la présentation commerciale",
+      "executiveSlides": "Présentation de l’équipe de direction",
+      "salesSlides": "Présentation commerciale",
+      "featureSummary": "Les 10 fonctionnalités les plus demandées",
+      "featureMockups": "Maquettes des 10 fonctionnalités",
+      "featureMockupsSubtitle": "Dix concepts haute fidélité liés, générés à partir des retours utilisateurs.",
+      "feedbackEvidence": "Preuves issues des retours clients",
+      "evaluation": "Évaluation du canevas",
+      "status": {
+        "live": "En ligne",
+        "ready": "Prêt",
+        "readyToLearn": "Prêt à apprendre",
+        "practiceWorkspace": "Espace d’entraînement",
+        "aiGenerated": "Généré par l’IA",
+        "synthesized": "Synthétisé",
+        "readyForReview": "Prêt pour relecture",
+        "aiEvaluation": "Évaluation IA"
+      },
+      "mockupItem": {
+        "onboarding": "Onboarding intelligent",
+        "analytics": "Analyses d’équipe",
+        "approvals": "Boîte d’approbations",
+        "voice": "Commandes vocales",
+        "dashboards": "Tableaux de bord personnalisés",
+        "handoffs": "Passations entre agents",
+        "mobileReview": "Relecture mobile",
+        "audit": "Historique d’audit",
+        "templates": "Modèles",
+        "collaboration": "Collaboration en direct"
+      }
+    },
+    "seedBoard": {
+      "workflow": "Flux de la campagne d’automne",
+      "weekdayCadence": "Cadence des jours ouvrés",
+      "draftCopy": "Rédiger le texte de la campagne",
+      "draftCopyTask": "Rédige l’e-mail de la campagne d’automne et le texte de la page d’atterrissage à partir du brief.",
+      "publishPage": "Publier la page d’atterrissage",
+      "landingPage": "Page d’atterrissage de la campagne",
+      "draft": "Brouillon",
+      "forecast": "Prévision de la campagne",
+      "marketing": "Marketing",
+      "sarahFocus": "Définit les segments d’audience et rédige les e-mails.",
+      "design": "Design",
+      "jordanFocus": "Peaufine la section d’accueil et la mise en page mobile.",
+      "strategist": "Stratège de campagne",
+      "strategistSubtitle": "Définit la stratégie, le message et l’audience des campagnes à fort impact.",
+      "publishes": "publie",
+      "measures": "mesure"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -25703,7 +25824,8 @@
       "heading": "Préparation de votre canevas de vente",
       "preparing": "Création de votre pipeline, de vos objectifs, du deck et du coach CRO…",
       "retryHint": "Rechargez la page pour réessayer."
-    }
+    },
+    "attributedScope": "Tous les parrainages qui vous sont attribués, dans chaque espace de travail où ils se sont inscrits."
   },
   "salesAdmin": {
     "title": "Programme commercial",
@@ -28891,5 +29013,43 @@
   "workflowDag": {
     "empty": "Aucune tâche dans ce workflow pour l’instant.",
     "defaultRole": "agent"
+  },
+  "workspacePicker": {
+    "title": "Choisir un espace de travail",
+    "subtitle": "Choisissez l’espace de travail dans lequel vous voulez travailler.",
+    "emptyTitle": "Aucun espace de travail pour l’instant.",
+    "emptyBody": "Créez-en un pour commencer à construire avec votre équipe.",
+    "createWorkspace": "Créer un espace de travail",
+    "createHeading": "Créer un nouvel espace de travail",
+    "namePlaceholder": "Nom de l’espace de travail",
+    "creating": "Création…",
+    "create": "Créer",
+    "backToList": "Retour à vos espaces de travail",
+    "defaultHint": "Votre espace de travail par défaut s’ouvre automatiquement lors de votre prochaine visite.",
+    "clearDefault": "Retirer le choix par défaut",
+    "defaultBadge": "Par défaut",
+    "renameTitle": "Renommer l’espace de travail",
+    "rename": "Renommer",
+    "clearDefaultTitle": "Ne plus ouvrir cet espace de travail automatiquement",
+    "setDefaultTitle": "Ouvrir cet espace de travail automatiquement la prochaine fois",
+    "setDefault": "Définir par défaut",
+    "newWorkspace": "Nouvel espace de travail"
+  },
+  "chatsView": {
+    "intro": "Toutes les sessions de chat des hôtes d’agents de cet espace de travail",
+    "errorPrefix": "Erreur : {error}",
+    "loadingSessions": "Chargement des sessions…",
+    "empty": "Aucune session de chat pour l’instant. L’historique apparaîtra ici dès que les hôtes d’agents recevront des messages.",
+    "sessionsHeading": "Sessions de chat ({count})",
+    "messageCount": "{count, plural, one {# message} other {# messages}}",
+    "hostFallback": "Hôte d’agents {id}",
+    "selectPrompt": "Sélectionnez une session pour afficher ses messages.",
+    "loadingMessages": "Chargement des messages…",
+    "noMessages": "Aucun message."
+  },
+  "webcontainerConnect": {
+    "connecting": "Connexion à votre IDE…",
+    "connected": "Connecté. Vous pouvez fermer cet onglet si l’aperçu s’affiche dans votre IDE.",
+    "failed": "Échec de la connexion : {error}"
   }
 }

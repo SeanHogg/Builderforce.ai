@@ -39,6 +39,7 @@
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import {
   getLegalDocument, requestLegalDocumentSignature, revokeLegalDocumentShare, shareLegalDocument,
   type LegalDocumentDetail,
@@ -92,7 +93,7 @@ export function patchFromDetail(detail: LegalDocumentDetail, translate?: CanvasT
     signatureRequestId: detail.signatureRequestId,
     signedAt: detail.signedAt,
     activeShares: detail.activeShares,
-    status: statusLabel(detail.status),
+    status: legalDocumentStatusLabel(detail.status, translate),
   };
 }
 
@@ -130,7 +131,7 @@ function gateOrError(object: BoardObject, action: 'share' | 'request-signature')
  *  `documentStatus`/`signatureRequestId`/`signedAt`/`activeShares`. */
 async function syncFromServer(ctx: CanvasFounderOpsContext, object: BoardObject, documentId: string, label: string): Promise<LegalDocumentDetail> {
   const detail = await getLegalDocument(documentId);
-  ctx.updateObject(object.id, patchFromDetail(detail), label);
+  ctx.updateObject(object.id, patchFromDetail(detail, ctx.t), label);
   return detail;
 }
 

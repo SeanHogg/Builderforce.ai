@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   analyticsApi,
@@ -150,16 +150,16 @@ export function ContributorsView() {
   const [selected, setSelected] = useState<number | null>(null); // null = whole team
   const [viewMode, setViewMode] = useState<ViewMode>('card');
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     setError(null);
     analyticsApi.activityCalendar()
       .then(setData)
       .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  };
+  }, [errorMessage]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const syncAgents = async () => {
     setSyncing(true);

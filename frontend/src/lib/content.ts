@@ -1456,7 +1456,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '🔒', title: 'Security', desc: 'Tenant-scoped access controls and AES-256-GCM encryption for credentials stored by supported integrations.', href: '/security' },
       { icon: '📊', title: 'Observability', desc: 'Execution, token, and tool-call telemetry for instrumented platform workflows, with coverage identified by surface.', href: '/settings?sub=logs' },
       { icon: '🐞', title: 'Quality & Error Tracking', desc: 'Ingest errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket; group them by fingerprint; then turn any group into a fix task an agent ships as a pull request — crash to PR on one surface.', href: '/quality' },
-      { icon: '📈', title: 'Maturity Diagnostic', desc: 'Rate every practice (Dev, QA, DevOps, PMO, governance) on a CMMI/COBIT-style 1–5 scale — free to self-assess, or scored objectively from your real delivery data with a prioritized plan to mature and innovate.', href: '/diagnostics' },
+      { icon: '📈', title: 'Maturity Diagnostic', desc: 'Rate every practice (Dev, QA, DevOps, PMO, governance) on a CMMI/COBIT-style 1–5 scale — free to self-assess, or scored objectively from your real delivery data with a prioritized plan to mature and innovate.', href: '/tools/agentic-maturity' },
       { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
     ],
   },
@@ -1516,7 +1516,7 @@ export const PRODUCT_CAPABILITY_OPERATIONS: Record<string, CapabilityOperations>
   'Board Connectors': { owner: 'Integrations', limitation: 'Mappings, permissions, sync direction, and conflict handling vary by provider.', exports: ['Provider-specific sync'], exampleHref: '/integrations' },
   'Workforce Mesh': { owner: 'Agent Runtime', limitation: 'Requires registered hosts and configured network/runtime access.', exports: ['Execution records'], exampleHref: '/workforce' },
   'Session Conversations': { owner: 'Collaboration', limitation: 'Conversation retention and tools depend on workspace configuration.', exports: ['Session export'], exampleHref: '/creation-canvas' },
-  'Workforce Kanban & Templates': { owner: 'Delivery', limitation: 'Installed templates remain subject to workspace roles and entitlements.', exports: ['Template package'], exampleHref: '/tasks' },
+  'Workforce Kanban & Templates': { owner: 'Delivery', limitation: 'Installed templates remain subject to workspace roles and entitlements.', exports: ['Template package'], exampleHref: '/projects?tab=tasks' },
   'Knowledge & SOPs': { owner: 'Knowledge', limitation: 'Compliance suitability depends on configured controls and organizational review.', exports: ['Published snapshot'], exampleHref: '/knowledge' },
   Skills: { owner: 'Marketplace', limitation: 'Installed skills execute with the permissions of their configured runtime.', exports: ['Skill package'], exampleHref: '/skills' },
   Personas: { owner: 'Marketplace', limitation: 'Persona behavior varies with the selected model and workflow.', exports: ['Persona definition'], exampleHref: '/personas' },
@@ -1526,7 +1526,7 @@ export const PRODUCT_CAPABILITY_OPERATIONS: Record<string, CapabilityOperations>
   Security: { owner: 'Security', limitation: 'Control coverage depends on deployment and integration configuration.', exports: ['Available audit evidence'], exampleHref: '/security' },
   Observability: { owner: 'Observability', limitation: 'Coverage varies by instrumented surface and entry point.', exports: ['Available logs and traces'], exampleHref: '/settings?sub=logs' },
   'Quality & Error Tracking': { owner: 'Quality', limitation: 'Requires a configured source; supported event fields vary by provider.', exports: ['Issue or fix task'], exampleHref: '/quality' },
-  'Maturity Diagnostic': { owner: 'Diagnostics', limitation: 'Self-assessment is directional and not a certification.', exports: ['Assessment result'], exampleHref: '/diagnostics' },
+  'Maturity Diagnostic': { owner: 'Diagnostics', limitation: 'Self-assessment is directional and not a certification.', exports: ['Assessment result'], exampleHref: '/tools/agentic-maturity' },
   'Tenants & Workspaces': { owner: 'Platform', limitation: 'Roles and entitlements govern available workspace operations.', exports: ['Available workspace records'], exampleHref: '/tenants' },
 };
 

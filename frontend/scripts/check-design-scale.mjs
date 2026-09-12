@@ -254,8 +254,15 @@ const BASELINE = {
    * `content-manager` pages became Server Components over client islands, and their
    * literals MOVED into `PersonasClient` / `SkillsClient` / `ContentManagerRedirect`
    * unchanged, which is why the delta shows them as a matched +/− pair and not as work.
+   *
+   * 3470 → 3462 (2026-09-12): the workspace picker (`app/tenants/page.tsx`) came
+   * off Tailwind onto inline styles with three typed sizes; the avatar letter and
+   * the "+" glyph now name `--font-size-card-title` and the empty-state icon takes
+   * its size from `<Icon size>`. The two byte-identical `/webcontainer/connect`
+   * pages (three `fontSize: 14` each) became ONE `WebContainerConnect` leaf on
+   * `--font-size-body`. Net of the one the integrations forms had added.
    */
-  offScaleFontSizes: 3470,
+  offScaleFontSizes: 3462,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

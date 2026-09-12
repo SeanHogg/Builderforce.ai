@@ -41,6 +41,67 @@ dispatcher gave no reason" (`no_agent`), on a ticket whose agent had resolved.
   interleaved reset), native run (`nativeBrainRun.test.ts`), replay auth
   (`builtinMcpService.test.ts`), `bfk_` access (`llmRoutes.test.ts`).
 
+## ✅ RESOLVED 2026-09-12 — Identity, integrations, canvas language, sales, SEO and the red guards
+
+Six parallel passes were stopped mid-edit; their committed halves are finished here and
+the tree compiles, with every frontend and api guard green.
+
+- **Identity — one session gate, and emulation that sees the tenant.** `lib/auth.ts` is
+  split: `auth/credentials` (pre-session calls; the only transport exemption left),
+  `auth/session` (`profileApi`) and `auth/members` (`membersApi`), both on `apiRequest`, so
+  emulation, locale and 401/402 handling apply. The callers the split stranded were
+  finished (`OnboardingStepper`/dashboards no longer pass `webToken`, `InviteTeamMembers`
+  no `tenantToken`, `WorkforceAgents` revokes through `membersApi`). `useRequireAuth` is
+  FOLDED into `useRequireSession` (`'loading' | 'anonymous' | 'no-tenant' | 'ready'`, plus
+  `mayRender`/`hasSession`); nine callers migrated, its test cases moved and extended
+  (`redirect: false`, the pure readings). The freelancer dashboard and `/admin` use the
+  gate. `authRoutes.ts` lost the newsletter and privacy routers (1,654 → 1,426 lines).
+- **Integrations — the connect UI renders from the server's catalog.** The gallery is
+  `buildGalleryCards`/`groupGalleryCards` in the catalog's category order (a warehouse
+  files under "data", not "source control"); `PROVIDER_META` and the hand-kept
+  `IntegrationProvider` union are gone (`provider` is a catalog id). 32 field-label and
+  board-hint keys, 6 categories and the form's own strings exist in all five catalogs, so
+  `connectableCatalog.test.ts`'s parity check is green.
+- **Canvas — new objects are titled in the board's language.** Every registry entry
+  carries a `titleKey` (a spec kind's own vocabulary namespace; a hand-declared kind whose
+  default title is its label reuses `object.<kind>`), and `createDefaultCreationData(kind,
+  t)` mints the title from it. The proposal stage (through a live translator ref),
+  `newNode`, materialisation, the project expansion and the scripted Brain fallbacks all
+  pass the board's translator (36 runtime keys), and the demo board a local canvas opens on
+  is built from it (`initialNodes(t)`/`initialEdges(t)`, 16 keys). A `legalDocument` card's status is minted
+  through `CanvasFounderOpsContext.t`. Residual: the LLM course body (Canvas, blocked on
+  the translation decision).
+- **Layering — `lib/` may not import presentation.** `check-layering.mjs` now scans
+  `src/lib/` (runtime imports of `@/components`/`@/app` forbidden, baseline empty); the last
+  site, `canvasProse`, takes the kind's content fields from its caller. The
+  `creation-canvas-contract` barrel is a barrel (115 lines; `objectKinds` subpath).
+- **Sales — an associate sees every referral attributed to them** (operator decision),
+  across workspaces, with the superadmin aggregate spanning all; the hub's leads are
+  keyed by the window they answer.
+- **SEO.** The 34 indexable app routes serve their own heads again (21 had regressed to the
+  root title): `routeTeaserMetadata(pathname)`, an absolute title, `RouteTeaserJsonLd`, and
+  nine client pages split into server pages over `*Client.tsx` islands. The retired
+  `/training`, `/tasks`, `/contributors` and `/diagnostics` left the sitemap AND robots.txt
+  (their dead teaser rows deleted; `content.ts` links point at the pages that replaced
+  them), and `routeTeaserMetadata.test.ts` now ASSERTS no listed route redirects instead of
+  exempting redirects. Residual: related-article cards (Growth, blocked on placement).
+- **api god modules.** `campaignEngine.ts` → `marketing/campaign/*` (8 files),
+  `creationListings.ts` → `marketplace/listings/*` (8), `careerTools.ts` → `tools/career/*`
+  (5), each original a thin re-export. `jobRoutes.ts` is still open.
+- **Faults.** The bare `faultMessage(e)` calls are on `useErrorMessage` (one left: its own
+  definition in `apiClient`).
+- **Kernel — a surface can widen its own step budget again.** `runAgentLoop` copied
+  `budget.stepCap` at start, so the canvas's build turn (which widens from the tool budget
+  the moment a workspace write commits) was pinned to 8 steps; it reads the cap live now,
+  with a kernel test. No cap was added — `stepCap` stays optional.
+- **Guards, all green.** react-hooks (six files: `load` as a `useCallback` over the stable
+  `errorMessage`, derived leads, `loadDiagnostic`); `'use client'` 980 → 976 (the two
+  byte-identical webcontainer connect pages are one leaf; three hook modules lost a
+  directive they did not need, argued in each header); design scale 3471 → 3462;
+  root closure 320 → 323 argued in its header (the auth split and the gate swap); i18n keys
+  (the workspace picker, `ChatsView`, the connect form); api `unvalidated-bodies` locked
+  in at 23 for `authRoutes`.
+
 ## ✅ RESOLVED 2026-09-12 — Roadmap cleanup: closure notes moved out of ROADMAP.md
 
 ROADMAP.md now carries open work only. Every "(Closed …, see DONE.md …)" note, "shipped"

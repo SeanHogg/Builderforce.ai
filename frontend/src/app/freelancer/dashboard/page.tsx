@@ -18,6 +18,7 @@ import { useAvailableForHire } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
+import { hasSession, useRequireSession } from '@/lib/useRequireSession';
 import { listMyInvoices, type Invoice } from '@/lib/freelance/billing';
 import { listMyEngagements, getTodayActivity, type Engagement } from '@/lib/freelance/engagements';
 import {
@@ -54,7 +55,10 @@ export default function FreelancerDashboardPage() {
   const t = useTranslations('freelancerDashboard');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, webToken } = useAuth();
+  const { isAuthenticated } = useAuth();
+  // A person-level page: a hired account works across engagements, not inside one
+  // workspace, so it asks for a session and not a tenant.
+  const session = useRequireSession({ requireTenant: false });
   const forHire = useAvailableForHire();
   // A hired account never reaches /dashboard (the shell blocks it), so this is
   // where its setup wizard lives — same shared decision, hired step track.
@@ -133,7 +137,7 @@ export default function FreelancerDashboardPage() {
     [pendingInvoices],
   );
 
-  if (!isAuthenticated) return null;
+  if (!hasSession(session)) return null;
 
   // A builder who hasn't opted into being hired has no worker data — nudge them
   // to the opt-in rather than showing four empty tiles.
@@ -156,9 +160,8 @@ export default function FreelancerDashboardPage() {
 
   return (
     <PageContainer style={{ padding: 0 }}>
-      {onboarding.show && webToken && (
+      {onboarding.show && isAuthenticated && (
         <OnboardingStepper
-          webToken={webToken}
           initialProgress={onboarding.progress}
           onComplete={onboarding.complete}
           onDismiss={onboarding.dismiss}

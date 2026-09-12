@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { canRelevelCanvasObject, canvasProseText } from './canvasProse';
 import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
+import { creationObjectContentFields } from '@/components/creation-canvas/creationObjectRegistry';
 
 const document = (markdown: string): CreationNodeData => ({ kind: 'document', title: 'Photosynthesis', subtitle: 'Biology notes', markdown });
+const relevel = (data: CreationNodeData) => canRelevelCanvasObject(data, creationObjectContentFields(data.kind));
 
 describe('the words on an object', () => {
   it('reads the body as speech, without the markdown marks', () => {
@@ -27,11 +29,11 @@ describe('the words on an object', () => {
 
 describe('what can be re-levelled', () => {
   it('offers the rewrite on prose kinds that actually have prose', () => {
-    expect(canRelevelCanvasObject(document('A long enough body to be worth rewriting for a younger reader.'))).toBe(true);
+    expect(relevel(document('A long enough body to be worth rewriting for a younger reader.'))).toBe(true);
   });
 
   it('never offers it on a kind whose content is rows or coordinates', () => {
-    expect(canRelevelCanvasObject({ kind: 'map', title: 'Sites', mapPoints: [{ lat: 1, lng: 2 }] } as CreationNodeData)).toBe(false);
-    expect(canRelevelCanvasObject({ kind: 'timer', title: 'Focus', duration: 300 } as CreationNodeData)).toBe(false);
+    expect(relevel({ kind: 'map', title: 'Sites', mapPoints: [{ lat: 1, lng: 2 }] } as CreationNodeData)).toBe(false);
+    expect(relevel({ kind: 'timer', title: 'Focus', duration: 300 } as CreationNodeData)).toBe(false);
   });
 });

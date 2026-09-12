@@ -36,7 +36,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { Select } from '@/components/Select';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { mayRender, useRequireSession } from '@/lib/useRequireSession';
 import { listDataRooms, type DataRoomSummary } from '@/lib/founderOpsApi';
 import {
   investorApi,
@@ -74,7 +74,7 @@ const EMPTY_ROOMS: DataRoomSummary[] = [];
 
 export default function InvestorClient() {
   const t = useTranslations('investor');
-  const allowed = useRequireAuth();
+  const allowed = mayRender(useRequireSession());
   const router = useRouter();
   const params = useSearchParams();
   const tab = params.get('tab') ?? '';

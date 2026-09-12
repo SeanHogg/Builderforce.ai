@@ -15,6 +15,7 @@ import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 import { canRelevelCanvasObject } from '@/lib/canvasProse';
+import { creationObjectContentFields } from './creationObjectRegistry';
 import { READING_LEVELS, relevelRequest } from '@/lib/readingLevels';
 import { courseFromNode } from '@/lib/courseLms';
 import type { CanvasPracticeQuestion } from '@/lib/canvasPractice';
@@ -36,7 +37,7 @@ export interface LearningControlProps {
 export function ReadingLevelControl({ data, editable, onAskBrain }: Omit<LearningControlProps, 'onChange'>) {
   const t = useTranslations('creationCanvas.readingLevel');
   const [level, setLevel] = useState<string>('simple');
-  if (!canRelevelCanvasObject(data)) return null;
+  if (!canRelevelCanvasObject(data, creationObjectContentFields(data.kind))) return null;
   return <section className={styles.learningControl} aria-label={t('title')}>
     <label>{t('title')}<select value={level} onChange={(event) => setLevel(event.target.value)}>
       {READING_LEVELS.map((option) => <option key={option.id} value={option.id}>{t(option.id)}</option>)}

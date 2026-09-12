@@ -479,7 +479,13 @@
         "pm": "Gestión de proyectos y trabajo",
         "scm": "Control de código fuente",
         "itsm": "Gestión de servicios de TI",
-        "incident": "Monitoreo y guardias"
+        "incident": "Monitoreo y guardias",
+        "knowledge": "Conocimiento y documentación",
+        "search": "Búsqueda web",
+        "productivity": "Productividad",
+        "data": "Datos y almacenes de datos",
+        "marketing": "Marketing y CRM",
+        "enrichment": "Enriquecimiento de contactos"
       }
     },
     "panel": {
@@ -1810,7 +1816,8 @@
       "confirm": "Confirmar",
       "armed": "Pulsa de nuevo para confirmar o Esc para cancelar."
     },
-    "servingPreviewAnyway": "Las últimas comprobaciones fallaron ({summary}): se sirve la vista previa de todos modos."
+    "servingPreviewAnyway": "Las últimas comprobaciones fallaron ({summary}): se sirve la vista previa de todos modos.",
+    "refresh": "Actualizar"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -15774,7 +15781,32 @@
     "rotateHintSingle": "Deja el token en blanco para conservar la clave actual, o introduce un nuevo valor para rotarla.",
     "saveChanges": "Guardar cambios",
     "saveKey": "Guardar clave",
-    "addKey": "Añadir clave"
+    "addKey": "Añadir clave",
+    "fields": {
+      "apiKey": "Clave de API",
+      "apiToken": "Token de API",
+      "accessToken": "Token de acceso",
+      "token": "Token de autenticación",
+      "email": "Correo de la cuenta",
+      "username": "Nombre de usuario",
+      "password": "Contraseña",
+      "fromEmail": "Correo del remitente",
+      "clientId": "ID de cliente OAuth",
+      "clientSecret": "Secreto de cliente OAuth",
+      "refreshToken": "Token de actualización OAuth",
+      "rootFolderId": "ID de la carpeta raíz",
+      "connectionString": "Cadena de conexión",
+      "projectUrl": "URL del proyecto",
+      "serviceKey": "Clave de rol de servicio",
+      "endpoint": "Punto de conexión",
+      "projectId": "ID del proyecto",
+      "account": "Identificador de la cuenta"
+    },
+    "optionalField": "{field} (opcional)",
+    "providerSelect": "Proveedor",
+    "tcpTransportNote": "{provider} se conecta por TCP, algo que el entorno de ejecución en la nube no puede abrir. La clave se guarda y valida aquí, y solo un entorno autoalojado puede usarla.",
+    "catalogLoadError": "No se pudo cargar la lista de servicios que puedes conectar.",
+    "notConnectable": "Este servicio se conecta sin una clave guardada."
   },
   "boardConnections": {
     "heading": "Tableros externos",
@@ -15799,7 +15831,29 @@
     "pollIntervalLabel": "Intervalo de sondeo (segundos)",
     "connecting": "Conectando…",
     "connectAndSync": "Conectar y sincronizar",
-    "connectExternalBoard": "Conectar tablero externo"
+    "connectExternalBoard": "Conectar tablero externo",
+    "externalBoardIdHint": {
+      "github": "Repositorio — owner/repo (en blanco = elegir durante la migración)",
+      "jira": "Clave del proyecto (p. ej. ENG) — en blanco sincroniza todo",
+      "linear": "ID del equipo (opcional) — en blanco sincroniza todos los equipos",
+      "monday": "ID del tablero (numérico)",
+      "asana": "GID del proyecto",
+      "clickup": "ID de la lista",
+      "rally": "ObjectID del proyecto (opcional) — en blanco sincroniza todo",
+      "gitlab": "ID o ruta del proyecto (p. ej. group/repo)",
+      "bitbucket": "Espacio de trabajo/repositorio (workspace/repo_slug)",
+      "freshservice": "ID del espacio de trabajo (opcional) — en blanco sincroniza todos los tickets",
+      "freshdesk": "En blanco sincroniza todos los tickets del servicio de ayuda",
+      "servicenow": "Nombre de la tabla (predeterminado: incident)",
+      "sentry": "Organización/proyecto (organization-slug/project-slug)",
+      "pagerduty": "ID del servicio (opcional) — en blanco sincroniza todos los servicios"
+    },
+    "providerSelect": "Proveedor de tableros",
+    "status": {
+      "active": "Activo",
+      "degraded": "Degradado",
+      "disabled": "Desactivado"
+    }
   },
   "sourceControl": {
     "errLoad": "No se pudieron cargar los repositorios",
@@ -22542,6 +22596,13 @@
           "over": "El gasto hasta la fecha es el {share}% de la exposición estimada: se ha gastado más en litigar esto de lo que se estima que vale. Es una conversación de acuerdo, no una partida presupuestaria.",
           "under": "El gasto hasta la fecha es el {share}% de la exposición estimada."
         }
+      },
+      "documentStatus": {
+        "draft": "Borrador",
+        "shared": "Compartido",
+        "awaitingSignature": "Pendiente de firma",
+        "declined": "Rechazado",
+        "signed": "Firmado"
       }
     },
     "legalUpload": {
@@ -23843,7 +23904,67 @@
       "agent": "Agentes"
     },
     "blankCanvasTagline": "Un tablero vacío. Di lo que quieres y toma forma.",
-    "startersLabel": "Formas de empezar"
+    "startersLabel": "Formas de empezar",
+    "runtimeObject": {
+      "projectHealth": "Salud de {title}",
+      "projectRoadmap": "Hoja de ruta de {title}",
+      "deliveryWorkflow": "Flujo de entrega",
+      "nextDeliveryTask": "Siguiente tarea de entrega",
+      "sprintCadence": "Cadencia de sprint",
+      "shipNextTask": "Entregar la siguiente tarea",
+      "llmCourse": "Construye un LLM",
+      "llmCourseSubtitle": "De los requisitos y los datos al entrenamiento, la evaluación y el despliegue.",
+      "llmLab": "Laboratorio final de LLM",
+      "executiveRoadmap": "Hoja de ruta del equipo directivo",
+      "salesRoadmap": "Hoja de ruta de la presentación de ventas",
+      "executiveSlides": "Presentación del equipo directivo",
+      "salesSlides": "Presentación de ventas",
+      "featureSummary": "Las 10 funciones más solicitadas",
+      "featureMockups": "Maquetas de las 10 funciones",
+      "featureMockupsSubtitle": "Diez conceptos de alta fidelidad vinculados, generados a partir de los comentarios de los usuarios.",
+      "feedbackEvidence": "Evidencia de comentarios de clientes",
+      "evaluation": "Evaluación del lienzo",
+      "status": {
+        "live": "En vivo",
+        "ready": "Listo",
+        "readyToLearn": "Listo para aprender",
+        "practiceWorkspace": "Espacio de práctica",
+        "aiGenerated": "Generado por IA",
+        "synthesized": "Sintetizado",
+        "readyForReview": "Listo para revisión",
+        "aiEvaluation": "Evaluación de IA"
+      },
+      "mockupItem": {
+        "onboarding": "Incorporación inteligente",
+        "analytics": "Analítica del equipo",
+        "approvals": "Bandeja de aprobaciones",
+        "voice": "Comandos de voz",
+        "dashboards": "Paneles personalizados",
+        "handoffs": "Traspasos entre agentes",
+        "mobileReview": "Revisión móvil",
+        "audit": "Historial de auditoría",
+        "templates": "Plantillas",
+        "collaboration": "Colaboración en vivo"
+      }
+    },
+    "seedBoard": {
+      "workflow": "Flujo de la campaña de otoño",
+      "weekdayCadence": "Cadencia de días laborables",
+      "draftCopy": "Redactar el texto de la campaña",
+      "draftCopyTask": "Redacta el correo de la campaña de otoño y el texto de la página de destino a partir del brief.",
+      "publishPage": "Publicar la página de destino",
+      "landingPage": "Página de destino de la campaña",
+      "draft": "Borrador",
+      "forecast": "Previsión de la campaña",
+      "marketing": "Marketing",
+      "sarahFocus": "Define segmentos de audiencia y redacta el texto de los correos.",
+      "design": "Diseño",
+      "jordanFocus": "Pule la sección principal y el diseño móvil.",
+      "strategist": "Estratega de campañas",
+      "strategistSubtitle": "Define la estrategia, el mensaje y la audiencia de campañas de alto impacto.",
+      "publishes": "publica",
+      "measures": "mide"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -25703,7 +25824,8 @@
       "heading": "Preparando tu lienzo de ventas",
       "preparing": "Creando tu pipeline, objetivos, deck y coach CRO…",
       "retryHint": "Recarga la página para volver a intentarlo."
-    }
+    },
+    "attributedScope": "Todas las referencias atribuidas a ti, en cada espacio de trabajo en el que se registraron."
   },
   "salesAdmin": {
     "title": "Programa de ventas",
@@ -28891,5 +29013,43 @@
   "workflowDag": {
     "empty": "Todavía no hay tareas en este flujo de trabajo.",
     "defaultRole": "agente"
+  },
+  "workspacePicker": {
+    "title": "Selecciona un espacio de trabajo",
+    "subtitle": "Elige el espacio de trabajo en el que quieres trabajar.",
+    "emptyTitle": "Aún no hay espacios de trabajo.",
+    "emptyBody": "Crea uno para empezar a construir con tu equipo.",
+    "createWorkspace": "Crear un espacio de trabajo",
+    "createHeading": "Crear un espacio de trabajo nuevo",
+    "namePlaceholder": "Nombre del espacio de trabajo",
+    "creating": "Creando…",
+    "create": "Crear",
+    "backToList": "Volver a tus espacios de trabajo",
+    "defaultHint": "Tu espacio de trabajo predeterminado se abre automáticamente en tu próxima visita.",
+    "clearDefault": "Quitar predeterminado",
+    "defaultBadge": "Predeterminado",
+    "renameTitle": "Cambiar el nombre del espacio de trabajo",
+    "rename": "Cambiar nombre",
+    "clearDefaultTitle": "Dejar de abrir este espacio de trabajo automáticamente",
+    "setDefaultTitle": "Abrir este espacio de trabajo automáticamente la próxima vez",
+    "setDefault": "Establecer como predeterminado",
+    "newWorkspace": "Nuevo espacio de trabajo"
+  },
+  "chatsView": {
+    "intro": "Todas las sesiones de chat de los hosts de agentes de este espacio de trabajo",
+    "errorPrefix": "Se produjo un error: {error}",
+    "loadingSessions": "Cargando sesiones…",
+    "empty": "Aún no hay sesiones de chat. El historial aparecerá aquí cuando los hosts de agentes empiecen a recibir mensajes.",
+    "sessionsHeading": "Sesiones ({count})",
+    "messageCount": "{count, plural, one {# mensaje} other {# mensajes}}",
+    "hostFallback": "Host de agentes {id}",
+    "selectPrompt": "Selecciona una sesión para ver sus mensajes.",
+    "loadingMessages": "Cargando mensajes…",
+    "noMessages": "No hay mensajes."
+  },
+  "webcontainerConnect": {
+    "connecting": "Conectando con tu IDE…",
+    "connected": "Conectado. Puedes cerrar esta pestaña si la vista previa aparece en tu IDE.",
+    "failed": "La conexión falló: {error}"
   }
 }

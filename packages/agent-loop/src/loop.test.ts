@@ -113,6 +113,25 @@ describe("runAgentLoop", () => {
     expect(r).toMatchObject({ finished: false, exhausted: true, exhaustedBy: "steps", step: 2 });
   });
 
+  it("reads stepCap live, so a surface can widen its own budget mid-run", async () => {
+    // The canvas does exactly this: a turn opens on the tool budget and, the moment its
+    // first workspace write commits, widens to the build budget. A cap copied at loop
+    // start pinned such a turn to the opening budget.
+    const turns: LoopTurnResult[] = Array.from({ length: 6 }, (_, i) => ({ content: "", toolCalls: [call(`w${i}`, "write")] }));
+    const ports = scripted(turns);
+    const budget = { stepCap: 2 };
+    const widening: LoopPorts<Row> = {
+      complete: (ctx) => ports.complete(ctx),
+      dispatch: async (c, ctx) => {
+        budget.stepCap = 5;
+        return ports.dispatch(c, ctx);
+      },
+    };
+    const r = await runAgentLoop({ messages: [], codec: openAiChatCodec<Row>(), ports: widening, budget });
+    expect(r).toMatchObject({ finished: false, exhausted: true, exhaustedBy: "steps", step: 5 });
+    expect(ports.dispatched).toHaveLength(5);
+  });
+
   // ── The tool-failure breaker: the ONLY limit a run has by default ────────────
   it("runs without a step cap by default: a long run of successful calls is never cut off", async () => {
     const turns: LoopTurnResult[] = Array.from({ length: 120 }, (_, i) => ({ content: "", toolCalls: [call(`c${i}`, "read")] }));

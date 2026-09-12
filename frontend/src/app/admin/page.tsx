@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { useRequireSession } from '@/lib/useRequireSession';
+import { hasSession, useRequireSession } from '@/lib/useRequireSession';
 import PageContainer from '@/components/PageContainer';
 import { EmulationLauncherProvider } from '@/components/admin/EmulationLauncher';
 import { DestinationIndex } from '@/components/shell/DestinationIndex';
@@ -98,7 +98,7 @@ export default function AdminPage() {
   const { user, isAuthenticated } = useAuth();
   const isSuperadmin = Boolean(user?.isSuperadmin);
 
-  const allowed = useRequireAuth({ returnTo: '/admin', requireTenant: false });
+  const allowed = hasSession(useRequireSession({ returnTo: '/admin', requireTenant: false }));
 
   useEffect(() => {
     if (!allowed || isSuperadmin) return;

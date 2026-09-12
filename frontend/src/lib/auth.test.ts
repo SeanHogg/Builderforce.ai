@@ -7,6 +7,8 @@ import {
   resendVerificationCode,
   getMyTenants,
   getTenantToken,
+} from './auth/credentials';
+import {
   persistSession,
   persistTenantSession,
   clearSession,

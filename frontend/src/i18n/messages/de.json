@@ -479,7 +479,13 @@
         "pm": "Projekt- & Arbeitsmanagement",
         "scm": "Versionsverwaltung",
         "itsm": "IT-Service-Management",
-        "incident": "Überwachung & Bereitschaft"
+        "incident": "Überwachung & Bereitschaft",
+        "knowledge": "Wissen & Dokumentation",
+        "search": "Websuche",
+        "productivity": "Produktivität",
+        "data": "Daten & Warehouses",
+        "marketing": "Marketing & CRM",
+        "enrichment": "Kontaktanreicherung"
       }
     },
     "panel": {
@@ -1810,7 +1816,8 @@
       "confirm": "Bestätigen",
       "armed": "Zum Bestätigen erneut drücken, mit Esc abbrechen."
     },
-    "servingPreviewAnyway": "Die letzten Prüfungen sind fehlgeschlagen ({summary}) – die Vorschau wird trotzdem bereitgestellt."
+    "servingPreviewAnyway": "Die letzten Prüfungen sind fehlgeschlagen ({summary}) – die Vorschau wird trotzdem bereitgestellt.",
+    "refresh": "Aktualisieren"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -15774,7 +15781,32 @@
     "rotateHintSingle": "Lass das Token leer, um den aktuellen Schlüssel zu behalten, oder gib einen neuen Wert ein, um ihn zu rotieren.",
     "saveChanges": "Änderungen speichern",
     "saveKey": "Schlüssel speichern",
-    "addKey": "Schlüssel hinzufügen"
+    "addKey": "Schlüssel hinzufügen",
+    "fields": {
+      "apiKey": "API-Schlüssel",
+      "apiToken": "API-Token",
+      "accessToken": "Zugriffstoken",
+      "token": "Authentifizierungstoken",
+      "email": "Konto-E-Mail",
+      "username": "Benutzername",
+      "password": "Passwort",
+      "fromEmail": "Absender-E-Mail",
+      "clientId": "OAuth-Client-ID",
+      "clientSecret": "OAuth-Client-Secret",
+      "refreshToken": "OAuth-Aktualisierungstoken",
+      "rootFolderId": "Stammordner-ID",
+      "connectionString": "Verbindungszeichenfolge",
+      "projectUrl": "Projekt-URL",
+      "serviceKey": "Service-Role-Schlüssel",
+      "endpoint": "Endpunkt",
+      "projectId": "Projekt-ID",
+      "account": "Konto-Kennung"
+    },
+    "optionalField": "{field} (optional)",
+    "providerSelect": "Anbieter",
+    "tcpTransportNote": "{provider} verbindet sich über TCP, das die Cloud-Laufzeit nicht öffnen kann. Der Schlüssel wird hier gespeichert und geprüft, nutzen kann ihn nur eine selbst gehostete Laufzeit.",
+    "catalogLoadError": "Die Liste der verbindbaren Dienste konnte nicht geladen werden.",
+    "notConnectable": "Dieser Dienst verbindet sich ohne gespeicherten Schlüssel."
   },
   "boardConnections": {
     "heading": "Externe Boards",
@@ -15799,7 +15831,29 @@
     "pollIntervalLabel": "Abfrageintervall (Sekunden)",
     "connecting": "Verbindung…",
     "connectAndSync": "Verbinden und synchronisieren",
-    "connectExternalBoard": "Externes Board verbinden"
+    "connectExternalBoard": "Externes Board verbinden",
+    "externalBoardIdHint": {
+      "github": "Repository — owner/repo (leer = bei der Migration auswählen)",
+      "jira": "Projektschlüssel (z. B. ENG) — leer synchronisiert alles",
+      "linear": "Team-ID (optional) — leer synchronisiert alle Teams",
+      "monday": "Board-ID (numerisch)",
+      "asana": "Projekt-GID",
+      "clickup": "Listen-ID",
+      "rally": "Projekt-ObjectID (optional) — leer synchronisiert alles",
+      "gitlab": "Projekt-ID oder -Pfad (z. B. group/repo)",
+      "bitbucket": "Workspace/Repository (workspace/repo_slug)",
+      "freshservice": "Workspace-ID (optional) — leer synchronisiert alle Tickets",
+      "freshdesk": "Leer synchronisiert alle Helpdesk-Tickets",
+      "servicenow": "Tabellenname (Standard: incident)",
+      "sentry": "Organisation/Projekt (organization-slug/project-slug)",
+      "pagerduty": "Service-ID (optional) — leer synchronisiert alle Services"
+    },
+    "providerSelect": "Board-Anbieter",
+    "status": {
+      "active": "Aktiv",
+      "degraded": "Eingeschränkt",
+      "disabled": "Deaktiviert"
+    }
   },
   "sourceControl": {
     "errLoad": "Repositorys konnten nicht geladen werden",
@@ -22542,6 +22596,13 @@
           "over": "Die bisherigen Ausgaben betragen {share} % des geschätzten Risikos – für diesen Streit wurde mehr ausgegeben, als er schätzungsweise wert ist. Das ist ein Fall für ein Vergleichsgespräch, nicht für eine Budgetzeile.",
           "under": "Die bisherigen Ausgaben betragen {share} % des geschätzten Risikos."
         }
+      },
+      "documentStatus": {
+        "draft": "Entwurf",
+        "shared": "Geteilt",
+        "awaitingSignature": "Wartet auf Unterschrift",
+        "declined": "Abgelehnt",
+        "signed": "Unterschrieben"
       }
     },
     "legalUpload": {
@@ -23843,7 +23904,67 @@
       "agent": "Agenten"
     },
     "blankCanvasTagline": "Eine leere Fläche. Sag, was du willst, und es nimmt Gestalt an.",
-    "startersLabel": "Wege zum Start"
+    "startersLabel": "Wege zum Start",
+    "runtimeObject": {
+      "projectHealth": "{title} – Zustand",
+      "projectRoadmap": "{title} – Roadmap",
+      "deliveryWorkflow": "Delivery-Workflow",
+      "nextDeliveryTask": "Nächste Delivery-Aufgabe",
+      "sprintCadence": "Sprint-Takt",
+      "shipNextTask": "Nächste Aufgabe ausliefern",
+      "llmCourse": "Ein LLM bauen",
+      "llmCourseSubtitle": "Von Anforderungen und Daten bis zu Training, Evaluierung und Deployment.",
+      "llmLab": "LLM-Abschlusslabor",
+      "executiveRoadmap": "Roadmap des Führungsteams",
+      "salesRoadmap": "Roadmap der Vertriebspräsentation",
+      "executiveSlides": "Präsentation des Führungsteams",
+      "salesSlides": "Vertriebspräsentation",
+      "featureSummary": "Die 10 meistgewünschten Funktionen",
+      "featureMockups": "Mockups der 10 Funktionen",
+      "featureMockupsSubtitle": "Zehn verknüpfte High-Fidelity-Konzepte, erstellt aus Nutzerfeedback.",
+      "feedbackEvidence": "Belege aus Kundenfeedback",
+      "evaluation": "Canvas-Evaluierung",
+      "status": {
+        "live": "Aktiv",
+        "ready": "Bereit",
+        "readyToLearn": "Bereit zum Lernen",
+        "practiceWorkspace": "Übungsumgebung",
+        "aiGenerated": "KI-generiert",
+        "synthesized": "Zusammengefasst",
+        "readyForReview": "Bereit zur Prüfung",
+        "aiEvaluation": "KI-Evaluierung"
+      },
+      "mockupItem": {
+        "onboarding": "Intelligentes Onboarding",
+        "analytics": "Team-Analysen",
+        "approvals": "Freigabe-Posteingang",
+        "voice": "Sprachbefehle",
+        "dashboards": "Individuelle Dashboards",
+        "handoffs": "Agenten-Übergaben",
+        "mobileReview": "Mobile Prüfung",
+        "audit": "Audit-Verlauf",
+        "templates": "Vorlagen",
+        "collaboration": "Live-Zusammenarbeit"
+      }
+    },
+    "seedBoard": {
+      "workflow": "Workflow der Herbstkampagne",
+      "weekdayCadence": "Werktags-Takt",
+      "draftCopy": "Kampagnentext entwerfen",
+      "draftCopyTask": "Entwirf die E-Mail zur Herbstkampagne und den Landingpage-Text aus dem Briefing.",
+      "publishPage": "Landingpage veröffentlichen",
+      "landingPage": "Landingpage der Kampagne",
+      "draft": "Entwurf",
+      "forecast": "Kampagnenprognose",
+      "marketing": "Marketing",
+      "sarahFocus": "Definiert Zielgruppensegmente und schreibt E-Mail-Texte.",
+      "design": "Design",
+      "jordanFocus": "Verfeinert den Hero-Bereich und das mobile Layout.",
+      "strategist": "Kampagnenstratege",
+      "strategistSubtitle": "Legt Strategie, Botschaft und Zielgruppe für wirkungsvolle Kampagnen fest.",
+      "publishes": "veröffentlicht",
+      "measures": "misst"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -25703,7 +25824,8 @@
       "heading": "Ihr Vertriebs-Canvas wird eingerichtet",
       "preparing": "Pipeline, Ziele, Deck und CRO-Coach werden erstellt…",
       "retryHint": "Laden Sie die Seite neu, um es erneut zu versuchen."
-    }
+    },
+    "attributedScope": "Jede Ihnen zugeordnete Empfehlung – in jedem Arbeitsbereich, in dem sie sich registriert hat."
   },
   "salesAdmin": {
     "title": "Vertriebsprogramm",
@@ -28891,5 +29013,43 @@
   "workflowDag": {
     "empty": "Dieser Workflow enthält noch keine Aufgaben.",
     "defaultRole": "Agent"
+  },
+  "workspacePicker": {
+    "title": "Workspace auswählen",
+    "subtitle": "Wähle den Workspace, in dem du arbeiten möchtest.",
+    "emptyTitle": "Noch keine Workspaces.",
+    "emptyBody": "Lege einen an, um mit deinem Team loszulegen.",
+    "createWorkspace": "Workspace anlegen",
+    "createHeading": "Neuen Workspace anlegen",
+    "namePlaceholder": "Name des Workspace",
+    "creating": "Wird angelegt…",
+    "create": "Anlegen",
+    "backToList": "Zurück zu deinen Workspaces",
+    "defaultHint": "Dein Standard-Workspace öffnet sich beim nächsten Besuch automatisch.",
+    "clearDefault": "Standard entfernen",
+    "defaultBadge": "Standard",
+    "renameTitle": "Workspace umbenennen",
+    "rename": "Umbenennen",
+    "clearDefaultTitle": "Diesen Workspace nicht mehr automatisch öffnen",
+    "setDefaultTitle": "Diesen Workspace beim nächsten Mal automatisch öffnen",
+    "setDefault": "Als Standard festlegen",
+    "newWorkspace": "Neuer Workspace"
+  },
+  "chatsView": {
+    "intro": "Alle Chat-Sitzungen der Agent-Hosts in diesem Workspace",
+    "errorPrefix": "Fehler: {error}",
+    "loadingSessions": "Sitzungen werden geladen…",
+    "empty": "Noch keine Chat-Sitzungen. Der Verlauf erscheint hier, sobald Agent-Hosts Nachrichten empfangen.",
+    "sessionsHeading": "Sitzungen ({count})",
+    "messageCount": "{count, plural, one {# Nachricht} other {# Nachrichten}}",
+    "hostFallback": "Agent-Host {id}",
+    "selectPrompt": "Wähle eine Sitzung, um ihre Nachrichten zu sehen.",
+    "loadingMessages": "Nachrichten werden geladen…",
+    "noMessages": "Keine Nachrichten."
+  },
+  "webcontainerConnect": {
+    "connecting": "Verbindung zu deiner IDE wird hergestellt…",
+    "connected": "Verbunden. Du kannst diesen Tab schließen, wenn die Vorschau in deiner IDE angezeigt wird.",
+    "failed": "Verbindung fehlgeschlagen: {error}"
   }
 }

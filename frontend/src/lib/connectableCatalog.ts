@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The CONNECT catalog client — `GET /api/integrations/connectable`.
  *
@@ -13,6 +11,11 @@
  * Both registries here are static server constants, so each is fetched at most
  * once per session through the read-through client cache; every consumer shares
  * the same in-flight/resolved promise.
+ *
+ * No `'use client'`, deliberately: this is a typed client plus the hooks over it, and
+ * a hook module marks no boundary — the hooks run inside whichever component calls
+ * them (every caller is a client component already). The directive only turned the
+ * plain loaders into client references. The `lib/useRoleText.ts` convention.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';

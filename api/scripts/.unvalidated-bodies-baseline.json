@@ -12,7 +12,7 @@
   "src/presentation/routes/approvalRoutes.ts": 2,
   "src/presentation/routes/approvalRuleRoutes.ts": 2,
   "src/presentation/routes/artifactAssignmentRoutes.ts": 1,
-  "src/presentation/routes/authRoutes.ts": 26,
+  "src/presentation/routes/authRoutes.ts": 23,
   "src/presentation/routes/benchmarkingRoutes.ts": 1,
   "src/presentation/routes/boardConnectionRoutes.ts": 2,
   "src/presentation/routes/brainRoutes.ts": 13,

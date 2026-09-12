@@ -103,7 +103,10 @@ export default function SalesHubClient() {
   // null = still loading. The hub's figures are every referral attributed to this
   // person across every workspace, so an empty list means "none yet", never "no
   // workspace selected".
-  const [leads, setLeads] = useState<SalesLead[] | null>(null);
+  // Keyed by the window they answer, so switching windows reads as "loading" by
+  // derivation rather than by an effect clearing state before the fetch.
+  const [leadsFor, setLeadsFor] = useState<{ window: SalesReportWindow; rows: SalesLead[] } | null>(null);
+  const leads = leadsFor?.window === window_ ? leadsFor.rows : null;
   const [balance, setBalance] = useState<PayoutBalance | null>(null);
   const [payoutHistory, setPayoutHistory] = useState<PayoutRecord[]>([]);
   const [error, setError] = useState('');
@@ -134,9 +137,8 @@ export default function SalesHubClient() {
 
   useEffect(() => {
     if (sub !== 'leads') return;
-    setLeads(null);
-    salesApi.leads(window_).then((result) => setLeads(result.leads))
-      .catch((cause) => { setLeads([]); setError(faultText(cause, t('loadFailed'))); });
+    salesApi.leads(window_).then((result) => setLeadsFor({ window: window_, rows: result.leads }))
+      .catch((cause) => { setLeadsFor({ window: window_, rows: [] }); setError(faultText(cause, t('loadFailed'))); });
   }, [sub, window_, t]);
 
   const loadPayouts = useCallback(() => {

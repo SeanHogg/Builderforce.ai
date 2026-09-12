@@ -68,7 +68,6 @@ export function stepsForAccountType(isFreelancer: boolean): StepId[] {
 // ---------------------------------------------------------------------------
 
 export function OnboardingStepper({
-  webToken,
   tenantToken = null,
   tenant = null,
   initialProgress = null,
@@ -422,7 +421,7 @@ export function OnboardingStepper({
 
           {/* ── Step 4: Invite ── */}
           {currentStepId === 'invite' && tenant && tenantToken && (
-            <InviteTeamMembers tenantId={tenant.id} tenantToken={tenantToken} />
+            <InviteTeamMembers tenantId={tenant.id} />
           )}
 
           {/* ── Hired track: profile → résumé → publish → find work ── */}

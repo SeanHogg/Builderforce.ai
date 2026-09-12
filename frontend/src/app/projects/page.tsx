@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { mayRender, useRequireSession } from '@/lib/useRequireSession';
 import { useOptionalBrainContext } from '@/lib/brain';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import PageContainer from '@/components/PageContainer';
@@ -48,7 +48,7 @@ export default function ProjectsTasksPage() {
   const [projectCount, setProjectCount] = useState<number | null>(null);
   usePublishNavCount(PROJECTS_COUNT_KEY, projectCount);
 
-  const allowed = useRequireAuth({ returnTo: '/projects' });
+  const allowed = mayRender(useRequireSession({ returnTo: '/projects' }));
 
   const tabParam = searchParams.get('tab');
   const activeTab: Tab =

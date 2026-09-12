@@ -45,13 +45,17 @@
  * point of landing this before the remaining moves — the first entry anyone adds
  * has to be argued for in a diff.
  *
- * ── WHAT IS DELIBERATELY NOT ENFORCED YET ────────────────────────────────────
- * `src/lib/` is unclassified. It holds genuine domain material (the context map
- * itself is `lib/canvas/boundedContexts.ts`), typed API clients that are really
- * infrastructure, and pure helpers. Forbidding it would fail on day one for
- * correct reasons and teach everyone to add baseline lines, which is how a
- * ratchet becomes decoration. Classifying `lib/` is its own pass; this guard
- * enforces the direction that is unambiguous today.
+ * ── `src/lib/` — ONE rule, not a layer ───────────────────────────────────────
+ * `src/lib/` is not classified into layers. It holds genuine domain material (the
+ * context map itself is `lib/canvas/boundedContexts.ts`), typed API clients that
+ * are really infrastructure, and pure helpers, so the domain rules above would fail
+ * it for correct reasons. ONE direction is unambiguous for all three, though: lib
+ * sits BELOW presentation, so it may not runtime-import `@/components` or `@/app`.
+ * That rule is enforced (baseline: empty). It was 48 sites in 26 files on
+ * 2026-09-05, twelve of them `lib/canvas*.ts` importing the canvas's core type
+ * from a component — the same upward edge `CanvasObjectData`'s move ended for the
+ * domain. A lib that reaches up cannot be tested or compiled into the VS Code
+ * webview without dragging the components in behind it.
  *
  * Run via `node scripts/check-layering.mjs`; wired into `npm test` through
  * `scripts/checks.manifest.mjs`. `--update` rewrites the baseline.
@@ -63,6 +67,7 @@ import { fileURLToPath } from 'node:url';
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const srcDir = resolve(here, '../src');
 const domainsDir = resolve(srcDir, 'domains');
+const libDir = resolve(srcDir, 'lib');
 const baselineFile = resolve(here, '.layering-baseline.txt');
 
 const UPDATE = process.argv.includes('--update');
@@ -104,6 +109,10 @@ const FORBIDDEN = {
    * context's application layer bypassed.
    */
   presentation: [],
+  /** Not a domain layer — see "`src/lib/` — ONE rule" above. */
+  lib: [
+    { test: (s) => /^@\/(components|app)\//.test(s), why: 'lib may not depend on presentation' },
+  ],
 };
 
 const LAYERS = Object.keys(FORBIDDEN);
@@ -151,8 +160,9 @@ function key(file) {
   return relative(srcDir, file).split('\\').join('/');
 }
 
-/** The layer a file belongs to: `domains/<context>/<layer>/…`. */
+/** The layer a file belongs to: `domains/<context>/<layer>/…`, or `lib` for `lib/…`. */
 function layerOf(relPath) {
+  if (relPath.startsWith('lib/')) return 'lib';
   const match = relPath.match(/^domains\/[^/]+\/([^/]+)\//);
   return match && LAYERS.includes(match[1]) ? match[1] : null;
 }
@@ -162,26 +172,30 @@ function contextOf(relPath) {
   return relPath.match(/^domains\/([^/]+)\//)?.[1] ?? null;
 }
 
+const scannedFiles = () => [...collect(domainsDir), ...collect(libDir)];
+
 const current = new Map();
-for (const file of collect(domainsDir)) {
+for (const file of scannedFiles()) {
   const relPath = key(file);
   // A test may reach anywhere to build a fixture; it is not the shipped call graph.
   if (/\.test\.tsx?$/.test(relPath)) continue;
   const layer = layerOf(relPath);
   if (!layer) continue;
   const text = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  const context = contextOf(relPath);
   for (const { specifier } of runtimeImports(text)) {
     for (const rule of FORBIDDEN[layer]) {
       if (rule.test(specifier)) current.set(relPath, `${rule.why} (imports '${specifier}')`);
     }
-    const foreign = crossContextInfrastructure(contextOf(relPath), specifier);
+    // Cross-context infrastructure is a rule between CONTEXTS; a lib file has none.
+    const foreign = context ? crossContextInfrastructure(context, specifier) : null;
     if (foreign) current.set(relPath, `${layer} ${foreign} (imports '${specifier}')`);
   }
 }
 
 if (UPDATE) {
   const header =
-    '# Files under src/domains/ whose imports point OUTWARD, against the layering.\n' +
+    '# Files under src/domains/ and src/lib/ whose imports point OUTWARD, against the layering.\n' +
     '# This list may only SHRINK — see scripts/check-layering.mjs.\n' +
     '# Regenerate with: node scripts/check-layering.mjs --update\n';
   writeFileSync(baselineFile, header + [...current.keys()].sort().join('\n') + (current.size ? '\n' : ''), 'utf8');
@@ -206,7 +220,7 @@ let failed = false;
 
 if (added.length > 0) {
   failed = true;
-  console.error(`❌  New outward dependency in src/domains/ (${added.length}):\n`);
+  console.error(`❌  New outward dependency in src/domains/ or src/lib/ (${added.length}):\n`);
   for (const file of added) console.error(`      - ${file}\n        ${current.get(file)}`);
   console.error(
     '\n   Dependencies point INWARD: presentation → application → domain, and' +
@@ -226,8 +240,8 @@ if (cleaned.length > 0) {
 
 if (failed) process.exit(1);
 
-const scanned = collect(domainsDir).filter((file) => layerOf(key(file)) && !/\.test\.tsx?$/.test(key(file))).length;
+const scanned = scannedFiles().filter((file) => layerOf(key(file)) && !/\.test\.tsx?$/.test(key(file))).length;
 console.log(
-  `✅  Frontend layering ratchet OK — ${scanned} layered module(s) under src/domains/, ` +
+  `✅  Frontend layering ratchet OK — ${scanned} module(s) under src/domains/ and src/lib/, ` +
     `${current.size} known violation(s), 0 new.`,
 );

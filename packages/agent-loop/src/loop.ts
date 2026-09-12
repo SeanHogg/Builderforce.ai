@@ -42,7 +42,10 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
   const ctx = new Ctx<M>(args.messages, signal);
   const startStep = Math.max(0, budget.startStep ?? 0);
   const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
-  const stepCap = budget.stepCap ?? Number.POSITIVE_INFINITY;
+  // Read LIVE, not copied: a surface may widen its own budget mid-run (the canvas
+  // does, the moment a turn's first workspace write commits and it becomes a build
+  // turn). A copy taken here silently pinned such a run to its opening cap.
+  const stepCap = (): number => budget.stepCap ?? Number.POSITIVE_INFINITY;
   const failureStreakCap = budget.failureStreakCap ?? DEFAULT_TOOL_FAILURE_STREAK;
   ctx.step = startStep;
   ctx.output = args.initialOutput ?? "";
@@ -58,7 +61,7 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
   const isCancelled = async (): Promise<boolean> =>
     Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
 
-  for (; ctx.step < stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
+  for (; ctx.step < stepCap() && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
     if (await isCancelled()) {
       cancelled = true;
       break;
@@ -168,7 +171,7 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
     }
   }
 
-  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap);
+  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap());
   return {
     ok,
     output: ctx.output,

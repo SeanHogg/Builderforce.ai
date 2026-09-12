@@ -5,7 +5,7 @@
  * Lists audit runs (status, findings, severity/criterion rollups, summary), lets an
  * admin trigger an on-demand audit, and expands a run to its finding tickets.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   securityAgentApi,
@@ -47,14 +47,14 @@ export function SecurityAuditPanel() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [findings, setFindings] = useState<Record<number, SecurityAuditFinding[]>>({});
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     securityAgentApi.listAudits()
       .then(setAudits)
       .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
+  }, [errorMessage]);
+  useEffect(() => { load(); }, [load]);
 
   const runNow = async () => {
     setRunning(true); setError(null);

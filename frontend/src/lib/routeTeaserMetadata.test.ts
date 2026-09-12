@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import en from '@/i18n/messages/en.json';
-import { getRouteMarketing, indexableTeaserRoutes } from './routeMarketing';
+import { getRouteMarketing, indexableTeaserRoutes, noindexTeaserRoutes } from './routeMarketing';
 import { routeTeaserMetadata, routeTeaserSchema } from './routeTeaserMetadata';
 import { classifyShell } from './shellRouting';
 
@@ -93,8 +93,7 @@ describe('every indexable app route serves its own head', () => {
 
   it('declares metadata on the server', () => {
     const missing = appRoutes.filter((route) => {
-      const { page, head } = routeSources(route);
-      if (isServerRedirect(page)) return false;
+      const { head } = routeSources(route);
       return !/routeTeaserMetadata\(|export\s+(?:const\s+metadata\b|(?:async\s+)?function\s+generateMetadata\b)/.test(head);
     });
     expect(missing).toEqual([]);
@@ -102,10 +101,28 @@ describe('every indexable app route serves its own head', () => {
 
   it('renders the FAQ JSON-LD where the registry carries one', () => {
     const missing = appRoutes.filter((route) => {
-      const { page, head } = routeSources(route);
-      if (isServerRedirect(page) || !routeTeaserSchema(route)) return false;
+      const { head } = routeSources(route);
+      if (!routeTeaserSchema(route)) return false;
       return !/<(?:RouteTeaserJsonLd|JsonLd)\b/.test(head);
     });
     expect(missing).toEqual([]);
+  });
+});
+
+/**
+ * A retired route answers with a redirect, so it belongs in NEITHER list. The sitemap
+ * submitting one files a soft error on every crawl and spends crawl budget on a URL
+ * that is not the page; robots.txt disallowing one is worse — a crawler told not to
+ * fetch the old URL never follows it to the page that replaced it. The two tests
+ * above used to EXEMPT redirects, which is exactly how three retired routes stayed
+ * in the sitemap: the rule a registry row has to meet was switched off for the rows
+ * that could not meet it.
+ */
+describe('no teaser route answers with a redirect', () => {
+  it.each([
+    ['sitemap', indexableTeaserRoutes],
+    ['robots disallow', noindexTeaserRoutes],
+  ] as const)('%s lists none', (_list, routes) => {
+    expect(routes().filter((route) => isServerRedirect(routeSources(route).page))).toEqual([]);
   });
 });

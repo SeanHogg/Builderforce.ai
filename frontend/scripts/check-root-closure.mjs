@@ -46,6 +46,26 @@
  *
  * Deliberate raises, so a name in the baseline always has an argument:
  *
+ *   320 → 323 files (2026-09-12, later the same day) — the identity split and the ONE
+ *   session gate. No new first-paint WORK; code that was already here moved into files
+ *   with names:
+ *
+ *     - `lib/auth/credentials.ts` and `lib/auth/session.ts` are `lib/auth.ts` SPLIT
+ *       (884 lines, in the closure through `AuthContext`). It carried ~20 calls that run
+ *       WITH a session under the transport exemption meant for the pre-session ones, so
+ *       they skipped the emulation token, the locale header and the 401/402 handling —
+ *       a superadmin emulating a tenant saw their OWN members. The pre-session calls
+ *       (sign-in, register, the token exchange) are `auth/credentials` and keep the
+ *       exemption; `auth/session` (`profileApi`) runs on `apiRequest`. `AuthContext`
+ *       signs in and reads the profile on first paint, so a `dynamic()` would defer
+ *       sign-in itself.
+ *     - `lib/auth/members.ts` is the third part of the same split (`membersApi`, on
+ *       `apiRequest`). It arrives through `InviteTeamMembers` and `RoleAssigneePicker`,
+ *       both already in the closure, which used to import those calls from `lib/auth`.
+ *     - `lib/useRequireSession.ts` REPLACES `lib/useRequireAuth.ts`, which left the
+ *       closure in the same pass: the shell's `RequireAuth` reads the one gate instead
+ *       of a second one. One name out, one in.
+ *
  *   314 → 320 files (2026-09-12) — commit 99f5576ca put five new modules into the
  *   closure and failed the frontend deploy; this pass cut the one that was not
  *   load-bearing and argues the rest by name. None of them brings new first-paint WORK:

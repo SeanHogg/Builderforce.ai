@@ -488,7 +488,7 @@
   "Your project's own learned Evermind model.": "你项目自己学习得到的 Evermind 模型。",
   "Your workspace is on the {plan} plan. Click to manage your plan.": "您的工作区使用 {plan} 套餐。点击管理您的套餐。",
   "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "您的 {provider} 账户连接在另一个工作区中，因此本次运行使用了共享模型池而非您自己的模型。请切换到该工作区，或在当前工作区的“设置 ▸ API 密钥”中进行连接。",
-  "_This turn reached its tool budget. For work this long, dispatch a cloud agent from the board instead — it runs without a turn limit._": "_本轮已用尽工具预算。对于这么长的工作，请改为从看板派发一个云端智能体 — 它没有轮次上限。_",
+  "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._": "_本轮已停止，因为最近几次工具调用全部失败。请阅读它们的返回内容并按要求回复，或从看板将工作交给云端智能体，让它在自己的运行环境中继续。_",
   "added": "已添加",
   "approval": "审批",
   "beta": "测试版",

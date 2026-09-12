@@ -1,10 +1,16 @@
-'use client';
-
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { signInHref } from '@/lib/auth';
 import { isGuestPreviewRoute } from '@/lib/shellRouting';
+
+/*
+ * No `'use client'`, deliberately. A hook module marks no boundary: a hook runs inside
+ * whichever component calls it, and every caller of this one is already a client page
+ * (it navigates, so it has to be). The directive declared nothing the hook needs — it
+ * only turned `readSessionStatus`/`hasSession`/`mayRender`, which are pure, into client
+ * references a server surface could not call. The `lib/useRoleText.ts` convention.
+ */
 
 /**
  * Where a page stands with respect to the session.
@@ -28,6 +34,15 @@ export function readSessionStatus(auth: { authReady: boolean; isAuthenticated: b
 /** Somebody is signed in — with or without a workspace. */
 export function hasSession(status: SessionStatus): boolean {
   return status === 'ready' || status === 'no-tenant';
+}
+
+/**
+ * The page may render its own content. Every status but `loading` qualifies, because
+ * the gate already navigated away from each one the page does not accept: an
+ * `anonymous` page is a previewable one, a `no-tenant` page asked for no workspace.
+ */
+export function mayRender(status: SessionStatus): boolean {
+  return status !== 'loading';
 }
 
 export interface RequireSessionOptions {

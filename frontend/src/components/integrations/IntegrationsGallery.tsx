@@ -27,16 +27,16 @@ import { faultMessage } from '@/lib/apiClient';
 import { useErrorText } from '@/i18n/useErrorMessage';
 /**
  * Integrations gallery — the workspace-level home for every external system.
- * Cards derive from the board-provider catalog (single source of truth) plus the
- * credential-only providers (Confluence). Each card shows connected state and
- * opens a config side panel (Credentials · Connections · Activity) with a
- * "Start migration" launcher for providers that support discovery.
+ * Cards derive from the server's CONNECT catalog — one per provider a key can be
+ * stored for, in the catalog's own category and section order — plus any synced-
+ * board provider that connects without a stored key (see galleryCards.ts). Each
+ * card shows connected state and opens a config side panel (Credentials ·
+ * Connections · Activity) with a "Start migration" launcher for providers that
+ * support discovery.
  *
  * The migration wizard + ongoing sync are the two halves of the platform-move
  * story; both hang off the same per-provider panel here.
  */
-
-const CATEGORY_ORDER: BoardProviderMeta['category'][] = ['pm', 'scm', 'itsm', 'incident'];
 
 const cardGrid: React.CSSProperties = {
   display: 'grid',
@@ -54,14 +54,6 @@ const cardStyle: React.CSSProperties = {
   cursor: 'pointer',
   textAlign: 'left',
 };
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)',
-  color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-};
-const btnSubtle: React.CSSProperties = {
-  padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
-  color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-};
 
 type PanelTab = 'credentials' | 'connections' | 'activity';
 
@@ -73,9 +65,10 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
   const consumption = useConsumption();
   const ingestionMeter = consumption?.meters.find((meter) => meter.key === 'ingestion');
 
-  const [providersMeta, setProvidersMeta] = useState<BoardProviderMeta[]>([]);
+  const [boards, setBoards] = useState<BoardProviderMeta[]>([]);
   const [credentials, setCredentials] = useState<IntegrationCredential[]>([]);
   const [loading, setLoading] = useState(true);
+  const { catalog, loading: catalogLoading } = useConnectableCatalog();
 
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab>('credentials');
@@ -86,8 +79,8 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
   }, []);
 
   useEffect(() => {
-    Promise.all([boardConnectionsApi.providers().catch(() => []), integrationsApi.list({ scope: 'global' }).catch(() => [])])
-      .then(([p, c]) => { setProvidersMeta(p); setCredentials(c); })
+    Promise.all([loadBoardProviders().catch(() => [] as BoardProviderMeta[]), integrationsApi.list({ scope: 'global' }).catch(() => [])])
+      .then(([p, c]) => { setBoards(p); setCredentials(c); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -101,26 +94,13 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
     return map;
   }, [credentials]);
 
-  // Gallery cards: catalog providers + credential-only providers (e.g. confluence)
-  // that aren't connectable boards but still need a credential home.
-  const cards = useMemo(() => {
-    const ids = new Set(providersMeta.map((p) => p.id));
-    const extra: BoardProviderMeta[] = (Object.keys(PROVIDER_META) as IntegrationProvider[])
-      .filter((id) => !ids.has(id))
-      .map((id) => ({ id, label: PROVIDER_META[id].label, category: 'scm', externalBoardId: 'optional', externalBoardIdHint: '', supportsWebhook: false, supportsDiscovery: false }));
-    return [...providersMeta, ...extra];
-  }, [providersMeta]);
-
-  const grouped = useMemo(() => {
-    const g = new Map<BoardProviderMeta['category'], BoardProviderMeta[]>();
-    const query = search.trim().toLowerCase();
-    for (const c of cards.filter((item) => !query || `${item.label} ${item.id} ${item.category}`.toLowerCase().includes(query))) {
-      const list = g.get(c.category) ?? [];
-      list.push(c);
-      g.set(c.category, list);
-    }
-    return g;
-  }, [cards, search]);
+  // Every connect-catalog provider plus any board that syncs without a stored key,
+  // each filed under its own catalog category (see galleryCards.ts).
+  const cards = useMemo(() => buildGalleryCards(catalog, boards), [catalog, boards]);
+  const grouped = useMemo(
+    () => groupGalleryCards(cards, catalog?.categories ?? [], search),
+    [cards, catalog, search],
+  );
 
   const activeMeta = cards.find((c) => c.id === activeProvider) ?? null;
   const activeCreds = activeProvider ? (credsByProvider.get(activeProvider) ?? []) : [];
@@ -138,7 +118,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
    * Imported work is untouched; the confirm says so, because "disconnect Jira" is otherwise
    * easy to read as "delete everything that came from Jira".
    */
-  const disconnectProvider = async (p: BoardProviderMeta) => {
+  const disconnectProvider = async (p: GalleryCard) => {
     const creds = credsByProvider.get(p.id) ?? [];
     const ok = await confirm({
       message: t('gallery.confirmDisconnect', { label: p.label, count: creds.length }),
@@ -151,17 +131,17 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
     loadCreds();
   };
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('gallery.loading')}</div>;
+  if (loading || catalogLoading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('gallery.loading')}</div>;
 
   return (
     <div>
-      {CATEGORY_ORDER.filter((cat) => grouped.has(cat)).map((cat) => (
+      {grouped.map(([cat, group]) => (
         <div key={cat} style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
             {t(`gallery.category.${cat}`)}
           </div>
           <div style={viewMode === 'card' ? cardGrid : { display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {grouped.get(cat)!.map((p) => {
+            {group.map((p) => {
               const count = credsByProvider.get(p.id)?.length ?? 0;
               return (
                 <ClickableCard key={p.id} ariaLabel={p.label} style={{ ...cardStyle, ...(viewMode === 'table' ? { flexDirection: 'row', alignItems: 'center' } : {}) }} onClick={() => openProvider(p.id)}>
@@ -239,7 +219,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
         >
           <div style={{ padding: 20 }}>
             {panelTab === 'credentials' && (
-              <IntegrationCredentialsManager providers={[activeMeta.id as IntegrationProvider]} heading={null} />
+              <IntegrationCredentialsManager providers={[activeMeta.id]} heading={null} />
             )}
             {panelTab === 'connections' && <ConnectionsTab provider={activeMeta.id} onChanged={loadCreds} t={t} />}
             {panelTab === 'activity' && <ActivityTab credentials={activeCreds} t={t} />}

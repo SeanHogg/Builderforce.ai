@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -20,6 +21,8 @@ const cardStyle: React.CSSProperties = {
  * dropped into the Workforce tab strip or any other shell.
  */
 export function ChatsView() {
+  const t = useTranslations('chatsView');
+  const tc = useTranslations('common');
   const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [sessions, setSessions] = useState<SessionWithName[]>([]);
@@ -29,24 +32,28 @@ export function ChatsView() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     setError(null);
     chatSessionsApi.listAll(100)
       .then(setSessions)
       .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  };
+  }, [errorMessage]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const hostName = (s: SessionWithName) => s.agentHostName ?? t('hostFallback', { id: String(s.agentHostId) });
 
   const selectSession = async (s: SessionWithName) => {
     setSelected(s);
     setMessages([]);
     setLoadingMsgs(true);
     try {
-      const msgs = await chatSessionsApi.getMessages(s.id, 200);
-      setMessages(msgs);
+      setMessages(await chatSessionsApi.getMessages(s.id, 200));
+    } catch (e) {
+      // A failed thread read says so, rather than leaving "No messages." standing in for it.
+      setError(errorMessage(e));
     } finally {
       setLoadingMsgs(false);
     }
@@ -54,9 +61,9 @@ export function ChatsView() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-          All chat sessions across agentHosts in this workspace
+          {t('intro')}
         </p>
         <button
           type="button"
@@ -68,28 +75,28 @@ export function ChatsView() {
             border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer', flexShrink: 0,
           }}
         >
-          {loading ? 'Loading…' : 'Refresh'}
+          {loading ? tc('loading') : tc('refresh')}
         </button>
       </div>
 
       {error && (
-        <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 16 }}>
-          Error: {error}
+        <div role="alert" style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 16 }}>
+          {t('errorPrefix', { error })}
         </div>
       )}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading sessions…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingSessions')}</div>
       ) : sessions.length === 0 ? (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>
-          No chat sessions yet. Chat history will appear here once agentHosts start receiving messages.
+          {t('empty')}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) 1fr', gap: 16, height: 'clamp(420px, calc(100dvh - 280px), 760px)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 16, height: 'clamp(420px, calc(100dvh - 280px), 760px)' }}>
           {/* Session list */}
           <div style={{ ...cardStyle, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-              Sessions ({sessions.length})
+              {t('sessionsHeading', { count: sessions.length })}
             </div>
             {sessions.map((s) => (
               <button
@@ -108,12 +115,12 @@ export function ChatsView() {
                     {s.sessionKey}
                   </span>
                   <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', flexShrink: 0 }}>
-                    {s.msgCount} msgs
+                    {t('messageCount', { count: s.msgCount })}
                   </span>
                 </div>
                 <div style={{ display: 'flex', width: '100%', gap: 4, marginTop: 3, fontSize: 11, color: 'var(--text-muted)' }}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.agentHostName ?? `agentHost ${s.agentHostId}`}
+                    {hostName(s)}
                   </span>
                   <span>{s.lastMsgAt ? fmt.dateTime(s.lastMsgAt) : '—'}</span>
                 </div>
@@ -125,21 +132,21 @@ export function ChatsView() {
           <div style={{ ...cardStyle, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {!selected ? (
               <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: 'auto' }}>
-                Select a session to view its messages.
+                {t('selectPrompt')}
               </div>
             ) : (
               <>
                 <div style={{ flexShrink: 0, marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border-subtle)' }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{selected.sessionKey}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
-                    {selected.agentHostName ?? `agentHost ${selected.agentHostId}`} · {selected.startedAt ? fmt.dateTime(selected.startedAt) : '—'}
+                    {hostName(selected)} · {selected.startedAt ? fmt.dateTime(selected.startedAt) : '—'}
                   </span>
                 </div>
                 <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {loadingMsgs ? (
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading messages…</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingMessages')}</div>
                   ) : messages.length === 0 ? (
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No messages.</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noMessages')}</div>
                   ) : (
                     messages.map((m) => (
                       <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

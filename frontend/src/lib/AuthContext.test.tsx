@@ -22,7 +22,7 @@ const { AuthProvider, useAuth } = await import('./AuthContext');
  * These tests pin the two halves of the fix: children render on the server, and
  * `authReady` is false there so that anything which would ACT on being signed out
  * (a redirect to /login, opening a guest board) can tell "signed out" apart from
- * "not known yet". See `useRequireAuth`, which is where that rule now lives.
+ * "not known yet". See `useRequireSession`, which is where that rule now lives.
  */
 describe('AuthProvider server render', () => {
   function Probe() {

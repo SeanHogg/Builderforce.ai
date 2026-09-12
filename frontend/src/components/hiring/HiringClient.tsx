@@ -29,7 +29,7 @@ import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
 import { ViewToggle } from '@/components/ViewToggle';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { mayRender, useRequireSession } from '@/lib/useRequireSession';
 import {
   atsApi,
   type AtsBoard,
@@ -54,7 +54,7 @@ const message = (error: unknown, fallback: string): string =>
 
 export default function HiringClient() {
   const t = useTranslations('ats');
-  const allowed = useRequireAuth();
+  const allowed = mayRender(useRequireSession());
   const router = useRouter();
   const params = useSearchParams();
   const tab = params.get('tab') ?? '';

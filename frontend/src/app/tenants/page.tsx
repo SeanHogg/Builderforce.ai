@@ -1,14 +1,16 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { hasSession, useRequireSession } from '@/lib/useRequireSession';
 import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId } from '@/lib/auth';
 import { workspacesApi } from '@/lib/auth/session';
 import type { Tenant } from '@/lib/types';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+
 /** Auto-select tenant when there is only one or a default is set (BuilderForceAgentsLink-style). Returns the tenant to select or null. */
 function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
   if (list.length === 0) return null;
@@ -19,10 +21,35 @@ function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
   return match ?? null;
 }
 
+// Theme tokens only — this page renders in whichever theme the person signed in
+// from, and the Tailwind gray scale it used to be written in is remapped per theme.
+const s = {
+  page: { minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' },
+  main: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 16px' },
+  column: { width: '100%', maxWidth: '28rem' },
+  title: { fontSize: 'var(--font-size-page-title)', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-primary)' },
+  subtitle: { fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '0 0 32px' },
+  error: { background: 'var(--bg-elevated)', border: '1px solid var(--error-text)', color: 'var(--error-text)', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 24, fontSize: 'var(--font-size-small)' },
+  skeleton: { background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', height: 64 },
+  card: { width: '100%', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16 },
+  panel: { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16, display: 'grid', gap: 16 },
+  input: { flex: 1, minWidth: 0, width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)' },
+  primary: { padding: '8px 16px', minHeight: 40, borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--coral-bright)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: 'var(--font-size-small)', cursor: 'pointer', flexShrink: 0 },
+  secondary: { padding: '8px 16px', minHeight: 40, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)', cursor: 'pointer', flexShrink: 0 },
+  chip: { padding: '4px 8px', minHeight: 32, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent', cursor: 'pointer' },
+  link: { background: 'none', border: 'none', padding: 0, color: 'var(--coral-bright)', cursor: 'pointer', fontSize: 'var(--font-size-eyebrow)' },
+  avatar: { width: 40, height: 40, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--coral-bright)', fontWeight: 700, fontSize: 'var(--font-size-card-title)', flexShrink: 0 },
+  badge: { display: 'inline-flex', alignItems: 'center', padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--coral-bright)', border: '1px solid var(--border-subtle)' },
+  muted: { color: 'var(--text-muted)', fontSize: 'var(--font-size-eyebrow)' },
+  dashed: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)', cursor: 'pointer' },
+} satisfies Record<string, CSSProperties>;
+
 export default function TenantsPage() {
+  const t = useTranslations('workspacePicker');
+  const tc = useTranslations('common');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, hasTenant, webToken, fetchTenants, selectTenant } = useAuth();
+  const { hasTenant, fetchTenants, selectTenant } = useAuth();
   const errorMessage = useErrorMessage();
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -39,33 +66,28 @@ export default function TenantsPage() {
 
   // The workspace picker is the one authed page that must NOT require a tenant —
   // choosing one is what it is for.
-  const allowed = useRequireAuth({ requireTenant: false });
+  const session = useRequireSession({ requireTenant: false });
+  const signedIn = hasSession(session);
 
   // Load tenants
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!signedIn) return;
     fetchTenants()
       .then((data) => {
         if (!Array.isArray(data)) {
           const arr = (data as { tenants?: Tenant[] })?.tenants;
-          if (Array.isArray(arr)) {
-            setTenants(arr);
-            return;
-          }
-          setTenants([]);
+          setTenants(Array.isArray(arr) ? arr : []);
           return;
         }
         setTenants(data);
       })
-      .catch((err: unknown) =>
-        setError(errorMessage(err))
-      )
+      .catch((err: unknown) => setError(errorMessage(err)))
       .finally(() => setIsLoading(false));
-  }, [isAuthenticated, fetchTenants, errorMessage]);
+  }, [signedIn, fetchTenants, errorMessage]);
 
   // Auto-select tenant only when user has no tenant (e.g. just from login). If they already have a tenant, they're visiting to switch or create one — don't redirect.
   useEffect(() => {
-    if (!isAuthenticated || hasTenant || isLoading || tenants.length === 0 || autoSelectAttempted.current) return;
+    if (!signedIn || hasTenant || isLoading || tenants.length === 0 || autoSelectAttempted.current) return;
     const target = resolveAutoSelectTenant(tenants);
     if (!target) return;
     autoSelectAttempted.current = true;
@@ -77,7 +99,7 @@ export default function TenantsPage() {
       .catch(() => {
         autoSelectAttempted.current = false;
       });
-  }, [isAuthenticated, hasTenant, isLoading, tenants, searchParams, router, selectTenant]);
+  }, [signedIn, hasTenant, isLoading, tenants, searchParams, router, selectTenant]);
 
   const handleSelect = async (tenant: Tenant) => {
     setIsSelecting(tenant.id);
@@ -118,7 +140,7 @@ export default function TenantsPage() {
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!webToken || !createName.trim()) return;
+    if (!signedIn || !createName.trim()) return;
     setError(null);
     setIsCreating(true);
     try {
@@ -154,15 +176,15 @@ export default function TenantsPage() {
   const handleRename = async (e: React.FormEvent, tenant: Tenant) => {
     e.preventDefault();
     const trimmed = renameName.trim();
-    if (!webToken || !trimmed || trimmed === tenant.name) {
+    if (!signedIn || !trimmed || trimmed === tenant.name) {
       cancelRename();
       return;
     }
     setError(null);
     setIsRenaming(true);
     try {
-      const updated = await apiRenameTenant(webToken, tenant.id, trimmed);
-      setTenants((prev) => prev.map((t) => (t.id === tenant.id ? { ...t, name: updated.name, slug: updated.slug ?? t.slug } : t)));
+      const updated = await workspacesApi.rename(tenant.id, trimmed);
+      setTenants((prev) => prev.map((x) => (x.id === tenant.id ? { ...x, name: updated.name, slug: updated.slug ?? x.slug } : x)));
       cancelRename();
     } catch (err) {
       setError(errorMessage(err));
@@ -172,201 +194,134 @@ export default function TenantsPage() {
   };
   // A workspace can be renamed by its owners and managers. When role is unknown
   // (older token shapes), allow the attempt — the API enforces authorization.
-  const canRename = (t: Tenant) => !t.role || t.role === 'owner' || t.role === 'manager';
+  const canRename = (x: Tenant) => !x.role || x.role === 'owner' || x.role === 'manager';
 
-  if (!allowed) return null;
+  if (session === 'loading') return null;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          <h1 className="text-2xl font-bold text-gray-100 mb-2">Select workspace</h1>
-          <p className="text-gray-400 text-sm mb-8">
-            Choose the organization you want to work in.
-          </p>
+    <div style={s.page}>
+      <main style={s.main}>
+        <div style={s.column}>
+          <h1 style={s.title}>{t('title')}</h1>
+          <p style={s.subtitle}>{t('subtitle')}</p>
 
-          {error && (
-            <div className="bg-red-900/40 border border-red-700 text-red-300 rounded-lg px-4 py-3 mb-6 text-sm">
-              {error}
-            </div>
-          )}
+          {error && <div role="alert" style={s.error}>{error}</div>}
 
           {isLoading ? (
-            <div className="space-y-3">
-              {[...Array(2)].map((_, i) => (
-                <div key={i} className="bg-gray-800 rounded-xl p-4 h-16 animate-pulse" />
-              ))}
+            <div style={{ display: 'grid', gap: 12 }} aria-busy="true" aria-label={tc('loading')}>
+              {[0, 1].map((i) => <div key={i} style={s.skeleton} className="animate-pulse" />)}
             </div>
           ) : tenants.length === 0 && !showCreate ? (
-            <div className="text-center py-10">
-              <div className="text-4xl mb-4"><Icon source="🏢" size="1em" /></div>
-              <p className="text-gray-400 mb-2">No workspaces yet.</p>
-              <p className="text-gray-500 text-sm mb-6">
-                Create a workspace to get started.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors"
-              >
-                Create workspace
-              </button>
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div style={{ marginBottom: 16 }}><Icon source="🏢" size={36} /></div>
+              <p style={{ color: 'var(--text-secondary)', margin: '0 0 8px' }}>{t('emptyTitle')}</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', margin: '0 0 24px' }}>{t('emptyBody')}</p>
+              <button type="button" onClick={() => setShowCreate(true)} style={s.primary}>{t('createWorkspace')}</button>
             </div>
           ) : showCreate ? (
-            <div className="space-y-4">
-              <form onSubmit={handleCreateTenant} className="bg-gray-900 border border-gray-700 rounded-xl p-4 space-y-4">
-                <h2 className="text-lg font-semibold text-gray-100">Create new Tenant</h2>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <form onSubmit={handleCreateTenant} style={s.panel}>
+                <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 600, margin: 0 }}>{t('createHeading')}</h2>
                 <input
                   type="text"
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
-                  placeholder="Workspace name"
-                  className="w-full px-4 py-2 rounded-lg bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                  placeholder={t('namePlaceholder')}
+                  aria-label={t('namePlaceholder')}
+                  style={s.input}
                   autoFocus
                   disabled={isCreating}
                 />
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    disabled={isCreating || !createName.trim()}
-                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-sm"
-                  >
-                    {isCreating ? 'Creating…' : 'Create'}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="submit" disabled={isCreating || !createName.trim()} style={{ ...s.primary, opacity: isCreating || !createName.trim() ? 0.5 : 1 }}>
+                    {isCreating ? t('creating') : t('create')}
                   </button>
                   <button
                     type="button"
                     onClick={() => { setShowCreate(false); setCreateName(''); setError(null); }}
                     disabled={isCreating}
-                    className="px-4 py-2 rounded-lg border border-gray-600 hover:border-gray-500 text-gray-300 text-sm"
+                    style={s.secondary}
                   >
-                    Cancel
+                    {tc('cancel')}
                   </button>
                 </div>
               </form>
               {tenants.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(false)}
-                  className="text-sm text-gray-500 hover:text-gray-400"
-                >
-                  ← Back to workspaces
+                <button type="button" onClick={() => setShowCreate(false)} style={{ ...s.link, color: 'var(--text-muted)', justifySelf: 'start' }}>
+                  {t('backToList')}
                 </button>
               )}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div style={{ display: 'grid', gap: 12 }}>
               {defaultTenantId && (
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                  <span>Default workspace is selected automatically on next visit.</span>
-                  <button
-                    type="button"
-                    onClick={handleClearDefault}
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    Clear default
-                  </button>
+                <div style={{ ...s.muted, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span>{t('defaultHint')}</span>
+                  <button type="button" onClick={handleClearDefault} style={s.link}>{t('clearDefault')}</button>
                 </div>
               )}
-              {tenants.map((t) => {
-                const isDefault = String(t.id) === defaultTenantId;
-                const isEditing = renamingId === t.id;
+              {tenants.map((x) => {
+                const isDefault = String(x.id) === defaultTenantId;
+                const isEditing = renamingId === x.id;
                 return (
-                  <div
-                    key={t.id}
-                    className="w-full flex items-center gap-4 bg-gray-900 hover:bg-gray-800 border border-gray-700 hover:border-gray-600 rounded-xl p-4 transition-all text-left group"
-                  >
+                  <div key={x.id} style={s.card}>
                     {isEditing ? (
-                      <form onSubmit={(e) => handleRename(e, t)} className="flex-1 flex items-center gap-2 min-w-0">
+                      <form onSubmit={(e) => handleRename(e, x)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                         <input
                           type="text"
                           value={renameName}
                           onChange={(e) => setRenameName(e.target.value)}
-                          placeholder="Workspace name"
-                          className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                          placeholder={t('namePlaceholder')}
+                          aria-label={t('namePlaceholder')}
+                          style={s.input}
                           autoFocus
                           disabled={isRenaming}
                           onKeyDown={(e) => { if (e.key === 'Escape') cancelRename(); }}
                         />
-                        <button
-                          type="submit"
-                          disabled={isRenaming || !renameName.trim()}
-                          className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-sm flex-shrink-0"
-                        >
-                          {isRenaming ? 'Saving…' : 'Save'}
+                        <button type="submit" disabled={isRenaming || !renameName.trim()} style={{ ...s.primary, opacity: isRenaming || !renameName.trim() ? 0.5 : 1 }}>
+                          {isRenaming ? tc('saving') : tc('save')}
                         </button>
-                        <button
-                          type="button"
-                          onClick={cancelRename}
-                          disabled={isRenaming}
-                          className="px-3 py-2 rounded-lg border border-gray-600 hover:border-gray-500 text-gray-300 text-sm flex-shrink-0"
-                        >
-                          Cancel
+                        <button type="button" onClick={cancelRename} disabled={isRenaming} style={s.secondary}>
+                          {tc('cancel')}
                         </button>
                       </form>
                     ) : (
                       <>
                         <button
                           type="button"
-                          onClick={() => handleSelect(t)}
+                          onClick={() => handleSelect(x)}
                           disabled={!!isSelecting}
-                          className="flex-1 flex items-center gap-4 min-w-0 disabled:opacity-50"
+                          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, background: 'none', border: 'none', padding: 0, color: 'inherit', textAlign: 'left', cursor: 'pointer', opacity: isSelecting ? 0.5 : 1 }}
                         >
-                          <div className="w-10 h-10 rounded-lg bg-blue-600/20 border border-blue-600/40 flex items-center justify-center text-blue-400 font-bold text-lg flex-shrink-0">
-                            {(t.name || t.id).charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-gray-100 truncate flex items-center gap-2">
-                              {t.name || t.id}
-                              {isDefault && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-600/30 text-blue-300 border border-blue-500/40">
-                                  Default
-                                </span>
-                              )}
+                          <div style={s.avatar}>{(x.name || x.id).charAt(0).toUpperCase()}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {x.name || x.id}
+                              {isDefault && <span style={s.badge}>{t('defaultBadge')}</span>}
                             </div>
-                            {t.slug && (
-                              <div className="text-xs text-gray-500 truncate">{t.slug}</div>
-                            )}
+                            {x.slug && <div style={{ ...s.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.slug}</div>}
                           </div>
-                          {isSelecting === t.id ? (
-                            <div className="text-gray-400 text-sm">Loading…</div>
+                          {isSelecting === x.id ? (
+                            <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{tc('loading')}</div>
                           ) : (
-                            <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg aria-hidden="true" style={{ width: 16, height: 16, color: 'var(--text-muted)', flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
                           )}
                         </button>
-                        <div
-                          className="flex-shrink-0 flex items-center gap-2"
-                          onClick={preventSelectBubble}
-                          onMouseDown={preventSelectBubble}
-                        >
-                          {canRename(t) && (
-                            <button
-                              type="button"
-                              onClick={(e) => startRename(e, t)}
-                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
-                              title="Rename workspace"
-                            >
-                              Rename
+                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }} onClick={preventSelectBubble} onMouseDown={preventSelectBubble}>
+                          {canRename(x) && (
+                            <button type="button" onClick={(e) => startRename(e, x)} style={s.chip} title={t('renameTitle')}>
+                              {t('rename')}
                             </button>
                           )}
                           {isDefault ? (
-                            <button
-                              type="button"
-                              onClick={handleClearDefault}
-                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
-                              title="Clear default tenant"
-                            >
-                              Clear default
+                            <button type="button" onClick={handleClearDefault} style={s.chip} title={t('clearDefaultTitle')}>
+                              {t('clearDefault')}
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => handleSetDefault(e, t)}
-                              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-300 border border-gray-600 hover:border-gray-500 rounded transition-opacity"
-                              title="Set as default tenant"
-                            >
-                              Set default
+                            <button type="button" onClick={(e) => handleSetDefault(e, x)} style={s.chip} title={t('setDefaultTitle')}>
+                              {t('setDefault')}
                             </button>
                           )}
                         </div>
@@ -375,13 +330,9 @@ export default function TenantsPage() {
                   </div>
                 );
               })}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowCreate(true); setError(null); }}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-gray-600 hover:border-gray-500 text-gray-400 hover:text-gray-300 text-sm transition-colors"
-                >
-                  <span className="text-lg">+</span> Create new Tenant
+              <div style={{ paddingTop: 8 }}>
+                <button type="button" onClick={() => { setShowCreate(true); setError(null); }} style={s.dashed}>
+                  <span aria-hidden="true" style={{ fontSize: 'var(--font-size-card-title)' }}>+</span> {t('newWorkspace')}
                 </button>
               </div>
             </div>

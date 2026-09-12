@@ -376,7 +376,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     if (!tenant || !tenantToken) return;
     setRevokingInviteId(invite.id);
     try {
-      await revokeInvitation(tenantToken, String(tenant.id), invite.id);
+      await membersApi.revokeInvitation(String(tenant.id), invite.id);
       setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
     } catch (e) {
       setError(faultText(e, tWf('errRevokeInvite')));
@@ -744,7 +744,6 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           <div style={{ padding: 20 }}>
             <InviteTeamMembers
               tenantId={String(tenant.id)}
-              tenantToken={tenantToken}
               onInvited={() => { void loadPeople(); }}
               onPlanLimit={(err) => setPlanError(err)}
             />

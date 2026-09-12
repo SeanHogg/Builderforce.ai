@@ -38,7 +38,7 @@ import { MODEL_LABELS, MODEL_OBJECT_SPECS, MODEL_STATUSES } from '@/lib/modelObj
 import { PEOPLE_LABELS, PEOPLE_OBJECT_SPECS, PEOPLE_STATUSES } from '@/lib/peopleObjects';
 import { SELL_MOTION_LABELS, SELL_MOTION_OBJECT_SPECS, SELL_MOTION_STATUSES } from '@/lib/sellMotionObjects';
 import { SHARED_LABELS, SHARED_OBJECT_SPECS, SHARED_STATUSES } from '@/lib/sharedCanvasObjects';
-import { specMutableFieldMap, type SpecObjectSpec } from '@/lib/specObjects';
+import { specMutableFieldMap, specObjectNamespace, type SpecObjectSpec } from '@/lib/specObjects';
 import type { CreationNodeData, CreationObjectGroup, CreationObjectKind } from './types';
 
 /**
@@ -75,6 +75,23 @@ interface SpecVocabulary {
   statuses: Readonly<Record<string, string>>;
 }
 
+const CANVAS_NAMESPACE = 'creationCanvas.';
+
+/**
+ * A kind's label key, relative to `creationCanvas` — read off the namespace its OWN
+ * vocabulary registered (`specObjectNamespace`), which is the same key the palette and
+ * `SpecObjectBody` already translate the label with. A kind whose vocabulary registered
+ * outside `creationCanvas` is a wiring fault, and it fails at import rather than
+ * titling cards with a dotted path.
+ */
+function titleKeyFor(kind: string): string {
+  const namespace = specObjectNamespace(kind);
+  if (!namespace?.startsWith(CANVAS_NAMESPACE)) {
+    throw new Error(`Spec kind "${kind}" has no creationCanvas label namespace (got ${namespace ?? 'none'})`);
+  }
+  return `${namespace.slice(CANVAS_NAMESPACE.length)}.label.${kind}`;
+}
+
 /**
  * One vocabulary → registry entries.
  *
@@ -87,6 +104,7 @@ function lower({ specs, labels, statuses }: SpecVocabulary): readonly SpecRegist
   return specs.map((spec) => ({
     kind: spec.kind as CreationObjectKind,
     label: labels[spec.kind] ?? spec.kind,
+    titleKey: titleKeyFor(spec.kind),
     icon: spec.icon,
     group: spec.group as CreationObjectGroup,
     createData: (): CreationNodeData => ({

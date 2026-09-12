@@ -1,7 +1,11 @@
-'use client';
-
 import { useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+
+/*
+ * No `'use client'`, deliberately. A hook module marks no boundary, and this one is
+ * `useTranslations` + `useCallback` — both render on the server too — so the directive
+ * declared no runtime it needs. The `i18n/useErrorMessage.ts` shape.
+ */
 
 /**
  * A board connection's status (`active | degraded | disabled`, board_connections.status)

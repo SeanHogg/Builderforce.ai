@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { mayRender, useRequireSession } from '@/lib/useRequireSession';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
 import { useFounderJourney } from '@/lib/useFounderJourney';
@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const t = useTranslations('dashboard');
   const tNav = useTranslations('nav');
-  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant } = useAuth();
+  const { isAuthenticated, hasTenant, tenantToken, tenant } = useAuth();
   const { currentProjectId } = useProjectScope();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
   const journey = useFounderJourney();
@@ -110,7 +110,7 @@ export default function DashboardPage() {
   // Auth guard. A brand-new builder's named workspace is auto-provisioned by the
   // onboarding gate before this page renders, so the tenant requirement is left to
   // that gate rather than bouncing to the picker from here.
-  const allowed = useRequireAuth({ returnTo: '/dashboard', requireTenant: false });
+  const allowed = mayRender(useRequireSession({ returnTo: '/dashboard', requireTenant: false }));
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
@@ -309,7 +309,7 @@ export default function DashboardPage() {
   ];
 
   return <>
-    {showOnboarding && webToken && <OnboardingStepper webToken={webToken} tenantToken={tenantToken} tenant={tenant} initialProgress={onboardingProgress} onComplete={handleOnboardingComplete} onDismiss={handleOnboardingDismiss} />}
+    {showOnboarding && isAuthenticated && <OnboardingStepper tenantToken={tenantToken} tenant={tenant} initialProgress={onboardingProgress} onComplete={handleOnboardingComplete} onDismiss={handleOnboardingDismiss} />}
     <WorkspacePanelList panels={panels} />
   </>;
 }

@@ -48,7 +48,7 @@ interface AuthContextValue {
    * there for everyone, signed in or not. Anything that ACTS on being signed
    * out (a redirect to /login, opening a guest board instead of a server one)
    * must wait for this, or it fires against a signed-in user. Use the
-   * `useRequireAuth` hook rather than re-deriving that rule per page.
+   * `useRequireSession` hook rather than re-deriving that rule per page.
    */
   authReady: boolean;
   /** Resolves to `{ needsVerification: true, email }` when the account's email must
