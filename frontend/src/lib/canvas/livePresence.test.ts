@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { canvasPresenceFrame, CANVAS_PRESENCE_FRAME } from '@builderforce/creation-canvas-contract';
 import {
   applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence,
-  peerBrainRuns, spatialPeers, BRAIN_RUN_HEARTBEAT_MS, LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
+  peerBrainRuns, retireSocket, spatialPeers, BRAIN_RUN_HEARTBEAT_MS, LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
 } from './livePresence';
 
 const frame = (over: Record<string, unknown> = {}) => ({ type: CANVAS_PRESENCE_FRAME, ...over } as never);
@@ -200,5 +200,20 @@ describe('brain-run presence (a collaborator is waiting on Brain)', () => {
 
   it('heartbeats well inside the TTL, so a still requester is not expired mid-run', () => {
     expect(BRAIN_RUN_HEARTBEAT_MS * 2).toBeLessThan(LIVE_PRESENCE_TTL_MS);
+  });
+});
+
+describe('retireSocket (a relay leave names a socket, not a person)', () => {
+  it('forgets the person last heard on that socket, and only them', () => {
+    let live: LivePresenceMap = {};
+    live = applyPresenceFrame(live, frame({ userId: 'u1', from: 'g1', cursor: { x: 1, y: 1 } }), 1_000);
+    live = applyPresenceFrame(live, frame({ userId: 'u2', from: 'g2', cursor: { x: 2, y: 2 } }), 1_000);
+    expect(Object.keys(retireSocket(live, 'g1'))).toEqual(['u2']);
+  });
+
+  it('returns the same map for a socket nobody was heard on, or no socket id', () => {
+    const live = applyPresenceFrame({}, frame({ userId: 'u1', from: 'g1', typing: true }), 1_000);
+    expect(retireSocket(live, 'g9')).toBe(live);
+    expect(retireSocket(live, '')).toBe(live);
   });
 });

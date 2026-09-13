@@ -86,6 +86,18 @@ export interface CanvasPresenceState {
   brainRun?: CanvasPresenceBrainRun | null;
 }
 
+/**
+ * The id an account-less guest-room participant is known by on the canvas — the key of
+ * their roster row AND of their relayed presence. Built from what the room's public
+ * roster already shows (display name and join instant), never from the visitor id,
+ * which must not reach another visitor's browser. Declared here so the guest-room
+ * relay's stamp and the canvas roster cannot spell it differently: if they did, every
+ * guest's cursor would arrive keyed to nobody.
+ */
+export function guestRoomOccupantId(participant: { name: string; joinedAt: string }): string {
+  return `guest:${participant.name}:${participant.joinedAt}`;
+}
+
 /** A relayed frame: the sender's state, plus the identity the SERVER stamped. */
 export interface CanvasPresenceFrame extends CanvasPresenceState {
   type: typeof CANVAS_PRESENCE_FRAME;

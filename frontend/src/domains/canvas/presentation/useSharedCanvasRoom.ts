@@ -33,7 +33,8 @@
  * a second surface could mount it unchanged.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { guestRoomOccupantId, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName, type GuestRoomParticipant } from '@/lib/guestRoomApi';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import {
@@ -65,6 +66,16 @@ export interface SharedCanvasRoomOptions {
    *  carries the board with it, and a read taken a render earlier would share the
    *  board as it was before the click. */
   currentSnapshot: () => LocalCreationSnapshot;
+  /** Handed every presence frame the room relays (a peer's pointer, typing, body,
+   *  Brain run — and the `leave` that retires it). See `useLivePresence`. */
+  onPresenceFrame: (frame: unknown) => void;
+}
+
+/** One person in the room, as the canvas roster (and its presence map) keys them. */
+export interface GuestRosterMember {
+  userId: string;
+  displayName: string;
+  role: 'owner' | 'editor';
 }
 
 export interface SharedCanvasRoom {
@@ -77,6 +88,14 @@ export interface SharedCanvasRoom {
   /** A start or a stop is in flight. */
   busy: boolean;
   participants: readonly GuestRoomParticipant[];
+  /** The participants as roster rows, keyed by `guestRoomOccupantId` — the SAME id the
+   *  room stamps on their relayed presence, so a pointer lands on its owner's name. */
+  roster: GuestRosterMember[];
+  /** Which roster row is this browser: the one row wearing its name, and nobody when
+   *  two guests chose the same name (a guess would mark the wrong person). */
+  selfId: string | null;
+  /** Put this browser's canvas presence on the room's relay. False when not connected. */
+  sendPresence: (state: CanvasPresenceState) => boolean;
   /** The room cannot take another person, so the invite link would fail. */
   full: boolean;
   /** Bumps whenever a peer announces a new board — the pull trigger. */
@@ -94,6 +113,7 @@ export function useSharedCanvasRoom({
   notify,
   adopt,
   currentSnapshot,
+  onPresenceFrame,
 }: SharedCanvasRoomOptions): SharedCanvasRoom {
   const [code, setCode] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -105,8 +125,22 @@ export function useSharedCanvasRoom({
     guestName.current = getGuestDisplayName();
   }, [enabled]);
 
-  const room = useGuestRoom(enabled ? code : null, { name: guestName.current });
+  // Through a ref, so the room's socket callback is stable while the caller re-renders.
+  const presenceFrameRef = useRef(onPresenceFrame);
+  presenceFrameRef.current = onPresenceFrame;
+  const forwardPresence = useCallback((frame: Record<string, unknown>) => presenceFrameRef.current(frame), []);
+  const room = useGuestRoom(enabled ? code : null, { name: guestName.current }, { onPresenceFrame: forwardPresence });
   const active = enabled && !!code;
+  const roster = useMemo<GuestRosterMember[]>(
+    () => room.participants.map((person) => ({
+      userId: guestRoomOccupantId(person),
+      displayName: person.name,
+      role: person.isHost ? 'owner' : 'editor',
+    })),
+    [room.participants],
+  );
+  const mine = roster.filter((member) => member.displayName === guestName.current);
+  const selfId = mine.length === 1 ? mine[0]!.userId : null;
 
   /**
    * The `announce` callback comes off the live room subscription, so it is fed to
@@ -188,6 +222,9 @@ export function useSharedCanvasRoom({
     displayName: guestName.current,
     busy,
     participants: room.participants,
+    roster,
+    selfId,
+    sendPresence: room.sendPresence,
     full: room.participants.length >= (room.state?.maxParticipants ?? 0),
     boardVersion: room.canvasVersion,
     start,

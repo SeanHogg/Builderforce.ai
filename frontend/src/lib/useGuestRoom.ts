@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CANVAS_PRESENCE_FRAME, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { getStoredGuestToken } from './guestChatApi';
 import {
   fetchGuestRoomState, guestRoomSocketUrl, type GuestRoomParticipant, type GuestRoomState,
@@ -22,6 +23,10 @@ import {
  *     stream, so they re-broadcast their delta buffer on a throttle and everyone
  *     else renders it as a trailing bubble. Without it a shared session reads as
  *     turn-based: a pause, then a wall of text that was already finished.
+ *   • `canvas.presence` — on a shared account-less CANVAS, each person's pointer,
+ *     viewport, typing, body in the Room and Brain run in flight. The same frame a
+ *     saved board relays; the room stamps who sent it (`guestRoomRelayFrame`), and
+ *     this hook hands it — with the `leave` that retires it — to `onPresenceFrame`.
  *
  * Relayed deltas are display-only and never persisted — the sender's completed
  * turn is what lands in the transcript, and `changed` retires the live bubble.
@@ -60,8 +65,17 @@ export interface GuestRoomLive {
   canvasVersion: number;
   /** Tell the room I just wrote a new board — everyone else should pull it. */
   announceCanvas: () => void;
+  /** Put MY canvas presence on the relay. False when the socket is not open. */
+  sendPresence: (state: CanvasPresenceState) => boolean;
   /** Refetch room state (roster + combined allowance) from the server. */
   refresh: () => Promise<void>;
+}
+
+export interface GuestRoomOptions {
+  /** Called when the shared transcript changed and should be refetched. */
+  onTranscriptChanged?: () => void;
+  /** Handed every relayed `canvas.presence` frame, and every `presence` join/leave. */
+  onPresenceFrame?: (frame: Record<string, unknown>) => void;
 }
 
 const NO_PARTICIPANTS: GuestRoomParticipant[] = [];
@@ -69,8 +83,7 @@ const NO_PARTICIPANTS: GuestRoomParticipant[] = [];
 export function useGuestRoom(
   code: string | null,
   me: { name: string },
-  /** Called when the shared transcript changed and should be refetched. */
-  onTranscriptChanged?: () => void,
+  { onTranscriptChanged, onPresenceFrame }: GuestRoomOptions = {},
 ): GuestRoomLive {
   const [state, setState] = useState<GuestRoomState | null>(null);
   const [connected, setConnected] = useState(false);
@@ -88,6 +101,8 @@ export function useGuestRoom(
   useEffect(() => { nameRef.current = me.name; }, [me.name]);
   const changedRef = useRef(onTranscriptChanged);
   useEffect(() => { changedRef.current = onTranscriptChanged; }, [onTranscriptChanged]);
+  const presenceFrameRef = useRef(onPresenceFrame);
+  useEffect(() => { presenceFrameRef.current = onPresenceFrame; }, [onPresenceFrame]);
   const busyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const applyState = useCallback((next: GuestRoomState | null) => {
@@ -103,12 +118,17 @@ export function useGuestRoom(
     applyState(await fetchGuestRoomState(code));
   }, [code, applyState]);
 
-  const send = useCallback((frame: Record<string, unknown>) => {
+  /** Put a frame on the relay. False when the socket is not open (or is closing). */
+  const send = useCallback((frame: Record<string, unknown>): boolean => {
     const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      try { ws.send(JSON.stringify(frame)); } catch { /* the reconnect will resync */ }
-    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    try { ws.send(JSON.stringify(frame)); return true; } catch { return false; /* the reconnect will resync */ }
   }, []);
+
+  const sendPresence = useCallback(
+    (state: CanvasPresenceState) => send({ type: CANVAS_PRESENCE_FRAME, ...state }),
+    [send],
+  );
 
   const setBusy = useCallback((busy: boolean) => {
     send({ type: 'busy', busy, name: nameRef.current });
@@ -176,6 +196,7 @@ export function useGuestRoom(
         let msg: Record<string, unknown>;
         try { msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ''); } catch { return; }
         const type = typeof msg?.type === 'string' ? msg.type : '';
+        if (type === CANVAS_PRESENCE_FRAME) { presenceFrameRef.current?.(msg); return; }
         if (type === 'changed') {
           // The real message just landed in the transcript — retire the live
           // bubble so the answer isn't rendered twice for a beat.
@@ -211,6 +232,8 @@ export function useGuestRoom(
           return;
         }
         if (type === 'presence' || type === 'roster') {
+          // A leave also retires that socket's canvas pointer (it names the socket).
+          presenceFrameRef.current?.(msg);
           // A join/leave changes the roster the server persists — ask for it
           // rather than reconstructing it from peer frames.
           void refresh();
@@ -242,6 +265,6 @@ export function useGuestRoom(
   return {
     state, connected, remaining, limit, participants,
     busyWith, setBusy, streamingPeer, relayStream,
-    canvasVersion, announceCanvas, refresh,
+    canvasVersion, announceCanvas, sendPresence, refresh,
   };
 }

@@ -1,3 +1,4 @@
+import { CANVAS_PRESENCE_FRAME, canvasPresenceFrame, guestRoomOccupantId } from '@builderforce/creation-canvas-contract';
 import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 import { verifyGuestToken } from '../../application/guest/guestToken';
 import { GUEST_CHAT_LIMITS, GUEST_ROOM_LIMITS } from '../../domain/tenant/PlanLimits';
@@ -38,7 +39,9 @@ import { PeerRelay, type RelayPeer } from './peerRelay';
  * Frame protocol (JSON, `type` discriminator) — mirrors CeremonyRoomDO:
  *  - server→client on connect: `{type:'hello', id, self:{visitorId,name}}` then `{type:'roster', peers:[…]}`
  *  - client→server `{type:'join', name}` → relayed as `{type:'presence', action:'join', peer:{…}}`
- *  - client→server anything else → relayed verbatim to the SAME channel, stamped `from:<peerId>`
+ *  - client→server anything else → relayed verbatim to the SAME channel, stamped `from:<peerId>` —
+ *    except `canvas.presence`, which relays only as the contract's sanitized shape with a
+ *    ROOM-stamped `userId` (see {@link guestRoomRelayFrame})
  *  - server→chat channel `{type:'changed'}` when the transcript changed (clients refetch)
  *  - server→chat channel `{type:'turns', used, remaining, limit}` after a turn is charged
  *  - on disconnect: `{type:'presence', action:'leave', peer:{id}}`
@@ -118,6 +121,28 @@ function clean(value: unknown, max: number): string {
   return typeof value === 'string' ? value.slice(0, max) : '';
 }
 
+/**
+ * What a guest-room client frame relays as.
+ *
+ * Every frame but one relays as sent — the open typing/busy/WebRTC protocol this room
+ * has always carried. The canvas PRESENCE frame is the exception, because the canvas
+ * keys it by `userId` and trusts that id: relayed verbatim, any guest could move another
+ * guest's cursor or claim a Brain run in their name. So it gets exactly what
+ * `SessionRoomDO` gives it — the contract's sanitizer, and an identity the ROOM stamps
+ * ({@link guestRoomOccupantId}, the id the canvas roster uses) — and only on the `chat`
+ * channel, from a socket whose visitor is on the persisted roster.
+ */
+export function guestRoomRelayFrame(
+  frame: Record<string, unknown>,
+  channel: string,
+  occupant: { name: string; joinedAt: string } | null,
+): object | null {
+  if (frame.type !== CANVAS_PRESENCE_FRAME) return frame;
+  if (channel !== 'chat' || !occupant) return null;
+  const state = canvasPresenceFrame(frame);
+  return state ? { ...state, type: CANVAS_PRESENCE_FRAME, userId: guestRoomOccupantId(occupant) } : null;
+}
+
 export class GuestRoomDO implements DurableObject {
   // Required brand for the DurableObjectNamespace<T> generic constraint.
   declare readonly '__DURABLE_OBJECT_BRAND': never;
@@ -136,6 +161,13 @@ export class GuestRoomDO implements DurableObject {
     burst: 80,
     // Big enough for a full WebRTC SDP — see CeremonyRoomDO for why this is not 4KB.
     maxFrameChars: 65_536,
+    // A shared canvas's pointers, typing and Brain runs ride this room too; their one
+    // frame type is shaped and attributed by the room, never by the sender.
+    sanitize: (frame, peer) => guestRoomRelayFrame(
+      frame,
+      peer.channel,
+      this.participants.find((p) => p.visitorId === peer.ref) ?? null,
+    ),
     stamp: (peer) => ({ from: peer.id, name: peer.name }),
     publicPeer: (peer) => ({ id: peer.id, name: peer.name, kind: 'human', ref: peer.id }),
   });

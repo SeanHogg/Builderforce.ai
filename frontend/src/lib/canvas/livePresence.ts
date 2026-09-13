@@ -80,6 +80,18 @@ export function dropPresence(map: LivePresenceMap, userId: string): LivePresence
   return next;
 }
 
+/**
+ * Forget whoever was last heard on a socket that just closed. A relay's `leave` frame
+ * names a SOCKET, not a person, so it is resolved back through the last frame that
+ * socket sent — which is also why a person with two tabs open only loses their pointer
+ * when the tab that was actually moving it goes away.
+ */
+export function retireSocket(map: LivePresenceMap, socketId: string): LivePresenceMap {
+  if (!socketId) return map;
+  const owner = Object.entries(map).find(([, entry]) => entry.socketId === socketId);
+  return owner ? dropPresence(map, owner[0]) : map;
+}
+
 /** Drop anyone who has not been heard from within {@link LIVE_PRESENCE_TTL_MS}. */
 export function expirePresence(map: LivePresenceMap, nowMs: number, ttlMs = LIVE_PRESENCE_TTL_MS): LivePresenceMap {
   const live = Object.entries(map).filter(([, entry]) => nowMs - entry.atMs < ttlMs);

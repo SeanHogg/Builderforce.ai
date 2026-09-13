@@ -124,7 +124,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   });
 
   const reloadMessages = conv.reloadMessages;
-  const room = useGuestRoom(roomCode, { name: displayName }, reloadMessages);
+  const room = useGuestRoom(roomCode, { name: displayName }, { onTranscriptChanged: reloadMessages });
 
   // Re-broadcast my in-flight reply so the room watches the same answer arrive
   // rather than staring at a pause and then a finished wall of text. Only the

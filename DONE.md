@@ -32,6 +32,30 @@ agent's system prompt, with the rule that it must not call something missing tha
 Covered by `livePresence.test.ts` (brain-run presence), `creationCanvasAi.test.ts` (ceiling widens after a
 cut-off) and `canvasBoardGrounding.test.ts` (board digest + board tag parsing).
 
+## ✅ RESOLVED 2026-09-13 — An account-less shared canvas now shows each person's cursor, typing, Room body and Brain run
+
+Closed from the Gap Register. A board shared through a guest room (no accounts) synced only its snapshot; the
+ephemeral `canvas.presence` frame rode the server session's relay alone, so people in the same guest room saw no
+pointer, no "is typing", no body in the Room and an idle Brain while someone else's turn ran.
+
+- **The room carries the frame, shaped and attributed by the room.** `GuestRoomDO` relays `canvas.presence` only
+  through `guestRoomRelayFrame`: the contract's `canvasPresenceFrame` sanitizer, the `chat` channel only, from a socket
+  whose visitor is on the persisted roster, with a ROOM-stamped `userId`. Relayed verbatim, any guest could have moved
+  another guest's cursor or claimed a Brain run in their name. Every other guest frame relays as before.
+- **One id, both ends.** `guestRoomOccupantId({ name, joinedAt })` (contract `presence.ts`) is the stamp AND the canvas
+  roster key — built from the public roster, never the visitor id. The roster's inline `guest:${…}` spelling was
+  migrated to it (`useSharedCanvasRoom().roster`), and the viewer's own row is `useSharedCanvasRoom().selfId`.
+- **One presence store for both transports.** `lib/canvas/useLivePresence.ts` folds presence frames and socket
+  `leave`s (`retireSocket`, new in `livePresence.ts`) and runs expiry; it replaced the inline map, leave-resolution and
+  expiry effect in `CreationCanvas`. The server socket and the guest room (`useGuestRoom` → `onPresenceFrame`) both
+  feed it; the outbound relay delivers to the server socket, else to `useGuestRoom().sendPresence`.
+- **The gates follow the channel, not the persistence mode.** Cursor, viewport, typing and the Brain-run heartbeat
+  sent only when `persistence === 'server'`; they now send whenever `presenceLive` (server relay or an active guest
+  room). `liveMembers` merges over the guest roster in a room, and "you" is `presenceSelfId`.
+- `useGuestRoom`'s third argument became `GuestRoomOptions { onTranscriptChanged, onPresenceFrame }`
+  (`GuestBrainPanel` migrated). No new UI strings.
+- Tests: `api/.../GuestRoomDO.presence.test.ts` (new, 4), `livePresence.test.ts` (+2 `retireSocket`).
+
 ## ✅ RESOLVED 2026-09-13 — VSIX runs re-read the same files and never edited: the model was starved of its own reads
 
 Reported from VS Code chat #105 (VSIX 2026.9.60): 55 turns, 61 tool calls, "63% of calls revisited ground", zero edits,

@@ -61,7 +61,8 @@ import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasS
 import { CanvasMenuSheet } from './CanvasMenuSheet';
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
-import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, peerBrainRuns, BRAIN_RUN_HEARTBEAT_MS, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
+import { mergeLivePresence, peerBrainRuns, BRAIN_RUN_HEARTBEAT_MS, PRESENCE_SEND_INTERVAL_MS } from '@/lib/canvas/livePresence';
+import { useLivePresence } from '@/lib/canvas/useLivePresence';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
@@ -1646,6 +1647,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * how to put a board on screen, and how to read the one being held. Nothing about
    * nodes, edges or React setters goes through it.
    */
+  /**
+   * Where everyone's pointer, typing, body and Brain run is RIGHT NOW — as opposed to
+   * `members`, which is where they were when the 8s presence poll last ran. Fed by
+   * whichever relay this board has: the server session's socket for a saved board, the
+   * guest room's for an account-less shared one (`useLivePresence`).
+   */
+  const liveRelay = useLivePresence();
+  const { receive: receivePresence, clear: clearPresence } = liveRelay;
   const sharedRoom = useSharedCanvasRoom({
     enabled: persistence === 'local',
     sessionId,
@@ -1653,9 +1662,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     notify: setNotice,
     adopt: (snapshot) => applyRoomSnapshotRef.current(snapshot),
     currentSnapshot: () => currentSnapshotRef.current(),
+    onPresenceFrame: receivePresence,
   });
   const inRoom = sharedRoom.active;
   const persistSnapshot = sharedRoom.persist;
+  /** A live presence channel exists: the server session's relay, or a shared guest room's. */
+  const presenceLive = persistence === 'server' || inRoom;
+  /** The guest room's presence send, read by the relay constructed once below. */
+  const sendRoomPresenceRef = useRef(sharedRoom.sendPresence);
+  sendRoomPresenceRef.current = sharedRoom.sendPresence;
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   // Published for the session rail, which lives outside this component's tree
@@ -1667,12 +1682,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [sessionId, realtimeState]);
   useEffect(() => () => clearActiveCanvasSync(sessionId), [sessionId]);
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
-  /**
-   * Where everyone's pointer is RIGHT NOW, off the peer relay — as opposed to
-   * `members`, which is where they were when the 8s presence poll last ran. The
-   * two are merged for rendering (`liveMembers`), never kept as rival rosters.
-   */
-  const [livePresence, setLivePresence] = useState<LivePresenceMap>({});
+  // Merged over the roster for rendering (`liveMembers`), never kept as a rival roster.
+  const livePresence = liveRelay.live;
   const [joinedCollaborator, setJoinedCollaborator] = useState<CreationSessionDetail['members'][number] | null>(null);
   const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
   const [pendingInvitations, setPendingInvitations] = useState<CreationSessionInvitation[]>([]);
@@ -1890,16 +1901,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *
    * The coalescing throttle that makes a fast drag look like a drag rather than a
    * teleport lives in `application/PresenceRelay.ts`; what stays here is the
-   * TRANSPORT, which is this board's socket. Silence when it is not open is
-   * correct: the 8-second presence poll is the fallback and carries the cursor on
-   * its own (see the reconcile effect).
+   * TRANSPORT: this board's socket, or — for an account-less board shared through a
+   * guest room, which has no server socket — that room's relay, which carries the
+   * same frame. Silence when neither is open is correct: on a saved board the
+   * 8-second presence poll is the fallback and carries the cursor on its own.
    */
   const presenceRef = useRef<PresenceRelay | null>(null);
   if (!presenceRef.current) {
     presenceRef.current = createPresenceRelay({
       deliver: (state) => {
         const socket = liveSocketRef.current;
-        if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return sendRoomPresenceRef.current(state);
         try { socket.send(JSON.stringify({ type: CANVAS_PRESENCE_FRAME, ...state })); return true; }
         catch { return false; } // the socket is closing; the poll takes over
       },
@@ -2557,25 +2569,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           const frame = JSON.parse(String(event.data)) as { type?: string; revision?: number; lastId?: number; action?: string; peer?: { id?: string } };
           if (frame.type === 'canvas.changed') void syncRevision(frame.revision);
           if (frame.type === 'timeline.changed') void creationSessionsApi.timeline.list(sessionId).then((result) => setTimeline(result.messages)).catch(() => undefined);
-          // A peer's pointer, at pointer speed. Relayed frames are attributed by the
-          // SERVER (`userId`), never by the sender — see `SessionRoomDO`.
-          if (isPresenceFrame(frame)) setLivePresence((current) => applyPresenceFrame(current, frame, Date.now()));
-          // A cursor must not outlive its socket. `presence`/`leave` names the socket,
-          // so the peer id is resolved back to the user through the last frame it sent.
-          if (frame.type === 'presence' && frame.action === 'leave') {
-            const gone = String(frame.peer?.id ?? '');
-            setLivePresence((current) => {
-              const owner = Object.entries(current).find(([, entry]) => entry.socketId === gone);
-              return owner ? dropPresence(current, owner[0]) : current;
-            });
-          }
+          // A peer's pointer at pointer speed, and the `leave` that retires it. Relayed
+          // frames are attributed by the SERVER (`userId`), never by the sender — see
+          // `SessionRoomDO`; the folding is `useLivePresence`'s, shared with the guest room.
+          receivePresence(frame);
         } catch { /* Ignore malformed relay frames. */ }
       };
       socket.onclose = () => {
         if (liveSocketRef.current === socket) liveSocketRef.current = null;
         socket = null;
         // Nobody's pointer is live while this client is deaf; the poll takes over.
-        setLivePresence({});
+        clearPresence();
         if (!stopped) {
           setRealtimeState(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'reconnecting');
           retryTimer = window.setTimeout(connect, retryMs);
@@ -2592,16 +2596,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       presenceRef.current?.dispose();
       socket?.close();
     };
-  }, [persistence, sessionId, setEdges, setNodes]);
+  }, [clearPresence, persistence, receivePresence, sessionId, setEdges, setNodes]);
 
   /**
    * Composing a prompt is presence too — the cursor label says so. It changes at
    * human speed, so it is sent on the state change rather than throttled per frame.
    */
   useEffect(() => {
-    if (persistence !== 'server') return;
+    if (!presenceLive) return;
     sendPresence({ typing: isComposingPrompt });
-  }, [isComposingPrompt, persistence, sendPresence]);
+  }, [isComposingPrompt, presenceLive, sendPresence]);
 
   /**
    * A Brain turn in flight is presence too. The run executes in THIS browser, so
@@ -2611,13 +2615,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * same beat also reaches a collaborator who joins after the turn began.
    */
   useEffect(() => {
-    if (persistence !== 'server') return;
+    if (!presenceLive) return;
     const brainRun = thinking && brainRunStartedAt != null ? { startedAt: brainRunStartedAt } : null;
     sendPresence({ brainRun });
     if (!brainRun) return;
     const timer = window.setInterval(() => sendPresence({ brainRun }), BRAIN_RUN_HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [brainRunStartedAt, persistence, sendPresence, thinking]);
+  }, [brainRunStartedAt, presenceLive, sendPresence, thinking]);
 
   /**
    * Follow, driven live. The poll's copy of this only runs when the relay is down,
@@ -2631,27 +2635,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [followedViewport]);
 
   /**
-   * Retire pointers nobody retracted. A socket that dies without a close frame
-   * (a closed lid, a dropped network) leaves a cursor standing exactly where its
-   * owner stopped; this is what takes it down.
+   * Who "you" are in the live roster. A saved board keys the viewer by account; an
+   * account-less guest room keys every person by `guestRoomOccupantId`, so the viewer
+   * is the room's own answer (`sharedRoom.selfId`).
    */
-  useEffect(() => {
-    if (persistence !== 'server') return;
-    const timer = window.setInterval(
-      () => setLivePresence((current) => expirePresence(current, Date.now())),
-      LIVE_PRESENCE_TTL_MS / 2,
-    );
-    return () => window.clearInterval(timer);
-  }, [persistence]);
-
+  const presenceSelfId = inRoom ? sharedRoom.selfId : currentUserId;
   /**
-   * One roster to draw. Identity (name, role) comes from the poll; position comes
-   * from the relay. Merging rather than keeping two lists is why a name and a
-   * pointer can never disagree — see `lib/canvas/livePresence`.
+   * One roster to draw. Identity (name, role) comes from the poll — or, in a guest
+   * room, from the room's roster; position comes from the relay. Merging rather than
+   * keeping two lists is why a name and a pointer can never disagree — see
+   * `lib/canvas/livePresence`. (Unretracted pointers are retired by `useLivePresence`.)
    */
   const liveMembers = useMemo(
-    () => mergeLivePresence(members, livePresence, currentUserId) as CreationSessionDetail['members'],
-    [currentUserId, livePresence, members],
+    () => mergeLivePresence<CreationSessionDetail['members'][number]>(inRoom ? sharedRoom.roster : members, livePresence, presenceSelfId),
+    [inRoom, livePresence, members, presenceSelfId, sharedRoom.roster],
   );
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
@@ -3569,9 +3566,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!flowRef.current) return;
     const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    if (persistence === 'server') { cursorRef.current = point; sendPresence({ cursor: point }); }
+    if (presenceLive) { cursorRef.current = point; sendPresence({ cursor: point }); }
     if (drawingMode && drawingPoints.current.length) drawingPoints.current.push(point);
-  }, [drawingMode, persistence, sendPresence]);
+  }, [drawingMode, presenceLive, sendPresence]);
   const onCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     // A stroke may START ANYWHERE, including on top of a card — that is what
     // makes annotation possible. While a tool is held the canvas is a drawing
@@ -3660,11 +3657,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
     // A follower is watching this pan happen, not reading about it eight seconds later.
-    if (persistence === 'server') sendPresence({ viewport });
+    if (presenceLive) sendPresence({ viewport });
     if (persistence !== 'local' || !hydrated.current) return;
     const snapshot = currentSnapshot(viewport);
     persistSnapshot(snapshot);
-  }, [edges, nodes, persistence, sendPresence, sessionId, storageKey, timeline, title]);
+  }, [edges, nodes, persistence, presenceLive, sendPresence, sessionId, storageKey, timeline, title]);
 
   /** Place a new object at the middle of the viewport. `data` lets a caller that
    *  already HAS the object's content (an editor capture) seed it in one step
@@ -11788,23 +11785,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const rosterMembers = useMemo(
     () => (persistence !== 'local'
       ? members
-      : inRoom && sharedRoom.participants.length
-        ? sharedRoom.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
+      : inRoom && sharedRoom.roster.length
+        ? sharedRoom.roster
         : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]),
-    [inRoom, members, persistence, sharedRoom.participants, t],
+    [inRoom, members, persistence, sharedRoom.roster, t],
   );
   /**
    * Which roster row is the viewer — the same three branches `rosterMembers` takes.
-   * A local canvas's lone row is `local`, not an account id; a shared guest room's
-   * rows carry only names, so the viewer is the one row wearing theirs, and nobody
-   * when two guests chose the same name (a guess would mark the wrong person).
+   * A local canvas's lone row is `local`, not an account id; a shared guest room
+   * answers for its own rows (`sharedRoom.selfId` — the one row wearing this
+   * browser's name, and nobody when two guests chose the same name).
    */
   const rosterSelfId = useMemo(() => {
     if (persistence !== 'local') return currentUserId;
     if (rosterMembers.length === 1 && rosterMembers[0]!.userId === 'local') return 'local';
-    const mine = rosterMembers.filter((member) => member.displayName === sharedRoom.displayName);
-    return mine.length === 1 ? mine[0]!.userId : null;
-  }, [currentUserId, persistence, rosterMembers, sharedRoom.displayName]);
+    return sharedRoom.selfId;
+  }, [currentUserId, persistence, rosterMembers, sharedRoom.selfId]);
 
   /**
    * WHO IS WORKING ON THIS BOARD — the agent cards on it, read once (`boardAgents`).
@@ -11837,7 +11833,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * working, not just the person who asked. This viewer's own run wins when there
    * is one: it is the one carrying the trace and the Stop.
    */
-  const peerRuns = useMemo(() => peerBrainRuns(livePresence, currentUserId, Date.now()), [currentUserId, livePresence]);
+  const peerRuns = useMemo(() => peerBrainRuns(livePresence, presenceSelfId, Date.now()), [livePresence, presenceSelfId]);
   const peerRunStartedAt = peerRuns[0]?.startedAt ?? null;
   const brainRunning = thinking || peerRunStartedAt !== null;
   const brainRunShownStartedAt = thinking ? brainRunStartedAt : peerRunStartedAt;
@@ -11846,9 +11842,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const brainCollaborators = useMemo(() => {
     const asking = new Set(peerRuns.map((run) => run.userId));
     return liveMembers
-      .filter((member) => member.userId !== currentUserId)
+      .filter((member) => member.userId !== presenceSelfId)
       .map((member) => (asking.has(member.userId) ? { ...member, askingBrain: true } : member));
-  }, [currentUserId, liveMembers, peerRuns]);
+  }, [liveMembers, peerRuns, presenceSelfId]);
   /**
    * "Send again" on a transcript message — the same path a typed prompt takes, so a
    * replay is scoped, queued and narrated identically to the original turn. Read
@@ -12847,7 +12843,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {/* Inside the flow, so the pane's own transform moves them: a cursor
               layer that lives outside the viewport is only ever correct until the
               first pan. */}
-          <RemoteCursors members={liveMembers} currentUserId={currentUserId} />
+          <RemoteCursors members={liveMembers} currentUserId={presenceSelfId} />
           <CanvasCommands
             minimapOpen={minimapOpen}
             setMinimapOpen={setMinimapOpen}
