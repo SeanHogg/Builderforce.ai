@@ -71,6 +71,8 @@ __export(src_exports, {
   ReadCoverage: () => ReadCoverage,
   RepetitionLoopError: () => RepetitionLoopError,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
+  STOPPED_TURN_META_KEY: () => STOPPED_TURN_META_KEY,
+  STOPPED_TURN_STEP: () => STOPPED_TURN_STEP,
   StreamInterruptedError: () => StreamInterruptedError,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
@@ -93,6 +95,7 @@ __export(src_exports, {
   announcesUntakenAction: () => announcesUntakenAction,
   applyRemoteRun: () => applyRemoteRun,
   artifactRoutePath: () => artifactRoutePath,
+  asProvenanceAccount: () => asProvenanceAccount,
   askUserAnchorId: () => askUserAnchorId,
   askUserBlock: () => askUserBlock,
   attachEvermindLearn: () => attachEvermindLearn,
@@ -178,6 +181,7 @@ __export(src_exports, {
   isRouterTool: () => isRouterTool,
   isRunning: () => isRunning,
   isStepMessage: () => isStepMessage,
+  isStoppedTurn: () => isStoppedTurn,
   isTicketRecordingTool: () => isTicketRecordingTool,
   isTruncatedTurn: () => isTruncatedTurn,
   isUnscopedMutationTool: () => isUnscopedMutationTool,
@@ -259,6 +263,7 @@ __export(src_exports, {
   startRun: () => startRun,
   stepSig: () => stepSig,
   stopRun: () => stopRun,
+  stoppedTurnMetadata: () => stoppedTurnMetadata,
   streamChatCompletion: () => streamChatCompletion,
   stripAskUser: () => stripAskUser,
   subscribeRun: () => subscribeRun,
@@ -640,7 +645,10 @@ function tailCountingRun(text) {
 }
 var LOOP_MIN_COPIES = 3;
 var LOOP_MIN_BLOCK_CHARS = 40;
-var LOOP_MAX_BLOCK_CHARS = 800;
+var LOOP_LONG_BLOCK_CHARS = 240;
+var LOOP_LONG_MIN_COPIES = 2;
+var LOOP_MAX_BLOCK_CHARS = 4e3;
+var minCopiesFor = (chars) => chars >= LOOP_LONG_BLOCK_CHARS ? LOOP_LONG_MIN_COPIES : LOOP_MIN_COPIES;
 var LOOP_MIN_BLOCK_WORDS = 5;
 function inOpenCodeFence(text) {
   let fences = 0;
@@ -667,10 +675,11 @@ function detectRepetitionLoop(text) {
   if (counting) return inOpenCodeFence(text) ? null : counting;
   const length = text.length;
   if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
-  const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_MIN_COPIES));
+  const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_LONG_MIN_COPIES));
   for (let p = LOOP_MIN_BLOCK_CHARS; p <= maxBlock; p += 1) {
-    if (!tailHasPeriod(text, p, LOOP_MIN_COPIES * p)) continue;
-    let start = length - LOOP_MIN_COPIES * p;
+    const copies = minCopiesFor(p);
+    if (copies * p > length || !tailHasPeriod(text, p, copies * p)) continue;
+    let start = length - copies * p;
     while (start > 0 && text.charCodeAt(start - 1) === text.charCodeAt(start - 1 + p)) start -= 1;
     const block = text.slice(start, start + p);
     if (!readsAsProse(block)) continue;
@@ -1273,6 +1282,14 @@ async function streamChatCompletion(opts, handlers = {}) {
     headerProviderCap = null;
   }
   const providerCap = () => headerProviderCap ?? void 0;
+  let modelAnnounced = false;
+  const announceModel = () => {
+    const known = resolvedModel();
+    if (modelAnnounced || !known) return;
+    modelAnnounced = true;
+    handlers.onModel?.(known, account());
+  };
+  announceModel();
   let usage;
   const readUsage = (u) => {
     if (!u || typeof u !== "object") return;
@@ -1290,6 +1307,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   if (!reader) {
     const data = await res.json().catch(() => null);
     if (typeof data?.model === "string" && data.model) streamModel = data.model;
+    announceModel();
     readUsage(data?.usage);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? "");
@@ -1341,6 +1359,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel());
       }
       if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
+      announceModel();
       if (parsed.usage) readUsage(parsed.usage);
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
@@ -2467,6 +2486,63 @@ function formatEvermindLearnStep(outcome) {
   }
 }
 
+// src/provenance.ts
+var PROVENANCE_META_KEY = "provenance";
+function asProvenanceAccount(value) {
+  return value === "own" || value === "shared" || value === "shared_byo_unused" ? value : void 0;
+}
+function isConnectedAccountUnused(prov) {
+  return prov?.account === "shared_byo_unused";
+}
+function parseMessageProvenance(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const p = JSON.parse(msg.metadata).provenance;
+    if (p && typeof p.model === "string" && p.model.length > 0) {
+      const ev = p.evermind;
+      const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
+      const account = asProvenanceAccount(p.account);
+      return {
+        model: p.model,
+        ...account ? { account } : {},
+        ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
+        ...evermind ? { evermind } : {}
+      };
+    }
+  } catch {
+  }
+  return null;
+}
+function lastServedModel(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const prov = parseMessageProvenance(messages[i]);
+    if (prov) return prov.model;
+  }
+  return void 0;
+}
+function withProvenanceMetadata(provenance, base) {
+  const meta = { ...base ?? {} };
+  if (provenance) meta[PROVENANCE_META_KEY] = provenance;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+
+// src/stoppedTurn.ts
+var STOPPED_TURN_META_KEY = "stoppedByUser";
+var STOPPED_TURN_STEP = "agent.stopped";
+function stoppedTurnMetadata(source) {
+  const account = asProvenanceAccount(source.account);
+  const provenance = source.model ? { model: source.model, ...account ? { account } : {} } : null;
+  return withProvenanceMetadata(provenance, { [STOPPED_TURN_META_KEY]: true }) ?? "{}";
+}
+function isStoppedTurn(msg) {
+  if (!msg.metadata) return false;
+  try {
+    return JSON.parse(msg.metadata)?.[STOPPED_TURN_META_KEY] === true;
+  } catch {
+    return false;
+  }
+}
+
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
 function consolidationMetadata() {
@@ -3284,12 +3360,17 @@ function modelScorecard(events) {
   const row = (model) => {
     let score = byModel.get(model);
     if (!score) {
-      score = { model, turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0 };
+      score = { model, turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0, stopped: 0 };
       byModel.set(model, score);
     }
     return score;
   };
   for (const ev of events) {
+    if (ev.label === STOPPED_TURN_STEP) {
+      const model2 = modelOf(ev);
+      if (model2) row(model2).stopped += 1;
+      continue;
+    }
     if (ev.label !== "llm.complete") continue;
     const model = modelOf(ev);
     if (!model) continue;
@@ -3310,13 +3391,15 @@ function modelScorecard(events) {
 }
 function formatModelScorecard(scores) {
   const markup = scores.some((s) => s.unliftedMarkupTurns > 0);
-  if (scores.length < 2 && !markup) return [];
+  const stopped = scores.some((s) => s.stopped > 0);
+  if (scores.length < 2 && !markup && !stopped) return [];
   const anyActed = scores.some((s) => s.toolCalls > 0);
   const lines = ["Per model:"];
   for (const s of scores) {
     const parts = [`${s.turns} turn(s)`, `${s.toolCalls} tool call(s)`];
     if (s.textOnlyTurns) parts.push(`${s.textOnlyTurns} text-only`);
     if (s.failures) parts.push(`${s.failures} failed`);
+    if (s.stopped) parts.push(`${s.stopped} stopped by the user mid-stream`);
     const flag = s.unliftedMarkupTurns ? ` \xB7 \u26A0 ${s.unliftedMarkupTurns} turn(s) wrote a tool call as MARKUP that no parser lifted, so the call never ran. The model tried to act; this is a parser gap, not a refusal.` : scores.length > 1 && anyActed && s.toolCalls === 0 && s.turns >= SILENT_TURNS_AT ? " \xB7 \u26A0 made NO tool calls while another model in this run did: this model is not emitting structured calls on its route." : "";
     lines.push(`  \u2022 ${s.model}: ${parts.join(" \xB7 ")}${flag}`);
   }
@@ -3974,7 +4057,7 @@ function isEvermindModel(model) {
 function modelsUsedInTrace(events) {
   const seen = [];
   for (const ev of events) {
-    if (ev.category !== "llm" && ev.category !== "error") continue;
+    if (ev.category !== "llm" && ev.category !== "error" && ev.label !== STOPPED_TURN_STEP) continue;
     const m = ev.args?.model;
     if (typeof m === "string" && m && m !== "default" && !seen.includes(m)) seen.push(m);
   }
@@ -4283,43 +4366,6 @@ function buildBrainTriageReport(opts) {
     }
   }
   return lines.join("\n");
-}
-
-// src/provenance.ts
-var PROVENANCE_META_KEY = "provenance";
-function isConnectedAccountUnused(prov) {
-  return prov?.account === "shared_byo_unused";
-}
-function parseMessageProvenance(msg) {
-  if (!msg.metadata) return null;
-  try {
-    const p = JSON.parse(msg.metadata).provenance;
-    if (p && typeof p.model === "string" && p.model.length > 0) {
-      const ev = p.evermind;
-      const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
-      const account = p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused" ? p.account : void 0;
-      return {
-        model: p.model,
-        ...account ? { account } : {},
-        ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
-        ...evermind ? { evermind } : {}
-      };
-    }
-  } catch {
-  }
-  return null;
-}
-function lastServedModel(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const prov = parseMessageProvenance(messages[i]);
-    if (prov) return prov.model;
-  }
-  return void 0;
-}
-function withProvenanceMetadata(provenance, base) {
-  const meta = { ...base ?? {} };
-  if (provenance) meta[PROVENANCE_META_KEY] = provenance;
-  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
 
 // src/turnRating.ts
@@ -4852,8 +4898,7 @@ function turnOptimizationDirective() {
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
   if (!model) return void 0;
-  const a = result.account;
-  const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
+  const account = asProvenanceAccount(result.account);
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
 var HISTORY_WINDOW = 80;
@@ -4929,6 +4974,8 @@ function makeCell() {
     deltaRecordedFiles: [],
     runTraceFrom: 0,
     compactMemo: null,
+    liveTurn: null,
+    stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -5236,6 +5283,8 @@ function stopRun(chatId) {
   if (driver) return driver.stop(chatId);
   const c = cells.get(chatId);
   if (!c || !c.running) return;
+  const stopped = stoppedTurnOf(c);
+  c.stoppedTurn = stopped;
   c.abort?.abort();
   if (c.confirmResolver) {
     const resolve = c.confirmResolver;
@@ -5245,7 +5294,48 @@ function stopRun(chatId) {
   }
   c.streamingText = "";
   c.activity = null;
-  pushTrace(c, { ts: nowIso(), category: "message", label: "agent.stopped", result: "Stopped by user." });
+  pushTrace(c, stopped.event);
+}
+function stoppedTurnOf(c) {
+  const live = c.liveTurn;
+  const text = live ? c.streamingText : "";
+  const model = live?.model;
+  const result = !live ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
+  return {
+    text,
+    source: { ...live },
+    event: {
+      ts: nowIso(),
+      category: "message",
+      label: STOPPED_TURN_STEP,
+      ...model ? { args: { model } } : {},
+      ...live ? { textChars: text.length } : {},
+      result
+    }
+  };
+}
+async function keepStoppedTurn(chatId, c, persistence) {
+  const stopped = c.stoppedTurn;
+  c.stoppedTurn = null;
+  if (!stopped) return;
+  persistStep(chatId, persistence, stopped.event);
+  const text = canonicalTurnText(stopped.text);
+  if (!text) return;
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
+  if (msg) recordAppended(c, msg);
+}
+async function asLiveTurn(c, complete) {
+  c.liveTurn = {};
+  try {
+    return await complete();
+  } finally {
+    c.liveTurn = null;
+  }
+}
+function liveTurnModel(c) {
+  return (model, account) => {
+    if (c.liveTurn) c.liveTurn = { model, account };
+  };
 }
 function clearRunError(chatId) {
   if (chatId == null) return;
@@ -5316,6 +5406,8 @@ async function startRun(chatId, req) {
   c.deltaRecordedFiles = [];
   c.runTraceFrom = c.trace.length;
   c.codeModel = null;
+  c.liveTurn = null;
+  c.stoppedTurn = null;
   c.runId = runOutcomeId(chatId, Date.now());
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
@@ -5337,6 +5429,8 @@ async function startRun(chatId, req) {
     c.running = false;
     c.streamingText = "";
     c.abort = null;
+    if (aborted) await keepStoppedTurn(chatId, c, req.persistence).catch(() => {
+    });
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
       c.activity = { phase: "finishing", startedAt: Date.now(), step: 0 };
       emit(c);
@@ -5996,6 +6090,7 @@ ${revisit}` : replayNote });
       }
       setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
       const handlers = {
+        onModel: liveTurnModel(c),
         onTextDelta: (d) => {
           c.streamingText += d;
           if (firstTokenAt === void 0) {
@@ -6008,7 +6103,7 @@ ${revisit}` : replayNote });
         }
       };
       let turnRole = tools ? phase : "chat";
-      const request = (role, excludeModels) => stream(
+      const request = (role, excludeModels) => asLiveTurn(c, () => stream(
         {
           messages: working,
           tools,
@@ -6024,7 +6119,7 @@ ${revisit}` : replayNote });
           signal: c.abort?.signal
         },
         handlers
-      );
+      ));
       const turnError = (e) => {
         pushTrace(c, {
           ts: nowIso(),
@@ -6225,15 +6320,18 @@ ${revisit}` : replayNote });
         }
       ];
       let closeFirstTokenAt;
-      const closing = await stream(
+      const closing = await asLiveTurn(c, () => stream(
         // No `tools` → the model can't call another tool and must produce text.
         { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        { onTextDelta: (d) => {
-          if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
-          c.streamingText += d;
-          emit(c);
-        } }
-      );
+        {
+          onModel: liveTurnModel(c),
+          onTextDelta: (d) => {
+            if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
+            c.streamingText += d;
+            emit(c);
+          }
+        }
+      ));
       accrueByoUnresolved(c, closing.byoUnresolved);
       accrueProviderCap(c, closing.providerCap);
       pushTrace(c, {
@@ -6279,7 +6377,7 @@ ${revisit}` : replayNote });
 
 // src/useBrainConversation.ts
 function seedFrom(history) {
-  return scopeToConsolidation(history).filter((m) => !isStepMessage(m)).flatMap((m) => {
+  return scopeToConsolidation(history).filter((m) => !isStepMessage(m) && !isStoppedTurn(m)).flatMap((m) => {
     if (m.role !== "assistant") return [{ role: m.role, content: m.content }];
     const content = replayTextOf(m.content);
     return content ? [{ role: "assistant", content }] : [];
@@ -7795,6 +7893,8 @@ function PromptInput({
   ReadCoverage,
   RepetitionLoopError,
   STEP_MESSAGE_ROLE,
+  STOPPED_TURN_META_KEY,
+  STOPPED_TURN_STEP,
   StreamInterruptedError,
   TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE,
@@ -7817,6 +7917,7 @@ function PromptInput({
   announcesUntakenAction,
   applyRemoteRun,
   artifactRoutePath,
+  asProvenanceAccount,
   askUserAnchorId,
   askUserBlock,
   attachEvermindLearn,
@@ -7902,6 +8003,7 @@ function PromptInput({
   isRouterTool,
   isRunning,
   isStepMessage,
+  isStoppedTurn,
   isTicketRecordingTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
@@ -7983,6 +8085,7 @@ function PromptInput({
   startRun,
   stepSig,
   stopRun,
+  stoppedTurnMetadata,
   streamChatCompletion,
   stripAskUser,
   subscribeRun,

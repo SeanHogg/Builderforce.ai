@@ -150,6 +150,10 @@ interface BrainTimelineLabels extends ToolStepLabels {
      *  inside its `<think>` block, so the transcript shows the reasoning as the reply
      *  rather than a collapsed line and nothing else. See `strandedReplyKey`. */
     replyFromThought: string;
+    /** Muted note above a reply the user STOPPED mid-stream — what the model had written
+     *  when Stop was pressed, kept so the reader can see what went wrong and (from the
+     *  provenance chip) which model did it. See `stoppedTurn.ts` in brain-embedded. */
+    stoppedReply: string;
     you: string;
     assistant: string;
     error: string;
@@ -181,6 +185,13 @@ interface BrainTimelineLabels extends ToolStepLabels {
     recallTitle: string;
     /** Tooltip on the recall step explaining what it means. */
     recallHint: string;
+    /** Memory-first answer step: a saved reply was replayed and no model ran. */
+    memoryAnswerCache: string;
+    /** Memory-first answer step: the project's Evermind replied and no other model ran.
+     *  Must contain `{version}`. */
+    memoryAnswerEvermind: string;
+    /** Tooltip on the memory-first answer step. */
+    memoryAnswerHint: string;
     /** Evermind learn step — the turn was contributed back. Must contain `{version}`. */
     learnTitle: string;
     /** Tooltip on the learn step. */
@@ -1288,8 +1299,8 @@ declare function useChatParticipants(adapter: ChatTicketsAdapter, chatId: number
  * returns handlers you spread onto YOUR <textarea> plus a `popup` node you render
  * inside a `position: relative` composer container. Picking a participant strips
  * the "@query" fragment (the picked recipient is shown by the composer's "To:"
- * chip, so it need not linger in the body) and calls `onPick` — wire that to the
- * host's `setRecipientChoice`, reusing the whole directed-message routing spine.
+ * chip, so it need not linger in the body) and calls `onPick` — wire that to
+ * `useRecipientChoice`'s `choose`, reusing the whole directed-message routing spine.
  *
  * Theme-aware via the same CSS-var fallback chain the ChatTicketsPanel uses, so the
  * popup reads in BOTH the web app (light/dark) and the editor's active theme.
@@ -1312,7 +1323,7 @@ interface UseMentionAutocompleteOptions {
     setValue: (v: string) => void;
     /** The chat's invited participants (agents + humans) offered by the picker. */
     participants: DirectedRecipient[];
-    /** Called with the participant the user picked — wire to `setRecipientChoice`. */
+    /** Called with the participant the user picked — wire to `useRecipientChoice`'s `choose`. */
     onPick: (r: DirectedRecipient) => void;
     labels?: MentionLabels;
     /** Suppress the picker entirely (e.g. while a run is streaming). */
@@ -1406,6 +1417,13 @@ type TimelineNode = {
     version: number;
     count: number;
     items: EvermindRecallItem[];
+} | {
+    key: string;
+    kind: 'memoryAnswer';
+    ts: number;
+    order: number;
+    source: 'qa-cache' | 'evermind';
+    version: number | null;
 } | {
     key: string;
     kind: 'learn';
