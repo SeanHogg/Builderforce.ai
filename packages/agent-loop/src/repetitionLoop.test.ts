@@ -49,6 +49,33 @@ describe("detectRepetitionLoop", () => {
   });
 });
 
+describe("detectRepetitionLoop — a runaway count", () => {
+  // What chat #106's Grok turn became after it wrote its tool calls as text.
+  const count = (from: number, to: number): string => Array.from({ length: to - from + 1 }, (_, i) => String(from + i)).join(" ");
+
+  it("cuts a count that runs on and keeps only what came before it", () => {
+    const loop = detectRepetitionLoop(`Applying the fix now. --- ${count(0, 593)}`);
+    expect(loop).not.toBeNull();
+    expect(loop!.copies).toBe(594);
+    expect(loop!.kept).toBe("Applying the fix now. ---");
+    expect(loop!.block.startsWith("0 1 2 3")).toBe(true);
+  });
+
+  it("catches it mid-stream, with the tail on a separator", () => {
+    expect(detectRepetitionLoop(`--- ${count(0, 60)} `)).not.toBeNull();
+  });
+
+  it("lets a short run of numbers, or one that ends in prose, through", () => {
+    expect(detectRepetitionLoop(`Values: ${count(1, 40)}`)).toBeNull();
+    expect(detectRepetitionLoop(`Pages ${count(1, 80)} are done.`)).toBeNull();
+    expect(detectRepetitionLoop(`Ids: ${Array.from({ length: 80 }, (_, i) => String(i * 2)).join(" ")}`)).toBeNull();
+  });
+
+  it("never judges a count inside an open code fence", () => {
+    expect(detectRepetitionLoop("```\n" + count(0, 100))).toBeNull();
+  });
+});
+
 describe("runAgentLoop — a turn that arrives looped", () => {
   it("keeps only what the model said before the loop, and tells the surface", async () => {
     const intro = "Here is what I found:\n";

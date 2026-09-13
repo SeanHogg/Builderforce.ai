@@ -27,9 +27,50 @@
  *  - Code: text inside an open ``` fence is never judged — three identical lines of
  *    boilerplate are a legitimate answer.
  *  - Near-repeats: a list of similar-but-different items is not periodic, so it passes.
+ *
+ * ── A RUNAWAY COUNT ──────────────────────────────────────────────────────────────
+ * Observed 2026-09-13 (chat #106, `xai-oauth/grok-4.6`): after writing its tool calls as
+ * text, the decoder counted `0 1 2 3 … 593` until Stop. Every number differs, so no block
+ * repeats and the periodic rule above can never fire. A tail of {@link COUNT_MIN_RUN}
+ * integers, each one more than the last, is that failure; `kept` is everything before the
+ * count, `block` the count itself and `copies` how many numbers it ran to.
  */
 
 import type { RepetitionLoop } from "./types.js";
+
+/** Consecutive integers, each one more than the last, before a tail counts as a runaway count. */
+const COUNT_MIN_RUN = 50;
+/** Longest number a counting run is read over. */
+const COUNT_MAX_DIGITS = 6;
+
+const isDigit = (code: number): boolean => code >= 48 && code <= 57;
+/** Space, tab, newline, carriage return, comma — what separates the numbers of a count. */
+const isCountSeparator = (code: number): boolean => code === 32 || code === 9 || code === 10 || code === 13 || code === 44;
+
+/** The counting run the text ends in, or null. Reads backwards and stops at the first break. */
+function tailCountingRun(text: string): RepetitionLoop | null {
+  let pos = text.length;
+  let expected: number | null = null;
+  let count = 0;
+  let start = pos;
+  for (;;) {
+    let end = pos;
+    while (end > 0 && isCountSeparator(text.charCodeAt(end - 1))) end -= 1;
+    let begin = end;
+    while (begin > 0 && end - begin <= COUNT_MAX_DIGITS && isDigit(text.charCodeAt(begin - 1))) begin -= 1;
+    if (begin === end || end - begin > COUNT_MAX_DIGITS) break;
+    // A number glued to a word ("v12") is not part of a count.
+    if (begin > 0 && !isCountSeparator(text.charCodeAt(begin - 1))) break;
+    const value = Number(text.slice(begin, end));
+    if (expected !== null && value !== expected) break;
+    count += 1;
+    start = begin;
+    pos = begin;
+    expected = value - 1;
+  }
+  if (count < COUNT_MIN_RUN) return null;
+  return { block: text.slice(start).trim(), copies: count, kept: text.slice(0, start).trimEnd() };
+}
 
 /** Consecutive verbatim copies of a block before the text counts as looping. */
 const LOOP_MIN_COPIES = 3;
@@ -71,6 +112,8 @@ function tailHasPeriod(text: string, p: number, span: number): boolean {
  * that block, not as a multiple of it.
  */
 export function detectRepetitionLoop(text: string): RepetitionLoop | null {
+  const counting = tailCountingRun(text);
+  if (counting) return inOpenCodeFence(text) ? null : counting;
   const length = text.length;
   if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
   const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_MIN_COPIES));

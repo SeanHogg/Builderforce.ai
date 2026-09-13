@@ -2,8 +2,84 @@ import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, fetchWit
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
 import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
+import {
+  REASONING_INCLUDE, nextReasoningChain, reasoningReplayKey, toolTurnCallIds, withReplayedReasoning,
+  type ReasoningChain,
+} from './reasoningReplay';
 
 const ENDPOINT = 'https://api.x.ai/v1/responses';
+
+/**
+ * Opt-in to xAI's server-side loop detector on a streamed request, the way xAI's own
+ * client (grok-build `xai-grok-sampler`) does. The value is the detector window in
+ * tokens (honoured 512–4096; grok-build's default 1024). The server then reports loops
+ * mid-stream as `response.doom_loop_check` frames, which the shared translator turns
+ * into a stream failure (`responsesStream.ts`) so the turn fails over instead of
+ * decaying — chat #106's Grok counted to 593 with nothing to stop it.
+ */
+const DOOM_LOOP_CHECK_HEADER = 'x-grok-doom-loop-check';
+const DOOM_LOOP_WINDOW_TOKENS = 1024;
+
+/**
+ * Tool turns looked back over for a saved chain. A run starts on one model and hands the
+ * coding to another (`modelRoles.ts`), so when Grok is called again the newest tool turns
+ * are usually the coder's, whose calls were never saved here.
+ */
+const REASONING_LOOKBACK_TURNS = 8;
+
+/**
+ * The reasoning chain this request replays: the newest saved one among its recent tool
+ * turns. Empty on any miss or failure — a request without replay is exactly the request
+ * this vendor always sent, so the store can never break a turn.
+ */
+async function loadReasoningChain(params: VendorCallParams): Promise<ReasoningChain> {
+  const store = params.reasoningReplay;
+  const callIds = toolTurnCallIds(params.messages).slice(0, REASONING_LOOKBACK_TURNS);
+  if (!store || callIds.length === 0) return {};
+  const load = async (callId: string): Promise<ReasoningChain | null> => {
+    try {
+      return await store.load(await reasoningReplayKey(params.apiKey, callId));
+    } catch {
+      return null;
+    }
+  };
+  // The newest turn alone first: in a loop Grok is driving, that one read is the whole cost.
+  const newest = await load(callIds[0]!);
+  if (newest) return newest;
+  const older = await Promise.all(callIds.slice(1).map(load));
+  return older.find((chain): chain is ReasoningChain => chain !== null) ?? {};
+}
+
+/** Save the chain once a turn completes. Best-effort: losing it costs only the next turn's continuity. */
+async function saveReasoningChain(
+  params: VendorCallParams,
+  prior: ReasoningChain,
+  items: ReadonlyArray<Record<string, unknown>>,
+): Promise<void> {
+  const next = params.reasoningReplay ? nextReasoningChain(prior, items) : null;
+  if (!next) return;
+  try {
+    await params.reasoningReplay!.save(await reasoningReplayKey(params.apiKey, next.firstCallId), next.chain);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * The Responses body, asking for encrypted reasoning (`store:false` is already set by the
+ * shared builder) and carrying the chain back in front of the calls it led to.
+ *
+ * No output cap: Grok reasons before it answers and those reasoning tokens count against
+ * `max_output_tokens`, so the composer's 4096 ceiling cut turns off mid-tool-call with
+ * nothing usable to show for them. The subscription is flat-rate; the model's own ceiling
+ * applies.
+ */
+function requestBody(params: VendorCallParams, chain: ReasoningChain, extra?: Record<string, unknown>): Record<string, unknown> {
+  const body = buildResponsesBody(params, { extra: { include: [REASONING_INCLUDE], ...extra }, omitMaxOutputTokens: true });
+  return Object.keys(chain).length > 0
+    ? { ...body, input: withReplayedReasoning(body['input'] as Array<Record<string, unknown>>, chain) }
+    : body;
+}
 
 /**
  * Issue the Responses request and classify a non-2xx answer, returning the still-unread
@@ -12,27 +88,37 @@ const ENDPOINT = 'https://api.x.ai/v1/responses';
  *
  * `extra` carries the per-surface request delta — only `{ stream: true }` today.
  */
-async function xaiFetch(params: VendorCallParams, extra?: Record<string, unknown>): Promise<Response> {
+async function xaiFetch(params: VendorCallParams, chain: ReasoningChain, extra?: Record<string, unknown>): Promise<Response> {
   // Request/response translation lives in the SHARED Responses helper, not here — the
   // hand-rolled copy in this vendor never read `params.toolChoice`, so a pinned or
   // forced tool degraded to `auto` on Grok with no error.
-  //
-  // No output cap: Grok reasons before it answers and those reasoning tokens count against
-  // `max_output_tokens`, so the composer's 4096 ceiling cut turns off mid-tool-call with
-  // nothing usable to show for them. The subscription is flat-rate; the model's own
-  // ceiling applies.
-  const init: RequestInit = {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${params.apiKey}` },
-    body: JSON.stringify(buildResponsesBody(params, { ...(extra ? { extra } : {}), omitMaxOutputTokens: true })),
+  const streamed = extra?.stream === true;
+  const send = (replay: ReasoningChain): Promise<Response> => {
+    const init: RequestInit = {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${params.apiKey}`,
+        ...(streamed ? { [DOOM_LOOP_CHECK_HEADER]: String(DOOM_LOOP_WINDOW_TOKENS) } : {}),
+      },
+      body: JSON.stringify(requestBody(params, replay, extra)),
+    };
+    // A STREAM's headers arrive as soon as generation starts, so a deadline on them bounds a
+    // hung upstream (this call had none, and a stalled Grok held a turn for minutes) without
+    // bounding a long answer — the timer clears once headers land. The buffered call only
+    // answers when the whole generation exists, so it keeps the caller's signal alone.
+    return streamed
+      ? fetchWithVendorTimeout('xai-oauth', params.model, ENDPOINT, init, params.timeoutMs, params.signal)
+      : fetch(ENDPOINT, { ...init, signal: params.signal });
   };
-  // A STREAM's headers arrive as soon as generation starts, so a deadline on them bounds a
-  // hung upstream (this call had none, and a stalled Grok held a turn for minutes) without
-  // bounding a long answer — the timer clears once headers land. The buffered call only
-  // answers when the whole generation exists, so it keeps the caller's signal alone.
-  const response = extra?.stream === true
-    ? await fetchWithVendorTimeout('xai-oauth', params.model, ENDPOINT, init, params.timeoutMs, params.signal)
-    : await fetch(ENDPOINT, { ...init, signal: params.signal });
+  let response = await send(chain);
+  // Replayed reasoning is the one thing in this body the request never carried before.
+  // If xAI refuses the request with it, send it once more without — a turn that loses
+  // its prior reasoning is the old behaviour, never a new way to fail.
+  if ((response.status === 400 || response.status === 422) && Object.keys(chain).length > 0) {
+    await response.body?.cancel().catch(() => undefined);
+    response = await send({});
+  }
   if (!response.ok) {
     const message = (await response.text()).slice(0, 1000);
     // xAI reports a depleted weekly SuperGrok/API allowance as 403 — the same
@@ -51,9 +137,16 @@ async function xaiFetch(params: VendorCallParams, extra?: Record<string, unknown
   return response;
 }
 
+/** The buffered call, for a chain already loaded — shared by `call` and the stream fallback. */
+async function callWith(params: VendorCallParams, chain: ReasoningChain): Promise<VendorCallResult> {
+  const response = await xaiFetch(params, chain);
+  const payload = await response.json() as ResponsesPayload;
+  await saveReasoningChain(params, chain, (payload.output ?? []) as Array<Record<string, unknown>>);
+  return normalizeResponsesPayload(payload);
+}
+
 async function call(params: VendorCallParams): Promise<VendorCallResult> {
-  const response = await xaiFetch(params);
-  return normalizeResponsesPayload(await response.json() as ResponsesPayload);
+  return callWith(params, await loadReasoningChain(params));
 }
 
 /**
@@ -70,19 +163,26 @@ async function call(params: VendorCallParams): Promise<VendorCallResult> {
  * a working Grok credential.
  */
 async function callStream(params: VendorCallParams): Promise<VendorStreamResult> {
+  const chain = await loadReasoningChain(params);
   let response: Response;
   try {
-    response = await xaiFetch(params, { stream: true });
+    response = await xaiFetch(params, chain, { stream: true });
   } catch (error) {
     if (!(error instanceof VendorFatalError)) throw error;
-    return pseudoStreamFromCall(await call(params), params);
+    return pseudoStreamFromCall(await callWith(params, chain), params);
   }
   const contentType = response.headers.get('content-type') ?? '';
   if (!response.body || !contentType.includes('text/event-stream')) {
-    return pseudoStreamFromCall(normalizeResponsesPayload(await response.json() as ResponsesPayload), params);
+    const payload = await response.json() as ResponsesPayload;
+    await saveReasoningChain(params, chain, (payload.output ?? []) as Array<Record<string, unknown>>);
+    return pseudoStreamFromCall(normalizeResponsesPayload(payload), params);
   }
   const body = await peekResponsesStreamError(response.body, 'xai-oauth', params.model);
-  return { response: responsesStreamResponse(body, params.model) };
+  return {
+    response: responsesStreamResponse(body, params.model, {
+      onTurnComplete: (items) => saveReasoningChain(params, chain, items),
+    }),
+  };
 }
 
 export const xaiOAuthModule: VendorModule = {

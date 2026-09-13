@@ -77,6 +77,7 @@ import { validateJsonSchema } from './jsonSchemaValidator';
 import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
 import { isEvermindModelId } from './evermindCodingGate';
+import { reasoningReplayStore } from '../../infrastructure/cache/reasoningReplayStore';
 import type { ActionType } from '@builderforce/learned-routing';
 import {
   DEFAULT_MIN_SAMPLES,
@@ -1547,6 +1548,9 @@ export class LlmProxyService {
       // Thread the R2 artifact store so the `evermind` vendor can load a
       // published model. Harmless for every other (HTTP) vendor — they ignore it.
       ...(this.env.UPLOADS ? { uploads: this.env.UPLOADS } : {}),
+      // Grok's encrypted reasoning between the turns of a tool loop, kept in the platform
+      // cache (`vendors/reasoningReplay.ts`). Only the xai-oauth vendor reads it.
+      ...(this.env.AUTH_CACHE_KV ? { reasoningReplay: reasoningReplayStore(this.env) } : {}),
       toolChoiceMinMargin: evermindToolChoiceMinMargin(this.env),
       // Local egress for the one class of vendor whose upstream refuses OUR machine
       // rather than our key (Kimi Code). `dispatchInternal` hands it only to a module

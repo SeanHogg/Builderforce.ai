@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.57] — Grok's replies stay readable, and the tools it asks for actually run
+
+- **No more stray `<|eos|>` in a reply.** Grok sometimes finished a turn by printing its own end-of-message marker. The chat now removes those markers from every model's replies.
+- **Tool calls Grok types out now run.** When Grok wrote its next steps as a numbered list of calls (`<|"0":{"name":…}}`) instead of making them, nothing happened and the run stalled. The chat now reads that list and runs each call in order.
+- **A reply that starts counting is stopped for you.** A model could slide from its answer into "0 1 2 3 …" and keep going until you pressed Stop. The chat now spots a long run of numbers counting up, cuts it, and hands the turn to another model the same way it does for a repeated sentence.
+
 ## [2026.9.56] — "Continue" picks up where the chat left off
 
 - **"Continue" builds on what was already read.** After the panel reloaded or the chat was reopened, saying "continue" started the research over: the agent searched and read the same files again and could run out of steam before changing anything. It now starts from a record of the files it read, the searches it ran and what they returned in earlier turns, and goes on from there.

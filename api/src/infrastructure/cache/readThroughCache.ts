@@ -31,6 +31,10 @@ import { isKvRateLimit, retryTransient } from '../shared/retryTransient';
 
 const SOURCE = 'infrastructure/cache/readThroughCache.ts';
 
+/** All a cache read or write needs of the environment: the KV binding. Narrower than
+ *  `Env`, so a holder of a partial environment (the LLM proxy's `ProxyEnv`) can use it. */
+export type CacheEnv = Pick<Env, 'AUTH_CACHE_KV'> | undefined;
+
 /** ONE instance = ONE L1 Map for the isolate. */
 const cache = createReadThroughCache({
   onError: (error, { operation, ...context }) => {
@@ -81,7 +85,7 @@ export async function getOrSetCached<T>(
  * read-modify-write that reconciles from the source only on a cold miss, instead
  * of double-counting against a loader that already includes the new write).
  */
-export async function peekCached<T>(env: Env, key: string): Promise<T | null> {
+export async function peekCached<T>(env: CacheEnv, key: string): Promise<T | null> {
   return cache.peek<T>(env?.AUTH_CACHE_KV, key);
 }
 
@@ -92,7 +96,7 @@ export async function peekCached<T>(env: Env, key: string): Promise<T | null> {
  * recompute. Best-effort on the KV write.
  */
 export async function setCached<T>(
-  env: Env,
+  env: CacheEnv,
   key: string,
   value: T,
   opts?: { kvTtlSeconds?: number; l1TtlMs?: number },

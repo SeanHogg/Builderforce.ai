@@ -50,8 +50,37 @@ interface ResponsesStreamEvent {
   /** `response.function_call_arguments.done` carries the call's COMPLETE arguments. */
   arguments?: unknown;
   item?: { type?: string; call_id?: string; id?: string; name?: string; arguments?: unknown };
-  response?: { id?: string; usage?: unknown; error?: { message?: string } | string };
+  /** `output` rides the terminal frame: the turn's complete item list, authoritative for order. */
+  response?: { id?: string; usage?: unknown; error?: { message?: string } | string; output?: unknown };
   error?: { message?: string } | string;
+  /** xAI's `response.doom_loop_check` payload: the CUMULATIVE set of loop triggers so far. */
+  doom_loop_check?: { triggers?: unknown };
+}
+
+/**
+ * Loosest tail-repetition threshold still treated as a real loop — grok-build's default
+ * recovery policy (`DoomLoopRecoveryPolicy::DEFAULT_MAX_THRESHOLD`). Lower is tighter.
+ */
+const DOOM_LOOP_MAX_THRESHOLD = 64;
+/** `tail_repetition:{threshold}@{channel}`, in the reasoning or the visible reply. */
+const TAIL_REPETITION = /^tail_repetition:(\d+)@(?:thinking|response)$/;
+
+/**
+ * The trigger that makes this check a real loop, or null. A tail repetition counts in
+ * EITHER channel. grok-build acts only on `@thinking` and leaves a visible loop to its
+ * user, but here a visible loop is a failed turn too: chat #105's Grok wrote an
+ * ever-growing tool name (`…_reset_all_reset_all_reset_all`) line after line, where no
+ * line repeats verbatim and each repeated unit is too short for the client's own guard.
+ * `low_logprob` and unknown kinds stay warn-only.
+ */
+function confidentDoomLoopTrigger(event: ResponsesStreamEvent): string | null {
+  const triggers = event.doom_loop_check?.triggers;
+  if (!Array.isArray(triggers)) return null;
+  for (const trigger of triggers) {
+    const match = typeof trigger === 'string' ? TAIL_REPETITION.exec(trigger) : null;
+    if (match && Number(match[1]) <= DOOM_LOOP_MAX_THRESHOLD) return trigger as string;
+  }
+  return null;
 }
 
 /** The chunk envelope every emitted frame shares. */
@@ -104,7 +133,16 @@ export async function peekResponsesStreamError(
  */
 export function responsesSseToChatSse(
   body: ReadableStream<Uint8Array>,
-  opts: { model: string },
+  opts: {
+    model: string;
+    /**
+     * Handed the finished turn's output items (reasoning and function calls, in
+     * output order) once it completes, before the stream closes — so a vendor can keep
+     * what the chat shape has no slot for (`reasoningReplay.ts`). Never called for a
+     * turn that failed, was cut off, or ended without its terminal frame.
+     */
+    onTurnComplete?: (items: ReadonlyArray<Record<string, unknown>>) => Promise<void>;
+  },
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -118,6 +156,10 @@ export function responsesSseToChatSse(
   /** Slots whose arguments already arrived as deltas, so a `.done` frame restating the
    *  whole string is not appended a second time. */
   const argsSeen = new Set<number>();
+  /** Reasoning and function-call items as the stream completed them, in output order. */
+  const completedItems: Array<Record<string, unknown>> = [];
+  /** Set by a clean `response.completed`: the turn's items, owed to `onTurnComplete`. */
+  let finishedItems: ReadonlyArray<Record<string, unknown>> | null = null;
 
   /** Open a chat tool_call slot for a Responses function_call item. */
   function openToolCall(outputIndex: number, item: NonNullable<ResponsesStreamEvent['item']>): string {
@@ -181,6 +223,9 @@ export function responsesSseToChatSse(
       case 'response.function_call_arguments.done':
       case 'response.output_item.done': {
         const isItem = event.type === 'response.output_item.done';
+        if (isItem && (event.item?.type === 'reasoning' || event.item?.type === 'function_call')) {
+          completedItems.push(event.item as unknown as Record<string, unknown>);
+        }
         if (isItem && event.item?.type !== 'function_call') return [];
         const outputIndex = typeof event.output_index === 'number' ? event.output_index : 0;
         const frames: string[] = [];
@@ -207,6 +252,10 @@ export function responsesSseToChatSse(
       case 'response.incomplete': {
         if (closed) return [];
         closed = true;
+        if (event.type === 'response.completed') {
+          const output = event.response?.output;
+          finishedItems = Array.isArray(output) ? output as Array<Record<string, unknown>> : completedItems;
+        }
         const finish = event.type === 'response.incomplete' ? 'length' : sawToolCall ? 'tool_calls' : 'stop';
         const frames = [chunk(responseId, model, {
           choices: [{ index: 0, delta: {}, finish_reason: finish }],
@@ -227,6 +276,20 @@ export function responsesSseToChatSse(
         closed = true;
         return [
           `data: ${JSON.stringify({ error: { message: errorMessage(event), type: 'upstream_error' } })}\n\n`,
+          'data: [DONE]\n\n',
+        ];
+      }
+
+      // xAI's server-side loop detector, opted into by the xai-oauth vendor's
+      // `x-grok-doom-loop-check` header. A confident loop ends the stream as a failure —
+      // the caller routes the turn to another model — rather than forwarding minutes of a
+      // model talking to itself. Anything less is ignored.
+      case 'response.doom_loop_check': {
+        const trigger = confidentDoomLoopTrigger(event);
+        if (!trigger || closed) return [];
+        closed = true;
+        return [
+          `data: ${JSON.stringify({ error: { message: `the model got stuck in a loop (xAI doom-loop check: ${trigger})`, type: 'upstream_error' } })}\n\n`,
           'data: [DONE]\n\n',
         ];
       }
@@ -268,6 +331,21 @@ export function responsesSseToChatSse(
             emitted = true;
           }
         }
+        // A terminal frame has been sent: stop reading, so an aborted generation is not
+        // left running (and billing) upstream while nothing consumes it.
+        if (closed) {
+          // Awaited while the response is still open, so the Worker cannot drop the
+          // write once the client has its last byte. Best-effort: a failed save only
+          // costs the next turn its continuity.
+          if (finishedItems && opts.onTurnComplete) {
+            const items = finishedItems;
+            finishedItems = null;
+            await opts.onTurnComplete(items).catch(() => undefined);
+          }
+          reader.cancel().catch(() => undefined);
+          controller.close();
+          return;
+        }
         if (emitted) return;
       }
     },
@@ -279,8 +357,12 @@ export function responsesSseToChatSse(
 
 /** Wrap a Responses SSE upstream body as the OpenAI-shaped `Response` a vendor's
  *  `callStream` must resolve to. */
-export function responsesStreamResponse(body: ReadableStream<Uint8Array>, model: string): Response {
-  return new Response(responsesSseToChatSse(body, { model }), {
+export function responsesStreamResponse(
+  body: ReadableStream<Uint8Array>,
+  model: string,
+  hooks?: { onTurnComplete?: (items: ReadonlyArray<Record<string, unknown>>) => Promise<void> },
+): Response {
+  return new Response(responsesSseToChatSse(body, { model, ...hooks }), {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

@@ -1,3 +1,34 @@
+## ✅ RESOLVED 2026-09-13 — Grok showed `<<|eos|>`, wrote its tool calls as `<|"0":{…}}` text, then counted to 593
+
+Reported from VS Code chat #106 (VSIX 2026.9.56, API 2026.9.30, `xai-oauth/grok-4.6`). One Grok turn ended with
+its end-of-sequence marker as visible text; the next wrote four tool calls as a numbered JSON map behind `<|`,
+none of which ran, and then decayed into `0 1 2 3 … 593` until Stop.
+
+- **Leaked control tokens are dropped from the visible reply.** `stripControlTokens` in `XmlToolCallFilter`
+  (`brain-embedded/src/xmlToolCalls.ts`) removes `<|eos|>`, `<|endoftext|>`, `<|im_end|>`, … with any `<` run glued
+  to the front, holding back a token split across chunks. Every vendor's text passes through it.
+- **Grok's numbered call map is a lifted dialect.** `<|"0":{"name":…,"arguments":{…}}, "1":{…} ?>`, with or without
+  the outer braces and never with a closing tag, now becomes structured calls. Dialects may be self-closing: the body
+  ends where its JSON does, and end of stream keeps every complete entry.
+- **A runaway count is cut like a sentence loop.** `detectRepetitionLoop` (`packages/agent-loop/src/repetitionLoop.ts`)
+  reports a tail of 50+ consecutive integers. Every number differs, so the periodic rule could never fire on it. Code
+  inside an open fence stays exempt.
+- **xAI's own loop detector is on for Grok streams** (api 2026.9.31). The xai-oauth vendor sends
+  `x-grok-doom-loop-check: 1024`, as xAI's grok-build client does. A confident `tail_repetition:{t}` trigger — in the reasoning OR the visible reply, since chat #105's
+  Grok wrote an ever-growing `…_reset_all_reset_all` tool name that no client guard could see as a repeat —
+  in a `response.doom_loop_check` frame ends the stream as a failure, so the turn fails over, and the translator stops
+  reading the upstream once any terminal frame is sent.
+- **Grok keeps its reasoning across the turns of a tool loop** (api 2026.9.31), the round-trip xAI's grok-build
+  client does. Before, every tool turn started from a cold chain of thought, which is the likeliest reason it
+  slipped out of native calling. The xai-oauth vendor now asks for `include:["reasoning.encrypted_content"]`. When a
+  turn that called tools completes, it saves the whole chain (call id → the reasoning before that call) under the
+  turn's first call id (`vendors/reasoningReplay.ts` → `infrastructure/cache/reasoningReplayStore.ts`, platform
+  cache, 6 h). The next request loads the record of its newest tool turn — and, when the run has handed coding to another
+  model (analysis → coder), looks back over up to eight tool turns in parallel for Grok's own — and puts each group back, byte-for-byte, immediately before
+  its call. Keys are scoped to the credential. A 400/422 with the replay is retried once without it, so the replay
+  can never be a new way for a Grok turn to fail. The shared stream translator hands a completed turn's items to
+  `onTurnComplete`, preferring the terminal `output` list, and never does so for a failed or cut-off turn.
+
 ## ✅ RESOLVED 2026-09-13 — "status?" replayed another chat's answer; a memory answer rendered as "Recalled … Evermind v0"
 
 Reported from VS Code chat #106 (VSIX 2026.9.53, API 2026.9.28). Mid-conversation, "status?" came back as a

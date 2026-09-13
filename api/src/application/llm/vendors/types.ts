@@ -254,6 +254,10 @@ export interface VendorCallParams {
    *  it can load a published `.evermind` model. Undefined for all HTTP vendors
    *  (they reach their backend over the network, not R2). */
   uploads?: import('../evermindRuntime').ArtifactStore;
+  /** Where the `xai-oauth` vendor keeps Grok's encrypted reasoning between the turns of
+   *  a tool loop (`reasoningReplay.ts`). Every other vendor ignores it; absent when the
+   *  platform cache is unbound, which only loses that continuity. */
+  reasoningReplay?: import('./reasoningReplay').ReasoningReplayStore;
   /** The tool-choice confidence bar in force for this request, already resolved from
    *  the environment by dispatch. Threaded rather than read here because vendors are
    *  deliberately env-free — the same reason `uploads` is passed in. Absent ⇒ the

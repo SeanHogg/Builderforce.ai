@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { peekResponsesStreamError, responsesSseToChatSse } from './responsesStream';
 import { openAiCodexModule } from './openaiCodex';
 import { xaiOAuthModule } from './xaiOAuth';
+import { reasoningReplayKey, type ReasoningChain, type ReasoningReplayStore } from './reasoningReplay';
 import { VendorRetryableError } from './types';
 import type { VendorCallParams } from './types';
 
@@ -43,6 +44,183 @@ const baseParams: VendorCallParams = {
   model: 'gpt-5.6-sol',
   messages: [{ role: 'user', content: 'hi' }],
 } as unknown as VendorCallParams;
+
+describe('xAI doom-loop check (response.doom_loop_check)', () => {
+  it('ends the stream as a failure on a confident loop in the reasoning, and stops reading', async () => {
+    const out = await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_text.delta","delta":"Working"}\n\n',
+      'event: response.doom_loop_check\ndata: {"sequence_number":4176,"type":"response.doom_loop_check","doom_loop_check":{"triggers":["tail_repetition:8@thinking"]}}\n\n',
+      'data: {"type":"response.output_text.delta","delta":" 0 1 2 3"}\n\n',
+    ]), { model: 'grok-4.6' }));
+
+    const parsed = chunks(out);
+    expect(parsed.at(-1)?.error?.message).toContain('tail_repetition:8@thinking');
+    expect(out).not.toContain('0 1 2 3');
+    expect(out.trimEnd().endsWith('data: [DONE]')).toBe(true);
+  });
+
+  it('ends a loop in the visible reply too — chat #105\'s ever-growing tool name', async () => {
+    const out = await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_text.delta","delta":"tasks.events_triggers_runs_logs_tail_stats_reset_all_reset_all,"}\n\n',
+      'data: {"type":"response.doom_loop_check","doom_loop_check":{"triggers":["tail_repetition:4@response"]}}\n\n',
+      'data: {"type":"response.output_text.delta","delta":"_reset_all_reset_all"}\n\n',
+    ]), { model: 'grok-4.6' }));
+
+    expect(chunks(out).at(-1)?.error?.message).toContain('tail_repetition:4@response');
+    expect(out).not.toContain('_reset_all_reset_all"');
+  });
+
+  it('treats low-logprob and unknown triggers as warnings only', async () => {
+    const out = await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_text.delta","delta":"ok"}\n\n',
+      'data: {"type":"response.doom_loop_check","doom_loop_check":{"triggers":["low_logprob@thinking","exact_repetition:42x3@response","something_new@thinking"]}}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r1"}}\n\n',
+    ]), { model: 'grok-4.6' }));
+
+    const parsed = chunks(out);
+    expect(parsed.some((c) => c.error)).toBe(false);
+    expect(parsed.at(-1)?.choices?.[0]?.finish_reason).toBe('stop');
+  });
+});
+
+/** A turn that reasoned, then called one tool — the frames xAI streams for it. */
+const REASONED_CALL_TURN = [
+  'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"enc-1"}}\n\n',
+  'data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","call_id":"call_1","name":"read_file","arguments":"{}"}}\n\n',
+  'data: {"type":"response.completed","response":{"id":"r1"}}\n\n',
+];
+const REASONING_1 = { type: 'reasoning', id: 'rs_1', summary: [], encrypted_content: 'enc-1' };
+
+describe('turn items for the reasoning replay (onTurnComplete)', () => {
+  it('hands the completed turn\'s reasoning and calls over, in output order, before the stream ends', async () => {
+    const seen: unknown[] = [];
+    const out = await drain(responsesSseToChatSse(sseStream(REASONED_CALL_TURN), {
+      model: 'grok-4.6',
+      onTurnComplete: async (items) => { seen.push(...items); },
+    }));
+    expect(seen.map((item) => (item as { type: string }).type)).toEqual(['reasoning', 'function_call']);
+    expect(chunks(out).some((c) => c.choices?.[0]?.delta?.tool_calls?.[0]?.id === 'call_1')).toBe(true);
+  });
+
+  it('prefers the terminal output list when the completed frame carries one', async () => {
+    const seen: unknown[] = [];
+    await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.completed","response":{"id":"r1","output":[{"type":"reasoning","id":"rs_9"},{"type":"function_call","call_id":"call_9"}]}}\n\n',
+    ]), { model: 'grok-4.6', onTurnComplete: async (items) => { seen.push(...items); } }));
+    expect(seen).toEqual([{ type: 'reasoning', id: 'rs_9' }, { type: 'function_call', call_id: 'call_9' }]);
+  });
+
+  it('never reports a turn that failed or was cut off', async () => {
+    const onTurnComplete = vi.fn(async () => undefined);
+    await drain(responsesSseToChatSse(sseStream([REASONED_CALL_TURN[0]!, 'data: {"type":"response.failed","response":{"error":{"message":"x"}}}\n\n']), { model: 'grok-4.6', onTurnComplete }));
+    await drain(responsesSseToChatSse(sseStream([REASONED_CALL_TURN[0]!, 'data: {"type":"response.incomplete","response":{"id":"r"}}\n\n']), { model: 'grok-4.6', onTurnComplete }));
+    expect(onTurnComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe('xai-oauth carries Grok\'s reasoning across tool calls', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const memoryStore = (): ReasoningReplayStore & { rows: Map<string, ReasoningChain> } => {
+    const rows = new Map<string, ReasoningChain>();
+    return { rows, load: async (key) => rows.get(key) ?? null, save: async (key, chain) => { rows.set(key, chain); } };
+  };
+  const streamed = (parts: string[]) => new Response(sseStream(parts), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  const sentBody = (fetchMock: ReturnType<typeof vi.fn>, n = 0) =>
+    JSON.parse(String((fetchMock.mock.calls[n] as unknown as [string, RequestInit])[1].body));
+  const TOOL_LOOP_MESSAGES = [
+    { role: 'user', content: 'fix it' },
+    { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'call_1', content: 'file text' },
+  ];
+
+  it('asks for encrypted reasoning, opts into the loop check, and saves the turn under its first call', async () => {
+    const store = memoryStore();
+    const fetchMock = vi.fn(async () => streamed(REASONED_CALL_TURN));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await xaiOAuthModule.callStream!({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.6', reasoningReplay: store });
+    await result.response.text();
+
+    const sent = sentBody(fetchMock);
+    expect(sent.include).toEqual(['reasoning.encrypted_content']);
+    expect(sent.store).toBe(false);
+    expect((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toMatchObject({ 'x-grok-doom-loop-check': '1024' });
+    expect(store.rows.get(await reasoningReplayKey('xai-key', 'call_1'))).toEqual({ call_1: [REASONING_1] });
+  });
+
+  it('puts the saved reasoning back immediately before its call on the next turn', async () => {
+    const store = memoryStore();
+    store.rows.set(await reasoningReplayKey('xai-key', 'call_1'), { call_1: [REASONING_1] });
+    const fetchMock = vi.fn(async () => streamed(['data: {"type":"response.completed","response":{"id":"r2"}}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await xaiOAuthModule.callStream!({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.6', messages: TOOL_LOOP_MESSAGES, reasoningReplay: store });
+    await result.response.text();
+
+    const input = sentBody(fetchMock).input as Array<{ type?: string; role?: string }>;
+    expect(input.map((item) => item.type ?? item.role)).toEqual(['user', 'reasoning', 'function_call', 'function_call_output']);
+    expect(input[1]).toEqual(REASONING_1);
+  });
+
+  it('never replays one credential\'s reasoning into another\'s request', async () => {
+    const store = memoryStore();
+    store.rows.set(await reasoningReplayKey('someone-else', 'call_1'), { call_1: [REASONING_1] });
+    const fetchMock = vi.fn(async () => streamed(['data: {"type":"response.completed","response":{"id":"r2"}}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await (await xaiOAuthModule.callStream!({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.6', messages: TOOL_LOOP_MESSAGES, reasoningReplay: store })).response.text();
+    expect((sentBody(fetchMock).input as Array<{ type?: string }>).some((item) => item.type === 'reasoning')).toBe(false);
+  });
+
+  it('sends the turn once more without the replay when xAI refuses it', async () => {
+    const store = memoryStore();
+    store.rows.set(await reasoningReplayKey('xai-key', 'call_1'), { call_1: [REASONING_1] });
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const replayed = (JSON.parse(init.body as string).input as Array<{ type?: string }>).some((item) => item.type === 'reasoning');
+      return replayed
+        ? new Response('{"error":"invalid reasoning item"}', { status: 400 })
+        : streamed(['data: {"type":"response.output_text.delta","delta":"ok"}\n\n', 'data: {"type":"response.completed","response":{"id":"r2"}}\n\n']);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await xaiOAuthModule.callStream!({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.6', messages: TOOL_LOOP_MESSAGES, reasoningReplay: store });
+    expect(chunks(await result.response.text())[0]!.choices[0].delta.content).toBe('ok');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('finds Grok\'s chain behind the coder\'s turns when the run handed off and Grok is called again', async () => {
+    const store = memoryStore();
+    store.rows.set(await reasoningReplayKey('xai-key', 'call_1'), { call_1: [REASONING_1] });
+    const fetchMock = vi.fn(async () => streamed(['data: {"type":"response.completed","response":{"id":"r3"}}\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const handedOff = [
+      ...TOOL_LOOP_MESSAGES,
+      // Two turns by the coding model — their call ids were never saved for Grok.
+      { role: 'assistant', content: null, tool_calls: [{ id: 'qwen_1', type: 'function', function: { name: 'edit_file', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'qwen_1', content: 'ok' },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'qwen_2', type: 'function', function: { name: 'edit_file', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'qwen_2', content: 'ok' },
+    ];
+    await (await xaiOAuthModule.callStream!({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.6', messages: handedOff, reasoningReplay: store })).response.text();
+
+    const input = sentBody(fetchMock).input as Array<{ type?: string; call_id?: string; id?: string }>;
+    const reasoningAt = input.findIndex((item) => item.type === 'reasoning');
+    expect(input[reasoningAt]).toEqual(REASONING_1);
+    expect(input[reasoningAt + 1]).toMatchObject({ type: 'function_call', call_id: 'call_1' });
+  });
+
+  it('saves the chain from a buffered answer too', async () => {
+    const store = memoryStore();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'r', output: [REASONING_1, { type: 'function_call', call_id: 'call_1', name: 'read_file', arguments: '{}' }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })));
+
+    await xaiOAuthModule.call({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.6', reasoningReplay: store });
+    expect(store.rows.get(await reasoningReplayKey('xai-key', 'call_1'))).toEqual({ call_1: [REASONING_1] });
+  });
+});
 
 describe('Responses SSE → OpenAI chat SSE passthrough', () => {
   afterEach(() => vi.restoreAllMocks());

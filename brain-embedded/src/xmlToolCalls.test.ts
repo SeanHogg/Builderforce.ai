@@ -184,6 +184,65 @@ describe('XmlToolCallFilter — Grok <xai:function_call>', () => {
   });
 });
 
+describe('XmlToolCallFilter — Grok numbered call map <|"0":{…}', () => {
+  /** Chat #106 (grok-4.6): four calls written this way, none lifted, so none ran. */
+  const RAW = 'Applying the fix now. <|"0":{"name": "builtin_tasks_update", "arguments": {"id": "2470", "status": "in_progress"}}, '
+    + '"1": {"name": "read_file", "arguments": {"path": "frontend/src/lib/canvas/boardAgents.ts"}}, '
+    + '"2": {"name": "search_code", "arguments": {"path": "frontend/src", "query": "a, {b} \\"c\\""}}} ? > done';
+
+  it('lifts every entry, in order, and strips the map and its ?> terminator', () => {
+    const { text, toolCalls } = extractXmlToolCalls(RAW);
+    expect(text).toBe('Applying the fix now.  done');
+    expect(toolCalls.map((c) => c.name)).toEqual(['builtin_tasks_update', 'read_file', 'search_code']);
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ id: '2470', status: 'in_progress' });
+    expect(JSON.parse(toolCalls[2].args)).toEqual({ path: 'frontend/src', query: 'a, {b} "c"' });
+    expect(new Set(toolCalls.map((c) => c.id)).size).toBe(3);
+  });
+
+  it('lifts the same calls however the stream is chunked', () => {
+    for (const size of [1, 3, 7, 16]) {
+      const { text, calls } = streamInChunks(RAW, size);
+      expect(text).toBe('Applying the fix now.  done');
+      expect(calls.map((c) => c.name)).toEqual(['builtin_tasks_update', 'read_file', 'search_code']);
+    }
+  });
+
+  it('accepts the map with its outer braces', () => {
+    const { text, toolCalls } = extractXmlToolCalls('<|{"0":{"name":"list_files","arguments":{"path":"src"}}}');
+    expect(text).toBe('');
+    expect(toolCalls[0].name).toBe('list_files');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ path: 'src' });
+  });
+
+  it('leaves prose that merely starts with <| alone', () => {
+    expect(extractXmlToolCalls('the <| "operator" |> reads left').text).toBe('the <| "operator" |> reads left');
+  });
+});
+
+describe('XmlToolCallFilter — leaked control tokens', () => {
+  /** Grok ended a reasoning-only turn with its end-of-sequence marker as visible text. */
+  it('drops a leaked <|eos|> (with its stray leading <) from the visible reply', () => {
+    expect(extractXmlToolCalls('Done.<<|eos|>').text).toBe('Done.');
+    expect(extractXmlToolCalls('<|endoftext|>').text).toBe('');
+    expect(extractXmlToolCalls('a<|im_end|>b<|separator|>c').text).toBe('abc');
+  });
+
+  it('holds back a control token split across chunks', () => {
+    const f = new XmlToolCallFilter();
+    let visible = f.push('Answer<');
+    visible += f.push('<|eo');
+    visible += f.push('s|>');
+    visible += f.flush();
+    expect(visible).toBe('Answer');
+  });
+
+  it('leaves ordinary angle brackets and pipes alone', () => {
+    expect(extractXmlToolCalls('a < b || c > d, x <| y').text).toBe('a < b || c > d, x <| y');
+    const f = new XmlToolCallFilter();
+    expect(f.push('trailing <') + f.flush()).toBe('trailing <');
+  });
+});
+
 describe('hasCallMarkup', () => {
   it('flags call markup of a dialect the filter does not lift, and nothing else', () => {
     expect(hasCallMarkup('<acme:tool_call>{"name":"x"}</acme:tool_call>')).toBe(true);
