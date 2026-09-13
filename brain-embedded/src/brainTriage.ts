@@ -15,6 +15,7 @@ import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
 import { formatModelScorecard, modelScorecard, type ModelScore } from './modelScorecard';
+import { STOPPED_TURN_STEP } from './stoppedTurn';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { READ_FILE_TOOL } from './toolResultBudget';
 
@@ -370,12 +371,13 @@ export function isEvermindModel(model: string): boolean {
  * trace events (brainRunStore records the resolved model in `args.model`). First-
  * seen order, so a mid-run failover swap stays visible. The placeholder `default`
  * (caller pinned nothing ⇒ gateway auto-selected, and it reported no model) is
- * dropped so it never masquerades as a real model id.
+ * dropped so it never masquerades as a real model id. A user Stop counts too: the
+ * model it cut off streamed, even though that turn never completed.
  */
 export function modelsUsedInTrace(events: BrainTraceEvent[]): string[] {
   const seen: string[] = [];
   for (const ev of events) {
-    if (ev.category !== 'llm' && ev.category !== 'error') continue;
+    if (ev.category !== 'llm' && ev.category !== 'error' && ev.label !== STOPPED_TURN_STEP) continue;
     const m = (ev.args as { model?: unknown } | undefined)?.model;
     if (typeof m === 'string' && m && m !== 'default' && !seen.includes(m)) seen.push(m);
   }

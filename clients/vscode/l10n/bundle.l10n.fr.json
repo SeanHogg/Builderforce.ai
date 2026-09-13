@@ -447,6 +447,7 @@
   "Reconciled {count} learned memories in Evermind v{version}": "{count} souvenirs appris réconciliés dans Evermind v{version}",
   "The answer restated these recalled learnings, so it updates them (write-through cognition).": "La réponse a reformulé ces apprentissages rappelés, elle les met donc à jour (cognition en écriture directe).",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "Récupéré du raisonnement du modèle — ce tour s'est terminé sans réponse distincte.",
+  "Stopped by you — this is what the model had written when you pressed Stop.": "Arrêté par vous — voici ce que le modèle avait écrit quand vous avez appuyé sur Arrêter.",
   "Thought for {duration}": "Réflexion pendant {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "Supprimez tout ce qui est en file d’attente mais pas encore appris, et videz les réponses mises en cache pour que les questions répétées reçoivent une nouvelle réponse. Les connaissances acquises ne sont pas touchées.",
   "Timer": "Minuteur",

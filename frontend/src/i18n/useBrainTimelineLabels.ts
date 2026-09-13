@@ -44,6 +44,7 @@ export function useBrainTimelineLabels(overrides?: Partial<BrainTimelineLabels>)
     thoughtFor: t('thoughtFor', { duration: '{duration}' }),
     thought: t('thought'),
     replyFromThought: t('replyFromThought'),
+    stoppedReply: t('stoppedReply'),
     you: t('you'),
     assistant: t('assistant'),
     input: t('input'),

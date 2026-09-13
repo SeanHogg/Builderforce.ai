@@ -1,3 +1,29 @@
+## ✅ RESOLVED 2026-09-13 — Stop threw away the looping reply AND the name of the model that wrote it
+
+Reported from VS Code chat #106 (VSIX 2026.9.59) with two screenshots: a Grok turn writing "1. 2. 3. … NOW. EMIT." and
+a MiniMax turn replaying its own narration paragraph over and over. Stop cleared the streaming bubble, and an aborted
+stream returns no result, so the transcript kept nothing and the report could not say which model had looped.
+
+- **A Stop keeps what it cut off.** `streamChatCompletion` fires `onModel(model, account)` the moment the gateway names
+  the model (header, else first chunk). `brainRunStore` tracks the completion in flight (`liveTurn`, via `asLiveTurn`);
+  `stopRun` captures its text and model BEFORE clearing the bubble, and the unwinding run (`keepStoppedTurn`) persists
+  the partial as an assistant message with normal provenance plus the `stoppedByUser` marker
+  (`brain-embedded/src/stoppedTurn.ts`), and the `agent.stopped` step durably with `args.model`.
+- **The timeline says so.** `<BrainTimeline>` never folds a stopped reply into a "Thought" line and shows
+  `stoppedReply` above it; the provenance chip names the model. Localized in the five web catalogs and the five VSIX
+  bundles.
+- **The report names the culprit.** `modelScorecard` counts `stopped` per model ("N stopped by the user mid-stream",
+  shown even for a single-model run) and `modelsUsedInTrace` includes the model a Stop cut off.
+- **A stopped reply is never replayed.** `seedFrom` skips `isStoppedTurn` messages, so the next model does not read a
+  loop as its own last word.
+- **A replayed paragraph is caught as a loop.** `detectRepetitionLoop` now treats a block of 240+ chars repeated
+  verbatim twice in a row as a loop (sentences still need three copies) and looks for blocks up to 4,000 chars (was
+  800). MiniMax's ~1,300-char cycle of a dozen different sentences could never fire the old rule.
+- `asProvenanceAccount` (`provenance.ts`) is the one reading of the account literal; `parseMessageProvenance` and the
+  run store's `provenanceMetadata` both use it now.
+- Tests: `stoppedTurn.test.ts` (new), `brainRunStore.test.ts` (+3 Stop cases), `streamChatCompletion.test.ts`
+  (+2 `onModel`), `modelScorecard.test.ts` (+2), `repetitionLoop.test.ts` (+3).
+
 ## ✅ RESOLVED 2026-09-13 — qwen wrote `<details><summary>Tool details</summary>` blocks instead of calling tools
 
 Reported from VS Code chat #106 (`direct/qwen/qwen3.8-max`, 35 of 36 turns). After "fix this" the run narrated

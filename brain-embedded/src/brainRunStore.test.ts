@@ -8,6 +8,7 @@ import {
   resetBrainRunStore,
   getRunSnapshot,
   getRunTrace,
+  stopRun,
   windowed,
   compactTailStart,
   compactMiddleRange,
@@ -18,6 +19,8 @@ import {
 import type { BrainStreamFn } from './brainRunStore';
 import { StreamInterruptedError, type ChatCompletionMessage } from './streamChatCompletion';
 import { isCoderReask } from './roleHandoff';
+import { isStoppedTurn } from './stoppedTurn';
+import { parseMessageProvenance } from './provenance';
 import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
@@ -40,6 +43,78 @@ function scriptedSteps(): (role: string | undefined) => number {
     return step;
   };
 }
+
+describe('a user Stop keeps what it cut off', () => {
+  type Sent = { role: string; content: string; metadata?: string };
+  const recorder = () => {
+    const sent: Sent[] = [];
+    const persistence = {
+      sendMessages: async (chatId: number, msgs: Sent[]) => {
+        sent.push(...msgs);
+        return msgs.map((m, i) => ({ id: 1000 + sent.length + i, chatId, createdAt: '', ...m }));
+      },
+    } as never;
+    return { sent, persistence };
+  };
+  /** A model that streams until it is stopped — the looping turn a reader ends with Stop. */
+  const loopsUntilStopped = (model: string | null, deltas: string[]) => {
+    let streaming!: () => void;
+    const started = new Promise<void>((resolve) => { streaming = resolve; });
+    const stream: BrainStreamFn = (opts, handlers) => new Promise((_resolve, reject) => {
+      if (model) handlers?.onModel?.(model, 'own');
+      for (const d of deltas) handlers?.onTextDelta?.(d);
+      opts.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      streaming();
+    });
+    return { stream, started };
+  };
+
+  it('persists the partial reply with the model that was streaming, and a durable step naming it', async () => {
+    const { sent, persistence } = recorder();
+    const { stream, started } = loopsUntilStopped('direct/minimax/MiniMax-M2.7', ['Checking linked tickets. ', 'Checking linked tickets again.']);
+    const run = startRun(4260, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    await started;
+    stopRun(4260);
+    await run;
+
+    const reply = sent.find((m) => m.role === 'assistant');
+    expect(reply?.content).toBe('Checking linked tickets. Checking linked tickets again.');
+    expect(isStoppedTurn(reply!)).toBe(true);
+    expect(parseMessageProvenance(reply!)).toEqual({ model: 'direct/minimax/MiniMax-M2.7', account: 'own' });
+
+    const step = sent.map((m) => (m.role === 'tool' ? JSON.parse(m.metadata ?? '{}') : null)).find((s) => s?.label === 'agent.stopped');
+    expect(step?.args).toEqual({ model: 'direct/minimax/MiniMax-M2.7' });
+    expect(step?.result).toContain('while direct/minimax/MiniMax-M2.7 was streaming');
+    expect(getRunTrace(4260).some((e) => e.label === 'agent.stopped')).toBe(true);
+    // The live view picks the kept reply up like any other persisted turn.
+    expect(getRunSnapshot(4260).appended.some((m) => m.content === reply!.content)).toBe(true);
+    expect(getRunSnapshot(4260).streamingText).toBe('');
+  });
+
+  it('keeps the text even when the gateway never named the model', async () => {
+    const { sent, persistence } = recorder();
+    const { stream, started } = loopsUntilStopped(null, ['1. 2. 3. NOW. 1. 2. 3.']);
+    const run = startRun(4261, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    await started;
+    stopRun(4261);
+    await run;
+    const reply = sent.find((m) => m.role === 'assistant');
+    expect(reply?.content).toBe('1. 2. 3. NOW. 1. 2. 3.');
+    expect(isStoppedTurn(reply!)).toBe(true);
+    expect(parseMessageProvenance(reply!)).toBeNull();
+  });
+
+  it('persists no reply when nothing had streamed yet, but still records the stop', async () => {
+    const { sent, persistence } = recorder();
+    const { stream, started } = loopsUntilStopped('xai-oauth/grok-4.6', []);
+    const run = startRun(4262, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    await started;
+    stopRun(4262);
+    await run;
+    expect(sent.some((m) => m.role === 'assistant')).toBe(false);
+    expect(sent.some((m) => m.role === 'tool' && JSON.parse(m.metadata ?? '{}').label === 'agent.stopped')).toBe(true);
+  });
+});
 
 describe('brainRunStore cell eviction', () => {
   it('evicts least-recently-used idle cells beyond the cap', () => {

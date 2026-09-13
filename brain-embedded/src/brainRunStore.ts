@@ -41,7 +41,8 @@ import {
 import type { ReasoningIntent } from './effort';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { chatErrorAction, type ChatErrorAction } from './chatError';
-import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
+import { asProvenanceAccount, withProvenanceMetadata } from './provenance';
+import { STOPPED_TURN_STEP, stoppedTurnMetadata } from './stoppedTurn';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
@@ -97,9 +98,7 @@ import {
 function provenanceMetadata(result: StreamChatResult): string | undefined {
   const model = result.resolvedModel;
   if (!model) return undefined;
-  const a = result.account;
-  const account: ProvenanceAccount | undefined =
-    a === 'own' || a === 'shared' || a === 'shared_byo_unused' ? a : undefined;
+  const account = asProvenanceAccount(result.account);
   return withProvenanceMetadata({ model, ...(account ? { account } : {}) });
 }
 
@@ -371,6 +370,21 @@ export interface BrainRunSnapshot {
   providerCap: string[];
 }
 
+/** The completion streaming right now — and, once the gateway names it, the model serving it. */
+interface LiveTurn {
+  model?: string;
+  account?: string;
+}
+
+/** What a user Stop cut off, held until the run unwinds and can persist it. */
+interface StoppedTurn {
+  /** What the model had streamed when Stop was pressed. */
+  text: string;
+  source: LiveTurn;
+  /** The `agent.stopped` step — already on the live trace, persisted with the reply. */
+  event: BrainTraceEvent;
+}
+
 interface RunCell {
   /** Rich working transcript (user + assistant tool-call turns + tool results). */
   transcript: ChatCompletionMessage[];
@@ -455,6 +469,13 @@ interface RunCell {
    * overflow rather than every iteration. Null until the first overflow / reset.
    */
   compactMemo: { note: string; atLen: number } | null;
+  /**
+   * The completion in flight ({@link asLiveTurn}), null between completions. The only
+   * record of which model a Stop cut off: an aborted stream never returns its result.
+   */
+  liveTurn: LiveTurn | null;
+  /** What the last Stop cut off, until the unwinding run persists it ({@link keepStoppedTurn}). */
+  stoppedTurn: StoppedTurn | null;
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
@@ -523,6 +544,8 @@ function makeCell(): RunCell {
     deltaRecordedFiles: [],
     runTraceFrom: 0,
     compactMemo: null,
+    liveTurn: null,
+    stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT,
   };
 }
@@ -1107,6 +1130,11 @@ export function getRunTrace(chatId: number | null): BrainTraceEvent[] {
  * declined so a loop waiting on the gate can also unwind. Records a `stopped`
  * trace step for triage. No-op if nothing is running for this chat.
  *
+ * What the model was streaming, and which model it was, are captured FIRST — a Stop
+ * is pressed exactly when a model has gone wrong, and clearing the bubble used to
+ * destroy the only evidence of what it did. The unwinding run persists both
+ * ({@link keepStoppedTurn}); see `stoppedTurn.ts`.
+ *
  * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
  * fires; we emit here too so the Stop is reflected immediately.
  */
@@ -1115,6 +1143,8 @@ export function stopRun(chatId: number): void {
   if (driver) return driver.stop(chatId);
   const c = cells.get(chatId);
   if (!c || !c.running) return;
+  const stopped = stoppedTurnOf(c);
+  c.stoppedTurn = stopped;
   c.abort?.abort();
   if (c.confirmResolver) {
     const resolve = c.confirmResolver;
@@ -1129,7 +1159,64 @@ export function stopRun(chatId: number): void {
   c.activity = null;
   // pushTrace emits, so subscribers see both the trace step and the cleared
   // streaming buffer in one go.
-  pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.stopped', result: 'Stopped by user.' });
+  pushTrace(c, stopped.event);
+}
+
+/** What a Stop cuts off: the live completion's text and model, and the step recording it. */
+function stoppedTurnOf(c: RunCell): StoppedTurn {
+  const live = c.liveTurn;
+  const text = live ? c.streamingText : '';
+  const model = live?.model;
+  const result = !live
+    ? 'Stopped by user.'
+    : model
+      ? `Stopped by user while ${model} was streaming (${text.length} chars kept).`
+      : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
+  return {
+    text,
+    source: { ...live },
+    event: {
+      ts: nowIso(),
+      category: 'message',
+      label: STOPPED_TURN_STEP,
+      ...(model ? { args: { model } } : {}),
+      ...(live ? { textChars: text.length } : {}),
+      result,
+    },
+  };
+}
+
+/**
+ * Persist what a Stop cut off, once the run has unwound: the step (so a reopened chat's
+ * report still names the model) and, when the model had written anything, the partial
+ * reply itself — marked, so the timeline says it was stopped and no seed replays it.
+ */
+async function keepStoppedTurn(chatId: number, c: RunCell, persistence: BrainRunPersistence): Promise<void> {
+  const stopped = c.stoppedTurn;
+  c.stoppedTurn = null;
+  if (!stopped) return;
+  persistStep(chatId, persistence, stopped.event);
+  const text = canonicalTurnText(stopped.text);
+  if (!text) return;
+  const [msg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
+  if (msg) recordAppended(c, msg);
+}
+
+/** Run one completion as the turn in flight, so a Stop mid-stream knows what it cut off. */
+async function asLiveTurn<T>(c: RunCell, complete: () => Promise<T>): Promise<T> {
+  c.liveTurn = {};
+  try {
+    return await complete();
+  } finally {
+    c.liveTurn = null;
+  }
+}
+
+/** `onModel` for the live turn: record the serving model the moment the gateway names it. */
+function liveTurnModel(c: RunCell): NonNullable<StreamHandlers['onModel']> {
+  return (model, account) => {
+    if (c.liveTurn) c.liveTurn = { model, account };
+  };
 }
 
 /**
@@ -1255,6 +1342,8 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.deltaRecordedFiles = [];
   c.runTraceFrom = c.trace.length;
   c.codeModel = null;
+  c.liveTurn = null;
+  c.stoppedTurn = null;
   c.runId = runOutcomeId(chatId, Date.now());
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
@@ -1292,6 +1381,8 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     c.running = false;
     c.streamingText = '';
     c.abort = null;
+    // A Stop keeps what it cut off — the partial reply and the model that was writing it.
+    if (aborted) await keepStoppedTurn(chatId, c, req.persistence).catch(() => { /* best-effort: never fail the unwind */ });
     // Guarantee a code change is tied to a ticket: if this run CHANGED code (an IDE
     // file tool succeeded) but never itself recorded/linked one, mint a ticket now
     // via from_delta, tied to this chat — so an edit is never invisible or unlinked.
@@ -2393,6 +2484,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // be indistinguishable from a hang. It flips to `writing` on the first delta.
       setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
       const handlers: StreamHandlers = {
+        onModel: liveTurnModel(c),
         onTextDelta: (d) => {
           c.streamingText += d;
           if (firstTokenAt === undefined) {
@@ -2410,7 +2502,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       };
       // A tool-less turn is conversation, not analysis or code.
       let turnRole: 'plan' | 'code' | 'chat' = tools ? phase : 'chat';
-      const request = (role: string, excludeModels: string[]): Promise<StreamChatResult> => stream(
+      const request = (role: string, excludeModels: string[]): Promise<StreamChatResult> => asLiveTurn(c, () => stream(
         {
           messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
           routingMode, maxTokens, reasoning, metadata, role,
@@ -2418,7 +2510,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           signal: c.abort?.signal,
         },
         handlers,
-      );
+      ));
       /** Record a failed completion on the timeline and hand the error back to rethrow. */
       const turnError = (e: unknown): unknown => {
         pushTrace(c, {
@@ -2732,11 +2824,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         },
       ];
       let closeFirstTokenAt: number | undefined;
-      const closing = await stream(
+      const closing = await asLiveTurn(c, () => stream(
         // No `tools` → the model can't call another tool and must produce text.
         { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
-      );
+        {
+          onModel: liveTurnModel(c),
+          onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); },
+        },
+      ));
       accrueByoUnresolved(c, closing.byoUnresolved);
       accrueProviderCap(c, closing.providerCap);
       pushTrace(c, {

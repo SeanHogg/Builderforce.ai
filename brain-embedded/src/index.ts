@@ -413,10 +413,15 @@ export {
   PROVENANCE_META_KEY,
   parseMessageProvenance,
   withProvenanceMetadata,
+  asProvenanceAccount,
   isConnectedAccountUnused,
   lastServedModel,
 } from './provenance';
 export type { MessageProvenance, ProvenanceAccount } from './provenance';
+
+// A reply the user stopped mid-stream — kept, attributed, and never replayed to a model
+export { STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, stoppedTurnMetadata, isStoppedTurn } from './stoppedTurn';
+export type { StoppedTurnSource } from './stoppedTurn';
 
 // WHICH model name a viewer is allowed to see — the routed product ("Builderforce
 // Free" / "Builderforce PRO") vs the upstream id. One rule for every surface.

@@ -12,6 +12,7 @@
  * copy surface renders the identical lines.
  */
 import type { BrainTraceEvent } from './brainTriage';
+import { STOPPED_TURN_STEP } from './stoppedTurn';
 
 /** What one model did across the turns it served. */
 export interface ModelScore {
@@ -29,6 +30,12 @@ export interface ModelScore {
   unliftedMarkupTurns: number;
   /** Completions against this model that failed outright. */
   failures: number;
+  /**
+   * Turns the USER stopped while this model was streaming — the reader's own verdict
+   * that it had gone wrong (looping, narrating, counting). The one failure the model
+   * never reports itself, so without this a run ended by Stop named no culprit at all.
+   */
+  stopped: number;
 }
 
 /** A model silent for at least this many turns, while another model in the same run
@@ -46,12 +53,17 @@ export function modelScorecard(events: BrainTraceEvent[]): ModelScore[] {
   const row = (model: string): ModelScore => {
     let score = byModel.get(model);
     if (!score) {
-      score = { model, turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0 };
+      score = { model, turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0, stopped: 0 };
       byModel.set(model, score);
     }
     return score;
   };
   for (const ev of events) {
+    if (ev.label === STOPPED_TURN_STEP) {
+      const model = modelOf(ev);
+      if (model) row(model).stopped += 1;
+      continue;
+    }
     if (ev.label !== 'llm.complete') continue;
     const model = modelOf(ev);
     if (!model) continue;
@@ -73,18 +85,20 @@ export function modelScorecard(events: BrainTraceEvent[]): ModelScore[] {
 
 /**
  * Render the scorecard as report lines. Emitted when it says something the "Models
- * used" line does not: more than one model served the run, or some turn wrote call
- * markup the parser missed.
+ * used" line does not: more than one model served the run, some turn wrote call
+ * markup the parser missed, or the user stopped a model mid-stream.
  */
 export function formatModelScorecard(scores: ModelScore[]): string[] {
   const markup = scores.some((s) => s.unliftedMarkupTurns > 0);
-  if (scores.length < 2 && !markup) return [];
+  const stopped = scores.some((s) => s.stopped > 0);
+  if (scores.length < 2 && !markup && !stopped) return [];
   const anyActed = scores.some((s) => s.toolCalls > 0);
   const lines = ['Per model:'];
   for (const s of scores) {
     const parts = [`${s.turns} turn(s)`, `${s.toolCalls} tool call(s)`];
     if (s.textOnlyTurns) parts.push(`${s.textOnlyTurns} text-only`);
     if (s.failures) parts.push(`${s.failures} failed`);
+    if (s.stopped) parts.push(`${s.stopped} stopped by the user mid-stream`);
     const flag = s.unliftedMarkupTurns
       ? ` · ⚠ ${s.unliftedMarkupTurns} turn(s) wrote a tool call as MARKUP that no parser lifted, so the call never ran. The model tried to act; this is a parser gap, not a refusal.`
       : scores.length > 1 && anyActed && s.toolCalls === 0 && s.turns >= SILENT_TURNS_AT

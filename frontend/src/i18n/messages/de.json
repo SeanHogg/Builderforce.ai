@@ -11109,6 +11109,7 @@
       "thoughtFor": "Hat {duration} nachgedacht",
       "thought": "Überlegung",
       "replyFromThought": "Aus dem Gedankengang des Modells wiederhergestellt – dieser Zug endete ohne eigene Antwort.",
+      "stoppedReply": "Von dir gestoppt – das hatte das Modell geschrieben, als du auf Stopp gedrückt hast.",
       "you": "Du",
       "assistant": "BuilderForce",
       "input": "Eingabe",

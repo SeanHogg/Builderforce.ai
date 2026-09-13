@@ -43,6 +43,30 @@ describe("detectRepetitionLoop", () => {
     expect(detectRepetitionLoop(list)).toBeNull();
   });
 
+  it("catches a replayed PARAGRAPH on its second copy — a dozen different sentences, verbatim again", () => {
+    // Chat #106 (MiniMax): the model re-wrote its own run of narration back to back. No
+    // sentence repeats inside the block, so only the paragraph-as-a-block reading sees it.
+    const paragraph =
+      "Checking linked tickets and reading the files that need to change. I'll implement click-to-scroll: bubbles carry a message ID, and Brain Chat scrolls to that reply. " +
+      "Gathering the remaining wiring (speech source, Brain message type, scroll container) and any linked tickets. No linked tickets yet. Let me locate the Room-mode bubble rendering. ";
+    const intro = "I have the bubble component:\n";
+    const loop = detectRepetitionLoop(intro + paragraph.repeat(2));
+    expect(loop).not.toBeNull();
+    expect(loop!.copies).toBe(2);
+    expect(loop!.kept).toBe(intro + paragraph);
+  });
+
+  it("catches a paragraph longer than the old 800-char ceiling", () => {
+    const sentences = Array.from({ length: 14 }, (_, i) => `Now let me read file number ${i} and see how the speech reaches the room scene. `).join("");
+    expect(sentences.length).toBeGreaterThan(800);
+    expect(detectRepetitionLoop(sentences.repeat(2))?.copies).toBe(2);
+  });
+
+  it("still lets a short sentence said twice through on its way to a paragraph", () => {
+    const answer = "The bubble is keyed by occupant id, which matches. ".repeat(2) + "Everything else is wired.";
+    expect(detectRepetitionLoop(answer)).toBeNull();
+  });
+
   it("trimRepetitionLoop cuts a loop and leaves healthy text alone", () => {
     expect(trimRepetitionLoop("Done.\n" + LOOPED.repeat(5))).toBe("Done.\n" + LOOPED);
     expect(trimRepetitionLoop("A normal answer.")).toBe("A normal answer.");

@@ -11109,6 +11109,7 @@
       "thoughtFor": "思考了 {duration}",
       "thought": "思考",
       "replyFromThought": "已从模型的思考过程中恢复 — 本轮没有单独的回复。",
+      "stoppedReply": "已由你停止 — 这是你按下停止时模型已写出的内容。",
       "you": "你",
       "assistant": "BuilderForce",
       "input": "输入",

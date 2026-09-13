@@ -11109,6 +11109,7 @@
       "thoughtFor": "Pensó durante {duration}",
       "thought": "Razonamiento",
       "replyFromThought": "Recuperado del razonamiento del modelo: este turno terminó sin una respuesta aparte.",
+      "stoppedReply": "Detenido por ti: esto es lo que el modelo había escrito cuando pulsaste Detener.",
       "you": "Tú",
       "assistant": "BuilderForce",
       "input": "Entrada",

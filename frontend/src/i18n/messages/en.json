@@ -11109,6 +11109,7 @@
       "thoughtFor": "Thought for {duration}",
       "thought": "Thought",
       "replyFromThought": "Recovered from the model's reasoning — the turn ended without a separate reply.",
+      "stoppedReply": "Stopped by you — this is what the model had written when you pressed Stop.",
       "you": "You",
       "assistant": "BuilderForce",
       "input": "Input",

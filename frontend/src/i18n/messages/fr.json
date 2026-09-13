@@ -11109,6 +11109,7 @@
       "thoughtFor": "A réfléchi pendant {duration}",
       "thought": "Réflexion",
       "replyFromThought": "Récupéré du raisonnement du modèle — ce tour s'est terminé sans réponse distincte.",
+      "stoppedReply": "Arrêté par vous — voici ce que le modèle avait écrit quand vous avez appuyé sur Arrêter.",
       "you": "Vous",
       "assistant": "BuilderForce",
       "input": "Entrée",

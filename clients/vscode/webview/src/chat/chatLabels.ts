@@ -58,6 +58,7 @@ export function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels
     thoughtFor: t('tl.thoughtFor', 'Thought for {duration}'),
     thought: t('tl.thought', 'Thought'),
     replyFromThought: t('tl.replyFromThought', "Recovered from the model's reasoning — the turn ended without a separate reply."),
+    stoppedReply: t('tl.stoppedReply', 'Stopped by you — this is what the model had written when you pressed Stop.'),
     you: t('tl.you', 'You'),
     assistant: t('tl.assistant', 'BuilderForce'),
     input: t('tl.input', 'Input'),

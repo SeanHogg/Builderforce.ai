@@ -21,6 +21,32 @@ const baseTransport: BrainTransport = {
 
 afterEach(() => vi.restoreAllMocks());
 
+describe('streamChatCompletion onModel', () => {
+  const chunk = (content: string, model?: string): string =>
+    `data: ${JSON.stringify({ ...(model ? { model } : {}), choices: [{ delta: { content } }] })}\n`;
+
+  it('names the serving model once, from the header, with the account that served it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(
+      [chunk('Hi', 'chunk/model'), chunk(' there', 'chunk/model'), 'data: [DONE]\n'],
+      { headers: { 'x-builderforce-model': 'xai-oauth/grok-4.6', 'x-builderforce-account': 'own' } },
+    )));
+    const onModel = vi.fn();
+    await streamChatCompletion({ messages: [], transport: baseTransport }, { onModel });
+    expect(onModel).toHaveBeenCalledTimes(1);
+    expect(onModel).toHaveBeenCalledWith('xai-oauth/grok-4.6', 'own');
+  });
+
+  it("falls back to the first chunk's model, before any text is handed over", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([chunk('Hi', 'direct/minimax/MiniMax-M2.7'), 'data: [DONE]\n'])));
+    const order: string[] = [];
+    await streamChatCompletion(
+      { messages: [], transport: baseTransport },
+      { onModel: (model) => order.push(`model:${model}`), onTextDelta: (d) => order.push(`text:${d}`) },
+    );
+    expect(order).toEqual(['model:direct/minimax/MiniMax-M2.7', 'text:Hi']);
+  });
+});
+
 describe('streamChatCompletion repetition guard', () => {
   const sentence = "I'll start by checking this chat's linked tickets and locating the Room bubble code. ";
   const frames = (copies: number): string[] => [

@@ -19,8 +19,9 @@
  * ── THE RULE ─────────────────────────────────────────────────────────────────────
  * The TAIL of the text is the same block, verbatim, {@link LOOP_MIN_COPIES} times in a
  * row, where the block is at least {@link LOOP_MIN_BLOCK_CHARS} long and reads as prose
- * (several words with letters in them). Checked on the tail only, so it costs a handful
- * of character compares per call, and matches wherever in the block the text stops.
+ * (several words with letters in them) — or, for a paragraph-length block of at least
+ * {@link LOOP_LONG_BLOCK_CHARS}, twice in a row. Checked on the tail only, so it costs a
+ * handful of character compares per call, and matches wherever in the block the text stops.
  *
  * ── WHAT IT IS CAREFUL NOT TO CATCH ──────────────────────────────────────────────
  *  - Short repeats ("ok ok ok", a row of `─`): below the block minimum, or not prose.
@@ -76,8 +77,21 @@ function tailCountingRun(text: string): RepetitionLoop | null {
 const LOOP_MIN_COPIES = 3;
 /** Shortest block that can count — a sentence, not a word or a divider. */
 const LOOP_MIN_BLOCK_CHARS = 40;
-/** Longest block looked for. A loop of whole paragraphs is caught on its sentences anyway. */
-const LOOP_MAX_BLOCK_CHARS = 800;
+/**
+ * A block at least this long loops on its SECOND verbatim copy. A sentence said twice
+ * can be emphasis; a whole paragraph written out again, character for character and
+ * back to back, never is. Observed 2026-09-13 (chat #106, MiniMax): the model replayed
+ * its own ~1,300-char run of narration — a dozen DIFFERENT sentences — over and over, so
+ * no single sentence repeated and the old 800-char / three-copy rule could never fire.
+ */
+const LOOP_LONG_BLOCK_CHARS = 240;
+/** Copies a {@link LOOP_LONG_BLOCK_CHARS} block needs. */
+const LOOP_LONG_MIN_COPIES = 2;
+/** Longest block looked for — a replayed paragraph of narration, not a whole answer. */
+const LOOP_MAX_BLOCK_CHARS = 4000;
+
+/** Copies a block of `chars` needs, back to back, before it reads as a loop. */
+const minCopiesFor = (chars: number): number => (chars >= LOOP_LONG_BLOCK_CHARS ? LOOP_LONG_MIN_COPIES : LOOP_MIN_COPIES);
 /** Words (with at least one letter) a block needs before it reads as prose. */
 const LOOP_MIN_BLOCK_WORDS = 5;
 
@@ -116,12 +130,13 @@ export function detectRepetitionLoop(text: string): RepetitionLoop | null {
   if (counting) return inOpenCodeFence(text) ? null : counting;
   const length = text.length;
   if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
-  const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_MIN_COPIES));
+  const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_LONG_MIN_COPIES));
   for (let p = LOOP_MIN_BLOCK_CHARS; p <= maxBlock; p += 1) {
-    if (!tailHasPeriod(text, p, LOOP_MIN_COPIES * p)) continue;
+    const copies = minCopiesFor(p);
+    if (copies * p > length || !tailHasPeriod(text, p, copies * p)) continue;
     // Walk back to where the loop began, so `kept` drops every copy but the first and
     // `block` is that first copy as written, not a rotation of it cut mid-sentence.
-    let start = length - LOOP_MIN_COPIES * p;
+    let start = length - copies * p;
     while (start > 0 && text.charCodeAt(start - 1) === text.charCodeAt(start - 1 + p)) start -= 1;
     const block = text.slice(start, start + p);
     if (!readsAsProse(block)) continue;

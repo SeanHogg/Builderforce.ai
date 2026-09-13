@@ -10,6 +10,7 @@ import {
   parseDirectedRecipients,
   parseMessageAuthor,
   parseMessageProvenance,
+  isStoppedTurn,
   type BrainMessage,
   type BrainTraceEvent,
   type MessageProvenance,
@@ -48,6 +49,10 @@ export interface BrainTimelineLabels extends ToolStepLabels {
    *  inside its `<think>` block, so the transcript shows the reasoning as the reply
    *  rather than a collapsed line and nothing else. See `strandedReplyKey`. */
   replyFromThought: string;
+  /** Muted note above a reply the user STOPPED mid-stream — what the model had written
+   *  when Stop was pressed, kept so the reader can see what went wrong and (from the
+   *  provenance chip) which model did it. See `stoppedTurn.ts` in brain-embedded. */
+  stoppedReply: string;
   you: string;
   assistant: string;
   error: string;
@@ -123,6 +128,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   thoughtFor: 'Thought for {duration}',
   thought: 'Thought',
   replyFromThought: "Recovered from the model's reasoning — the turn ended without a separate reply.",
+  stoppedReply: 'Stopped by you — this is what the model had written when you pressed Stop.',
   you: 'You',
   assistant: 'BuilderForce',
   input: 'Input',
@@ -542,7 +548,10 @@ function BrainTimelineInner({
             // the reply, with a muted note explaining the first-person voice. Every
             // other reasoning-only turn still collapses — see `strandedReplyKey`.
             const rescued = node.key === stranded ? thoughtTextOf(bodyText) : '';
-            if (!answer && bodyText && !card && !rescued) {
+            // A reply the user STOPPED is never folded into a "Thought" line: what the model
+            // was writing when Stop was pressed is exactly what the reader stopped it for.
+            const stopped = isStoppedTurn(node.message);
+            if (!answer && bodyText && !card && !rescued && !stopped) {
               return (
                 <li key={node.key} className="bf-tl__item bf-tl__item--thought">
                   <span className="bf-tl__gutter">
@@ -563,6 +572,7 @@ function BrainTimelineInner({
                 <div className="bf-tl__body">
                   <div className="bf-tl__role">{author ? author.name : assistant}</div>
                   {rescued && <div className="bf-tl__rescued">{labels.replyFromThought}</div>}
+                  {stopped && <div className="bf-tl__rescued">{labels.stoppedReply}</div>}
                   {bodyText && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', rescued || bodyText)}</div>}
                   {card && onAnswerQuestion && (
                     <QuestionCard

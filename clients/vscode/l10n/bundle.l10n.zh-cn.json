@@ -447,6 +447,7 @@
   "Reconciled {count} learned memories in Evermind v{version}": "已在 Evermind v{version} 中协调 {count} 条已学习记忆",
   "The answer restated these recalled learnings, so it updates them (write-through cognition).": "回答重述了这些召回的学习内容，因此会对其进行更新（写通式认知）。",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "已从模型的思考过程中恢复 — 本轮没有单独的回复。",
+  "Stopped by you — this is what the model had written when you pressed Stop.": "已由你停止 — 这是你按下停止时模型已写出的内容。",
   "Thought for {duration}": "思考了 {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "丢弃所有已排队但尚未学习的内容，并清空缓存的回答，让重复的问题重新作答。已学到的知识不受影响。",
   "Timer": "计时器",

@@ -140,6 +140,7 @@ function buildLabels(): Record<string, string> {
     "tl.thoughtFor": t("Thought for {duration}"),
     "tl.thought": t("Thought"),
     "tl.replyFromThought": t("Recovered from the model's reasoning — the turn ended without a separate reply."),
+    "tl.stoppedReply": t("Stopped by you — this is what the model had written when you pressed Stop."),
     "tl.you": t("You"),
     "tl.assistant": "BuilderForce",
     "tl.input": t("Input"),

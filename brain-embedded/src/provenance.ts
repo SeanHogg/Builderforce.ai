@@ -54,6 +54,12 @@ export interface MessageProvenance {
   evermind?: { version: number };
 }
 
+/** The wire's account literal, or undefined for anything else — the one reading of it,
+ *  for the stream header on the way in and a persisted blob on the way out. */
+export function asProvenanceAccount(value: unknown): ProvenanceAccount | undefined {
+  return value === 'own' || value === 'shared' || value === 'shared_byo_unused' ? value : undefined;
+}
+
 /** True when a turn ran on the shared pool despite a connected account existing —
  *  the only state the chip flags inline. Shared by the chip and any host that
  *  wants to nudge the user to check their connection. */
@@ -72,8 +78,7 @@ export function parseMessageProvenance(msg: { metadata?: string | null }): Messa
     if (p && typeof p.model === 'string' && p.model.length > 0) {
       const ev = (p as { evermind?: { version?: unknown } }).evermind;
       const evermind = ev && typeof ev.version === 'number' && ev.version >= 1 ? { version: ev.version } : undefined;
-      const account =
-        p.account === 'own' || p.account === 'shared' || p.account === 'shared_byo_unused' ? p.account : undefined;
+      const account = asProvenanceAccount(p.account);
       return {
         model: p.model,
         ...(account ? { account } : {}),

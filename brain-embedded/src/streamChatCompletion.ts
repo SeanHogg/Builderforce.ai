@@ -101,6 +101,13 @@ export interface StreamHandlers {
   /** Fired per streamed tool-call fragment; accumulate by `index`. */
   onToolCallDelta?(index: number, partial: { id?: string; name?: string; argsFragment?: string }): void;
   onDone?(finishReason: string | null): void;
+  /**
+   * Fired ONCE, the moment the gateway names the model serving this stream (its
+   * `x-builderforce-model` header, else the first chunk's `model`) — long before the
+   * result exists. A caller whose stream is cut short (a user Stop aborts the fetch, so
+   * no result is ever returned) otherwise never learns which model it was watching.
+   */
+  onModel?(model: string, account: string | undefined): void;
 }
 
 /**
@@ -421,6 +428,16 @@ export async function streamChatCompletion(
   let headerProviderCap: string | null = null;
   try { headerProviderCap = res.headers?.get?.('x-builderforce-provider-cap') || null; } catch { headerProviderCap = null; }
   const providerCap = (): string | undefined => headerProviderCap ?? undefined;
+  // Name the serving model to the caller the moment it is known (see
+  // `StreamHandlers.onModel`) — from the header now, else from the first chunk below.
+  let modelAnnounced = false;
+  const announceModel = (): void => {
+    const known = resolvedModel();
+    if (modelAnnounced || !known) return;
+    modelAnnounced = true;
+    handlers.onModel?.(known, account());
+  };
+  announceModel();
 
   // Token usage from the trailing `usage` chunk (or a non-streaming body). Kept
   // as the last non-empty usage seen so a mid-stream partial can't clobber the
@@ -453,6 +470,7 @@ export async function streamChatCompletion(
       | { model?: string; choices?: Array<{ message?: { content?: string; tool_calls?: DeltaToolCall[] }; finish_reason?: string }> }
       | null;
     if (typeof data?.model === 'string' && data.model) streamModel = data.model;
+    announceModel();
     readUsage((data as { usage?: unknown } | null)?.usage);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? '');
@@ -520,6 +538,7 @@ export async function streamChatCompletion(
         throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel());
       }
       if (!streamModel && typeof parsed.model === 'string' && parsed.model) streamModel = parsed.model;
+      announceModel();
       // The usage-bearing chunk (OpenAI stream_options) typically arrives last,
       // often with an empty `choices` array — read it whenever present.
       if (parsed.usage) readUsage(parsed.usage);

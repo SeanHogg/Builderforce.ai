@@ -447,6 +447,7 @@
   "Reconciled {count} learned memories in Evermind v{version}": "Reconciled {count} learned memories in Evermind v{version}",
   "The answer restated these recalled learnings, so it updates them (write-through cognition).": "The answer restated these recalled learnings, so it updates them (write-through cognition).",
   "Recovered from the model's reasoning — the turn ended without a separate reply.": "Recovered from the model's reasoning — the turn ended without a separate reply.",
+  "Stopped by you — this is what the model had written when you pressed Stop.": "Stopped by you — this is what the model had written when you pressed Stop.",
   "Thought for {duration}": "Thought for {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.",
   "Timer": "Timer",

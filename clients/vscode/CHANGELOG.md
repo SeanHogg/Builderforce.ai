@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.60] — Pressing Stop keeps what the model wrote, and names the model
+
+- **Stop no longer erases the reply.** When a model went off the rails and you pressed Stop, everything it had written vanished, so you couldn't see what went wrong. The partial reply now stays in the chat, marked as stopped by you, with the model that wrote it shown underneath.
+- **The copied diagnostics name the model you stopped.** Each model's summary now counts how many times you stopped it mid-reply, so a report says which model got stuck even when no turn finished.
+- **A stopped reply isn't handed back to the next model.** Your next message starts from the conversation before the stopped reply, so a new model doesn't pick up where the looping one left off.
+- **A model replaying a whole paragraph is stopped for you.** A model could rewrite the same paragraph of notes over and over. The chat now catches this on the second copy and hands the turn to another model, as it already does for a repeated sentence.
+
 ## [2026.9.59] — Copied diagnostics show when a turn was handed to another model
 
 - **You can see when a model was swapped mid-turn.** When a model got stuck repeating itself, the chat quietly gave the turn to another connected model, and the copied diagnostics never said so. They now list which model broke and that the turn was retried, so a report shows whether the second model failed too.
