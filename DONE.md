@@ -78,7 +78,9 @@ pointer, no "is typing", no body in the Room and an idle Brain while someone els
   `domains/canvas/application/PersistCanvas.test.ts` — its fake scheduler returned `{ run, ms }` where
   `createCanvasNotices` types the handle as `ReturnType<typeof setTimeout>`, which blocked `npm test` (it runs
   type-check first) for the whole frontend. The fake now passes its record across as an opaque handle.
-- Verified (Sonnet): api `tsc` + `tsgo` clean; api `GuestRoomDO.presence` + `GuestRoomDO.combinedCap` 19/19.
+- Verified (Sonnet): api `tsc` + `tsgo` clean; api `GuestRoomDO.presence` + `GuestRoomDO.combinedCap` 19/19;
+  frontend `tsc` + `tsgo` clean; frontend `PersistCanvas.test.ts` + `livePresence.test.ts` + `CreationCanvas.test.tsx`
+  126/126.
 
 ## ✅ RESOLVED 2026-09-13 — VSIX runs re-read the same files and never edited: the model was starved of its own reads
 
