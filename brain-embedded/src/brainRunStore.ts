@@ -28,14 +28,15 @@
 
 import type { BrainMessage } from './types';
 import { getRunDriver } from './runDriver';
-import type {
-  BrainToolSpec,
-  ChatCompletionMessage,
-  CompletionMetadata,
-  ContentPart,
-  StreamChatOptions,
-  StreamHandlers,
-  StreamChatResult,
+import {
+  StreamInterruptedError,
+  type BrainToolSpec,
+  type ChatCompletionMessage,
+  type CompletionMetadata,
+  type ContentPart,
+  type StreamChatOptions,
+  type StreamHandlers,
+  type StreamChatResult,
 } from './streamChatCompletion';
 import type { ReasoningIntent } from './effort';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
@@ -46,6 +47,7 @@ import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
 import { isCodeChangeTool, canChangeCodeHere, canShipHere, localToolsIn, memoryToolsIn } from './localWorkspaceTools';
+import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcomeReport';
 import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
@@ -290,6 +292,12 @@ export interface BrainRunRequest {
    * than silently losing their ticket lineage.
    */
   chatMode?: ChatMode;
+  /**
+   * Report a settled code-changing run's outcome to learned routing (the host POSTs it
+   * to `/llm/v1/run-outcome`). Omit and nothing is reported. Best-effort: a rejection is
+   * swallowed and never affects the run.
+   */
+  reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
@@ -389,6 +397,10 @@ interface RunCell {
    * that never linked its work gets a ticket minted for it. IDE-only in practice.
    */
   codeChanged: boolean;
+  /** The model that made this run's code changes — what its outcome grades as a coder. */
+  codeModel: string | null;
+  /** This run's outcome idempotency key ({@link runOutcomeId}). */
+  runId: string;
   ticketRecorded: boolean;
   touchedFiles: string[];
   /**
@@ -409,13 +421,15 @@ interface RunCell {
    *  is new (and sends nothing when the first edit was the only one). */
   deltaRecordedFiles: string[];
   /**
-   * When the CURRENT run started (ISO, same clock as trace `ts`). The trace is a
-   * per-CHAT sliding window that spans every run in the session, so any question about
-   * "what did THIS run do" must be asked of {@link runTrace}, never of `trace` — reading
-   * the whole window let an earlier run's push-to-main close a later run's unshipped
-   * ticket. A timestamp rather than an index because the window splices from the front.
+   * Index in `trace` of the CURRENT run's first event. The trace is a per-CHAT sliding
+   * window that spans every run in the session, so any question about "what did THIS run
+   * do" must be asked of {@link runTrace}, never of `trace` — reading the whole window let
+   * an earlier run's push-to-main close a later run's unshipped ticket. An index, kept
+   * true as the window splices from the front ({@link pushTrace}), rather than a start
+   * timestamp: at millisecond resolution a run that starts in the same millisecond as
+   * the previous run's last step inherited that step.
    */
-  runStartedAt: string;
+  runTraceFrom: number;
   /**
    * Cached compressed-memory of the run's older turns. When the transcript exceeds
    * {@link HISTORY_TOKEN_BUDGET} the loop SUMMARIZES the bulky middle (instead of
@@ -483,11 +497,13 @@ function makeCell(): RunCell {
     byoUnresolved: [],
     providerCap: [],
     codeChanged: false,
+    codeModel: null,
+    runId: '',
     ticketRecorded: false,
     touchedFiles: [],
     deltaTicketId: null,
     deltaRecordedFiles: [],
-    runStartedAt: '',
+    runTraceFrom: 0,
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT,
   };
@@ -586,14 +602,17 @@ function setActivity(c: RunCell, activity: BrainRunActivity | null): void {
 function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
   c.trace.push(ev);
   // Bound a single run's trace so a long tool-chain can't grow without limit.
-  if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
+  if (c.trace.length > MAX_TRACE_EVENTS) {
+    const dropped = c.trace.length - MAX_TRACE_EVENTS;
+    c.trace.splice(0, dropped);
+    c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
+  }
   emit(c);
 }
 
-/** The trace events THIS run produced — see {@link RunCell.runStartedAt}. */
+/** The trace events THIS run produced — see {@link RunCell.runTraceFrom}. */
 function runTrace(c: RunCell): BrainTraceEvent[] {
-  const from = c.runStartedAt;
-  return from ? c.trace.filter((e) => e.ts >= from) : c.trace;
+  return c.trace.slice(c.runTraceFrom);
 }
 
 /** Cap on the persisted step RESULT (chars). The live trace keeps the full result;
@@ -1169,6 +1188,8 @@ export function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void
   c.messagesEpoch = snapshot.messagesEpoch;
   c.appended = snapshot.appended;
   c.trace = snapshot.trace;
+  // A mirrored run's trace is replaced wholesale, so no local run index survives it.
+  c.runTraceFrom = 0;
   c.activity = snapshot.activity;
   c.byoUnresolved = snapshot.byoUnresolved;
   c.providerCap = snapshot.providerCap;
@@ -1200,7 +1221,9 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.touchedFiles = [];
   c.deltaTicketId = null;
   c.deltaRecordedFiles = [];
-  c.runStartedAt = nowIso();
+  c.runTraceFrom = c.trace.length;
+  c.codeModel = null;
+  c.runId = runOutcomeId(chatId, Date.now());
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
   c.abort = new AbortController();
@@ -1270,9 +1293,18 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     // evidence of a push that landed, not on the run merely having touched files — and
     // on THIS run's trace only, with this run's files no longer dirty (an earlier run's
     // push, or a push that left this change uncommitted, is not this change shipping).
-    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles })) {
+    // Evaluated once: it gates ticket completion AND is the reported outcome's `merged`.
+    const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
+    if (shipped && req.projectId != null && req.runTool) {
       await completeShippedTickets(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
     }
+    // Teach learned routing how this run's CODER did. Not awaited — a report must
+    // never hold the run open or fail it.
+    const outcome = req.reportOutcome && codeRunOutcome({
+      runId: c.runId, codeModel: c.codeModel, codeChanged: c.codeChanged, aborted,
+      failed: c.error !== '', shipped, trace: runTrace(c), projectId: req.projectId,
+    });
+    if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);
     // The run is over: nothing is in flight, so no indicator may claim otherwise.
     // Cleared LAST, after the backstops above, so `finishing` stays visible for them.
     c.activity = null;
@@ -1750,6 +1782,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // promise. The stall budget (`agent-stall`) bounds these recoveries on its own — a
   // run has no iteration ceiling to fall back on.
   let announcementRecoveries = 0;
+  // ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway what
+  // kind of call it is. Until the run reaches its first code change the turns are
+  // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
+  // are `code`, which the gateway leads with the strongest connected model. A run that
+  // already changed code (a resumed turn) starts as `code`.
+  let phase: 'plan' | 'code' = c.codeChanged ? 'code' : 'plan';
   // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
   // One, not a budget: the second time the model stops short it has read the contract
   // twice, and its answer — including "I cannot ship this because…" — is the answer.
@@ -2308,30 +2346,35 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // The completion is open and no token has arrived yet — the phase that used to
       // be indistinguishable from a hang. It flips to `writing` on the first delta.
       setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
-      try {
-        result = await stream(
-          { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-          {
-            onTextDelta: (d) => {
-              c.streamingText += d;
-              if (firstTokenAt === undefined) {
-                firstTokenAt = nowMs();
-                // First token: the reply is visibly forming, so the indicator stops
-                // claiming the model is still thinking. A PHASE change, so it repaints
-                // now (one repaint carrying the first token too); every later delta
-                // is text only and coalesces into a frame.
-                c.activity = { phase: 'writing', startedAt: Date.now(), step: iter };
-                emit(c);
-                return;
-              }
-              emitStreaming(c);
-            },
-          },
-        );
-      } catch (e) {
-        // Aborting the fetch rejects the stream — that's a user Stop; the kernel
-        // reports it as `cancelled` (no error trace, no error message).
-        if (c.abort?.signal.aborted) throw e;
+      const handlers: StreamHandlers = {
+        onTextDelta: (d) => {
+          c.streamingText += d;
+          if (firstTokenAt === undefined) {
+            firstTokenAt = nowMs();
+            // First token: the reply is visibly forming, so the indicator stops
+            // claiming the model is still thinking. A PHASE change, so it repaints
+            // now (one repaint carrying the first token too); every later delta
+            // is text only and coalesces into a frame.
+            c.activity = { phase: 'writing', startedAt: Date.now(), step: iter };
+            emit(c);
+            return;
+          }
+          emitStreaming(c);
+        },
+      };
+      // A tool-less turn is conversation, not analysis or code.
+      let turnRole: 'plan' | 'code' | 'chat' = tools ? phase : 'chat';
+      const request = (role: string, excludeModels: string[]): Promise<StreamChatResult> => stream(
+        {
+          messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
+          routingMode, maxTokens, reasoning, metadata, role,
+          ...(excludeModels.length > 0 ? { excludeModels } : {}),
+          signal: c.abort?.signal,
+        },
+        handlers,
+      );
+      /** Record a failed completion on the timeline and hand the error back to rethrow. */
+      const turnError = (e: unknown): unknown => {
         pushTrace(c, {
           ts: nowIso(),
           category: 'error',
@@ -2341,8 +2384,72 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
           isError: true,
         });
-        throw e;
+        return e;
+      };
+      /** Start the turn over on a clean slate — the discarded attempt's text already streamed. */
+      const restartTurn = (): void => {
+        c.streamingText = '';
+        firstTokenAt = undefined;
+        emit(c);
+      };
+      try {
+        result = await request(turnRole, []);
+      } catch (e) {
+        // Aborting the fetch rejects the stream — that's a user Stop; the kernel
+        // reports it as `cancelled` (no error trace, no error message).
+        if (c.abort?.signal.aborted) throw e;
+        // The model broke AFTER the gateway committed to it (an in-band failure, or the
+        // connection dropping) — which the gateway cannot fail over from. Under
+        // auto-routing, retry the turn ONCE on another connected model instead of ending
+        // the run: this is the "Grok starts and then stops" failure. A pinned model is the
+        // user's own choice, so it is not routed around.
+        if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'llm.stream_interrupted',
+          args: { model: e.model, step: iter },
+          result: `${e.message} — retrying this turn on another connected model.`,
+        });
+        restartTurn();
+        try {
+          result = await request(turnRole, [e.model]);
+        } catch (retryError) {
+          if (c.abort?.signal.aborted) throw retryError;
+          throw turnError(retryError);
+        }
       }
+      // ANALYSIS → CODE hand-off, at the exact turn it matters. The analysis model just
+      // decided to change code; that edit is the first line of the deliverable, so it is
+      // re-asked of the coding model — from the same transcript — rather than written by
+      // the model that planned it. One discarded turn per run is the price of the coder
+      // writing every edit. A pinned model is the user's choice for the whole run.
+      if (turnRole === 'plan' && !activeModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) {
+        phase = 'code';
+        turnRole = 'code';
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'llm.role_handoff',
+          args: { from: result.resolvedModel ?? 'default', step: iter },
+          result: `Analysis on ${result.resolvedModel ?? 'the planning model'} reached its first code change — handing the edit to the strongest connected coding model.`,
+        });
+        restartTurn();
+        try {
+          result = await request('code', []);
+        } catch (e) {
+          if (c.abort?.signal.aborted) throw e;
+          throw turnError(e);
+        }
+      }
+      // The stall-recovery budget covers a STREAK of narration-only turns, not the whole
+      // run. As a run-wide count, a 134-turn run's fourth narrated step anywhere was
+      // silently accepted as the final answer — the run just stopped mid-task. A turn
+      // that actually called a tool proves the model is acting, so the streak resets.
+      if (result.toolCalls.length > 0) announcementRecoveries = 0;
+      // The model making the code changes is the one this run's outcome grades as a
+      // coder — after a hand-off the coding model, under a pin the pinned one.
+      if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
       // Surface a connected-but-unresolved BYO account for a live banner (and reset
       // clears it when the account is reconnected). Emit happens with the trace below.
       accrueByoUnresolved(c, result.byoUnresolved);
@@ -2398,6 +2505,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           model: resolved,
           requestedModel: requested,
           step: iter,
+          // What the turn asked the gateway for (analysis vs code vs chat), so a copied
+          // report shows which model planned and which one wrote the code.
+          role: turnRole,
           toolCalls: result.toolCalls.length,
           // Which account served the turn + any connected-BYO provider the gateway
           // could NOT resolve — so triage tells "ran on the shared pool despite a

@@ -9,4 +9,4 @@
 ALTER TABLE llm_usage_log ADD COLUMN IF NOT EXISTS role varchar(16);
 
 COMMENT ON COLUMN llm_usage_log.role IS
-  'Call-purpose role this call resolved as, when the producer knew it (mirrors main-track migration 1167) — null for most rows until role adoption widens past the cloud engine''s spawn_agent delegations.';
+  'Call-purpose role this call resolved as (plan|code|verify|explore|chat|utility), when the producer declared one (mirrors main-track migration 1167). Null for callers that send none.';

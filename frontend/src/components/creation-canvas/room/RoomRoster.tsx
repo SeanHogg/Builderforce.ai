@@ -1,23 +1,31 @@
-import { memo, useState, type CSSProperties } from 'react'
-import { useT } from '../../../i18n'
-import { Avatar } from '../../ui/Avatar'
-import { Icon } from '../../ui/Icon'
-import surfaceStyles from '../CanvasRoomSurface.module.css'
-import type { RoomSeat } from '../types'
+import { useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { bodyColor, type RoomPalette, type RoomSeat } from '@/lib/canvas/roomSeating';
+import type { RoomStationInstance } from '@/lib/canvas/roomStations';
+import { RoomStationList } from '../room-stations/RoomStations';
+import surfaceStyles from '../CanvasRoomSurface.module.css';
 
-type RoomRosterProps = {
-  seats: RoomSeat[]
-  style?: CSSProperties
-}
-
-/** Side panel listing everyone present in the room, plus the session's stations. Collapsible via the header chevron. */
-export const RoomRoster = memo(function RoomRoster({ seats, style }: RoomRosterProps) {
-  const t = useT()
-  const [collapsed, setCollapsed] = useState(false)
-  const stations = seats.flatMap((seat) => seat.stations)
-  const toggleLabel = t(collapsed ? 'expandRoster' : 'collapseRoster')
+/**
+ * WHO IS IN THE ROOM, and what stands in it — the rail beside the stage.
+ *
+ * The keyboard and screen-reader path to the room's people and stations, and on a
+ * phone the strip under the stage. Every row reads the seat the room placed, so the
+ * list and the bodies can never disagree about who is here.
+ *
+ * Collapsible from the chevron in its header: collapsed, the rail narrows to the
+ * chevron alone (`.rosterCollapsed`) so the stage gets the width back.
+ */
+export function RoomRoster({ seats, palette, stations, onOpenStation }: {
+  seats: readonly RoomSeat[];
+  palette: RoomPalette;
+  stations: readonly RoomStationInstance[];
+  onOpenStation: (key: string) => void;
+}) {
+  const t = useTranslations('creationCanvas.surface.room');
+  const [collapsed, setCollapsed] = useState(false);
+  const toggleLabel = t(collapsed ? 'expandRoster' : 'collapseRoster');
   return (
-    <aside className={surfaceStyles.roster} style={style}>
+    <div className={`${surfaceStyles.roster} ${collapsed ? surfaceStyles.rosterCollapsed : ''}`}>
       <div className={surfaceStyles.rosterHeadRow}>
         <p className={surfaceStyles.rosterHead}>{t('rosterHead', { count: seats.length })}</p>
         <button
@@ -28,46 +36,21 @@ export const RoomRoster = memo(function RoomRoster({ seats, style }: RoomRosterP
           title={toggleLabel}
           onClick={() => setCollapsed((value) => !value)}
         >
-          <Icon name="chevron-right" size={14} />
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 3l5 5-5 5" />
+          </svg>
         </button>
       </div>
-      {collapsed ? null : (
-        <>
-          <ul className={surfaceStyles.rosterList}>
-            {seats.map((seat) => (
-              <li key={seat.id} className={surfaceStyles.rosterRow}>
-                <span className={surfaceStyles.rosterWho}>
-                  <Avatar name={seat.label} tone={seat.tone} size={18} presence={seat.presence} />
-                  <span className={surfaceStyles.rosterName}>{seat.label}</span>
-                </span>
-                <span className={surfaceStyles.rosterMeta}>
-                  {seat.you ? t('you') : seat.kind === 'agent' ? t('agent') : t('inRoom')}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {stations.length > 0 ? (
-            <>
-              <p className={surfaceStyles.rosterHead}>{t('stationsInRoom')}</p>
-              <ul className={surfaceStyles.stationList}>
-                {stations.map((station) => (
-                  <li key={station.id} className={surfaceStyles.stationRow}>
-                    <span className={surfaceStyles.stationInfo}>
-                      <strong>{station.title}</strong>
-                      <small>{station.detail}</small>
-                    </span>
-                    {station.action ? (
-                      <button type="button" className={surfaceStyles.stationAction}>
-                        {station.action}
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </>
-      )}
-    </aside>
-  )
-})
+      {seats.map((seat) => (
+        <div key={seat.userId} className={surfaceStyles.seat} data-live={seat.present ? 'true' : 'false'} data-kind={seat.kind}>
+          <span className={surfaceStyles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
+          <span className={surfaceStyles.seatName}>{seat.displayName || t('unknown')}</span>
+          <span className={surfaceStyles.seatState}>
+            {seat.isSelf ? t('you') : seat.kind === 'agent' ? t('agent') : seat.live ? t('inRoom') : t('onBoard')}
+          </span>
+        </div>
+      ))}
+      <RoomStationList instances={stations} onOpen={onOpenStation} />
+    </div>
+  );
+}

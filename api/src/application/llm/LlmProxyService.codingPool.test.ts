@@ -421,7 +421,7 @@ describe('pickCloudModel with a connected BYO account', () => {
   it('no explicit pin + Anthropic connected → soft Opus seed, even on the free plan', () => {
     const byoVendors = new Set(['anthropic']);
     const free = pickCloudModel(undefined, 'free', false, { byoVendors });
-    expect(free).toEqual({ model: 'claude-opus-5', strict: false });
+    expect(free).toMatchObject({ model: 'claude-opus-5', strict: false });
     const pro = pickCloudModel(undefined, 'pro', false, { byoVendors });
     expect(pro.model).toBe('claude-opus-5');
     expect(pro.strict).toBe(false);
@@ -429,7 +429,7 @@ describe('pickCloudModel with a connected BYO account', () => {
 
   it('OpenAI-only connected → the cloud pin leads with the owner GPT account (not Anthropic)', () => {
     const pick = pickCloudModel(undefined, 'free', false, { byoVendors: new Set(['openai']) });
-    expect(pick).toEqual({ model: 'direct/openai/gpt-4.1', strict: false });
+    expect(pick).toMatchObject({ model: 'direct/openai/gpt-4.1', strict: false });
   });
 
   it("a weak default base model does NOT shadow a connected account — the reported bug", () => {
@@ -437,7 +437,7 @@ describe('pickCloudModel with a connected BYO account', () => {
     // must NOT win; the connected Opus flagship leads instead of the empty-turning coder.
     const byoVendors = new Set(['anthropic']);
     const pick = pickCloudModel('@cf/qwen/qwen3-30b-a3b-fp8', 'pro', false, { byoVendors });
-    expect(pick).toEqual({ model: 'claude-opus-5', strict: false });
+    expect(pick).toMatchObject({ model: 'claude-opus-5', strict: false });
   });
 
   it('a deliberate BYO-served pin still wins over the auto seed', () => {
@@ -485,7 +485,7 @@ describe('BYO precedence — tenant-set provider priority (byoAutoSeedModels)', 
       byoVendors: new Set(['anthropic', 'meta']),
       byoVendorPriority: ['meta', 'anthropic'],
     });
-    expect(pick).toEqual({ model: 'direct/meta/muse-spark-1.1', strict: false });
+    expect(pick).toMatchObject({ model: 'direct/meta/muse-spark-1.1', strict: false });
   });
 
   it('empty vendorPriority is a no-op (identical to omitting it)', () => {

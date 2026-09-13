@@ -529,6 +529,22 @@ export async function complete(
 }
 
 /**
+ * Report a settled run's outcome to learned routing (`POST /llm/v1/run-outcome`, the
+ * `RUN_OUTCOME_PATH` of `@builderforce/learned-routing`), so a run in the editor teaches
+ * the router which connected model codes best, exactly as a cloud run does. Same gateway
+ * credential as a completion. Best-effort: resolves either way, never throws.
+ */
+export async function postRunOutcome(secrets: vscode.SecretStorage, outcome: object): Promise<void> {
+  const key = await getApiKey(secrets);
+  if (!key) return;
+  await fetch(`${getBaseUrl()}/llm/v1/run-outcome`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    body: JSON.stringify(outcome),
+  }).catch(() => undefined);
+}
+
+/**
  * Personality/persona context sent to `POST /api/limbic/block` so the returned
  * directive block carries PERSONALITY (setpoints + psychometric directives), not
  * just the affective appraisal of the text. Every field is optional and

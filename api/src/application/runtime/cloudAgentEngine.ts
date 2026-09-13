@@ -167,6 +167,9 @@ export async function recordCloudUsage(
     tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number;
     projectId?: number | null; model: string; inputTokens: number; outputTokens: number;
     byo?: boolean; byoProvider?: string | null;
+    /** What kind of call this turn was — the parent loop's own turn is `code`, a
+     *  `spawn_agent` child carries its delegation role. Stamped onto the usage row. */
+    role?: string | null;
     /** The run's effective plan + premium override — used ONLY to price a PREMIUM
      *  (any-paid-OpenRouter) turn, which adds the flat per-request surcharge on top of
      *  the metered token cost. Omit and a premium cloud turn would be billed at plain
@@ -209,7 +212,7 @@ export async function recordCloudUsage(
     useCase:    'task_execution',
     // Attribute the spend to the run's cloud agent + ticket + project so cost
     // rolls up ticket → project → account (0104 / 0103).
-    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
+    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null, role: args.role ?? null },
     // Cloud runs always execute on our infra: a BYO row here is $0 to us but STILL
     // counts against the tenant's token allowance (free tenants are charged for
     // cloud-agent usage), so surface is 'cloud' — never exempt. See tokenUsage.ts.
@@ -253,6 +256,8 @@ interface CloudLlmTurnCtx {
    *  (any-paid-OpenRouter) turn's flat per-request surcharge. */
   effectivePlan?: 'free' | 'pro' | 'teams';
   premiumOverride?: boolean;
+  /** What kind of call this turn was, for the usage row (see {@link recordCloudUsage}). */
+  role?: ModelRole;
 }
 
 /**
@@ -309,6 +314,7 @@ async function recordCloudLlmTurn(
   if (result.usage) {
     await recordCloudUsage(rc.env, rc.db, {
       ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
+      ...(rc.role ? { role: rc.role } : {}),
       ...(rc.effectivePlan ? { effectivePlan: rc.effectivePlan, premiumOverride: rc.premiumOverride ?? false } : {}),
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
       byo: result.byoFunded ?? false,
@@ -474,6 +480,7 @@ async function imageRunTurn(
     env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
     requestedModel: pick.model ?? model, fallbackModel: pick.model,
     effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
+    ...(role ? { role } : {}),
   }, { tGen0, notify: args.notify });
   if (!turn.ok) return { ok: false, error: turn.error };
   return { ok: true, content: turn.content, toolCalls: turn.toolCalls };
@@ -1275,18 +1282,22 @@ async function runCloudToolLoop(
       provider: decoratedProvider,
       registry: cloudToolRegistry,
       signal: abortController.signal,
-      complete: async ({ messages: childMessages, tools, step }) => {
+      complete: async ({ messages: childMessages, tools, step, role }) => {
         const tGen0 = Date.now();
-        // The child rides the model the parent LOCKED onto, with no cascade of its
-        // own: a delegation is a bounded side quest, so a model failure inside it ends
-        // the child and is reported to the parent as a failed tool call rather than
-        // spending the run's one pin-drop on a sub-task.
+        // A CODE delegation rides the model the parent LOCKED onto: a delegation is a
+        // bounded side quest, so a model failure inside it ends the child and is
+        // reported to the parent as a failed tool call rather than spending the run's
+        // one pin-drop on a sub-task. Every OTHER role names itself instead of the
+        // parent's model, so the proxy seeds it from the tenant's connected accounts
+        // ordered for that role — a read-only lookup does not ride the parent's
+        // strongest (and priciest) coder.
+        const childRole = role ?? 'code';
         const result = await proxy.complete(
           {
             messages: childMessages as unknown as ChatMessage[],
             tools,
             tool_choice: 'auto',
-            ...(activeModel ? { model: activeModel } : {}),
+            ...(childRole === 'code' ? (activeModel ? { model: activeModel } : {}) : { role: childRole }),
             ...(genParams.temperature != null ? { temperature: genParams.temperature } : {}),
             useCase: 'task_execution',
           },
@@ -1301,6 +1312,7 @@ async function runCloudToolLoop(
           env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
           requestedModel: pick.model, fallbackModel: activeModel,
           effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
+          role: childRole,
         }, { tGen0, step, notify: false });
         if (!turn.ok) return { failed: turn.error };
         return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };
@@ -1672,6 +1684,7 @@ async function runCloudToolLoop(
         env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
         requestedModel: pick.model, fallbackModel: activeModel,
         effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
+        role: 'code',
       }, { tGen0, step: ctx.step, notify: false });
       if (!turn.ok) return { failed: turn.error };
       return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };

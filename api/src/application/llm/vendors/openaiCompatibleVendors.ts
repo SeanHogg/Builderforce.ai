@@ -20,12 +20,16 @@
  */
 
 import { createOpenAICompatibleVendor, type VendorApiKeyEnv } from './openaiCompatible';
-import type { VendorEnv, VendorModule } from './types';
+import type { AiModelTier, VendorEnv, VendorModule } from './types';
 
 /**
  * Declarative spec for one OpenAI-compatible vendor. Kept as data so the list is
- * scannable and the count is obvious. `models` are `<tier?>id` shorthand expanded
- * below into `VendorModelEntry`s (default tier STANDARD).
+ * scannable and the count is obvious. `models` are `<TIER>:<id>` or a bare `<id>`,
+ * expanded below into `VendorModelEntry`s (a bare id is STANDARD).
+ *
+ * The tier matters beyond labelling: a coding turn leads with the tenant's STRONGEST
+ * connected model by catalog tier (`orderForRole`), so a vendor whose flagship sat at
+ * the STANDARD default could never be told apart from its own flash model.
  */
 interface VendorSpec {
   id: Parameters<typeof createOpenAICompatibleVendor>[0]['id'];
@@ -91,7 +95,8 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   {
     id: 'xai', brand: 'xAI', apiKeyEnv: 'XAI_API_KEY',
     baseUrl: 'https://api.x.ai/v1/chat/completions',
-    models: ['grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
+    // grok-4.5 is the same model the SuperGrok subscription route (xaiOAuth) catalogues ULTRA.
+    models: ['ULTRA:grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
   },
   {
     id: 'perplexity', brand: 'Perplexity', apiKeyEnv: 'PERPLEXITY_API_KEY',
@@ -151,7 +156,9 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // Ids served on BOTH platforms. The credential health probe uses the FIRST entry,
     // so it must exist on a Token Plan too — the old `qwen3-max` / `qwen3-coder-plus`
     // are not on the plan and read back as "your key is broken" on a working account.
-    models: ['qwen3.8-max', 'qwen3.7-plus', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.6-flash'],
+    // Max/Plus are Qwen's premium line (OpenRouter catalogues qwen3.7-plus PREMIUM too);
+    // the flash models are its fast, cheap line.
+    models: ['PREMIUM:qwen3.8-max', 'PREMIUM:qwen3.7-plus', 'qwen3.8-flash', 'PREMIUM:qwen3.7-max', 'qwen3.6-flash'],
   },
   {
     id: 'hyperbolic', brand: 'Hyperbolic', apiKeyEnv: 'HYPERBOLIC_API_KEY',
@@ -274,6 +281,14 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   },
 ];
 
+const TIER_PREFIX = /^(FREE|STANDARD|PREMIUM|ULTRA):(.+)$/;
+
+/** `<TIER>:<id>` → that tier; a bare id → STANDARD. */
+export function parseModelShorthand(entry: string): { id: string; tier: AiModelTier } {
+  const match = TIER_PREFIX.exec(entry);
+  return match ? { id: match[2]!, tier: match[1] as AiModelTier } : { id: entry, tier: 'STANDARD' };
+}
+
 /** All factory-built OpenAI-compatible vendor modules, in declaration order. */
 export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((spec) =>
   createOpenAICompatibleVendor({
@@ -281,12 +296,10 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     baseUrl: spec.baseUrl,
     ...(spec.altBaseUrl ? { altBaseUrl: spec.altBaseUrl } : {}),
     apiKeyEnv: spec.apiKeyEnv,
-    catalog: spec.models.map((id) => ({
-      id,
-      label: `${id} (${spec.brand})`,
-      brand: spec.brand,
-      tier: 'STANDARD' as const,
-    })),
+    catalog: spec.models.map((entry) => {
+      const { id, tier } = parseModelShorthand(entry);
+      return { id, label: `${id} (${spec.brand})`, brand: spec.brand, tier };
+    }),
     ...(spec.maxTokensField ? { maxTokensField: spec.maxTokensField } : {}),
     ...(spec.headers ? { headers: spec.headers } : {}),
     ...(spec.noStream ? { noStream: spec.noStream } : {}),

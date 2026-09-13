@@ -20,7 +20,7 @@
  * account headers in the same shapes the real client surfaces.
  */
 
-import { XmlToolCallFilter } from '@seanhogg/builderforce-brain-embedded';
+import { XmlToolCallFilter, isCoderReask } from '@seanhogg/builderforce-brain-embedded';
 import type {
   AssembledToolCall,
   BrainToolSpec,
@@ -129,13 +129,21 @@ function assemble(calls: ScriptedTurn['toolCalls'], turn: number): AssembledTool
  * convenience: the failures worth testing are the ones where a model does the same
  * unhelpful thing on every turn until the loop's budget runs out, and a script that
  * silently ran dry would end the run for the wrong reason.
+ *
+ * The analysis→code hand-off ({@link isCoderReask}) re-asks the current turn of the
+ * coding model, which given the same transcript makes the same move — so that request
+ * REPLAYS the current step rather than consuming the next one.
  */
 export function fakeGateway(script: GatewayScript): FakeGateway {
   const requests: RecordedRequest[] = [];
   let turn = 0;
+  let lastRole: string | undefined;
 
   const stream: HarnessStreamFn = async (opts, handlers) => {
     const advertised = toolNamesOf(opts.tools);
+    const reask = isCoderReask(opts.role, lastRole);
+    lastRole = opts.role;
+    if (reask) turn -= 1;
     const ctx: TurnContext = {
       turn,
       requestedModel: opts.model,

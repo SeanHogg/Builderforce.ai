@@ -211,8 +211,15 @@ export function vendorRequiresLocalEgress(vendor: VendorId): boolean {
 }
 
 export function tierForModel(modelId: string): AiModelTier {
-  const vendorId = vendorForModel(modelId);
-  return MODULES_BY_ID[vendorId].tierFor(modelId);
+  const prefixed = parseVendorPrefix(modelId);
+  const mod = MODULES_BY_ID[prefixed?.vendor ?? vendorForModel(modelId)];
+  // A routing prefix (`direct/qwen/…`) is not part of the vendor's catalog id — the
+  // catalog lists `qwen3.8-max` — so the prefixed id always missed and fell to the
+  // vendor's default tier, which flattened every connected account's models into one
+  // tier and left role ordering nothing to order by. Ask about the bare id, unless the
+  // vendor catalogs the prefixed form itself.
+  const id = prefixed && !mod.catalog.some((e) => e.id === modelId) ? prefixed.modelId : modelId;
+  return mod.tierFor(id);
 }
 
 /**

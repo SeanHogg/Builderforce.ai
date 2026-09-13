@@ -16,7 +16,8 @@ import {
   COMPACT_TAIL_TURNS,
 } from './brainRunStore';
 import type { BrainStreamFn } from './brainRunStore';
-import type { ChatCompletionMessage } from './streamChatCompletion';
+import { StreamInterruptedError, type ChatCompletionMessage } from './streamChatCompletion';
+import { isCoderReask } from './roleHandoff';
 import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
@@ -24,6 +25,21 @@ import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answer
 const CAP = 50;
 
 beforeEach(resetBrainRunStore);
+
+/**
+ * Step counter for a scripted model. The analysis→code hand-off re-asks the SAME turn
+ * of the coder ({@link isCoderReask}), which — given the same transcript — makes the
+ * same move, so that one request replays the current step instead of advancing.
+ */
+function scriptedSteps(): (role: string | undefined) => number {
+  let step = 0;
+  let lastRole: string | undefined;
+  return (role) => {
+    if (!isCoderReask(role, lastRole)) step += 1;
+    lastRole = role;
+    return step;
+  };
+}
 
 describe('brainRunStore cell eviction', () => {
   it('evicts least-recently-used idle cells beyond the cap', () => {
@@ -250,6 +266,124 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
   });
 });
 
+describe('analysis first, then the strongest coder writes the code', () => {
+  const persistence = { sendMessages: async () => [] };
+  const TOOLS = [
+    { type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } },
+    { type: 'function' as const, function: { name: 'edit_file', description: 'edit', parameters: {} } },
+  ];
+
+  it('plans on the tenant order, and re-asks the first code change of the coding model', async () => {
+    const roles: string[] = [];
+    let turn = 0;
+    await startRun(5101, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: async () => ({ ok: true, content: 'ok' }),
+      stream: async (opts) => {
+        turn += 1;
+        roles.push(String(opts.role));
+        if (opts.tools === undefined || turn > 3) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        if (turn === 1) return { text: '', toolCalls: [{ id: 'c1', name: 'read_file', args: JSON.stringify({ path: 'a.ts' }) }], finishReason: 'tool_calls', resolvedModel: 'direct/qwen/qwen3.8-max' };
+        return { text: '', toolCalls: [{ id: `c${turn}`, name: 'edit_file', args: JSON.stringify({ path: 'a.ts', old: 'x', new: 'y' }) }], finishReason: 'tool_calls', resolvedModel: turn === 2 ? 'direct/qwen/qwen3.8-max' : 'claude-opus-5' };
+      },
+      persistence,
+      userTurn: 'fix a.ts',
+    });
+    // Reading is analysis; the planner's edit is discarded and re-asked as code, and
+    // the run stays on the coder from then on.
+    expect(roles.slice(0, 3)).toEqual(['plan', 'plan', 'code']);
+    expect(roles.slice(3).every((r) => r === 'code')).toBe(true);
+    expect(getRunTrace(5101).filter((e) => e.label === 'llm.role_handoff')).toHaveLength(1);
+  });
+
+  it('reports how the CODER did, so the next run picks its coder on evidence', async () => {
+    const reported: unknown[] = [];
+    let turn = 0;
+    await startRun(5103, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: async () => ({ ok: true, content: 'ok' }),
+      reportOutcome: async (o) => { reported.push(o); },
+      stream: async (opts) => {
+        turn += 1;
+        if (opts.tools === undefined || turn > 2) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        // Turn 1: the planner reaches for an edit; turn 2: the hand-off re-asks the coder.
+        return { text: '', toolCalls: [{ id: `c${turn}`, name: 'edit_file', args: JSON.stringify({ path: 'a.ts', old: 'x', new: 'y' }) }], finishReason: 'tool_calls', resolvedModel: opts.role === 'code' ? 'claude-opus-5' : 'direct/qwen/qwen3.8-max' };
+      },
+      persistence,
+      userTurn: 'fix a.ts',
+    });
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatchObject({ model: 'claude-opus-5', role: 'code', source: 'ide', terminalStatus: 'completed', merged: false });
+  });
+
+  it('a model pinned by the user writes its own code — no hand-off', async () => {
+    const roles: string[] = [];
+    let turn = 0;
+    await startRun(5102, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      model: 'direct/qwen/qwen3.8-max',
+      modelStrict: true,
+      runTool: async () => ({ ok: true, content: 'ok' }),
+      stream: async (opts) => {
+        turn += 1;
+        roles.push(String(opts.role));
+        if (opts.tools === undefined || turn > 1) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        return { text: '', toolCalls: [{ id: 'c1', name: 'edit_file', args: JSON.stringify({ path: 'a.ts', old: 'x', new: 'y' }) }], finishReason: 'tool_calls' };
+      },
+      persistence,
+      userTurn: 'fix a.ts',
+    });
+    expect(roles[0]).toBe('plan');
+    expect(getRunTrace(5102).some((e) => e.label === 'llm.role_handoff')).toBe(false);
+  });
+});
+
+describe('a model that breaks mid-answer (the "Grok starts and then stops" run)', () => {
+  const persistence = { sendMessages: async () => [] };
+  const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
+
+  it('retries the turn once on another connected model instead of ending the run', async () => {
+    const excluded: Array<string[] | undefined> = [];
+    await startRun(5201, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: true, content: 'ok' }),
+      stream: async (opts) => {
+        excluded.push(opts.excludeModels);
+        if (excluded.length === 1) throw new StreamInterruptedError('the model failed mid-answer: overloaded', 'xai-oauth/grok-4.5');
+        return { text: 'Here is the answer.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence,
+      userTurn: 'explain a.ts',
+    });
+    expect(excluded).toEqual([undefined, ['xai-oauth/grok-4.5']]);
+    expect(getRunTrace(5201).some((e) => e.label === 'llm.stream_interrupted')).toBe(true);
+    expect(getRunSnapshot(5201).error).toBe('');
+  });
+
+  it('does not route around a model the user pinned', async () => {
+    let calls = 0;
+    await startRun(5202, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      model: 'xai-oauth/grok-4.5',
+      modelStrict: true,
+      runTool: async () => ({ ok: true, content: 'ok' }),
+      stream: async () => {
+        calls += 1;
+        throw new StreamInterruptedError('the model failed mid-answer: overloaded', 'xai-oauth/grok-4.5');
+      },
+      persistence,
+      userTurn: 'explain a.ts',
+    });
+    expect(calls).toBe(1);
+    expect(getRunSnapshot(5202).error).not.toBe('');
+  });
+});
+
 describe('the re-read loop guard', () => {
   const persistence = { sendMessages: async () => [] };
   const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
@@ -447,9 +581,9 @@ describe('a run that ships its change closes its own ticket', () => {
   /** A run that edits a file, then commits + pushes, then checks git status. */
   function shippingRun(statusOutput: string) {
     const calls: { name: string; args: unknown }[] = [];
-    let turn = 0;
+    const nextStep = scriptedSteps();
     const stream: BrainStreamFn = async (opts) => {
-      turn += 1;
+      const turn = nextStep(opts.role);
       if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
       const plan = [
         { name: 'edit_file', args: { path: 'a.css', old_string: 'x', new_string: 'y' } },
@@ -526,12 +660,12 @@ describe('a local run is its own reviewer: it ships its change instead of parkin
   function scripted(turns: Array<{ name: string; args: unknown } | string>) {
     const calls: { name: string; args: unknown }[] = [];
     const systems: string[] = [];
-    let turn = 0;
+    const nextStep = scriptedSteps();
     const stream: BrainStreamFn = async (opts) => {
       const sys = opts.messages.find((m) => m.role === 'system');
       if (sys && typeof sys.content === 'string') systems.push(sys.content);
       if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
-      turn += 1;
+      const turn = nextStep(opts.role);
       const t = turns[turn - 1] ?? 'Done.';
       if (typeof t === 'string') return { text: t, toolCalls: [], finishReason: 'stop' };
       return { text: '', toolCalls: [{ id: `c${turn}`, name: t.name, args: JSON.stringify(t.args) }], finishReason: 'tool_calls' };

@@ -62,12 +62,12 @@ describe('pickCloudModel — pins on a connected provider route', () => {
 
   it('an id that is neither catalogued nor selected still falls back to the seed', () => {
     expect(pickCloudModel('direct/qwen/not-a-model', 'free', false, { byoVendors }))
-      .toEqual({ model: 'direct/qwen/qwen3.8-max', strict: false });
+      .toMatchObject({ model: 'direct/qwen/qwen3.8-max', strict: false });
   });
 
   it('an unpinned run seeds with the selection\'s lead model', () => {
     expect(pickCloudModel(undefined, 'free', false, { byoVendors, byoSelectedModels: { qwen: QWEN_SELECTION } }))
-      .toEqual({ model: QWEN_SELECTION[0], strict: false });
+      .toMatchObject({ model: QWEN_SELECTION[0], strict: false });
   });
 });
 

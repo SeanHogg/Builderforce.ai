@@ -16,7 +16,7 @@
 
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import type { SubagentResult } from "./capabilities.js";
-import { isModelRole, MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS, type ModelRole } from "./modelRoles.js";
+import { delegationRole, MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS } from "./modelRoles.js";
 
 const ROLE_ENUM_DESCRIPTION = MODEL_ROLES
   .map((role) => `${role} — ${MODEL_ROLE_DESCRIPTIONS[role]}`)
@@ -61,11 +61,7 @@ export const spawnAgentTool: ToolDefinition = defineTool({
     // Default-deny on writes: an unspecified `read_only` is the investigative case,
     // which is what delegation is for. Only an explicit `false` widens it.
     const readOnly = args.read_only !== false;
-    // A model choosing to write typed the intent to edit; a model choosing to read
-    // typed the intent to investigate — the same signal `readOnly` already carries,
-    // reused as the role default so an unset `role` still resolves to the sane model
-    // for the shape of work it declared.
-    const role: ModelRole = isModelRole(args.role) ? args.role : readOnly ? "explore" : "code";
+    const role = delegationRole(args.role, readOnly);
     const r = (await ctx.caps.orchestration!.spawn({
       label: label || task.slice(0, 60),
       task,

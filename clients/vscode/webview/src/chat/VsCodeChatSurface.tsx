@@ -58,6 +58,7 @@ import {
   normalizeChatMode,
   mergeRecoveredTrace,
   projectMemoryHooks,
+  lastServedModel,
   type ChatMode,
   type Effort,
   type BrainChat,
@@ -902,6 +903,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // agent's card, so it is restated at the composer (and the session shows ❓ on its
   // tab + Sessions row) — one shared predicate, so banner and card never disagree.
   const pendingQuestion = useMemo(() => selectPendingAskUser(conv.messages), [conv.messages]);
+  // What actually answered, not what was requested: under auto `init.model` is the
+  // plan default ("Builderforce Free") even while a connected account does the work.
+  const servedModel = useMemo(() => lastServedModel(conv.messages), [conv.messages]);
   const askLabels = useMemo(
     () => ({
       askSubmit: t('tl.askSubmit', 'Send'),
@@ -1494,7 +1498,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               selection: modelSelection,
               options: composerModels.options,
               onChange: chooseModel,
-              effective: init.model,
+              effective: servedModel ?? init.model,
               identity: composerModels.identity,
             } : undefined}
             onAccountSettings={() => post('settings')}

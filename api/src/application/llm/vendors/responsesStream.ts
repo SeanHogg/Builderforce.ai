@@ -20,8 +20,12 @@
  *   response.output_item.added(function_call)
  *                                          → open a tool_call slot (id + name)
  *   response.function_call_arguments.delta → an arguments delta on that slot
+ *   response.function_call_arguments.done / response.output_item.done
+ *                                          → the WHOLE arguments, when no delta
+ *                                            carried them (opening the slot if needed)
  *   response.completed                     → finish_reason chunk, then the
  *                                            usage-only chunk, then `[DONE]`
+ *   response.incomplete                    → the same, with finish_reason `length`
  *   response.failed / error                → an OpenAI-shaped error frame
  *
  * The emitted shape is byte-for-byte the contract {@link pseudoStreamFromCall}
@@ -43,7 +47,9 @@ interface ResponsesStreamEvent {
   type?: string;
   delta?: unknown;
   output_index?: number;
-  item?: { type?: string; call_id?: string; id?: string; name?: string };
+  /** `response.function_call_arguments.done` carries the call's COMPLETE arguments. */
+  arguments?: unknown;
+  item?: { type?: string; call_id?: string; id?: string; name?: string; arguments?: unknown };
   response?: { id?: string; usage?: unknown; error?: { message?: string } | string };
   error?: { message?: string } | string;
 }
@@ -109,6 +115,33 @@ export function responsesSseToChatSse(
   let closed = false;
   /** Responses numbers its output items globally; chat numbers tool_calls from 0. */
   const toolSlotByOutputIndex = new Map<number, number>();
+  /** Slots whose arguments already arrived as deltas, so a `.done` frame restating the
+   *  whole string is not appended a second time. */
+  const argsSeen = new Set<number>();
+
+  /** Open a chat tool_call slot for a Responses function_call item. */
+  function openToolCall(outputIndex: number, item: NonNullable<ResponsesStreamEvent['item']>): string {
+    const slot = toolSlotByOutputIndex.size;
+    toolSlotByOutputIndex.set(outputIndex, slot);
+    sawToolCall = true;
+    const toolCall = {
+      index: slot,
+      id: item.call_id ?? item.id ?? `call_${slot}`,
+      type: 'function',
+      function: { name: item.name ?? '', arguments: '' },
+    };
+    const delta: Record<string, unknown> = sawFirstDelta
+      ? { tool_calls: [toolCall] }
+      : { role: 'assistant', content: '', tool_calls: [toolCall] };
+    sawFirstDelta = true;
+    return chunk(responseId, opts.model, { choices: [{ index: 0, delta, finish_reason: null }] });
+  }
+
+  function argumentsChunk(slot: number, args: string): string {
+    return chunk(responseId, opts.model, {
+      choices: [{ index: 0, delta: { tool_calls: [{ index: slot, function: { arguments: args } }] }, finish_reason: null }],
+    });
+  }
 
   /** Translate one parsed Responses frame into zero or more chat SSE frames. */
   function translate(event: ResponsesStreamEvent): string[] {
@@ -130,40 +163,53 @@ export function responsesSseToChatSse(
       case 'response.output_item.added': {
         if (event.item?.type !== 'function_call') return [];
         const outputIndex = typeof event.output_index === 'number' ? event.output_index : toolSlotByOutputIndex.size;
-        const slot = toolSlotByOutputIndex.size;
-        toolSlotByOutputIndex.set(outputIndex, slot);
-        sawToolCall = true;
-        const toolCall = {
-          index: slot,
-          id: event.item.call_id ?? event.item.id ?? `call_${slot}`,
-          type: 'function',
-          function: { name: event.item.name ?? '', arguments: '' },
-        };
-        const delta: Record<string, unknown> = sawFirstDelta
-          ? { tool_calls: [toolCall] }
-          : { role: 'assistant', content: '', tool_calls: [toolCall] };
-        sawFirstDelta = true;
-        return [chunk(responseId, model, { choices: [{ index: 0, delta, finish_reason: null }] })];
+        return [openToolCall(outputIndex, event.item)];
       }
 
       case 'response.function_call_arguments.delta': {
         if (typeof event.delta !== 'string' || event.delta === '') return [];
         const outputIndex = typeof event.output_index === 'number' ? event.output_index : 0;
         const slot = toolSlotByOutputIndex.get(outputIndex) ?? 0;
-        return [chunk(responseId, model, {
-          choices: [{
-            index: 0,
-            delta: { tool_calls: [{ index: slot, function: { arguments: event.delta } }] },
-            finish_reason: null,
-          }],
-        })];
+        argsSeen.add(slot);
+        return [argumentsChunk(slot, event.delta)];
       }
 
-      case 'response.completed': {
+      // A backend may deliver a call's arguments WHOLE — on `function_call_arguments.done`
+      // or on the finished `output_item.done` — without ever streaming deltas. Reading
+      // only the deltas turned such a call into empty arguments, which fail every required
+      // parameter; five in a row trip the loop's failure breaker and the run ends mid-task.
+      case 'response.function_call_arguments.done':
+      case 'response.output_item.done': {
+        const isItem = event.type === 'response.output_item.done';
+        if (isItem && event.item?.type !== 'function_call') return [];
+        const outputIndex = typeof event.output_index === 'number' ? event.output_index : 0;
+        const frames: string[] = [];
+        let slot = toolSlotByOutputIndex.get(outputIndex);
+        if (slot === undefined) {
+          // Only a finished ITEM carries the name needed to open a call never announced.
+          if (!isItem || !event.item) return [];
+          frames.push(openToolCall(outputIndex, event.item));
+          slot = toolSlotByOutputIndex.get(outputIndex)!;
+        }
+        const args = isItem ? event.item?.arguments : event.arguments;
+        if (!argsSeen.has(slot) && typeof args === 'string' && args !== '') {
+          argsSeen.add(slot);
+          frames.push(argumentsChunk(slot, args));
+        }
+        return frames;
+      }
+
+      // `incomplete` is "stopped at the output cap" — and a reasoning model's thinking
+      // tokens count against that cap. Reporting it as a clean `stop` made a truncated
+      // turn indistinguishable from a finished one; `length` is the finish reason every
+      // consumer already reads as "cut off".
+      case 'response.completed':
+      case 'response.incomplete': {
         if (closed) return [];
         closed = true;
+        const finish = event.type === 'response.incomplete' ? 'length' : sawToolCall ? 'tool_calls' : 'stop';
         const frames = [chunk(responseId, model, {
-          choices: [{ index: 0, delta: {}, finish_reason: sawToolCall ? 'tool_calls' : 'stop' }],
+          choices: [{ index: 0, delta: {}, finish_reason: finish }],
         })];
         // Token counts ride their own trailing chunk, mirroring OpenAI's
         // `include_usage` behaviour — the only shape `readUsage` reads.

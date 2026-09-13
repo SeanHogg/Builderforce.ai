@@ -60,7 +60,7 @@ import { teardownCrashedRunArtifacts } from '../runRollback';
 import { scoreRunOutcome } from '../scoreRunOutcome';
 import { agentCommitMessage, buildPrdCapability, recordTaskFileChange } from './prd';
 import { readOpenAiToolCalls } from '@builderforce/agent-loop';
-import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
+import { delegationRole } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { RuntimeService } from '../RuntimeService';
@@ -398,10 +398,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     if (!task) return { status: 200, body: { ok: false, error: 'task is required — the child sees none of your conversation' } };
     const label = typeof args.label === 'string' && args.label.trim() ? args.label.trim() : task.slice(0, 60);
     const readOnly = args.read_only !== false;
-    // Same default the Worker-driven `spawn_agent` tool applies (subagent-tools.ts):
-    // an unset role follows readOnly, since choosing to write already typed the
-    // intent to edit and choosing to read already typed the intent to investigate.
-    const role: ModelRole = isModelRole(args.role) ? args.role : readOnly ? 'explore' : 'code';
+    const role = delegationRole(args.role, readOnly);
     if (await isExecutionCancelled(db, executionId)) {
       return { status: 200, body: { ok: false, error: 'this run was cancelled; do not delegate, just stop' } };
     }

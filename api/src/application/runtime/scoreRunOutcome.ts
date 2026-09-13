@@ -33,6 +33,12 @@ import { clamp01 } from '../../domain/shared/numbers';
 export type { NormalizedRunOutcome, OutcomeSource, TerminalStatus };
 import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
+import { isModelRole, type ModelRole } from '../llm/modelRoles';
+
+/** The role a CLOUD run's outcome scores. The primary loop is the run's coding work
+ *  (`pickCloudModel` is called with role 'code'), so its merge/CI/completion outcome is
+ *  evidence about the model as a coder. */
+const CLOUD_RUN_ROLE: ModelRole = 'code';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { lexicalEval } from '../eval/semanticEval';
@@ -181,6 +187,8 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
     const clientRunId = o.clientRunId?.trim();
     if (!clientRunId || !o.model?.trim()) return;
     const actionType = normalizeActionType(o.actionType);
+    // Only a known role is evidence; anything else is recorded as unknown (NULL).
+    const role = isModelRole(o.role) ? o.role : null;
     const steps = Math.max(0, Math.floor(o.steps ?? 0));
     const costMc = Math.max(0, Math.floor(o.costMc ?? 0));
     const { score } = computeOutcomeScore({
@@ -204,6 +212,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         source: o.source,
         clientRunId,
         actionType,
+        role,
         resolvedModel: o.model,
         plan,
         score,
@@ -214,10 +223,6 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         costUsdMillicents: costMc,
         terminalStatus: o.terminalStatus,
         rateLimited: !!o.rateLimited,
-        // The client-reported run is the top-level agent's own work, same as a
-        // cloud run's primary turn — see modelRoles.ts for why every top-level
-        // run resolves 'code' today.
-        role: 'code',
       })
       .onConflictDoNothing({ target: runModelOutcomes.clientRunId })
       .returning({ id: runModelOutcomes.id });
@@ -230,6 +235,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         tenantId,
         projectId: o.projectId ?? null,
         actionType,
+        role,
         model: o.model,
         score,
         costMc,
@@ -423,6 +429,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       executionId: args.executionId,
       cloudAgentRef: exec.cloudAgentRef ?? null,
       actionType,
+      role: CLOUD_RUN_ROLE,
       resolvedModel,
       plan,
       score,
@@ -441,10 +448,6 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       answerRelevance: evalScores?.answerRelevance ?? null,
       hallucinationRate: evalScores?.hallucinationRate ?? null,
       evalMethod: evalScores?.method ?? null,
-      // The scored run is the top-level agent loop's own work — see modelRoles.ts
-      // for why every top-level run resolves 'code' today. A spawn_agent child's
-      // OWN outcome is not separately scored here.
-      role: 'code',
     };
 
     // Insert-once: a newly inserted row folds into the routing blobs; an existing one
@@ -490,6 +493,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
         tenantId: exec.tenantId,
         projectId,
         actionType,
+        role: CLOUD_RUN_ROLE,
         model,
         score,
         costMc,

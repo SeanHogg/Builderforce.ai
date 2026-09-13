@@ -133,7 +133,7 @@ import {
   resolveVendorTimeoutOverride,
 } from './modelPool';
 export * from './modelPool';
-import type { ArcStage, ModelRole } from './modelRoles';
+import { isArcStage, isModelRole, rankConnectedForRole, type ArcStage, type ModelRole } from './modelRoles';
 export type { ArcStage, ModelRole } from './modelRoles';
 // ---------------------------------------------------------------------------
 // Public types — kept stable for callers (llmRoutes, ideAiRoutes)
@@ -180,6 +180,15 @@ export interface ChatCompletionRequest {
    * Gateway-only: listed in STANDARD_BODY_FIELDS so it is stripped before vendor dispatch.
    */
   excludeModels?: string[];
+  /**
+   * What kind of call this is (plan/code/verify/explore/chat/utility). Orders the
+   * tenant's connected accounts for the work ({@link orderForRole}): a coding turn
+   * leads with the strongest connected model, a planning turn keeps the tenant's own
+   * precedence. Unknown values are ignored. Gateway-only: stripped before dispatch.
+   */
+  role?: string;
+  /** The launching canvas session's arc stage — a nudge on top of `role`. Gateway-only. */
+  arcStage?: string;
   /** OPTIONAL vendor-neutral reasoning intent (the VS Code chat "Thinking" toggle).
    *  Omitted entirely when the toggle is off. The level names are `AgentThinkLevel`
    *  members, so `reasoningCapability` maps them to the CORRECT vendor param for the
@@ -696,7 +705,13 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
     traceId?: string,
     signal?: AbortSignal,
-    opts?: { estimatedTokens?: number; responseCache?: { tenantId: number } },
+    opts?: {
+      estimatedTokens?: number;
+      responseCache?: { tenantId: number };
+      /** Learned per-model stats for `body.role` (see `roleRoutingStats`) — reorders the
+       *  connected-account seed by what each model actually delivered in that role. */
+      roleStats?: ReadonlyArray<ActionModelRankStat>;
+    },
   ): Promise<ProxyResult> {
     const startedAt = Date.now();
     const tid = traceId ?? newTraceId();
@@ -908,10 +923,22 @@ export class LlmProxyService {
       return ar === br ? a.tie - b.tie : ar - br;
     });
     const rankedModels = rankedSeeds.flatMap((entry) => entry.models);
-    const byoSeeds = [...new Set([
+    const rankMerged = [...new Set([
       ...rankedModels,
       ...providerSeeds.filter((model) => !rankedModels.includes(model)),
     ])];
+    // Order for what this call is FOR, with health re-applied as the outermost key:
+    // the rank merge above re-sorts by persisted priority alone, which is how a vendor
+    // `byoAutoSeedModels` had demoted for faulting got pulled back to the lead whenever
+    // the tenant ranked it first. A coding turn then leads with the strongest connected
+    // model — or, once there is evidence, the one that has delivered best in that role;
+    // a planning turn keeps the tenant's order.
+    const byoSeeds = rankConnectedForRole(rankMerged, {
+      role: isModelRole(body.role) ? body.role : undefined,
+      arcStage: isArcStage(body.arcStage) ? body.arcStage : undefined,
+      demotedVendors,
+      ...(opts?.roleStats ? { stats: opts.roleStats } : {}),
+    });
     // An honoured caller model LEADS, but it never stands alone: the tenant's OTHER
     // connected accounts follow it as failover. BYO is an execution boundary — the
     // chain composer below drops every operator-funded model — so a lead-only head
@@ -2573,32 +2600,33 @@ export function pickCloudModel(
   // the run locks onto whatever this seed resolves on turn 1. Shared with the gateway
   // completion seed so both surfaces agree. Soft (not strict) so a transient provider
   // error still fails over.
+  // Same health demotion the gateway completion seed applies. Omitted here before,
+  // which is why a cloud run could lock turn 1 onto a known-401 account.
+  const byoDemoted = opts?.byoAlertedVendors?.length ? new Set(opts.byoAlertedVendors) : undefined;
   const byoCandidates = opts?.preferredRegisteredModel
     ? [opts.preferredRegisteredModel]
     : byoAutoSeedModels(opts?.byoVendors, {
-      agentic: true,
-      vendorPriority: opts?.byoVendorPriority,
+        agentic: true,
+        vendorPriority: opts?.byoVendorPriority,
+        // A provider the tenant chose models for leads with its first choice — the same
+        // seed the gateway completion path builds, so a cloud run and a chat agree.
+        ...(opts?.byoSelectedModels ? { selectedModels: opts.byoSelectedModels } : {}),
+        ...(byoDemoted ? { demotedVendors: byoDemoted } : {}),
+      });
+  if (byoCandidates.length > 0) {
+    // The SAME ranker the gateway completion seed uses: the role orders by tier, learned
+    // `action_type` evidence re-ranks where the role lets the system choose, and health
+    // is re-applied OUTERMOST — a model with a good history must not lead while its
+    // vendor is known to be failing.
+    const byoBias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
+    const byoRanked = rankConnectedForRole(byoCandidates, {
       role: opts?.role,
       arcStage: opts?.arcStage,
-      // A provider the tenant chose models for leads with its first choice — the same
-      // seed the gateway completion path builds, so a cloud run and a chat agree.
-      ...(opts?.byoSelectedModels ? { selectedModels: opts.byoSelectedModels } : {}),
-      // Same health demotion the gateway completion seed applies. Omitted here before,
-      // which is why a cloud run could lock turn 1 onto a known-401 account.
-      ...(opts?.byoAlertedVendors?.length
-        ? { demotedVendors: new Set(opts.byoAlertedVendors) }
-        : {}),
+      demotedVendors: byoDemoted,
+      stats: opts?.actionStats,
+      minSamples: opts?.minSamples,
+      bias: byoBias,
     });
-  if (byoCandidates.length > 0) {
-    // Learned routing used to apply ONLY in the soft-seed branch below, which a BYO
-    // tenant never reaches — every BYO run's `action_type` outcomes were recorded
-    // but never fed back into ordering. Reusing the SAME ranker here means a BYO
-    // tenant's connected accounts also benefit from what has empirically worked for
-    // this action type, on top of (not instead of) the role/tier ordering above —
-    // `byoCandidates` is already role-ranked per vendor group, so this is a nudge
-    // among those candidates, never a reach past what the tenant connected.
-    const byoBias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
-    const byoRanked = rankModelsForAction(byoCandidates, opts?.actionStats, { minSamples: opts?.minSamples, bias: byoBias });
     const byoSeed = byoRanked[0];
     if (byoSeed) {
       const seedStat = opts?.actionStats?.find((s) => s.model === byoSeed);

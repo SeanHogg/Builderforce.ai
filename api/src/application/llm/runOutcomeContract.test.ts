@@ -12,6 +12,13 @@ import {
 // straight to this parser and the on-prem host builds its body from the same module,
 // so these are the tests that keep the two halves of the door honest.
 describe('parseRunOutcomeRequest', () => {
+  it('carries the role the model played, so the router can rank per role', () => {
+    const parsed = parseRunOutcomeRequest({ clientRunId: 'r1', model: 'claude-opus-5', role: 'code' });
+    expect(parsed).toMatchObject({ ok: true, outcome: { role: 'code' } });
+    const bare = parseRunOutcomeRequest({ clientRunId: 'r1', model: 'claude-opus-5' });
+    expect(bare.ok && 'role' in bare.outcome).toBe(false);
+  });
+
   it('rejects a body with nothing to key on or attribute to', () => {
     expect(parseRunOutcomeRequest({})).toEqual({ ok: false, error: 'clientRunId and model are required' });
     expect(parseRunOutcomeRequest({ clientRunId: 'r1' }).ok).toBe(false);

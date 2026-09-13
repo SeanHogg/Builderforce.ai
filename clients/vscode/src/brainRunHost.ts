@@ -39,6 +39,7 @@ import {
   subscribeRunStore,
   traceEventToPersistInput,
   type PersistTraceEventInput,
+  type BrainRunOutcome,
   type BrainRunPersistence,
   type BrainRunSnapshot,
   type BrainStreamFn,
@@ -170,6 +171,8 @@ export interface BrainRunHostPorts {
   onRunsChanged?(state: { running: number[]; awaiting: number[] }): void;
   /** A run finished with local activity — write its `.builderforce/` note. */
   sessionNote?(chatId: number, activity: RunActivity): Promise<void> | void;
+  /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
+  reportOutcome?(outcome: BrainRunOutcome): Promise<unknown>;
 }
 
 export interface BrainRunHost {
@@ -392,6 +395,7 @@ ${p.systemPrompt}` : p.systemPrompt,
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
         projectId: p.projectId ?? null,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
+        ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),
       });
     } finally {
       flags.delete(chatId);

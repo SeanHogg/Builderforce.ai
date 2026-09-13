@@ -194,6 +194,14 @@ function extractXmlToolCalls(raw) {
 }
 
 // src/streamChatCompletion.ts
+var StreamInterruptedError = class extends Error {
+  model;
+  constructor(message, model) {
+    super(message);
+    this.name = "StreamInterruptedError";
+    this.model = model;
+  }
+};
 async function defaultMapError(res) {
   const body = await res.json().catch(() => ({}));
   return brainRequestError(res.status, body, res.statusText);
@@ -217,6 +225,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   if (model && opts.modelStrict) body.strict = true;
   if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
+  if (opts.role) body.role = opts.role;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
@@ -306,7 +315,14 @@ async function streamChatCompletion(opts, handlers = {}) {
   const decoder = new TextDecoder();
   let buffer = "";
   while (true) {
-    const { done, value } = await reader.read();
+    let chunkRead;
+    try {
+      chunkRead = await reader.read();
+    } catch (e) {
+      if (opts.signal?.aborted) throw e;
+      throw new StreamInterruptedError(`the stream dropped mid-answer: ${e instanceof Error ? e.message : String(e)}`, resolvedModel());
+    }
+    const { done, value } = chunkRead;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");
@@ -326,6 +342,11 @@ async function streamChatCompletion(opts, handlers = {}) {
         parsed = JSON.parse(payload);
       } catch {
         continue;
+      }
+      if (parsed.error) {
+        const message = typeof parsed.error === "string" ? parsed.error : parsed.error.message ?? "unknown error";
+        reader.cancel().catch(() => void 0);
+        throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel());
       }
       if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
       if (parsed.usage) readUsage(parsed.usage);
@@ -3135,6 +3156,13 @@ function parseMessageProvenance(msg) {
   }
   return null;
 }
+function lastServedModel(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const prov = parseMessageProvenance(messages[i]);
+    if (prov) return prov.model;
+  }
+  return void 0;
+}
 function withProvenanceMetadata(provenance, base) {
   const meta = { ...base ?? {} };
   if (provenance) meta[PROVENANCE_META_KEY] = provenance;
@@ -3918,6 +3946,24 @@ function withObservedModel(chatId, tool, args) {
   return { ...supplied, model: observed };
 }
 
+// src/runOutcomeReport.ts
+function runOutcomeId(chatId, startedAtMs) {
+  return `ide:${chatId}:${startedAtMs}`;
+}
+function codeRunOutcome(args) {
+  if (args.aborted || !args.codeChanged || !args.codeModel || !args.runId) return null;
+  return {
+    clientRunId: args.runId,
+    model: args.codeModel,
+    role: "code",
+    source: "ide",
+    terminalStatus: args.failed ? "failed" : "completed",
+    merged: args.shipped,
+    steps: args.trace.filter((e) => e.label === "llm.complete" && !e.isError).length,
+    ...args.projectId != null ? { projectId: args.projectId } : {}
+  };
+}
+
 // src/shipVerification.ts
 var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
 function parseGitShortStatus(output) {
@@ -4162,11 +4208,13 @@ function makeCell() {
     byoUnresolved: [],
     providerCap: [],
     codeChanged: false,
+    codeModel: null,
+    runId: "",
     ticketRecorded: false,
     touchedFiles: [],
     deltaTicketId: null,
     deltaRecordedFiles: [],
-    runStartedAt: "",
+    runTraceFrom: 0,
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT
   };
@@ -4227,12 +4275,15 @@ function setActivity(c, activity) {
 }
 function pushTrace(c, ev) {
   c.trace.push(ev);
-  if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
+  if (c.trace.length > MAX_TRACE_EVENTS) {
+    const dropped = c.trace.length - MAX_TRACE_EVENTS;
+    c.trace.splice(0, dropped);
+    c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
+  }
   emit(c);
 }
 function runTrace(c) {
-  const from = c.runStartedAt;
-  return from ? c.trace.filter((e) => e.ts >= from) : c.trace;
+  return c.trace.slice(c.runTraceFrom);
 }
 var STEP_RESULT_CAP = 4e3;
 function persistStep(chatId, persistence, ev) {
@@ -4520,6 +4571,7 @@ function applyRemoteRun(chatId, snapshot) {
   c.messagesEpoch = snapshot.messagesEpoch;
   c.appended = snapshot.appended;
   c.trace = snapshot.trace;
+  c.runTraceFrom = 0;
   c.activity = snapshot.activity;
   c.byoUnresolved = snapshot.byoUnresolved;
   c.providerCap = snapshot.providerCap;
@@ -4541,7 +4593,9 @@ async function startRun(chatId, req) {
   c.touchedFiles = [];
   c.deltaTicketId = null;
   c.deltaRecordedFiles = [];
-  c.runStartedAt = nowIso();
+  c.runTraceFrom = c.trace.length;
+  c.codeModel = null;
+  c.runId = runOutcomeId(chatId, Date.now());
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
@@ -4571,10 +4625,22 @@ async function startRun(chatId, req) {
       await advanceLinkedTickets(chatId, c, req).catch(() => {
       });
     }
-    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles })) {
+    const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
+    if (shipped && req.projectId != null && req.runTool) {
       await completeShippedTickets(chatId, c, req).catch(() => {
       });
     }
+    const outcome = req.reportOutcome && codeRunOutcome({
+      runId: c.runId,
+      codeModel: c.codeModel,
+      codeChanged: c.codeChanged,
+      aborted,
+      failed: c.error !== "",
+      shipped,
+      trace: runTrace(c),
+      projectId: req.projectId
+    });
+    if (outcome) void req.reportOutcome(outcome).catch(() => void 0);
     c.activity = null;
     emit(c);
   }
@@ -4839,6 +4905,7 @@ ${continuationDirective()}`;
     return advisory;
   };
   let announcementRecoveries = 0;
+  let phase = c.codeChanged ? "code" : "plan";
   let shipRecoveryUsed = false;
   let activeModel = model;
   const triedModels = [];
@@ -5200,24 +5267,37 @@ ${revisit}` : replayNote });
         });
       }
       setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
-      try {
-        result = await stream(
-          { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-          {
-            onTextDelta: (d) => {
-              c.streamingText += d;
-              if (firstTokenAt === void 0) {
-                firstTokenAt = nowMs2();
-                c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
-                emit(c);
-                return;
-              }
-              emitStreaming(c);
-            }
+      const handlers = {
+        onTextDelta: (d) => {
+          c.streamingText += d;
+          if (firstTokenAt === void 0) {
+            firstTokenAt = nowMs2();
+            c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
+            emit(c);
+            return;
           }
-        );
-      } catch (e) {
-        if (c.abort?.signal.aborted) throw e;
+          emitStreaming(c);
+        }
+      };
+      let turnRole = tools ? phase : "chat";
+      const request = (role, excludeModels) => stream(
+        {
+          messages: working,
+          tools,
+          tool_choice: tools ? "auto" : void 0,
+          model: activeModel,
+          modelStrict: !!activeModel && modelStrict,
+          routingMode,
+          maxTokens,
+          reasoning,
+          metadata,
+          role,
+          ...excludeModels.length > 0 ? { excludeModels } : {},
+          signal: c.abort?.signal
+        },
+        handlers
+      );
+      const turnError = (e) => {
         pushTrace(c, {
           ts: nowIso(),
           category: "error",
@@ -5227,8 +5307,53 @@ ${revisit}` : replayNote });
           result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
           isError: true
         });
-        throw e;
+        return e;
+      };
+      const restartTurn = () => {
+        c.streamingText = "";
+        firstTokenAt = void 0;
+        emit(c);
+      };
+      try {
+        result = await request(turnRole, []);
+      } catch (e) {
+        if (c.abort?.signal.aborted) throw e;
+        if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "llm.stream_interrupted",
+          args: { model: e.model, step: iter },
+          result: `${e.message} \u2014 retrying this turn on another connected model.`
+        });
+        restartTurn();
+        try {
+          result = await request(turnRole, [e.model]);
+        } catch (retryError) {
+          if (c.abort?.signal.aborted) throw retryError;
+          throw turnError(retryError);
+        }
       }
+      if (turnRole === "plan" && !activeModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) {
+        phase = "code";
+        turnRole = "code";
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "llm.role_handoff",
+          args: { from: result.resolvedModel ?? "default", step: iter },
+          result: `Analysis on ${result.resolvedModel ?? "the planning model"} reached its first code change \u2014 handing the edit to the strongest connected coding model.`
+        });
+        restartTurn();
+        try {
+          result = await request("code", []);
+        } catch (e) {
+          if (c.abort?.signal.aborted) throw e;
+          throw turnError(e);
+        }
+      }
+      if (result.toolCalls.length > 0) announcementRecoveries = 0;
+      if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
       accrueByoUnresolved(c, result.byoUnresolved);
       accrueProviderCap(c, result.providerCap);
       const resolved = result.resolvedModel ?? activeModel ?? "default";
@@ -5258,6 +5383,9 @@ ${revisit}` : replayNote });
           model: resolved,
           requestedModel: requested,
           step: iter,
+          // What the turn asked the gateway for (analysis vs code vs chat), so a copied
+          // report shows which model planned and which one wrote the code.
+          role: turnRole,
           toolCalls: result.toolCalls.length,
           // Which account served the turn + any connected-BYO provider the gateway
           // could NOT resolve — so triage tells "ran on the shared pool despite a
@@ -5880,6 +6008,11 @@ function createBrainRestPersistence(opts) {
       return `${baseUrl}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig)}`;
     }
   };
+}
+
+// src/roleHandoff.ts
+function isCoderReask(role, previousRole) {
+  return role === "code" && previousRole === "plan";
 }
 
 // src/transcriptBudget.ts
@@ -6922,6 +7055,7 @@ export {
   REVISIT_NUDGE_AT,
   ReadCoverage,
   STEP_MESSAGE_ROLE,
+  StreamInterruptedError,
   TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND,
@@ -7015,6 +7149,7 @@ export {
   isActivityMessage,
   isChatMode,
   isCodeChangeTool,
+  isCoderReask,
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
@@ -7032,6 +7167,7 @@ export {
   isUnscopedMutationTool,
   isUserConfiguredModelRef,
   lastConsolidationIndex,
+  lastServedModel,
   leftChangeUnshipped,
   linkedTicketsToAdvance,
   linkedTicketsToComplete,

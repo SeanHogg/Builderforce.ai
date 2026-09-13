@@ -1,3 +1,103 @@
+## ✅ RESOLVED 2026-09-13 — The Room roster compiles again (and keeps its new collapse chevron)
+
+Commit 27b587187 ("Chevron") replaced `frontend/src/components/creation-canvas/room/RoomRoster.tsx`
+with a component from a different codebase. It imported `../../../i18n` (`useT`), `../../ui/Avatar`
+and `../../ui/Icon`, none of which exist here, and read a `RoomSeat` shape from `../types`. It also
+dropped the `palette` / `stations` / `onOpenStation` props `CanvasRoomSurface` passes. The frontend
+failed to type-check, and the VS Code webview build (which bundles the canvas) could not package.
+
+- **Fix:** the previous component is back: `next-intl` `creationCanvas.surface.room`, `RoomSeat` from
+  `lib/canvas/roomSeating`, `bodyColor` dots and the `RoomStationList`. The commit's intended
+  collapse chevron is added on top, using the CSS it already shipped (`.rosterHeadRow`,
+  `.rosterToggle`, `.rosterToggleCollapsed`, `.rosterCollapsed`) and the `collapseRoster` /
+  `expandRoster` keys it added to all five catalogs.
+- The chevron is an inline `currentColor` SVG, so it follows the theme; the button carries
+  `aria-expanded` and a localized label.
+- Verified: frontend type-check clean; `builderforce-ai-2026.9.50.vsix` packages.
+
+## ✅ RESOLVED 2026-09-13 — The coder slot goes to the connected model with the best track record; VS Code runs now teach the router
+
+Learned routing reached cloud runs only, keyed by action type alone. The gateway chat seed (the VS
+Code and web Brain) ordered by role and health and never read the routing table. A model's history
+as a planner and as a coder was one number. And nothing in the VS Code extension ever reported an
+outcome, so editor runs taught the router nothing.
+
+- **Per-role evidence:**
+  - `run_model_outcomes.role`, migration 1169. Existing cloud rows are backfilled to `code`, because
+    a cloud run's primary loop is coding work.
+  - The routing blob gains `byRole`, from a third grouped query in `reconcileRoutingTable`. It is
+    folded incrementally by `applyObservation`, and a human rating passes it through untouched.
+- **One ranker** (`rankConnectedForRole`, `llm/modelRoles.ts`):
+  1. the role's tier order;
+  2. a learned re-rank, only for roles the system chooses for (code, verify, explore, utility);
+     plan and chat keep the tenant's order, whatever the evidence;
+  3. vendor health as the outermost key.
+
+  The gateway `complete()` seed and `pickCloudModel` both use it, so a chat turn and a cloud run
+  with the same role and evidence lead with the same model.
+- **Gateway chat path:** the chat route reads `roleRoutingStats`, the finest scope with evidence,
+  as cached blob reads. The read is skipped for a tenant with nothing connected and for balanced
+  roles. The route passes `complete(…, { roleStats })`.
+- **Scope ladder:** `scopeLadder` and `finestScopeStats` in `routingTable.ts` now serve both the
+  gateway and the cloud loop's `resolveLearnedRoutingInputs`, which had its own copy of the walk.
+- **VS Code runs report their outcome:**
+  - brain-embedded `runOutcomeReport.ts` builds it for a code-changing run. It grades the model
+    that made the edits (after a hand-off, the coder), with `role: 'code'` and `merged` set to the
+    run's own push to the base branch.
+  - The extension's `postRunOutcome` posts to `/llm/v1/run-outcome`, and the shared contract
+    (`@builderforce/learned-routing`) gains `role`.
+  - Not awaited, so it never holds a run open or fails one.
+- **Test harness:** `isCoderReask` (brain-embedded `roleHandoff.ts`) lets scripted gateways replay
+  the current step on the hand-off re-ask: the VS Code `fakeGateway` and the brainRunStore tests.
+  This fixed six VS Code run-host tests the hand-off had broken.
+- Closes the Gap Register entry "Learned routing does not reach the gateway chat path, and outcomes
+  are not yet ranked per ROLE".
+
+## ✅ RESOLVED 2026-09-12 — Analysis on the tenant's order, code on the strongest connected coder; Grok no longer stops mid-run
+
+One global BYO order used to route every turn, so "MiniMax first" put MiniMax on the code-writing
+turns too. A VS Code run on qwen3.8-max plus grok-4.5 went 134 turns in 64 minutes with Anthropic
+connected, looping, and Grok kept stopping partway through its answers.
+
+- **Roles** (`@builderforce/agent-tools` `modelRoles.ts`; api `application/llm/modelRoles.ts`): a
+  closed set, plan · code · verify · explore · chat · utility, each declared as an objective (DATA).
+  Code is +1 (strongest first). Plan and chat are 0, which keeps the tenant's precedence exactly.
+  Verify is −0.5, and explore and utility are −1 (cheapest first). The canvas ARC stage nudges it
+  (idea −0.3, make +0.3, run 0, measure −0.2, reach −0.3), clamped. `orderForRole` (`modelPool.ts`) is
+  a stable cross-vendor sort; vendor HEALTH stays the outermost key in both `complete()` and
+  `pickCloudModel`, so a failing vendor never leads because a role asked for its tier.
+- **Hand-off at the turn it matters** (`brain-embedded/src/brainRunStore.ts`): an auto-routed run
+  works as `plan` until the planner emits its first code-change tool call. That turn is then
+  discarded and re-asked of `code` from the same transcript, and the run stays on the coder
+  (`llm.role_handoff` trace). A pinned model is never handed off.
+- **Delegation:** `spawn_agent` takes a `role` (`delegationRole(raw, readOnly)`); a child is no
+  longer pinned to the parent's model on every surface.
+- **Attribution:** `llm_usage_log.role` in both migration tracks (1167 · transactional 0011), written
+  by the gateway chat route and the cloud loop.
+- **Defect — `tierForModel` ignored every direct-routed id** (`vendors/registry.ts`): it looked the
+  full `direct/qwen/…` id up in a vendor catalog that lists `qwen3.8-max`, so every connected
+  account's models fell to the vendor default tier and role ordering had nothing to order by. It
+  now asks about the bare id.
+- **Grok stops mid-run** (`vendors/xaiOAuth.ts`, `responsesStream.ts`,
+  `brain-embedded/streamChatCompletion.ts`):
+  - streaming now has the vendor timeout;
+  - `max_output_tokens` is omitted, because reasoning tokens counted against the old 4096 cap;
+  - `response.incomplete` maps to `length`;
+  - arguments delivered only on `.done`, and calls first seen on `output_item.done`, are assembled;
+  - in-band error frames and dropped reads raise `StreamInterruptedError` naming the model, and the
+    loop retries that turn once with `excludeModels` on another connected model.
+- **Stall budget:** the narration-recovery count is now a STREAK, reset by any turn that calls a
+  tool. It used to be run-wide, so a long run's fourth narrated step anywhere was accepted as the
+  final answer.
+- **Defect — `runTrace` bled between runs:** it scoped a run by `ts >= runStartedAt` at millisecond
+  resolution, so a run starting in the same millisecond as the previous run's push inherited it
+  and could close an unshipped ticket. It is now a trim-adjusted trace index (`runTraceFrom`).
+- **Composer label:** `lastServedModel(messages)` (`provenance.ts`) drives the VS Code composer, so
+  it names the model that answered instead of "Builderforce Free".
+- **Release note:** migration `1168_model_roles_release_note.sql`.
+- Closes the Gap Register entries "Model selection has no notion of ROLE" and "VS Code composer says
+  'Builderforce Free' while the tenant's own accounts serve the turn".
+
 ## ✅ RESOLVED 2026-09-12 — A connected Qwen account runs the models you pick, from Qwen Cloud's full catalog
 
 A connected Qwen key contributed ONE hardcoded model to routing and five static ids to the picker,

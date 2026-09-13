@@ -153,6 +153,13 @@ export interface StreamChatOptions {
    * one stays byte-identical to a pre-feature request.
    */
   excludeModels?: string[];
+  /**
+   * What kind of call this is (plan/code/verify/explore/chat/utility), emitted as the
+   * body's `role`. Under auto-routing the gateway orders the tenant's connected
+   * accounts for it — analysis on the tenant's own order, code on the strongest
+   * connected model. Omitted when unset, so the body stays byte-identical.
+   */
+  role?: string;
   temperature?: number;
   maxTokens?: number;
   /**
@@ -258,6 +265,22 @@ interface DeltaToolCall {
 }
 
 /**
+ * The stream broke AFTER the gateway committed to a model: an in-band `error` frame, or
+ * the connection dropping mid-answer. The gateway can only fail over before it sends
+ * headers, so from here the caller is the only one who can route around the model —
+ * `model` is what it needs to do that (`excludeModels` on a retry). Before this, both
+ * cases ended the stream as a clean, empty `stop`, and the agent run simply ended.
+ */
+export class StreamInterruptedError extends Error {
+  readonly model: string | undefined;
+  constructor(message: string, model: string | undefined) {
+    super(message);
+    this.name = 'StreamInterruptedError';
+    this.model = model;
+  }
+}
+
+/**
  * Default error mapper used when the transport doesn't supply one.
  *
  * Keeps the gateway's STRUCTURED entitlement fields (`code`/`reason`/`unlock`/
@@ -306,6 +329,7 @@ export async function streamChatCompletion(
   if (model && opts.modelStrict) body.strict = true;
   if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
+  if (opts.role) body.role = opts.role;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? 'auto';
@@ -412,7 +436,15 @@ export async function streamChatCompletion(
   const decoder = new TextDecoder();
   let buffer = '';
   while (true) {
-    const { done, value } = await reader.read();
+    let chunkRead: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunkRead = await reader.read();
+    } catch (e) {
+      // A user Stop aborts the fetch — that is a cancellation, not an upstream failure.
+      if (opts.signal?.aborted) throw e;
+      throw new StreamInterruptedError(`the stream dropped mid-answer: ${e instanceof Error ? e.message : String(e)}`, resolvedModel());
+    }
+    const { done, value } = chunkRead;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
@@ -434,6 +466,8 @@ export async function streamChatCompletion(
           delta?: { content?: string; tool_calls?: DeltaToolCall[] };
           finish_reason?: string | null;
         }>;
+        // An upstream that failed after the stream opened (e.g. a Responses `response.failed`).
+        error?: { message?: string } | string;
         // Non-OpenAI fallbacks some providers emit:
         response?: string;
         text?: string;
@@ -444,6 +478,11 @@ export async function streamChatCompletion(
       } catch {
         // Never surface raw JSON; skip malformed chunks.
         continue;
+      }
+      if (parsed.error) {
+        const message = typeof parsed.error === 'string' ? parsed.error : parsed.error.message ?? 'unknown error';
+        reader.cancel().catch(() => undefined);
+        throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel());
       }
       if (!streamModel && typeof parsed.model === 'string' && parsed.model) streamModel = parsed.model;
       // The usage-bearing chunk (OpenAI stream_options) typically arrives last,

@@ -1,4 +1,4 @@
-import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, isCapacityLimitBody, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, fetchWithVendorTimeout, isCapacityLimitBody, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
 import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
@@ -16,7 +16,23 @@ async function xaiFetch(params: VendorCallParams, extra?: Record<string, unknown
   // Request/response translation lives in the SHARED Responses helper, not here — the
   // hand-rolled copy in this vendor never read `params.toolChoice`, so a pinned or
   // forced tool degraded to `auto` on Grok with no error.
-  const response = await fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${params.apiKey}` }, body: JSON.stringify(buildResponsesBody(params, extra ? { extra } : undefined)), signal: params.signal });
+  //
+  // No output cap: Grok reasons before it answers and those reasoning tokens count against
+  // `max_output_tokens`, so the composer's 4096 ceiling cut turns off mid-tool-call with
+  // nothing usable to show for them. The subscription is flat-rate; the model's own
+  // ceiling applies.
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${params.apiKey}` },
+    body: JSON.stringify(buildResponsesBody(params, { ...(extra ? { extra } : {}), omitMaxOutputTokens: true })),
+  };
+  // A STREAM's headers arrive as soon as generation starts, so a deadline on them bounds a
+  // hung upstream (this call had none, and a stalled Grok held a turn for minutes) without
+  // bounding a long answer — the timer clears once headers land. The buffered call only
+  // answers when the whole generation exists, so it keeps the caller's signal alone.
+  const response = extra?.stream === true
+    ? await fetchWithVendorTimeout('xai-oauth', params.model, ENDPOINT, init, params.timeoutMs, params.signal)
+    : await fetch(ENDPOINT, { ...init, signal: params.signal });
   if (!response.ok) {
     const message = (await response.text()).slice(0, 1000);
     // xAI reports a depleted weekly SuperGrok/API allowance as 403 — the same

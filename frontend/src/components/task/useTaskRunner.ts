@@ -9,6 +9,7 @@ import {
 import { llmApi } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { computeModelRecallBias, seedModelRecallMemory } from '@/lib/modelRecallBias';
+import { readChosenCanvasPhase } from '@/lib/canvasPhases';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
@@ -79,10 +80,15 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
         // repoId: a real id pins the run to that repo; '' explicitly clears the pin
         // (Auto). Only sent when the caller passed it, so a one-click run leaves any
         // existing pin untouched.
-        const payloadObj: { model?: string; cloudAgentRef?: string; repoId?: string; routingBias?: Record<string, number> } = {};
+        const payloadObj: { model?: string; cloudAgentRef?: string; repoId?: string; routingBias?: Record<string, number>; arcStage?: string } = {};
         if (effectiveModel) payloadObj.model = effectiveModel;
         if (cloudRef) payloadObj.cloudAgentRef = cloudRef;
         if (opts?.repoId !== undefined) payloadObj.repoId = opts.repoId;
+        // The arc stage this person put their canvas in, when they chose one — a nudge
+        // on the model-role objective server-side (idea/reach lean cheaper, make leans
+        // stronger). Omitted rather than defaulted, so an unset phase changes nothing.
+        const arcStage = readChosenCanvasPhase();
+        if (arcStage) payloadObj.arcStage = arcStage;
         // Learned Model Routing (PRD 13 §6.6): this is an INTERACTIVE launch, so
         // compute the client-side SSM recall bias on the user's GPU and attach it as
         // a nudge over the server's routing table. Empty (omitted) when WebGPU/local

@@ -69,14 +69,17 @@ describe('xAI SuperGrok OAuth vendor', () => {
 
   /** The Responses surface rejects a `max_output_tokens` under 16; the floor is shared
    *  with the sibling Responses vendor so a tiny probe is not rejected on either. */
-  it('floors max_output_tokens to the Responses minimum', async () => {
+  /** Grok's reasoning tokens count against `max_output_tokens`, so any cap we pass
+   *  (the old 4096 default) ends an agentic turn as `incomplete` mid-answer — the
+   *  "Grok starts and then stops" run. The cap is left to the model. */
+  it('sends no max_output_tokens, so reasoning cannot truncate the answer', async () => {
     let sent: Record<string, unknown> = {};
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
       sent = JSON.parse(String(init.body)) as Record<string, unknown>;
       return new Response(JSON.stringify({ id: 'resp_xai', output_text: 'OK' }), { status: 200 });
     }));
     await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.5', messages: [{ role: 'user', content: 'hi' }], maxTokens: 8 });
-    expect(sent.max_output_tokens).toBe(16);
+    expect(sent.max_output_tokens).toBeUndefined();
   });
 
   /** System turns have no Responses role — they become `instructions`. Non-string

@@ -43,6 +43,9 @@ export interface RunOutcomeRequest {
   /** Alias for `terminalStatus`: true → completed, false → failed. */
   success?: boolean;
   actionType?: string;
+  /** The model ROLE `model` played in this run (plan · code · verify · explore · chat ·
+   *  utility) — lets the router rank per role. The route validates it; unknown → dropped. */
+  role?: string;
   projectId?: number | null;
   taskId?: number | null;
   merged?: boolean;
@@ -63,6 +66,7 @@ export interface NormalizedRunOutcome {
   model: string;
   terminalStatus: TerminalStatus;
   actionType?: string;
+  role?: string;
   projectId?: number | null;
   taskId?: number | null;
   merged?: boolean;
@@ -123,6 +127,7 @@ export function parseRunOutcomeRequest(
   const approved = bool(b.approved);
   const rateLimited = bool(b.rateLimited);
   const actionType = str(b.actionType);
+  const role = str(b.role);
 
   return {
     ok: true,
@@ -132,6 +137,7 @@ export function parseRunOutcomeRequest(
       model,
       terminalStatus,
       ...(actionType ? { actionType } : {}),
+      ...(role ? { role } : {}),
       ...(projectId != null ? { projectId } : {}),
       ...(taskId != null ? { taskId } : {}),
       ...(merged != null ? { merged } : {}),

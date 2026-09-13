@@ -74,7 +74,7 @@ import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '.
 import { recordClientRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../../application/agent/agentPrompt';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
-import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
+import { getRoutingTable, parseScopeToken, roleRoutingStats, scopeToken } from '../../application/llm/routingTable';
 import {
   actionTypeLabel,
   OWN_TENANT_SCOPE_TOKEN,
@@ -141,6 +141,7 @@ import { resolveProviderKeyHealth } from '../../application/llm/providerKeyHealt
 import { buildHostEgress } from '../../application/llm/hostEgress';
 import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import { byoRoutingOptions, type ByoRoutingOptions } from '../../application/llm/tenantProxy';
+import { isArcStage, isModelRole } from '../../application/llm/modelRoles';
 import { listProviderModelSelections } from '../../application/llm/providerModelSelection';
 import { mountProviderModelRoutes } from './providerModelRoutes';
 import {
@@ -2334,6 +2335,21 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ? bodyAny.routingMode
       : undefined;
     if (bodyAny.routingMode != null && routingMode == null) delete bodyAny.routingMode;
+    // What kind of call this is, for the usage row — validated so a client can never write
+    // an arbitrary string into the ledger. The proxy reads the same field to order the seed.
+    const bodyRole = isModelRole(bodyAny.role) ? bodyAny.role : null;
+    // What each connected model has actually delivered in THIS role (finest scope with
+    // evidence). Read only when it can change the order: the tenant has an account to
+    // order, and the role is one the system chooses for — `roleRoutingStats` returns
+    // nothing for analysis and chat, which keep the tenant's order. Cached blob reads.
+    const roleStats = bodyRole && tenantCreds.configuredProviders.length > 0
+      ? await roleRoutingStats(c.env, requestDb(c), {
+          tenantId: access.tenantId,
+          projectId: workHints.projectId ?? null,
+          role: bodyRole,
+          ...(isArcStage(bodyAny.arcStage) ? { arcStage: bodyAny.arcStage } : {}),
+        })
+      : undefined;
     const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoRouting: byoRoutingOptions(tenantCreds),byoRequired: routingMode === 'byo_pool' || (routingMode == null && tenantCreds.configuredProviders.length > 0), allowGatewayAuto: routingMode === 'auto', byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
@@ -2342,7 +2358,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // a model it would immediately overflow (and the client now also bounds what
     // it sends; see brainRunStore windowing + tool-result trimming).
     const estimatedTokens = estimateRequestTokens(body.messages, (body as { tools?: unknown }).tools);
-    const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
+    const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens, ...(roleStats ? { roleStats } : {}) });
 
     // Did the PREMIUM model the tenant selected actually serve this turn? Only then
     // does the flat 1¢ surcharge apply — if the cascade failed over to a plan-pool
@@ -2498,7 +2514,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             tenantId: access.tenantId, userId: access.userId, llmProduct,
             model: result.resolvedModel, retries: result.retries, streamed: true, usage,
             metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
-            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints }, traceId,
+            tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints, role: bodyRole }, traceId,
             paidOverflow: result.paidOverflow,
             byo: result.byoFunded ?? false,
             byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
@@ -2538,7 +2554,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       model: result.resolvedModel, retries: result.retries, streamed: false,
       usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
-      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints }, traceId,
+      tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints, role: bodyRole }, traceId,
       paidOverflow: result.paidOverflow,
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,

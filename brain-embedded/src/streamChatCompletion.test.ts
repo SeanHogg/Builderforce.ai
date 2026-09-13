@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { streamChatCompletion, type BrainTransport } from './streamChatCompletion';
+import { streamChatCompletion, StreamInterruptedError, type BrainTransport } from './streamChatCompletion';
 import { BrainRequestError, chatErrorAction } from './chatError';
 
 /** Build a Response whose body streams the given SSE lines. */
@@ -196,6 +196,51 @@ describe('streamChatCompletion transport injection', () => {
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0].name).toBe('delete_task');
     expect(JSON.parse(result.toolCalls[0].args)).toEqual({ id: 75 });
+  });
+});
+
+describe('a model that breaks after the stream opened', () => {
+  it('turns an in-band error frame into StreamInterruptedError naming the model', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        sseResponse(
+          [
+            'data: {"choices":[{"delta":{"content":"Working on it"}}]}\n',
+            'data: {"error":{"message":"response.failed: upstream overloaded"}}\n',
+          ],
+          { headers: { 'x-builderforce-model': 'xai-oauth/grok-4.5' } },
+        ),
+      ),
+    );
+    const err = await streamChatCompletion({ messages: [], transport: baseTransport }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StreamInterruptedError);
+    expect((err as StreamInterruptedError).model).toBe('xai-oauth/grok-4.5');
+    expect((err as Error).message).toContain('upstream overloaded');
+  });
+
+  it('turns a dropped connection into StreamInterruptedError rather than a silent stop', async () => {
+    // The first read delivers a chunk; the NEXT read fails, as a dropped socket does.
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) controller.enqueue(new TextEncoder().encode('data: {"model":"direct/xai/grok-4.5","choices":[{"delta":{"content":"Half"}}]}\n'));
+        else controller.error(new Error('socket hang up'));
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
+    const err = await streamChatCompletion({ messages: [], transport: baseTransport }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StreamInterruptedError);
+    expect((err as StreamInterruptedError).model).toBe('direct/xai/grok-4.5');
+  });
+
+  it('sends excludeModels so a retry routes around the model that broke', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+    await streamChatCompletion({ messages: [], transport: baseTransport, excludeModels: ['xai-oauth/grok-4.5'] });
+    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(JSON.parse(String(init.body)).excludeModels).toEqual(['xai-oauth/grok-4.5']);
   });
 });
 

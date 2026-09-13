@@ -30,7 +30,7 @@ import {
 import { deriveAllocationCategory } from '../../llm/allocationCategories';
 import { classifyTaskAction } from '../../llm/classifyTask';
 import { assertCloudRunByo, type CloudByoFailure } from '../../llm/cloudByoPolicy';
-import { MIN_SAMPLES, getRoutingTable, type RoutingScope } from '../../llm/routingTable';
+import { MIN_SAMPLES, finestScopeStats, scopeLadder } from '../../llm/routingTable';
 import type { TenantVendorKeys } from '../../llm/tenantProviderKeyService';
 import { isPremiumCapExhausted, recordUsageRow } from '../../llm/usageLedger';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
@@ -38,7 +38,7 @@ import { resolveTenantPlan } from '../../tenant/tenantPlanSnapshot';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { submittingUserId } from '../dispatcherLabel';
 import {
-  learnedRoutingEnabled, normalizeActionType, scopeHasSignal,
+  learnedRoutingEnabled, normalizeActionType,
   type ActionModelRankStat, type ActionType,
 } from '@builderforce/learned-routing';
 import type { Env } from '../../../env';
@@ -201,17 +201,8 @@ export async function resolveLearnedRoutingInputs(
     }
 
     // 2. Finest scope with signal → its ranked stats for this action.
-    const scopes: RoutingScope[] = [
-      { kind: 'project', id: args.projectId },
-      { kind: 'tenant', id: args.tenantId },
-      { kind: 'global' },
-    ];
-    for (const scope of scopes) {
-      const table = await getRoutingTable(env, db, scope);
-      const stats = table.byAction[actionType];
-      if (scopeHasSignal(stats, MIN_SAMPLES)) return { actionType, actionStats: stats };
-    }
-    return { actionType };
+    const stats = await finestScopeStats(env, db, scopeLadder(args.tenantId, args.projectId), (t) => t.byAction[actionType]);
+    return stats ? { actionType, actionStats: stats } : { actionType };
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "resolveLearnedRoutingInputs", context: { logMessage: '[cloud-routing] learned routing resolution failed; using default action', details: {
       tenantId: args.tenantId,

@@ -16,7 +16,7 @@ export { BrainProvider, useBrainConfig } from './config';
 export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './config';
 
 // Streaming client + tool/message types
-export { streamChatCompletion } from './streamChatCompletion';
+export { streamChatCompletion, StreamInterruptedError } from './streamChatCompletion';
 export type {
   BrainTransport,
   BrainToolSpec,
@@ -162,6 +162,8 @@ export {
   resetBrainRunStore,
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn } from './brainRunStore';
+export type { BrainRunOutcome } from './runOutcomeReport';
+export { isCoderReask } from './roleHandoff';
 // The run-driver seam: a host whose UI process is disposable (the VS Code webview)
 // executes runs in a longer-lived process and mirrors them back with `applyRemoteRun`.
 export { applyRemoteRun } from './brainRunStore';
@@ -411,6 +413,7 @@ export {
   parseMessageProvenance,
   withProvenanceMetadata,
   isConnectedAccountUnused,
+  lastServedModel,
 } from './provenance';
 export type { MessageProvenance, ProvenanceAccount } from './provenance';
 

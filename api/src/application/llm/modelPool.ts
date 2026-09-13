@@ -26,7 +26,6 @@ import {
   MAX_VENDOR_CALL_TIMEOUT_MS,
   type VendorId,
 } from './vendors';
-import { resolveRoleObjective, type ArcStage, type ModelRole } from './modelRoles';
 import {
   byoVendorIdsFromCredentials,
 } from './tenantProviderKeyService';
@@ -334,20 +333,43 @@ function frontierTierRank(model: string): number {
  *  alone rather than reordering on a barely-there preference. */
 const BALANCED_OBJECTIVE_THRESHOLD = 0.15;
 
+/** Is this objective BALANCED — i.e. the tenant's own order stands rather than the
+ *  system choosing by tier or by learned evidence? Pure. */
+export function isBalancedObjective(objective: number): boolean {
+  return Math.abs(objective) < BALANCED_OBJECTIVE_THRESHOLD;
+}
+
 /**
- * Reorder ONE vendor's own candidates (the tenant's selection, or — trivially — its
- * single flagship) toward a role's objective: quality-first promotes the tenant's
- * STRONGEST reachable tier to the lead, cost-first the CHEAPEST. Never adds, drops
- * or invents a candidate — a single-item list, or a near-zero (balanced) objective,
- * returns the input untouched, so a vendor the tenant never gave a choice for (no
- * selection made, just the one flagship) is completely unaffected. Pure +
- * unit-testable.
+ * Order a BYO seed for what the call is FOR (see `modelRoles.ts`): a quality-first
+ * objective (writing code) leads with the tenant's STRONGEST connected tier, a
+ * cost-first one (exploring, mechanical work) with its CHEAPEST, and a balanced one
+ * (planning, chat) keeps the tenant's precedence exactly as given.
+ *
+ * Across vendors, not just within one — a role that only reordered inside a provider
+ * could never move a connected Claude ahead of a precedence-first Qwen for a coding
+ * turn, which is the whole point. Upstream HEALTH stays the outermost key: a vendor
+ * known to be failing never leads because a role asked for its tier. Stable, so equal
+ * tiers keep precedence order; never adds, drops or invents a model. Pure.
  */
-export function rankByObjective(models: readonly string[], objective: number): string[] {
-  if (models.length <= 1 || Math.abs(objective) < BALANCED_OBJECTIVE_THRESHOLD) return [...models];
-  return [...models].sort((a, b) => (objective > 0
-    ? frontierTierRank(a) - frontierTierRank(b)
-    : frontierTierRank(b) - frontierTierRank(a)));
+export function orderForRole(
+  models: readonly string[],
+  objective: number,
+  demotedVendors?: ReadonlySet<string>,
+): string[] {
+  const byTier = !isBalancedObjective(objective);
+  if (!byTier && !demotedVendors?.size) return [...models];
+  const health = (m: string): number => (demotedVendors?.has(vendorForModel(m)) ? 1 : 0);
+  const tier = (m: string): number => {
+    if (!byTier) return 0;
+    const rank = frontierTierRank(m);
+    // Cost-first reads the ladder upside down; an UNKNOWN tier (4) is not evidence of
+    // cheapness, so it sorts with the top tier rather than jumping to the lead.
+    return objective > 0 ? rank : rank >= 4 ? 0 : -rank;
+  };
+  return models
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => health(a.m) - health(b.m) || tier(a.m) - tier(b.m) || a.i - b.i)
+    .map(({ m }) => m);
 }
 
 /**
@@ -383,18 +405,9 @@ export function byoAutoSeedModels(
      *  dispatch vendor. A selected vendor contributes its whole ordered list — lead model
      *  first, then its own failover — in place of its single flagship. */
     selectedModels?: Readonly<Record<string, readonly string[]>>;
-    /** What kind of call this seed is for, and the launching session's arc stage —
-     *  combine into ONE objective ({@link resolveRoleObjective}) that reorders each
-     *  vendor's OWN selected candidates toward the tenant's strongest or cheapest
-     *  reachable tier. A vendor with only its single flagship (no selection made)
-     *  has nothing to reorder, so this only ever matters once a tenant has chosen
-     *  more than one model for a provider. */
-    role?: ModelRole;
-    arcStage?: ArcStage;
   },
 ): string[] {
   if (!byoVendors || byoVendors.size === 0) return [];
-  const objective = resolveRoleObjective(opts.role, opts.arcStage);
   // One GROUP per connected vendor: the tenant's ordered selection when they made one,
   // else the vendor's frontier flagship. A selection is taken as given — its refs route
   // by their `direct/<vendor>/` prefix, not catalog membership, which is the whole point
@@ -403,7 +416,7 @@ export function byoAutoSeedModels(
   const groups = [...byoVendors]
     .map((v): string[] => {
       const selected = opts.selectedModels?.[v];
-      if (selected?.length) return rankByObjective(selected, objective);
+      if (selected?.length) return [...selected];
       const flagship = providerFrontierFlagship(v, opts.agentic);
       return flagship !== null && isDispatchableSeed(flagship) ? [flagship] : [];
     })

@@ -106,6 +106,50 @@ describe('Responses SSE → OpenAI chat SSE passthrough', () => {
     expect(parsed.at(-1)?.choices?.[0]?.finish_reason).toBe('tool_calls');
   });
 
+  it('reports a turn cut off at the output cap as `length`, not a clean stop', async () => {
+    const out = await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_text.delta","delta":"half an ans"}\n\n',
+      'data: {"type":"response.incomplete","response":{"id":"r","usage":{"input_tokens":5,"output_tokens":4096}}}\n\n',
+    ]), { model: 'grok-4.5' }));
+    const parsed = chunks(out);
+    expect(parsed.at(-2)?.choices?.[0]?.finish_reason).toBe('length');
+    expect(parsed.at(-1)).toMatchObject({ usage: { completion_tokens: 4096 } });
+  });
+
+  it('carries tool-call arguments delivered WHOLE on output_item.done, with no deltas', async () => {
+    const out = await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"c1","name":"read_file"}}\n\n',
+      'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","call_id":"c1","name":"read_file","arguments":"{\\"path\\":\\"a.ts\\"}"}}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r"}}\n\n',
+    ]), { model: 'grok-4.5' }));
+    const args = chunks(out).filter((c) => c.choices?.[0]?.delta?.tool_calls?.[0]?.function?.arguments)
+      .map((c) => c.choices[0].delta.tool_calls[0].function.arguments).join('');
+    expect(args).toBe('{"path":"a.ts"}');
+  });
+
+  it('opens a call first seen only on output_item.done', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_item.done","output_index":2,"item":{"type":"function_call","call_id":"c9","name":"search_code","arguments":"{\\"query\\":\\"x\\"}"}}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r"}}\n\n',
+    ]), { model: 'grok-4.5' })));
+    expect(parsed[0]!.choices[0].delta.tool_calls[0]).toMatchObject({ index: 0, id: 'c9', function: { name: 'search_code' } });
+    expect(parsed[1]!.choices[0].delta.tool_calls[0].function.arguments).toBe('{"query":"x"}');
+    expect(parsed.at(-1)?.choices?.[0]?.finish_reason).toBe('tool_calls');
+  });
+
+  it('does not repeat arguments that already streamed as deltas when the .done frames restate them', async () => {
+    const out = await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"c1","name":"lookup"}}\n\n',
+      'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\\"q\\":1}"}\n\n',
+      'data: {"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\\"q\\":1}"}\n\n',
+      'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","call_id":"c1","name":"lookup","arguments":"{\\"q\\":1}"}}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r"}}\n\n',
+    ]), { model: 'grok-4.5' }));
+    const args = chunks(out).filter((c) => c.choices?.[0]?.delta?.tool_calls?.[0]?.function?.arguments)
+      .map((c) => c.choices[0].delta.tool_calls[0].function.arguments).join('');
+    expect(args).toBe('{"q":1}');
+  });
+
   it('terminates a stream that ends without a response.completed frame', async () => {
     const out = await drain(responsesSseToChatSse(sseStream([
       'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
@@ -169,6 +213,8 @@ describe('Responses vendors stream for real', () => {
     const result = await xaiOAuthModule.callStream!({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.5' });
     const sentBody = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
     expect(sentBody.stream).toBe(true);
+    // Grok's reasoning tokens count against an output cap, so none is sent.
+    expect(sentBody.max_output_tokens).toBeUndefined();
     expect(chunks(await result.response.text())[0]!.choices[0].delta.content).toBe('grok');
   });
 

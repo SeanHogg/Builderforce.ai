@@ -6,7 +6,22 @@ import {
   markReaperRequeued, wasReaperRequeued, withDefaultModel,
   parseExecutor, withExecutor,
   parseOriginatingChatId,
+  parseArcStage,
 } from './cloudDispatch';
+
+describe('parseArcStage', () => {
+  it('reads one of the five known stages off the run payload', () => {
+    expect(parseArcStage(JSON.stringify({ arcStage: 'make' }))).toBe('make');
+    expect(parseArcStage(JSON.stringify({ arcStage: 'reach', task: 'x' }))).toBe('reach');
+  });
+
+  it('is undefined for a missing, unknown or malformed stage', () => {
+    expect(parseArcStage(undefined)).toBeUndefined();
+    expect(parseArcStage(JSON.stringify({ task: 'x' }))).toBeUndefined();
+    expect(parseArcStage(JSON.stringify({ arcStage: 'expand' }))).toBeUndefined();
+    expect(parseArcStage('{not json')).toBeUndefined();
+  });
+});
 
 describe('chooseCloudExecutor', () => {
   it('uses the container ONLY when wanted, bound, AND proven healthy', () => {

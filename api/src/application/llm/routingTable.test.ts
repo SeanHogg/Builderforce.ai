@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyObservation,
+  applyRatingObservation,
+  scopeLadder,
   scopeToken,
   parseScopeToken,
   MIN_SAMPLES,
@@ -26,6 +28,30 @@ describe('scope tokens', () => {
     expect(parseScopeToken('bogus:1')).toBeNull();
     expect(parseScopeToken('')).toBeNull();
     expect(parseScopeToken(undefined)).toBeNull();
+  });
+});
+
+describe('per-role stats (byRole)', () => {
+  it('a role-bearing outcome folds into its role as well as its action type', () => {
+    const t = applyObservation(empty(), { actionType: 'sql', model: 'm', score: 1, costMc: 0, merged: true, role: 'code' });
+    expect(t.byRole?.code?.[0]).toMatchObject({ model: 'm', n: 1, avgScore: 1 });
+    expect(t.byAction.sql?.[0]?.n).toBe(1);
+  });
+
+  it('an outcome with no known role is not evidence about any role', () => {
+    const t = applyObservation(empty(), { actionType: 'sql', model: 'm', score: 1, costMc: 0, merged: true });
+    expect(t.byRole).toBeUndefined();
+  });
+
+  it('a human rating keeps the per-role lists it cannot speak to', () => {
+    const withRole = applyObservation(empty(), { actionType: 'sql', model: 'm', score: 1, costMc: 0, merged: true, role: 'code' });
+    const rated = applyRatingObservation(withRole, { actionType: 'sql', model: 'm', up: true });
+    expect(rated.byRole?.code?.[0]?.n).toBe(1);
+  });
+
+  it('walks project → tenant → global, skipping the project when there is none', () => {
+    expect(scopeLadder(3, 7)).toEqual([{ kind: 'project', id: 7 }, { kind: 'tenant', id: 3 }, { kind: 'global' }]);
+    expect(scopeLadder(3, null)).toEqual([{ kind: 'tenant', id: 3 }, { kind: 'global' }]);
   });
 });
 

@@ -18,7 +18,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Losing the blob costs one reconcile, never correctness.
  */
 
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
@@ -28,12 +28,15 @@ import {
   blendedQualityScore,
   DEFAULT_MIN_SAMPLES,
   isChronicallyRateLimited,
+  learnedRoutingEnabled,
   normalizeActionType,
   parseScopeToken,
+  scopeHasSignal,
   scopeToken,
   type ActionType,
   type RoutingScope,
 } from '@builderforce/learned-routing';
+import { isModelRole, roleUsesLearnedRanking, type ArcStage, type ModelRole } from './modelRoles';
 
 // The scope type + its token are the shared contract (an on-prem host reads the same
 // `?scope=` token), so they live in `@builderforce/learned-routing`. Re-exported here
@@ -88,6 +91,32 @@ export interface RoutingTable {
   updatedAt: string;
   /** action_type → models ranked best-first. */
   byAction: Partial<Record<ActionType, ActionModelStat[]>>;
+  /** model ROLE → models ranked best-first, from the outcomes that recorded which role
+   *  their model played (migration 1169). Optional: blobs written before it have none. */
+  byRole?: Partial<Record<ModelRole, ActionModelStat[]>>;
+}
+
+/** The stat for `model` under `key`, created empty when absent. Shared by every grain
+ *  the reconcile folds (per action, per role). */
+function statIn<K extends string>(map: Partial<Record<K, ActionModelStat[]>>, key: K, model: string): ActionModelStat {
+  const list = (map[key] ??= []);
+  const found = list.find((s) => s.model === model);
+  if (found) return found;
+  const fresh: ActionModelStat = { model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
+  list.push(fresh);
+  return fresh;
+}
+
+/** Copy one grouped outcome aggregate onto its stat. */
+function assignOutcomeAggregate(
+  stat: ActionModelStat,
+  r: { n: unknown; avgScore: unknown; avgCost: unknown; mergeRate: unknown; rateLimitRate: unknown },
+): void {
+  stat.n = Number(r.n) || 0;
+  stat.avgScore = Number(r.avgScore) || 0;
+  stat.mergeRate = Number(r.mergeRate) || 0;
+  stat.avgCostMc = Number(r.avgCost) || 0;
+  stat.rateLimitRate = Number(r.rateLimitRate) || 0;
 }
 
 function cacheKey(scope: RoutingScope): string {
@@ -142,17 +171,18 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
     // TWO grouped queries, not a join: a run and a human press are different grains,
     // so joining them in SQL would multiply rows and inflate both counts. They are
     // merged by (action, model) in memory below.
-    const [rows, ratingRows] = await Promise.all([
+    // One definition of the per-model aggregate, selected at both outcome grains.
+    const outcomeAggregate = {
+      model: runModelOutcomes.resolvedModel,
+      n: sql<number>`count(*)::int`,
+      avgScore: sql<number>`avg(${runModelOutcomes.score})::float8`,
+      avgCost: sql<number>`avg(${runModelOutcomes.costUsdMillicents})::float8`,
+      mergeRate: sql<number>`(sum(case when ${runModelOutcomes.merged} then 1 else 0 end)::float8 / count(*))`,
+      rateLimitRate: sql<number>`(sum(case when ${runModelOutcomes.rateLimited} then 1 else 0 end)::float8 / count(*))`,
+    };
+    const [rows, ratingRows, roleRows] = await Promise.all([
       db
-        .select({
-          actionType: runModelOutcomes.actionType,
-          model: runModelOutcomes.resolvedModel,
-          n: sql<number>`count(*)::int`,
-          avgScore: sql<number>`avg(${runModelOutcomes.score})::float8`,
-          avgCost: sql<number>`avg(${runModelOutcomes.costUsdMillicents})::float8`,
-          mergeRate: sql<number>`(sum(case when ${runModelOutcomes.merged} then 1 else 0 end)::float8 / count(*))`,
-          rateLimitRate: sql<number>`(sum(case when ${runModelOutcomes.rateLimited} then 1 else 0 end)::float8 / count(*))`,
-        })
+        .select({ actionType: runModelOutcomes.actionType, ...outcomeAggregate })
         .from(runModelOutcomes)
         .where(
           scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start))
@@ -176,38 +206,43 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
         .groupBy(llmActionRatings.actionType, llmActionRatings.resolvedModel)
         // A dead rating table must not cost the router its outcome ranking.
         .catch(() => [] as Array<{ actionType: string; model: string; up: number; down: number }>),
+      // The same outcomes by the ROLE their model played — a third grain, and only the
+      // rows that recorded one (1169); an unknown role is not evidence about any role.
+      db
+        .select({ role: runModelOutcomes.role, ...outcomeAggregate })
+        .from(runModelOutcomes)
+        .where(
+          scope.kind === 'project' ? and(eq(runModelOutcomes.projectId, scope.id), gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role))
+          : scope.kind === 'tenant' ? scopedToTenant(runModelOutcomes, scope.id, and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role)))
+          : acrossTenants(runModelOutcomes, 'platform_aggregate', and(gte(runModelOutcomes.createdAt, start), isNotNull(runModelOutcomes.role))),
+        )
+        .groupBy(runModelOutcomes.role, runModelOutcomes.resolvedModel),
     ]);
 
     const byAction: RoutingTable['byAction'] = {};
-    const at = (action: ActionType, model: string): ActionModelStat => {
-      const list = (byAction[action] ??= []);
-      const found = list.find((s) => s.model === model);
-      if (found) return found;
-      const fresh: ActionModelStat = { model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
-      list.push(fresh);
-      return fresh;
-    };
     for (const r of rows) {
-      const stat = at(normalizeActionType(r.actionType), r.model);
-      stat.n = Number(r.n) || 0;
-      stat.avgScore = Number(r.avgScore) || 0;
-      stat.mergeRate = Number(r.mergeRate) || 0;
-      stat.avgCostMc = Number(r.avgCost) || 0;
-      stat.rateLimitRate = Number(r.rateLimitRate) || 0;
+      assignOutcomeAggregate(statIn(byAction, normalizeActionType(r.actionType), r.model), r);
     }
     // A model rated by humans but never scored by a cloud run gets a stat row with
     // `n: 0` — which is correct and load-bearing: for chat and canvas work there IS
     // no run, and refusing to record the model would leave the router blind to the
     // only evidence that exists.
     for (const r of ratingRows) {
-      const stat = at(normalizeActionType(r.actionType), r.model);
+      const stat = statIn(byAction, normalizeActionType(r.actionType), r.model);
       stat.ratedUp = Number(r.up) || 0;
       stat.ratedDown = Number(r.down) || 0;
+    }
+    const byRole: NonNullable<RoutingTable['byRole']> = {};
+    for (const r of roleRows) {
+      if (isModelRole(r.role)) assignOutcomeAggregate(statIn(byRole, r.role, r.model), r);
     }
     for (const action of Object.keys(byAction) as ActionType[]) {
       byAction[action] = sortStats(byAction[action]!);
     }
-    table = { updatedAt: new Date().toISOString(), byAction };
+    for (const role of Object.keys(byRole) as ModelRole[]) {
+      byRole[role] = sortStats(byRole[role]!);
+    }
+    table = { updatedAt: new Date().toISOString(), byAction, byRole };
   } catch {
     table = emptyTable();
   }
@@ -228,6 +263,55 @@ export async function getRoutingTable(env: Env, db: Db, scope: RoutingScope): Pr
   );
 }
 
+/** The scope ladder, finest first: project (when known) → tenant → global. */
+export function scopeLadder(tenantId: number, projectId?: number | null): RoutingScope[] {
+  return [
+    ...(projectId != null ? [{ kind: 'project', id: projectId } as const] : []),
+    { kind: 'tenant', id: tenantId },
+    { kind: 'global' },
+  ];
+}
+
+/**
+ * The stat slice of the FINEST scope that carries real evidence (a model clearing
+ * MIN_SAMPLES), or undefined when every scope is cold. `pick` names the slice — one
+ * action type for a cloud run, one role for a gateway call — so both walk the ladder
+ * the same way and a coarser scope that knows something is never shadowed by a finer
+ * one that does not.
+ */
+export async function finestScopeStats(
+  env: Env,
+  db: Db,
+  scopes: readonly RoutingScope[],
+  pick: (table: RoutingTable) => ActionModelStat[] | undefined,
+): Promise<ActionModelStat[] | undefined> {
+  for (const scope of scopes) {
+    const stats = pick(await getRoutingTable(env, db, scope));
+    if (scopeHasSignal(stats, MIN_SAMPLES)) return stats;
+  }
+  return undefined;
+}
+
+/**
+ * Learned stats for ONE ROLE, for the gateway completion seed. Read only when they can
+ * change the order — learned routing on, and a role the system chooses for (a planning
+ * or chat call keeps the tenant's order, so its evidence is never fetched). Cached blob
+ * reads, at most one per scope. Best-effort: undefined on any error.
+ */
+export async function roleRoutingStats(
+  env: Env,
+  db: Db,
+  args: { tenantId: number; projectId?: number | null; role: ModelRole; arcStage?: ArcStage },
+): Promise<ActionModelStat[] | undefined> {
+  if (!learnedRoutingEnabled(env) || !roleUsesLearnedRanking(args.role, args.arcStage)) return undefined;
+  try {
+    return await finestScopeStats(env, db, scopeLadder(args.tenantId, args.projectId), (t) => t.byRole?.[args.role]);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/llm/routingTable.ts', operation: 'roleRoutingStats' });
+    return undefined;
+  }
+}
+
 /** One terminal run, as the blob folds it. `rateLimited` rides alongside `merged`
  *  because it is the same grain — a property of THIS run — and giving it its own
  *  fold path would mean two writers racing on one bucket. */
@@ -239,6 +323,8 @@ export interface RoutingObservation {
   merged: boolean;
   /** The run died on a provider rate limit (`classifyRunFailure === 'rate_limited'`). */
   rateLimited?: boolean;
+  /** The role the model played, when known — also folds into `byRole`. */
+  role?: ModelRole | null;
 }
 
 /** Welford-style update of one model's running stats with a fresh observation. */
@@ -257,19 +343,27 @@ function foldObservation(prev: ActionModelStat | undefined, model: string, score
   };
 }
 
-/** Apply one fresh observation to a blob (pure) — returns a NEW table, re-sorted. */
+/** Fold an observation into one stat list (pure) — returns a NEW list, re-sorted. */
+function foldIntoList(list: ActionModelStat[] | undefined, obs: RoutingObservation): ActionModelStat[] {
+  const next = (list ?? []).slice();
+  const idx = next.findIndex((s) => s.model === obs.model);
+  const updated = foldObservation(idx >= 0 ? next[idx] : undefined, obs.model, obs.score, obs.costMc, obs.merged, obs.rateLimited === true);
+  if (idx >= 0) next[idx] = updated;
+  else next.push(updated);
+  return sortStats(next);
+}
+
+/** Apply one fresh observation to a blob (pure) — returns a NEW table, re-sorted. A
+ *  role-bearing observation also folds into that role's list. */
 export function applyObservation(
   table: RoutingTable,
   obs: RoutingObservation,
 ): RoutingTable {
-  const byAction = { ...table.byAction };
-  const list = (byAction[obs.actionType] ?? []).slice();
-  const idx = list.findIndex((s) => s.model === obs.model);
-  const updated = foldObservation(idx >= 0 ? list[idx] : undefined, obs.model, obs.score, obs.costMc, obs.merged, obs.rateLimited === true);
-  if (idx >= 0) list[idx] = updated;
-  else list.push(updated);
-  byAction[obs.actionType] = sortStats(list);
-  return { updatedAt: new Date().toISOString(), byAction };
+  const byAction = { ...table.byAction, [obs.actionType]: foldIntoList(table.byAction[obs.actionType], obs) };
+  const byRole = obs.role
+    ? { ...table.byRole, [obs.role]: foldIntoList(table.byRole?.[obs.role], obs) }
+    : table.byRole;
+  return { updatedAt: new Date().toISOString(), byAction, ...(byRole ? { byRole } : {}) };
 }
 
 /** Apply one human thumb to a blob (pure) — returns a NEW table, re-sorted. A model
@@ -291,7 +385,8 @@ export function applyRatingObservation(
   if (idx >= 0) list[idx] = updated;
   else list.push(updated);
   byAction[obs.actionType] = sortStats(list);
-  return { updatedAt: new Date().toISOString(), byAction };
+  // A thumb carries no role, so the per-role lists pass through untouched.
+  return { updatedAt: new Date().toISOString(), byAction, ...(table.byRole ? { byRole: table.byRole } : {}) };
 }
 
 /**
@@ -361,6 +456,7 @@ export async function applyOutcomeToRoutingTable(
           costMc: outcome.costMc,
           merged: outcome.merged,
           rateLimited: outcome.rateLimited === true,
+          role: outcome.role ?? null,
         });
         await setCached(env, cacheKey(scope), next, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
       } catch (error) {

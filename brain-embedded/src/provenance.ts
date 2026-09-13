@@ -88,6 +88,21 @@ export function parseMessageProvenance(msg: { metadata?: string | null }): Messa
 }
 
 /**
+ * The model that most recently ANSWERED in this conversation — the newest message
+ * carrying provenance. A composer labelled from the requested model alone reads
+ * "Builderforce Free" under auto while a connected Qwen or Grok is doing the work;
+ * this is what the label should say once anything has actually answered. `undefined`
+ * before the first served reply, so the caller falls back to the requested model.
+ */
+export function lastServedModel(messages: readonly { metadata?: string | null }[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const prov = parseMessageProvenance(messages[i]);
+    if (prov) return prov.model;
+  }
+  return undefined;
+}
+
+/**
  * Merge a provenance object into a message's metadata (preserving any other keys,
  * e.g. `authoredBy` on an agent's reply). Returns a serialized string, or
  * `undefined` when there is nothing to store — ready to hand to

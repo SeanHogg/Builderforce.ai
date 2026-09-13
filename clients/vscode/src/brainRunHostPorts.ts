@@ -8,7 +8,7 @@
 
 import * as vscode from "vscode";
 import { attachEvermindLearn, type BrainMessage, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
-import { getApiKey } from "./gateway";
+import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, postBrainMessages, postBrainTrace, projectEvermindHooks } from "./bfApi";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { resolveModelRoute, routeStream } from "./modelRouting";
@@ -60,6 +60,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // The run's tool/LLM steps, so its timeline rehydrates after a reload — written
     // here for EVERY run, including ones nobody is looking at.
     persistTrace: (chatId, events) => postBrainTrace(secrets, chatId, events),
+    // How a code-changing run's coder did — so the next run's coder is picked on evidence.
+    reportOutcome: (outcome) => postRunOutcome(secrets, outcome),
     evermind: (projectId) => projectEvermindHooks(secrets, projectId),
     // The ONE api `ContextSource` the native participant and the cloud engine read.
     // Continuity-scoped to the chat (a real server chat only — an unlinked run has a

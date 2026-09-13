@@ -95,15 +95,23 @@ export function sanitizeCanvasPhase(value: unknown): CanvasPhase {
 
 export const CANVAS_PHASE_STORAGE_KEY = 'builderforce:create:phase';
 
+/** The phase someone actually CHOSE in this browser, or undefined when none ever was.
+ *  A run launched from a browser that never picked a phase must not report "idea" as
+ *  if someone had said so — which is what reading through the default would do. */
+export function readChosenCanvasPhase(): CanvasPhase | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const stored = window.localStorage.getItem(CANVAS_PHASE_STORAGE_KEY);
+    return isCanvasPhase(stored) ? stored : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Same persistence shape as `readCanvasSurface`: a place someone chose, remembered
  *  per browser, degrading to the default rather than throwing on a stale value. */
 export function readCanvasPhase(): CanvasPhase {
-  if (typeof window === 'undefined') return DEFAULT_CANVAS_PHASE;
-  try {
-    return sanitizeCanvasPhase(window.localStorage.getItem(CANVAS_PHASE_STORAGE_KEY));
-  } catch {
-    return DEFAULT_CANVAS_PHASE;
-  }
+  return readChosenCanvasPhase() ?? DEFAULT_CANVAS_PHASE;
 }
 
 export function writeCanvasPhase(phase: CanvasPhase): void {
