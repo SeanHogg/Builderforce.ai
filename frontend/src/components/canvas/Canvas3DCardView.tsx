@@ -1,5 +1,6 @@
-'use client';
-
+// No 'use client': rendered only inside `Canvas3DView.tsx`'s client boundary. Its one
+// hook, `useTranslations`, renders on the server too, and its pointer/keyboard/click
+// props are handlers `Canvas3DView` already owns, not ones this file creates.
 import { memo, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';

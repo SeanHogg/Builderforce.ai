@@ -30,6 +30,37 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   978 → 980 (`useClientFiles`, 2026-09-13) — a NET +2 across four new files in
+ *   two unrelated commits landed on top of the "976 → 978" entry below, judged per
+ *   file rather than per commit:
+ *
+ *     - `lib/canvas/useLivePresence.ts` STAYS, and is the guest-room presence fix
+ *       (DONE 2026-09-13): the ONE store that folds `canvas.presence` frames from
+ *       whichever transport a board has — the server session's relay for a saved
+ *       board, the guest room's for an account-less one — so a passwordless guest
+ *       finally sees a peer's cursor, typing and Brain run. It holds `useState`,
+ *       runs a `window.setInterval` expiry effect and is imported by both
+ *       transports, so it carries its own boundary rather than inheriting one from
+ *       `CreationCanvas`, the same reason `useSubflowBoards.ts` does two entries up.
+ *     - `components/canvas/CanvasNodeHandle.tsx` STAYS. It reads xyflow's
+ *       `useNodeId()` to tell whether it is drawn inside a React Flow node wrapper
+ *       (a real connection point) or standing alone as a face's picture (an inert
+ *       `div`) — a hook client by construction, same as every other xyflow-bound
+ *       leaf in this codebase.
+ *     - `components/canvas/CanvasNodeFace.tsx` and `components/canvas/
+ *       Canvas3DCardView.tsx` LOST it, argued in each file's own header comment
+ *       now. `CanvasNodeFace` takes props in and JSX out with no hook of its own —
+ *       its `ComponentType`/`Node`/`NodeProps`/`NodeTypes` imports are all
+ *       `import type`, erased before runtime — and its three importers
+ *       (`Canvas3DView.tsx`, `CreationCanvas.tsx`, `WorkspaceCanvas.tsx`) are
+ *       already client boundaries, the exact shape `FlowStepBody.tsx` already
+ *       documents this way. `Canvas3DCardView` has one hook, `useTranslations`,
+ *       which renders on the server too (the "974 → 975" rule), and its
+ *       pointer/keyboard/click props are handlers its sole importer
+ *       (`Canvas3DView.tsx`) already owns — this file only attaches them. Neither
+ *       directive marked anything; removing both is why four new files cost two
+ *       points and not four.
+ *
  *   976 → 978 (`useClientFiles`, 2026-09-13) — the BYO provider model-order picker
  *   (the settings-side counterpart of migration 1165's `tenant_llm_provider_models`).
  *   Net +2 across three additions and one removal, diffed against the commit that

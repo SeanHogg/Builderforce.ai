@@ -1,5 +1,6 @@
-'use client';
-
+// No 'use client': rendered only inside `Canvas3DView.tsx` / `CreationCanvas.tsx` /
+// `WorkspaceCanvas.tsx`'s client boundary. No hook of its own — `nodeTypes` are the
+// board's own registered face components, which carry any boundary they need.
 import type { ComponentType } from 'react';
 import type { Node, NodeProps, NodeTypes } from '@xyflow/react';
 
