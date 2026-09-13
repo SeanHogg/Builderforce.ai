@@ -295,6 +295,23 @@ describe('Moonshot regional host resolution', () => {
     expect((thrown as VendorRetryableError).status).toBe(401);
   });
 
+  it('falls back to the Qwen Token Plan host when dashscope-intl rejects the credential', async () => {
+    // A Token Plan key is not valid on Model Studio pay-as-you-go: sent there alone it
+    // was a flat 401 and the connected Qwen account never ran.
+    const PAYG = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
+    const TOKEN_PLAN = 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
+    const urls = stubHosts((url) => (url === PAYG ? rejected() : ok()));
+    await getModule('qwen').call({
+      apiKey: 'sk-token-plan', model: 'qwen3.8-max', messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(urls).toEqual([PAYG, TOKEN_PLAN]);
+  });
+
+  it('leads the Qwen catalog with an id a Token Plan serves', () => {
+    // The health probe dispatches the FIRST entry; `qwen3-max` is not on the plan.
+    expect(getModule('qwen').catalog[0]!.id).toBe('qwen3.8-max');
+  });
+
   it('a single-host vendor makes exactly one attempt on an auth rejection', async () => {
     const urls = stubHosts(rejected);
     await expect(getModule('deepseek').call({

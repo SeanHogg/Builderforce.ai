@@ -14846,7 +14846,7 @@
         "blurb": "Paste a Moonshot Open Platform API key to run Moonshot models on your own account."
       },
       "qwen": {
-        "blurb": "Paste an Alibaba DashScope API key to run Qwen models on your own account."
+        "blurb": "Paste an Alibaba Model Studio or Token Plan API key to run Qwen models on your own account."
       },
       "minimax": {
         "blurb": "Paste a MiniMax API key to run MiniMax models on your own account."

@@ -14846,7 +14846,7 @@
         "blurb": "Pega una clave API de Moonshot Open Platform para usar modelos de Moonshot."
       },
       "qwen": {
-        "blurb": "Pega una clave API de Alibaba DashScope para ejecutar modelos Qwen."
+        "blurb": "Pega una clave API de Alibaba Model Studio o de Token Plan para ejecutar modelos Qwen."
       },
       "minimax": {
         "blurb": "Pega una clave API de MiniMax para ejecutar modelos MiniMax."

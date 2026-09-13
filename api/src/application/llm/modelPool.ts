@@ -287,7 +287,7 @@ const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: s
   // for a tenant who connected Kimi; when their runtime is offline the edge 403 is a
   // `not_entitled` failover like any other and the cascade moves on.
   'kimi-code': { agentic: 'direct/kimi-code/kimi-for-coding', chat: 'direct/kimi-code/kimi-for-coding' },
-  qwen:      { agentic: 'direct/qwen/qwen3-coder-plus', chat: 'direct/qwen/qwen3-max' },
+  qwen:      { agentic: 'direct/qwen/qwen3.8-max', chat: 'direct/qwen/qwen3.7-plus' },
   minimax:   { agentic: 'direct/minimax/MiniMax-M1', chat: 'direct/minimax/MiniMax-Text-01' },
   xai:       { agentic: 'direct/xai/grok-4.5', chat: 'direct/xai/grok-4.5' },
 };

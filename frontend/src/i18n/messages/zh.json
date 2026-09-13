@@ -14846,7 +14846,7 @@
         "blurb": "粘贴 Moonshot 开放平台 API 密钥以使用 Moonshot 模型。"
       },
       "qwen": {
-        "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。"
+        "blurb": "粘贴阿里云百炼（按量付费或 Token Plan）API 密钥以运行 Qwen 模型。"
       },
       "minimax": {
         "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。"

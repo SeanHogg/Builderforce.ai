@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-09-12 — A Qwen Token Plan key now works: the vendor falls back to the Token Plan host
+
+A tenant who connected an Alibaba Qwen **Token Plan** key (a subscription, not pay-as-you-go) got
+`401` on every call: `POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions`,
+model `direct/qwen/qwen3-max`. The defect was found and fixed in the same pass.
+
+- **Cause 1, wrong host:** the `qwen` vendor in `api/src/application/llm/vendors/openaiCompatibleVendors.ts`
+  pinned only the Model Studio pay-as-you-go host. Token Plan keys are issued by a separate platform
+  (`token-plan.ap-southeast-1.maas.aliyuncs.com`), and neither platform accepts the other's keys.
+- **Cause 2, models the plan doesn't serve:** the catalog and the BYO flagship (`modelPool.ts`
+  `BYO_FRONTIER_FLAGSHIPS.qwen`) named `qwen3-max` / `qwen3-coder-plus`, which are not on a Token
+  Plan. The credential probe dispatches the first catalog entry, so it also blamed the key.
+- **Fix:** the vendor sets `altBaseUrl` to the Token Plan host, which is the same per-key regional
+  fallback Moonshot uses (retry once on an auth rejection, remember the winning host). The catalog
+  now lists ids served on both platforms, `qwen3.8-max` first. The flagship is `qwen3.8-max`
+  (agentic) / `qwen3.7-plus` (chat). The connect-card blurb in all five catalogs names both key
+  types.
+- **Guard:** `openaiCompatibleVendors.test.ts` asserts the dashscope-intl → Token Plan fallback, and
+  that the catalog leads with `qwen3.8-max`.
+
 ## ✅ RESOLVED 2026-09-12 — The VSIX harness no longer runs out of memory: its "tool budget" scenario is rewritten for the no-cap loop
 
 The `clients/vscode` vitest suite crashed every run: one worker hit an out-of-memory error, even with an 8 GB heap, after about 20 minutes. The defect was found and fixed in the same pass.

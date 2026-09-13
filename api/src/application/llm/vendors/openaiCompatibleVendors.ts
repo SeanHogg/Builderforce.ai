@@ -134,9 +134,18 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
   },
   {
+    // Alibaba issues Qwen keys from two platforms that do NOT accept each other's
+    // credentials: Model Studio pay-as-you-go (dashscope-intl) and the Token Plan
+    // subscription (its own `token-plan.*.maas` host). A Token Plan key sent to
+    // dashscope-intl is a flat 401, and nothing in the key says which issued it —
+    // the same shape as Moonshot, so the same regional fallback resolves it.
     id: 'qwen', brand: 'Qwen', apiKeyEnv: 'QWEN_API_KEY',
     baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
-    models: ['qwen3-coder-plus', 'qwen3-max', 'qwen-plus', 'qwen-turbo'],
+    altBaseUrl: 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions',
+    // Ids served on BOTH platforms. The credential health probe uses the FIRST entry,
+    // so it must exist on a Token Plan too — the old `qwen3-max` / `qwen3-coder-plus`
+    // are not on the plan and read back as "your key is broken" on a working account.
+    models: ['qwen3.8-max', 'qwen3.7-plus', 'qwen3.8-flash', 'qwen3.7-max', 'qwen3.6-flash'],
   },
   {
     id: 'hyperbolic', brand: 'Hyperbolic', apiKeyEnv: 'HYPERBOLIC_API_KEY',
