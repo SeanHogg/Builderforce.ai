@@ -354,12 +354,30 @@ function frontierTierRank(model: string): number {
  */
 export function byoAutoSeedModels(
   byoVendors: ReadonlySet<string> | null | undefined,
-  opts: { agentic: boolean; vendorPriority?: readonly string[]; demotedVendors?: ReadonlySet<string> },
+  opts: {
+    agentic: boolean;
+    vendorPriority?: readonly string[];
+    demotedVendors?: ReadonlySet<string>;
+    /** Each connected vendor's SELECTED models (1165) as tenant-keyed refs, keyed by
+     *  dispatch vendor. A selected vendor contributes its whole ordered list — lead model
+     *  first, then its own failover — in place of its single flagship. */
+    selectedModels?: Readonly<Record<string, readonly string[]>>;
+  },
 ): string[] {
   if (!byoVendors || byoVendors.size === 0) return [];
-  const flagships = [...byoVendors]
-    .map((v) => providerFrontierFlagship(v, opts.agentic))
-    .filter((m): m is string => m !== null && isDispatchableSeed(m));
+  // One GROUP per connected vendor: the tenant's ordered selection when they made one,
+  // else the vendor's frontier flagship. A selection is taken as given — its refs route
+  // by their `direct/<vendor>/` prefix, not catalog membership, which is the whole point
+  // of choosing a model the static catalog never listed. Only the flagship constant is
+  // guarded, because only it can drift out from under the catalog.
+  const groups = [...byoVendors]
+    .map((v): string[] => {
+      const selected = opts.selectedModels?.[v];
+      if (selected?.length) return [...selected];
+      const flagship = providerFrontierFlagship(v, opts.agentic);
+      return flagship !== null && isDispatchableSeed(flagship) ? [flagship] : [];
+    })
+    .filter((group) => group.length > 0);
   // TENANT PRECEDENCE first, catalog tier as tiebreak. `vendorPriority` is the tenant's
   // ordered gateway vendor ids (most-preferred first — e.g. Meta first); a flagship's
   // vendor is matched via vendorForModel so `direct/meta/…` → 'meta' lines up. A vendor
@@ -390,13 +408,17 @@ export function byoAutoSeedModels(
   // vendor clears on its next successful call, not on a timer.
   const demoted = opts.demotedVendors;
   const healthRank = (m: string): number => (demoted?.has(vendorForModel(m)) ? 1 : 0);
-  return flagships.sort((a, b) => {
+  // Groups sort by their LEAD model and never interleave: a selected vendor's failover
+  // stays directly behind its own lead, in exactly the order the tenant chose.
+  return groups.sort((groupA, groupB) => {
+    const a = groupA[0]!;
+    const b = groupB[0]!;
     const h = healthRank(a) - healthRank(b);
     if (h !== 0) return h;
     const p = priorityRank(a) - priorityRank(b);
     if (p !== 0) return p;
     return frontierTierRank(a) - frontierTierRank(b);
-  });
+  }).flat();
 }
 
 /** Registered OpenRouter connection refs (`openrouter/<org>/<slug>`), in either shape. */

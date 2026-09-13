@@ -497,3 +497,38 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(report).toContain('agent.message');
   });
 });
+
+describe('parallel chats on one hook instance (a panel that walks between chats)', () => {
+  it('a send in flight for chat A marks ONLY chat A busy — chat B still sends', async () => {
+    // Chat A's user-turn persist hangs, holding A mid-send.
+    let releaseA: (() => void) | undefined;
+    vi.mocked(persistence.sendMessages).mockImplementationOnce(
+      () => new Promise((res) => {
+        releaseA = () => res([{ id: ++seq, role: 'user', content: 'work on A', metadata: null, seq, createdAt: '' }] as never);
+      }),
+    );
+    mockStream.mockResolvedValue(result({ text: 'ok' }));
+    const { rerender, result: hook } = renderHook(
+      (props: { chatId: number }) => useBrainConversation({ chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
+      { initialProps: { chatId: 1 }, wrapper },
+    );
+
+    let sendA!: Promise<boolean>;
+    act(() => { sendA = hook.current.send('work on A'); });
+    expect(hook.current.sending).toBe(true);
+
+    // "New chat" / another chat: not busy, and it runs.
+    rerender({ chatId: 2 });
+    expect(hook.current.sending).toBe(false);
+    let okB = false;
+    await act(async () => { okB = await hook.current.send('work on B'); });
+    expect(okB).toBe(true);
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['work on B', 'ok']));
+
+    // Back on A: still busy until its own send settles.
+    rerender({ chatId: 1 });
+    expect(hook.current.sending).toBe(true);
+    await act(async () => { releaseA?.(); await sendA; });
+    expect(hook.current.sending).toBe(false);
+  });
+});

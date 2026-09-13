@@ -25,6 +25,7 @@ import {
   executeChatCompletion,
   executeChatCompletionStream,
   forwardCallOpts,
+  VendorFatalError,
   VendorRetryableError,
   type AiModelTier,
   type VendorCallParams,
@@ -96,6 +97,9 @@ export interface OpenAICompatibleVendorOptions {
   schemaDialect?: { stripKeywords: readonly string[] };
   /** This upstream refuses the Worker's own egress — see `VendorModule.requiresLocalEgress`. */
   requiresLocalEgress?: boolean;
+  /** The provider serves an OpenAI-style `GET /models` beside its chat endpoint, so the
+   *  module can list what a tenant key can call — see `VendorModule.listModels`. */
+  listsModels?: boolean;
 }
 
 /**
@@ -114,7 +118,14 @@ export interface OpenAICompatibleVendorOptions {
  * map outlives the request in module scope, and an isolate is shared across tenants.
  * Bounded so a long-lived isolate seeing many tenants cannot grow it without limit.
  */
-const regionByKeyDigest = new Map<string, string>();
+/**
+ * Which of the vendor's two hosts a key lives on — the SIDE, never a URL. One key is
+ * resolved against several endpoints on the same host pair (chat, stream, `/models`);
+ * remembering the URL of whichever call ran first would send the next call to the right
+ * host but the WRONG path.
+ */
+type RegionSide = 'primary' | 'alt';
+const regionByKeyDigest = new Map<string, RegionSide>();
 const REGION_MEMO_MAX_ENTRIES = 512;
 
 /** FNV-1a over the key + vendor id. Not cryptographic and does not need to be: a
@@ -129,13 +140,13 @@ function keyDigest(vendorId: string, apiKey: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function rememberRegion(digest: string, endpoint: string): void {
+function rememberRegion(digest: string, side: RegionSide): void {
   // Cheap FIFO eviction — order of insertion is Map's own iteration order.
   if (regionByKeyDigest.size >= REGION_MEMO_MAX_ENTRIES) {
     const oldest = regionByKeyDigest.keys().next();
     if (!oldest.done) regionByKeyDigest.delete(oldest.value);
   }
-  regionByKeyDigest.set(digest, endpoint);
+  regionByKeyDigest.set(digest, side);
 }
 
 /** True for the rejections that mean "wrong platform for this key" — the upstream
@@ -165,25 +176,26 @@ async function resolveRegionalEndpoint<T>(
   if (!alt) return attempt(primary);
 
   const digest = keyDigest(vendorId, apiKey);
-  const first = regionByKeyDigest.get(digest) ?? primary;
-  const second = first === primary ? alt : primary;
+  const firstSide: RegionSide = regionByKeyDigest.get(digest) ?? 'primary';
+  const secondSide: RegionSide = firstSide === 'primary' ? 'alt' : 'primary';
+  const endpointOn = (side: RegionSide): string => (side === 'primary' ? primary : alt);
 
   try {
-    const result = await attempt(first);
-    rememberRegion(digest, first);
+    const result = await attempt(endpointOn(firstSide));
+    rememberRegion(digest, firstSide);
     return result;
   } catch (error) {
     if (!isAuthRejection(error)) throw error;
     try {
-      const result = await attempt(second);
-      rememberRegion(digest, second);
+      const result = await attempt(endpointOn(secondSide));
+      rememberRegion(digest, secondSide);
       return result;
     } catch (fallbackError) {
       // Both platforms refused it. Forget the memo so a key that is later fixed on
       // either side is not pinned to whichever host happened to be tried first.
       regionByKeyDigest.delete(digest);
       // Whichever attempt hit `primary` is the one worth reporting.
-      throw first === primary ? error : fallbackError;
+      throw firstSide === 'primary' ? error : fallbackError;
     }
   }
 }
@@ -262,5 +274,47 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
         }));
   }
 
+  if (opts.listsModels) {
+    // Same host pair and same per-key platform memo as the chat calls: a Token Plan key
+    // that chat already learned lives on the alt host lists its models from there too.
+    const modelsUrl = modelsEndpoint(baseUrl);
+    const altModelsUrl = altBaseUrl ? modelsEndpoint(altBaseUrl) : undefined;
+    mod.listModels = (apiKey: string): Promise<string[]> =>
+      resolveRegionalEndpoint(id, apiKey, modelsUrl, altModelsUrl, (endpoint) =>
+        fetchModelIds(id, endpoint, apiKey, headers));
+  }
+
   return mod;
+}
+
+/** A chat-completions URL's sibling listing URL (`…/v1/chat/completions` → `…/v1/models`). */
+function modelsEndpoint(chatUrl: string): string {
+  return chatUrl.replace(/\/chat\/completions$/, '/models');
+}
+
+const MODEL_LIST_TIMEOUT_MS = 10_000;
+
+/**
+ * `GET /models` on one host → the ids in its OpenAI-shaped `{ data: [{ id }] }` body.
+ * A credential rejection is thrown as the RETRYABLE auth class so
+ * {@link resolveRegionalEndpoint} tries the sibling platform, exactly as a chat call would.
+ */
+async function fetchModelIds(
+  vendorId: VendorId,
+  endpoint: string,
+  apiKey: string,
+  headers: Record<string, string> | undefined,
+): Promise<string[]> {
+  const res = await fetch(endpoint, {
+    headers: { Authorization: `Bearer ${apiKey}`, ...(headers ?? {}) },
+    signal: AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
+  });
+  if (AUTH_STATUSES.has(res.status)) {
+    throw new VendorRetryableError(vendorId, 'models', res.status, 'model listing rejected the credential');
+  }
+  if (!res.ok) throw new VendorFatalError(vendorId, res.status, 'model listing failed');
+  const body = await res.json().catch(() => null) as { data?: Array<{ id?: unknown }> } | null;
+  return (body?.data ?? [])
+    .map((entry) => entry?.id)
+    .filter((modelId): modelId is string => typeof modelId === 'string' && modelId.length > 0);
 }

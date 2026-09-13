@@ -47,6 +47,9 @@ interface VendorSpec {
   /** This upstream refuses the Worker's egress — run it from the tenant's connected
    *  runtime when one is online. See `VendorModule.requiresLocalEgress`. */
   requiresLocalEgress?: boolean;
+  /** The provider serves an OpenAI-style `GET /models` for a tenant key, so a connected
+   *  account can list the models it can actually call. See `VendorModule.listModels`. */
+  listsModels?: boolean;
 }
 
 const SPECS: ReadonlyArray<VendorSpec> = [
@@ -142,6 +145,9 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'qwen', brand: 'Qwen', apiKeyEnv: 'QWEN_API_KEY',
     baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
     altBaseUrl: 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions',
+    // Both platforms serve `GET /compatible-mode/v1/models` for a tenant key, so a connected
+    // account can list what it can actually call (a Token Plan serves a subset).
+    listsModels: true,
     // Ids served on BOTH platforms. The credential health probe uses the FIRST entry,
     // so it must exist on a Token Plan too — the old `qwen3-max` / `qwen3-coder-plus`
     // are not on the plan and read back as "your key is broken" on a working account.
@@ -286,6 +292,7 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     ...(spec.noStream ? { noStream: spec.noStream } : {}),
     ...(spec.pseudoStream ? { pseudoStream: spec.pseudoStream } : {}),
     ...(spec.requiresLocalEgress ? { requiresLocalEgress: spec.requiresLocalEgress } : {}),
+    ...(spec.listsModels ? { listsModels: true } : {}),
   }),
 );
 

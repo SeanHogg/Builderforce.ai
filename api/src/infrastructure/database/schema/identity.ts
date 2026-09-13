@@ -18,6 +18,7 @@ import {
   bigint,
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -1037,6 +1038,27 @@ export const tenantLlmProviderKeys = pgTable('tenant_llm_provider_keys', {
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.tenantId, t.provider] }),
+}));
+
+/**
+ * Per-provider MODEL SELECTION (1165) — which of a connected provider's models routing
+ * uses, in order (`position` 0 leads, the rest are failover). A CHILD of
+ * {@link tenantLlmProviderKeys} on its (tenant, provider) key: it survives a key rotation
+ * (the parent is upserted in place) and is cascaded away on disconnect. Stores the
+ * provider's BARE model id; routing prefixes the tenant-keyed route at the boundary.
+ */
+export const tenantLlmProviderModels = pgTable('tenant_llm_provider_models', {
+  tenantId:  integer('tenant_id').notNull(),
+  provider:  text('provider').notNull(),
+  modelId:   text('model_id').notNull(),
+  position:  integer('position').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.tenantId, t.provider, t.modelId] }),
+  credential: foreignKey({
+    columns: [t.tenantId, t.provider],
+    foreignColumns: [tenantLlmProviderKeys.tenantId, tenantLlmProviderKeys.provider],
+  }).onDelete('cascade'),
 }));
 
 /**

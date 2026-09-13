@@ -140,6 +140,9 @@ import { probeByoProvider, probeOpenRouterConnection } from '../../application/l
 import { resolveProviderKeyHealth } from '../../application/llm/providerKeyHealth';
 import { buildHostEgress } from '../../application/llm/hostEgress';
 import { byoModelsFor } from '../../application/llm/byoModelRouting';
+import { byoRoutingOptions, type ByoRoutingOptions } from '../../application/llm/tenantProxy';
+import { listProviderModelSelections } from '../../application/llm/providerModelSelection';
+import { mountProviderModelRoutes } from './providerModelRoutes';
 import {
   withClaudeCodeSystemPrompt,
   ANTHROPIC_OAUTH_BETA,
@@ -998,7 +1001,7 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; byoVendorPriority?: readonly string[]; byoAlertedVendors?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly import('../../application/llm/openRouterConnectionService').OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; byoRouting?: ByoRoutingOptions; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
@@ -1008,11 +1011,9 @@ function proxyForCompletion(
     ...(opts.openaiCodexAuth ? { openaiCodexAuth: opts.openaiCodexAuth } : {}),
     ...(opts.xaiOAuthToken ? { xaiOAuthToken: opts.xaiOAuthToken } : {}),
     ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
-    ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
-    ...(opts.byoAlertedVendors?.length ? { byoAlertedVendors: opts.byoAlertedVendors } : {}),
-    ...(opts.byoProviderPriorities?.length ? { byoProviderPriorities: opts.byoProviderPriorities } : {}),
-    ...(opts.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
-    ...(opts.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length ? { openRouterModelKeys: opts.openRouterModelKeys } : {}),
+    // The routing ORDER (precedence, known-broken accounts, OpenRouter connections, each
+    // provider's selected models) — one derivation shared with every tenant proxy.
+    ...(opts.byoRouting ?? {}),
     ...(opts.byoRequired ? { byoRequired: true } : {}),
     ...(opts.allowGatewayAuto ? { allowGatewayAuto: true } : {}),
     // Diagnostics only — so a fail-closed BYO 503 names the connected providers and
@@ -1622,6 +1623,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // differs only by provider data — it lives in its own module rather than as
   // three near-identical handler pairs here. See subscriptionOAuthRoutes.
   mountSubscriptionOAuthRoutes(router, { requireTenantAccess, respondToAccessError });
+
+  // Which of a connected provider's models routing uses, in order (1165) — its own module.
+  mountProviderModelRoutes(router, { requireTenantAccess, respondToAccessError });
 
   router.delete('/provider-keys/:provider', async (c) => {
     let access: TenantAccess;
@@ -2330,7 +2334,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ? bodyAny.routingMode
       : undefined;
     if (bodyAny.routingMode != null && routingMode == null) delete bodyAny.routingMode;
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoVendorPriority: tenantCreds.vendorPriority, byoAlertedVendors: tenantCreds.alertedVendors ?? [], byoProviderPriorities: tenantCreds.providerPriorities, openRouterConnections: tenantCreds.openRouterConnections, openRouterModelKeys: tenantCreds.openRouterModelKeys, byoRequired: routingMode === 'byo_pool' || (routingMode == null && tenantCreds.configuredProviders.length > 0), allowGatewayAuto: routingMode === 'auto', byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoRouting: byoRoutingOptions(tenantCreds),byoRequired: routingMode === 'byo_pool' || (routingMode == null && tenantCreds.configuredProviders.length > 0), allowGatewayAuto: routingMode === 'auto', byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413
@@ -2676,16 +2680,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Keep the SUMMARIES (not just provider ids): a subscription-connected provider
     // serves a different model route than an api-key one, and only the summary carries
     // the auth type that decides which.
-    const [byoProviderRows, openRouterConnections] = access
+    const [byoProviderRows, openRouterConnections, modelSelections] = access
       ? await Promise.all([
           listTenantProviderKeys(c.env, access.tenantId),
           listOpenRouterConnections(c.env, access.tenantId),
+          // A provider's selected models (1165) replace its static defaults in the picker,
+          // so the list offers exactly what routing will try. Advisory: unreadable → defaults.
+          listProviderModelSelections(c.env, access.tenantId).catch(() => ({})),
         ])
-      : [[] as ProviderKeySummary[], []];
+      : [[] as ProviderKeySummary[], [], {}];
     // Preserve the ONE mixed provider/connection precedence in the picker payload.
     // Appending every OpenRouter registration after every direct provider made the
     // prompt order disagree with the priority drawer whenever a connection was #1.
-    const providerModels = byoModelsFor(byoProviderRows);
+    const providerModels = byoModelsFor(byoProviderRows, modelSelections);
     const groups = [
       ...byoProviderRows.map((row) => ({
         priority: row.priority,

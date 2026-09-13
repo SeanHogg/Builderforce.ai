@@ -13,8 +13,15 @@ export function installBrowserCommonMiddleware(app: Express) {
         abort();
       }
     });
-    // Make the signal available to browser route handlers (best-effort).
-    (req as unknown as { signal?: AbortSignal }).signal = ctrl.signal;
+    // Make the signal available to browser route handlers (best-effort). Defined as an
+    // own property: Node >= 24.20 ships a getter-only `IncomingMessage.prototype.signal`,
+    // so a plain assignment throws in strict mode and turns every request into a 500.
+    Object.defineProperty(req, "signal", {
+      value: ctrl.signal,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
     next();
   });
   app.use(express.json({ limit: "1mb" }));

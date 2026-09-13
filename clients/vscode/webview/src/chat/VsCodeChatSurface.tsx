@@ -751,43 +751,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     },
   });
 
-  // When a run finishes (sending true→false) with content, persist its execution
-  // trace. Evermind learning is NOT triggered here: it happens authoritatively
-  // server-side on every message persist (`evaluateBrainLearnGate` on
-  // POST /brain/chats/:id/messages), so a chat turn always feeds the project's
-  // Evermind when the chat is attached + seeded + connected — no separate, throttled,
-  // opt-in client contribution (that path was redundant and has been removed).
-  const prevSending = useRef(false);
-  useEffect(() => {
-    if (prevSending.current && !conv.sending
-      && hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error })) {
-      // Persist this run's execution trace so its tool/LLM turns survive a reload (the
-      // web app does the same via POST /chats/:id/trace). Best-effort — a failed persist
-      // never affects the chat; the live trace stays visible via conv.trace this session.
-      const chatIdNow = chatId;
-      if (chatIdNow != null && conv.trace.length > 0) {
-        void apiReq(`/api/brain/chats/${chatIdNow}/trace`, {
-          method: 'POST',
-          body: JSON.stringify({
-            events: conv.trace.map((e) => ({
-              kind: e.category,
-              label: e.label,
-              args: e.args,
-              result: e.result,
-              isError: e.isError,
-              durationMs: e.durationMs,
-              ttftMs: e.ttftMs,
-              // The instant the event happened. This POST is ONE batch insert, so
-              // without it every row of the run comes back at the same `created_at`
-              // and the rehydrated timeline has no chronology left to sort on.
-              ts: e.ts,
-            })),
-          }),
-        }).catch(() => {});
-      }
-    }
-    prevSending.current = conv.sending;
-  }, [conv.sending, conv.messages, conv.trace, conv.error, init.model, chatId, apiReq, memoryEnabled]);
+  // A run's execution trace is persisted by the HOST that ran it (`brainRunHost.ts`,
+  // `persistTrace`), not here: runs execute in parallel and outlive this view, so a
+  // panel could only ever see — and save — the one chat it happened to be showing.
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachFiles = useCallback((files: FileList | File[] | null) => {
@@ -893,15 +859,19 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Drain the queue: when a run finishes (sending true→false) and messages are queued,
   // dispatch the next one. Draining one-per-run keeps each follow-up its own turn (and
   // lets the user watch/steer between them) rather than concatenating them into one.
-  const prevSendingForQueue = useRef(false);
+  // Keyed by chat: `sending` is per conversation, so switching away from a running chat
+  // flips it true→false without any run settling — and must not fire that chat's queue
+  // into the one the user switched to.
+  const prevSendingForQueue = useRef<{ chatId: number | null; sending: boolean }>({ chatId: null, sending: false });
   useEffect(() => {
-    if (prevSendingForQueue.current && !conv.sending && messageQueue.length > 0) {
+    const prev = prevSendingForQueue.current;
+    if (prev.chatId === chatId && prev.sending && !conv.sending && messageQueue.length > 0) {
       const [next, ...rest] = messageQueue;
       setMessageQueue(rest);
       void dispatchSend(next.text, next.recipient);
     }
-    prevSendingForQueue.current = conv.sending;
-  }, [conv.sending, messageQueue, dispatchSend]);
+    prevSendingForQueue.current = { chatId, sending: conv.sending };
+  }, [chatId, conv.sending, messageQueue, dispatchSend]);
 
   const submit = useCallback(() => {
     const text = input.trim();

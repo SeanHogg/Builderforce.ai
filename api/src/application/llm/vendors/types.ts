@@ -422,6 +422,14 @@ export interface VendorModule {
    * a VALID connected account as broken and mailed its owners about it.
    */
   requiresLocalEgress?: boolean;
+  /**
+   * The model ids THIS credential can call, read live from the vendor's OpenAI-style
+   * `GET /models`. Optional: only a vendor that declares it is asked (see
+   * `providerModelCatalog`), because a provider without the route answers 404 and its
+   * static catalog is then the only honest list. Throws on failure — the caller decides
+   * what an unreadable list means.
+   */
+  listModels?(apiKey: string): Promise<string[]>;
 }
 
 export type ResponseParser = (raw: unknown) => {

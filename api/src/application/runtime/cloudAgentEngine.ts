@@ -61,6 +61,7 @@ import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { byoRoutingOptions } from '../llm/tenantProxy';
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
 import { TenantPlan } from '../../domain/shared/types';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
@@ -427,8 +428,9 @@ async function imageRunTurn(
     byoVendorPriority: creds.vendorPriority,
     byoAlertedVendors: creds.alertedVendors ?? [],
     isSuperadmin: ctx.isSuperadmin,
-    registeredOpenRouterModels: creds.registeredOpenRouterModels,
+    registeredModels: creds.registeredModels,
     preferredRegisteredModel: creds.preferredOpenRouterModel,
+    byoSelectedModels: creds.byoSelectedModels,
     // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
     premiumEntitled: ctx.premiumEntitled,
   });
@@ -438,11 +440,7 @@ async function imageRunTurn(
     ...(openaiCodexAuth ? { openaiCodexAuth } : {}),
     ...(xaiOAuthToken ? { xaiOAuthToken } : {}),
     ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}),
-    ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
-    ...(creds.alertedVendors?.length ? { byoAlertedVendors: creds.alertedVendors } : {}),
-    ...(creds.providerPriorities?.length ? { byoProviderPriorities: creds.providerPriorities } : {}),
-    ...(creds.openRouterConnections?.length ? { openRouterConnections: creds.openRouterConnections } : {}),
-    ...(creds.openRouterModelKeys && Object.keys(creds.openRouterModelKeys).length ? { openRouterModelKeys: creds.openRouterModelKeys } : {}),
+    ...byoRoutingOptions(creds),
     ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
   }).complete({
     messages: args.messages as unknown as ChatMessage[], tools: args.tools, tool_choice: 'auto',
@@ -1125,7 +1123,7 @@ async function runCloudToolLoop(
   // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
   // exhausted free run escalates to the paid coding backstop instead of degrading
   // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(loopCreds.vendorPriority.length ? { byoVendorPriority: loopCreds.vendorPriority } : {}), ...(loopCreds.alertedVendors?.length ? { byoAlertedVendors: loopCreds.alertedVendors } : {}), ...(loopCreds.providerPriorities?.length ? { byoProviderPriorities: loopCreds.providerPriorities } : {}), ...(loopCreds.openRouterConnections?.length ? { openRouterConnections: loopCreds.openRouterConnections } : {}), ...(loopCreds.openRouterModelKeys && Object.keys(loopCreds.openRouterModelKeys).length ? { openRouterModelKeys: loopCreds.openRouterModelKeys } : {}), ...(loopCreds.configuredProviders.length ? { byoRequired: true } : {}) });
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...byoRoutingOptions(loopCreds),...(loopCreds.configuredProviders.length ? { byoRequired: true } : {}) });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would
@@ -1169,8 +1167,9 @@ async function runCloudToolLoop(
         byoVendorPriority: loopCreds.vendorPriority,
         byoAlertedVendors: loopCreds.alertedVendors ?? [],
         isSuperadmin: routing.isSuperadmin,
-        registeredOpenRouterModels: loopCreds.registeredOpenRouterModels,
+        registeredModels: loopCreds.registeredModels,
         preferredRegisteredModel: loopCreds.preferredOpenRouterModel,
+        byoSelectedModels: loopCreds.byoSelectedModels,
         // A PREMIUM pin is honoured only with a paid plan + a validated card; otherwise
         // it's ignored and the run uses the plan's coding default.
         premiumEntitled: routing.premiumEntitled,

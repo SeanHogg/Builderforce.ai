@@ -6,6 +6,7 @@ import type {
   EvermindRunHooks,
   MemoryFirstAnswer,
   BrainMessage,
+  PersistTraceEventInput,
 } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
@@ -879,6 +880,26 @@ export async function postBrainMessages(
     return { messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
   } catch {
     /* best-effort persistence — never blocks the chat turn */
+    return undefined;
+  }
+}
+
+/**
+ * Append a settled run's trace events (POST /api/brain/chats/:id/trace), so its tool/LLM
+ * turns rehydrate after a reload. Best-effort: undefined on any failure, never a throw.
+ */
+export async function postBrainTrace(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  events: PersistTraceEventInput[],
+): Promise<{ appended: number } | undefined> {
+  if (events.length === 0) return undefined;
+  try {
+    return await authed<{ appended: number }>(secrets, `/api/brain/chats/${chatId}/trace`, {
+      method: "POST",
+      body: JSON.stringify({ events }),
+    });
+  } catch {
     return undefined;
   }
 }

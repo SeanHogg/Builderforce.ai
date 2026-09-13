@@ -42,6 +42,38 @@ export interface PersistedStep {
   ttftMs?: number;
 }
 
+/** A live trace event in the shape `POST /api/brain/chats/:id/trace` persists. */
+export interface PersistTraceEventInput {
+  kind: string;
+  label?: string;
+  args?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  durationMs?: number;
+  ttftMs?: number;
+  /** ISO instant the event happened. A run posts its whole trace in ONE insert when it
+   *  settles, so without this every row of the run comes back at the same time. */
+  ts?: string;
+}
+
+/**
+ * Live trace event → the persisted-row input (kind = the event category). The ONE
+ * mapping every writer uses — the web panel and the editor's run host — so the rows the
+ * timeline rehydrates cannot drift by which surface happened to write them.
+ */
+export function traceEventToPersistInput(ev: BrainTraceEvent): PersistTraceEventInput {
+  return {
+    kind: ev.category,
+    label: ev.label,
+    args: ev.args,
+    result: ev.result,
+    isError: ev.isError,
+    durationMs: ev.durationMs,
+    ttftMs: ev.ttftMs,
+    ts: ev.ts,
+  };
+}
+
 /**
  * Identity of a step across the live trace and its durable copy: same category +
  * label + client timestamp. Lets a step present in BOTH be handled once, while a

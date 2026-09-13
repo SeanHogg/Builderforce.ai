@@ -314,7 +314,12 @@ function isTransientProbeStatus(status: number): boolean {
  */
 export function probeModelFor(provider: LlmProvider, creds: TenantLlmCredentials): string | null {
   const authType = resolvedAuthTypeFor(provider, creds);
-  return byoAutoSeedModels(new Set([byoVendorIdFor(provider, authType)]), { agentic: false })[0]
+  // The tenant's own first choice when they selected models — a green probe on a flagship
+  // they never route to would prove nothing about the model their agents actually run.
+  return byoAutoSeedModels(new Set([byoVendorIdFor(provider, authType)]), {
+    agentic: false,
+    ...(creds.byoSelectedModels ? { selectedModels: creds.byoSelectedModels } : {}),
+  })[0]
     ?? byoModelsFor([{ provider, authType, priority: null }])[0]?.id
     ?? null;
 }

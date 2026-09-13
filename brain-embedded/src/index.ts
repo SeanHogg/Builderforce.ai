@@ -243,8 +243,8 @@ export {
   DEFAULT_CHAT_ACTIVITY_LABELS,
 } from './chatActivity';
 export type { ChatActivity, RunMilestoneActivity, AgentDispatchActivity, ChatActivityLabels, RunMilestonePhase } from './chatActivity';
-export { stepSig, parseStepMessage, traceWithPersistedSteps, mergeRecoveredTrace } from './persistedSteps';
-export type { PersistedStep } from './persistedSteps';
+export { stepSig, parseStepMessage, traceWithPersistedSteps, mergeRecoveredTrace, traceEventToPersistInput } from './persistedSteps';
+export type { PersistedStep, PersistTraceEventInput } from './persistedSteps';
 
 // Deployed API version (session-cached) — the "which build produced this capture?"
 // half of the diagnostics version stamp. Each surface supplies its own /health read.

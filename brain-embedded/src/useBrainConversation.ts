@@ -276,7 +276,27 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   // chat id — e.g. after another chat is merged INTO this one server-side.
   const [reloadNonce, setReloadNonce] = useState(0);
   const reloadMessages = useCallback(() => setReloadNonce((n) => n + 1), []);
-  const [localSending, setLocalSending] = useState(false);
+  // Which chats THIS hook instance has a send in flight for: persisting the user turn,
+  // then holding until the run settles (a driver-owned run's `running` only lands with
+  // its first sync, so the snapshot alone would leave a gap). Keyed by chat because one
+  // instance serves a panel that WALKS between chats — a single boolean made a send in
+  // chat A mark every chat busy, so "New chat" showed A's Stop button, queued its
+  // composer behind A, and could not run in parallel. `null` is a draft chat whose
+  // server row `ensureChatId` is still creating.
+  const sendingRef = useRef<ReadonlySet<number | null>>(new Set());
+  const [sendingChats, setSendingChats] = useState<ReadonlySet<number | null>>(sendingRef.current);
+  const markSending = useCallback((key: number | null, on: boolean) => {
+    const next = new Set(sendingRef.current);
+    if (on) next.add(key);
+    else next.delete(key);
+    sendingRef.current = next;
+    setSendingChats(next);
+  }, []);
+  const localSending = sendingChats.has(chatId);
+  // The chat on screen NOW. A send outlives a switch, and must not write its turn (or
+  // its failure) into the conversation the user moved to.
+  const chatIdRef = useRef(chatId);
+  chatIdRef.current = chatId;
   const [localError, setLocalError] = useState('');
   const [ratings, setRatings] = useState<Record<number, 1 | -1>>({});
   const [pendingAttachments, setPendingAttachments] = useState<ChatInputAttachment[]>([]);
@@ -410,27 +430,39 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean> => {
       const trimmed = text.trim();
-      if (!trimmed || localSending || isRunning(chatId)) return false;
+      // Busy only for THIS chat: a run in flight elsewhere never blocks this one.
+      if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
       // A message addressed to a participant (an invited agent/human) is a chat
       // turn for THEM, not a directive for the BRAIN — persist it, but don't run
       // the agent loop. `null`/omitted means the BRAIN (existing behavior).
       const addressedTo = opts?.addressedTo ?? null;
 
+      // Claimed before a draft's row exists, so a double-submit cannot mint two chats.
+      const origin = chatId;
+      markSending(origin, true);
       let id = chatId;
       if (id == null) {
-        id = (await ensureChatId?.()) ?? null;
+        try {
+          id = (await ensureChatId?.()) ?? null;
+        } catch {
+          id = null;
+        }
         if (id == null) {
+          markSending(origin, false);
           setLocalError('Could not start a chat.');
           return false;
         }
+        markSending(id, true);
+        markSending(origin, false);
       }
+      const runChatId = id;
+      const stillOpen = () => chatIdRef.current === runChatId || chatIdRef.current === origin;
       // Claim the auto-reply guard for this chat: a user-driven send must not be
       // re-answered by the trailing-user-message auto-reply effect.
       autoRepliedChatIdRef.current = id;
 
       const attachments = [...pendingAttachments];
       setPendingAttachments([]);
-      setLocalSending(true);
       setLocalError('');
 
       // Persisted/display content stays text-only (the chat tables store a
@@ -461,7 +493,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
-        setMessages((prev) => [...prev, userMsg]);
+        if (stillOpen()) setMessages((prev) => [...prev, userMsg]);
         onActivity?.(id);
         // First user turn of this chat → let the host auto-name it from the topic
         // (so it stops reading "New chat"). Uses the raw typed text, not the
@@ -478,10 +510,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           if (addressedTo.kind === 'agent' && persistence.requestAgentReply) {
             try {
               const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
-              setMessages((prev) => [...prev, reply]);
+              if (stillOpen()) setMessages((prev) => [...prev, reply]);
               onActivity?.(id);
             } catch (e) {
-              setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
+              if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
             }
           }
           return true;
@@ -492,14 +524,16 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // Persisting the user turn failed (commonly an expired token) — the turn
         // was NOT saved. Restore the attachments too so the whole message can be
         // resent, and signal failure so the composer keeps the typed text.
-        setPendingAttachments(attachments);
-        setLocalError(e instanceof Error ? e.message : 'Send failed');
+        if (stillOpen()) {
+          setPendingAttachments(attachments);
+          setLocalError(e instanceof Error ? e.message : 'Send failed');
+        }
         return false;
       } finally {
-        setLocalSending(false);
+        markSending(runChatId, false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn],
+    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message

@@ -497,3 +497,35 @@ describe("governance gates in a host-owned run", () => {
     expect(isRunning(chatId)).toBe(false);
   });
 });
+
+describe("the host persists each run's trace", () => {
+  it("posts only the settled run's OWN steps — a later run never re-posts an earlier one", async () => {
+    const chatId = freshChatId();
+    const persistTrace = vi.fn(async (_chatId: number, _events: unknown[]) => undefined);
+    const host = createBrainRunHost(ports({ script: [{ text: "first" }, { text: "second" }], persistTrace }));
+
+    await start(chatId, host);
+    await vi.waitFor(() => expect(persistTrace).toHaveBeenCalledTimes(1));
+    await start(chatId, host, { userTurn: "and again?" });
+    await vi.waitFor(() => expect(persistTrace).toHaveBeenCalledTimes(2));
+
+    const [first, second] = persistTrace.mock.calls.map((c) => c[1]);
+    expect(persistTrace.mock.calls.every((c) => c[0] === chatId)).toBe(true);
+    expect(first.length).toBeGreaterThan(0);
+    expect(second.length).toBeGreaterThan(0);
+    // Together they are the session trace exactly once: no overlap, nothing dropped.
+    expect(first.length + second.length).toBe(getRunTrace(chatId).length);
+  });
+
+  it("runs two chats at once, each persisting its own trace", async () => {
+    const [a, b] = [freshChatId(), freshChatId()];
+    const persistTrace = vi.fn(async (_chatId: number, _events: unknown[]) => undefined);
+    const host = createBrainRunHost(ports({ script: [{ text: "done" }], persistTrace }));
+
+    await Promise.all([start(a, host), start(b, host)]);
+    await vi.waitFor(() => expect(persistTrace).toHaveBeenCalledTimes(2));
+    expect(persistTrace.mock.calls.map((c) => c[0]).sort()).toEqual([a, b].sort());
+    expect(getRunSnapshot(a).appended.map((m) => m.content)).toEqual(["done"]);
+    expect(getRunSnapshot(b).appended.map((m) => m.content)).toEqual(["done"]);
+  });
+});

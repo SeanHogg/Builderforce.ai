@@ -265,6 +265,7 @@ __export(src_exports, {
   toolExposureInTrace: () => toolExposureInTrace,
   toolNamesMentionedIn: () => toolNamesMentionedIn,
   toolSpecsFor: () => toolSpecsFor,
+  traceEventToPersistInput: () => traceEventToPersistInput,
   traceWithPersistedSteps: () => traceWithPersistedSteps,
   trimToolResult: () => trimToolResult,
   turnInterruption: () => turnInterruption,
@@ -2162,6 +2163,18 @@ function chooseStallFailover(input) {
 }
 
 // src/persistedSteps.ts
+function traceEventToPersistInput(ev) {
+  return {
+    kind: ev.category,
+    label: ev.label,
+    args: ev.args,
+    result: ev.result,
+    isError: ev.isError,
+    durationMs: ev.durationMs,
+    ttftMs: ev.ttftMs,
+    ts: ev.ts
+  };
+}
 function stepSig(category, label, tsIso) {
   return `${category}|${label}|${tsIso ?? ""}`;
 }
@@ -5778,7 +5791,18 @@ function useBrainConversation(options) {
   const [loadingMessages, setLoadingMessages] = (0, import_react7.useState)(false);
   const [reloadNonce, setReloadNonce] = (0, import_react7.useState)(0);
   const reloadMessages = (0, import_react7.useCallback)(() => setReloadNonce((n) => n + 1), []);
-  const [localSending, setLocalSending] = (0, import_react7.useState)(false);
+  const sendingRef = (0, import_react7.useRef)(/* @__PURE__ */ new Set());
+  const [sendingChats, setSendingChats] = (0, import_react7.useState)(sendingRef.current);
+  const markSending = (0, import_react7.useCallback)((key, on) => {
+    const next = new Set(sendingRef.current);
+    if (on) next.add(key);
+    else next.delete(key);
+    sendingRef.current = next;
+    setSendingChats(next);
+  }, []);
+  const localSending = sendingChats.has(chatId);
+  const chatIdRef = (0, import_react7.useRef)(chatId);
+  chatIdRef.current = chatId;
   const [localError, setLocalError] = (0, import_react7.useState)("");
   const [ratings, setRatings] = (0, import_react7.useState)({});
   const [pendingAttachments, setPendingAttachments] = (0, import_react7.useState)([]);
@@ -5878,20 +5902,30 @@ ${extraSystem}` : resolvedSystemPrompt;
   const send = (0, import_react7.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
-      if (!trimmed || localSending || isRunning(chatId)) return false;
+      if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
       const addressedTo = opts?.addressedTo ?? null;
+      const origin = chatId;
+      markSending(origin, true);
       let id = chatId;
       if (id == null) {
-        id = await ensureChatId?.() ?? null;
+        try {
+          id = await ensureChatId?.() ?? null;
+        } catch {
+          id = null;
+        }
         if (id == null) {
+          markSending(origin, false);
           setLocalError("Could not start a chat.");
           return false;
         }
+        markSending(id, true);
+        markSending(origin, false);
       }
+      const runChatId = id;
+      const stillOpen = () => chatIdRef.current === runChatId || chatIdRef.current === origin;
       autoRepliedChatIdRef.current = id;
       const attachments = [...pendingAttachments];
       setPendingAttachments([]);
-      setLocalSending(true);
       setLocalError("");
       let displayContent = trimmed;
       if (attachments.length > 0) {
@@ -5913,17 +5947,17 @@ ${refs}`;
       }
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
-        setMessages((prev) => [...prev, userMsg]);
+        if (stillOpen()) setMessages((prev) => [...prev, userMsg]);
         onActivity?.(id);
         if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         if (addressedTo) {
           if (addressedTo.kind === "agent" && persistence.requestAgentReply) {
             try {
               const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
-              setMessages((prev) => [...prev, reply]);
+              if (stillOpen()) setMessages((prev) => [...prev, reply]);
               onActivity?.(id);
             } catch (e) {
-              setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
+              if (stillOpen()) setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
             }
           }
           return true;
@@ -5931,14 +5965,16 @@ ${refs}`;
         await startRun(id, buildRequest(seedFrom(messages), modelContent));
         return true;
       } catch (e) {
-        setPendingAttachments(attachments);
-        setLocalError(e instanceof Error ? e.message : "Send failed");
+        if (stillOpen()) {
+          setPendingAttachments(attachments);
+          setLocalError(e instanceof Error ? e.message : "Send failed");
+        }
         return false;
       } finally {
-        setLocalSending(false);
+        markSending(runChatId, false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
+    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
   );
   (0, import_react7.useEffect)(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
@@ -7425,6 +7461,7 @@ function PromptInput({
   toolExposureInTrace,
   toolNamesMentionedIn,
   toolSpecsFor,
+  traceEventToPersistInput,
   traceWithPersistedSteps,
   trimToolResult,
   turnInterruption,

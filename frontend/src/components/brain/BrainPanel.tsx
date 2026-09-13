@@ -34,6 +34,7 @@ import {
   useToolConfirmationGate,
   type BrainTraceEvent,
   mergeRecoveredTrace,
+  traceEventToPersistInput,
   brainPersonaAgents,
   personaAgentOf,
   personaModalityOf,
@@ -126,22 +127,6 @@ const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
 function safeJsonParse(s: string | null): unknown {
   if (s == null) return undefined;
   try { return JSON.parse(s); } catch { return s; }
-}
-
-/** Live run-trace event → the persistence input shape (kind = the event category). */
-function traceEventToInput(ev: BrainTraceEvent) {
-  return {
-    kind: ev.category,
-    label: ev.label,
-    args: ev.args,
-    result: ev.result,
-    isError: ev.isError,
-    durationMs: ev.durationMs,
-    ttftMs: ev.ttftMs,
-    // The instant the event happened. The whole run is posted in ONE insert when it
-    // settles, so `created_at` is identical across it and cannot order the timeline.
-    ts: ev.ts,
-  };
 }
 
 /** A persisted trace row → a timeline BrainTraceEvent, so tool/LLM turns survive reload. */
@@ -742,7 +727,7 @@ export function BrainPanel({
       const full = getRunTrace(cid);
       const already = persistedLenRef.current.get(cid) ?? 0;
       if (full.length <= already) return;
-      const events = full.slice(already).map(traceEventToInput);
+      const events = full.slice(already).map(traceEventToPersistInput);
       persistedLenRef.current.set(cid, full.length);
       void brain.appendChatTrace(cid, events).catch(() => { /* best-effort */ });
     };

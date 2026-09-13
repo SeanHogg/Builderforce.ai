@@ -1,3 +1,70 @@
+## ✅ RESOLVED 2026-09-12 — A connected Qwen account runs the models you pick, from Qwen Cloud's full catalog
+
+A connected Qwen key contributed ONE hardcoded model to routing and five static ids to the picker,
+while the key itself reaches Qwen Cloud's whole marketplace — Qwen, DeepSeek, GLM and Kimi models.
+The Qwen drawer in Settings → Bring your own models now lists that catalog and the tenant picks an
+ordered set; routing leads with the first and fails over down the list on every surface.
+
+- **Discovery** (`application/llm/providerModelCatalog.ts`): the public index behind
+  qwencloud.com/models (`alioth-intl.alicdn.com/model-mapping`, the same map its marketplace bundle
+  reads — 270 ids) merged with the tenant key's own `GET /compatible-mode/v1/models`, filtered to
+  chat-completions models (video, speech, image, omni/realtime, translation, OCR, embedding and
+  rerank ids dropped). Read-through cached — public list 6 h shared, key list 1 h per tenant and
+  invalidated on key set/rotate/remove — with the static catalog as the fallback, so the picker is
+  never empty. Sources are data (`PROVIDER_MODEL_SOURCES`); another provider joins with an entry.
+- **Vendor** (`vendors/openaiCompatible.ts`): `VendorModule.listModels` behind a `listsModels` spec
+  flag (qwen). The regional credential memo now remembers the key's PLATFORM side, not the URL that
+  won — one key resolves chat, stream and `/models` on the same host pair, and a remembered URL would
+  have sent the next chat call to the listing path.
+- **Storage**: migration `1165_tenant_llm_provider_models.sql` — a child of the credential row on
+  (tenant_id, provider) with ON DELETE CASCADE, so a selection survives rotation and leaves with a
+  disconnect; `providerModelSelection.ts` replaces a selection in one statement.
+- **Routing**: `byoAutoSeedModels({ selectedModels })` swaps a vendor's flagship for its ordered
+  selection; the gateway seed groups per vendor; `TenantLlmCredentials.byoSelectedModels` and
+  `registeredModels` (renamed from `registeredOpenRouterModels` — it now holds both kinds);
+  `byoRoutingOptions(creds)` is the ONE derivation the tenant proxy, both cloud-agent loops and the
+  gateway completion route share (each had threaded the same fields by hand). The `/v1/models`
+  picker and the connection probe use the selection too.
+- **Defect fixed in the same pass:** `pickCloudModel` dropped EVERY `direct/<vendor>/<id>` cloud pin
+  on a connected provider — `isKnownModel` reads the bare catalog index, which never holds a
+  prefixed id — so a deliberately pinned BYO model silently ran the soft seed. Now `isDispatchableSeed`.
+- **Guard:** every `BYO_FRONTIER_CODERS` entry is asserted dispatchable (`byoModelSelection.test.ts`),
+  replacing a hand-picked three — the drift that let `qwen3-coder-plus` (not served on a Token Plan,
+  not catalogued) silently remove Qwen from auto-select. The flagship itself was corrected earlier the
+  same day.
+- **UI:** `components/llm/ProviderModelPicker.tsx` (self-contained; renders only for a connected
+  provider with a catalog), `ReorderableList` and the drawer styles extracted to `components/llm/`,
+  `providerKeys.models.*` in all five catalogs. Routes: `GET`/`PUT /llm/provider-keys/:provider/models`.
+- Closes the Gap Register entry "A connected Qwen Token Plan never leads auto-select, and the models
+  it carries are invisible". The other providers' model choice stays open (credential-blocked).
+
+## ✅ RESOLVED 2026-09-12 — VS Code chats run in parallel: a new chat is no longer blocked by a running one
+
+With one chat running, clicking **New chat** in the BuilderForce panel showed the other chat's
+"Starting…" timeline and Stop button, and queued anything typed "until the run finishes". So two
+chats could not run at once, even though the extension host already runs every chat independently.
+The defect was found and fixed in the same pass.
+
+- **Cause:** `useBrainConversation` (brain-embedded) held ONE `localSending` boolean from the send
+  until the run settled, which with the host run driver is the whole run. One hook instance serves a
+  panel that walks between chats, so chat A's send marked every chat busy. `send` refused, the
+  composer queued, and the new chat rendered A's in-flight state.
+- **Fix:** the in-flight flag is now a per-chat set (`null` is a draft chat whose row is still
+  being created). `sending` is true only for the chat that is sending, and a send that outlives a chat
+  switch no longer writes its turn or error into the chat the user moved to. The panel's queue drain
+  in `VsCodeChatSurface.tsx` is keyed by chat, so a switch never fires one chat's queue into another.
+  The web Brain uses the same hook and gets the same fix.
+- **Related, fixed together:** the run trace was persisted by the panel, only for the chat it was
+  showing. A run that finished in the background lost its tool steps on reload, and a switch could
+  re-post the visible chat's whole session trace. The host now persists each run's own events when it
+  settles (`BrainRunHostPorts.persistTrace` → `bfApi.postBrainTrace`). The event→row mapping is one
+  shared `traceEventToPersistInput` (brain-embedded), used by the web panel and the host. A
+  `run.start` for a chat that is already running now returns before building tools, instead of
+  deleting the live run's Auto flag when it exits.
+- **Guard:** `useBrainConversation.test.tsx` covers a second chat that stays sendable while the
+  first chat's send is in flight. `brainRunHost.test.ts` covers the host persisting only the
+  settled run's events.
+
 ## ✅ RESOLVED 2026-09-12 — A Qwen Token Plan key now works: the vendor falls back to the Token Plan host
 
 A tenant who connected an Alibaba Qwen **Token Plan** key (a subscription, not pay-as-you-go) got
@@ -248,6 +315,25 @@ the agents ("**CMO:** …"); Call and Standup were greyed out; there was no way 
   the copy glyph in the dock, the Brain Object and the chat surface.
 - Tests: `agentMentions.test.ts`, `roomSpeech.test.ts`; the creation-canvas, session-action, surface and agent-chat
   suites pass; whole-project `tsgo --noEmit` clean. Not visually verified in a browser (the room needs WebGL).
+
+## ✅ RESOLVED 2026-09-12 — browser control/bridge servers answered every request with 500 on Node 24.20
+
+The entry below misdiagnosed this: after its port-retry fix shipped, the `Package @seanhogg/builderforce-agents`
+release job still failed the same 18 tests (5 files), deterministically, on every run. The CI log showed
+`expected 500 to be 401/404/400` and an HTML `<!DOCTYPE` body — Express's default error page, served by *our*
+server, even for `GET /` on the bridge before auth ran.
+
+- **Root cause:** CI's `setup-node` `node-version: 24` resolved to **v24.20.0**, which ships a getter-only
+  `http.IncomingMessage.prototype.signal`. `installBrowserCommonMiddleware` (`src/browser/server-middleware.ts`)
+  did `req.signal = ctrl.signal`; in strict-mode ESM that throws `Cannot set property signal of
+  #<IncomingMessage> which has only a getter`, so the first middleware failed every request on both the
+  control server and the bridge server. Local runs were on Node 22.12 (no such property), so everything passed.
+  This broke the real on-prem browser control server on Node 24.20+, not just the tests.
+- **Fix:** the middleware now installs the signal with `Object.defineProperty` as an own property, which shadows
+  the prototype getter on every Node version and keeps the existing abort semantics (`aborted` event, or
+  `close` before the response finished). New `src/browser/server-middleware.test.ts` reproduces the getter-only
+  prototype, so it fails on any Node version if the assignment regresses.
+- The port-retry and `undici` fetch changes from the entry below are harmless and stay.
 
 ## ✅ RESOLVED 2026-09-12 — `agent-runtime`'s browser/server tests flaked under full-suite CI load
 

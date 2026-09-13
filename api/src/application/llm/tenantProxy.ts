@@ -30,6 +30,7 @@ import {
   type ModelRefs,
   type LlmProxyService,
   type ChatCompletionRequest,
+  type LlmProxyOptions,
   type ProxyResult,
 } from './LlmProxyService';
 import {
@@ -42,6 +43,33 @@ import { recordProxyUsage } from './usageLedger';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+
+/** The routing-ORDER options a tenant's credentials contribute to any proxy. */
+export type ByoRoutingOptions = Pick<
+  LlmProxyOptions,
+  'byoVendorPriority' | 'byoAlertedVendors' | 'byoProviderPriorities' | 'openRouterConnections' | 'openRouterModelKeys' | 'byoSelectedModels'
+>;
+
+/**
+ * The routing-ORDER half of a proxy's options, read off a tenant's credential set: the
+ * connected accounts' precedence, which of them are known-broken right now, the OpenRouter
+ * connections, and each provider's selected models.
+ *
+ * ONE derivation for every surface that builds a tenant proxy — this builder, the cloud
+ * agent (both loops) and the gateway completion route. Each used to thread these fields by
+ * hand, and a field added at one site and missed at the next is exactly how the chat and a
+ * cloud run end up seeding different models for the same tenant.
+ */
+export function byoRoutingOptions(creds: TenantLlmCredentials): ByoRoutingOptions {
+  return {
+    ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
+    ...(creds.alertedVendors?.length ? { byoAlertedVendors: creds.alertedVendors } : {}),
+    ...(creds.providerPriorities?.length ? { byoProviderPriorities: creds.providerPriorities } : {}),
+    ...(creds.openRouterConnections?.length ? { openRouterConnections: creds.openRouterConnections } : {}),
+    ...(creds.openRouterModelKeys && Object.keys(creds.openRouterModelKeys).length ? { openRouterModelKeys: creds.openRouterModelKeys } : {}),
+    ...(creds.byoSelectedModels && Object.keys(creds.byoSelectedModels).length ? { byoSelectedModels: creds.byoSelectedModels } : {}),
+  };
+}
 
 export interface TenantProxyOptions {
   /** Restrict failover to the curated coding pool + paid coding backstop (agentic
@@ -116,7 +144,7 @@ export async function tenantProxyForPlan(
       providerPriorities: [],
       openRouterConnections: [],
       openRouterModelKeys: {},
-      registeredOpenRouterModels: [],
+      registeredModels: [],
     })),
   ]);
 
@@ -124,7 +152,7 @@ export async function tenantProxyForPlan(
   // api-key vendor) — the same set the proxy's BYO boundary enforces, so a gated model
   // can't name a vendor the proxy would then filter out.
   const byoVendors = byoVendorIdsFromCredentials(creds);
-  const registeredModels = creds.registeredOpenRouterModels ?? [];
+  const registeredModels = creds.registeredModels ?? [];
 
   const proxy = llmProxyForPlan(env, plan.effectivePlan, plan.premiumOverride, {
     ...(opts?.codingOnly ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
@@ -133,11 +161,7 @@ export async function tenantProxyForPlan(
     ...(creds.openaiCodexAuth ? { openaiCodexAuth: creds.openaiCodexAuth } : {}),
     ...(creds.xaiOAuthToken ? { xaiOAuthToken: creds.xaiOAuthToken } : {}),
     ...(hasVendorKeys(creds.vendorKeys) ? { tenantVendorKeys: creds.vendorKeys } : {}),
-    ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
-    ...(creds.alertedVendors?.length ? { byoAlertedVendors: creds.alertedVendors } : {}),
-    ...(creds.providerPriorities?.length ? { byoProviderPriorities: creds.providerPriorities } : {}),
-    ...(creds.openRouterConnections?.length ? { openRouterConnections: creds.openRouterConnections } : {}),
-    ...(creds.openRouterModelKeys && Object.keys(creds.openRouterModelKeys).length ? { openRouterModelKeys: creds.openRouterModelKeys } : {}),
+    ...byoRoutingOptions(creds),
     ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
     // Carry configured-vs-resolved state into the proxy so a fail-closed BYO 503 can
     // NAME the providers (and why each was unusable) rather than claiming none exists —

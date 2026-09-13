@@ -56,6 +56,9 @@ import {
   type ProviderAuthType,
 } from './llmProviderCatalog';
 import { loadAlertedByoVendors } from './providerAuthAlerts';
+import { listProviderModelSelections, type ProviderModelSelections } from './providerModelSelection';
+import { invalidateProviderModelCaches } from './providerModelCacheKeys';
+import { byoSelectedModelRefs } from './byoModelRouting';
 
 export {
   SUPPORTED_PROVIDERS,
@@ -207,6 +210,9 @@ export async function setTenantProviderKey(
       // a new one. See migration 0953.
       set: { id: sql`gen_random_uuid()`, keyEnc, authType: 'api_key', updatedAt: sql`NOW()` },
     });
+  // A new key can serve a different model set (a Token Plan is a subset of pay-as-you-go),
+  // so the cached "what this account can call" list must follow it.
+  await invalidateProviderModelCaches(env, tenantId, provider);
 }
 
 /** Store (or replace) a tenant's OAuth subscription tokens, encrypted at rest. */
@@ -235,6 +241,7 @@ export async function setTenantProviderOAuth(
       // account replaces the credential, so it is a new instance (0953).
       set: { id: sql`gen_random_uuid()`, keyEnc, authType: 'oauth', updatedAt: sql`NOW()` },
     });
+  await invalidateProviderModelCaches(env, tenantId, provider);
 }
 
 export interface OpenAICodexResolution {
@@ -565,10 +572,16 @@ export interface TenantLlmCredentials {
    *  two different OpenRouter accounts, and a single request-wide key would bill the wrong
    *  one. Empty when no connection is keyed (then everything rides the operator key). */
   openRouterModelKeys?: Record<string, string>;
-  /** All registered OpenRouter refs, used to validate explicit cloud pins. */
-  registeredOpenRouterModels?: string[];
+  /** Every tenant-REGISTERED model ref — the OpenRouter connections' refs plus each
+   *  connected provider's selected models (1165). Each is a deliberate pick on the
+   *  tenant's own list, so it is a valid explicit pin even outside the curated catalog. */
+  registeredModels?: string[];
   /** Registered model that currently leads the shared provider/connection rank. */
   preferredOpenRouterModel?: string;
+  /** Each connected vendor's SELECTED models as tenant-keyed refs, keyed by dispatch
+   *  vendor (see `byoSelectedModelRefs`). A vendor present here seeds with its selection
+   *  instead of its default flagship; absent/empty changes nothing. */
+  byoSelectedModels?: Record<string, string[]>;
 }
 
 /**
@@ -583,7 +596,7 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, openaiRes, xaiRes, kimiRes, vendorKeys, configured, openRouterConnections] = await Promise.all([
+  const [anthropicRes, openaiRes, xaiRes, kimiRes, vendorKeys, configured, openRouterConnections, modelSelections] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
     resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
@@ -591,6 +604,9 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId),
     listOpenRouterConnections(env, tenantId).catch(() => [] as OpenRouterConnection[]),
+    // Cached, and advisory: an unreadable selection degrades to each provider's default
+    // flagship — the routing that existed before selections did — never to a failed call.
+    listProviderModelSelections(env, tenantId).catch(() => ({}) as ProviderModelSelections),
   ]);
   // A connected Kimi SUBSCRIPTION becomes the `kimi` vendor key. Kimi's OAuth access
   // token is a plain Bearer against the same endpoint an api key would have used, so
@@ -630,7 +646,14 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   // nothing is `undecryptable` (the only api-key failure mode `resolveTenantVendorKeys`
   // can hit). Computed against the resolved (usable) set so a working provider is skipped.
   const usable = new Set(providersFromCredentials(creds));
-  creds.registeredOpenRouterModels = connectionModelRefs(openRouterConnections);
+  // Each provider's SELECTED models (1165) as tenant-keyed refs by dispatch vendor. They join
+  // the OpenRouter refs as REGISTERED models: a deliberate pick on the tenant's own list is a
+  // valid explicit pin even when the curated catalog never listed it.
+  creds.byoSelectedModels = byoSelectedModelRefs(configured, modelSelections);
+  creds.registeredModels = [
+    ...connectionModelRefs(openRouterConnections),
+    ...Object.values(creds.byoSelectedModels).flat(),
+  ];
   // Which of the tenant's OWN vendors are known-broken right now. Resolved HERE, where
   // `tenantId` is already in scope and every consumer of `vendorPriority` picks it up
   // for free, rather than at each of the five seams that thread routing options — the
@@ -837,4 +860,6 @@ export async function deleteTenantProviderKey(env: Env, tenantId: number, provid
       eq(tenantLlmProviderKeys.tenantId, tenantId),
       eq(tenantLlmProviderKeys.provider, provider),
     ));
+  // The row's model selection went with it (ON DELETE CASCADE) — the cached copy must too.
+  await invalidateProviderModelCaches(env, tenantId, provider);
 }

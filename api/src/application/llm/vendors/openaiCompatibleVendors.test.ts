@@ -329,6 +329,55 @@ describe('Moonshot regional host resolution', () => {
 // whether the body was an edge block page — redacted, per the submission checklist
 // in docs/partnerships/kimi-code-hosted-integration-request.md.
 // ---------------------------------------------------------------------------
+describe('Qwen model listing (GET /models on the tenant key)', () => {
+  const PAYG_MODELS = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models';
+  const PLAN_MODELS = 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/models';
+  const PLAN_CHAT = 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions';
+  const json = { 'content-type': 'application/json' };
+
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  function stubFetch(respond: (url: string) => Response): string[] {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      urls.push(url);
+      return respond(url);
+    }));
+    return urls;
+  }
+  const rejected = () => new Response(JSON.stringify({ error: { message: 'Incorrect API key provided.' } }), { status: 401, headers: json });
+  const listing = () => new Response(JSON.stringify({ object: 'list', data: [{ id: 'qwen3.8-max' }, { id: 'deepseek-v4-flash' }, { id: '' }] }), { status: 200, headers: json });
+  const chatOk = () => new Response(JSON.stringify({
+    id: 'c1',
+    choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+  }), { status: 200, headers: json });
+
+  it('lists a Token Plan key from the plan host after the pay-as-you-go host rejects it', async () => {
+    const urls = stubFetch((url) => (url.startsWith('https://dashscope-intl') ? rejected() : listing()));
+    await expect(getModule('qwen').listModels!('sk-sp-list-only')).resolves.toEqual(['qwen3.8-max', 'deepseek-v4-flash']);
+    expect(urls).toEqual([PAYG_MODELS, PLAN_MODELS]);
+  });
+
+  it('remembers the key\'s PLATFORM, so the next chat call goes straight to that host\'s chat path', async () => {
+    // The memo used to hold whichever URL won. A listing that learned "this key is a Token
+    // Plan key" would then have sent the next CHAT call to the /models path.
+    const urls = stubFetch((url) => (url.startsWith('https://dashscope-intl')
+      ? rejected()
+      : url.endsWith('/models') ? listing() : chatOk()));
+    await getModule('qwen').listModels!('sk-sp-list-then-chat');
+    urls.length = 0;
+    await getModule('qwen').call({ apiKey: 'sk-sp-list-then-chat', model: 'qwen3.8-max', messages: [{ role: 'user', content: 'hi' }] });
+    expect(urls).toEqual([PLAN_CHAT]);
+  });
+
+  it('only a vendor that declares the route can list', () => {
+    expect(getModule('qwen').listModels).toBeTypeOf('function');
+    expect(getModule('deepseek').listModels).toBeUndefined();
+  });
+});
+
 describe('upstream diagnostic capture', () => {
   function stubResponse(status: number, body: string, headers: Record<string, string>) {
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async () =>

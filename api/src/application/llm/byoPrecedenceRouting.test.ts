@@ -70,7 +70,7 @@ describe('pickCloudModel — the cloud-run pin agrees with the gateway seed', ()
     // free-plan model-choice gate must not swallow it.
     const pick = pickCloudModel(REGISTERED[0], 'free', false, {
       byoVendors: new Set(),
-      registeredOpenRouterModels: REGISTERED,
+      registeredModels: REGISTERED,
     });
     expect(pick).toMatchObject({ model: REGISTERED[0], strict: true });
   });
@@ -78,7 +78,7 @@ describe('pickCloudModel — the cloud-run pin agrees with the gateway seed', ()
   it('leads with the precedence-leading connection over a non-BYO explicit model', () => {
     const pick = pickCloudModel('@cf/qwen/qwen3-30b-a3b-fp8', 'pro', false, {
       byoVendors: new Set(),
-      registeredOpenRouterModels: REGISTERED,
+      registeredModels: REGISTERED,
       preferredRegisteredModel: REGISTERED[0],
     });
     expect(pick).toMatchObject({ model: REGISTERED[0], strict: false });
@@ -90,7 +90,7 @@ describe('pickCloudModel — the cloud-run pin agrees with the gateway seed', ()
     const pick = pickCloudModel(undefined, 'pro', false, {
       byoVendors: new Set(['anthropic']),
       byoVendorPriority: ['anthropic'],
-      registeredOpenRouterModels: REGISTERED,
+      registeredModels: REGISTERED,
       preferredRegisteredModel: REGISTERED[0],
     });
     expect(pick.model).toBe(REGISTERED[0]);
