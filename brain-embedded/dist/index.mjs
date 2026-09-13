@@ -8,6 +8,70 @@ import {
 import { createContext, useContext, useMemo } from "react";
 
 // src/xmlToolCalls.ts
+var isSelfClosing = (dialect) => "closeAt" in dialect;
+function skipSpace(text, i) {
+  while (i < text.length && /\s/.test(text[i])) i += 1;
+  return i;
+}
+function objectEnd(text, i) {
+  let depth = 0;
+  let inString = false;
+  for (let j = i; j < text.length; j += 1) {
+    const c = text[j];
+    if (inString) {
+      if (c === "\\") j += 1;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) return j + 1;
+    }
+  }
+  return -1;
+}
+var PARTIAL_MAP_KEY = /^(?:"\d*"?\s*:?\s*)?$/;
+var MAP_KEY = /^"\d+"\s*:\s*/;
+var MAP_TERMINATOR = /^\}?\s*\??\s*\|?>?/;
+function callMapEnd(buf, final) {
+  const unfinished = (at) => final ? { at, length: buf.length - at } : null;
+  let i = skipSpace(buf, 0);
+  if (buf[i] === "{") i = skipSpace(buf, i + 1);
+  for (; ; ) {
+    const entryStart = i;
+    const rest2 = buf.slice(i);
+    const key = MAP_KEY.exec(rest2);
+    if (!key) return PARTIAL_MAP_KEY.test(rest2) ? unfinished(entryStart) : { at: i, length: 0 };
+    i += key[0].length;
+    if (i >= buf.length) return unfinished(entryStart);
+    if (buf[i] !== "{") return { at: entryStart, length: 0 };
+    const end = objectEnd(buf, i);
+    if (end < 0) return unfinished(entryStart);
+    i = skipSpace(buf, end);
+    if (i >= buf.length) return unfinished(end);
+    if (buf[i] !== ",") break;
+    i = skipSpace(buf, i + 1);
+  }
+  const rest = buf.slice(i);
+  const terminator = MAP_TERMINATOR.exec(rest)[0];
+  if (!final && terminator.length === rest.length && !terminator.endsWith(">")) return null;
+  return { at: i, length: terminator.length };
+}
+function parseCallMap(body, seq) {
+  const entries = body.trim().replace(/^\{/, "").replace(/,\s*$/, "");
+  let map;
+  try {
+    map = JSON.parse(`{${entries}}`);
+  } catch {
+    return [];
+  }
+  return Object.values(map).flatMap((raw, index) => {
+    const entry = raw;
+    if (!entry || typeof entry.name !== "string" || !entry.name) return [];
+    const args = entry.arguments ?? {};
+    return [{ id: `xmltc_${seq}_${index}`, name: entry.name, args: typeof args === "string" ? args : JSON.stringify(args) }];
+  });
+}
 var DIALECTS = [
   { prefix: "<tool_call>", open: /<tool_call>/, close: "</tool_call>", namedInOpenTag: false },
   { prefix: "<function_call>", open: /<function_call>/, close: "</function_call>", namedInOpenTag: false },
@@ -20,8 +84,18 @@ var DIALECTS = [
   // ran, the markup reached the transcript as "narration", and Grok, seeing its own
   // calls with no results, concluded the tools were not returning. The name is optional
   // in the pattern so a body carrying `{"name":…}` JSON is lifted too.
-  { prefix: "<xai:function_call", open: /<xai:function_call(?:\s+name\s*=\s*"([^"]*)")?\s*>/, close: "</xai:function_call>", namedInOpenTag: true }
+  { prefix: "<xai:function_call", open: /<xai:function_call(?:\s+name\s*=\s*"([^"]*)")?\s*>/, close: "</xai:function_call>", namedInOpenTag: true },
+  // Grok's numbered call map (chat #106, grok-4.6): `<|"0":{"name":…,"arguments":{…}}, "1":{…} ?>`,
+  // with or without the outer braces and never with a closing tag. Four calls written
+  // this way ran nothing, and the turn decayed into counting.
+  { prefix: "<|", open: /<\|\s*(?=\{?\s*"\d+"\s*:\s*\{)/, closeAt: callMapEnd, parseBody: parseCallMap }
 ];
+var CALL_MAP_OPEN_TAIL = /<\|\s*\{?\s*(?:"\d*"?\s*:?\s*)?$/;
+var CONTROL_TOKEN = /<+\|[a-z][a-z0-9_]{0,31}\|>/gi;
+var CONTROL_TOKEN_TAIL = /<+(?:\|[a-z0-9_]{0,32}\|?)?$/i;
+function stripControlTokens(text) {
+  return text.replace(CONTROL_TOKEN, "");
+}
 function partialTailPrefix(buf, tag) {
   const max = Math.min(buf.length, tag.length - 1);
   for (let L = max; L > 0; L--) {
@@ -33,10 +107,14 @@ function holdLength(buf) {
   let hold = 0;
   for (const d of DIALECTS) {
     hold = Math.max(hold, partialTailPrefix(buf, d.prefix));
-    if (d.namedInOpenTag) {
+    if (!isSelfClosing(d) && d.namedInOpenTag) {
       const idx = buf.lastIndexOf(d.prefix);
       if (idx >= 0 && !buf.slice(idx).includes(">")) hold = Math.max(hold, buf.length - idx);
     }
+  }
+  for (const tailPattern of [CALL_MAP_OPEN_TAIL, CONTROL_TOKEN_TAIL]) {
+    const tail = tailPattern.exec(buf);
+    if (tail) hold = Math.max(hold, tail[0].length);
   }
   return Math.min(hold, buf.length);
 }
@@ -49,6 +127,11 @@ function findOpen(buf) {
     best = { dialect, index: m.index, length: m[0].length, ...m[1] ? { name: m[1].trim() } : {} };
   }
   return best;
+}
+function callEnd(dialect, buf) {
+  if (isSelfClosing(dialect)) return dialect.closeAt(buf, false);
+  const at = buf.indexOf(dialect.close);
+  return at >= 0 ? { at, length: dialect.close.length } : null;
 }
 function coerceArg(raw) {
   const v = raw.trim();
@@ -134,8 +217,14 @@ var XmlToolCallFilter = class {
   /** Close the call currently being accumulated and record it. A dialect whose name
    *  is optional in the open tag falls back to reading the name from the body. */
   commit() {
-    const parsed = this.inside?.namedInOpenTag && this.insideName !== void 0 ? parseNamedBody(this.insideName, this.innerBuf, this.seq++) : parseInner(this.innerBuf, this.seq++);
-    if (parsed) this.calls.push(parsed);
+    const dialect = this.inside;
+    const seq = this.seq++;
+    if (dialect && isSelfClosing(dialect)) {
+      this.calls.push(...dialect.parseBody(this.innerBuf, seq));
+    } else {
+      const parsed = dialect?.namedInOpenTag && this.insideName !== void 0 ? parseNamedBody(this.insideName, this.innerBuf, seq) : parseInner(this.innerBuf, seq);
+      if (parsed) this.calls.push(parsed);
+    }
     this.innerBuf = "";
     this.inside = null;
     this.insideName = void 0;
@@ -160,29 +249,35 @@ var XmlToolCallFilter = class {
         this.buf = hold2 ? this.buf.slice(this.buf.length - hold2) : "";
         break;
       }
-      const close = this.buf.indexOf(this.inside.close);
-      if (close >= 0) {
-        this.innerBuf += this.buf.slice(0, close);
-        this.buf = this.buf.slice(close + this.inside.close.length);
+      const end = callEnd(this.inside, this.buf);
+      if (end) {
+        this.innerBuf += this.buf.slice(0, end.at);
+        this.buf = this.buf.slice(end.at + end.length);
         this.commit();
         continue;
       }
-      const hold = partialTailPrefix(this.buf, this.inside.close);
+      const hold = isSelfClosing(this.inside) ? this.buf.length : partialTailPrefix(this.buf, this.inside.close);
       this.innerBuf += this.buf.slice(0, this.buf.length - hold);
       this.buf = hold ? this.buf.slice(this.buf.length - hold) : "";
       break;
     }
+    emit2 = stripControlTokens(emit2);
     this.clean += emit2;
     return emit2;
   }
   /** End of stream: flush held-back text and close any unterminated call. */
   flush() {
     let emit2 = "";
-    if (this.inside) {
+    if (this.inside && isSelfClosing(this.inside)) {
+      const end = this.inside.closeAt(this.buf, true) ?? { at: this.buf.length, length: 0 };
+      this.innerBuf += this.buf.slice(0, end.at);
+      emit2 = stripControlTokens(this.buf.slice(end.at + end.length));
+      this.commit();
+    } else if (this.inside) {
       this.innerBuf += this.buf;
       this.commit();
     } else {
-      emit2 = this.buf;
+      emit2 = stripControlTokens(this.buf);
     }
     this.buf = "";
     this.innerBuf = "";
@@ -229,6 +324,32 @@ function parseToolCall(raw) {
 }
 
 // ../packages/agent-loop/src/repetitionLoop.ts
+var COUNT_MIN_RUN = 50;
+var COUNT_MAX_DIGITS = 6;
+var isDigit = (code) => code >= 48 && code <= 57;
+var isCountSeparator = (code) => code === 32 || code === 9 || code === 10 || code === 13 || code === 44;
+function tailCountingRun(text) {
+  let pos = text.length;
+  let expected = null;
+  let count = 0;
+  let start = pos;
+  for (; ; ) {
+    let end = pos;
+    while (end > 0 && isCountSeparator(text.charCodeAt(end - 1))) end -= 1;
+    let begin = end;
+    while (begin > 0 && end - begin <= COUNT_MAX_DIGITS && isDigit(text.charCodeAt(begin - 1))) begin -= 1;
+    if (begin === end || end - begin > COUNT_MAX_DIGITS) break;
+    if (begin > 0 && !isCountSeparator(text.charCodeAt(begin - 1))) break;
+    const value = Number(text.slice(begin, end));
+    if (expected !== null && value !== expected) break;
+    count += 1;
+    start = begin;
+    pos = begin;
+    expected = value - 1;
+  }
+  if (count < COUNT_MIN_RUN) return null;
+  return { block: text.slice(start).trim(), copies: count, kept: text.slice(0, start).trimEnd() };
+}
 var LOOP_MIN_COPIES = 3;
 var LOOP_MIN_BLOCK_CHARS = 40;
 var LOOP_MAX_BLOCK_CHARS = 800;
@@ -254,6 +375,8 @@ function tailHasPeriod(text, p, span) {
   return true;
 }
 function detectRepetitionLoop(text) {
+  const counting = tailCountingRun(text);
+  if (counting) return inOpenCodeFence(text) ? null : counting;
   const length = text.length;
   if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
   const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_MIN_COPIES));

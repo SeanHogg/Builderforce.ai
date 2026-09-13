@@ -1220,6 +1220,7 @@ declare function toolSpecsFor(actions: readonly BrainAction[]): BrainToolSpec[];
  *   <invoke name="delete_task"><parameter name="id">75</parameter></invoke>
  *   <function=delete_task>{"id":75}</function>
  *   <xai:function_call name="delete_task"><parameter name="id">75</parameter></xai:function_call>
+ *   <|"0":{"name":"delete_task","arguments":{"id":75}}, "1":{…} ?>
  *
  * Left untouched that markup (a) renders as literal tags in the chat bubble — the
  * "garbled reply" symptom — and (b), worse, means the call NEVER executes, because
