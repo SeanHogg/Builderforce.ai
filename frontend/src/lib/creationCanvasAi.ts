@@ -363,6 +363,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   /** Set once a workspace write commits: the turn is BUILDING, so it gets the code
    *  output ceiling and the code step budget from then on. */
   let buildTurn = false;
+  /** Set once a response is cut off at the output ceiling. Re-sending the same
+   *  artifact under the same ceiling truncates identically (measured: one consolidated
+   *  document, five identical cut-offs in a row), so the rest of the turn gets the
+   *  wider ceiling. Widened once; never narrowed back. */
+  let truncatedOnce = false;
   /** The kernel reads this object every iteration, which is what lets a build turn
    *  widen its own budget the moment its first workspace write commits. */
   const budget = { stepCap: MAX_CANVAS_TOOL_TURNS };
@@ -409,7 +414,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             messages,
             tools: selection.tools,
             tool_choice: 'auto',
-            maxTokens: buildTurn ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
+            maxTokens: buildTurn || truncatedOnce ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
             reasoning: { level: 'low' },
             model: activeModel,
             modelStrict: activeModelStrict,
@@ -505,6 +510,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         if (call.malformed) {
           discardedCallThisRound = true;
           const truncated = lastTurnInterruption === 'truncated';
+          if (truncated) truncatedOnce = true;
           const outcome = { error: truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT };
           options.onTrace?.({
             ts: new Date().toISOString(), category: 'error', isError: true, durationMs: 0,
@@ -584,6 +590,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         // the same failure. Handled FIRST, with the directive that matches the actual
         // interruption: author smaller, or re-encode the call.
         const interruption = turnInterruption(result.finishReason);
+        if (interruption === 'truncated') truncatedOnce = true;
         if (interruption && interruptedTurnRecoveries < MAX_INTERRUPTED_TURN_RECOVERIES) {
           interruptedTurnRecoveries += 1;
           options.onTrace?.({

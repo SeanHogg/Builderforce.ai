@@ -47,6 +47,11 @@ export const CANVAS_RESPONSE_TOKENS = 3_200;
  * a cap, not a spend — the model is billed for what it emits — so raising it only for
  * turns that have already committed to a workspace costs nothing on ordinary turns.
  * Raised, not unbounded: 8K sits under every vendor's own limit in the coding pool.
+ *
+ * Also the ceiling for the rest of ANY turn once a response is cut off at 3,200. One
+ * object can be bigger than that on its own — measured (session `bf886fc1`, ui 2026.9.30):
+ * "combine the competitor research into one document" re-sent the same consolidated
+ * `canvas_add_object` five times, each cut off at the same place, and delivered nothing.
  */
 export const CANVAS_BUILD_RESPONSE_TOKENS = 8_192;
 
@@ -78,7 +83,7 @@ export const MAX_CANVAS_BUILD_TURNS = 16;
 export const CANVAS_TOOL_LIMIT = 96;
 
 /** The tool result a call that arrived with unusable arguments gets INSTEAD of being run. */
-export const TRUNCATED_CALL_RESULT = 'This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON — one file or one object per response, never several.';
+export const TRUNCATED_CALL_RESULT = 'This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON — one file or one object per response, never several. If that one object is itself long, create it with its essential fields first and add the rest with canvas_update_object.';
 export const MALFORMED_CALL_RESULT = 'This tool call\'s arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.';
 
 /** Pushed once after a round whose LAST call was cut off while the complete ones ran —

@@ -21362,6 +21362,7 @@
     "resizeBrain": "调整 Brain 聊天宽度",
     "collaboratorJoined": "{name} 加入了对话",
     "collaboratorWriting": "{name} 正在输入",
+    "collaboratorAskingBrain": "{name} 向 Brain 提问了，正在处理",
     "writingPrompt": "正在编写提示词",
     "saveCollaborator": "保存此协作者",
     "saveCollaboratorGate": "创建免费账户，将此已配置的智能体发布到您的团队，并在不同会话中使用。",

@@ -1,3 +1,37 @@
+## ✅ RESOLVED 2026-09-13 — Collaborators never saw Brain working; one oversized object truncated five times
+
+Reported from session `bf886fc1` ("Food App", ui 2026.9.30, 2 members on the call).
+
+**1. Only the person who asked saw the thinking animation.** A canvas Brain turn executes in the requester's
+browser, and `thinking` / `brainRunStartedAt` were local React state that nothing put on the wire — so for the
+185 s that turn ran, the other member saw an idle Brain until the reply landed. The run is now PRESENCE: a
+`brainRun: { startedAt } | null` field on the ONE relay frame (`creation-canvas-contract/src/presence.ts`,
+sanitized to the start instant only — the prompt never crosses), announced when a turn starts and settles and
+re-sent every `BRAIN_RUN_HEARTBEAT_MS` (TTL/3) so a still requester is not expired mid-run and a late joiner
+picks it up within seconds. `peerBrainRuns` (`lib/canvas/livePresence.ts`) reads it; every Brain surface
+(dock, inline Brain Object, chat surface) runs its animation and elapsed clock off `thinking || peer run`,
+and the presence row names who asked ("{name} asked Brain — it's working on it", all five catalogs). Stop and
+the turn queue still follow only the viewer's own run. The Brain collaborator list now reads the LIVE roster, so
+"is writing" also moves at relay speed, and the dock's duplicated `members.filter(...)` copy is gone.
+
+**2. "Combine the competitor research into one document" delivered nothing.** The consolidated
+`canvas_add_object` was larger than the 3,200-token ceiling on its own; each re-send (five) was cut off at the
+same place, and the dispatch path's "re-issue it" result invited exactly that. A cut-off now widens the rest of
+the turn to `CANVAS_BUILD_RESPONSE_TOKENS` (widened once, never narrowed), and the cut-off result tells the
+model to create a long object with its essentials first and add the rest with `canvas_update_object`.
+
+**3. The seated CMO said there was no competitor research on a board holding nine `competitor` cards.** A
+canvas group turn reaches a seated built-in agent through the ordinary team-chat reply
+(`runCanonicalCanvasGroupTurn` → `BrainService.agentReply`), which grounded on the project's tasks and files and
+never saw the board — the canvas tagged its message with `creationSessionId` and the API never read it. The
+reply now resolves that board through `resolveSessionAccess` (the asker must be a member; a non-member gets no
+digest, same as no board) and the revision-cached `readPublicBoardGraph`, and puts a bounded digest
+(`canvasBoardDigest`, 16K chars: kind, title, status, summary, readable fields; no chat or plumbing fields) in the
+agent's system prompt, with the rule that it must not call something missing that is on the board.
+
+Covered by `livePresence.test.ts` (brain-run presence), `creationCanvasAi.test.ts` (ceiling widens after a
+cut-off) and `canvasBoardGrounding.test.ts` (board digest + board tag parsing).
+
 ## ✅ RESOLVED 2026-09-13 — VSIX runs re-read the same files and never edited: the model was starved of its own reads
 
 Reported from VS Code chat #105 (VSIX 2026.9.60): 55 turns, 61 tool calls, "63% of calls revisited ground", zero edits,

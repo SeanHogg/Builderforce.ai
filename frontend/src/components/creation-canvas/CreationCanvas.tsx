@@ -61,7 +61,7 @@ import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasS
 import { CanvasMenuSheet } from './CanvasMenuSheet';
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
-import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
+import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, peerBrainRuns, BRAIN_RUN_HEARTBEAT_MS, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
@@ -2602,6 +2602,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (persistence !== 'server') return;
     sendPresence({ typing: isComposingPrompt });
   }, [isComposingPrompt, persistence, sendPresence]);
+
+  /**
+   * A Brain turn in flight is presence too. The run executes in THIS browser, so
+   * without announcing it everyone else on the board saw an idle Brain for the
+   * minutes a long turn takes. Re-sent on a heartbeat because a still requester
+   * sends nothing else and would otherwise expire off their screens mid-run — the
+   * same beat also reaches a collaborator who joins after the turn began.
+   */
+  useEffect(() => {
+    if (persistence !== 'server') return;
+    const brainRun = thinking && brainRunStartedAt != null ? { startedAt: brainRunStartedAt } : null;
+    sendPresence({ brainRun });
+    if (!brainRun) return;
+    const timer = window.setInterval(() => sendPresence({ brainRun }), BRAIN_RUN_HEARTBEAT_MS);
+    return () => window.clearInterval(timer);
+  }, [brainRunStartedAt, persistence, sendPresence, thinking]);
 
   /**
    * Follow, driven live. The poll's copy of this only runs when the relay is down,
@@ -11815,10 +11831,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   );
 
   const brainSurfaceOpen = !presentMode && brainDock.open;
-  const brainCollaborators = useMemo(
-    () => members.filter((member) => member.userId !== currentUserId),
-    [currentUserId, members],
-  );
+  /**
+   * Brain turns a COLLABORATOR started. Every Brain surface narrates one — the
+   * thinking animation and its elapsed clock — so the whole board sees Brain
+   * working, not just the person who asked. This viewer's own run wins when there
+   * is one: it is the one carrying the trace and the Stop.
+   */
+  const peerRuns = useMemo(() => peerBrainRuns(livePresence, currentUserId, Date.now()), [currentUserId, livePresence]);
+  const peerRunStartedAt = peerRuns[0]?.startedAt ?? null;
+  const brainRunning = thinking || peerRunStartedAt !== null;
+  const brainRunShownStartedAt = thinking ? brainRunStartedAt : peerRunStartedAt;
+  // Read off the LIVE roster, so "is writing" and "asked Brain" move at relay speed
+  // rather than waiting for the next presence poll.
+  const brainCollaborators = useMemo(() => {
+    const asking = new Set(peerRuns.map((run) => run.userId));
+    return liveMembers
+      .filter((member) => member.userId !== currentUserId)
+      .map((member) => (asking.has(member.userId) ? { ...member, askingBrain: true } : member));
+  }, [currentUserId, liveMembers, peerRuns]);
   /**
    * "Send again" on a transcript message — the same path a typed prompt takes, so a
    * replay is scoped, queued and narrated identically to the original turn. Read
@@ -11879,8 +11909,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     canOpen: !presentMode,
     mode: brainPlacement,
     showExecutionDetail: brainDock.showExecutionDetail,
-    running: thinking,
-    runStartedAt: brainRunStartedAt,
+    running: brainRunning,
+    runStartedAt: brainRunShownStartedAt,
     messages: brainMessages,
     trace: brainTrace,
     nodes,
@@ -11897,9 +11927,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
   }), [
-    brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunStartedAt,
-    brainSurfaceOpen, brainTrace, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence,
-    presentMode, rateBrainMessage, replayBrainMessage, thinking, updateBrainDock,
+    brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt,
+    brainRunning, brainSurfaceOpen, brainTrace, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence,
+    presentMode, rateBrainMessage, replayBrainMessage, updateBrainDock,
   ]);
 
   /**
@@ -12889,8 +12919,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               participants={rosterMembers}
               messages={brainMessages}
               trace={brainTrace}
-              running={thinking}
-              runStartedAt={brainRunStartedAt}
+              running={brainRunning}
+              runStartedAt={brainRunShownStartedAt}
               node={brainNode}
               nodes={nodes}
               edges={edges}
@@ -13254,12 +13284,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onClose={() => updateBrainDock({ open: false })}
           messages={brainMessages}
           trace={brainTrace}
-          running={thinking}
-          runStartedAt={brainRunStartedAt}
+          running={brainRunning}
+          runStartedAt={brainRunShownStartedAt}
           node={brainNode}
           nodes={nodes}
           edges={edges}
-          collaborators={members.filter((member) => member.userId !== currentUserId)}
+          collaborators={brainCollaborators}
           joinedCollaborator={joinedCollaborator}
           onReplayMessage={replayBrainMessage}
           onRateMessage={brainSurface.onRateMessage}

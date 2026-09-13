@@ -57,6 +57,21 @@ export interface CanvasPresenceSpatial {
   space?: string;
 }
 
+/**
+ * A Brain turn this peer started and is still waiting on.
+ *
+ * The run itself executes in the requester's browser, so without this every other
+ * person on the board saw an idle Brain for the minutes a long turn takes — the
+ * transcript only moved when the reply finally landed. It is presence, not board
+ * state: it describes what one person is doing right now and dies with their socket.
+ * Only the start instant crosses the relay — never the prompt — so the elapsed clock
+ * every viewer shows is the same clock.
+ */
+export interface CanvasPresenceBrainRun {
+  /** Epoch ms the turn began, on the requester's clock. */
+  startedAt: number;
+}
+
 /** What one peer is doing right now. Every field is optional and short-lived. */
 export interface CanvasPresenceState {
   /** Pointer position, or null when the pointer left the board. */
@@ -67,6 +82,8 @@ export interface CanvasPresenceState {
   typing?: boolean;
   /** Body position on a spatial surface, or null when they left it. */
   spatial?: CanvasPresenceSpatial | null;
+  /** A Brain turn in flight, or null when it settled. */
+  brainRun?: CanvasPresenceBrainRun | null;
 }
 
 /** A relayed frame: the sender's state, plus the identity the SERVER stamped. */
@@ -118,6 +135,15 @@ function spatial(value: unknown): CanvasPresenceSpatial | null {
   return { position: [x, y, z], yaw, ...(seated ? { seat } : {}), ...(space ? { space } : {}) };
 }
 
+/** Latest instant a run may claim to have started — centuries out, short of a garbage value. */
+const EPOCH_LIMIT_MS = 1e13;
+
+function brainRun(value: unknown): CanvasPresenceBrainRun | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const startedAt = finite((value as CanvasPresenceBrainRun).startedAt, EPOCH_LIMIT_MS);
+  return startedAt !== null && startedAt > 0 ? { startedAt } : null;
+}
+
 /**
  * Narrow anything a client sent to the presence state this relay carries, or null
  * when there is nothing worth relaying.
@@ -150,6 +176,10 @@ export function canvasPresenceFrame(input: unknown): CanvasPresenceState | null 
   // rather than a dropped field, so a malformed frame retracts a stale avatar
   // instead of leaving it standing in the room forever.
   if ('spatial' in raw) state.spatial = spatial(raw.spatial);
+
+  // Same rule again: a settled run is announced as `null`, and an unparseable one
+  // reads as settled, so nobody is left watching a Brain that stopped long ago.
+  if ('brainRun' in raw) state.brainRun = brainRun(raw.brainRun);
 
   return Object.keys(state).length ? state : null;
 }

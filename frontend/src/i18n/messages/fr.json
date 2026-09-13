@@ -21362,6 +21362,7 @@
     "resizeBrain": "Redimensionner le chat Brain",
     "collaboratorJoined": "{name} a rejoint la conversation",
     "collaboratorWriting": "{name} est en train d’écrire",
+    "collaboratorAskingBrain": "{name} a interrogé Brain — traitement en cours",
     "writingPrompt": "rédige une invite",
     "saveCollaborator": "Enregistrer ce collaborateur",
     "saveCollaboratorGate": "Créez un compte gratuit pour publier cet agent configuré dans votre équipe et l’utiliser entre les sessions.",

@@ -24,6 +24,8 @@ export interface BrainSurfaceCollaborator {
   userId: string;
   displayName: string | null;
   typing?: boolean;
+  /** They started a Brain turn that has not settled — see `peerBrainRuns`. */
+  askingBrain?: boolean;
 }
 
 export interface BrainSurfaceContextValue {

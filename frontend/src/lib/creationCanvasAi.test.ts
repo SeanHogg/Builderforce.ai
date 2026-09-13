@@ -857,6 +857,26 @@ describe('runCreationCanvasAi', () => {
       expect(transcript.find((row) => row.role === 'tool')!.content).toContain('not valid JSON');
     });
 
+    it('widens the output ceiling after one object was cut off, so the re-send can fit', async () => {
+      // Session bf886fc1: one consolidated document re-sent five times at 3,200 tokens,
+      // cut off at the same place every time.
+      const run = vi.fn(() => ({ ok: true, applied: true }));
+      mocks.streamChatCompletion
+        .mockResolvedValueOnce({ text: '', finishReason: 'length', toolCalls: [{ id: 'c1', name: 'canvas_add_object', args: '{"kind": "document", "title": "Competitive Analysis"' }] })
+        .mockResolvedValueOnce({ text: 'Done.', toolCalls: [], finishReason: 'stop' });
+
+      await runTurn({
+        prompt: 'combine the competitor research into one document', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [{ name: 'canvas_add_object', description: 'Add an object', parameters: { type: 'object' }, mutates: true, run }],
+      });
+
+      expect(run).not.toHaveBeenCalled();
+      expect(mocks.streamChatCompletion.mock.calls[0][0].maxTokens).toBe(3_200);
+      expect(mocks.streamChatCompletion.mock.calls[1][0].maxTokens).toBe(CANVAS_BUILD_RESPONSE_TOKENS);
+      const transcript = mocks.streamChatCompletion.mock.calls[1][0].messages as Array<{ role: string; content: string }>;
+      expect(transcript.find((row) => row.role === 'tool')!.content).toContain('canvas_update_object');
+    });
+
     it('counts a committed workspace write as canvas work and widens the output ceiling for the rest of the turn', async () => {
       const run = vi.fn(() => ({ ok: true, applied: true }));
       mocks.streamChatCompletion

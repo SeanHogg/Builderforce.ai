@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { canvasPresenceFrame, CANVAS_PRESENCE_FRAME } from '@builderforce/creation-canvas-contract';
 import {
   applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence,
-  spatialPeers, LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
+  peerBrainRuns, spatialPeers, BRAIN_RUN_HEARTBEAT_MS, LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
 } from './livePresence';
 
 const frame = (over: Record<string, unknown> = {}) => ({ type: CANVAS_PRESENCE_FRAME, ...over } as never);
@@ -156,5 +156,49 @@ describe('spatial presence (the body a room surface draws)', () => {
   it('stops listing a peer the board has already expired, so the two readings agree', () => {
     const live = applyPresenceFrame({}, frame({ userId: 'u1', spatial: body }), 0);
     expect(spatialPeers(expirePresence(live, LIVE_PRESENCE_TTL_MS + 1), 'me')).toEqual([]);
+  });
+});
+
+/**
+ * A Brain turn in flight. It executes in the requester's browser, so this frame is
+ * the only way anyone else on the board learns Brain is working at all.
+ */
+describe('brain-run presence (a collaborator is waiting on Brain)', () => {
+  it('carries the start instant and nothing else', () => {
+    expect(canvasPresenceFrame({ brainRun: { startedAt: 1_700_000_000_000, prompt: 'secret' } }))
+      .toEqual({ brainRun: { startedAt: 1_700_000_000_000 } });
+  });
+
+  it('preserves a settled run as null, and reads a malformed one as settled', () => {
+    expect(canvasPresenceFrame({ brainRun: null })).toEqual({ brainRun: null });
+    expect(canvasPresenceFrame({ brainRun: { startedAt: Number.NaN } })).toEqual({ brainRun: null });
+    expect(canvasPresenceFrame({ brainRun: { startedAt: -5 } })).toEqual({ brainRun: null });
+    expect(canvasPresenceFrame({ brainRun: [1] })).toEqual({ brainRun: null });
+  });
+
+  it('lists every peer run oldest first, never the reader own run', () => {
+    let live: LivePresenceMap = {};
+    live = applyPresenceFrame(live, frame({ userId: 'u2', brainRun: { startedAt: 2_000 } }), 2_000);
+    live = applyPresenceFrame(live, frame({ userId: 'u1', brainRun: { startedAt: 1_000 } }), 2_000);
+    live = applyPresenceFrame(live, frame({ userId: 'me', brainRun: { startedAt: 500 } }), 2_000);
+    live = applyPresenceFrame(live, frame({ userId: 'u3', cursor: { x: 1, y: 1 } }), 2_000);
+    expect(peerBrainRuns(live, 'me', 3_000)).toEqual([{ userId: 'u1', startedAt: 1_000 }, { userId: 'u2', startedAt: 2_000 }]);
+  });
+
+  it('survives a cursor frame and ends on the settling frame', () => {
+    const running = applyPresenceFrame({}, frame({ userId: 'u1', brainRun: { startedAt: 1_000 } }), 1_000);
+    const moved = applyPresenceFrame(running, frame({ userId: 'u1', cursor: { x: 4, y: 4 } }), 1_050);
+    expect(peerBrainRuns(moved, 'me', 1_100)).toHaveLength(1);
+    const settled = applyPresenceFrame(moved, frame({ userId: 'u1', brainRun: null }), 1_200);
+    expect(peerBrainRuns(settled, 'me', 1_300)).toEqual([]);
+  });
+
+  it('clamps a start stamped on a clock running ahead of the reader', () => {
+    const live = applyPresenceFrame({}, frame({ userId: 'u1', brainRun: { startedAt: 9_000 } }), 1_000);
+    expect(peerBrainRuns(live, 'me', 1_000)).toEqual([{ userId: 'u1', startedAt: 1_000 }]);
+  });
+
+  it('heartbeats well inside the TTL, so a still requester is not expired mid-run', () => {
+    expect(BRAIN_RUN_HEARTBEAT_MS * 2).toBeLessThan(LIVE_PRESENCE_TTL_MS);
   });
 });

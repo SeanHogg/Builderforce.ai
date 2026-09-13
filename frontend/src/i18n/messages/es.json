@@ -21362,6 +21362,7 @@
     "resizeBrain": "Cambiar el tamaño del chat de Brain",
     "collaboratorJoined": "{name} se unió a la conversación",
     "collaboratorWriting": "{name} está escribiendo",
+    "collaboratorAskingBrain": "{name} le preguntó a Brain; está trabajando en ello",
     "writingPrompt": "escribiendo una indicación",
     "saveCollaborator": "Guardar este colaborador",
     "saveCollaboratorGate": "Crea una cuenta gratuita para publicar este agente configurado en tu equipo y usarlo entre sesiones.",

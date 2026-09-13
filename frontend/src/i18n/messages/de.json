@@ -21362,6 +21362,7 @@
     "resizeBrain": "Größe des Brain-Chats ändern",
     "collaboratorJoined": "{name} ist der Unterhaltung beigetreten",
     "collaboratorWriting": "{name} schreibt gerade",
+    "collaboratorAskingBrain": "{name} hat Brain gefragt – Brain arbeitet daran",
     "writingPrompt": "schreibt eine Eingabe",
     "saveCollaborator": "Diesen Mitwirkenden speichern",
     "saveCollaboratorGate": "Erstellen Sie ein kostenloses Konto, um diesen konfigurierten Agenten in Ihrer Belegschaft zu veröffentlichen und sitzungsübergreifend zu verwenden.",

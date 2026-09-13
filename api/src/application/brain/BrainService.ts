@@ -20,6 +20,7 @@ import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPla
 import { logTrace } from '../llm/traceLogger';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance, vendorAccountLabel } from '../llm/replyProvenance';
+import { loadCanvasBoardGrounding } from '../creation/canvasBoardGrounding';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
 import { invite } from '../kernel/InvitationService';
 import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
@@ -1128,6 +1129,11 @@ export class BrainService {
     const transcript = msgs
       .map((m) => `${m.role === 'user' ? 'User' : authorName(m.metadata)}: ${m.content}`)
       .join('\n\n');
+    // A canvas group turn tags its message with the board it was asked on; the agent
+    // answers from THAT board rather than from the project alone (see
+    // `loadCanvasBoardGrounding`). A board that cannot be read degrades to no digest.
+    const lastUserMetadata = [...msgs].reverse().find((m) => m.role === 'user')?.metadata ?? null;
+    const boardGrounding = await loadCanvasBoardGrounding(this.db, env, tenantId, userId, lastUserMetadata).catch(() => null);
 
     // The request this reply is answering — the newest USER turn, not the whole
     // transcript and not a nudge this loop injected. The stall gate needs it to tell a
@@ -1170,6 +1176,7 @@ export class BrainService {
     const systemPrompt = [
       persona,
       `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
+      ...(boardGrounding ? [`\n\n${boardGrounding}\n\n`] : []),
       // The MANAGER chat's framing (0376). It lives here rather than only in the built-in
       // Manager agent's persona because a tenant may designate its OWN cloud agent to run
       // the backlog, and that agent's persona knows nothing about being accountable for

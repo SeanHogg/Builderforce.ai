@@ -175,7 +175,9 @@ export function BrainSurfaceBody({
   }), [liveLine, t, liveLabels]);
   const timelineLabels = useBrainTimelineLabels(timelineOverrides);
   const typingCollaborators = collaborators.filter((member) => member.typing);
-  const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
+  // Who the running animation below is for, when it is not this viewer's own turn.
+  const askingCollaborators = collaborators.filter((member) => member.askingBrain);
+  const showPresence = joinedCollaborator != null || typingCollaborators.length > 0 || askingCollaborators.length > 0;
 
   return <>
     {/* Chat is the panel's own content, not a tab beside another tab — the reader
@@ -201,6 +203,11 @@ export function BrainSurfaceBody({
       {typingCollaborators.map((member) => <span key={member.userId} data-state="typing">
         <Avatar name={member.displayName || t('collaborator')} kind="human" size={22} />
         <b>{t('collaboratorWriting', { name: member.displayName || t('collaborator') })}</b>
+        <i aria-hidden>•••</i>
+      </span>)}
+      {askingCollaborators.map((member) => <span key={`asking:${member.userId}`} data-state="asking">
+        <Avatar name={member.displayName || t('collaborator')} kind="human" size={22} />
+        <b>{t('collaboratorAskingBrain', { name: member.displayName || t('collaborator') })}</b>
         <i aria-hidden>•••</i>
       </span>)}
     </div>}

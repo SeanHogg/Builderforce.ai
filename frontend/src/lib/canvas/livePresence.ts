@@ -158,6 +158,36 @@ export function spatialPeers(
 }
 
 /**
+ * How often a peer re-announces a Brain run it is still waiting on.
+ *
+ * A turn can run for minutes while its requester sits still, and a still client
+ * sends nothing — so without a heartbeat the run would expire off everyone else's
+ * screen at {@link LIVE_PRESENCE_TTL_MS}. A third of the TTL survives one dropped
+ * frame, and it also reaches a collaborator who joins mid-run within seconds.
+ */
+export const BRAIN_RUN_HEARTBEAT_MS = LIVE_PRESENCE_TTL_MS / 3;
+
+/** A Brain turn a collaborator started and has not settled. */
+export interface PeerBrainRun { userId: string; startedAt: number }
+
+/**
+ * Every Brain turn in flight on this board that is NOT the reader's, oldest first.
+ *
+ * The reader's own run is already known locally (and carries the trace and Stop), so
+ * a relayed echo of it is skipped exactly as `mergeLivePresence` skips the reader's
+ * own pointer. `startedAt` is clamped to `nowMs` because it was stamped on another
+ * machine's clock: a peer running a few seconds fast must not show a negative clock.
+ */
+export function peerBrainRuns(live: LivePresenceMap, currentUserId: string | null, nowMs: number): PeerBrainRun[] {
+  const runs: PeerBrainRun[] = [];
+  for (const [userId, entry] of Object.entries(live)) {
+    if (userId === currentUserId || !entry.brainRun) continue;
+    runs.push({ userId, startedAt: Math.min(entry.brainRun.startedAt, nowMs) });
+  }
+  return runs.sort((a, b) => a.startedAt - b.startedAt || (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
+}
+
+/**
  * The smallest interval between outbound pointer frames.
  *
  * 20 frames a second reads as continuous motion and leaves the server's 30/s
