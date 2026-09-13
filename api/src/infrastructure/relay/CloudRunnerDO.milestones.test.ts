@@ -47,6 +47,7 @@ vi.mock('../../application/runtime/scoreRunOutcome', () => ({ scoreRunOutcome: v
 vi.mock('../../application/runtime/lateSteerFollowUp', () => ({ settleLateSteersSafely: vi.fn(async () => ({ kind: 'none' })) }));
 vi.mock('../../application/runtime/cloudDispatch', () => ({
   parseRoutingBias: () => null,
+  parseArcStage: () => null,
   parsePolicyGates: () => null,
   parseReviewRole: () => null,
   parseLaneKey: () => null,
