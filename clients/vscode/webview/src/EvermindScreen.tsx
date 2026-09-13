@@ -136,18 +136,29 @@ export function EvermindScreen({ init }: { init: InitData }) {
   useEffect(() => {
     let cancelled = false;
     const req = authedFetch(init.baseUrl, getToken, () => refreshToken());
-    req<IdeProjectRow[]>('/api/ide-projects')
-      .then((rows) => {
+    const activeProjectId = init.project?.id ?? null;
+    // WHICH Evermind is the active Project's is the SERVER's answer (its head names the
+    // build it reads from), not a rule re-derived here — so this view opens on the very
+    // model the Brain chat recalls from and badges, and the two never show different
+    // versions for the same project.
+    const activeHead = activeProjectId == null
+      ? Promise.resolve(null)
+      : req<{ inheritedFromProjectId?: number }>(`/api/projects/${activeProjectId}/evermind/head`).catch(() => null);
+    Promise.all([req<IdeProjectRow[]>('/api/ide-projects'), activeHead])
+      .then(([rows, head]) => {
         if (cancelled) return;
         // Evermind builds: the `evermind` modality (plus legacy `llm`, the retired
         // combined modality, which are Evermind projects).
         const evermindBuilds = (rows ?? []).filter((r) => r.modality === 'evermind' || r.modality === 'llm');
         setBuilds(evermindBuilds);
         setStorageId((cur) => {
-          // Keep a still-valid selection across refreshes; else prefer a build grouped
-          // under the sidebar's active Project, falling back to the first available.
+          // Keep a still-valid selection across refreshes; else the Evermind the server
+          // resolves for the active Project, then any build grouped under it, then the first.
           if (cur != null && evermindBuilds.some((r) => r.storageProjectId === cur)) return cur;
-          const preferred = evermindBuilds.find((r) => r.containerProjectId === init.project?.id) ?? evermindBuilds[0];
+          const resolvedId = head?.inheritedFromProjectId ?? activeProjectId;
+          const preferred = evermindBuilds.find((r) => r.storageProjectId === resolvedId)
+            ?? evermindBuilds.find((r) => r.containerProjectId === activeProjectId)
+            ?? evermindBuilds[0];
           return preferred?.storageProjectId ?? null;
         });
       })
@@ -263,6 +274,9 @@ export function EvermindScreen({ init }: { init: InitData }) {
   const ungrouped = init.labels['ev.ungrouped'] ?? 'Ungrouped';
 
   return (
+    // The view scrolls itself — the shared stylesheet clips `#root` to the viewport,
+    // which cut the console off below the fold with no way to reach it.
+    <div className="bf-scroll-screen">
     <div style={{ padding: 12, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Build picker — only meaningful with more than one LLM build. */}
       {builds.length > 1 && (
@@ -303,6 +317,7 @@ export function EvermindScreen({ init }: { init: InitData }) {
           refreshSignal={refreshSignal}
         />
       )}
+    </div>
     </div>
   );
 }

@@ -13,9 +13,11 @@ const env = {} as Env;
 
 /** db mock whose `.select().from().where()[.limit()]` returns queued result sets in
  *  order. Sequence for an Evermind-first resolve: 1) getProjectFactByKey (cache, limit),
- *  2) resolveEffectiveEvermindProjectId → the project's OWN head (limit), 3) the head of
- *  the effective owner (limit). A project whose own head is UNSEEDED inserts an
- *  `ide_projects` container lookup between 2 and 3. `where()` is awaitable AND chainable.
+ *  2) resolveEffectiveEvermindProjectId → the dedicated Evermind builds grouped under the
+ *  project (limit; each seeded-check reads that build's head), 3) the project's OWN head
+ *  (limit), 4) the head of the effective owner (limit). A project whose own head is
+ *  UNSEEDED inserts an `ide_projects` container lookup between 3 and 4. `where()` is
+ *  awaitable AND chainable.
  *  Also supports the upsert chain for cacheProjectAnswer. */
 function memoryDb(resultQueue: Array<Array<Record<string, unknown>>>) {
   let i = 0;
@@ -72,8 +74,8 @@ describe('resolveMemoryAnswer', () => {
   });
 
   it('falls to Evermind on a cache miss and names WHICH Evermind answered', async () => {
-    // cache miss, ide_projects children (none), head for proj 42.
-    const { db } = memoryDb([[], [headRow()], [headRow()]]);
+    // cache miss, Evermind builds under 42 (none), own head, head for proj 42.
+    const { db } = memoryDb([[], [], [headRow()], [headRow()]]);
     const runEvermind = vi.fn(async () => 'This is a sufficiently long Evermind reply about the project.');
     const ans = await resolveMemoryAnswer(env, db, 7, 42, 'How does auth work?', { runEvermind, toolsAvailable: false });
     expect(ans?.source).toBe('evermind');
@@ -107,21 +109,21 @@ describe('resolveMemoryAnswer', () => {
   });
 
   it('returns null when Evermind is not opted in (inferenceEnabled false)', async () => {
-    const { db } = memoryDb([[], [headRow({ inferenceEnabled: false })], [headRow({ inferenceEnabled: false })]]);
+    const { db } = memoryDb([[], [], [headRow({ inferenceEnabled: false })], [headRow({ inferenceEnabled: false })]]);
     const runEvermind = vi.fn(async () => 'a substantive answer that would otherwise qualify');
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind, toolsAvailable: false })).toBeNull();
     expect(runEvermind).not.toHaveBeenCalled();
   });
 
   it('returns null when the Evermind reply is too short (below threshold)', async () => {
-    const { db } = memoryDb([[], [headRow()], [headRow()]]);
+    const { db } = memoryDb([[], [], [headRow()], [headRow()]]);
     const runEvermind = vi.fn(async () => 'nope'); // < EVERMIND_ANSWER_MIN_CHARS
     expect('nope'.length).toBeLessThan(EVERMIND_ANSWER_MIN_CHARS);
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind, toolsAvailable: false })).toBeNull();
   });
 
   it('returns null when an under-trained head returns long-but-incoherent garbage', async () => {
-    const { db } = memoryDb([[], [headRow()], [headRow()]]);
+    const { db } = memoryDb([[], [], [headRow()], [headRow()]]);
     // The real serving failure: fluent-looking gibberish that clears 20 chars but is
     // not language — must be treated as a miss, not served to the user.
     const garbage =
@@ -136,9 +138,9 @@ describe('resolveMemoryAnswer', () => {
     // even though sibling IDE builds under the same container have live, inference-enabled
     // heads. Fanning out over them is right for LEARNING and wrong for ANSWERING: it
     // attributed build B's knowledge to project A and contradicted A's own "inference off".
-    // Queue: cache miss → own head (unseeded) → ide_projects container lookup (none) →
-    // effective head (still unseeded).
-    const { db } = memoryDb([[], [headRow({ version: 0, inferenceEnabled: false })], [], [headRow({ version: 0, inferenceEnabled: false })]]);
+    // Queue: cache miss → Evermind builds under 42 (none) → own head (unseeded) →
+    // ide_projects container lookup (none) → effective head (still unseeded).
+    const { db } = memoryDb([[], [], [headRow({ version: 0, inferenceEnabled: false })], [], [headRow({ version: 0, inferenceEnabled: false })]]);
     const runEvermind = vi.fn(async () => 'a substantive answer a sibling head would happily give');
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'what project is this chat on?', { runEvermind, toolsAvailable: false })).toBeNull();
     expect(runEvermind).not.toHaveBeenCalled();
@@ -149,6 +151,7 @@ describe('resolveMemoryAnswer', () => {
     // still answers from its container's (the same head the console shows it).
     const { db } = memoryDb([
       [],                                                   // cache miss
+      [],                                                   // no Evermind builds under 42
       [headRow({ version: 0, inferenceEnabled: false })],    // own head — unseeded
       [{ cid: 9 }],                                          // ide_projects → container 9
       [headRow()],                                           // container head — live
@@ -158,6 +161,22 @@ describe('resolveMemoryAnswer', () => {
     expect(ans?.source).toBe('evermind');
     expect(ans?.evermindProjectId).toBe(9);
     expect(runEvermind).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers from the project’s Evermind BUILD, not the container’s own default head', async () => {
+    // The container carries its own seeded default head AND groups a dedicated Evermind
+    // build. The build is the project's Evermind (what the Evermind view opens), so it —
+    // never the container's default — answers.
+    const { db } = memoryDb([
+      [],                                                   // cache miss
+      [{ sid: 30, createdAt: new Date('2026-09-01') }],      // Evermind build under 11
+      [headRow({ version: 10217 })],                         // build head — seeded
+      [headRow({ version: 10217 })],                         // effective head (build 30)
+    ]);
+    const runEvermind = vi.fn(async () => 'The Evermind build owns the trained model that answers this.');
+    const ans = await resolveMemoryAnswer(env, db, 7, 11, 'How does auth work?', { runEvermind, toolsAvailable: false });
+    expect(ans?.evermindProjectId).toBe(30);
+    expect(ans?.evermindVersion).toBe(10217);
   });
 
   it('returns null without runEvermind and no cache hit (caller proceeds to the LLM)', async () => {

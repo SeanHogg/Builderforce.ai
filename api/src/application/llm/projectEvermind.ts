@@ -19,7 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * per-project version token bumped on every seed / merge, so a learn never serves
  * a stale head.
  */
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { EvermindLM, EvermindModelPackage, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
 import {
   deriveLimbicSetpoints,
@@ -38,7 +38,7 @@ import { aggregateProjectPsychometric } from '../persona/psychometricCatalog';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { stripReasoningScratchpad } from '@builderforce/agent-loop';
-import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, getCacheVersion, bumpCacheVersion, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
 import { tierRecallByChat } from './evermindChatTiering';
 import type { RecordedSkipReason } from './evermindTeacher';
@@ -169,17 +169,81 @@ export async function getProjectEvermindHead(
   );
 }
 
+/** The IDE-build modalities that carry an Evermind of their own (`llm` = the retired alias). */
+const EVERMIND_BUILD_MODALITIES = ['evermind', 'llm'];
+/** Bound on the dedicated Evermind builds read under one container — a real project has a handful. */
+const EVERMIND_BUILDS_CAP = 50;
+
+const buildsUnderKey = (tenantId: number, projectId: number) => `evermind:builds-under:${tenantId}:${projectId}`;
+const containerOfKey = (tenantId: number, projectId: number) => `evermind:container-of:${tenantId}:${projectId}`;
+const targetChildrenKey = (tenantId: number, projectId: number) => `evermind:targets:children:${tenantId}:${projectId}`;
+
 /**
- * Resolve the project whose Evermind a READ surface bound to `projectId` should show.
+ * The storage projects of the dedicated Evermind builds grouped under `projectId`,
+ * NEWEST FIRST — the same order `/api/ide-projects` lists them, so the editor's
+ * Evermind view and this resolver name the same build. Cached; dropped by
+ * {@link invalidateEvermindGrouping} whenever a build is created, moved or deleted.
+ */
+async function evermindBuildsUnder(env: Env, db: Db, tenantId: number, projectId: number): Promise<number[]> {
+  return getOrSetCached(
+    env,
+    buildsUnderKey(tenantId, projectId),
+    async () => {
+      const rows = await db
+        .select({ sid: ideProjects.storageProjectId, createdAt: ideProjects.createdAt })
+        .from(ideProjects)
+        .where(and(
+          eq(ideProjects.tenantId, tenantId),
+          eq(ideProjects.containerProjectId, projectId),
+          inArray(ideProjects.modality, EVERMIND_BUILD_MODALITIES),
+        ))
+        .limit(EVERMIND_BUILDS_CAP);
+      return rows
+        .filter((r) => Number.isInteger(r.sid) && r.sid > 0 && r.sid !== projectId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .map((r) => r.sid);
+    },
+    { kvTtlSeconds: 300 },
+  );
+}
+
+/**
+ * Drop the cached build↔container grouping for the given projects — the ONE
+ * invalidation an IDE-build write (create / re-parent / delete) calls, so "which
+ * Evermind does this project read" and "which Everminds does it teach" follow the
+ * write instead of lagging it. Pass every container the write touched (old AND new)
+ * plus the build's storage project.
+ */
+export async function invalidateEvermindGrouping(
+  env: Env,
+  tenantId: number,
+  projectIds: ReadonlyArray<number | null | undefined>,
+): Promise<void> {
+  const ids = [...new Set(projectIds.filter((p): p is number => Number.isInteger(p) && (p as number) > 0))];
+  await Promise.all(ids.flatMap((pid) => [
+    invalidateCached(env, buildsUnderKey(tenantId, pid)),
+    invalidateCached(env, containerOfKey(tenantId, pid)),
+    invalidateCached(env, targetChildrenKey(tenantId, pid)),
+  ]));
+}
+
+/**
+ * Resolve the project whose Evermind a READ surface bound to `projectId` should show —
+ * THE one answer to "which Evermind is this project's", shared by the head badge, the
+ * chat's recall, the console, memory-first answering and the inference pin, so no two
+ * surfaces can name different models (or versions) for the same project.
  *
- * An IDE build opens at its hidden `is_ide_storage` project row, but only
- * `evermind`/`llm`-modality builds ever get their own `project_evermind` row — every
- * other modality (video, voice, designer, finetune) inherits the Evermind of the
- * PARENT container project it was created under. Reading the storage id verbatim
- * therefore reported "Not set up" for a project that plainly has one.
- *
- * Precedence: a build's OWN seeded Evermind wins (so per-build Everminds keep working);
- * otherwise fall back to the container project. A non-IDE project resolves to itself.
+ * Precedence:
+ *  1. A container project that groups a SEEDED dedicated Evermind build reads that
+ *     build's model (the newest, when there are several). That build is the project's
+ *     Evermind — it is what the Evermind view opens — even when the container also
+ *     carries an auto-provisioned default head of its own. Reading the container's own
+ *     head instead had the chat recalling from "v115" while the Evermind view showed
+ *     the build at "v10217".
+ *  2. Otherwise the project's OWN seeded Evermind (so per-build Everminds keep working).
+ *  3. Otherwise, for an IDE build with none of its own (video, voice, designer,
+ *     finetune…), the Evermind of the container project it was created under.
+ * A project with none of these resolves to itself.
  *
  * Read-path only — {@link resolveEvermindTargets} and the WRITE/fan-out paths keep
  * exact-id semantics so a contribution never silently lands on the wrong project.
@@ -191,11 +255,16 @@ export async function resolveEffectiveEvermindProjectId(
   projectId: number,
 ): Promise<number> {
   if (!Number.isInteger(projectId) || projectId <= 0) return projectId;
+  // Sequential on purpose: the first seeded build wins, and every head read is a
+  // version-token cache hit once warm.
+  for (const buildId of await evermindBuildsUnder(env, db, tenantId, projectId)) {
+    if ((await getProjectEvermindHead(env, db, tenantId, buildId)).version > 0) return buildId;
+  }
   const own = await getProjectEvermindHead(env, db, tenantId, projectId);
   if (own.version > 0) return projectId;
   const containerId = await getOrSetCached(
     env,
-    `evermind:container-of:${tenantId}:${projectId}`,
+    containerOfKey(tenantId, projectId),
     async () => {
       const [row] = await db
         .select({ cid: ideProjects.containerProjectId })
@@ -232,7 +301,7 @@ export async function resolveEvermindTargets(
   if (!Number.isInteger(projectId) || projectId <= 0) return [];
   const childIds = await getOrSetCached(
     env,
-    `evermind:targets:children:${tenantId}:${projectId}`,
+    targetChildrenKey(tenantId, projectId),
     async () => {
       const rows = await db
         .select({ sid: ideProjects.storageProjectId })
@@ -617,7 +686,10 @@ export async function resolveProjectInferenceModel(
   opts: { purpose?: 'coding' } = {},
 ): Promise<string | undefined> {
   if (!Number.isInteger(projectId) || projectId <= 0) return undefined;
-  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+  // The head this project actually reads — the same one its console, head badge and
+  // recall show — so the inference toggle the operator sees is the one that decides.
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
   if (!head.inferenceEnabled || !head.ref) return undefined;
   if (opts.purpose === 'coding' && !evermindQualifiesForCoding(head).qualified) return undefined;
   return `evermind/${head.ref}`;

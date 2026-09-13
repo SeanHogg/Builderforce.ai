@@ -23,6 +23,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/evermindRecipes';
+import { invalidateEvermindGrouping } from '../../application/llm/projectEvermind';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { parseBody, z } from './requestBody';
@@ -272,6 +273,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     }
 
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
+    await invalidateEvermindGrouping(c.env as Env, tenantId, [containerProjectId, storage.id]);
     const view = await fetchOne(tenantId, String(created!.id));
     return c.json(view, 201);
   });
@@ -313,6 +315,9 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
 
     await db.update(ideProjects).set(set).where(eq(ideProjects.id, existing.id));
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
+    if (set.containerProjectId !== undefined) {
+      await invalidateEvermindGrouping(c.env as Env, tenantId, [existing.containerProjectId, set.containerProjectId, existing.storageProjectId]);
+    }
     const view = await fetchOne(tenantId, String(existing.id));
     return c.json(view);
   });
@@ -335,6 +340,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       await db.delete(ideProjects).where(eq(ideProjects.id, existing.id));
     }
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
+    await invalidateEvermindGrouping(c.env as Env, tenantId, [existing.containerProjectId, existing.storageProjectId]);
     return c.body(null, 204);
   });
 

@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.53] — The Evermind panel and the chat now agree
+
+- **The Evermind panel shows everything, and you can scroll to see it.** The panel was clipped to the editor's visible height with no way to reach content below the fold. It now scrolls on its own.
+- **The chat's "Recalled from Evermind" and the panel's version now match.** A project with its own trained Evermind model could still have the Brain chat recall from — and badge — a different, untrained one grouped under it. Recall, the version badge, and the model the project actually runs on now all resolve to the same Evermind: the project's own trained one when it has one.
+
 ## [2026.9.52] — A new chat stays on your request
 
 - **A new chat works on what you asked.** The Brain adds learnings from your project's other conversations to each request. It used to present all of them as relevant, so a model could take up another chat's unfinished task: asked to make Room chat bubbles scroll the chat, Grok spent its turns "closing out linked work" on an unrelated roster fix. Each learning is now marked as from this conversation or from elsewhere in the project, and the model is told to ignore any that don't bear on your request and never to pick up another chat's work.

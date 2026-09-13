@@ -1,3 +1,31 @@
+## ✅ RESOLVED 2026-09-13 — The chat and the Evermind view named different Everminds; the Evermind view did not scroll
+
+Reported from VS Code: the Evermind sidebar showed "EverMind · Learning · v10217", while the Brain chat
+said "Recalled 1 memories from Evermind v115" and its footer read "Evermind v115 · Off". The sidebar was
+also clipped below the fold. The operator confirmed the sidebar's version is correct.
+
+- **Two answers to "which Evermind is this project's"?** Container project #11 carries an auto-provisioned
+  default head of its own (v115) and also groups a dedicated Evermind build (#30, v10217). The sidebar
+  opens the build. The chat's recall, the head badge and the host's model pin all read
+  `/api/projects/11/evermind/*`. `resolveEffectiveEvermindProjectId` returned #11 because its own head
+  was seeded, and `recallCore`/`validateCore` did not resolve at all.
+  - `resolveEffectiveEvermindProjectId` (`api/src/application/llm/projectEvermind.ts`) now puts the newest
+    seeded Evermind build grouped under a container first. After that come the project's own head, then
+    the container fallback.
+  - `recallCore` and `validateCore` now resolve through the same function, and so does
+    `resolveProjectInferenceModel` (the pin expansion and cloud dispatch).
+  - Write and fan-out paths keep exact ids.
+- **The grouping caches were only ever TTL-expired.** New `invalidateEvermindGrouping` drops the
+  builds-under, container-of and target-children keys. The `ide-projects` create, re-parent and delete
+  handlers call it.
+- **The sidebar picked its default with its own rule.** `EvermindScreen` now preselects the build the
+  server's head names (`inheritedFromProjectId`), so the view and the chat cannot disagree.
+- **No scroll:** the canvas stylesheet pins `html/body/#root` with `overflow: hidden` for the whole bundle.
+  New `.bf-scroll-screen` (`webview/src/index.css`) wraps the Evermind screen.
+- Tests: `projectEvermind.test.ts` covers the resolver's precedence and a container pin expanding to its
+  build. `projectMemory.test.ts` has updated queues and a new case: the build answers, not the container's
+  default.
+
 ## ✅ RESOLVED 2026-09-13 — A new chat followed another chat's recalled work, and the stall detector let it stop
 
 Reported from VS Code chat #105 (new chat, `xai-oauth/grok-4.6`, auto-routed): "on the canvas in Room

@@ -6,6 +6,7 @@ import {
   getProjectEvermindHead,
   resolveProjectEvermindModelPin,
   resolveProjectInferenceModel,
+  resolveEffectiveEvermindProjectId,
   setProjectEvermindInference,
   recordEvermindServeOutcome,
   computeProjectAffect,
@@ -129,6 +130,42 @@ describe('getProjectEvermindHead', () => {
     const head = await getProjectEvermindHead(env, makeDb({ name: 'PM', version: 0, mode: 'connected', contributions: 0 }), 7, 42);
     expect(head.version).toBe(0);
     expect(head.ref).toBeNull();
+  });
+});
+
+/** db mock whose every `.select().from().where().limit()` returns the NEXT queued result set. */
+function queueDb(queue: Array<Array<Record<string, unknown>>>) {
+  let i = 0;
+  return {
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => queue[i++] ?? [] }) }) }),
+  } as never;
+}
+
+describe('resolveEffectiveEvermindProjectId (the ONE "which Evermind is this project’s")', () => {
+  const head = (version: number, over: Record<string, unknown> = {}) =>
+    ({ name: 'PM', version, mode: 'connected', contributions: 0, inferenceEnabled: true, ...over });
+
+  it('prefers the newest seeded Evermind build under a container over the container’s own head', async () => {
+    const db = queueDb([
+      [{ sid: 30, createdAt: '2026-09-01' }, { sid: 31, createdAt: '2026-09-10' }], // builds under 11
+      [head(10217)],                                                                // newest (31) — seeded
+    ]);
+    expect(await resolveEffectiveEvermindProjectId(env, db, 7, 11)).toBe(31);
+  });
+
+  it('skips an unseeded build and falls back to the project’s own seeded head', async () => {
+    const db = queueDb([[{ sid: 31, createdAt: '2026-09-10' }], [head(0)], [head(115)]]);
+    expect(await resolveEffectiveEvermindProjectId(env, db, 7, 11)).toBe(11);
+  });
+
+  it('inherits the container’s Evermind for a build with none of its own', async () => {
+    const db = queueDb([[], [head(0)], [{ cid: 9 }]]);
+    expect(await resolveEffectiveEvermindProjectId(env, db, 7, 42)).toBe(9);
+  });
+
+  it('expands a container’s pin to its Evermind BUILD’s head', async () => {
+    const db = queueDb([[{ sid: 30, createdAt: '2026-09-01' }], [head(4)], [head(4)]]);
+    expect(await resolveProjectInferenceModel(env, db, 7, 11)).toBe('evermind/evermind/project/7/30/v4');
   });
 });
 

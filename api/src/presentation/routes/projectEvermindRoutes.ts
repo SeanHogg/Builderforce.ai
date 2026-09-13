@@ -231,7 +231,8 @@ async function validateCore(env: Env, db: Db, tenantId: number, projectId: numbe
   const body = await parseOptionalBody(c, PromptBody);
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
   if (!prompt.trim()) return json({ error: 'prompt is required' }, 400);
-  return json(await validateProjectEvermindRecall(env, db, tenantId, projectId, prompt));
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  return json(await validateProjectEvermindRecall(env, db, tenantId, effectiveId, prompt));
 }
 
 /**
@@ -249,7 +250,11 @@ async function recallCore(env: Env, db: Db, tenantId: number, projectId: number,
   // recalls project-wide exactly as before. When present, this chat's own memories
   // take precedence over the rest of the project's — see `evermindChatTiering`.
   const chatId = Number.isInteger(body.chatId) && (body.chatId as number) > 0 ? (body.chatId as number) : null;
-  return json(await recallProjectEvermindMemory(env, db, tenantId, projectId, query, { chatId }));
+  // Recall from the Evermind this project actually reads — the one its head badge and
+  // Evermind view show. Recalling the raw id named the container's own default head
+  // ("v115") while every other surface showed the project's Evermind build ("v10217").
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  return json(await recallProjectEvermindMemory(env, db, tenantId, effectiveId, query, { chatId }));
 }
 
 async function artifactCore(env: Env, db: Db, tenantId: number, projectId: number, versionQ: string | undefined, file: 'model.evermind' | 'tokenizer.json'): Promise<Response> {
