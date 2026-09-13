@@ -3,24 +3,15 @@
  * aspect of the platform (project, workflow, architecture, security, brain…).
  * One loader so every "assign an agent" surface draws from the same source (DRY).
  */
+import { poolAgentsFrom, type PoolAgent } from '@seanhogg/builderforce-brain-embedded';
 import { registeredAgents, type RegisteredAgent } from './builderforceApi';
 import { listMyAgents, listPurchasedAgents } from './api';
 import type { PublishedAgent } from './types';
 import { getProjectWorkforce } from './teams';
 
-/** A selectable agent from one of the tenant's two source pools. */
-export interface PoolAgent {
-  kind: 'workforce' | 'registered';
-  ref: string;
-  name: string;
-  meta: string;
-  /** Gateway-resolvable model for this agent (workforce base_model), or null when
-   *  it should use the default (the 'builderforce-default' sentinel / registered). */
-  baseModel?: string | null;
-}
-
-/** base_model sentinel meaning "no explicit model — use the default". */
-const DEFAULT_MODEL_SENTINEL = 'builderforce-default';
+// The roster shape and its mapping are shared with the VS Code webview (brain-embedded
+// `agentPool.ts`); this module owns only the web transport and the session cache.
+export type { PoolAgent } from '@seanhogg/builderforce-brain-embedded';
 
 export const AGENT_KIND_LABEL: Record<PoolAgent['kind'], string> = {
   workforce: 'Workforce',
@@ -42,20 +33,7 @@ export async function loadAgentPool(): Promise<PoolAgent[]> {
     listPurchasedAgents().catch(() => [] as PublishedAgent[]),
     registeredAgents.list().catch(() => [] as RegisteredAgent[]),
   ]);
-  // Dedupe workforce agents by id (an agent could be both owned and listed).
-  const wfById = new Map<string, PublishedAgent>();
-  for (const a of [...owned, ...purchased]) wfById.set(String(a.id), a);
-  const wf: PoolAgent[] = [...wfById.values()].map((a) => ({
-    kind: 'workforce',
-    ref: String(a.id),
-    name: a.name,
-    meta: a.title || a.base_model,
-    baseModel: a.base_model && a.base_model !== DEFAULT_MODEL_SENTINEL ? a.base_model : null,
-  }));
-  const reg: PoolAgent[] = registered
-    .filter((a) => a.isActive)
-    .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type, baseModel: null }));
-  return [...wf, ...reg];
+  return poolAgentsFrom({ owned, purchased, registered });
 }
 
 // Shared session cache for the pool (stable tenant data — a 3-endpoint fan-out).

@@ -42,7 +42,7 @@ const EXCLUDED_TOOLS = new Set(["finish"]);
 
 /** Tools that read but never change the workspace — so they skip the approval gate
  *  even though they ride a write/shell-capable surface. */
-const READ_ONLY_TOOLS = new Set(["list_files", "read_file", "search_code", "git_status", "git_diff", "git_history"]);
+const READ_ONLY_TOOLS = new Set(["list_files", "read_file", "search_code", "find_symbol", "file_outline", "git_status", "git_diff", "git_history"]);
 
 // `git.write` is here for the same reason `shell` is, and more so: committing, pushing
 // and opening a pull request move work out of the working tree, and a push to the base
@@ -94,6 +94,12 @@ export function describeTool(name: string, args: Record<string, unknown>): strin
       return `run: ${typeof args.command === "string" ? args.command.slice(0, 80) : ""}`;
     case "search_code":
       return `search ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
+    case "find_symbol":
+      return `find symbol ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
+    case "file_outline":
+      return `outline ${p}`;
+    case "review_ticket_branches":
+      return `review ticket branches${typeof args.repo === "string" ? ` in ${args.repo}` : ""}`;
     // The project-memory pair (cognition.ts): named by what is being recalled/kept, so
     // an activity row reads "recall auth flow" rather than a bare tool name.
     case "recall_facts":

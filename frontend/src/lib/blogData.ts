@@ -90,6 +90,7 @@ import oneCanvasInsideAnother from '@/content/blog/one-canvas-inside-another.md'
 import delegateTheSearch from '@/content/blog/delegate-the-search-not-the-decision.md';
 import walkMeThroughWhatYouMade from '@/content/blog/walk-me-through-what-you-made.md';
 import signMeasurePlugIn from '@/content/blog/sign-measure-and-plug-in-inside-the-room.md';
+import chooseWhoAnswers from '@/content/blog/choose-who-answers-not-just-who-you-ask.md';
 import importYourRecords from '@/content/blog/import-your-records.md';
 import shipFromTheEditor from '@/content/blog/ship-from-the-editor-commit-branch-pull-request.md';
 import seeWhatTheAgentChanged from '@/content/blog/see-what-the-agent-changed-before-you-commit.md';
@@ -254,6 +255,7 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('choose-who-answers-not-just-who-you-ask', chooseWhoAnswers),
   buildPost('sign-measure-and-plug-in-inside-the-room', signMeasurePlugIn),
   buildPost('every-account-gets-a-sales-programme', salesProgrammeForEveryone),
   buildPost('send-the-link-join-without-an-account', sendTheLink),

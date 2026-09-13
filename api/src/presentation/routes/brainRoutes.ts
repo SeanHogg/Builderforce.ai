@@ -293,15 +293,19 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       })());
     }
 
-    // Notify any HUMAN addressed in these turns (directed @human message) so an
-    // offline teammate learns they were pinged — in-app + optional email.
+    // Notify any HUMAN addressed in these turns (directed @human message, or a
+    // member of a group turn) so an offline teammate learns they were pinged —
+    // in-app + optional email. `addressedTo` is one participant or
+    // `{kind:'group', members}` (brain-embedded `directedMessage.ts`).
     const mentioned = new Set<string>();
     for (const m of body.messages ?? []) {
       if (!m.metadata) continue;
       try {
-        const a = (JSON.parse(m.metadata) as { addressedTo?: { kind?: string; ref?: string } }).addressedTo;
-        if (a?.kind === 'human' && a.ref) mentioned.add(a.ref);
-      } catch (error) { /* not directed */ 
+        type Addressee = { kind?: string; ref?: string };
+        const a = (JSON.parse(m.metadata) as { addressedTo?: Addressee & { members?: Addressee[] } }).addressedTo;
+        const addressees = a?.kind === 'group' ? (Array.isArray(a.members) ? a.members : []) : a ? [a] : [];
+        for (const r of addressees) if (r?.kind === 'human' && typeof r.ref === 'string' && r.ref) mentioned.add(r.ref);
+      } catch (error) { /* not directed */
         reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
       }
     }

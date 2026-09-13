@@ -1,3 +1,4 @@
+import { withDirectedMetadata } from '@seanhogg/builderforce-brain-embedded';
 import { brain, type BrainMessage, type ChatAgentInvite } from './builderforceApi';
 import { mentionsAny } from './canvas/agentMentions';
 
@@ -42,9 +43,14 @@ export async function runCanonicalCanvasGroupTurn(input: {
     agentRef: agent.ref, agentKind: agent.kind || 'workforce', role: agent.role || 'creator',
   })));
   const addressed = addressedCanvasAgents(input.prompt, input.agents);
+  // The shared directed-message contract: one agent is stored as itself, several as a
+  // NAMED group, so the chat page's transcript can draw who the question went to.
   await brain.sendMessages(chatId, [{
     role: 'user', content: input.prompt,
-    metadata: JSON.stringify({ creationSessionId: input.sessionId, addressedTo: addressed.length === 1 ? { kind: 'agent', ref: addressed[0]!.ref, name: addressed[0]!.name } : { kind: 'group', refs: addressed.map((agent) => agent.ref) } }),
+    metadata: withDirectedMetadata(
+      addressed.map((agent) => ({ kind: 'agent' as const, ref: agent.ref, name: agent.name })),
+      { creationSessionId: input.sessionId },
+    ),
   }]);
   const replies = await Promise.all(addressed.map(async (agent) => {
     const message = await brain.requestAgentReply(chatId, { agentRef: agent.ref, agentName: agent.name });

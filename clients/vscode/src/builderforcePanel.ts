@@ -221,6 +221,29 @@ function buildLabels(): Record<string, string> {
     // Composer toolbar (Claude-style + / menus, auto mode, dictation)
     "app.add": t("Add"),
     "app.options": t("Options"),
+    // The composer's "who" controls — the shared brain-ui RecipientPicker ("To") and
+    // PersonaPicker ("Acting as"), worded the same as the web composer's.
+    "app.to": t("To"),
+    "app.recipientPickerTitle": t("Send to"),
+    "app.brainRecipient": "BuilderForce",
+    "app.brainRecipientHint": t("Runs it"),
+    "app.agentRecipientHint": t("Replies & acts"),
+    "app.humanRecipientHint": t("Notified"),
+    "app.messageParticipant": t("Message {name}…"),
+    "app.mentionTitle": t("Direct to"),
+    "app.mentionAgent": t("Agent"),
+    "app.mentionHuman": t("Person"),
+    "app.actingAs": t("Acting as"),
+    "app.personaTitle": t("Brain agent or persona"),
+    "app.defaultBrain": t("Default Brain"),
+    "app.personas": t("Personas"),
+    "app.assignedAgents": t("Assigned agents"),
+    "app.persona.modality.designer": t("Website"),
+    "app.persona.modality.mobile": t("Mobile"),
+    "app.persona.modality.webmobile": t("Web + Mobile"),
+    "app.persona.modality.evermind": "Evermind",
+    "app.persona.modality.finetune": t("Fine-tune"),
+    "app.persona.modality.voice": t("Voice"),
     // Chat | Work — the CONVERSATION's mode (migration 0409), not an editor setting.
     // The same chat opened on the web reads the same mode, which is the whole point:
     // one conversation means one thing on every surface.

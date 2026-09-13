@@ -1,3 +1,108 @@
+## ✅ RESOLVED 2026-09-12 — Group turns name who they went to; ONE "To" and ONE "Acting as" control on the web and in the editor
+
+Two Gap-Register entries (Brain & chat) plus one defect found on the way, closed together.
+Operator decision 2026-09-12: the editor composer GAINS persona selection (full parity, not
+recipient-only).
+
+- **Group-addressed turns drew no recipient badge.** `addressedTo` now has two shapes in
+  `brain-embedded/src/directedMessage.ts`: one participant as itself, several as
+  `{kind:'group', members:[…]}` (`DirectedGroup`). `withDirectedMetadata` accepts one or many;
+  the single-recipient `parseDirectedRecipient` is replaced by `parseDirectedRecipients` (a list,
+  empty for a BRAIN turn), which also reads the legacy `{kind:'group', refs}` rows, named by ref.
+  `brain-ui` `RecipientsBadge` (replacing the unreferenced single `ParticipantBadge`) stacks up to
+  three avatars with "+N". Writers moved onto the helper: `runCanonicalCanvasGroupTurn`
+  (`frontend/src/lib/creationAgentChat.ts`) and `ManagerChatPanel` (whose nameless handle used to
+  write an unparseable flag — it now falls back to the ref). The API's human-mention notifier
+  (`brainRoutes.ts`) now notifies humans inside a group too. **Contract note:** the entry said
+  `isDirectedToParticipant` "must keep answering false for a group, so the server Brain still does
+  not auto-reply" — that is inverted. `true` is what keeps the BRAIN idle (the auto-reply effect in
+  `useBrainConversation` returns early on it), and a group turn is put to the agents it names, so a
+  group now answers `true`. Before, a group turn whose replies failed would have been re-answered
+  by the BRAIN on the chat page.
+- **Recipient and persona controls differed per surface.** `packages/brain-ui` now owns both:
+  `RecipientPicker` + `useRecipientChoice` (the reset-on-chat-switch / drop-a-departed-participant /
+  follow-the-@mention state both composers had copied) and `PersonaPicker`, on a shared
+  `PickerShell` and a new `usePopover` hook that the `/` menu (`PromptOptionsMenu`) and the VS Code
+  `+` menu (`ChatMenu.PopoverMenu`) also moved onto (three copies of outside-click/Escape → one).
+  The web's two native `<select>`s and the webview's hand-rolled "To" popover (and its
+  `bf-recipient` CSS) are gone; the web keeps its personality hovercard through the picker's
+  `renderAvatar` slot.
+- **The editor gained "Acting as".** The persona domain moved out of `frontend/src/lib/modality.ts`
+  into `brain-embedded/src/brainPersona.ts` — the modality prompts and glyphs (`MODALITY_PERSONAS`,
+  which `modality.ts` now joins in), the choice encoding, the Brain-assigned-agent join
+  (`brainPersonaAgents`, over the tenant pool mapping now shared as `brain-embedded/src/agentPool.ts`
+  `poolAgentsFrom`, which `frontend/src/lib/agentPool.ts` calls) and a transport-agnostic loader the
+  webview drives through its authed fetch. The web applies a persona as a REPLACEMENT system prompt
+  (`personaSystemPrompt`); the editor LAYERS it over its own prompt (`personaOverlay`), because the
+  editor prompt describes the real workspace and tools and a Builder persona's "live Preview" must
+  not overwrite that. Host copy: 17 new `app.*` labels in `builderforcePanel.ts` with de/es/fr/zh-cn
+  entries in `clients/vscode/l10n` (several — To, Send to, Direct to, Person — had never been in the
+  bundle and rendered English in every locale); three new `brain.*Hint` keys in all five web catalogs.
+- **Found + fixed: an agent persona never ran on the agent's model.** `BrainPanel` computed
+  `personaModel` ("Route the Brain to the assigned agent's real model") and passed it only to the
+  diagnostics capture — the conversation hook still got `model: selectedModel`. Both surfaces now
+  send `personaModel` as a non-strict preference: an explicit pin in the `/` menu still wins.
+
+- **Found + fixed: the Inbox shipped English in four languages.** Checking the persona copy
+  surfaced a second `actingAs` key — in `inboxApp`, whose 87 keys were identical to English in
+  `de`/`es`/`fr`/`zh` (every string the Inbox, its rules, the AI-agent drafting and the mailbox
+  connect prompts render). Translated in all four, with placeholders checked key-by-key.
+  `inboxApp.draftSystem` stays English on purpose: it is the instruction sent to the drafting
+  model, not copy a person reads.
+- **Marketing:** release note `api/migrations/1164_editor_acting_as_release_note.sql` (`new`) and
+  the post `choose-who-answers-not-just-who-you-ask` (English + de/es/fr/zh bodies, catalog titles,
+  `RELATED_ARTICLES` for `ide`/`workforce`/`personas`). VS Code extension 2026.9.48.
+
+Not changed: the cross-turn re-derivation entry stays open with its blocker, now carrying the
+finding that `seedFrom` strips earlier turns' tool results, so any guard must re-serve rather than
+stub.
+
+## ✅ RESOLVED 2026-09-12 — The VS Code agent navigates code by definition, reviews ticket branches in one call, and its scan teaches project memory
+
+Triggered by a VS Code Brain ticket-review run: 153 tool calls, 31% revisiting covered ground,
+one 153 KB service read 12× and searched 6×, ~40 hand-rolled `git`/`tasks_get` calls to learn
+which tickets had pending code. builderforce-memory/Evermind contributed nothing about the
+codebase — Evermind stores chat Q&A, and the facts store filled only when a model chose to
+call `remember_fact`. Five gaps, closed together:
+
+- **No definition index (VSIX, on-prem).** One shared extractor
+  `packages/agent-tools/src/symbols.ts` (`extractSymbols`/`exportedSymbols`, line-anchored, TS/JS,
+  Python, Go, Rust, JVM/.NET/Swift/PHP, Ruby, SQL, Markdown headings) replaced the canvas's
+  `exportedSymbols` copy (`frontend/src/lib/canvasBuildTools.ts`, now imported by the browser-safe
+  `@builderforce/agent-tools/symbols` subpath) and the on-prem `ssExtractSymbols` regex set
+  (`agent-runtime/.../node-code-tools.ts`). New capability `repo.symbols` + `RepoSymbolsCapability`;
+  tools `find_symbol` / `file_outline` (`symbol-tools.ts`, spliced into `CORE_TOOLS`, so only a
+  surface backing the capability advertises them — cloud Worker/Container unchanged). The Node
+  index `node-symbols.ts` (`WorkspaceSymbolIndex`, node-only export, mtime+size incremental,
+  persisted snapshot, coalesced refresh, `sharedSymbolIndex` per root) backs both the VS Code
+  provider (`clients/vscode/src/workspaceSymbols.ts`, watcher `workspaceSymbolWatch.ts`,
+  snapshot `.builderforce/symbols.json`) and the on-prem Node provider (`.builderForceAgents/symbols.json`).
+  Both tools are pinned in `LOCAL_WORKSPACE_TOOLS` and deduped as reads; the persona gained
+  `CODE_NAVIGATION_DIRECTIVE`.
+- **Scan digest never reached memory** (spec 14-prd-vscode-extension §grounding). `scanCodebase`
+  now returns `ScanResult` (grounding + manifests + overview); `workspaceFacts.ts` builds one
+  overview + one fact per significant sub-project (nearest-manifest attribution, main folders, most-exported
+  modules with names); `workspaceFactsSync.ts` publishes to the ACTIVE project after each scan and on
+  project switch, hash-diffed via `.builderforce/facts-published.json`, retiring its own stale
+  `workspace:*` keys through the new `DELETE /api/projects/:id/facts/:key` (+ agent front door).
+  This also closes the Gap-Register entry "On-prem `.builderforce/` knowledge loop for the VS Code
+  agent" — session notes shipped earlier (`sessionNotes.ts`), the digest completes it.
+- **Ticket review took ~40 calls.** `review_ticket_branches` (`ticketBranchTool.ts` composing
+  `bfApi.listTasksForReview` + `gitBranchFacts.ts` — `for-each-ref`, `rev-list --left-right`,
+  no-checkout `merge-tree --write-tree`) with pure verdicts in `ticketBranchReview.ts`
+  (ready / conflicts / merged_pr_leftover / in_base / branch_missing / no_branch, budgeted rows,
+  `only` to expand a group). PR state rides `GET /api/tasks` from the SAME grouped read as the
+  build badge (`loadTicketBuildStatuses` → `loadTicketPullRequestSignals`, `prState`), so a
+  squash-merged leftover is told apart from unmerged work without an extra query.
+- **Every `run_command` wiped the read cache.** `brain-embedded/src/readOnlyShell.ts`
+  (`isReadOnlyShellCommand`, conservative: known read-only programs + read-only git subcommands,
+  `$( … )` checked recursively, no file redirects) exempts provably read-only commands in
+  `ReadCoverage.invalidate`.
+- **Near-identical reads were misses.** `canonicalReadArgs` (trimmed strings, normalized paths,
+  default `read_file` offset dropped) keys the exact-repeat guard; `ReadCoverage.derivedSearch`
+  serves a narrower `search_code` from a complete wider one already held; a code change now also
+  forgets tree-wide answers (`search_code`/`find_symbol`/`list_files`).
+
 ## ✅ RESOLVED 2026-09-12 — Designed rooms: presets, a furniture designer, Roblox-style walking, Roblox places played inside the Room, and Room listings
 
 The Room was one room (round table, ring, back wall), seen only from above, and a

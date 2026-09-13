@@ -13,6 +13,7 @@ import {
 } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
 import { usePanelTask } from '@/hooks/usePanelTask';
+import { withDirectedMetadata } from '@seanhogg/builderforce-brain-embedded';
 /**
  * ASK THE MANAGER — the conversation where a person holds the AI Manager to account.
  *
@@ -131,11 +132,13 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
     await run(async () => {
       try {
         // The question is ADDRESSED to the manager — the same `addressedTo` convention an
-        // @agent mention uses, so the transcript records who it was put to.
+        // @agent mention uses, so the transcript records who it was put to and the BRAIN
+        // never auto-answers it. A nameless handle falls back to the ref: without a name
+        // the flag would not parse at all, and the turn would read as a BRAIN directive.
         const posted = await brain.sendMessages(chatId, [{
           role: 'user',
           content: text,
-          metadata: JSON.stringify({ addressedTo: { kind: 'agent', ref: agentRef, name: agentName } }),
+          metadata: withDirectedMetadata({ kind: 'agent', ref: agentRef, name: agentName ?? agentRef }),
         }]);
         setMessages((prev) => [...prev, ...posted]);
         const reply = await brain.requestAgentReply(chatId, {

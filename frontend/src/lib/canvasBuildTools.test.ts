@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   applySearchReplace,
-  exportedSymbols,
   resolveCanvasBuild,
   searchFileLines,
   summarizeWorkspace,
@@ -95,25 +94,8 @@ describe('searchFileLines', () => {
   });
 });
 
-describe('exportedSymbols', () => {
-  it('finds named and default exports in source files', () => {
-    const source = 'export function Header() {}\nexport const NAV = [];\nexport default App;';
-    expect(exportedSymbols('src/App.jsx', source).sort()).toEqual(['Header', 'NAV', 'default']);
-  });
-
-  it('ignores non-source files', () => {
-    expect(exportedSymbols('package.json', '{"name":"x"}')).toEqual([]);
-  });
-
-  // A shared /g regex carries `lastIndex` between calls; a second file would
-  // start matching from wherever the first one stopped.
-  it('does not leak regex state between files', () => {
-    const source = 'export const A = 1;';
-    expect(exportedSymbols('a.ts', source)).toEqual(['A']);
-    expect(exportedSymbols('b.ts', source)).toEqual(['A']);
-  });
-});
-
+// `exportedSymbols` itself is the shared extractor's (packages/agent-tools symbols.test.ts);
+// this only checks that the canvas map is built from it.
 describe('summarizeWorkspace', () => {
   it('lists every path and annotates source files with their exports', () => {
     const map = summarizeWorkspace([

@@ -42,7 +42,73 @@
 
 import { activityTarget } from './runActivity';
 import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool } from './localWorkspaceTools';
+import { isReadOnlyShellCommand } from './readOnlyShell';
 import { stableStringify } from './stableStringify';
+
+/** Argument keys that name a path — spelled `./a/b/`, `a\\b` and `a/b` by different turns. */
+const PATH_ARG_KEYS = new Set(['path', 'scope', 'repo', 'file', 'filePath', 'dir']);
+
+function normalizePathArg(value: string): string {
+  const p = value.split('\\').join('/').replace(/^\.\/+/, '').replace(/\/+$/, '');
+  return p === '.' ? '' : p;
+}
+
+/**
+ * The arguments as the guard compares them: strings trimmed, path arguments normalized,
+ * empty/absent values dropped, and a `read_file` at offset 1 treated as no offset (that
+ * IS the default). A model that asks for `{path: "./api/src/"}` after `{path: "api/src"}`
+ * is asking the same question, and the fingerprint used to see two.
+ */
+export function canonicalReadArgs(tool: string, args: unknown): Record<string, unknown> {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+    if (value == null) continue;
+    if (typeof value === 'string') {
+      const trimmed = PATH_ARG_KEYS.has(key) ? normalizePathArg(value.trim()) : value.trim();
+      if (trimmed) out[key] = trimmed;
+      continue;
+    }
+    out[key] = value;
+  }
+  if (tool === 'read_file' && (out.offset === 1 || out.offset === 0)) delete out.offset;
+  return out;
+}
+
+/**
+ * Reads whose answer depends on files OTHER than a named target — a search or a symbol
+ * lookup over a tree. An edit to any file can change them, so a code change forgets their
+ * cached answers (it still forgets only its own target from the visit tally).
+ */
+const TREE_WIDE_READ_TOOLS = new Set(['search_code', 'find_symbol', 'list_files']);
+
+/** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
+function isReadOnlyShellCall(tool: string, args: unknown): boolean {
+  if (tool !== 'run_command' || !args || typeof args !== 'object') return false;
+  const record = args as Record<string, unknown>;
+  const command = typeof record.command === 'string' ? record.command : typeof record.cmd === 'string' ? record.cmd : '';
+  return isReadOnlyShellCommand(command);
+}
+
+/** A tool result as an object — the host may hand it back already parsed or as JSON text. */
+function resultObject(result: unknown): Record<string, unknown> | null {
+  if (result && typeof result === 'object' && !Array.isArray(result)) return result as Record<string, unknown>;
+  if (typeof result === 'string') {
+    try {
+      const parsed = JSON.parse(result) as unknown;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function isUnderDir(p: string, dir: string): boolean {
+  if (!dir) return true;
+  const path = normalizePathArg(p);
+  return path === dir || path.startsWith(`${dir}/`);
+}
 
 /**
  * Visits to one target before the model is told it is circling. Two reads of a
@@ -100,6 +166,8 @@ export interface CachedRead {
 /** One successful read this run has already made, by its canonical fingerprint. */
 interface ExactRead {
   tool: string;
+  /** The canonical arguments it was made with (see {@link canonicalReadArgs}). */
+  args: Record<string, unknown>;
   /** The file/search target the read was about, or null for a target-less platform read. */
   target: string | null;
   /** What it returned, once the loop has handed it to the model (see {@link CachedRead}). */
@@ -116,7 +184,7 @@ export class ReadCoverage {
   private readonly exact = new Map<string, ExactRead>();
 
   private static exactKey(tool: string, args: unknown): string {
-    return `${tool}:${stableStringify(args ?? {})}`;
+    return `${tool}:${stableStringify(canonicalReadArgs(tool, args))}`;
   }
 
   /**
@@ -150,7 +218,7 @@ export class ReadCoverage {
    */
   record(tool: string, args: unknown): ReadVisit | null {
     const target = activityTarget(args) ?? null;
-    this.exact.set(ReadCoverage.exactKey(tool, args), { tool, target });
+    this.exact.set(ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
     if (!target) return null;
     const key = `${tool}:${target}`;
     const existing = this.visits.get(key);
@@ -209,7 +277,10 @@ export class ReadCoverage {
    *   are forgotten; file reads are not, because a ticket write does not edit source.
    */
   invalidate(tool: string, args: unknown): void {
-    if (isUnscopedMutationTool(tool)) {
+    // A shell command that provably only READS (`git log`, `ls`, a loop of `git rev-list`)
+    // changed nothing, so it forgets nothing — see `readOnlyShell.ts`. Every other shell
+    // command keeps the unknown-blast-radius treatment below.
+    if (isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args)) {
       this.exact.clear();
       for (const visit of this.visits.values()) visit.mayHaveChanged = true;
       return;
@@ -222,7 +293,9 @@ export class ReadCoverage {
         if (key.slice(key.indexOf(':') + 1) === target) this.visits.delete(key);
       }
       for (const [key, read] of [...this.exact.entries()]) {
-        if (read.target === target) this.exact.delete(key);
+        // Its own target, and every tree-wide answer the change may have altered: a
+        // search that returned no match for a name the edit just added is now wrong.
+        if (read.target === target || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
       }
       return;
     }
@@ -232,6 +305,45 @@ export class ReadCoverage {
     }
   }
 
+  /**
+   * Answer a `search_code` from a WIDER search already held: the same query (and the same
+   * other arguments) run earlier over an ancestor directory — or the whole tree — whose
+   * result was complete (not truncated). Filtering those matches to the narrower `path`
+   * is exactly what re-running the search would return, without running it.
+   *
+   * Measured on a ticket-review run: one directory searched nine times and one file six,
+   * mostly re-asking a question an earlier, broader search had already answered. Null when
+   * no complete covering result is held — then the search runs as normal.
+   */
+  derivedSearch(tool: string, args: unknown): Record<string, unknown> | null {
+    if (tool !== 'search_code') return null;
+    const wanted = canonicalReadArgs(tool, args);
+    const scope = typeof wanted.path === 'string' ? wanted.path : '';
+    if (!scope) return null; // an unscoped search has no wider search to come from
+    const { path: _scope, ...rest } = wanted;
+    const others = stableStringify(rest);
+    for (const read of this.exact.values()) {
+      if (read.tool !== 'search_code' || !read.cached) continue;
+      const { path: earlierPath, ...earlierRest } = read.args;
+      const earlier = typeof earlierPath === 'string' ? earlierPath : '';
+      if (earlier === scope || !isUnderDir(scope, earlier)) continue;
+      if (stableStringify(earlierRest) !== others) continue;
+      const result = resultObject(read.cached.result);
+      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
+      const matches = (result.matches as Array<Record<string, unknown>>).filter(
+        (m) => typeof m.path === 'string' && isUnderDir(m.path, scope),
+      );
+      return {
+        ok: true,
+        query: wanted.query,
+        total: matches.length,
+        truncated: false,
+        matches,
+        note: `Answered from this run's earlier complete search for the same query${earlier ? ` under "${earlier}"` : ' over the whole tree'}, filtered to "${scope}" — not re-run. ${matches.length === 0 ? 'The term does not appear under this path.' : ''}`.trim(),
+      };
+    }
+    return null;
+  }
 }
 
 /**

@@ -19,8 +19,22 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { pullRequests } from '../../infrastructure/database/schema';
 import {
-  deriveBuildStatusFromRows, type TicketBuildStatus,
+  deriveBuildStatusFromRows, pickCurrentPr, type TicketBuildStatus,
 } from '../../domain/task/buildStatus';
+
+/**
+ * What a ticket's pull requests say about it, for a card or a review: the build verdict
+ * and the STATE of the PR that speaks for the ticket (`open` / `merged` / `closed`).
+ * Both come from the one grouped read below — the state rides along because a branch
+ * that still exists after its PR merged (a squash merge) is indistinguishable, from git
+ * alone, from unmerged work, and the editor's branch review needs to tell them apart.
+ */
+export interface TicketPullRequestSignals {
+  /** Absent when `unknown` (the caller's default). */
+  buildStatus?: TicketBuildStatus;
+  /** Absent when the ticket has no pull request. */
+  prState?: string;
+}
 
 /**
  * Per-ticket build verdicts for `taskIds`, in one query.
@@ -32,11 +46,11 @@ import {
  * Best-effort: a failure returns an empty map, so the board still renders (without
  * badges) rather than 500ing on a projection.
  */
-export async function loadTicketBuildStatuses(
+export async function loadTicketPullRequestSignals(
   db: Db,
   tenantId: number,
   taskIds: readonly number[],
-): Promise<Map<number, TicketBuildStatus>> {
+): Promise<Map<number, TicketPullRequestSignals>> {
   if (taskIds.length === 0) return new Map();
   try {
     const rows = await db
@@ -61,11 +75,15 @@ export async function loadTicketBuildStatuses(
       if (list) list.push(r);
       else byTask.set(r.taskId, [r]);
     }
-    const out = new Map<number, TicketBuildStatus>();
+    const out = new Map<number, TicketPullRequestSignals>();
     for (const [taskId, list] of byTask) {
+      const signals: TicketPullRequestSignals = {};
       const verdict = deriveBuildStatusFromRows(list);
       // `unknown` is the caller's default; sending it would be a byte per card for nothing.
-      if (verdict !== 'unknown') out.set(taskId, verdict);
+      if (verdict !== 'unknown') signals.buildStatus = verdict;
+      const state = pickCurrentPr(list)?.status;
+      if (state) signals.prState = state;
+      if (signals.buildStatus || signals.prState) out.set(taskId, signals);
     }
     return out;
   } catch {

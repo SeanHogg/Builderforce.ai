@@ -2097,21 +2097,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
 
-  // ---- AI Manager: enable/disable ----
-  // Turn the AI Manager on or off for a project. Use this to enable autonomous
-  // agent dispatch, ticket assignment, and backlog management.
-  { tool: 'manager.enable', mutates: true,
-    description: 'Enable or disable the AI Manager for a project. Pass enabled:true to turn it on (allowing autonomous agent dispatch and ticket management), or enabled:false to pause it. Returns the updated config.',
-    parameters: obj({ projectId: N, enabled: B }, ['projectId', 'enabled']),
-    run: async (ctx, a) => {
-      const projectId = num(a.projectId);
-      const enabled = a.enabled;
-      if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean');
-      await ctx.projects.getProject(projectId, ctx.tenantId); // tenant-ownership guard
-      const cfg = await upsertManagerConfig(ctx.db, { tenantId: ctx.tenantId, projectId, enabled });
-      return { projectId, enabled: cfg.enabled, updatedAt: cfg.updatedAt };
-    },
-  },
+
 
   // ---- AI Manager: coaching (chat → standing directive) ----
   // Turns a "coaching session" (the human telling the manager how to manage) into a
@@ -3860,14 +3846,15 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'manager.enable', mutates: true,
-    description: 'ENABLE THE AI MANAGER for a project so it can autonomously dispatch agents, assign tickets, and manage the board. This is the switch that turns on agent execution — when disabled, no autonomous runs will be dispatched regardless of ticket state. Pass projectId to target a specific project.',
-    parameters: obj({ projectId: N }, ['projectId']),
+    description: 'ENABLE THE AI MANAGER for a project so it can autonomously dispatch agents, assign tickets, and manage the board. This is the switch that turns on agent execution — when disabled, no autonomous runs will be dispatched regardless of ticket state. Pass projectId to target a specific project. Optionally pass enabled:true/false to change the state.',
+    parameters: obj({ projectId: N, enabled: O(B) }, ['projectId']),
     run: async (ctx, a) => {
       const projectId = num(a.projectId);
       await assertProjectInTenant(ctx, projectId);
       const { upsertManagerConfig } = await import('../manager/ManagerService');
-      await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, { enabled: true });
-      return { success: true, message: 'Manager enabled for project ' + projectId };
+      const enabled = a.enabled !== undefined ? a.enabled : true;
+      const result = await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, { enabled });
+      return { success: true, message: 'Manager ' + (enabled ? 'enabled' : 'disabled') + ' for project ' + projectId, config: result };
     },
   },
   {

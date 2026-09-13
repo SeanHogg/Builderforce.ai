@@ -201,7 +201,7 @@ export function PromptOptionsMenu({
         aria-label={title}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
       >
         <span className="bf-pmenu__slash" aria-hidden="true">/</span>
         {activeMode && <span className="bf-pmenu__mode">
@@ -223,7 +223,7 @@ export function PromptOptionsMenu({
                   role="menuitemradio"
                   aria-checked={choice.value === mode.value}
                   className={`bf-pmenu__item${choice.value === mode.value ? ' is-active' : ''}`}
-                  onClick={() => { mode.onChange(choice.value); setOpen(false); }}
+                  onClick={() => { mode.onChange(choice.value); close(); }}
                 >
                   <span className="bf-pmenu__ico" aria-hidden="true">{choice.icon ?? ''}</span>
                   <span className="bf-pmenu__lbl">
@@ -368,7 +368,7 @@ export function PromptOptionsMenu({
                         role="option"
                         aria-selected={item.key === activeKey}
                         className={`bf-pmenu__option${item.key === activeKey ? ' is-active' : ''}`}
-                        onClick={() => { model.onChange(item.selection); setQuery(''); setOpen(false); }}
+                        onClick={() => { model.onChange(item.selection); setQuery(''); close(); }}
                       >
                         <span className="bf-pmenu__optName">{item.label}</span>
                         <span className="bf-pmenu__optTag">{modelCategoryLabel(item.category, labels)}</span>
@@ -402,7 +402,7 @@ export function PromptOptionsMenu({
                 role="menuitem"
                 className="bf-pmenu__item"
                 disabled={!session.canConsolidate || !!session.consolidating || !!session.forking}
-                onClick={() => { setOpen(false); session.onConsolidate(); }}
+                onClick={() => { close(); session.onConsolidate(); }}
               >
                 <span className="bf-pmenu__ico" aria-hidden="true"><IconConsolidate /></span>
                 <span className="bf-pmenu__lbl">
@@ -415,7 +415,7 @@ export function PromptOptionsMenu({
                 role="menuitem"
                 className="bf-pmenu__item"
                 disabled={!session.canConsolidate || !!session.consolidating || !!session.forking}
-                onClick={() => { setOpen(false); session.onFork(); }}
+                onClick={() => { close(); session.onFork(); }}
               >
                 <span className="bf-pmenu__ico" aria-hidden="true"><IconFork /></span>
                 <span className="bf-pmenu__lbl">
@@ -433,7 +433,7 @@ export function PromptOptionsMenu({
                 type="button"
                 role="menuitem"
                 className="bf-pmenu__item"
-                onClick={() => { setOpen(false); onAccountSettings(); }}
+                onClick={() => { close(); onAccountSettings(); }}
               >
                 <span className="bf-pmenu__ico" aria-hidden="true">⚙</span>
                 <span className="bf-pmenu__lbl">{labels.accountSettings}</span>

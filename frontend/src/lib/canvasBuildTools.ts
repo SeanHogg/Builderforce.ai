@@ -44,6 +44,9 @@
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { fetchFiles, fetchFileContent, fetchFileHistory, restoreFileVersion, saveFile } from '@/lib/api';
 import { coerceFileContent, validateFileContentForPath } from '@builderforce/ide-file-contract';
+// The ONE symbol extractor (shared with the editor's and on-prem's definition index);
+// imported by subpath so the canvas bundle carries the extractor, not the tool catalog.
+import { exportedSymbols } from '@builderforce/agent-tools/symbols';
 import { formatBuildFailures } from '@/lib/buildDiagnostics';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
 import type { CanvasBuildBinding } from '@/lib/canvasBuild';
@@ -224,27 +227,6 @@ export function summarizeWorkspace(files: { path: string; content: string }[]): 
   return lines.join('\n');
 }
 
-const EXPORT_PATTERNS = [
-  /\bexport\s+(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g,
-  /\bexport\s+(?:const|let|var|class|type|interface|enum)\s+([A-Za-z_$][\w$]*)/g,
-];
-
-/** Exported names of a JS/TS source file. Empty for anything else. */
-export function exportedSymbols(path: string, content: string): string[] {
-  if (!/\.(js|jsx|ts|tsx|mjs|cjs)$/i.test(path)) return [];
-  const found = new Set<string>();
-  for (const pattern of EXPORT_PATTERNS) {
-    // A fresh regex per file: a shared /g regex carries lastIndex between calls.
-    const re = new RegExp(pattern.source, pattern.flags);
-    let match = re.exec(content);
-    while (match) {
-      found.add(match[1]);
-      match = re.exec(content);
-    }
-  }
-  if (/\bexport\s+default\b/.test(content)) found.add('default');
-  return [...found].slice(0, 25);
-}
 
 /**
  * The canvas's build actions.

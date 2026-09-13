@@ -8,6 +8,7 @@
  *
  *   GET  /facts?query=&limit=  — recall (read-through cached)
  *   POST /facts { key, content, source? } — write-through upsert (replace by key)
+ *   DELETE /facts/:key          — retire one fact (a writer removing what it owns)
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -17,7 +18,7 @@ import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import { projects } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
+import { deleteProjectFact, recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
 import { evermindGenerate, type ArtifactStore } from '../../application/llm/evermindRuntime';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
@@ -67,6 +68,15 @@ async function rememberCore(env: Env, db: Db, tenantId: number, projectId: numbe
   if (!key.trim() || !content.trim()) return json({ error: 'key and content are required' }, 400);
   const ok = await upsertProjectFact(env, db, tenantId, projectId, key, content, typeof body.source === 'string' ? body.source : 'agent');
   return json({ ok, key: key.trim() });
+}
+
+/** Retire one fact by key. `ok` says whether a fact was removed (absent is not an error). */
+async function forgetCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const key = decodeURIComponent(c.req.param('key') ?? '');
+  if (!key.trim()) return json({ error: 'key is required' }, 400);
+  const removed = await deleteProjectFact(env, db, tenantId, projectId, key);
+  return json({ ok: true, removed, key: key.trim() });
 }
 
 /**
@@ -125,6 +135,7 @@ export function createProjectFactsRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/:projectId/facts', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c));
+  router.delete('/:projectId/facts/:key', (c) => forgetCore(c.env as Env, db, t(c), pid(c), c));
   // Memory-first: resolve an answer from memory (skip the LLM) / cache a Q&A pair.
   router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/answer', (c) => cacheAnswerCore(c.env as Env, db, t(c), pid(c), c));
@@ -147,6 +158,11 @@ export function createProjectFactsAgentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
     return rememberCore(c.env as Env, db, tenantId, pid(c), c);
+  });
+  router.delete('/:projectId/facts/:key', async (c) => {
+    const tenantId = await auth(c);
+    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
+    return forgetCore(c.env as Env, db, tenantId, pid(c), c);
   });
   router.get('/:projectId/answer', async (c) => {
     const tenantId = await auth(c);

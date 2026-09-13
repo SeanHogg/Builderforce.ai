@@ -11,6 +11,8 @@ import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
+import { afterWorkspaceScan, syncWorkspaceFacts } from "./workspaceFactsSync";
+import { watchWorkspaceSymbols } from "./workspaceSymbolWatch";
 import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache, invalidateKimiInstallMemo } from "./gateway";
 import { listLocalModels, localModelOptions, type LocalModel } from "./localModels";
 import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
@@ -518,6 +520,8 @@ export function activate(context: vscode.ExtensionContext): void {
       setGroundingSummary(undefined);
       void maybeScan(context, false);
     }),
+    // Keep the find_symbol / file_outline definition index current as files change.
+    ...watchWorkspaceSymbols(),
     // Switching the active project re-pushes Brain init so an open chat's system
     // prompt (and new-chat scoping) tracks the current project without a reopen, and
     // re-labels the Sessions header to show which project's chats are in view.
@@ -525,6 +529,8 @@ export function activate(context: vscode.ExtensionContext): void {
       BuilderForcePanel.refresh();
       evermindView?.refresh();
       sessionsView.description = getSelectedProject()?.name;
+      // The workspace digest belongs in the project the user is now working in.
+      void syncWorkspaceFacts(context.secrets);
     }),
     // A manual model pick re-pushes Brain init so an open chat switches immediately
     // (parity with project change; the native participant re-resolves per turn).
@@ -1333,7 +1339,11 @@ async function maybeScan(context: vscode.ExtensionContext, force: boolean): Prom
   const work = async (progress?: vscode.Progress<{ message?: string }>) => {
     progress?.report({ message: "Scanning workspace…" });
     try {
-      setGroundingSummary(await scanCodebase(context.secrets, root, route, force));
+      const scan = await scanCodebase(context.secrets, root, route, force);
+      setGroundingSummary(scan.grounding);
+      // Warm the definition index and publish the digest into the project's facts, in
+      // the background: grounding is ready now, and neither must hold up activation.
+      void afterWorkspaceScan(context.secrets, root, scan).catch((e) => console.error("BuilderForce workspace digest failed:", e));
     } catch (e) {
       console.error("BuilderForce codebase scan failed:", e);
     }

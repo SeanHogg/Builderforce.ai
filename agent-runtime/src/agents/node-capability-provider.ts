@@ -34,6 +34,9 @@ import { applyStringEdit, filterByGlob, normalizeScopeDir, isUnderScopeDir } fro
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
 import { resolveInsideRoot as resolveInside } from "@builderforce/agent-tools/node-path.js";
+// The ONE definition index (shared with the VS Code workspace) behind `find_symbol` /
+// `file_outline`. Node-only, so it too comes from its own export condition.
+import { sharedSymbolIndex } from "@builderforce/agent-tools/node-symbols.js";
 import type {
   Capability,
   CapabilityProvider,
@@ -58,6 +61,7 @@ const LIST_MAX_FILES = 5_000;
 export const NODE_FILE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "repo.read",
   "repo.search",
+  "repo.symbols",
   "repo.write",
   "repo.edit",
   "repo.delete",
@@ -159,9 +163,16 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     (options.scope ?? "workspace") === "workspace"
       ? (p: string) => resolveInside(root, p)
       : (p: string) => resolvePath(root, p);
+  // Process-wide per root: a provider is built per session, and an index per provider
+  // would re-walk the tree every time. Persisted beside the on-prem search index.
+  const symbols = sharedSymbolIndex(root, {
+    skipDirs: LIST_IGNORED_DIRS,
+    cachePath: join(root, ".builderForceAgents", "symbols.json"),
+  });
 
   return {
     capabilities: NODE_SURFACE_CAPS,
+    symbols,
     human: {
       async ask(question, context): Promise<HumanAskResult> {
         // On-prem the gate BLOCKS in-process until a human answers (or it auto-answers
@@ -264,6 +275,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         try {
           await fsMkdir(resolvePath(abs, ".."), { recursive: true });
           await fsWriteFile(abs, content, "utf-8");
+          symbols.markDirty(abs);
           return { ok: true, change: existed ? "modified" : "created" };
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -291,6 +303,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
         try {
           await fsWriteFile(abs, result.content, "utf-8");
+          symbols.markDirty(abs);
           return { ok: true, change: "modified", replaced: result.replaced };
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -313,6 +326,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
         try {
           await fsRm(abs);
+          symbols.markDirty(abs);
           return { ok: true, deleted: true };
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : String(err) };

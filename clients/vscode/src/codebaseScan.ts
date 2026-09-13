@@ -32,7 +32,17 @@ interface ScanData {
 interface ScanCache {
   versionToken: string;
   grounding: string;
+  /** The model-written overview on its own, so a cache hit can still hand it to the digest. */
+  overview?: string;
   generatedAt: string;
+}
+
+/** What a scan hands its callers: the prompt grounding, plus the raw digest facts are built from. */
+export interface ScanResult {
+  grounding: string;
+  /** Workspace-relative manifest paths — where the sub-projects are. */
+  manifests: string[];
+  overview: string;
 }
 
 function isManifest(name: string): boolean {
@@ -173,7 +183,7 @@ export async function scanCodebase(
   root: string,
   route: ModelRoute,
   force = false,
-): Promise<string | undefined> {
+): Promise<ScanResult> {
   const bfDir = path.join(root, ".builderforce");
   const cachePath = path.join(bfDir, "scan.json");
 
@@ -183,7 +193,9 @@ export async function scanCodebase(
   if (!force) {
     try {
       const cached = JSON.parse(await fs.readFile(cachePath, "utf-8")) as ScanCache;
-      if (cached.versionToken === versionToken && cached.grounding) return cached.grounding;
+      if (cached.versionToken === versionToken && cached.grounding) {
+        return { grounding: cached.grounding, manifests: data.manifests, overview: cached.overview ?? "" };
+      }
     } catch {
       /* recompute */
     }
@@ -241,7 +253,7 @@ export async function scanCodebase(
   );
   await fs.writeFile(path.join(bfDir, "memory", ".gitkeep"), "", "utf-8");
 
-  const cache: ScanCache = { versionToken, grounding, generatedAt: new Date().toISOString() };
+  const cache: ScanCache = { versionToken, grounding, overview: overview.trim(), generatedAt: new Date().toISOString() };
   await fs.writeFile(cachePath, JSON.stringify(cache, null, 2), "utf-8");
-  return grounding;
+  return { grounding, manifests: data.manifests, overview: overview.trim() };
 }

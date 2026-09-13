@@ -197,6 +197,91 @@ describe('ReadCoverage · the exact-repeat guard', () => {
   });
 });
 
+describe('ReadCoverage · fewer false misses', () => {
+  it('treats spelling variants of one path as the same read', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'foo', path: 'api/src' });
+    expect(cov.isRepeat('search_code', { query: ' foo ', path: './api/src/' })).toBe(true);
+    expect(cov.isRepeat('search_code', { query: 'foo', path: 'api\\src' })).toBe(true);
+    cov.record('read_file', { path: CSS });
+    expect(cov.isRepeat('read_file', { path: CSS, offset: 1 })).toBe(true);
+  });
+
+  it('keeps every cached answer across a READ-ONLY shell command', () => {
+    // The ticket review: `git branch -a`, `git log main..X`, a `for` loop of `git rev-list`
+    // — nineteen shell calls that changed nothing, each of which used to wipe the cache.
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.record('builtin_tasks_list', { projectId: 11 });
+    cov.invalidate('run_command', { command: 'cd repo && git log main..builderforce/task-58 --oneline | head -5' });
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(true);
+    expect(cov.isRepeat('builtin_tasks_list', { projectId: 11 })).toBe(true);
+    // …and does not excuse the next read as "may have changed".
+    expect(cov.record('read_file', { path: CSS })!.mayHaveChanged).toBe(false);
+  });
+
+  it('forgets tree-wide answers when any file is edited, but not other files\' reads', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'newHelper' });
+    cov.record('find_symbol', { query: 'newHelper' });
+    cov.record('read_file', { path: 'other.tsx' });
+    cov.invalidate('edit_file', { path: CSS });
+    expect(cov.isRepeat('search_code', { query: 'newHelper' })).toBe(false);
+    expect(cov.isRepeat('find_symbol', { query: 'newHelper' })).toBe(false);
+    expect(cov.isRepeat('read_file', { path: 'other.tsx' })).toBe(true);
+  });
+});
+
+describe('ReadCoverage · derived searches', () => {
+  const wide = {
+    ok: true,
+    query: 'resolveRepo',
+    total: 3,
+    truncated: false,
+    matches: [
+      { path: 'api/src/a.ts', line: 1, text: 'resolveRepo()' },
+      { path: 'api/src/llm/b.ts', line: 9, text: 'resolveRepo()' },
+      { path: 'frontend/c.ts', line: 4, text: 'resolveRepo()' },
+    ],
+  };
+
+  it('answers a narrower search from a complete wider one', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'resolveRepo' });
+    cov.cacheResult('search_code', { query: 'resolveRepo' }, { result: wide, anchor: {} });
+    const derived = cov.derivedSearch('search_code', { query: 'resolveRepo', path: 'api/src/llm' })!;
+    expect(derived.total).toBe(1);
+    expect((derived.matches as Array<{ path: string }>)[0].path).toBe('api/src/llm/b.ts');
+    expect(String(derived.note)).toMatch(/not re-run/);
+  });
+
+  it('accepts a JSON-string result the host handed back unparsed', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'resolveRepo', path: 'api' });
+    cov.cacheResult('search_code', { query: 'resolveRepo', path: 'api' }, { result: JSON.stringify(wide), anchor: {} });
+    expect(cov.derivedSearch('search_code', { query: 'resolveRepo', path: 'api/src' })?.total).toBe(2);
+  });
+
+  it('never derives from a truncated result, a different query, or a sibling directory', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'resolveRepo', path: 'api/src' });
+    cov.cacheResult('search_code', { query: 'resolveRepo', path: 'api/src' }, { result: { ...wide, truncated: true }, anchor: {} });
+    expect(cov.derivedSearch('search_code', { query: 'resolveRepo', path: 'api/src/llm' })).toBeNull();
+    cov.record('search_code', { query: 'other' });
+    cov.cacheResult('search_code', { query: 'other' }, { result: wide, anchor: {} });
+    expect(cov.derivedSearch('search_code', { query: 'resolveRepo', path: 'frontend' })).toBeNull();
+    expect(cov.derivedSearch('search_code', { query: 'other', path: 'api/srcx' })?.total).toBe(0);
+  });
+
+  it('derives nothing for an unscoped search or another tool', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'x', path: 'a' });
+    cov.cacheResult('search_code', { query: 'x', path: 'a' }, { result: wide, anchor: {} });
+    expect(cov.derivedSearch('search_code', { query: 'x' })).toBeNull();
+    expect(cov.derivedSearch('read_file', { path: 'a/b' })).toBeNull();
+  });
+});
+
 describe('ReadCoverage · the replay cache', () => {
   it('holds nothing for a read that never succeeded', () => {
     const cov = new ReadCoverage();

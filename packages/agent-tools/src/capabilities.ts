@@ -25,6 +25,8 @@
  * under both `moduleResolution: bundler` and `NodeNext`.
  */
 
+import type { SymbolKind } from "./symbols.js";
+
 /**
  * The set of capabilities a tool can require / a surface can provide. Adding a new
  * capability here is the ONLY place a new class of tool↔surface gating is declared
@@ -38,6 +40,11 @@ export type Capability =
    *  a surface with a real shell (the Container) greps natively and intentionally
    *  does not back the indexed searcher, so this gates `search_code` separately. */
   | "repo.search"
+  /** A DEFINITION index over the tree — symbol name → file:line — backing `find_symbol`
+   *  and `file_outline`. Separate from `repo.search` because it needs a maintained index
+   *  (a surface on a real disk keeps one warm; a git-over-HTTP surface has none), and a
+   *  surface that cannot back it must not advertise tools that promise "one instant call". */
+  | "repo.symbols"
   /** Create / update whole files in the working tree (committed or on disk). */
   | "repo.write"
   /** Surgical in-place string edits. Separate from write so a surface can offer whole
@@ -127,6 +134,14 @@ export interface RepoReadCapability {
    *  restrict the search — essential on a large monorepo where an unscoped walk can
    *  be truncated before it reaches the relevant subtree. */
   searchCode(query: string, scope?: string): Promise<RepoSearchResult>;
+}
+
+/** Look up where symbols are DEFINED (capability `repo.symbols`). The surface owns the
+ *  index — how it is built, kept fresh and persisted; the tool only asks it. */
+export interface RepoSymbolsCapability {
+  /** Definitions whose name matches `query` (case-insensitive; exact matches first).
+   *  `scope` narrows to a repo-relative subdirectory, `kind` to one {@link SymbolKind}. */
+  find(query: string, opts?: { scope?: string; kind?: SymbolKind; limit?: number }): Promise<SymbolFindResult>;
 }
 
 /** Mutate the working tree. The provider owns the side effects of a write —
@@ -387,6 +402,7 @@ export interface CapabilityProvider {
   readonly capabilities: ReadonlySet<Capability>;
   readonly repoRead?: RepoReadCapability;
   readonly repoWrite?: RepoWriteCapability;
+  readonly symbols?: RepoSymbolsCapability;
   readonly shell?: ShellCapability;
   readonly staticCheck?: StaticCheckCapability;
   readonly human?: HumanCapability;
@@ -433,6 +449,27 @@ export interface RepoSearchResult {
   total?: number;
   truncated?: boolean;
   matches?: Array<{ path: string } & Record<string, unknown>>;
+  error?: string;
+}
+/** One definition a {@link RepoSymbolsCapability} found. */
+export interface SymbolMatch {
+  path: string;
+  line: number;
+  kind: SymbolKind;
+  name: string;
+  exported: boolean;
+}
+export interface SymbolFindResult {
+  ok: boolean;
+  query?: string;
+  /** Every definition that matched, before `limit`. */
+  total?: number;
+  truncated?: boolean;
+  matches?: SymbolMatch[];
+  /** Files the index covers, so "0 matches" can be read against how much was searched. */
+  indexedFiles?: number;
+  /** True when the index hit its file cap — a miss is then not proof of absence. */
+  partialIndex?: boolean;
   error?: string;
 }
 export interface RepoWriteResult {

@@ -552,5 +552,22 @@
   "Recent": "Zuletzt",
   "The board could not be drawn. The conversation is still here.": "Das Board konnte nicht gezeichnet werden. Die Unterhaltung ist weiterhin da.",
   "BuilderForce: the board could not be drawn ({0}). The conversation is still available.": "BuilderForce: Das Board konnte nicht gezeichnet werden ({0}). Die Unterhaltung ist weiterhin verfügbar.",
-  "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.": "BuilderForce: Deine Canvas-Sitzungen konnten nicht geladen werden ({0}). Es wird ein lokales Board angezeigt — deine Unterhaltung ist davon nicht betroffen."
+  "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.": "BuilderForce: Deine Canvas-Sitzungen konnten nicht geladen werden ({0}). Es wird ein lokales Board angezeigt — deine Unterhaltung ist davon nicht betroffen.",
+  "To": "An",
+  "Send to": "Senden an",
+  "Runs it": "Führt es aus",
+  "Replies & acts": "Antwortet & handelt",
+  "Notified": "Wird benachrichtigt",
+  "Message {name}…": "Nachricht an {name}…",
+  "Direct to": "Richten an",
+  "Person": "Person",
+  "Acting as": "Handelt als",
+  "Brain agent or persona": "Brain-Agent oder -Persona",
+  "Default Brain": "Standard-Brain",
+  "Personas": "Personas",
+  "Assigned agents": "Zugewiesene Agenten",
+  "Mobile": "Mobil",
+  "Web + Mobile": "Web + Mobile",
+  "Fine-tune": "Feinabstimmung",
+  "Voice": "Stimme"
 }

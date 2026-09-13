@@ -552,5 +552,22 @@
   "Recent": "最近",
   "The board could not be drawn. The conversation is still here.": "无法绘制画板。对话仍然可用。",
   "BuilderForce: the board could not be drawn ({0}). The conversation is still available.": "BuilderForce：无法绘制画板（{0}）。对话仍然可用。",
-  "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.": "BuilderForce：无法加载你的 Canvas 会话（{0}）。正在显示本地画板 — 你的对话不受影响。"
+  "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.": "BuilderForce：无法加载你的 Canvas 会话（{0}）。正在显示本地画板 — 你的对话不受影响。",
+  "To": "发送给",
+  "Send to": "发送至",
+  "Runs it": "由它执行",
+  "Replies & acts": "回复并执行",
+  "Notified": "会收到通知",
+  "Message {name}…": "给 {name} 发消息…",
+  "Direct to": "指定给",
+  "Person": "成员",
+  "Acting as": "身份",
+  "Brain agent or persona": "Brain 智能体或角色",
+  "Default Brain": "默认 Brain",
+  "Personas": "角色",
+  "Assigned agents": "已分配的智能体",
+  "Mobile": "移动端",
+  "Web + Mobile": "网页 + 移动端",
+  "Fine-tune": "微调",
+  "Voice": "语音"
 }

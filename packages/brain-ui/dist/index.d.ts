@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
 /**
@@ -725,12 +725,123 @@ interface AvatarProps {
 }
 /** A single participant avatar: initials on a deterministic coloured disc/tile. */
 declare function Avatar({ name, kind, size, title, style }: AvatarProps): React__default.JSX.Element;
-/** Avatar + name — the "→ recipient" badge shown on a directed message / composer chip. */
-declare function ParticipantBadge({ recipient, prefix, size }: {
-    recipient: DirectedRecipient;
-    prefix?: string;
+/**
+ * The "→ recipients" badge on a directed user turn: who it was put to. One recipient
+ * reads "→ [avatar] Name"; a group turn stacks up to `max` avatars and names them,
+ * with "+N" for the rest (the full list is in the tooltip). Renders nothing for a
+ * BRAIN turn.
+ */
+declare function RecipientsBadge({ recipients, max, size }: {
+    recipients: readonly DirectedRecipient[];
+    max?: number;
     size?: number;
-}): React__default.JSX.Element;
+}): React__default.JSX.Element | null;
+
+/**
+ * Open/close state for a composer popover — the ONE implementation of "opens on the
+ * trigger, closes on an outside press or Escape" that every composer menu shares: the
+ * `/` options menu, the recipient and persona pickers, and the VS Code webview's `+`
+ * menu. Attach `rootRef` to the element that contains BOTH the trigger and the
+ * popover, so a press inside either never counts as outside.
+ */
+declare function usePopover<T extends HTMLElement = HTMLDivElement>(): {
+    open: boolean;
+    toggle: () => void;
+    close: () => void;
+    rootRef: React.RefObject<T>;
+};
+
+interface RecipientPickerLabels {
+    /** Eyebrow on the pill, e.g. "To". */
+    to: string;
+    /** Names the control and heads its list, e.g. "Send to". */
+    title: string;
+    /** The BRAIN row, e.g. "BuilderForce". */
+    brain: string;
+    /** What sending to the BRAIN does, e.g. "Runs it". */
+    brainHint: string;
+    /** What sending to an invited agent does, e.g. "Replies & acts". */
+    agentHint: string;
+    /** What sending to an invited person does, e.g. "Notified". */
+    humanHint: string;
+}
+declare const DEFAULT_RECIPIENT_PICKER_LABELS: RecipientPickerLabels;
+interface RecipientPickerProps {
+    /** The chat's invited participants. None ⇒ the control does not render. */
+    participants: readonly DirectedRecipient[];
+    /** The EFFECTIVE recipient of the next message (null = the BRAIN). */
+    recipient: DirectedRecipient | null;
+    /** An explicit pick: the BRAIN, or a participant. */
+    onChoose: (choice: Exclude<RecipientChoice, null>) => void;
+    labels?: Partial<RecipientPickerLabels>;
+    disabled?: boolean;
+    /** Wrap the chosen participant's avatar — the web adds its personality hovercard. */
+    renderAvatar?: (recipient: DirectedRecipient, avatar: React__default.ReactNode) => React__default.ReactNode;
+}
+/**
+ * The composer's "To" control: who the next message goes to. The BRAIN (the default)
+ * executes it; an invited agent replies and can act; an invited person is notified.
+ * ONE control for the web composer and the VS Code webview, so the two cannot route a
+ * message differently or describe the same choice in different words.
+ *
+ * Self-gating: a chat with no participants has nothing to route, so nothing renders.
+ */
+declare function RecipientPicker({ participants, recipient, onChoose, labels, disabled, renderAvatar }: RecipientPickerProps): React__default.JSX.Element | null;
+
+/**
+ * Who the next message goes to, as composer state — shared by every composer so
+ * routing behaves identically on the web and in the editor.
+ *
+ * `choice` is the explicit pick (`null` = auto, `'brain'`, or a participant). It resets
+ * when `resetKey` changes (switching chats) and drops a participant who has since left
+ * the roster. The effective `recipient` then follows {@link resolveRecipient}: an
+ * explicit BRAIN pick wins, else an explicit participant, else a leading @mention in
+ * `input`, else the BRAIN (null).
+ */
+declare function useRecipientChoice({ participants, input, resetKey }: {
+    participants: DirectedRecipient[];
+    input: string;
+    resetKey: unknown;
+}): {
+    recipient: DirectedRecipient | null;
+    choice: RecipientChoice;
+    choose: React.Dispatch<React.SetStateAction<RecipientChoice>>;
+};
+
+interface PersonaPickerLabels {
+    /** Eyebrow on the pill, e.g. "Acting as". */
+    actingAs: string;
+    /** Names the control, e.g. "Brain agent or persona". */
+    title: string;
+    defaultBrain: string;
+    /** Heading over the modality personas. */
+    personas: string;
+    /** Heading over the Brain-assigned agents. */
+    assignedAgents: string;
+}
+declare const DEFAULT_PERSONA_PICKER_LABELS: PersonaPickerLabels;
+/** A modality persona as the host names it (the label is the host's translation). */
+interface PersonaModalityOption {
+    id: string;
+    label: string;
+    icon?: string;
+}
+interface PersonaPickerProps {
+    value: BrainPersonaChoice;
+    onChange: (value: BrainPersonaChoice) => void;
+    modalities: readonly PersonaModalityOption[];
+    /** Agents assigned to the Brain; the group is omitted when there are none. */
+    agents: readonly BrainPersonaAgent[];
+    labels?: Partial<PersonaPickerLabels>;
+    disabled?: boolean;
+}
+/**
+ * The composer's "Acting as" control: WHO the Brain answers as — the default Brain,
+ * a modality persona, or an agent assigned to the Brain. ONE control for the web
+ * composer and the VS Code webview; what a choice DOES to the run is the shared
+ * persona domain's (`brainPersona.ts`), so this component only offers and names.
+ */
+declare function PersonaPicker({ value, onChange, modalities, agents, labels, disabled }: PersonaPickerProps): React.JSX.Element;
 
 /**
  * HealthRing — a compact "% done" donut for a work item's health, rendered
@@ -2338,4 +2449,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, commandOf, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, healthRingColor, initialsOf, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, commandOf, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, healthRingColor, initialsOf, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice };

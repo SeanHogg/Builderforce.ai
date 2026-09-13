@@ -14,6 +14,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { extractSymbols } from "@builderforce/agent-tools";
 import { buildCodeMap, buildDependencyGraph } from "../code-map.js";
 import {
   loadCustomAgentRoles,
@@ -369,32 +370,10 @@ const BM25_B = 0.75;
 const SS_IGNORED_DIRS = new Set(IGNORED_DIRS);
 const SS_SOURCE_EXTENSIONS = new Set(SOURCE_EXTENSIONS);
 
-const SYMBOL_PATTERNS: RegExp[] = [
-  /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g,
-  /(?:^|\s)(?:async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)/gm,
-  /(?:^|\s)class\s+([A-Za-z_$][A-Za-z0-9_$]*)/gm,
-  /(?:^|\s)(?:type|interface)\s+([A-Za-z_$][A-Za-z0-9_$]*)/gm,
-  /^def\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-  /^class\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-  /^func\s+(?:\([^)]+\)\s+)?([A-Za-z_][A-Za-z0-9_]*)/gm,
-  /^type\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-  /^(?:pub\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-  /^(?:pub\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-  /^(?:pub\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-  /(?:public|private|protected|static)?\s+(?:class|interface|enum)\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
-];
-
-function ssExtractSymbols(text: string): string[] {
-  const symbols = new Set<string>();
-  for (const pattern of SYMBOL_PATTERNS) {
-    pattern.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = pattern.exec(text)) !== null) {
-      const sym = m[1];
-      if (sym && sym.length >= 2) symbols.add(sym);
-    }
-  }
-  return Array.from(symbols);
+/** Symbol NAMES for the BM25 index, from the ONE shared extractor (`@builderforce/agent-tools`
+ *  symbols — the same definitions the editor's `find_symbol` index holds). */
+function ssExtractSymbols(relPath: string, text: string): string[] {
+  return [...new Set(extractSymbols(relPath, text).map((s) => s.name).filter((name) => name.length >= 2))];
 }
 
 const SS_STOP_WORDS = new Set([
@@ -473,7 +452,7 @@ async function ssBuildIndex(projectRoot: string): Promise<SearchIndex> {
     } catch {
       continue;
     }
-    const symbols = ssExtractSymbols(text);
+    const symbols = ssExtractSymbols(relPath, text);
     const pathTokens = ssTokenise(relPath.replace(/[/\\]/g, " ").replace(/\.[^.]+$/, ""));
     const symbolTokens = symbols.flatMap((s) => ssTokenise(s));
     const contentTokens = ssTokenise(text.split("\n").slice(0, 200).join("\n"));

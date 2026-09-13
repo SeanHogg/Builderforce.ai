@@ -39,6 +39,9 @@ import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 // spliced into `CORE_TOOLS` here so the advertised catalog — name, order and all — is
 // exactly what it was before the split.
 import { GIT_TOOLS } from "./git-tools.js";
+// Code navigation (`find_symbol` / `file_outline`) likewise lives in its own module and
+// is gated on `repo.symbols`, so only a surface with a definition index advertises it.
+import { SYMBOL_TOOLS } from "./symbol-tools.js";
 
 export const listFilesTool: ToolDefinition = defineTool({
   name: "list_files",
@@ -621,6 +624,7 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   listFilesTool,
   searchCodeTool,
   readFileTool,
+  ...SYMBOL_TOOLS,
   writeFileTool,
   editFileTool,
   deleteFileTool,

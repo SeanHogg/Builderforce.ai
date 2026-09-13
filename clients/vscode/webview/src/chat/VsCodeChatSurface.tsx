@@ -36,8 +36,10 @@ import {
   useBrainConfig,
   consolidationMarkerContent,
   consolidationMetadata,
-  mentionRecipient,
-  resolveRecipient,
+  DEFAULT_PERSONA,
+  loadBrainPersonaAgentsVia,
+  personaModel,
+  personaOverlay,
   parseByoUnresolved,
   deriveChatTitle,
   DEFAULT_CHAT_TITLE,
@@ -60,13 +62,15 @@ import {
   type Effort,
   type BrainChat,
   type DirectedRecipient,
-  type RecipientChoice,
+  type BrainPersonaAgent,
+  type BrainPersonaChoice,
   type BrainTraceEvent,
   type BrainMessage,
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from '../authedFetch';
 import {
-  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
+  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, useChatParticipants,
+  RecipientPicker, PersonaPicker, useRecipientChoice,
   useMentionAutocomplete, ChatErrorBanner,
   PromptPanel, PromptOptionsMenu,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
@@ -98,7 +102,9 @@ import { readStored, writeStored } from '../storage';
 import { autoApprovePersistence } from '../autoApprove';
 import { EFFORT_KEY, MEMORY_KEY, THINKING_KEY } from './chatPreferences';
 import { decodeTokenClaims } from './tokenClaims';
-import { effortDesc, makeT, promptMenuLabels, timelineLabels } from './chatLabels';
+import {
+  effortDesc, makeT, personaModalityOptions, personaPickerLabels, promptMenuLabels, recipientPickerLabels, timelineLabels,
+} from './chatLabels';
 import { persistedToTraceEvent, type PersistedTraceRow } from './chatTrace';
 import { IconBolt, IconMic, IconPlus, IconRename, IconSend, MenuItem, PopoverMenu } from './ChatMenu';
 import { useGlobalRunState } from './useGlobalRunState';
@@ -377,6 +383,26 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   useEffect(() => onEditorContext(setEditorCtx), []);
   const editorDirective = useMemo(() => editorContextDirective(editorCtx) ?? '', [editorCtx]);
 
+  // WHO the Brain answers as ("Acting as"): the default editor Brain, a modality
+  // persona, or an agent assigned to the Brain — the same choices, from the same shared
+  // persona domain, as the web composer. Here the persona LAYERS over the editor's own
+  // prompt (which describes the real workspace, file tools and repository) instead of
+  // replacing it — see `personaOverlay`. An agent persona also prefers the agent's own
+  // model; an explicit model pin in the `/` menu still wins.
+  const [persona, setPersona] = useState<BrainPersonaChoice>(DEFAULT_PERSONA);
+  const [personaAgents, setPersonaAgents] = useState<BrainPersonaAgent[]>([]);
+  useEffect(() => {
+    let live = true;
+    loadBrainPersonaAgentsVia(apiReq)
+      .then((agents) => { if (live) setPersonaAgents(agents); })
+      .catch(() => { /* no assigned agents to offer — the modality personas still are */ });
+    return () => { live = false; };
+  }, [apiReq]);
+  const personaDirective = useMemo(() => personaOverlay(persona, personaAgents) ?? '', [persona, personaAgents]);
+  const personaModelId = useMemo(() => personaModel(persona, personaAgents), [persona, personaAgents]);
+  const personaLabels = useMemo(() => personaPickerLabels(init.labels), [init.labels]);
+  const personaModalities = useMemo(() => personaModalityOptions(init.labels), [init.labels]);
+
   // Fold the composer toggles (effort / thinking / web), the live editor context,
   // and the user's affective/PERSONALITY block into the same system channel as the
   // project context, so the next turn honors them. The DYNAMIC per-turn limbic block
@@ -385,10 +411,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // participant; before the first send it falls back to the STATIC personality block
   // (host-fetched once per session). '' (a no-op) when the user has no profile.
   const extraSystem = useMemo(
-    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, web: webBrowsing }), turnLimbic || init.personalityBlock || '']
+    () => [personaDirective, projectDirective, editorDirective, buildComposerDirectives({ effort, web: webBrowsing }), turnLimbic || init.personalityBlock || '']
       .filter(Boolean)
       .join('\n\n'),
-    [projectDirective, editorDirective, effort, webBrowsing, turnLimbic, init.personalityBlock],
+    [personaDirective, projectDirective, editorDirective, effort, webBrowsing, turnLimbic, init.personalityBlock],
   );
 
   // The REAL request params behind the `/` menu. `maxTokens` is a universal param so
@@ -553,7 +579,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     // from_delta ticket for this project (linked to the chat) when a turn changed
     // code without recording one.
     projectId: evermindProjectId,
-    model: init.model,
+    // A strict pin wins; otherwise an agent persona runs on the agent's own model.
+    model: init.modelStrict ? init.model : (personaModelId ?? init.model),
     modelStrict: init.modelStrict,
     routingMode: init.routingMode ?? 'auto',
     // When a model burns its stall budget describing tool calls it never makes, the
@@ -700,16 +727,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // invited agent/human is just talked to. The selector only appears once a chat
   // actually has participants, so a solo chat is unchanged (everything → BRAIN).
   const participants = useChatParticipants(ticketAdapter, chatId, ticketRefresh);
-  const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(null);
-  // Reset to auto when switching chats; drop an explicit pick that's since left.
-  useEffect(() => { setRecipientChoice(null); }, [chatId]);
-  useEffect(() => {
-    setRecipientChoice((c) => (c && c !== 'brain' && !participants.some((p) => p.ref === c.ref) ? null : c));
-  }, [participants]);
-  const mentioned = useMemo(() => mentionRecipient(input, participants), [input, participants]);
-  // The effective target: an explicit BRAIN pick wins; else an explicit
-  // participant; else a leading @mention; else the BRAIN (null).
-  const recipient: DirectedRecipient | null = resolveRecipient(recipientChoice, mentioned);
+  // The effective target (shared with the web composer): an explicit BRAIN pick wins;
+  // else an explicit participant; else a leading @mention; else the BRAIN (null). The
+  // pick resets on a chat switch and drops a participant who has since left.
+  const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants, input, resetKey: chatId });
+  const recipientLabels = useMemo(() => recipientPickerLabels(init.labels), [init.labels]);
 
   // @-mention typeahead: typing `@` in the composer opens a picker of the chat's
   // participants (agents + humans); choosing one directs the next turn to them.
@@ -720,7 +742,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     value: input,
     setValue: setInput,
     participants,
-    onPick: setRecipientChoice,
+    onPick: chooseRecipient,
     disabled: conv.sending,
     labels: {
       title: t('app.mentionTitle', 'Direct to'),
@@ -1416,50 +1438,24 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             onChange={(e) => { attachFiles(e.target.files); e.target.value = ''; }}
           />
 
-          {/* Recipient selector — only once the chat is multi-party. Routes the
-              next message to the BRAIN (executes) or a participant (talked to). */}
-          {participants.length > 0 && (
-            <PopoverMenu
-              align="left"
-              triggerClassName={`bf-recipient${recipient ? ' is-active' : ''}`}
-              title={t('app.recipientPickerTitle', 'Send to')}
-              trigger={
-                <span className="bf-recipient__inner">
-                  <span className="bf-recipient__to">{t('app.to', 'To')}</span>
-                  {recipient ? <Avatar name={recipient.name} kind={recipient.kind} size={16} /> : <IconBolt />}
-                  <span className="bf-recipient__name">{recipient ? recipient.name : t('app.brainRecipient', 'BuilderForce')}</span>
-                  <span aria-hidden>▾</span>
-                </span>
-              }
-            >
-              {(close) => (
-                <>
-                  <div className="bf-menu__group">{t('app.recipientPickerTitle', 'Send to')}</div>
-                  <MenuItem
-                    icon={<IconBolt />}
-                    label={t('app.brainRecipient', 'BuilderForce')}
-                    hint={t('app.brainRecipientHint', 'Runs it')}
-                    active={!recipient}
-                    onClick={() => { setRecipientChoice('brain'); close(); }}
-                  />
-                  {participants.map((p) => (
-                    <MenuItem
-                      key={p.ref}
-                      icon={<Avatar name={p.name} kind={p.kind} size={16} />}
-                      label={p.name}
-                      // An invited AGENT actually answers (and can use platform tools);
-                      // a person is just notified. Make the affordance say which.
-                      hint={p.kind === 'agent'
-                        ? t('app.agentRecipientHint', 'Replies & acts')
-                        : t('app.humanRecipientHint', 'Notified')}
-                      active={recipient?.ref === p.ref}
-                      onClick={() => { setRecipientChoice(p); close(); }}
-                    />
-                  ))}
-                </>
-              )}
-            </PopoverMenu>
-          )}
+          {/* Acting as — WHO the Brain answers as. The shared brain-ui control the web
+              composer renders too; see `personaOverlay` for how it shapes the turn. */}
+          <PersonaPicker
+            value={persona}
+            onChange={setPersona}
+            modalities={personaModalities}
+            agents={personaAgents}
+            labels={personaLabels}
+          />
+
+          {/* To — routes the next message to the BRAIN (executes) or a participant
+              (talked to). Self-hides until the chat is multi-party. */}
+          <RecipientPicker
+            participants={participants}
+            recipient={recipient}
+            onChoose={chooseRecipient}
+            labels={recipientLabels}
+          />
 
           {/* + : add content to the message (upload, workspace context, or web). */}
           <PopoverMenu align="left" title={t('app.add', 'Add')} trigger={<IconPlus />}>

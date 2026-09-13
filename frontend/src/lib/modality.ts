@@ -27,7 +27,13 @@
  * branching scattered across components.
  */
 
-export type ProjectModality = 'designer' | 'mobile' | 'webmobile' | 'evermind' | 'finetune' | 'voice';
+import { MODALITY_PERSONAS, type PersonaModalityId } from '@seanhogg/builderforce-brain-embedded';
+
+/**
+ * The modality id set is the Brain persona set — one definition, in brain-embedded,
+ * because the VS Code composer offers the same personas and cannot import this file.
+ */
+export type ProjectModality = PersonaModalityId;
 
 /** Legacy modality id (the combined LLM Studio) → its replacement. */
 const LEGACY_MODALITY_ALIASES: Record<string, ProjectModality> = { llm: 'evermind' };
@@ -57,7 +63,9 @@ export interface ModalityDef {
   /** Roadmap placeholder — switcher renders it disabled with a "soon" tag. */
   comingSoon?: boolean;
   /** Static system-prompt prefix injected into the Brain so the AI knows the
-   *  active modality. Dynamic context (open file, etc.) is appended by the Brain. */
+   *  active modality. Dynamic context (open file, etc.) is appended by the Brain.
+   *  Sourced from brain-embedded's `MODALITY_PERSONAS` (with `icon`), the ONE
+   *  definition the web and the editor's "Acting as" picker share. */
   brainSystemPrompt: string;
   /** Brain input placeholder for this modality. */
   /** Brain empty-state hint for this modality. */
@@ -104,29 +112,14 @@ export const RIGHT_TAB_ICONS: Record<RightTab, string> = {
   state: '🔬',
 };
 
-/**
- * Cross-modality strategy note appended to EVERY modality's Brain system prompt.
- * Whatever the project mode, strategy/goals are modeled as OKRs/Objectives in
- * their own tables (Portfolio ▸ OKRs) — NOT as tasks on the Kanban board — and the
- * assistant can create/link them via the platform tools. Single source so no
- * modality prompt drifts on how goals are represented. See [[okr-objectives-vs-epics]].
- */
-const STRATEGY_OKR_NOTE =
-  'Strategy and goals live as OKRs/Objectives (Objectives + Key Results) in their own tables — not as tasks on the Kanban board. When the user talks about goals, outcomes, or strategy, you can create and link Objectives and Key Results, and promote an epic titled like "OKR …" into a real Objective, using the platform tools.';
+/** A registry entry before its Brain persona (prompt + glyph) is joined in. */
+type ModalityEntry = Omit<ModalityDef, 'brainSystemPrompt' | 'icon'>;
 
-const BASE_MODALITIES: ModalityDef[] = [
+const BASE_MODALITIES: ModalityEntry[] = [
   {
     id: 'designer',
     label: 'Website',
-    icon: '🌐',
     tagline: 'Generate and build a website or web app with Preview, Code, and a live dev server.',
-    brainSystemPrompt: [
-      'You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.',
-      'When the user describes an app to build, SCAFFOLD IT COMPLETELY in this turn: call the `create_file` tool for every file the app needs to actually run — an index.html entry, a package.json with real dependencies and a `build` script, and all of the src/ components — so the live Preview renders a working app immediately, not a single snippet. Default to a Vite + React app unless the user asks for something else. Prefer `create_file` over pasting code the user must apply by hand. When you have scaffolded the app, tell the user in one line what you built and that Preview is live and it is ready to Publish.',
-      'Use markdown for your response: headings, lists, bold, and fenced code blocks.',
-      'If the file tools are unavailable, fall back to suggesting files as a code block with the file path as the language tag so the user can create the file in one click. Examples: ```package.json (then JSON content), ```src/index.js (then JS content), ```.gitignore (then content).',
-      'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
-    ].join('\n'),
     rightTabs: ['files', 'agent', 'train', 'publish', 'state'],
     showRunButton: true,
     runLabel: 'Run',
@@ -138,16 +131,7 @@ const BASE_MODALITIES: ModalityDef[] = [
   {
     id: 'mobile',
     label: 'Mobile',
-    icon: '📱',
     tagline: 'Build a phone app and preview it in a device simulator, then scan to open it on your own handset.',
-    brainSystemPrompt: [
-      "You are an expert mobile app developer operating Builderforce.ai's Canvas Builder. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
-      'The project is a React Native app rendered for the web through react-native-web, so it runs in the browser preview AND stays portable to Expo. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" — never use HTML elements like div, span or button, and never use CSS files or className.',
-      'Style with StyleSheet.create and flexbox. Remember there is no hover: design for touch, keep tap targets at least 44 points, and respect safe areas at the top and bottom of the screen.',
-      'Design for a narrow portrait viewport (roughly 390 x 850 points) first. Prefer native navigation patterns — tab bars, stack headers, bottom sheets — over desktop patterns like sidebars and hover menus.',
-      'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.',
-      'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
-    ].join('\n'),
     rightTabs: ['files', 'agent', 'publish', 'state'],
     showRunButton: true,
     runLabel: 'Run',
@@ -159,15 +143,7 @@ const BASE_MODALITIES: ModalityDef[] = [
   {
     id: 'webmobile',
     label: 'Web + Mobile',
-    icon: '🖥️',
     tagline: 'Build a web application and a mobile app together from one codebase — preview both side by side.',
-    brainSystemPrompt: [
-      "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
-      'The project is a React app rendered through react-native-web, so the SAME source runs full-width as a website AND inside a phone-sized device simulator, and stays portable to Expo for native iOS/Android. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" — never use HTML elements like div, span or button, and never use CSS files or className.',
-      'Style with StyleSheet.create and flexbox, and make layouts RESPONSIVE: use flex, percentage widths and useWindowDimensions to adapt between a wide desktop viewport and a narrow phone one. Keep tap targets at least 44 points and respect safe areas — there is no hover on mobile.',
-      'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.',
-      'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
-    ].join('\n'),
     rightTabs: ['files', 'agent', 'publish', 'state'],
     showRunButton: true,
     runLabel: 'Run',
@@ -180,13 +156,7 @@ const BASE_MODALITIES: ModalityDef[] = [
   {
     id: 'evermind',
     label: 'Evermind',
-    icon: '🧠',
     tagline: 'Grow a living Evermind model that learns from every project — teach it and watch its Knowledge Map fill in.',
-    brainSystemPrompt: [
-      "You are assisting with growing an Evermind — Builderforce.ai's self-updating model that learns continuously (Write-Through Cognition) instead of being frozen after training.",
-      'Help the user teach it: draft facts, skills, and examples to feed it, reason about what it has learned, and interpret its Knowledge Map (neocortex / hippocampus / limbic regions).',
-      'This is NOT classic fine-tuning — the model updates in place as it learns. Keep guidance oriented around teaching and recall, not training runs or LoRA adapters.',
-    ].join('\n'),
     rightTabs: ['files', 'publish', 'state'],
     showRunButton: false,
     runLabel: 'Run',
@@ -198,12 +168,7 @@ const BASE_MODALITIES: ModalityDef[] = [
   {
     id: 'finetune',
     label: 'Fine-tune',
-    icon: '🔧',
     tagline: 'Design datasets and train a custom LoRA model, then benchmark, publish, and export it.',
-    brainSystemPrompt: [
-      'You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.',
-      'Help the user draft instruction/response pairs, choose a base model and training hyperparameters, and reason about training runs and benchmark results.',
-    ].join('\n'),
     rightTabs: ['files', 'train', 'publish', 'state'],
     showRunButton: false,
     runLabel: 'Run',
@@ -215,13 +180,7 @@ const BASE_MODALITIES: ModalityDef[] = [
   {
     id: 'voice',
     label: 'Voice',
-    icon: '🎙',
     tagline: 'Clone and design a custom voice, then synthesize speech from it.',
-    brainSystemPrompt: [
-      "You are a voice director inside Builderforce.ai's Voice Studio.",
-      'The user enrolls a reference sample to clone a voice (SSM/WebGPU acoustic model) and then synthesizes speech from typed text.',
-      'Help them write natural, well-punctuated lines to synthesize, and advise on pacing, emphasis, and tone.',
-    ].join('\n'),
     rightTabs: ['voice', 'files', 'state'],
     showRunButton: true,
     runLabel: 'Generate',
@@ -232,11 +191,12 @@ const BASE_MODALITIES: ModalityDef[] = [
   },
 ];
 
-/** The public registry — every modality's Brain prompt carries the shared
- *  strategy/OKR note (baked once here so getModality and direct reads agree). */
+/** The public registry — each entry joined to its Brain persona (the prompt already
+ *  carries the shared strategy/OKR note), so getModality and direct reads agree. */
 export const MODALITIES: ModalityDef[] = BASE_MODALITIES.map((m) => ({
   ...m,
-  brainSystemPrompt: `${m.brainSystemPrompt}\n${STRATEGY_OKR_NOTE}`,
+  icon: MODALITY_PERSONAS[m.id].icon,
+  brainSystemPrompt: MODALITY_PERSONAS[m.id].prompt,
 }));
 
 export const DEFAULT_MODALITY: ProjectModality = 'designer';

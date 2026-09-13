@@ -228,14 +228,14 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Feature routes — associated blog content shown on each logged-out feature
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
-  ide: ['vs-code-command-center-for-your-agentic-workforce', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
+  ide: ['vs-code-command-center-for-your-agentic-workforce', 'choose-who-answers-not-just-who-you-ask', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
   training: ['webgpu-lora-explained', 'local-first-ai-webgpu-in-the-browser', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices', 'how-to-launch-a-course-and-upload-scorm-on-hired-video', 'how-to-run-a-classroom-cohort-as-an-educator', 'how-to-earn-a-verifiable-certificate-on-hired-video'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
-  workforce: ['real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'fleet-management-and-agent-routing', 'how-to-run-effective-one-on-ones', 'how-to-build-an-org-chart-that-stays-accurate', 'team-health-signals-every-manager-should-watch'],
+  workforce: ['real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'choose-who-answers-not-just-who-you-ask','fleet-management-and-agent-routing', 'how-to-run-effective-one-on-ones', 'how-to-build-an-org-chart-that-stays-accurate', 'team-health-signals-every-manager-should-watch'],
   meetings: ['video-meetings-standups-and-shared-calendars', 'real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'how-to-host-a-hiring-event-on-hired-video', 'how-to-book-a-coaching-session-on-hired-video'],
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
-  personas: ['ai-agent-personality-psychometric-personas', 'builderforce-agents-and-agent-integration', 'multi-agent-orchestration'],
+  personas: ['choose-who-answers-not-just-who-you-ask', 'ai-agent-personality-psychometric-personas','builderforce-agents-and-agent-integration', 'multi-agent-orchestration'],
   'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
   security: ['every-role-operating-picture', 'role-gated-accountability-proof-of-participation', 'security-and-multi-tenant-architecture', 'cobit-governance-readiness-for-agentic-it'],
   soc2: ['cobit-governance-readiness-for-agentic-it', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],

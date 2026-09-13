@@ -36,6 +36,13 @@ export interface BfTask {
    *  (stale / overdue). Present in the API's `toPlain()` payload. */
   updatedAt?: string | null;
   dueDate?: string | null;
+  /** The ticket's working branch and pull request, as the API's `toPlain()` carries them. */
+  gitBranch?: string | null;
+  githubPrNumber?: number | null;
+  githubPrUrl?: string | null;
+  /** State of the ticket's current pull request (`open` / `merged` / `closed`), when it has one. */
+  prState?: string | null;
+  archived?: boolean;
 }
 
 /** A project-scoped OKR Objective + the board items that deliver it — the top tier
@@ -463,6 +470,26 @@ export async function rememberProjectFact(
 }
 
 /**
+ * Remove one fact from the project's SHARED facts store (DELETE …/facts/:key) — for a
+ * writer retiring a fact it owns (e.g. a workspace digest for a sub-project that no
+ * longer exists). Best-effort.
+ */
+export async function forgetProjectFact(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  key: string,
+): Promise<boolean> {
+  try {
+    const r = await authed<{ ok?: boolean }>(secrets, `/api/projects/${projectId}/facts/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
+    return !!r?.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The project-Evermind memory hooks for a run loop, bound to one project — the host
  * half of "recall → memory-first answer → cache the answer".
  *
@@ -619,6 +646,23 @@ export async function listTasks(
   const tasks = r?.tasks ?? [];
   taskCache.set(projectId, tasks);
   return tasks;
+}
+
+/**
+ * A project's tickets read FRESH for a review — never from the 30s sidebar cache, because
+ * a review decides merges from it — optionally including archived tickets (a cancelled,
+ * archived ticket can still have an unmerged branch).
+ */
+export async function listTasksForReview(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  includeArchived: boolean,
+): Promise<BfTask[]> {
+  const r = await authed<{ tasks: BfTask[] }>(
+    secrets,
+    `/api/tasks?project_id=${projectId}${includeArchived ? "&include_archived=true" : ""}`,
+  );
+  return r?.tasks ?? [];
 }
 
 export function invalidateTasks(projectId?: number): void {

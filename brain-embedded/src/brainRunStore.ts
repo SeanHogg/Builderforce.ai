@@ -121,7 +121,7 @@ const HISTORY_WINDOW = 80;
  *  `isDedupableRead` set. Deliberately narrow — only tools that observe and can't mutate,
  *  so a stubbed repeat never hides a real change (a mutation clears the dedupe set anyway;
  *  see {@link runLoop}). */
-const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files']);
+const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline']);
 
 /** A tool whose identical-args repeat within a run is safe to suppress: a local file/search
  *  tool OR a read-only platform tool. This is the fix for the "Brain re-checks the same
@@ -2029,6 +2029,28 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           };
           pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: stub });
           return { result: { data: stub } };
+        }
+        // A narrower search whose answer is already held: the same query run earlier
+        // over an ancestor directory, complete. Served by filtering that result — the
+        // same bytes a re-run would return — and cached like any read so a repeat of it
+        // is an exact repeat. See `ReadCoverage.derivedSearch`.
+        const derived = readCoverage.derivedSearch(call.name, args);
+        if (derived) {
+          const visit = readCoverage.record(call.name, args);
+          const target = visit ? activityTarget(args) : undefined;
+          const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          const served = trimToolResult(call.name, derived, { advisory: revisit });
+          pendingReplay = { name: call.name, args, result: derived };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: 'tool',
+            label: call.name,
+            args,
+            result: { derived: true, note: derived.note },
+            resultBytes: served.bytes,
+            truncated: served.truncated,
+          });
+          return { result: { data: served.content } };
         }
       } else {
         readCoverage.invalidate(call.name, args);

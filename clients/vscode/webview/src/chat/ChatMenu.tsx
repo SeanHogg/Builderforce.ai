@@ -8,7 +8,7 @@
  * of SVG paths first.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePopover } from '@seanhogg/builderforce-brain-ui';
 
 /* Toolbar glyphs — inline SVG so they render crisply in the editor's light AND dark
    themes, inheriting the surrounding button's colour. */
@@ -30,9 +30,10 @@ export const IconRename = () => (
 );
 
 /**
- * A small popover menu (the `+` and `/` composer affordances). Closes on outside
- * click or Escape. `children` is a render prop given a `close()` so an item can
- * dismiss the menu after acting. Shared by both composer menus (DRY).
+ * A small popover menu (the composer's `+` affordance). Closes on outside click or
+ * Escape — the shared brain-ui `usePopover`, the same open/close the `/` menu and the
+ * To / Acting-as pickers run on. `children` is a render prop given a `close()` so an
+ * item can dismiss the menu after acting.
  */
 export function PopoverMenu({
   trigger, title, align = 'left', triggerClassName, children,
@@ -44,19 +45,9 @@ export function PopoverMenu({
   triggerClassName?: string;
   children: (close: () => void) => React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [open]);
+  const { open, toggle, close, rootRef } = usePopover<HTMLDivElement>();
   return (
-    <div className="bf-menu" ref={ref}>
+    <div className="bf-menu" ref={rootRef}>
       <button
         type="button"
         className={`${triggerClassName ?? 'bf-iconbtn'}${open ? ' is-active' : ''}`}
@@ -64,7 +55,7 @@ export function PopoverMenu({
         aria-expanded={open}
         title={title}
         aria-label={title}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
       >
         {trigger}
       </button>

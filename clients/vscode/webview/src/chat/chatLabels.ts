@@ -14,13 +14,19 @@
 
 import {
   effortProfile,
+  MODALITY_PERSONAS,
+  PERSONA_MODALITY_IDS,
   type Effort,
+  type PersonaModalityId,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   DEFAULT_PROMPT_OPTIONS_LABELS,
   type BrainTimelineLabels,
   type ModelChoiceLabels,
+  type PersonaModalityOption,
+  type PersonaPickerLabels,
   type PromptOptionsLabels,
+  type RecipientPickerLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
 
@@ -126,6 +132,51 @@ export const EFFORT_DESC_FALLBACK: Record<Effort, string> = {
   balanced: 'The default — normal depth. Up to {answer} answer tokens.',
   thorough: 'Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.',
 };
+
+/** The composer's "To" control (shared `RecipientPicker`) copy. */
+export function recipientPickerLabels(labels: LabelBundle): RecipientPickerLabels {
+  const t = makeT(labels);
+  return {
+    to: t('app.to', 'To'),
+    title: t('app.recipientPickerTitle', 'Send to'),
+    brain: t('app.brainRecipient', 'BuilderForce'),
+    brainHint: t('app.brainRecipientHint', 'Runs it'),
+    agentHint: t('app.agentRecipientHint', 'Replies & acts'),
+    humanHint: t('app.humanRecipientHint', 'Notified'),
+  };
+}
+
+/** The composer's "Acting as" control (shared `PersonaPicker`) copy. */
+export function personaPickerLabels(labels: LabelBundle): PersonaPickerLabels {
+  const t = makeT(labels);
+  return {
+    actingAs: t('app.actingAs', 'Acting as'),
+    title: t('app.personaTitle', 'Brain agent or persona'),
+    defaultBrain: t('app.defaultBrain', 'Default Brain'),
+    personas: t('app.personas', 'Personas'),
+    assignedAgents: t('app.assignedAgents', 'Assigned agents'),
+  };
+}
+
+/** English fallbacks for the modality persona names (localized via the host bundle). */
+const MODALITY_LABEL_FALLBACK: Record<PersonaModalityId, string> = {
+  designer: 'Website',
+  mobile: 'Mobile',
+  webmobile: 'Web + Mobile',
+  evermind: 'Evermind',
+  finetune: 'Fine-tune',
+  voice: 'Voice',
+};
+
+/** The modality personas "Acting as" offers — the shared catalog, named in the editor's language. */
+export function personaModalityOptions(labels: LabelBundle): PersonaModalityOption[] {
+  const t = makeT(labels);
+  return PERSONA_MODALITY_IDS.map((id) => ({
+    id,
+    label: t(`app.persona.modality.${id}`, MODALITY_LABEL_FALLBACK[id]),
+    icon: MODALITY_PERSONAS[id].icon,
+  }));
+}
 
 /**
  * The `/` menu's copy: its own chrome from the host's label bundle, and the model

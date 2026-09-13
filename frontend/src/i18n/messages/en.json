@@ -11081,6 +11081,10 @@
       "tags": "Tags"
     },
     "posts": {
+      "choose-who-answers-not-just-who-you-ask": {
+        "title": "Choose who answers, not just who you ask",
+        "description": "A chat with teammates and agents asks two things on every turn — who you are talking to, and who is answering. The editor could only set the first. Now “Acting as” is in VS Code too, so you can run the Brain as a persona or as one of your agents, and a question put to a whole board shows everyone it went to."
+      },
       "design-the-room-you-meet-in": {
         "title": "Design the room you meet in — then walk it",
         "description": "The room on your board used to be one room. Now it is a boardroom, an office kitchen or an open floor of desks — or a room you lay out piece by piece, walk through like a game, sell in the marketplace, and play your Roblox place inside."
@@ -11335,6 +11339,9 @@
     "to": "To",
     "brainRecipient": "BuilderForce",
     "recipientPickerTitle": "Send to",
+    "brainRecipientHint": "Runs it",
+    "agentRecipientHint": "Replies & acts",
+    "humanRecipientHint": "Notified",
     "messageParticipant": "Message {name}…",
     "uploading": "Uploading…",
     "brainStorm": "Brain Storm",

@@ -1466,35 +1466,49 @@ function consolidationMarkerContent(summary) {
 // src/directedMessage.ts
 var ADDRESSED_TO_META_KEY = "addressedTo";
 var AUTHORED_BY_META_KEY = "authoredBy";
+function asRecipient(value) {
+  const a = value;
+  if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+    return { kind: a.kind, ref: a.ref, name: a.name };
+  }
+  return null;
+}
 function parseMessageAuthor(msg) {
   if (!msg.metadata) return null;
   try {
-    const a = JSON.parse(msg.metadata).authoredBy;
-    if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
-      return { kind: a.kind, ref: a.ref, name: a.name };
-    }
+    return asRecipient(JSON.parse(msg.metadata).authoredBy);
   } catch {
   }
   return null;
 }
 function withDirectedMetadata(recipient, base) {
   const meta = { ...base ?? {} };
-  if (recipient) meta[ADDRESSED_TO_META_KEY] = recipient;
+  const list = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
+  if (list.length === 1) meta[ADDRESSED_TO_META_KEY] = list[0];
+  else if (list.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list] };
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
-function parseDirectedRecipient(msg) {
-  if (!msg.metadata) return null;
+function parseDirectedRecipients(msg) {
+  if (!msg.metadata) return [];
   try {
     const a = JSON.parse(msg.metadata).addressedTo;
-    if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
-      return { kind: a.kind, ref: a.ref, name: a.name };
+    if (!a || typeof a !== "object") return [];
+    if (a.kind !== "group") {
+      const one = asRecipient(a);
+      return one ? [one] : [];
+    }
+    if (Array.isArray(a.members)) {
+      return a.members.map(asRecipient).filter((r) => r !== null);
+    }
+    if (Array.isArray(a.refs)) {
+      return a.refs.filter((ref) => typeof ref === "string" && ref.length > 0).map((ref) => ({ kind: "agent", ref, name: ref }));
     }
   } catch {
   }
-  return null;
+  return [];
 }
 function isDirectedToParticipant(msg) {
-  return parseDirectedRecipient(msg) !== null;
+  return parseDirectedRecipients(msg).length > 0;
 }
 function activeMentionToken(text, caret) {
   const at = text.lastIndexOf("@", Math.max(0, caret - 1));
@@ -1880,6 +1894,12 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   "read_file",
   "list_files",
   "search_code",
+  // Code navigation over the definition index. Pinned for the reason the file tools are,
+  // and more acutely: "where is the auth middleware?" shares no stem with "find_symbol",
+  // so relevance drops the one call that answers it and the run falls back to searching
+  // and paging through files — the pattern these two tools exist to replace.
+  "find_symbol",
+  "file_outline",
   "write_file",
   "edit_file",
   "delete_file",
@@ -1993,6 +2013,7 @@ function midRunNotice(activity, capturedAtMs) {
 }
 
 // src/runProgress.ts
+var BACK_TO_BACK_AT = 3;
 var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
 function isMutationTool(name) {
   return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
@@ -2003,7 +2024,7 @@ function hasEditIntent(messages) {
 function callSignature(ev) {
   let args = "";
   try {
-    args = JSON.stringify(ev.args ?? null);
+    args = stableStringify(ev.args ?? null);
   } catch {
     args = String(ev.args ?? "");
   }
@@ -2021,10 +2042,22 @@ function computeRunProgress(events, messages = []) {
   let targetedCalls = 0;
   let mutationsAttempted = 0;
   let mutationsSucceeded = 0;
+  let streaks = 0;
+  let longestStreak = null;
+  let current = null;
   for (const ev of tools) {
     const sig = callSignature(ev);
     if (seenCalls.has(sig)) duplicateCalls += 1;
     else seenCalls.add(sig);
+    const failed = Boolean(ev.isError) || isFailedToolResult(ev.result);
+    if (current && current.sig === sig) {
+      current.streak.count += 1;
+      if (failed) current.streak.failed += 1;
+      if (current.streak.count === 2) streaks += 1;
+      if (!longestStreak || current.streak.count > longestStreak.count) longestStreak = current.streak;
+    } else {
+      current = { sig, streak: { label: ev.label, count: 1, failed: failed ? 1 : 0 } };
+    }
     const target = targetSignature(ev);
     if (target) {
       targetedCalls += 1;
@@ -2059,9 +2092,13 @@ function computeRunProgress(events, messages = []) {
   const editIntent = hasEditIntent(messages);
   const didWork = tools.length > 0;
   const noEffect = editIntent && didWork && mutationsSucceeded === 0;
-  const spinning = targetedCalls >= 6 && revisitRatio >= 0.4;
+  const stuckOnCall = longestStreak !== null && longestStreak.count >= BACK_TO_BACK_AT;
+  const spinning = targetedCalls >= 6 && revisitRatio >= 0.4 || stuckOnCall;
   return {
     duplicateCalls,
+    longestStreak,
+    streaks,
+    stuckOnCall,
     repeatedTargets,
     distinctTargets,
     targetedCalls,
@@ -2086,11 +2123,15 @@ function progressDuration(ms) {
   return s ? `${m}m ${s}s` : `${m}m`;
 }
 var MAX_NAMED_TARGETS = 4;
+function formatStreak(s) {
+  const outcome = s.failed === 0 ? "" : s.failed === s.count ? ` (all ${s.count} failed)` : ` (${s.failed} of ${s.count} failed)`;
+  return `\`${s.label}\` \xD7${s.count} BACK-TO-BACK${outcome}`;
+}
 function formatRunProgress(p) {
   const lines = [];
   const reach = p.targetedCalls > 0 ? `${p.distinctTargets} distinct target(s) over ${p.targetedCalls} targeted call(s)` : "no targeted calls";
   lines.push(
-    `Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}`
+    `Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}${p.longestStreak ? ` \xB7 ${formatStreak(p.longestStreak)}${p.streaks > 1 ? ` (${p.streaks} such streaks)` : ""}` : ""}`
   );
   if (p.repeatedTargets.length) {
     const named = p.repeatedTargets.slice(0, MAX_NAMED_TARGETS).map((t) => `${t.label} \xD7${t.count}`).join(" \xB7 ");
@@ -2114,13 +2155,306 @@ function formatRunProgress(p) {
 function runProgressVerdict(p) {
   if (!p.spinning && !p.noEffect) return null;
   const worst = p.repeatedTargets[0];
-  const loop = p.spinning ? `NO PROGRESS \u2014 the run kept going back over ground it had already covered: ${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` \xD7${worst.count}` : ""}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ""}. ` : "NO EFFECT \u2014 ";
+  const streak = p.stuckOnCall && p.longestStreak ? `it made the same call ${p.longestStreak.count} times in a row \u2014 ${formatStreak(p.longestStreak)} \u2014 with nothing else attempted between them${p.longestStreak.failed === p.longestStreak.count ? ", re-asking a question it had already been answered the same way each time" : ""}` : null;
+  const revisit = p.repeatedTargets.length ? `${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` \xD7${worst.count}` : ""}` : null;
+  const loop = p.spinning ? `NO PROGRESS \u2014 ${streak ? `${streak}${revisit ? `; ${revisit}` : ""}` : `the run kept going back over ground it had already covered: ${revisit}`}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ""}. ` : "NO EFFECT \u2014 ";
   const effect = p.noEffect ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : " \u2014 it never attempted one"}, so nothing was actually modified. ` : "";
-  const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the re-reading, not its cause. Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.` : 'Check the "Answered from memory" line first \u2014 a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
+  const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the repetition, not its cause. ${streak && p.longestStreak && p.longestStreak.failed > 0 ? "A call repeated back-to-back after FAILING is the model ignoring the error it was given: the failure text usually names the exact change to make (a `repo`, a path, a missing argument). Check that the tool result reached the model un-truncated, and that the repeated-failure advisory fired; if it did and the model still repeated the call, the model is not reading tool results \u2014 switch models for this run." : streak ? "A call repeated back-to-back after SUCCEEDING is the model not retaining the answer it already has: the result was truncated, or too large to keep in the transcript. Check the truncated-results count above, and shrink or page that result rather than the transcript." : "Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models."}` : 'Check the "Answered from memory" line first \u2014 a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
   return `${loop}${effect}${remedy}`;
 }
 
+// src/readOnlyShell.ts
+var READ_ONLY_PROGRAMS = /* @__PURE__ */ new Set([
+  "cat",
+  "head",
+  "tail",
+  "wc",
+  "ls",
+  "dir",
+  "pwd",
+  "echo",
+  "printf",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "find",
+  "tree",
+  "stat",
+  "file",
+  "du",
+  "df",
+  "which",
+  "where",
+  "type",
+  "sort",
+  "uniq",
+  "cut",
+  "tr",
+  "jq",
+  "basename",
+  "dirname",
+  "realpath",
+  "readlink",
+  "date",
+  "true",
+  "false",
+  "test",
+  "[",
+  "diff",
+  "cmp",
+  "comm",
+  "nl",
+  "column",
+  "less",
+  "more",
+  "sed",
+  "cd",
+  "read",
+  "whoami",
+  "hostname",
+  "uname",
+  "node",
+  "npm",
+  "pnpm",
+  "yarn",
+  "python",
+  "python3"
+]);
+var INFO_ONLY_PROGRAMS = /* @__PURE__ */ new Set(["node", "npm", "pnpm", "yarn", "python", "python3"]);
+var INFO_FLAGS = /* @__PURE__ */ new Set(["--version", "-v", "-V", "version", "--help", "-h"]);
+var READ_ONLY_GIT = /* @__PURE__ */ new Set([
+  "status",
+  "log",
+  "show",
+  "diff",
+  "rev-list",
+  "rev-parse",
+  "ls-files",
+  "ls-tree",
+  "ls-remote",
+  "cat-file",
+  "merge-base",
+  "for-each-ref",
+  "describe",
+  "blame",
+  "shortlog",
+  "grep",
+  "name-rev",
+  "count-objects",
+  "whatchanged",
+  "cherry",
+  "show-ref",
+  "show-branch",
+  "range-diff",
+  "var",
+  "check-ignore",
+  "check-attr"
+]);
+var CONSTRUCT_WORDS = /* @__PURE__ */ new Set(["then", "else", "fi", "do", "done", "esac", "{", "}", "(", ")"]);
+function splitSegments(command) {
+  const out = [];
+  let current = "";
+  let quote = null;
+  let depth = 0;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === "$" && command[i + 1] === "(") {
+      depth += 1;
+      current += "$(";
+      i += 1;
+      continue;
+    }
+    if (ch === ")" && depth > 0) {
+      depth -= 1;
+      current += ch;
+      continue;
+    }
+    if (ch === "&" && (command[i - 1] === ">" || command[i - 1] === "<" || command[i + 1] === ">")) {
+      current += ch;
+      continue;
+    }
+    if (depth === 0 && (ch === ";" || ch === "\n" || ch === "|" || ch === "&")) {
+      if ((ch === "&" || ch === "|") && command[i + 1] === ch) i += 1;
+      if (current.trim()) out.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (quote || depth !== 0) return null;
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+function substitutions(segment) {
+  const out = [];
+  let i = segment.indexOf("$(");
+  while (i >= 0) {
+    let depth = 1;
+    let j = i + 2;
+    for (; j < segment.length && depth > 0; j += 1) {
+      if (segment[j] === "(") depth += 1;
+      else if (segment[j] === ")") depth -= 1;
+    }
+    out.push(segment.slice(i + 2, j - 1));
+    i = segment.indexOf("$(", j);
+  }
+  return out;
+}
+function tokens(segment) {
+  const out = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let m = re.exec(segment);
+  while (m) {
+    out.push(m[1] ?? m[2] ?? m[3]);
+    m = re.exec(segment);
+  }
+  return out;
+}
+function writesViaRedirect(segment) {
+  const unquoted = segment.replace(/"[^"]*"|'[^']*'/g, '""');
+  const re = /(\d*)>>?\s*(&\d+|\S+)?/g;
+  let m = re.exec(unquoted);
+  while (m) {
+    const target = m[2] ?? "";
+    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target)) return true;
+    m = re.exec(unquoted);
+  }
+  return false;
+}
+function gitIsReadOnly(args) {
+  let i = 0;
+  while (i < args.length && args[i].startsWith("-")) {
+    i += args[i] === "-C" || args[i] === "-c" ? 2 : 1;
+  }
+  const sub = args[i];
+  const rest = args.slice(i + 1);
+  if (!sub) return true;
+  if (READ_ONLY_GIT.has(sub)) return true;
+  const flags = new Set(rest.filter((a) => a.startsWith("-")));
+  const positional = rest.filter((a) => !a.startsWith("-"));
+  switch (sub) {
+    case "branch": {
+      const writes = ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy", "-f", "--force", "-u", "--set-upstream-to", "--unset-upstream", "--edit-description"];
+      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`)))) return false;
+      if (flags.has("--list") || flags.has("-l")) return true;
+      const valued = /* @__PURE__ */ new Set(["--format", "--sort", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]);
+      for (let k = 0; k < rest.length; k += 1) {
+        if (rest[k].startsWith("-")) {
+          if (valued.has(rest[k])) k += 1;
+          continue;
+        }
+        return false;
+      }
+      return true;
+    }
+    case "tag":
+      return positional.length === 0 || flags.has("-l") || flags.has("--list");
+    case "remote":
+      return positional.length === 0 || ["show", "get-url"].includes(positional[0]);
+    case "stash":
+    case "notes":
+    case "worktree":
+      return ["list", "show"].includes(positional[0] ?? "");
+    case "reflog":
+      return positional.length === 0 || positional[0] === "show";
+    case "config":
+      return ["--get", "--get-all", "--get-regexp", "--list", "-l"].some((f) => flags.has(f));
+    case "symbolic-ref":
+      return positional.length <= 1 && !flags.has("-d") && !flags.has("--delete");
+    default:
+      return false;
+  }
+}
+function segmentIsReadOnly(segment, depth) {
+  if (depth > 4) return false;
+  for (const body of substitutions(segment)) {
+    if (!commandIsReadOnly(body, depth + 1)) return false;
+  }
+  const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
+  if (writesViaRedirect(flat)) return false;
+  let words2 = tokens(flat);
+  while (words2.length && (CONSTRUCT_WORDS.has(words2[0]) || /^[A-Za-z_]\w*=/.test(words2[0]) || words2[0] === "if" || words2[0] === "while" || words2[0] === "until" || words2[0] === "!")) {
+    words2 = words2.slice(1);
+  }
+  if (words2.length === 0) return true;
+  const [program, ...args] = words2;
+  if (program === "for" || program === "case") return true;
+  if (program === "git") return gitIsReadOnly(args);
+  if (!READ_ONLY_PROGRAMS.has(program)) return false;
+  if (INFO_ONLY_PROGRAMS.has(program)) return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
+  if (program === "sed") return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
+  if (program === "find") return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
+  if (program === "sort") return !args.some((a) => a === "-o" || a.startsWith("--output"));
+  return true;
+}
+function commandIsReadOnly(command, depth) {
+  if (/`/.test(command)) return false;
+  const segments = splitSegments(command);
+  if (!segments || segments.length === 0) return false;
+  return segments.every((s) => segmentIsReadOnly(s, depth));
+}
+function isReadOnlyShellCommand(command) {
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+  return commandIsReadOnly(trimmed, 0);
+}
+
 // src/readCoverage.ts
+var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
+function normalizePathArg(value) {
+  const p = value.split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
+  return p === "." ? "" : p;
+}
+function canonicalReadArgs(tool, args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (value == null) continue;
+    if (typeof value === "string") {
+      const trimmed = PATH_ARG_KEYS.has(key) ? normalizePathArg(value.trim()) : value.trim();
+      if (trimmed) out[key] = trimmed;
+      continue;
+    }
+    out[key] = value;
+  }
+  if (tool === "read_file" && (out.offset === 1 || out.offset === 0)) delete out.offset;
+  return out;
+}
+var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files"]);
+function isReadOnlyShellCall(tool, args) {
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
+  const record = args;
+  const command = typeof record.command === "string" ? record.command : typeof record.cmd === "string" ? record.cmd : "";
+  return isReadOnlyShellCommand(command);
+}
+function resultObject(result) {
+  if (result && typeof result === "object" && !Array.isArray(result)) return result;
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function isUnderDir(p, dir) {
+  if (!dir) return true;
+  const path = normalizePathArg(p);
+  return path === dir || path.startsWith(`${dir}/`);
+}
 var REVISIT_NUDGE_AT = 3;
 var REVISIT_HARD_AT = 5;
 var MAX_REMEMBERED_ARGS = 8;
@@ -2129,7 +2463,7 @@ var ReadCoverage = class _ReadCoverage {
   /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
   exact = /* @__PURE__ */ new Map();
   static exactKey(tool, args) {
-    return `${tool}:${stableStringify(args ?? {})}`;
+    return `${tool}:${stableStringify(canonicalReadArgs(tool, args))}`;
   }
   /**
    * Has this exact read — same tool, same arguments in any key order — already
@@ -2159,7 +2493,7 @@ var ReadCoverage = class _ReadCoverage {
    */
   record(tool, args) {
     const target = activityTarget(args) ?? null;
-    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, target });
+    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
     if (!target) return null;
     const key = `${tool}:${target}`;
     const existing = this.visits.get(key);
@@ -2213,7 +2547,7 @@ var ReadCoverage = class _ReadCoverage {
    *   are forgotten; file reads are not, because a ticket write does not edit source.
    */
   invalidate(tool, args) {
-    if (isUnscopedMutationTool(tool)) {
+    if (isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args)) {
       this.exact.clear();
       for (const visit of this.visits.values()) visit.mayHaveChanged = true;
       return;
@@ -2225,7 +2559,7 @@ var ReadCoverage = class _ReadCoverage {
         if (key.slice(key.indexOf(":") + 1) === target) this.visits.delete(key);
       }
       for (const [key, read] of [...this.exact.entries()]) {
-        if (read.target === target) this.exact.delete(key);
+        if (read.target === target || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
       }
       return;
     }
@@ -2233,6 +2567,45 @@ var ReadCoverage = class _ReadCoverage {
     for (const [key, read] of [...this.exact.entries()]) {
       if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }
+  }
+  /**
+   * Answer a `search_code` from a WIDER search already held: the same query (and the same
+   * other arguments) run earlier over an ancestor directory — or the whole tree — whose
+   * result was complete (not truncated). Filtering those matches to the narrower `path`
+   * is exactly what re-running the search would return, without running it.
+   *
+   * Measured on a ticket-review run: one directory searched nine times and one file six,
+   * mostly re-asking a question an earlier, broader search had already answered. Null when
+   * no complete covering result is held — then the search runs as normal.
+   */
+  derivedSearch(tool, args) {
+    if (tool !== "search_code") return null;
+    const wanted = canonicalReadArgs(tool, args);
+    const scope = typeof wanted.path === "string" ? wanted.path : "";
+    if (!scope) return null;
+    const { path: _scope, ...rest } = wanted;
+    const others = stableStringify(rest);
+    for (const read of this.exact.values()) {
+      if (read.tool !== "search_code" || !read.cached) continue;
+      const { path: earlierPath, ...earlierRest } = read.args;
+      const earlier = typeof earlierPath === "string" ? earlierPath : "";
+      if (earlier === scope || !isUnderDir(scope, earlier)) continue;
+      if (stableStringify(earlierRest) !== others) continue;
+      const result = resultObject(read.cached.result);
+      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
+      const matches = result.matches.filter(
+        (m) => typeof m.path === "string" && isUnderDir(m.path, scope)
+      );
+      return {
+        ok: true,
+        query: wanted.query,
+        total: matches.length,
+        truncated: false,
+        matches,
+        note: `Answered from this run's earlier complete search for the same query${earlier ? ` under "${earlier}"` : " over the whole tree"}, filtered to "${scope}" \u2014 not re-run. ${matches.length === 0 ? "The term does not appear under this path." : ""}`.trim()
+      };
+    }
+    return null;
   }
 };
 function revisitAdvisory(tool, target, visit) {
@@ -3264,6 +3637,7 @@ function stitchSplitSentence(segments) {
     const prev = out[i - 1];
     const cur = out[i];
     if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
     if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
     const cut = lastSentenceStart(prev.content);
     const head = prev.content.slice(0, cut).trim();
@@ -3713,7 +4087,7 @@ function provenanceMetadata(result) {
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
 var HISTORY_WINDOW = 80;
-var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
 function accrueByoUnresolved(c, raw) {
   if (!raw) return;
@@ -4619,6 +4993,24 @@ ${revisit}` : replayNote });
           };
           pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: stub });
           return { result: { data: stub } };
+        }
+        const derived = readCoverage.derivedSearch(call.name, args);
+        if (derived) {
+          const visit = readCoverage.record(call.name, args);
+          const target = visit ? activityTarget(args) : void 0;
+          const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          const served = trimToolResult(call.name, derived, { advisory: revisit });
+          pendingReplay = { name: call.name, args, result: derived };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "tool",
+            label: call.name,
+            args,
+            result: { derived: true, note: derived.note },
+            resultBytes: served.bytes,
+            truncated: served.truncated
+          });
+          return { result: { data: served.content } };
         }
       } else {
         readCoverage.invalidate(call.name, args);
@@ -5693,6 +6085,154 @@ function takePendingPrompt() {
   }
 }
 
+// src/agentPool.ts
+var DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
+var AGENT_POOL_PATHS = {
+  owned: "/api/workforce/agents/mine",
+  purchased: "/api/workforce/agents/purchased",
+  registered: "/api/agents"
+};
+function poolAgentsFrom(input) {
+  const wfById = /* @__PURE__ */ new Map();
+  for (const a of [...input.owned, ...input.purchased]) wfById.set(String(a.id), a);
+  const workforce = [...wfById.values()].map((a) => ({
+    kind: "workforce",
+    ref: String(a.id),
+    name: a.name,
+    meta: a.title || a.base_model || "",
+    baseModel: a.base_model && a.base_model !== DEFAULT_AGENT_MODEL_SENTINEL ? a.base_model : null
+  }));
+  const registered = input.registered.filter((a) => a.isActive).map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.type, baseModel: null }));
+  return [...workforce, ...registered];
+}
+async function loadAgentPoolVia(request) {
+  const [owned, purchased, registered] = await Promise.all([
+    request(AGENT_POOL_PATHS.owned).catch(() => []),
+    request(AGENT_POOL_PATHS.purchased).catch(() => []),
+    request(AGENT_POOL_PATHS.registered).catch(() => [])
+  ]);
+  return poolAgentsFrom({ owned: owned ?? [], purchased: purchased ?? [], registered: registered ?? [] });
+}
+
+// src/brainPersona.ts
+var PERSONA_MODALITY_IDS = ["designer", "mobile", "webmobile", "evermind", "finetune", "voice"];
+var STRATEGY_OKR_NOTE = 'Strategy and goals live as OKRs/Objectives (Objectives + Key Results) in their own tables \u2014 not as tasks on the Kanban board. When the user talks about goals, outcomes, or strategy, you can create and link Objectives and Key Results, and promote an epic titled like "OKR \u2026" into a real Objective, using the platform tools.';
+var BASE_PERSONAS = {
+  designer: {
+    icon: "\u{1F310}",
+    prompt: [
+      "You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.",
+      "When the user describes an app to build, SCAFFOLD IT COMPLETELY in this turn: call the `create_file` tool for every file the app needs to actually run \u2014 an index.html entry, a package.json with real dependencies and a `build` script, and all of the src/ components \u2014 so the live Preview renders a working app immediately, not a single snippet. Default to a Vite + React app unless the user asks for something else. Prefer `create_file` over pasting code the user must apply by hand. When you have scaffolded the app, tell the user in one line what you built and that Preview is live and it is ready to Publish.",
+      "Use markdown for your response: headings, lists, bold, and fenced code blocks.",
+      "If the file tools are unavailable, fall back to suggesting files as a code block with the file path as the language tag so the user can create the file in one click. Examples: ```package.json (then JSON content), ```src/index.js (then JS content), ```.gitignore (then content).",
+      "When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it."
+    ].join("\n")
+  },
+  mobile: {
+    icon: "\u{1F4F1}",
+    prompt: [
+      "You are an expert mobile app developer operating Builderforce.ai's Canvas Builder. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
+      'The project is a React Native app rendered for the web through react-native-web, so it runs in the browser preview AND stays portable to Expo. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
+      "Style with StyleSheet.create and flexbox. Remember there is no hover: design for touch, keep tap targets at least 44 points, and respect safe areas at the top and bottom of the screen.",
+      "Design for a narrow portrait viewport (roughly 390 x 850 points) first. Prefer native navigation patterns \u2014 tab bars, stack headers, bottom sheets \u2014 over desktop patterns like sidebars and hover menus.",
+      "When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.",
+      "When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it."
+    ].join("\n")
+  },
+  webmobile: {
+    icon: "\u{1F5A5}\uFE0F",
+    prompt: [
+      "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
+      'The project is a React app rendered through react-native-web, so the SAME source runs full-width as a website AND inside a phone-sized device simulator, and stays portable to Expo for native iOS/Android. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
+      "Style with StyleSheet.create and flexbox, and make layouts RESPONSIVE: use flex, percentage widths and useWindowDimensions to adapt between a wide desktop viewport and a narrow phone one. Keep tap targets at least 44 points and respect safe areas \u2014 there is no hover on mobile.",
+      "When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.",
+      "When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it."
+    ].join("\n")
+  },
+  evermind: {
+    icon: "\u{1F9E0}",
+    prompt: [
+      "You are assisting with growing an Evermind \u2014 Builderforce.ai's self-updating model that learns continuously (Write-Through Cognition) instead of being frozen after training.",
+      "Help the user teach it: draft facts, skills, and examples to feed it, reason about what it has learned, and interpret its Knowledge Map (neocortex / hippocampus / limbic regions).",
+      "This is NOT classic fine-tuning \u2014 the model updates in place as it learns. Keep guidance oriented around teaching and recall, not training runs or LoRA adapters."
+    ].join("\n")
+  },
+  finetune: {
+    icon: "\u{1F527}",
+    prompt: [
+      "You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.",
+      "Help the user draft instruction/response pairs, choose a base model and training hyperparameters, and reason about training runs and benchmark results."
+    ].join("\n")
+  },
+  voice: {
+    icon: "\u{1F399}",
+    prompt: [
+      "You are a voice director inside Builderforce.ai's Voice Studio.",
+      "The user enrolls a reference sample to clone a voice (SSM/WebGPU acoustic model) and then synthesizes speech from typed text.",
+      "Help them write natural, well-punctuated lines to synthesize, and advise on pacing, emphasis, and tone."
+    ].join("\n")
+  }
+};
+var MODALITY_PERSONAS = Object.fromEntries(
+  PERSONA_MODALITY_IDS.map((id) => [id, { ...BASE_PERSONAS[id], prompt: `${BASE_PERSONAS[id].prompt}
+${STRATEGY_OKR_NOTE}` }])
+);
+var DEFAULT_PERSONA = "default";
+function modalityPersonaChoice(id) {
+  return `modality:${id}`;
+}
+function agentPersonaChoice(agent) {
+  return `agent:${agent.kind}:${agent.ref}`;
+}
+function personaModalityOf(choice) {
+  if (!choice.startsWith("modality:")) return null;
+  const id = choice.slice("modality:".length);
+  return PERSONA_MODALITY_IDS.includes(id) ? id : null;
+}
+function personaAgentOf(choice, agents) {
+  return agents.find((a) => agentPersonaChoice(a) === choice) ?? null;
+}
+function agentPersonaPrompt(name) {
+  return `You are acting as the "${name}" agent for this workspace. Adopt its role, voice and duties when responding.`;
+}
+function personaSystemPrompt(choice, agents) {
+  const modality = personaModalityOf(choice);
+  if (modality) return MODALITY_PERSONAS[modality].prompt;
+  const agent = personaAgentOf(choice, agents);
+  return agent ? agentPersonaPrompt(agent.name) : void 0;
+}
+var PERSONA_OVERLAY_PREFACE = "Persona for this conversation \u2014 adopt the domain focus below. Where it describes an environment, preview, or tools that differ from the ones described above, the ones above are what you actually have: use those.";
+function personaOverlay(choice, agents) {
+  const modality = personaModalityOf(choice);
+  if (modality) return `${PERSONA_OVERLAY_PREFACE}
+${MODALITY_PERSONAS[modality].prompt}`;
+  const agent = personaAgentOf(choice, agents);
+  return agent ? agentPersonaPrompt(agent.name) : void 0;
+}
+function personaModel(choice, agents) {
+  return personaAgentOf(choice, agents)?.baseModel ?? void 0;
+}
+function brainPersonaAgents(assignments, pool) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const a of assignments) {
+    const key = agentPersonaChoice({ kind: a.agentKind, ref: a.agentRef });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const pooled = pool.find((p) => p.kind === a.agentKind && p.ref === a.agentRef);
+    out.push({ kind: a.agentKind, ref: a.agentRef, name: pooled?.name ?? `${a.agentKind}:${a.agentRef}`, baseModel: pooled?.baseModel ?? null });
+  }
+  return out;
+}
+var BRAIN_AGENT_ASSIGNMENTS_PATH = "/api/agent-assignments?scope=brain";
+async function loadBrainPersonaAgentsVia(request) {
+  const [assignments, pool] = await Promise.all([
+    request(BRAIN_AGENT_ASSIGNMENTS_PATH).then((r) => r?.assignments ?? []).catch(() => []),
+    loadAgentPoolVia(request).catch(() => [])
+  ]);
+  return brainPersonaAgents(assignments, pool);
+}
+
 // src/modelIdentity.ts
 var BUILDERFORCE_PRODUCT_NAME = {
   free: "Builderforce Free",
@@ -5939,7 +6479,7 @@ function diagnosticsSignals(d) {
     }
   }
   const acct = d.account;
-  const tokens = tokenMeter(acct);
+  const tokens2 = tokenMeter(acct);
   if (acct) {
     const free = acct.plan === "free";
     const noCard = acct.billingStatus === "none" || acct.billingStatus == null;
@@ -5953,14 +6493,14 @@ function diagnosticsSignals(d) {
     if (acct.billingStatus === "past_due") {
       out.push("\u26A0\uFE0F Billing status is past_due \u2014 plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.");
     }
-    const tokenState = allowanceState(tokens);
-    if (tokens && tokenState === "exhausted") {
+    const tokenState = allowanceState(tokens2);
+    if (tokens2 && tokenState === "exhausted") {
       out.push(
-        `\u26A0\uFE0F AI token allowance is EXHAUSTED (${tokens.used.toLocaleString("en-US")} / ${tokens.limit.toLocaleString("en-US")} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? "the period resets"}.`
+        `\u26A0\uFE0F AI token allowance is EXHAUSTED (${tokens2.used.toLocaleString("en-US")} / ${tokens2.limit.toLocaleString("en-US")} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? "the period resets"}.`
       );
-    } else if (tokens && tokenState === "warn") {
+    } else if (tokens2 && tokenState === "warn") {
       out.push(
-        `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
+        `\u26A0\uFE0F AI token allowance is ${tokens2.percentUsed}% used (${tokens2.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
       );
     }
     if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false) {
@@ -6298,12 +6838,15 @@ function PromptInput({
 }
 export {
   ADDRESSED_TO_META_KEY,
+  AGENT_POOL_PATHS,
   API_VERSION_PROBE_TIMEOUT_MS,
   API_VERSION_TTL_MS,
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
   AUTHORED_BY_META_KEY,
+  BACK_TO_BACK_AT,
   BASE_BRANCHES,
+  BRAIN_AGENT_ASSIGNMENTS_PATH,
   BUILDERFORCE_PRODUCT_NAME,
   BrainActionsProvider,
   BrainContextProvider,
@@ -6314,10 +6857,12 @@ export {
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
+  DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_IDENTITY,
+  DEFAULT_PERSONA,
   DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
@@ -6326,10 +6871,12 @@ export {
   FailureTally,
   LOCAL_WORKSPACE_TOOLS,
   MAX_TOOL_RESULT_CHARS,
+  MODALITY_PERSONAS,
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
   ON_DEVICE_ANSWER_THRESHOLD,
+  PERSONA_MODALITY_IDS,
   PMO_FOCUS_PARAM,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
@@ -6355,6 +6902,8 @@ export {
   activityIcon,
   activityTarget,
   activityTone,
+  agentPersonaChoice,
+  agentPersonaPrompt,
   allowanceState,
   announcesUntakenAction,
   applyRemoteRun,
@@ -6363,6 +6912,7 @@ export {
   askUserBlock,
   attachEvermindLearn,
   attemptedPublish,
+  brainPersonaAgents,
   brainRequestError,
   buildBrainTriageReport,
   buildComposerDirectives,
@@ -6450,12 +7000,15 @@ export {
   leftChangeUnshipped,
   linkedTicketsToAdvance,
   linkedTicketsToComplete,
+  loadAgentPoolVia,
+  loadBrainPersonaAgentsVia,
   localStorageConfirmationPersistence,
   localToolsIn,
   mcpActionsFrom,
   mentionRecipient,
   mergeRecoveredTrace,
   midRunNotice,
+  modalityPersonaChoice,
   modelCategoryLabel,
   modelFailoversInTrace,
   modelInUse,
@@ -6467,15 +7020,21 @@ export {
   parseAskUser,
   parseByoUnresolved,
   parseChatActivity,
-  parseDirectedRecipient,
+  parseDirectedRecipients,
   parseGitShortStatus,
   parseMessageAuthor,
   parseMessageProvenance,
   parsePmoFocus,
   parseStepMessage,
   perMillionUsd,
+  personaAgentOf,
+  personaModalityOf,
+  personaModel,
+  personaOverlay,
+  personaSystemPrompt,
   pmoFocusDomId,
   pmoFocusValue,
+  poolAgentsFrom,
   premiumCostLabel,
   prepareImageDataUrl,
   productForPlan,

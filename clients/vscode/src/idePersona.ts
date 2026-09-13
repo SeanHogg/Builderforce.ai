@@ -11,7 +11,7 @@
 
 /** Standard preamble shown above the scanned workspace map. */
 export const WORKSPACE_MAP_INTRO =
-  'The following map of the open workspace lists its top-level files and directory structure. Use it to orient yourself — but it is NOT an exhaustive file index (deeper files are summarized), so when a file is not named here, find it with `list_files` (pass a `glob`) or `search_code` before concluding it does not exist:';
+  'The following map of the open workspace lists its top-level files and directory structure. Use it to orient yourself — but it is NOT an exhaustive file index (deeper files are summarized), so when a file is not named here, find it with `find_symbol` (where a name is defined), `list_files` (pass a `glob`) or `search_code` before concluding it does not exist:';
 
 /**
  * Autonomy directive — appended to BOTH persona branches. The agent was being
@@ -52,6 +52,17 @@ export const FOLLOW_THROUGH_DIRECTIVE =
  */
 export const DISCOVERY_DIRECTIVE =
   "Finding files: to locate a file you cannot already see in the workspace map, call `list_files` with a `glob` — e.g. `{ \"glob\": \"ROADMAP.md\" }` finds that filename at ANY depth, case-insensitively (so `Roadmap.md` still matches `ROADMAP.md`); use patterns like `*.md` or `src/**/*.ts` too. You can also `search_code` for a distinctive string inside files, or scope `list_files` to a subdirectory with `path`. Do NOT dump `list_files` on the root of a large repo without a `glob` (it summarizes to directories); prefer a glob or a scoped path. Never claim a file is missing until a `glob` search for its name has come back with zero matches.";
+
+/**
+ * Code-navigation directive (workspace surface only). The measured failure: a run that
+ * wanted one function out of a 153 KB service read it twelve times in 2,000-line windows
+ * and searched it six more, because `search_code` returns every line that MENTIONS a name
+ * and the only way to tell the definition from its calls was to read around each hit.
+ * `find_symbol` answers "where is it defined" from the index in one call, and
+ * `file_outline` turns "page through the file" into "jump to line N".
+ */
+export const CODE_NAVIGATION_DIRECTIVE =
+  "Navigating code: to find where a function, class, method, type, constant, SQL table or Markdown section is DEFINED, call `find_symbol` first — one indexed call returns `path:line`, whereas `search_code` returns every line that merely mentions the name. Before paging through a large file, call `file_outline` to list its definitions with line numbers, then `read_file` with `offset` a few lines above the one you need and a small `limit` (e.g. 150) — do not read a large file window by window hunting for one function. Keep `search_code` for usages, string literals and config values.";
 
 /**
  * Dispatch-handoff strategy — the decisive fix for "the Brain can't finish a big job
@@ -128,7 +139,7 @@ export const NO_HANDOFF_DIRECTIVE =
   "Never hand the user a command you could have run yourself. If your reply would end with \"now run the build / tests / type-check\", \"you'll need to install first\", or a Next-steps list of shell or git commands, that list is YOUR work order and not theirs: run it, read the output, and fix what fails before you answer. A change you did not verify is not a change you finished, and a commit-and-push the user asked for is not done until YOU have made it. The only steps you may leave to them are ones you genuinely cannot do here — something needing a credential, a browser, a VS Code restart, or a decision that is theirs to make — and when you leave one, name that step, say why, and state plainly that the change is unverified.";
 
 export const SHELL_USE_DIRECTIVE =
-  "Use `run_command` for BUILDING and CHECKING — install, build, type-check, lint, test — and verify your changes with it before reporting done. Do NOT use it for git: `git_status`, `git_diff`, `git_history`, `git_sync_latest`, `git_undo`, `git_redo`, `git_commit`, `git_push`, `open_pull_request` and `git_cleanup_merged` already exist, they are safer, and their failures tell you what to do next where raw git's do not. When a `run_command` DOES fail, read the output before retrying: a non-zero exit from a build or test run is a real result to act on, not a reason to run the same command again.";
+  "Use `run_command` for BUILDING and CHECKING — install, build, type-check, lint, test — and verify your changes with it before reporting done. Do NOT use it for git: `git_status`, `git_diff`, `git_history`, `git_sync_latest`, `git_undo`, `git_redo`, `git_commit`, `git_push`, `open_pull_request` and `git_cleanup_merged` already exist, they are safer, and their failures tell you what to do next where raw git's do not. When a `run_command` DOES fail, read the output before retrying: a non-zero exit from a build or test run is a real result to act on, not a reason to run the same command again. To review which tickets have pending code (unmerged branches, conflicts, squash-merge leftovers), call `review_ticket_branches` once — never a `git branch` / `git log main..X` loop plus a tasks.get per ticket.";
 
 /**
  * The base persona line. `hasWorkspace=false` → conversational (the local file
@@ -145,7 +156,7 @@ export function ideSystemPromptBase(hasWorkspace: boolean): string {
   // All workspace-only: they name `run_command` and the git tools, and stating them
   // where those do not exist would tell the agent off for correctly reporting that it
   // cannot run anything.
-  if (hasWorkspace) parts.push(DISCOVERY_DIRECTIVE, SHELL_USE_DIRECTIVE, NO_HANDOFF_DIRECTIVE, SHIP_CLEANUP_DIRECTIVE);
+  if (hasWorkspace) parts.push(DISCOVERY_DIRECTIVE, CODE_NAVIGATION_DIRECTIVE, SHELL_USE_DIRECTIVE, NO_HANDOFF_DIRECTIVE, SHIP_CLEANUP_DIRECTIVE);
   parts.push(DISPATCH_STRATEGY_DIRECTIVE);
   return parts.join("\n\n");
 }

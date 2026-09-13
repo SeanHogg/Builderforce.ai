@@ -42,6 +42,17 @@ describe("the local workspace tools are always advertised", () => {
     }
   });
 
+  it("pins the code-navigation tools the persona routes definition lookups through", () => {
+    // "where is the auth middleware?" shares no stem with `find_symbol`, so unpinned it
+    // is the first tool relevance drops — and the run falls back to search-and-page.
+    const prompt = ideSystemPromptBase(true);
+    for (const name of ["find_symbol", "file_outline"]) {
+      expect(prompt).toContain(name);
+      expect(LOCAL_WORKSPACE_TOOLS.has(name)).toBe(true);
+      expect(coreNames.has(name)).toBe(true);
+    }
+  });
+
   it("pins the publish tools the persona now routes shipping through", () => {
     // The persona used to say "use run_command for git/gh to commit, push and open a
     // PR" — advice with no tool behind it, which is how a one-line change ended up

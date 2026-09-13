@@ -1482,16 +1482,23 @@ declare function useBrainChats(options?: UseBrainChatsOptions): UseBrainChats;
  *
  * A BuilderForce chat is multi-party: alongside the BRAIN (the agent that
  * executes build/change requests) a chat can have other participants — invited
- * teammate agents and (in future) humans. Not every message is a directive for
- * the BRAIN to run: a user can @-tag a participant and simply talk to them. Such
- * a turn is a normal `user` message tagged with `{ addressedTo: {...} }` in its
- * metadata; the conversation loop reads that flag and does NOT start a BRAIN run
- * for it, while the transcript still shows who it was addressed to. An untagged
- * message (or one addressed to the BRAIN) runs the agent loop as before.
+ * teammate agents and humans. Not every message is a directive for the BRAIN to
+ * run: a user can @-tag a participant and simply talk to them. Such a turn is a
+ * normal `user` message tagged with `{ addressedTo: {...} }` in its metadata; the
+ * conversation loop reads that flag and does NOT start a BRAIN run for it, while
+ * the transcript still shows who it was addressed to. An untagged message (or one
+ * addressed to the BRAIN) runs the agent loop as before.
+ *
+ * `addressedTo` has two shapes. ONE participant is stored as the participant
+ * itself (`{kind:'agent'|'human', ref, name}`). SEVERAL — a canvas group turn that
+ * asks every agent on the board at once — are stored as
+ * `{kind:'group', members:[…participants]}`. Readers go through
+ * {@link parseDirectedRecipients}, which answers a list for both, so no surface
+ * has to know which shape a row carries.
  *
  * This is the single source of truth for the convention, shared by the send path
  * (which skips the run), the auto-reply guard, and any surface that renders the
- * "→ recipient" badge.
+ * "→ recipients" badge.
  */
 /** A non-BRAIN participant a message can be addressed to. */
 interface DirectedRecipient {
@@ -1501,6 +1508,11 @@ interface DirectedRecipient {
     ref: string;
     /** Display name shown in the composer chip + the transcript badge. */
     name: string;
+}
+/** A turn addressed to several participants at once (a canvas group turn). */
+interface DirectedGroup {
+    kind: 'group';
+    members: DirectedRecipient[];
 }
 /** The metadata key that flags a user message as addressed to a participant. */
 declare const ADDRESSED_TO_META_KEY = "addressedTo";
@@ -1514,15 +1526,27 @@ declare function parseMessageAuthor(msg: {
 }): DirectedRecipient | null;
 /**
  * Merge an `addressedTo` flag into a message's metadata object (preserving any
- * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`
- * when there is nothing to store — ready to hand to `persistence.sendMessages`.
+ * other keys, e.g. `attachments`). One recipient is stored as itself; two or more
+ * as a {@link DirectedGroup}. Returns a serialized string, or `undefined` when
+ * there is nothing to store — ready to hand to `persistence.sendMessages`.
  */
-declare function withDirectedMetadata(recipient: DirectedRecipient | null | undefined, base?: Record<string, unknown>): string | undefined;
-/** The recipient a persisted message was addressed to, or `null` for the BRAIN. */
-declare function parseDirectedRecipient(msg: {
+declare function withDirectedMetadata(recipient: DirectedRecipient | readonly DirectedRecipient[] | null | undefined, base?: Record<string, unknown>): string | undefined;
+/**
+ * Everyone a persisted message was addressed to — empty for a BRAIN turn, one
+ * entry for a directed turn, several for a group turn.
+ *
+ * Group rows written before members carried names stored bare agent refs
+ * (`{kind:'group', refs}`); those still read as addressed, named by their ref, so
+ * the transcript says SOMETHING true about them and the BRAIN still stays idle.
+ */
+declare function parseDirectedRecipients(msg: {
     metadata?: string | null;
-}): DirectedRecipient | null;
-/** True when a message is addressed to a participant (so the BRAIN should NOT run for it). */
+}): DirectedRecipient[];
+/**
+ * True when a message is addressed to one or more participants — a directed OR a
+ * group turn — so the BRAIN must NOT run for it: whoever it was put to owns the
+ * reply.
+ */
 declare function isDirectedToParticipant(msg: {
     metadata?: string | null;
 }): boolean;
@@ -1603,6 +1627,28 @@ interface RepeatedTarget {
     label: string;
     count: number;
 }
+/**
+ * The same call made again IMMEDIATELY — back to back, with no other tool call in
+ * between. The exact-duplicate counter above catches a call repeated anywhere in
+ * the run; this catches the tighter and more damning shape: `git_status` → same
+ * error → `git_status` → same error → `git_status`. Nothing was learned between
+ * the attempts because nothing else was tried.
+ */
+interface RepeatStreak {
+    /** The tool name, e.g. `git_status`. */
+    label: string;
+    /** Consecutive identical calls, including the first. */
+    count: number;
+    /** How many of those calls failed — a streak of failures is a stall on a known
+     *  error; a streak of successes is a stall on an answer it already has. */
+    failed: number;
+}
+/**
+ * Consecutive identical calls at which the streak becomes a verdict on its own.
+ * Two in a row is a retry; three is the model asking the same question a third time
+ * after hearing the same answer twice, whatever the rest of the run looks like.
+ */
+declare const BACK_TO_BACK_AT = 3;
 declare function isMutationTool(name: string): boolean;
 /**
  * Whether the run was asked to CHANGE something. Reads the user turns only — the
@@ -1618,6 +1664,19 @@ declare function hasEditIntent(messages: BrainMessage[]): boolean;
 interface RunProgress {
     /** Tool calls whose label AND arguments exactly repeated an earlier call. */
     duplicateCalls: number;
+    /**
+     * The longest run of CONSECUTIVE identical calls, or null when no call was ever
+     * repeated back to back. See {@link RepeatStreak}.
+     */
+    longestStreak: RepeatStreak | null;
+    /** How many distinct back-to-back streaks (two or more in a row) the run had. */
+    streaks: number;
+    /**
+     * True when some call was repeated {@link BACK_TO_BACK_AT} or more times in a
+     * row. Unlike `spinning` this needs no minimum run size — three identical calls
+     * in a row is a stall in a 3-call run as surely as in a 300-call one.
+     */
+    stuckOnCall: boolean;
     /** Targets hit more than once, most-repeated first. */
     repeatedTargets: RepeatedTarget[];
     /** Distinct targets the run touched (calls with no discernible target excluded). */
@@ -2959,47 +3018,6 @@ declare function shippedToBaseBranch(events: readonly BrainTraceEvent[], opts?: 
 }): boolean;
 
 /**
- * The loop-breaker for re-reading.
- *
- * Two guards, one tally:
- *
- * 1. The EXACT repeat — same tool, same arguments. The run loop answers it with a stub
- *    telling the model to reuse the earlier result. That catches a model that asks the
- *    identical question twice.
- *
- * 2. The CIRCLING read — the failure that actually burns runs:
- *
- *     read_file(LandingCanvasHero.module.css, offset 1)
- *     read_file(LandingCanvasHero.module.css, offset 140)
- *     read_file(LandingCanvasHero.module.css, offset 141)   ← one line later
- *     read_file(LandingCanvasHero.module.css, offset 208)
- *     read_file(LandingCanvasHero.module.css, offset 240)
- *     read_file(LandingCanvasHero.module.css, offset 340)
- *     read_file(LandingCanvasHero.module.css, offset 440)
- *
- *    Seven DIFFERENT calls, so the exact-repeat guard stays silent for all of them,
- *    while the model shuffles a window up and down one 566-line file until the tool
- *    budget is gone and the user's actual request — a one-line CSS change — is never
- *    made. Every existing signal scores that run clean.
- *
- * The fix is not to block the read: a legitimate second pass over a large file is
- * normal, and refusing it would break real work. The fix is to make the model AWARE
- * that it is circling, at the only moment it can act on that — inside the tool
- * result it is about to read — and to tell it exactly what it has already been
- * shown, so "I'll just look again" stops being the cheapest next move.
- *
- * Both guards live in ONE object because they share the one question that decides
- * whether they are still valid: "did something just change what a re-read would see?"
- * They used to be two structures with two answers. The exact-repeat set was cleared
- * wholesale by EVERY non-read call — a ticket write, a git status, a failed dispatch —
- * so a run that interleaves reads with platform writes never suppressed anything, while
- * the circling tally had already learned to forget only the target an edit touched.
- * Now one `invalidate` speaks for both.
- *
- * Pure and self-contained: a small tally with one method to record a visit and one
- * to describe it. No clock, no I/O.
- */
-/**
  * Visits to one target before the model is told it is circling. Two reads of a
  * long file is ordinary (read the top, jump to the section); the THIRD is the
  * point where a pass stops being navigation and starts being a loop.
@@ -3105,6 +3123,17 @@ declare class ReadCoverage {
      *   are forgotten; file reads are not, because a ticket write does not edit source.
      */
     invalidate(tool: string, args: unknown): void;
+    /**
+     * Answer a `search_code` from a WIDER search already held: the same query (and the same
+     * other arguments) run earlier over an ancestor directory — or the whole tree — whose
+     * result was complete (not truncated). Filtering those matches to the narrower `path`
+     * is exactly what re-running the search would return, without running it.
+     *
+     * Measured on a ticket-review run: one directory searched nine times and one file six,
+     * mostly re-asking a question an earlier, broader search had already answered. Null when
+     * no complete covering result is held — then the search runs as normal.
+     */
+    derivedSearch(tool: string, args: unknown): Record<string, unknown> | null;
 }
 /**
  * The advisory to attach to a read result once a target has been visited enough
@@ -4049,6 +4078,144 @@ declare function scopeToConsolidation<T extends {
 declare const CONSOLIDATION_MARKER_PREFIX = "\uD83D\uDCCC **Consolidated summary** \u2014 context continues from here.\n\n";
 /** Wrap a raw summary as the marker's visible content (prefix + summary). */
 declare function consolidationMarkerContent(summary: string): string;
+
+/**
+ * The tenant's assignable agent pool — ONE roster built from three source lists:
+ * the tenant's own cloud (workforce) agents, agents acquired from the marketplace,
+ * and registered remote agents. An agent is registered once to the tenant and can
+ * be assigned to any surface (project, swimlane, brain…), so the pool is never
+ * project-filtered here.
+ *
+ * Pure mapping plus a transport-agnostic loader: the web app fetches through its own
+ * API client and the VS Code webview through its authed fetch, but both build the
+ * SAME pool from the SAME rows — which is what keeps a persona picker or a recipient
+ * chip naming an agent identically on both surfaces.
+ */
+/** A selectable agent from one of the tenant's two source pools. */
+interface PoolAgent {
+    kind: 'workforce' | 'registered';
+    ref: string;
+    name: string;
+    meta: string;
+    /** Gateway-resolvable model for this agent (workforce base_model), or null when
+     *  it should use the default (the 'builderforce-default' sentinel / registered). */
+    baseModel?: string | null;
+}
+/** The fields of a workforce (cloud) agent row the pool reads. */
+interface PoolWorkforceAgentRow {
+    id: number | string;
+    name: string;
+    title?: string | null;
+    base_model?: string | null;
+}
+/** The fields of a registered remote agent row the pool reads. */
+interface PoolRegisteredAgentRow {
+    id: number | string;
+    name: string;
+    type: string;
+    isActive: boolean;
+}
+/** base_model sentinel meaning "no explicit model — use the default". */
+declare const DEFAULT_AGENT_MODEL_SENTINEL = "builderforce-default";
+/** The three endpoints the pool is built from. */
+declare const AGENT_POOL_PATHS: {
+    readonly owned: "/api/workforce/agents/mine";
+    readonly purchased: "/api/workforce/agents/purchased";
+    readonly registered: "/api/agents";
+};
+/** Build the pool from its three source lists (owned + purchased deduped by id). */
+declare function poolAgentsFrom(input: {
+    owned: readonly PoolWorkforceAgentRow[];
+    purchased: readonly PoolWorkforceAgentRow[];
+    registered: readonly PoolRegisteredAgentRow[];
+}): PoolAgent[];
+/** A host's authenticated JSON GET. */
+type PoolRequest = <T>(path: string) => Promise<T>;
+/** Load the pool through a host's transport. Each source degrades to empty on its own. */
+declare function loadAgentPoolVia(request: PoolRequest): Promise<PoolAgent[]>;
+
+/**
+ * Brain personas — WHO the Brain answers as in a conversation.
+ *
+ * A composer's "Acting as" control offers three kinds of persona: the host's
+ * default Brain, a built-in MODALITY persona (the Website builder, the mobile
+ * coder, the Evermind teacher…), or an AGENT assigned to the Brain (scope='brain'
+ * in the agent-assignment model). This module is the one definition of all three,
+ * shared by the web app and the VS Code webview: the modality prompts live here
+ * (the frontend's modality registry reads them from here too), and so do the choice
+ * encoding, the agent join, and the two ways a host applies a persona.
+ *
+ * The two applications differ for a real reason. The web Brain has no environment
+ * of its own to describe, so a persona REPLACES its system prompt
+ * ({@link personaSystemPrompt}). The editor's base prompt describes the actual
+ * workspace, file tools and repository — a Builder persona that talks about a live
+ * browser Preview must not overwrite that — so the editor LAYERS the persona on top
+ * ({@link personaOverlay}).
+ */
+
+/** The project modalities that carry a Brain persona. */
+type PersonaModalityId = 'designer' | 'mobile' | 'webmobile' | 'evermind' | 'finetune' | 'voice';
+/** Display order of the modality personas. */
+declare const PERSONA_MODALITY_IDS: readonly PersonaModalityId[];
+/** A modality persona: its glyph and the Brain prompt it runs under. */
+interface ModalityPersona {
+    icon: string;
+    prompt: string;
+}
+/** Every modality persona, its prompt carrying the shared strategy/OKR note. */
+declare const MODALITY_PERSONAS: Readonly<Record<PersonaModalityId, ModalityPersona>>;
+/** An agent assigned to the Brain, named and model-resolved from the tenant pool. */
+interface BrainPersonaAgent {
+    kind: string;
+    ref: string;
+    name: string;
+    /** The agent's own model, or null for the default. */
+    baseModel?: string | null;
+}
+/**
+ * A persona choice, encoded as one stable string so a host can hold it in a single
+ * piece of state: `'default'`, `'modality:<id>'`, or `'agent:<kind>:<ref>'`.
+ */
+type BrainPersonaChoice = string;
+declare const DEFAULT_PERSONA: BrainPersonaChoice;
+declare function modalityPersonaChoice(id: string): BrainPersonaChoice;
+declare function agentPersonaChoice(agent: {
+    kind: string;
+    ref: string;
+}): BrainPersonaChoice;
+/** The modality a choice names, or null (unknown ids included). */
+declare function personaModalityOf(choice: BrainPersonaChoice): PersonaModalityId | null;
+/** The assigned agent a choice names, or null when it names none of `agents`. */
+declare function personaAgentOf(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): BrainPersonaAgent | null;
+/** The framing that makes the Brain answer AS an assigned agent. */
+declare function agentPersonaPrompt(name: string): string;
+/**
+ * The persona as a REPLACEMENT system prompt — for a host whose persona is the whole
+ * prompt (the web Brain). `undefined` for the default persona (or a choice naming
+ * nothing), so the host's own default applies.
+ */
+declare function personaSystemPrompt(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): string | undefined;
+/**
+ * The persona as an ADDITIVE directive — for a host that keeps its own base prompt
+ * because that prompt describes the environment the run really executes in (the
+ * editor's workspace, file tools and repository). `undefined` for the default persona.
+ */
+declare function personaOverlay(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): string | undefined;
+/**
+ * The model an agent persona runs on — the agent's own `base_model` — or undefined
+ * (default persona, modality persona, or an agent on the default model). A host
+ * feeds it as a NON-strict preference: an explicit user pin still wins.
+ */
+declare function personaModel(choice: BrainPersonaChoice, agents: readonly BrainPersonaAgent[]): string | undefined;
+/** Join the Brain's agent assignments to the tenant pool — one entry per agent. */
+declare function brainPersonaAgents(assignments: ReadonlyArray<{
+    agentKind: string;
+    agentRef: string;
+}>, pool: readonly PoolAgent[]): BrainPersonaAgent[];
+/** The Brain's agent assignments (scope='brain'). */
+declare const BRAIN_AGENT_ASSIGNMENTS_PATH = "/api/agent-assignments?scope=brain";
+/** Load the Brain's assigned agents through a host's transport. Degrades to []. */
+declare function loadBrainPersonaAgentsVia(request: PoolRequest): Promise<BrainPersonaAgent[]>;
 
 /**
  * Per-reply model/account provenance — the durable "which LLM, and whose account,
@@ -5125,4 +5292,4 @@ interface PromptInputProps {
 }
 declare function PromptInput({ value, onChange, onSubmit, placeholder, submitLabel, ariaLabel, disabled, busy, leading, secondaryContent, rows, className, submitOnEnter, }: PromptInputProps): react_jsx_runtime.JSX.Element;
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BASE_BRANCHES, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FailureTally, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PreparedImage, type ProjectMemoryRequest, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnshippedChangeInput, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, coerceAskUserPayload, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createBrainRestPersistence, createPayloadBudget, declinesShipping, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, dirtyPathsOf, displayModelName, effortProfile, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, forgetResolvedModels, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, projectMemoryHooks, ratedTurnContext, ratedTurnTool, reasoningForRun, repeatedFailureAdvisory, requestRunConfirm, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, stripAskUser, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FailureTally, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnshippedChangeInput, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, coerceAskUserPayload, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createBrainRestPersistence, createPayloadBudget, declinesShipping, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, dirtyPathsOf, displayModelName, effortProfile, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, forgetResolvedModels, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, projectMemoryHooks, ratedTurnContext, ratedTurnTool, reasoningForRun, repeatedFailureAdvisory, requestRunConfirm, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, stripAskUser, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workItemLinkFromCreate };

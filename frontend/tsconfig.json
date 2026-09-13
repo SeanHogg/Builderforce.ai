@@ -31,7 +31,8 @@
       "@builderforce/canvas-widget-protocol": ["../packages/canvas-widget-protocol/src/index.ts"],
       "@builderforce/ide-templates": ["../packages/ide-templates/src/index.ts"],
       "@builderforce/ide-file-contract": ["../packages/ide-file-contract/src/index.ts"],
-      "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"]
+      "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
+      "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"]
     },
     "target": "ES2017"
   },

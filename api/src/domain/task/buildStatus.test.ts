@@ -100,7 +100,7 @@ describe('there is exactly one derivation', () => {
 
   it('the board card is fed by ONE batched read, never a query per card', () => {
     const route = read('../../presentation/routes/taskRoutes.ts');
-    expect(route).toMatch(/loadTicketBuildStatuses\(db, c\.get\('tenantId'\), ids\)/);
+    expect(route).toMatch(/loadTicketPullRequestSignals\(db, c\.get\('tenantId'\), ids\)/);
     const reader = read('../../application/repos/ticketBuildStatus.ts');
     // One scan over the ids the list already resolved, ordered so the fallback is honest.
     expect(reader).toMatch(/inArray\(pullRequests\.taskId, \[\.\.\.taskIds\]\)/);

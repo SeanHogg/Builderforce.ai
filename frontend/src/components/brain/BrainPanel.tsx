@@ -17,7 +17,7 @@ import type { Formatter } from '@/i18n/format';
 import { useFormat } from '@/i18n/useFormat';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import Link from 'next/link';
-import { BrainTimeline, Avatar, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId, PersonaPicker, RecipientPicker, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import {
   consolidationMarkerContent,
@@ -34,6 +34,11 @@ import {
   useToolConfirmationGate,
   type BrainTraceEvent,
   mergeRecoveredTrace,
+  brainPersonaAgents,
+  personaAgentOf,
+  personaModalityOf,
+  personaModel,
+  personaSystemPrompt,
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
@@ -55,7 +60,6 @@ import { WorkOptionsPicker } from '@/components/brain/WorkOptionsPicker';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
 import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
 import { ThemeSelect } from '@/components/ThemeSelect';
-import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -69,8 +73,6 @@ import {
   BRAIN_AUTO_APPROVE_DIRECTIVE,
   buildComposerDirectives,
   parseSuggestedActions,
-  mentionRecipient,
-  resolveRecipient,
   isStepMessage,
   getBrainCapability,
   normalizeChatMode,
@@ -84,7 +86,6 @@ import {
   type BrainModality,
   type BrainEffort,
   type DirectedRecipient,
-  type RecipientChoice,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
@@ -95,7 +96,6 @@ import { PlanBadge } from '@/components/PlanBadge';
 import { BrainErrorBanner } from './BrainErrorBanner';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
-import { getModality } from '@/lib/modality';
 import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
 import { BRAIN_AUTO_APPROVE_DEFAULT, brainAutoApprovePersistence } from '@/lib/brain/autoApprove';
 import { nextSeedPromptStep } from '@/lib/brain/seedPrompt';
@@ -373,31 +373,22 @@ export function BrainPanel({
       .then(([a, p]) => { if (live) { setBrainAgents(a); setAgentPool(p); } });
     return () => { live = false; };
   }, []);
-  const agentName = useCallback(
-    (a: AgentAssignment) => agentPool.find((p) => p.kind === a.agentKind && p.ref === a.agentRef)?.name ?? `${a.agentKind}:${a.agentRef}`,
-    [agentPool],
+  // The Brain-assigned agents, named and model-resolved from the pool — the SAME join
+  // (and the same persona domain) the editor's composer uses: brain-embedded
+  // `brainPersona.ts`.
+  const personaAgents = useMemo(() => brainPersonaAgents(brainAgents, agentPool), [brainAgents, agentPool]);
+  const personaPrompt = useMemo(
+    () => personaSystemPrompt(personaSel, personaAgents)
+      // Default persona: the platform co-pilot prompt on the full Brain Storm page
+      // AND on the floating drawer everywhere EXCEPT when it's pinned to an IDE
+      // project (there the modality coding prompt — via resolveSystemPrompt — wins).
+      ?? (isPage || pinnedProjectId == null ? PLATFORM_BRAIN_SYSTEM_PROMPT : undefined),
+    [personaSel, personaAgents, isPage, pinnedProjectId],
   );
-  const personaSystemPrompt = useMemo(() => {
-    if (personaSel.startsWith('modality:')) return getModality(personaSel.slice('modality:'.length)).brainSystemPrompt;
-    if (personaSel.startsWith('agent:')) {
-      const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
-      return a ? `You are acting as the "${agentName(a)}" agent for this workspace. Adopt its role, voice and duties when responding.` : undefined;
-    }
-    // Default persona: the platform co-pilot prompt on the full Brain Storm page
-    // AND on the floating drawer everywhere EXCEPT when it's pinned to an IDE
-    // project (there the modality coding prompt — via resolveSystemPrompt — wins).
-    return isPage || pinnedProjectId == null ? PLATFORM_BRAIN_SYSTEM_PROMPT : undefined;
-  }, [personaSel, brainAgents, agentName, isPage, pinnedProjectId]);
-  // Route the Brain to the assigned agent's real model. The Brain streams to the
-  // gateway (/llm/v1/chat/completions), which resolves real model ids — so use the
-  // agent's base_model from the pool; registered/default agents → undefined (default).
-  const personaModel = useMemo(() => {
-    if (!personaSel.startsWith('agent:')) return undefined;
-    const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
-    if (!a) return undefined;
-    const pooled = agentPool.find((p) => p.kind === a.agentKind && p.ref === a.agentRef);
-    return pooled?.baseModel ?? undefined;
-  }, [personaSel, brainAgents, agentPool]);
+  // Route the Brain to the assigned agent's real model (its base_model; registered /
+  // default agents → undefined). A PREFERENCE, not a pin: an explicit model chosen in
+  // the `/` menu still wins — see the conversation hook's `model` below.
+  const personaModelId = useMemo(() => personaModel(personaSel, personaAgents), [personaSel, personaAgents]);
 
   // Share the live chat selection across co-mounted docked Brain instances (the
   // IDE Designer left-panel and the floating drawer) via BrainContext, so
@@ -625,8 +616,9 @@ export function BrainPanel({
     chatId: chats.activeChatId,
     modality,
     extraSystem: ambientSystem,
-    systemPrompt: personaSystemPrompt,
-    model: selectedModel,
+    systemPrompt: personaPrompt,
+    // An explicit pick wins; otherwise an agent persona runs on the agent's own model.
+    model: selectedModel ?? personaModelId,
     modelStrict: modelSelection.mode === 'model',
     routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
     pickFallbackModel: modelSelection.mode === 'model' ? undefined : pickFallbackModel,
@@ -785,15 +777,10 @@ export function BrainPanel({
     ],
     [invitedAgents, chatMembers, agentPool],
   );
-  // Who the next message goes to: `null` = auto (follow @mention), `'brain'` =
-  // explicit BRAIN, or an explicit participant. Reset when switching chats; drop
-  // a pick that has since left the roster.
-  const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(null);
-  useEffect(() => { setRecipientChoice(null); }, [activeChatId]);
-  useEffect(() => {
-    setRecipientChoice((c) => (c && c !== 'brain' && !participants.some((p) => p.ref === c.ref) ? null : c));
-  }, [participants]);
-  const recipient = resolveRecipient(recipientChoice, mentionRecipient(input, participants));
+  // Who the next message goes to — the shared composer state the editor uses too:
+  // reset when switching chats, drops a pick that has since left the roster, and
+  // follows a leading @mention when nothing was picked explicitly.
+  const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants, input, resetKey: activeChatId });
 
   // The project whose repos back "Add context" — the active chat's project takes
   // precedence (a chat can be assigned to a different project than the viewport),
@@ -1062,13 +1049,14 @@ export function BrainPanel({
   const modalityCopy = useModalityCopy();
   const localizedModalities = useLocalizedModalities();
   const personaLabel = useMemo(() => {
-    if (personaSel.startsWith('modality:')) return tBrain('brainModality', { modality: modalityCopy(personaSel.slice('modality:'.length)).label });
+    const modalityId = personaModalityOf(personaSel);
+    if (modalityId) return tBrain('brainModality', { modality: modalityCopy(modalityId).label });
     if (personaSel.startsWith('agent:')) {
-      const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
-      return a ? tBrain('brainAs', { name: agentName(a) }) : tBrain('brainTitle');
+      const agent = personaAgentOf(personaSel, personaAgents);
+      return agent ? tBrain('brainAs', { name: agent.name }) : tBrain('brainTitle');
     }
     return tBrain('brainDefault');
-  }, [personaSel, brainAgents, agentName, tBrain, modalityCopy]);
+  }, [personaSel, personaAgents, tBrain, modalityCopy]);
   const captureExecution = useCallback(async () => {
     // The write, the idle→copied/error→idle feedback and its 2000ms reset all live in the
     // shared hook. Thunk form: the payload is built on click, and a build that throws
@@ -1106,7 +1094,7 @@ export function BrainPanel({
           return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
         })(),
         trace: timelineTrace,
-        model: personaModel ?? null,
+        model: selectedModel ?? personaModelId ?? null,
         // Shared cached model surface — `fundingSurface` keeps the vendor tagging the
         // classifier needs, so this reads the list the pickers already loaded instead
         // of re-fetching /llm/v1/models on every capture.
@@ -1133,7 +1121,7 @@ export function BrainPanel({
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
       return `${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`;
     });
-  }, [capture, conv, personaLabel, personaModel, llmModels, toolSpecs, timelineTrace, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+  }, [capture, conv, personaLabel, selectedModel, personaModelId, llmModels, toolSpecs, timelineTrace, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (
@@ -1394,49 +1382,47 @@ export function BrainPanel({
       pendingAttachments={conv.pendingAttachments}
       onRemoveAttachment={conv.removeAttachment}
       mentionables={participants}
-      onMention={setRecipientChoice}
+      onMention={chooseRecipient}
       focusToken={composerFocusToken}
       contextControls={<>
-        <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
-        <Select
+        {/* "Acting as" and "To" are the shared brain-ui pickers — the SAME controls the
+            editor's composer renders, so the two surfaces offer and word them alike. */}
+        <PersonaPicker
           value={personaSel}
-          onChange={(e) => choosePersona(e.target.value)}
-          aria-label={tBrain('personaAria')}
-          style={{ fontSize: 'var(--font-size-small)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-        >
-          <option value="default">{tBrain('defaultBrain')}</option>
-          <optgroup label={tBrain('personas')}>
-            {localizedModalities.map((m) => <option key={m.id} value={`modality:${m.id}`}>{m.label}</option>)}
-          </optgroup>
-          {brainAgents.length > 0 && (
-            <optgroup label={tBrain('assignedAgents')}>
-              {brainAgents.map((a) => <option key={a.id} value={`agent:${a.agentKind}:${a.agentRef}`}>{agentName(a)}</option>)}
-            </optgroup>
-          )}
-        </Select>
+          onChange={choosePersona}
+          modalities={localizedModalities}
+          agents={personaAgents}
+          labels={{
+            actingAs: tBrain('actingAs'),
+            title: tBrain('personaAria'),
+            defaultBrain: tBrain('defaultBrain'),
+            personas: tBrain('personas'),
+            assignedAgents: tBrain('assignedAgents'),
+          }}
+        />
         {chats.activeChatId != null && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
-        {participants.length > 0 && <>
-          <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{tBrain('to')}</span>
-          {/* WHO YOU ARE ADDRESSING, with their personality. The shared hovercard showed
-              on /settings, the Workforce card and task-assignee chips — everywhere except
-              the surface where you actually choose which agent to talk to. It reads the
-              same provider map (mounted once below) and self-hides for a participant with
-              no personality on file, so nothing changes for anyone who has not set one. */}
-          {recipient && (
-            <AssigneeHovercard selectValue={recipient.kind === 'agent' ? `c:${recipient.ref}` : `u:${recipient.ref}`}>
-              <Avatar name={recipient.name} kind={recipient.kind} size={18} />
-            </AssigneeHovercard>
+        {/* WHO YOU ARE ADDRESSING, with their personality. The shared hovercard showed
+            on /settings, the Workforce card and task-assignee chips — everywhere except
+            the surface where you actually choose which agent to talk to. It reads the
+            same provider map (mounted once below) and self-hides for a participant with
+            no personality on file, so nothing changes for anyone who has not set one.
+            The picker self-hides in a chat with no participants. */}
+        <RecipientPicker
+          participants={participants}
+          recipient={recipient}
+          onChoose={chooseRecipient}
+          labels={{
+            to: tBrain('to'),
+            title: tBrain('recipientPickerTitle'),
+            brain: tBrain('brainRecipient'),
+            brainHint: tBrain('brainRecipientHint'),
+            agentHint: tBrain('agentRecipientHint'),
+            humanHint: tBrain('humanRecipientHint'),
+          }}
+          renderAvatar={(r, avatar) => (
+            <AssigneeHovercard selectValue={r.kind === 'agent' ? `c:${r.ref}` : `u:${r.ref}`}>{avatar}</AssigneeHovercard>
           )}
-          <Select
-            value={recipient ? recipient.ref : 'brain'}
-            onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
-            aria-label={tBrain('recipientPickerTitle')}
-            style={{ fontSize: 'var(--font-size-small)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-          >
-            <option value="brain">{tBrain('brainRecipient')}</option>
-            {participants.map((p) => <option key={p.ref} value={p.ref}>{p.name}</option>)}
-          </Select>
-        </>}
+        />
       </>}
       modeControls={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
     />

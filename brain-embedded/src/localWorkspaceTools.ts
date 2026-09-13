@@ -41,6 +41,12 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   'read_file',
   'list_files',
   'search_code',
+  // Code navigation over the definition index. Pinned for the reason the file tools are,
+  // and more acutely: "where is the auth middleware?" shares no stem with "find_symbol",
+  // so relevance drops the one call that answers it and the run falls back to searching
+  // and paging through files — the pattern these two tools exist to replace.
+  'find_symbol',
+  'file_outline',
   'write_file',
   'edit_file',
   'delete_file',

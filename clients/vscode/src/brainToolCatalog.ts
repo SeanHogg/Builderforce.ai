@@ -18,6 +18,7 @@ import { TOOL_DEFS, type ToolDef } from "./fileTools";
 import { cognitionToolDefs } from "./cognition";
 import { listPlatformTools } from "./platformTools";
 import { subagentToolDef, type SubagentToolDeps } from "./subagentTool";
+import { ticketBranchReviewToolDef } from "./ticketBranchTool";
 
 export async function brainToolCatalog(
   secrets: vscode.SecretStorage,
@@ -34,7 +35,9 @@ export async function brainToolCatalog(
 ): Promise<ToolDef[]> {
   const cognitionTools = projectId != null ? cognitionToolDefs(secrets, projectId) : [];
   const platformTools = await listPlatformTools(secrets);
-  const localTools = root ? TOOL_DEFS : [];
+  // The ticket branch review needs both halves: the project's tickets AND a checkout to
+  // compare their branches in.
+  const localTools = root ? [...TOOL_DEFS, ...(projectId != null ? [ticketBranchReviewToolDef(secrets, projectId)] : [])] : [];
   // Delegation needs a workspace to explore AND a model to run the child on. Built
   // last so its `catalog()` can hand the child the tools assembled above — the child's
   // read-only subset is derived from the parent's catalog, never a second list that

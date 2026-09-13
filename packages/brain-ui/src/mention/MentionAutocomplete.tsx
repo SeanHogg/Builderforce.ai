@@ -8,8 +8,8 @@
  * returns handlers you spread onto YOUR <textarea> plus a `popup` node you render
  * inside a `position: relative` composer container. Picking a participant strips
  * the "@query" fragment (the picked recipient is shown by the composer's "To:"
- * chip, so it need not linger in the body) and calls `onPick` — wire that to the
- * host's `setRecipientChoice`, reusing the whole directed-message routing spine.
+ * chip, so it need not linger in the body) and calls `onPick` — wire that to
+ * `useRecipientChoice`'s `choose`, reusing the whole directed-message routing spine.
  *
  * Theme-aware via the same CSS-var fallback chain the ChatTicketsPanel uses, so the
  * popup reads in BOTH the web app (light/dark) and the editor's active theme.
@@ -41,7 +41,7 @@ export interface UseMentionAutocompleteOptions {
   setValue: (v: string) => void;
   /** The chat's invited participants (agents + humans) offered by the picker. */
   participants: DirectedRecipient[];
-  /** Called with the participant the user picked — wire to `setRecipientChoice`. */
+  /** Called with the participant the user picked — wire to `useRecipientChoice`'s `choose`. */
   onPick: (r: DirectedRecipient) => void;
   labels?: MentionLabels;
   /** Suppress the picker entirely (e.g. while a run is streaming). */

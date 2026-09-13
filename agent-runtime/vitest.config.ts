@@ -26,6 +26,12 @@ export default defineConfig({
         find: "@builderforce/agent-tools/node-path.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-path.ts"),
       },
+      {
+        // The second node-only export (the definition index behind find_symbol /
+        // file_outline), spelled the same NodeNext way for the same reason.
+        find: "@builderforce/agent-tools/node-symbols.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-symbols.ts"),
+      },
       // Every source-only package under `packages/`, derived from their manifests.
       // These were six hand-written entries and had already fallen behind the
       // registry: `canvas-widget-protocol`, `creation-canvas-contract`,

@@ -20,7 +20,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { dispatchTaskFinalize } from '../../application/task/taskFinalize';
-import { loadTicketBuildStatuses } from '../../application/repos/ticketBuildStatus';
+import { loadTicketPullRequestSignals } from '../../application/repos/ticketBuildStatus';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
@@ -218,7 +218,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // The BUILD VERDICT rides the same list for the same reason. A failing PR-branch
     // build used to surface only on the ticket's PR tab, so the one place a person scans
     // — the board — showed a green-looking card over a branch that could not build. It is
-    // one grouped read beside the PRD counts (`loadTicketBuildStatuses`), never a query
+    // one grouped read beside the PRD counts (`loadTicketPullRequestSignals`), never a query
     // per card: this is the most-loaded read path the product has.
     const ids = plain.map(t => Number(t.id)).filter(n => Number.isFinite(n));
     // The PLAN VERDICT rides the same list for the same reason as the build verdict:
@@ -230,9 +230,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       .filter((t) => t.taskType === 'epic')
       .map((t) => Number(t.id))
       .filter((n) => Number.isFinite(n));
-    const [specCounts, buildStatuses, planVerdicts] = await Promise.all([
+    const [specCounts, prSignals, planVerdicts] = await Promise.all([
       countSpecsByTask(db, ids),
-      loadTicketBuildStatuses(db, c.get('tenantId'), ids),
+      loadTicketPullRequestSignals(db, c.get('tenantId'), ids),
       loadPlanVerdictsForTasks(db, c.get('tenantId'), epicIds),
     ]);
     return c.json({
@@ -241,7 +241,10 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         specCount: specCounts.get(Number(t.id)) ?? 0,
         // Absent for a ticket with no pull request — the client's default is `unknown`
         // and both render nothing, so there is no reason to spend a field per card.
-        buildStatus: buildStatuses.get(Number(t.id)) ?? null,
+        buildStatus: prSignals.get(Number(t.id))?.buildStatus ?? null,
+        // The current PR's state, from the same read: lets a branch review tell a
+        // squash-merged leftover branch from unmerged work (see TicketPullRequestSignals).
+        prState: prSignals.get(Number(t.id))?.prState ?? null,
         // Absent when the plan is clean — see planVerdictStore: "no row" is the ONE
         // encoding of "nothing to warn about".
         planVerdict: planVerdicts.get(Number(t.id)) ?? null,

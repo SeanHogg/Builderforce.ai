@@ -34,8 +34,10 @@ import type {
   ShellResult,
 } from "@builderforce/agent-tools";
 
+import type { RepoSymbolsCapability } from "@builderforce/agent-tools";
 import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
 import { SKIP_DIRS, searchWorkspace } from "./workspaceSearch";
+import { workspaceSymbolIndex } from "./workspaceSymbols";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -67,6 +69,9 @@ const LIST_RETURN_MAX = 400;
  *  are offered, identical to the cloud Container). */
 export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell",
+  // The definition index behind `find_symbol` / `file_outline` (see workspaceSymbols.ts):
+  // "where is X defined" in one call, and a file's map before paging through it.
+  "repo.symbols",
   // Publishing (commit / push / open a pull request). Backed HERE and on no cloud
   // surface: those already publish by a different mechanism (a write IS a commit, and
   // the engine opens the PR at finish), whereas the editor could change a working tree
@@ -145,11 +150,14 @@ export interface LocalProviderOptions {
    * pure Node module and a test can pin either backend.
    */
   ripgrep?: () => Promise<string | null>;
+  /** The definition index. Defaults to the workspace's shared one; a test can pin its own. */
+  symbols?: RepoSymbolsCapability & { markDirty(path: string): void };
 }
 
 /** Build the editor's local-disk capability provider rooted at the open folder. */
 export function buildLocalCapabilityProvider(root: string, options: LocalProviderOptions = {}): CapabilityProvider {
   const rootResolved = path.resolve(root);
+  const symbols = options.symbols ?? workspaceSymbolIndex(rootResolved);
 
   const repoRead = {
     async listFiles(subdir?: string, glob?: string): Promise<RepoListResult> {
@@ -211,12 +219,14 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       const existed = await fs.stat(abs).then(() => true, () => false);
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(abs, content, "utf-8");
+      symbols.markDirty(abs);
       return { ok: true, change: existed ? "modified" : "created" };
     },
     async deleteFile(p: string): Promise<RepoDeleteResult> {
       const abs = resolveInRoot(rootResolved, p);
       try {
         await fs.rm(abs);
+        symbols.markDirty(abs);
         return { ok: true, deleted: true };
       } catch {
         return { ok: false, deleted: false, code: "not_found", error: "file not found" };
@@ -233,6 +243,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       const edit = applyStringEdit(current, oldString, newString, replaceAll);
       if (!edit.ok || edit.content == null) return { ok: false, error: edit.error ?? "oldString not found in file" };
       await fs.writeFile(abs, edit.content, "utf-8");
+      symbols.markDirty(abs);
       return { ok: true, change: "modified", replaced: edit.replaced };
     },
   };
@@ -300,5 +311,5 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
     },
   };
 
-  return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, shell };
+  return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, shell };
 }

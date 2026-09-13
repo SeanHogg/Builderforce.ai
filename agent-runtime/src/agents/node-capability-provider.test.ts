@@ -23,6 +23,7 @@ describe("buildNodeCapabilityProvider", () => {
       "repo.edit",
       "repo.read",
       "repo.search",
+      "repo.symbols",
       "repo.write",
     ]);
     // The file-only subset is still exported (and is a strict subset of the full set).
