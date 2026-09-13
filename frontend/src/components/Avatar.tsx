@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type CSSProperties, type MouseEvent } from 'react';
+import { useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { initialsOf } from '@/lib/initials';
 
 /**
@@ -65,6 +65,11 @@ export function AvatarFace({
 }: AvatarFaceProps) {
   const bgColor = useMemo(() => color ?? avatarColor(name), [name, color]);
   const initials = useMemo(() => avatarInitials(name), [name]);
+  // A profile picture is an external link that can expire; a face that failed to
+  // load shows the initials rather than a broken-image icon. Keyed by the URL, so a
+  // new picture gets its own attempt.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const photo = imageUrl && imageUrl !== failedUrl ? imageUrl : null;
 
   const style: CSSProperties = {
     position: 'relative',
@@ -87,13 +92,16 @@ export function AvatarFace({
 
   return (
     <span style={style} aria-hidden="true">
-      {imageUrl ? (
+      {photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={imageUrl}
+          src={photo}
           alt=""
           width={size}
           height={size}
+          // Google's signed profile links refuse a request that carries a referrer.
+          referrerPolicy="no-referrer"
+          onError={() => setFailedUrl(photo)}
           style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
         />
       ) : (

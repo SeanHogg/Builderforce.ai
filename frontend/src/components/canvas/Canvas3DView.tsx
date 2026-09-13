@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Icon } from '@/components/ui/Icon';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
+import { Canvas3DCardView, Canvas3DFace } from './Canvas3DCardView';
 import {
   CANVAS_3D_DEFAULT_ORBIT,
   CANVAS_3D_DEPTH_MODES,
@@ -48,6 +48,13 @@ export interface Canvas3DViewProps<T extends Canvas3DNode> {
   edges: readonly CanvasGraphEdge[];
   /** How this canvas labels and colours one of its objects. */
   describe: (node: T) => Canvas3DDescriptor;
+  /**
+   * Draw each object with the canvas's OWN component, so the space shows exactly
+   * what the board shows (see `CanvasNodeFace`). Keep it stable — each face redraws
+   * when its object or this function changes. Omitted, a card summarises its
+   * object from `describe`, which is all a canvas of plain nodes has to offer.
+   */
+  renderCard?: (node: T) => ReactNode;
   /** Canvas-specific footprint, when a canvas knows more than the measured box. */
   measure?: (node: T) => { width: number; height: number };
   selectedIds?: readonly string[];
@@ -151,6 +158,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
   nodes,
   edges,
   describe,
+  renderCard,
   measure,
   selectedIds = [],
   onSelect,
@@ -176,6 +184,8 @@ export function Canvas3DView<T extends Canvas3DNode>({
     [depthMode, describe, edges, measure, nodes],
   );
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+  /** The node behind each card, for the canvas's own component to draw. */
+  const nodeById = useMemo(() => (renderCard ? new Map(nodes.map((node) => [node.id, node])) : null), [nodes, renderCard]);
 
   // Gestures read the live orbit and scene from refs: a pointer listener that
   // re-subscribed on every frame of its own drag would drop events mid-move.
@@ -614,52 +624,25 @@ export function Canvas3DView<T extends Canvas3DNode>({
               })}
 
               {scene.cards.map((card) => {
-                const solid = meshPreviews[card.id];
-                return <button
-                key={card.id}
-                type="button"
-                className={styles.card}
-                style={{
-                  width: card.width,
-                  minHeight: card.height,
-                  transform: canvas3dTranslate(card),
-                  ...(card.accent ? { ['--canvas-3d-accent' as string]: card.accent } : {}),
-                }}
-                aria-pressed={selected.has(card.id)}
-                data-selected={selected.has(card.id)}
-                data-movable={!!onMove && !card.locked}
-                onPointerDown={(event) => onCardPointerDown(event, card)}
-                onKeyDown={(event) => onCardKeyDown(event, card)}
-                onClick={(event) => {
-                  // A drag is not a click — but Enter and Space on a focused card
-                  // are (`detail` is 0), and those must still open the object even
-                  // when the last thing the pointer did was move something.
-                  if (event.detail !== 0 && movedRef.current) return;
-                  onSelect?.(card.id);
-                }}
-              >
-                <span className={styles.cardHead}>
-                  {card.icon && <i aria-hidden><Icon source={card.icon} size={18} /></i>}
-                  <b>{card.label}</b>
-                </span>
-                {(solid ?? card.preview) && <img
-                  className={styles.cardPreview}
-                  // A mesh is drawn from the camera, so it has to face the camera:
-                  // the card lies flat in the space, and undoing the stage rotation
-                  // here stands the object up on it instead of painting a picture
-                  // of it onto the floor.
-                  data-solid={!!solid}
-                  {...(solid ? { style: { transform: `rotateY(${-orbit.yaw}deg) rotateX(${-orbit.pitch}deg)` } } : {})}
-                  src={solid ?? card.preview}
-                  alt={t('threeD.previewAlt', { label: card.label })}
-                  width={320}
-                  height={190}
-                  loading="lazy"
-                  draggable={false}
-                />}
-                {card.sublabel && <span className={styles.cardSub}>{card.sublabel}</span>}
-                <span className={styles.cardGroup}>{card.group}</span>
-              </button>;
+                const node = nodeById?.get(card.id);
+                return <Canvas3DCardView
+                  key={card.id}
+                  card={card}
+                  {...(node && renderCard ? { face: <Canvas3DFace node={node} render={renderCard} /> } : {})}
+                  solid={meshPreviews[card.id]}
+                  orbit={orbit}
+                  selected={selected.has(card.id)}
+                  movable={!!onMove && !card.locked}
+                  onPointerDown={(event) => onCardPointerDown(event, card)}
+                  onKeyDown={(event) => onCardKeyDown(event, card)}
+                  onClick={(event) => {
+                    // A drag is not a click — but Enter and Space on a focused card
+                    // are (`detail` is 0), and those must still open the object even
+                    // when the last thing the pointer did was move something.
+                    if (event.detail !== 0 && movedRef.current) return;
+                    onSelect?.(card.id);
+                  }}
+                />;
               })}
             </div>
           </div>}

@@ -1071,7 +1071,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       // Every link, both kinds: this is a READ of what the board relates to, not
       // a copy, so the app link belongs in it.
       db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id)),
-      db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName, lastSeenAt: creationSessionMembers.lastSeenAt, viewport: creationSessionMembers.viewport, cursor: creationSessionMembers.cursor, selection: creationSessionMembers.selection, typing: creationSessionMembers.typing, watchState: creationSessionMembers.watchState, followingUserId: creationSessionMembers.followingUserId })
+      db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName, avatarUrl: users.avatarUrl, lastSeenAt: creationSessionMembers.lastSeenAt, viewport: creationSessionMembers.viewport, cursor: creationSessionMembers.cursor, selection: creationSessionMembers.selection, typing: creationSessionMembers.typing, watchState: creationSessionMembers.watchState, followingUserId: creationSessionMembers.followingUserId })
         .from(creationSessionMembers).leftJoin(users, eq(users.id, creationSessionMembers.userId))
         .where(eq(creationSessionMembers.sessionId, access.session.id)),
       // The app this board became, if it became one. Rides the session read so
@@ -2595,6 +2595,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       userId: creationSessionMembers.userId,
       role: creationSessionMembers.role,
       displayName: users.displayName,
+      // The picture the room puts on this person's figure (`PeerAvatar`).
+      avatarUrl: users.avatarUrl,
       lastSeenRevision: creationSessionMembers.lastSeenRevision,
       lastSeenAt: creationSessionMembers.lastSeenAt,
       viewport: creationSessionMembers.viewport,

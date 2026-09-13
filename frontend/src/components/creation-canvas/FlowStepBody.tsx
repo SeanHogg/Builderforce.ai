@@ -1,6 +1,7 @@
 // No 'use client': rendered only inside `CreationNode.tsx`'s client boundary.
 import { useTranslations } from 'next-intl';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
+import { CanvasNodeHandle } from '@/components/canvas/CanvasNodeHandle';
 import { configSummary, nodeKindBlurb, NODE_GROUP_KEYS, NODE_KIND_MAP } from '@/domains/workflow/domain/stepCatalog';
 import { stepConfigOf, stepInputsOf, stepKindOf, stepOutputsOf } from '@/domains/workflow/domain/flowStepObject';
 import { isMultiOutletKind, stepOutlets } from '@/domains/workflow/domain/stepOutlets';
@@ -107,7 +108,7 @@ export function FlowStepOutletRail({ data }: { data: CreationNodeData }) {
         <span key={outlet.id} className={styles.flowStepOutlet} data-fallback={outlet.fallback ? 'true' : undefined}>
           <b>{outlet.name}</b>
           {(outlet.condition || outlet.match) && <small>{outlet.condition || outlet.match}</small>}
-          <Handle
+          <CanvasNodeHandle
             type="source"
             id={outlet.id}
             position={Position.Bottom}

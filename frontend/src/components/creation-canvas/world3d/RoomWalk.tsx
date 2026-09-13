@@ -32,12 +32,14 @@ export interface RoomWalkProps {
   design: CanvasRoomDesign;
   cameraView: 'first' | 'third';
   walkerColor: string;
+  /** The walker's own picture, worn as its face in third person. */
+  walkerFaceUrl?: string | null;
   respawnNonce: number;
   /** The walker's feet and heading, every frame it moved. */
   onMove: (position: [number, number, number], yaw: number) => void;
 }
 
-export function RoomWalk({ design, cameraView, walkerColor, respawnNonce, onMove }: RoomWalkProps) {
+export function RoomWalk({ design, cameraView, walkerColor, walkerFaceUrl, respawnNonce, onMove }: RoomWalkProps) {
   const hw = design.floor.width / 2;
   const hd = design.floor.depth / 2;
   const wall = design.wall.height;
@@ -76,6 +78,7 @@ export function RoomWalk({ design, cameraView, walkerColor, respawnNonce, onMove
         respawnNonce={respawnNonce}
         cameraView={cameraView}
         walkerColor={walkerColor}
+        faceUrl={walkerFaceUrl}
         look="drag"
         onMove={onMove}
       />

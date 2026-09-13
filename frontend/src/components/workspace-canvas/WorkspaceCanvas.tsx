@@ -18,6 +18,7 @@ import '@xyflow/react/dist/style.css';
 import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { Icon } from '@/components/ui/Icon';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import { CanvasNodeFace } from '@/components/canvas/CanvasNodeFace';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/lib/canvas/canvas3d';
 import { WorkspacePanelList } from './WorkspacePanelList';
@@ -82,6 +83,11 @@ function WorkspacePanel({ data, selected }: NodeProps<WorkspacePanelNode>) {
 }
 
 const NODE_TYPES: NodeTypes = { workspacePanel: WorkspacePanel };
+
+/** A panel in the 3D space is the panel the board draws, not a summary of it. */
+function renderPanelFace(node: WorkspacePanelNode) {
+  return <CanvasNodeFace node={node} nodeTypes={NODE_TYPES} />;
+}
 
 function panelNode(panel: WorkspaceCanvasPanel, index: number): WorkspacePanelNode {
   return {
@@ -204,6 +210,7 @@ export function WorkspaceCanvas({
             nodes={nodes}
             edges={[]}
             describe={describeThreeD}
+            renderCard={renderPanelFace}
             onMove={moveThreeD}
             onExit={threeD.exit}
           />}

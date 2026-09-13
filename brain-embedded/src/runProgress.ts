@@ -32,7 +32,7 @@
 import { asksForChange } from '@builderforce/agent-stall';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
-import { activityTarget } from './runActivity';
+import { visitTarget } from './runActivity';
 import { stableStringify } from './stableStringify';
 import type { BrainMessage } from './types';
 
@@ -117,7 +117,7 @@ function callSignature(ev: BrainTraceEvent): string {
  * was working on.
  */
 function targetSignature(ev: BrainTraceEvent): string | null {
-  const target = activityTarget(ev.args);
+  const target = visitTarget(ev.args);
   return target ? `${ev.label}:${target}` : null;
 }
 

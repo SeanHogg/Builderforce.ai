@@ -52,7 +52,7 @@ import { hasCallMarkup } from './xmlToolCalls';
 import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcomeReport';
 import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
-import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
+import { toolActivity, visitTarget, type BrainRunActivity } from './runActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
 import { FailureTally, failureReason, repeatedFailureAdvisory } from './repeatedFailure';
 import { trimToolResult } from './toolResultBudget';
@@ -155,16 +155,30 @@ function accrueProviderCap(c: RunCell, raw: string | undefined): void {
   if (next.size !== before) c.providerCap = [...next];
 }
 /**
- * Token budget for the working transcript sent to the model each turn. This is
- * the real backstop against the "Brain dies after several executions" failure:
- * message-count windowing (HISTORY_WINDOW) alone does NOT bound context, because
- * a single `tasks.list` tool result can be tens of thousands of tokens. We
- * estimate tokens (≈4 chars/token) and drop the oldest turns — after the
- * user-turn anchor — until the working set fits. Sized well under the smallest
- * pool model's window so a mid-run gateway failover to a smaller model can't
- * 413. See {@link windowed}.
+ * Token budget for the working transcript sent to the model each turn — how much of this
+ * run the model can SEE: the file windows it read, the searches it ran, what it decided.
+ *
+ * It bounds context, which message-count windowing (HISTORY_WINDOW) alone does not: one
+ * `tasks.list` result can be tens of thousands of tokens. It is NOT what keeps a request
+ * inside the serving model's window — the gateway fits every request to a model that can
+ * hold it (`modelsFittingContext` over `estimateRequestTokens`, with 413 failover behind).
+ *
+ * It was 24k, "sized under the smallest pool model's window". That protected nothing — the
+ * ~16k-token system prompt + tool catalog in front of it already put a full turn at ~40k,
+ * past any 32k window — and it cost every coding run its memory. Six 4k-token file windows
+ * filled it, compaction folded them into a 1.2k-token note, and the model went back for the
+ * files it had just read (chat #105: 55 turns, 63% of calls revisiting, zero edits, prompt
+ * peak 40,351). 64k holds a coding task's working set — a dozen-plus file windows —
+ * verbatim, while a full turn stays well inside the 128k window every coding-capable pool
+ * model has. See {@link windowed} and {@link buildWorkingTranscript}.
  */
-const HISTORY_TOKEN_BUDGET = 24_000;
+const HISTORY_TOKEN_BUDGET = 64_000;
+/**
+ * How much of {@link HISTORY_TOKEN_BUDGET} the verbatim TAIL may keep when the older part
+ * of the transcript is compacted. The rest is headroom new work fills before the next
+ * fold, so the memo is re-folded once per ~20k tokens of progress, not on every turn.
+ */
+const COMPACT_TAIL_TOKEN_BUDGET = 40_000;
 // The per-result cap on what the MODEL transcript carries for one tool result (the trace
 // keeps the full result) lives in `toolResultBudget.ts`: a generic head slice for list
 // results, and LINE-paged windows with an intact continuation offset for `read_file`.
@@ -873,7 +887,7 @@ function stillInWorkingContext(c: RunCell, anchor: unknown): boolean {
   const convo = c.transcript;
   const idx = convo.indexOf(anchor as ChatCompletionMessage);
   if (idx < 0) return false;
-  if (c.compactMemo) return idx >= compactTailStart(convo, COMPACT_TAIL_TURNS);
+  if (c.compactMemo) return idx >= verbatimStart(convo, c.compactMemo.coveredEnd);
   return windowed(convo).includes(convo[idx]!);
 }
 
@@ -890,16 +904,49 @@ function stillInWorkingContext(c: RunCell, anchor: unknown): boolean {
 // summarizer is reachable, so correctness never depends on the extra LLM call.
 // ---------------------------------------------------------------------------
 
-/** Recent turns kept verbatim ahead of the compressed memory note. */
+/** The fewest recent messages the verbatim tail keeps, however large they are. */
 export const COMPACT_TAIL_TURNS = 8;
 
-/** Start index of the recent tail that never orphans a `tool` result: take the last
- *  `tailTurns` messages, then walk FORWARD off any leading `tool` message (whose
- *  paired assistant tool-call turn sits in the summarized middle). Pure/testable. */
-export function compactTailStart(convo: ChatCompletionMessage[], tailTurns: number): number {
-  let start = Math.max(0, convo.length - tailTurns);
+/** The most recent messages the verbatim tail may hold — half the message window, so a
+ *  compacted transcript stays inside {@link HISTORY_WINDOW} with room to grow. */
+const COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
+
+/** The first index at or after `from` that is not a `tool` result: a tool row whose
+ *  assistant call was folded into the memo would be orphaned (strict vendors 400 on it).
+ *  Pure/testable. */
+export function verbatimStart(convo: ChatCompletionMessage[], from: number): number {
+  let start = Math.max(0, Math.min(from, convo.length));
   while (start < convo.length && convo[start]!.role === 'tool') start += 1;
   return start;
+}
+
+/** Start index of the last `tailTurns` messages, walked off a leading `tool` result. Pure/testable. */
+export function compactTailStart(convo: ChatCompletionMessage[], tailTurns: number): number {
+  return verbatimStart(convo, convo.length - tailTurns);
+}
+
+/**
+ * Where the verbatim tail begins when the transcript is compacted: as many of the most
+ * recent messages as fit in `budgetTokens` — never fewer than {@link COMPACT_TAIL_TURNS},
+ * never more than {@link COMPACT_TAIL_MAX_MESSAGES} — walked off a leading tool result.
+ *
+ * Sized by TOKENS, not a message count. The tail used to be a fixed eight messages, which
+ * is four tool results: after a fold the model kept its last four reads verbatim and one
+ * short note for everything else, so the fifth file it needed was always the one it had to
+ * read again. Pure/testable.
+ */
+export function compactTailStartForBudget(convo: ChatCompletionMessage[], budgetTokens: number): number {
+  let start = convo.length;
+  let tokens = 0;
+  while (start > 0) {
+    const kept = convo.length - start;
+    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
+    const next = messageTokens(convo[start - 1]!);
+    if (kept >= COMPACT_TAIL_TURNS && tokens + next > budgetTokens) break;
+    tokens += next;
+    start -= 1;
+  }
+  return verbatimStart(convo, start);
 }
 
 /**
@@ -2184,7 +2231,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             // A replay is still the model going back to the same target, so it
             // counts as a visit and carries the circling advisory when it earns one.
             const visit = readCoverage.record(call.name, args);
-            const target = visit ? activityTarget(args) : undefined;
+            const target = visit ? visitTarget(args) : undefined;
             const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
             const replayed = trimToolResult(call.name, cached.result ?? null, { advisory: revisit ? `${replayNote}\n\n${revisit}` : replayNote });
             pendingReplay = { name: call.name, args, result: cached.result };
@@ -2212,7 +2259,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         const derived = readCoverage.derivedSearch(call.name, args);
         if (derived) {
           const visit = readCoverage.record(call.name, args);
-          const target = visit ? activityTarget(args) : undefined;
+          const target = visit ? visitTarget(args) : undefined;
           const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
           const served = trimToolResult(call.name, derived, { advisory: revisit });
           pendingReplay = { name: call.name, args, result: derived };
@@ -2764,7 +2811,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           // Recording a SUCCESSFUL read is also what arms the exact-repeat stub for it;
           // a failed read is not recorded, so it can be retried.
           const visit = readCoverage.record(call.name, args);
-          const target = visit ? activityTarget(args) : undefined;
+          const target = visit ? visitTarget(args) : undefined;
           advisory = visit && target ? revisitAdvisory(call.name, target, visit) : null;
           if (advisory) {
             pushTrace(c, {

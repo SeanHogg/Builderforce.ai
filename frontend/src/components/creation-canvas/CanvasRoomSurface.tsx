@@ -349,7 +349,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
                       onOpen={setStationKey}
                       onDragChange={setDragging}
                     />
-                    {walking && <RoomWalk design={design} cameraView={cameraView} walkerColor={palette.self} respawnNonce={respawnNonce} onMove={walkMove} />}
+                    {walking && <RoomWalk design={design} cameraView={cameraView} walkerColor={palette.self} walkerFaceUrl={seats.find((seat) => seat.isSelf)?.avatarUrl ?? null} respawnNonce={respawnNonce} onMove={walkMove} />}
                   </RoomScene>
                 </RoomGeometryProvider>
               </Canvas>

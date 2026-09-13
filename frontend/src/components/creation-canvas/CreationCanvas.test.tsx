@@ -71,7 +71,7 @@ vi.mock('@xyflow/react', async () => {
     ViewportPortal: ({ children }: { children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'viewport-portal' }, children),
     Controls: ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children),
     ControlButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => React.createElement('button', props, children),
-    MiniMap: inert, Handle: inert, NodeResizer: inert,
+    MiniMap: inert, Handle: inert, useNodeId: () => 'node', NodeResizer: inert,
     BackgroundVariant: { Dots: 'dots' }, MarkerType: { ArrowClosed: 'arrowclosed' }, Position: { Left: 'left', Right: 'right' },
     ConnectionMode: { Strict: 'strict', Loose: 'loose' },
   };

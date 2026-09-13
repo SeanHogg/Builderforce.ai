@@ -25,7 +25,7 @@ import { useBodyAnnouncer } from './room/useBodyAnnouncer';
 export interface CanvasSpacePresenceValue {
   live: LivePresenceMap;
   selfId: string | null;
-  members: ReadonlyArray<{ userId: string; displayName?: string | null }>;
+  members: ReadonlyArray<{ userId: string; displayName?: string | null; avatarUrl?: string | null }>;
   send: (state: CanvasPresenceState) => void;
 }
 
@@ -40,12 +40,16 @@ export interface WorldPeer {
   userId: string;
   label: string;
   color: string;
+  /** Their profile picture, worn as the figure's face. */
+  avatarUrl: string | null;
   position: [number, number, number];
   yaw: number;
 }
 
 export interface SpacePresence {
   peers: readonly WorldPeer[];
+  /** My own picture, for my walker's face in third person. */
+  selfAvatarUrl: string | null;
   /** The walker moved: announce it, throttled, in this space. */
   onMove: (position: [number, number, number], yaw: number) => void;
 }
@@ -66,11 +70,12 @@ export function useSpacePresence(space: string | undefined): SpacePresence | nul
 
   const peers = useMemo<WorldPeer[]>(() => {
     if (!value || !space) return [];
-    const names = new Map(value.members.map((member) => [member.userId, member.displayName ?? '']));
+    const byId = new Map(value.members.map((member) => [member.userId, member]));
     return spatialPeers(value.live, value.selfId, space).map((peer) => ({
       userId: peer.userId,
-      label: names.get(peer.userId) || t('unknown'),
+      label: byId.get(peer.userId)?.displayName || t('unknown'),
       color: bodyColor(peer.userId, palette, false),
+      avatarUrl: byId.get(peer.userId)?.avatarUrl || null,
       position: peer.spatial.position,
       yaw: peer.spatial.yaw,
     }));
@@ -80,5 +85,10 @@ export function useSpacePresence(space: string | undefined): SpacePresence | nul
     if (space) announce({ position, yaw, space });
   }, [announce, space]);
 
-  return active ? { peers, onMove } : null;
+  const selfAvatarUrl = useMemo(
+    () => value?.members.find((member) => member.userId === value.selfId)?.avatarUrl || null,
+    [value],
+  );
+
+  return active ? { peers, selfAvatarUrl, onMove } : null;
 }

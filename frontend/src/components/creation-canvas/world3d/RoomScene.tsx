@@ -134,6 +134,7 @@ export function RoomScene({
           yaw={seat.yaw}
           color={bodyColor(seat.userId, palette, seat.isSelf)}
           label={seat.displayName || unknownLabel}
+          avatarUrl={seat.avatarUrl}
           live={seat.present}
           speech={bubbleFor(speech?.get(seat.userId), thinkingLabel)}
         />

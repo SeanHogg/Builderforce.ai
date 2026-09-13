@@ -76,6 +76,8 @@ export type RoomOccupantKind = 'human' | 'agent';
 export interface RoomOccupant {
   userId: string;
   displayName?: string | null;
+  /** Their profile picture, when they have one. Agents and guests usually do not. */
+  avatarUrl?: string | null;
   /** Absent means a person. */
   kind?: RoomOccupantKind;
 }
@@ -84,6 +86,8 @@ export interface RoomSeat {
   userId: string;
   /** Empty when the roster has not named them yet — the surface labels those. */
   displayName: string;
+  /** The face drawn on their figure and beside their name; null draws the plain figure. */
+  avatarUrl: string | null;
   kind: RoomOccupantKind;
   /** Ring index. Stable for a given roster order, which is what stops the
    *  circle reshuffling every time somebody's cursor moves. */
@@ -149,6 +153,7 @@ export function assignRoomSeats(
     return {
       userId: occupant.userId,
       displayName: occupant.displayName ?? '',
+      avatarUrl: occupant.avatarUrl || null,
       kind,
       index: seatIndex,
       position: body ? body.position : fallback.position,

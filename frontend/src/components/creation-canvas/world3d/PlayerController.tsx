@@ -55,6 +55,8 @@ interface PlayerControllerProps {
    *  the choice survives a respawn without re-mounting the controller. */
   cameraView?: 'first' | 'third';
   walkerColor?: string;
+  /** The walker's own picture, worn as the third-person body's face. */
+  faceUrl?: string | null;
   /** How the camera is turned — see the header. Default: pointer lock. */
   look?: WalkerLook;
   /**
@@ -70,6 +72,7 @@ export default function PlayerController({
   respawnNonce = 0,
   cameraView = 'first',
   walkerColor = DEFAULT_WALKER_COLOR,
+  faceUrl,
   look = 'pointerLock',
   onMove,
 }: PlayerControllerProps) {
@@ -215,7 +218,7 @@ export default function PlayerController({
           it can yaw to the look direction independently of the
           rotation-locked body. */}
       <group ref={avatarRef} visible={cameraView === 'third'}>
-        <AvatarFigure color={walkerColor} />
+        <AvatarFigure color={walkerColor} faceUrl={faceUrl} />
       </group>
       {look === 'pointerLock' && <PointerLockControls />}
     </>

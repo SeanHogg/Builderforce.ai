@@ -40,7 +40,7 @@
  * to describe it. No clock, no I/O.
  */
 
-import { activityTarget } from './runActivity';
+import { activityTarget, visitTarget, VISIT_QUESTION_SEPARATOR } from './runActivity';
 import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool } from './localWorkspaceTools';
 import { isReadOnlyShellCommand } from './readOnlyShell';
 import { stableStringify } from './stableStringify';
@@ -81,6 +81,14 @@ export function canonicalReadArgs(tool: string, args: unknown): Record<string, u
  * cached answers (it still forgets only its own target from the visit tally).
  */
 const TREE_WIDE_READ_TOOLS = new Set(['search_code', 'find_symbol', 'list_files']);
+
+/**
+ * Was this visit ABOUT `target` — the target itself, or a question asked of it (a search
+ * scoped to the file an edit just changed)? See `visitTarget`.
+ */
+function visitedScopeIs(visited: string | null, target: string): boolean {
+  return visited === target || (visited?.startsWith(`${target}${VISIT_QUESTION_SEPARATOR}`) ?? false);
+}
 
 /** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
 function isReadOnlyShellCall(tool: string, args: unknown): boolean {
@@ -217,7 +225,7 @@ export class ReadCoverage {
    * circling around; the exact guard still applies).
    */
   record(tool: string, args: unknown): ReadVisit | null {
-    const target = activityTarget(args) ?? null;
+    const target = visitTarget(args) ?? null;
     this.exact.set(ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
     if (!target) return null;
     const key = `${tool}:${target}`;
@@ -290,12 +298,12 @@ export class ReadCoverage {
       // A file mutation with no resolvable path changed nothing this tally describes.
       if (!target) return;
       for (const key of [...this.visits.keys()]) {
-        if (key.slice(key.indexOf(':') + 1) === target) this.visits.delete(key);
+        if (visitedScopeIs(key.slice(key.indexOf(':') + 1), target)) this.visits.delete(key);
       }
       for (const [key, read] of [...this.exact.entries()]) {
         // Its own target, and every tree-wide answer the change may have altered: a
         // search that returned no match for a name the edit just added is now wrong.
-        if (read.target === target || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
+        if (visitedScopeIs(read.target, target) || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
       }
       return;
     }

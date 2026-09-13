@@ -150,6 +150,35 @@ describe('Canvas3DView', () => {
   });
 });
 
+describe('Canvas3DView — objects drawn by their own canvas', () => {
+  it('draws each object with the component it is handed, and keeps the card a handle', () => {
+    const onSelect = vi.fn();
+    const onMove = vi.fn();
+    render(<Canvas3DControlsProvider>
+      <Canvas3DView
+        nodes={nodes}
+        edges={[]}
+        describe={describe3D}
+        renderCard={(node) => <article data-testid={`face-${node.id}`}>{node.id} page</article>}
+        onSelect={onSelect}
+        onMove={onMove}
+        onExit={vi.fn()}
+      />
+    </Canvas3DControlsProvider>);
+
+    // The board's own face, not the summary: no group badge is drawn.
+    expect(screen.getByTestId('face-alpha')).toHaveTextContent('alpha page');
+    expect(screen.queryByText('Build')).not.toBeInTheDocument();
+
+    const alpha = screen.getByRole('button', { name: 'alpha' });
+    fireEvent.click(alpha);
+    expect(onSelect).toHaveBeenCalledWith('alpha');
+    drag(alpha, { x: 40, y: 40 }, { x: 190, y: 40 });
+    expect(onMove).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'locked' })).toHaveAttribute('data-movable', 'false');
+  });
+});
+
 describe('Canvas3DView — its own way out', () => {
   function mountWithExit(exitLabel?: string, empty = false) {
     const onExit = vi.fn();

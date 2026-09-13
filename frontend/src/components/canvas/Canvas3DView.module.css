@@ -243,6 +243,64 @@
   font-weight: 700;
 }
 
+/* An object drawn by its own canvas's component (`renderCard`): the card IS that
+   component, at the size the board measured it, and a transparent button laid over
+   it is the handle. The face is `inert` — recognised from a distance, worked on
+   from the board. */
+.faceCard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  /* A standing mesh rises off the face (see `.faceSolid`), in the same 3D space. */
+  transform-style: preserve-3d;
+}
+
+.face {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.faceHandle {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  transition: box-shadow .16s ease;
+}
+
+.faceHandle[data-movable='true'] { cursor: grab; }
+.viewport[data-gesture='move'] .faceHandle[data-movable='true'] { cursor: grabbing; }
+
+.faceHandle:hover,
+.faceHandle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 60%, transparent);
+}
+
+.faceHandle[data-selected='true'] {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 46%, transparent), 0 40px 90px var(--canvas-shadow, rgba(0, 0, 0, .28));
+}
+
+/* A model stands on its card's top edge, like a figure on a plinth, rather than
+   covering the face the board draws. */
+.faceSolid {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  width: 320px;
+  height: 190px;
+  margin-left: -160px;
+  object-fit: contain;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+}
+
 /* The space's own way out, drawn only when a host asks for one (the room does: the
    session is a thing IN the room, with no rail entry to press). It rides the
    projected top-right corner of the planes — `--canvas-3d-exit-x/y`, measured from
@@ -302,5 +360,6 @@
 @media (prefers-reduced-motion: reduce) {
   .stage,
   .card,
+  .faceHandle,
   .exit { transition: none; }
 }

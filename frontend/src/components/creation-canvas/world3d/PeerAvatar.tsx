@@ -3,6 +3,7 @@
  * `dynamic(..., { ssr: false })` import, since WebGL has no server-side render.
  */
 import { Html } from '@react-three/drei';
+import { AvatarFace } from '@/components/Avatar';
 import { AvatarFigure } from './PlayerAvatar';
 import { PeerSpeechBubble } from './PeerSpeechBubble';
 
@@ -43,6 +44,9 @@ export interface PeerAvatarProps {
   /** Already resolved by the caller — a peer with no roster row yet gets the
    *  translated generic label rather than an empty plate. */
   label: string;
+  /** Their profile picture: worn as the figure's face, and shown in the plate so
+   *  it is visible from behind too. Absent for agents and guests without one. */
+  avatarUrl?: string | null;
   /** Dims the plate for somebody seated by assumption rather than by a live
    *  frame, so "in the session" and "here right now" are distinguishable. */
   live: boolean;
@@ -51,10 +55,10 @@ export interface PeerAvatarProps {
   speech?: { text: string; pending: boolean } | null;
 }
 
-export function PeerAvatar({ position, yaw, color, label, live, speech }: PeerAvatarProps) {
+export function PeerAvatar({ position, yaw, color, label, avatarUrl, live, speech }: PeerAvatarProps) {
   return (
     <group position={[position[0], position[1] + FOOT_OFFSET, position[2]]} rotation={[0, yaw, 0]}>
-      <AvatarFigure color={color} />
+      <AvatarFigure color={color} faceUrl={avatarUrl} />
       <Html
         position={[0, PLATE_HEIGHT, 0]}
         center
@@ -65,7 +69,9 @@ export function PeerAvatar({ position, yaw, color, label, live, speech }: PeerAv
       >
         <span
           style={{
-            display: 'block',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
             whiteSpace: 'nowrap',
             padding: '2px 7px',
             // The plate is real DOM (`Html`), so the app's own scale reaches it —
@@ -80,6 +86,9 @@ export function PeerAvatar({ position, yaw, color, label, live, speech }: PeerAv
             opacity: live ? 1 : 0.55,
           }}
         >
+          {/* An `<img>` needs no CORS, so the plate shows the picture even where the
+              face texture could not load — and from behind, where the face is not. */}
+          {avatarUrl && <AvatarFace name={label} imageUrl={avatarUrl} color={color} active size={16} />}
           {label}
         </span>
       </Html>

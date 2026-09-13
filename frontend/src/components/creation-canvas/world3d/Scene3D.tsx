@@ -26,6 +26,8 @@ interface Scene3DProps {
   respawnNonce?: number;
   cameraView?: 'first' | 'third';
   walkerColor?: string;
+  /** The walker's own picture, worn as its face in third person. */
+  walkerFaceUrl?: string | null;
   /** Scoring, when this space is being PLAYED rather than authored. Passed
    *  straight to the sensor props — see `useWorldPlay`. */
   onPlayerEnter?: (prop: CanvasWorldProp) => void;
@@ -35,7 +37,7 @@ interface Scene3DProps {
   onMove?: (position: [number, number, number], yaw: number) => void;
 }
 
-export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, respawnNonce = 0, cameraView = 'first', walkerColor, onPlayerEnter, peers = [], onMove }: Scene3DProps) {
+export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, respawnNonce = 0, cameraView = 'first', walkerColor, walkerFaceUrl, onPlayerEnter, peers = [], onMove }: Scene3DProps) {
   const sunPosition: [number, number, number] = [
     -scene.lighting.sun.direction[0] * 30,
     -scene.lighting.sun.direction[1] * 30,
@@ -99,13 +101,14 @@ export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, res
             respawnNonce={respawnNonce}
             cameraView={cameraView}
             walkerColor={walkerColor}
+            faceUrl={walkerFaceUrl}
             {...(onMove ? { onMove } : {})}
           />
         )}
       </Physics>
 
       {mode === 'walk' && peers.map((peer) => (
-        <PeerAvatar key={peer.userId} position={peer.position} yaw={peer.yaw} color={peer.color} label={peer.label} live />
+        <PeerAvatar key={peer.userId} position={peer.position} yaw={peer.yaw} color={peer.color} label={peer.label} avatarUrl={peer.avatarUrl} live />
       ))}
 
       {mode === 'edit' && (

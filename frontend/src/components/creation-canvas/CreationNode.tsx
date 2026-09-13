@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
-import { Handle, NodeResizer, Position, useStore, type NodeProps } from '@xyflow/react';
+import { NodeResizer, Position, useStore, type NodeProps } from '@xyflow/react';
+import { CanvasNodeHandle } from '@/components/canvas/CanvasNodeHandle';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
@@ -2916,7 +2917,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       data-density="minimized"
       className={`${styles.nodeOrb} ${selected ? styles.selected : ''}`}
     >
-      <Handle type="target" position={Position.Left} className={styles.handle} />
+      <CanvasNodeHandle type="target" position={Position.Left} className={styles.handle} />
       <span className={styles.nodeOrbMark} style={data.accent ? { background: String(data.accent) } : undefined}>
         <Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={30} />
       </span>
@@ -2931,14 +2932,14 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           arm the executor can never take, which is the failure outlets exist to end. */}
       {flowStepHasNamedOutlets(data)
         ? <FlowStepOutletRail data={data} />
-        : <Handle type="source" position={Position.Right} className={styles.handle} />}
+        : <CanvasNodeHandle type="source" position={Position.Right} className={styles.handle} />}
     </article>
   );
 
   return (
     <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} data-density={density} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
-      <Handle type="target" position={Position.Left} className={styles.handle} />
+      <CanvasNodeHandle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
         {typeof data.pipelineStep === 'number' && <span className={styles.pipelineStepBadge}>{data.pipelineStep}</span>}
         <span className={styles.nodeIcon}><Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={18} /></span>
@@ -3133,7 +3134,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           arm the executor can never take, which is the failure outlets exist to end. */}
       {flowStepHasNamedOutlets(data)
         ? <FlowStepOutletRail data={data} />
-        : <Handle type="source" position={Position.Right} className={styles.handle} />}
+        : <CanvasNodeHandle type="source" position={Position.Right} className={styles.handle} />}
     </article>
   );
 }

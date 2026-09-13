@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
-import { bodyColor, type RoomPalette, type RoomSeat } from '@/lib/canvas/roomSeating';
+import type { RoomPalette, RoomSeat } from '@/lib/canvas/roomSeating';
 import type { RoomCreation } from '@/lib/canvas/roomCreations';
+import { RoomSeatMark } from './RoomSeatMark';
 import { useCreationLabels } from './useCreationLabels';
 import surfaceStyles from '../CanvasRoomSurface.module.css';
 
@@ -29,7 +30,7 @@ export function RoomFallback({ seats, palette, creations, onOpenSession, onOpenC
       <div className={surfaceStyles.ring}>
         {seats.map((seat) => (
           <span key={seat.userId} className={surfaceStyles.ringSeat} data-live={seat.present ? 'true' : 'false'}>
-            <span className={surfaceStyles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
+            <RoomSeatMark seat={seat} palette={palette} />
             {seat.displayName || t('unknown')}
           </span>
         ))}

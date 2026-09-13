@@ -22,6 +22,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DisclosureIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ProveIdeaIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
+import { CanvasNodeFace } from '@/components/canvas/CanvasNodeFace';
 import type { CanvasRoomSurfaceProps } from './CanvasRoomSurface';
 import { ROOM_CREATION_TOOL_NOTE, leadsToRoom, roomToolNote, type RoomCreation } from '@/lib/canvas/roomCreations';
 import { roomCreationsOf } from './roomCreationsOf';
@@ -11624,6 +11625,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setSelectedId(nodeId); setSelectedIds([nodeId]); openNodeInspector(nodeId, focus || null);
     }} />,
   }), [canRun, cardsEditable, deleteNodeFromCard, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openFrame, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
+  /**
+   * An object in the 3D space is drawn by the component that draws it on the board —
+   * a website shows its page, an agent its latest response — so the two readings of
+   * one board cannot disagree about what an object looks like. Depends on the node
+   * types alone, so each face redraws only when its own object changes.
+   */
+  const renderThreeDCard = useCallback(
+    (node: CreationFlowNode) => <CanvasNodeFace node={node} nodeTypes={canvasNodeTypes} />,
+    [canvasNodeTypes],
+  );
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -12916,10 +12927,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               live={livePresence}
               onPresence={sendPresence}
               sceneInput={roomSceneInput}
-              renderSession={({ onMinimize, exitLabel }) => <Canvas3DView
+              // The faces are the board's own cards, and some of them read the Brain
+              // surface — whose provider wraps the board, not the surfaces — so the
+              // session brings the same one with it.
+              renderSession={({ onMinimize, exitLabel }) => <BrainSurfaceProvider value={brainSurface}><Canvas3DView
                 nodes={threeDNodes}
                 edges={edges}
                 describe={describeThreeD}
+                renderCard={renderThreeDCard}
                 measure={canvasNodeDimensions}
                 selectedIds={effectiveSelectedIds}
                 onSelect={selectThreeDObject}
@@ -12927,7 +12942,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 onExit={onMinimize}
                 exitLabel={exitLabel}
                 initialDepthMode={roomSceneInput.depthMode}
-              />}
+              /></BrainSurfaceProvider>}
               creations={roomCreations}
               onOpenCreation={openRoomCreation}
               // A designed room goes on sale through the same publish panel as any card.

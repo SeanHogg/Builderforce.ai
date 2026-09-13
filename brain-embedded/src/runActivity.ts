@@ -91,6 +91,35 @@ export function activityTarget(args: unknown): string | undefined {
   return undefined;
 }
 
+/** Argument keys that name the QUESTION a call asks of its scope — a search's query, a listing's glob. */
+const QUESTION_KEYS = ['query', 'q', 'search', 'pattern', 'glob'] as const;
+
+/** Joins a scope to the question asked of it in a {@link visitTarget}. */
+export const VISIT_QUESTION_SEPARATOR = ' ∋ ';
+
+/**
+ * What a call VISITED, for the loop guards' "have you been here before?" tally — the
+ * target {@link activityTarget} names, plus the question asked of it when that target is
+ * a scope. `search_code` for "RoomScene" and then for "scrollIntoView" under one directory
+ * are two questions, not one directory visited twice. Keyed by the directory alone they
+ * were one (chat #105: sixteen different searches under `frontend/src` counted as a single
+ * target revisited ×16), so the circling advisory told a model that was EXPLORING to stop
+ * re-reading, and the run report blamed a loop it had manufactured. A call whose only
+ * target is its question is keyed by that once.
+ */
+export function visitTarget(args: unknown): string | undefined {
+  const scope = activityTarget(args);
+  if (!scope) return undefined;
+  const record = args as Record<string, unknown>;
+  for (const key of QUESTION_KEYS) {
+    const value = record[key];
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const question = shortenTarget(value);
+    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
+  }
+  return scope;
+}
+
 /** Build the live activity for a tool step about to execute. */
 export function toolActivity(label: string, args: unknown, step: number, startedAt: number): BrainRunActivity {
   const detail = activityTarget(args);

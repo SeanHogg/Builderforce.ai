@@ -95,6 +95,15 @@ describe('assignRoomSeats', () => {
     expect(seats.map((seat) => seat.userId)).toEqual(['zoe', 'adam']);
   });
 
+  it('carries each person\'s picture to their seat, and none for someone without one', () => {
+    const seats = assignRoomSeats(
+      [{ userId: 'a', avatarUrl: 'https://img.example/a.png' }, { userId: 'b', avatarUrl: '' }, { userId: 'agent:cmo', kind: 'agent' }],
+      bodies({}),
+      'a',
+    );
+    expect(seats.map((seat) => seat.avatarUrl)).toEqual(['https://img.example/a.png', null, null]);
+  });
+
   it('leaves an unnamed peer unnamed rather than guessing a label', () => {
     const seats = assignRoomSeats([{ userId: 'u1' }], bodies({}), null);
     expect(seats[0]!.displayName).toBe('');

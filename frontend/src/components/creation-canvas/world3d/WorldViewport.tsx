@@ -122,7 +122,7 @@ export function WorldViewport({
           cameraView={cameraView}
           walkerColor={DEFAULT_WALKER_COLOR}
           onPlayerEnter={play.onPlayerEnter}
-          {...(presence ? { peers: presence.peers, onMove: presence.onMove } : {})}
+          {...(presence ? { peers: presence.peers, walkerFaceUrl: presence.selfAvatarUrl, onMove: presence.onMove } : {})}
         />
         {mode === 'edit' && sceneExtras}
       </Canvas>

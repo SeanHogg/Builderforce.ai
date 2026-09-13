@@ -144,6 +144,8 @@ export interface CanvasSessionMember {
   userId: string;
   role: string;
   displayName: string | null;
+  /** Their profile picture, when they have one — drawn on their figure in the room. */
+  avatarUrl?: string | null;
   lastSeenAt?: string;
   viewport?: Record<string, unknown>;
   cursor?: { x?: number; y?: number } | null;

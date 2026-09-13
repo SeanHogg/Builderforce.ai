@@ -35,7 +35,7 @@ export const MAX_TOOL_RESULT_CHARS = 6_000;
 /**
  * Per-result cap for `read_file`. Larger than the generic cap on purpose: reading source
  * is what a coding surface DOES, and a window this size (~4k tokens) still leaves the
- * 24k-token history budget room for several reads before compaction. Under it a 566-line
+ * 64k-token history budget room for a dozen-plus reads before compaction. Under it a 566-line
  * CSS module arrives in two windows; the service file above in four — each one saying
  * where the next begins.
  */

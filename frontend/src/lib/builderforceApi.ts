@@ -9127,7 +9127,7 @@ export interface CreationSessionDetail {
    * no cycle.
    */
   app?: SessionApp | null;
-  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null }>;
+  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null }>;
   personalViewport?: { x?: number; y?: number; zoom?: number } | null;
 }
 
@@ -9492,7 +9492,7 @@ export const creationSessionsApi = {
     remove: (id: string, userId: string) => request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
   },
   presence: (id: string, body: { revision: number; viewport?: Record<string, unknown>; cursor?: { x: number; y: number } | null; selection?: string[]; typing?: boolean; followingUserId?: string | null }) =>
-    request<{ revision: number; currentUserId?: string; members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenRevision: number; lastSeenAt: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; followingUserId?: string | null }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/presence`, { method: 'POST', body: JSON.stringify(body) }),
+    request<{ revision: number; currentUserId?: string; members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenRevision: number; lastSeenAt: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; followingUserId?: string | null }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/presence`, { method: 'POST', body: JSON.stringify(body) }),
   activity: (id: string, limit = 50) =>
     request<{ activity: CreationSessionActivity[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/activity?limit=${Math.min(200, Math.max(1, limit))}`),
   comments: {

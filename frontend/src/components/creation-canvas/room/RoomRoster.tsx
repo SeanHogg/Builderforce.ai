@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { bodyColor, type RoomPalette, type RoomSeat } from '@/lib/canvas/roomSeating';
+import type { RoomPalette, RoomSeat } from '@/lib/canvas/roomSeating';
 import type { RoomStationInstance } from '@/lib/canvas/roomStations';
 import { RoomStationList } from '../room-stations/RoomStations';
+import { RoomSeatMark } from './RoomSeatMark';
 import surfaceStyles from '../CanvasRoomSurface.module.css';
 
 /**
@@ -43,7 +44,7 @@ export function RoomRoster({ seats, palette, stations, onOpenStation }: {
       </div>
       {seats.map((seat) => (
         <div key={seat.userId} className={surfaceStyles.seat} data-live={seat.present ? 'true' : 'false'} data-kind={seat.kind}>
-          <span className={surfaceStyles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
+          <RoomSeatMark seat={seat} palette={palette} />
           <span className={surfaceStyles.seatName}>{seat.displayName || t('unknown')}</span>
           <span className={surfaceStyles.seatState}>
             {seat.isSelf ? t('you') : seat.kind === 'agent' ? t('agent') : seat.live ? t('inRoom') : t('onBoard')}

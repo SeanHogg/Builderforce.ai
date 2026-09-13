@@ -33,7 +33,7 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 vi.mock('@xyflow/react', async () => {
   const inert = () => null;
   return {
-    Handle: inert, NodeResizer: inert, Position: { Left: 'left', Right: 'right' },
+    Handle: inert, useNodeId: () => 'node', NodeResizer: inert, Position: { Left: 'left', Right: 'right' },
     // An empty board: these cards are rendered on their own, so no object here has
     // been given an authored size.
     useStore: (selector: (state: { nodeLookup: Map<string, unknown> }) => unknown) => selector({ nodeLookup: new Map() }),
