@@ -16,10 +16,8 @@ export { BrainProvider, useBrainConfig } from './config';
 export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './config';
 
 // Streaming client + tool/message types
+// RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.
 export { streamChatCompletion, StreamInterruptedError, RepetitionLoopError } from './streamChatCompletion';
-// A model stuck repeating one block of prose, caught mid-stream (raised as RepetitionLoopError).
-export { detectRepetitionLoop } from './repetitionLoop';
-export type { RepetitionLoop } from './repetitionLoop';
 export type {
   BrainTransport,
   BrainToolSpec,

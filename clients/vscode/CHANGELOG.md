@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.56] — "Continue" picks up where the chat left off
+
+- **"Continue" builds on what was already read.** After the panel reloaded or the chat was reopened, saying "continue" started the research over: the agent searched and read the same files again and could run out of steam before changing anything. It now starts from a record of the files it read, the searches it ran and what they returned in earlier turns, and goes on from there.
+- **A reply stuck on one sentence is trimmed everywhere.** Replies from agents you @-mention and from cloud agents now drop a sentence repeated back to back, the way the chat already does.
+
 ## [2026.9.55] — A model stuck on one sentence no longer takes over the chat
 
 - **A reply that starts repeating itself is stopped for you.** A model could fall into a loop and write the same sentence ("I'll start by checking this chat's linked tickets…") over and over until you pressed Stop. The chat now notices once a sentence has come back three times in a row, drops the repeats, and asks another connected model to take the turn from the same point, so the work carries on. If you picked the model yourself, the chat stops and tells you it was repeating itself rather than switching models without asking.

@@ -21,7 +21,7 @@
  */
 
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
-import { detectRepetitionLoop, type RepetitionLoop } from './repetitionLoop';
+import { detectRepetitionLoop } from '@builderforce/agent-loop';
 import { brainRequestError } from './chatError';
 import type { ReasoningIntent } from './effort';
 
@@ -298,7 +298,9 @@ export class RepetitionLoopError extends StreamInterruptedError {
   readonly kept: string;
   readonly block: string;
   readonly copies: number;
-  constructor(loop: RepetitionLoop, model: string | undefined) {
+  // Structural, not `RepetitionLoop` by name: this class is published, and its
+  // declaration must not reach into the source-only loop package for a type.
+  constructor(loop: { block: string; copies: number; kept: string }, model: string | undefined) {
     const quote = loop.block.trim();
     const shown = quote.length > LOOP_QUOTE_CHARS ? `${quote.slice(0, LOOP_QUOTE_CHARS - 1).trimEnd()}…` : quote;
     super(`the model got stuck repeating itself (${loop.copies}× "${shown}")`, model);

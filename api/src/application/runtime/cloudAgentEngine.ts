@@ -1343,6 +1343,16 @@ async function runCloudToolLoop(
   const hooks: LoopHooks<Row> = {
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
     isCancelled: () => cancelChannel.check(),
+    // The kernel already cut a looped turn back to its first copy; this only leaves the
+    // evidence, so a run that "kept saying the same thing" names the model that did it.
+    onRepetitionLoop: async (ctx, loop) => {
+      await recordCloudToolEvent(db, {
+        ...evt,
+        toolName: 'llm.repetition_loop', category: 'llm',
+        detail: { step: ctx.step, model: activeModel || null, copies: loop.copies },
+        result: `the model repeated one block ${loop.copies} times — kept the first copy: "${loop.block.trim().slice(0, 120)}"`,
+      });
+    },
 
     beforeTurn: async (ctx) => {
       if (declaredLimits) {

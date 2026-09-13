@@ -3,6 +3,9 @@ export { DEFAULT_TOOL_FAILURE_STREAK } from "./types.js";
 export { runSubagent, subagentSystemPrompt, SUBAGENT_MAX_STEPS, SUBAGENT_OUTPUT_CHARS } from "./subagent.js";
 export type { SubagentRunArgs, SubagentRunResult } from "./subagent.js";
 export { asToolArgs, parseToolArgs, parseToolCall } from "./parseToolCall.js";
+// A model stuck repeating one block of prose. The kernel trims looped turns itself; the
+// Brain's stream client cuts a live stream with it; the api trims its tool-free replies.
+export { detectRepetitionLoop, trimRepetitionLoop } from "./repetitionLoop.js";
 // The reasoning channel — one reading of what a turn SAID versus what it THOUGHT, and
 // the policies each surface applies to it. Written four times before this, disagreeing
 // on whether an unclosed block counts and whether a tag inside a code fence does; see
@@ -42,6 +45,7 @@ export type {
   LoopTurnResult,
   NoToolCallsDecision,
   ParsedToolCall,
+  RepetitionLoop,
   StopDecision,
   TurnContext,
 } from "./types.js";

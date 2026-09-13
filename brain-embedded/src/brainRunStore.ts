@@ -253,6 +253,14 @@ export interface BrainRunRequest {
   onActivity?: (chatId: number) => void;
   /** Seed the rich transcript from prior persisted history (first turn only). */
   seed?: ChatCompletionMessage[];
+  /**
+   * What earlier turns of this chat already READ and DID, as a system-prompt block
+   * (`priorResearch.ts`) — the counterpart to {@link seed}, which cannot carry tool
+   * results (an orphaned tool message 400s strict vendors). Applied only when the run
+   * seeds its transcript from history; a transcript still in memory already holds the
+   * real tool rows. Without it a "continue" after a reload started its research over.
+   */
+  priorResearch?: string | null;
   /** The user turn that triggered this run, appended to the transcript. */
   userTurn?: string | ContentPart[];
   /**
@@ -366,6 +374,13 @@ export interface BrainRunSnapshot {
 interface RunCell {
   /** Rich working transcript (user + assistant tool-call turns + tool results). */
   transcript: ChatCompletionMessage[];
+  /**
+   * The earlier turns' tool work the transcript was seeded WITHOUT
+   * ({@link BrainRunRequest.priorResearch}). Set when the transcript is seeded and kept
+   * for the chat's later runs this session: the tool rows it summarises never enter
+   * the transcript, so dropping it on the next run would lose them a second time.
+   */
+  priorResearch: string | null;
   trace: BrainTraceEvent[];
   running: boolean;
   streamingText: string;
@@ -483,6 +498,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
 function makeCell(): RunCell {
   return {
     transcript: [],
+    priorResearch: null,
     trace: [],
     running: false,
     streamingText: '',
@@ -1251,7 +1267,10 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   // touch this chat this session, then append the triggering user turn — done
   // here (inside the single-flight claim) so a racing send + auto-reply can't
   // both append the user turn to the transcript.
-  if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
+  if (req.seed && c.transcript.length === 0) {
+    c.transcript = req.seed.slice();
+    c.priorResearch = req.priorResearch ?? null;
+  }
   if (req.userTurn !== undefined) c.transcript.push({ role: 'user', content: req.userTurn });
   emit(c);
 
@@ -1739,6 +1758,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // Rides both modes: it only binds a turn that changes code.
   const canShip = canShipHere(catalogToolNames);
   if (canShip) systemPrompt = `${systemPrompt}\n\n${selfReviewShipDirective(chatId)}`;
+  // The tool work of this chat's earlier turns, which a transcript seeded from history
+  // does not carry — so "continue" builds on what was read instead of reading it again.
+  if (c.priorResearch) systemPrompt = `${systemPrompt}\n\n${c.priorResearch}`;
 
   // A bare "Fix" / "do it" / "go ahead" has no subject of its own — it points at the
   // proposal in the previous assistant turn. Read as a fresh, contextless request it

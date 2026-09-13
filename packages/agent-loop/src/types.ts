@@ -38,6 +38,20 @@ export interface LoopTurn {
 export type LoopTurnResult = LoopTurn | { failed: string } | { skip: true };
 
 /**
+ * A turn whose text ends in the same block of prose repeated verbatim — a decoder loop
+ * (`repetitionLoop.ts`). Declared here with the rest of the contract, not beside the
+ * detector, so every file this package's declarations are read through names it.
+ */
+export interface RepetitionLoop {
+  /** The repeated block, as the model first wrote it. */
+  block: string;
+  /** How many whole copies of it sit at the end of the text. */
+  copies: number;
+  /** The text up to and including the FIRST copy — everything said before looping. */
+  kept: string;
+}
+
+/**
  * The control signals a tool may return alongside its data. Structurally identical to
  * `ToolControl` in `@builderforce/agent-tools`, restated here so this package keeps zero
  * inter-package edges (a surface that only consumes this kernel need not resolve the
@@ -127,6 +141,12 @@ export interface LoopHooks<M> {
   isCancelled?(ctx: TurnContext<M>): Promise<boolean> | boolean;
   /** Runs before the model is asked (containment limits, compaction, budget checks). `stop` ends the run without a model call. */
   beforeTurn?(ctx: TurnContext<M>): Promise<StopDecision | void> | StopDecision | void;
+  /**
+   * The model's turn ended in a decoder loop. The kernel has already cut its content back
+   * to the first copy (`loop.kept`) — the repeats never reach the transcript, the output
+   * or any later hook. For telemetry: record which model looped and how badly.
+   */
+  onRepetitionLoop?(ctx: TurnContext<M>, loop: RepetitionLoop): Promise<void> | void;
   /** Runs after the model answered, before anything is pushed (telemetry, trace, output capture). */
   afterTurn?(ctx: TurnContext<M>, turn: LoopTurn): Promise<void> | void;
   /** A turn with NO tool calls. Default: finish with the turn's content. */

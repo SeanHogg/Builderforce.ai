@@ -208,6 +208,36 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
   const persistence = { sendMessages: async () => [] };
   const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
 
+  it("carries the earlier turns' tool work into a run seeded from saved history, and keeps it for the chat's next run", async () => {
+    const systems: string[] = [];
+    const stream: BrainStreamFn = async (opts) => {
+      systems.push(String(opts.messages.find((m) => m.role === 'system')?.content ?? ''));
+      return { text: 'Here is what I found.', toolCalls: [], finishReason: 'stop' };
+    };
+    const digest = '## Already done earlier in this chat\n- read_file({"path":"a.ts"})\n  → body';
+    await startRun(4250, {
+      resolvedSystemPrompt: 'sys', stream, persistence,
+      seed: [{ role: 'user', content: 'look at a.ts' }, { role: 'assistant', content: 'a.ts renders the bubble.' }],
+      priorResearch: digest,
+      userTurn: 'what does it do?',
+    });
+    // Same session: the transcript is still in memory, so the chat is not re-seeded —
+    // but the tool rows the digest stands for never entered it, so the digest stays.
+    await startRun(4250, { resolvedSystemPrompt: 'sys', stream, persistence, seed: [], userTurn: 'and the tail?' });
+    expect(systems[0]).toContain(digest);
+    expect(systems[systems.length - 1]).toContain(digest);
+  });
+
+  it('adds no digest to a run whose transcript was not seeded from history', async () => {
+    const systems: string[] = [];
+    const stream: BrainStreamFn = async (opts) => {
+      systems.push(String(opts.messages.find((m) => m.role === 'system')?.content ?? ''));
+      return { text: 'Hello.', toolCalls: [], finishReason: 'stop' };
+    };
+    await startRun(4251, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'hi' });
+    expect(systems.every((s) => !s.includes('Already done earlier in this chat'))).toBe(true);
+  });
+
   it('lets a long run of SUCCESSFUL calls go past every ceiling that used to exist', async () => {
     const gateway = callsThenAnswers(60);
     let executed = 0;

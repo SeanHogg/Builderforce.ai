@@ -33,7 +33,7 @@ import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
 import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
-import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock } from '@builderforce/agent-loop';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -1414,6 +1414,16 @@ export class BrainService {
           }
           return { action: 'stop', ok: true, output: content };
         },
+        // The kernel already cut a looped turn back to its first copy; this leaves the
+        // evidence in the reply's trace, as its own kind so it is never counted as a turn.
+        onRepetitionLoop: (_ctx, loop) => {
+          record({
+            kind: 'repetition_loop',
+            label: lastModel || activeModel || '(gateway default)',
+            result: { copies: loop.copies, block: loop.block.trim().slice(0, 200) },
+            turnSeq: iterations,
+          });
+        },
         beforeToolCalls: (_ctx, turn, calls) => {
           const message = (turn.meta as { message?: { content?: string | null } | null }).message;
           // `ask_user` is a TERMINAL turn: the agent is blocked on the user's decision, so
@@ -1532,7 +1542,9 @@ export class BrainService {
       noteByoFailure(finalResult);
       const finalChoice = await readProxyChoice(finalResult);
       lastFinish = finalChoice.finishReason || lastFinish;
-      text = finalChoice.content;
+      // Outside the kernel (no tools, one call), so the loop trim is applied here: a reply
+      // stuck on one sentence posts that sentence once, not the run to the output ceiling.
+      text = trimRepetitionLoop(finalChoice.content);
       // Traced like every other model turn. This is the call that decides whether the
       // reply exists at all, and it was the ONLY one leaving no row — so an empty reply
       // produced HERE was invisible to the diagnostics report that exists to explain it.

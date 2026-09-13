@@ -24,6 +24,7 @@ import {
   type TurnContext,
 } from "./types.js";
 import { parseToolCall } from "./parseToolCall.js";
+import { detectRepetitionLoop } from "./repetitionLoop.js";
 
 class Ctx<M> implements TurnContext<M> {
   step = 0;
@@ -92,7 +93,15 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
       finished = true;
       break;
     }
-    const turn: LoopTurn = turnResult;
+    let turn: LoopTurn = turnResult;
+    // A turn that arrives stuck repeating one block of prose keeps only what it said
+    // before the loop. A streaming surface cuts the loop live; this catches every
+    // surface that receives a whole completion at once.
+    const looped = turn.content ? detectRepetitionLoop(turn.content) : null;
+    if (looped) {
+      turn = { ...turn, content: looped.kept };
+      await hooks.onRepetitionLoop?.(ctx, looped);
+    }
     if (turn.content) ctx.output = turn.content;
     await hooks.afterTurn?.(ctx, turn);
 

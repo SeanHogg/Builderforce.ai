@@ -31,6 +31,7 @@ import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
+import { priorResearchDigest } from './priorResearch';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { BrainRunActivity } from './runActivity';
@@ -403,7 +404,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
   /** Assemble the BrainRunRequest from the current options (captured at run start). */
   const buildRequest = useCallback(
-    (seed?: ChatCompletionMessage[], userTurn?: string | ContentPart[]) => ({
+    (seed?: ChatCompletionMessage[], userTurn?: string | ContentPart[], priorResearch?: string | null) => ({
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
@@ -420,6 +421,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       evermind,
       augmentSystemPrompt,
       seed,
+      priorResearch,
       userTurn,
       projectId,
       chatMode,
@@ -518,7 +520,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        await startRun(id, buildRequest(seedFrom(messages), modelContent));
+        await startRun(id, buildRequest(seedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -551,7 +553,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    void startRun(chatId, buildRequest(seedFrom(messages.slice(0, -1)), last.content));
+    void startRun(chatId, buildRequest(seedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
 
   const rateMessage = useCallback(async (msg: BrainMessage, rating: 1 | -1 | 0) => {

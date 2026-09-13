@@ -205,7 +205,30 @@ function extractXmlToolCalls(raw) {
   return { text: f.cleanText(), toolCalls: f.toolCalls() };
 }
 
-// src/repetitionLoop.ts
+// ../packages/agent-loop/src/types.ts
+var DEFAULT_TOOL_FAILURE_STREAK = 5;
+
+// ../packages/agent-loop/src/parseToolCall.ts
+function asToolArgs(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  return null;
+}
+function parseToolArgs(raw) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return { args: {}, malformed: false };
+  try {
+    const bag = asToolArgs(JSON.parse(text));
+    return bag ? { args: bag, malformed: false } : { args: {}, malformed: true };
+  } catch {
+    return { args: {}, malformed: true };
+  }
+}
+function parseToolCall(raw) {
+  const { args, malformed } = parseToolArgs(raw.arguments);
+  return { id: raw.id, name: raw.name, args, raw, malformed };
+}
+
+// ../packages/agent-loop/src/repetitionLoop.ts
 var LOOP_MIN_COPIES = 3;
 var LOOP_MIN_BLOCK_CHARS = 40;
 var LOOP_MAX_BLOCK_CHARS = 800;
@@ -246,6 +269,429 @@ function detectRepetitionLoop(text) {
   return null;
 }
 
+// ../packages/agent-loop/src/loop.ts
+var Ctx = class {
+  constructor(messages, signal) {
+    this.messages = messages;
+    this.signal = signal;
+  }
+  messages;
+  signal;
+  step = 0;
+  stepInCall = 0;
+  output = "";
+  failureStreak = 0;
+};
+async function runAgentLoop(args) {
+  const { codec, ports, budget, signal } = args;
+  const hooks = args.hooks ?? {};
+  const ctx = new Ctx(args.messages, signal);
+  const startStep = Math.max(0, budget.startStep ?? 0);
+  const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
+  const stepCap = () => budget.stepCap ?? Number.POSITIVE_INFINITY;
+  const failureStreakCap = budget.failureStreakCap ?? DEFAULT_TOOL_FAILURE_STREAK;
+  ctx.step = startStep;
+  ctx.output = args.initialOutput ?? "";
+  let ok = true;
+  let finished = false;
+  let cancelled = false;
+  let failuresTripped = false;
+  let awaitingInput;
+  const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
+  for (; ctx.step < stepCap() && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
+    if (await isCancelled()) {
+      cancelled = true;
+      break;
+    }
+    const before = await hooks.beforeTurn?.(ctx);
+    if (before?.action === "stop") {
+      ok = before.ok ?? false;
+      if (before.output !== void 0) ctx.output = before.output;
+      finished = before.finished ?? true;
+      break;
+    }
+    let turnResult;
+    try {
+      turnResult = await ports.complete(ctx);
+    } catch (err) {
+      if (signal?.aborted) {
+        cancelled = true;
+        break;
+      }
+      throw err;
+    }
+    if ("skip" in turnResult) continue;
+    if ("failed" in turnResult) {
+      ok = false;
+      ctx.output = turnResult.failed;
+      finished = true;
+      break;
+    }
+    let turn = turnResult;
+    const looped = turn.content ? detectRepetitionLoop(turn.content) : null;
+    if (looped) {
+      turn = { ...turn, content: looped.kept };
+      await hooks.onRepetitionLoop?.(ctx, looped);
+    }
+    if (turn.content) ctx.output = turn.content;
+    await hooks.afterTurn?.(ctx, turn);
+    if (turn.toolCalls.length === 0) {
+      const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
+      if (decision.action === "continue") continue;
+      if (decision.action === "stop") {
+        ok = decision.ok ?? false;
+        if (decision.output !== void 0) ctx.output = decision.output;
+        finished = decision.finished ?? true;
+        break;
+      }
+      if (decision.output !== void 0) ctx.output = decision.output;
+      finished = true;
+      break;
+    }
+    const calls = turn.toolCalls.map(parseToolCall);
+    const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
+    if (gate?.action === "stop") {
+      ok = gate.ok ?? true;
+      if (gate.output !== void 0) ctx.output = gate.output;
+      finished = gate.finished ?? true;
+      break;
+    }
+    ctx.messages.push(codec.assistant(turn));
+    for (let i = 0; i < calls.length; i++) {
+      let call = calls[i];
+      let result;
+      const pre = await hooks.beforeDispatch?.(call, ctx);
+      if (pre && "result" in pre) result = pre.result;
+      else if (pre && "rewrite" in pre) call = pre.rewrite;
+      if (!result) result = await ports.dispatch(call, ctx);
+      if (result.control?.kind === "finish") {
+        const block = await hooks.onFinish?.(ctx, result.control.summary, call);
+        if (block) {
+          result = { data: { ok: false, error: block }, isError: true };
+        } else {
+          finished = true;
+          if (result.control.summary) ctx.output = result.control.summary;
+        }
+      } else if (result.control?.kind === "ask_human") {
+        await hooks.onAskHuman?.(ctx, result.control, call);
+        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
+      }
+      if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
+      const row = codec.tool(call, result);
+      ctx.messages.push(row);
+      const post = await hooks.afterDispatch?.(call, result, row, ctx);
+      if (post?.skipRemaining) {
+        const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
+        for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
+        break;
+      }
+    }
+    const after = await hooks.afterToolCalls?.(ctx, finished);
+    if (after && after.finished !== void 0) finished = after.finished;
+    if (awaitingInput) break;
+    if (!finished && ctx.failureStreak >= failureStreakCap) {
+      ctx.step++;
+      ctx.stepInCall++;
+      failuresTripped = true;
+      break;
+    }
+  }
+  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap());
+  return {
+    ok,
+    output: ctx.output,
+    finished,
+    cancelled,
+    step: ctx.step,
+    exhausted,
+    ...exhausted ? { exhaustedBy: failuresTripped ? "failures" : "steps" } : {},
+    failureStreak: ctx.failureStreak,
+    ...awaitingInput ? { awaitingInput } : {}
+  };
+}
+
+// ../packages/agent-loop/src/openaiCodec.ts
+function toOpenAiToolCall(call) {
+  return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
+}
+var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
+function openAiChatCodec(serialize = defaultToolRowSerializer) {
+  return {
+    assistant(turn) {
+      const row = {
+        role: "assistant",
+        content: turn.content ?? "",
+        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
+      };
+      return row;
+    },
+    tool(call, result) {
+      const row = { role: "tool", tool_call_id: call.id, content: serialize(result, call) };
+      return row;
+    }
+  };
+}
+
+// ../packages/agent-loop/src/reasoning.ts
+var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
+var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
+var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
+var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
+function findCodeRegions(text) {
+  const regions = [];
+  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:\n\2(?:\n|$)|$)/g;
+  for (const match of text.matchAll(fencedRe)) {
+    const lead = match[1] ?? "";
+    const start = (match.index ?? 0) + lead.length;
+    regions.push({ start, end: start + match[0].length - lead.length });
+  }
+  const inlineRe = /`+[^`]+`+/g;
+  for (const match of text.matchAll(inlineRe)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
+    if (!insideFenced) regions.push({ start, end });
+  }
+  regions.sort((a, b) => a.start - b.start);
+  return regions;
+}
+function isInsideCode(pos, regions) {
+  return regions.some((r) => pos >= r.start && pos < r.end);
+}
+function scanReasoning(text) {
+  const regions = findCodeRegions(text);
+  const spans = [];
+  let kind = "answer";
+  let start = 0;
+  let contentStart = 0;
+  REASONING_TAG_RE.lastIndex = 0;
+  for (const match of text.matchAll(REASONING_TAG_RE)) {
+    const idx = match.index ?? 0;
+    if (isInsideCode(idx, regions)) continue;
+    const isClose = match[1] === "/";
+    if (kind === "thought" && !isClose) continue;
+    const after = idx + match[0].length;
+    spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
+    kind = isClose ? "answer" : "thought";
+    start = isClose ? after : idx;
+    contentStart = after;
+  }
+  spans.push({
+    kind,
+    start,
+    contentStart,
+    contentEnd: text.length,
+    end: text.length,
+    unterminated: kind === "thought"
+  });
+  return spans;
+}
+function splitReasoningSegments(text) {
+  if (!text) return [];
+  if (!QUICK_TAG_RE.test(text)) return [{ kind: "answer", content: text }];
+  const cleaned = unwrapFinalTags(text);
+  const segments = segmentsOf(cleaned, scanReasoning(cleaned));
+  if (segments.length === 0) return [{ kind: "answer", content: text }];
+  return stitchSplitSentence(promoteSwallowedAnswer(segments));
+}
+var EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
+function segmentsOf(text, spans) {
+  const out = [];
+  for (const span of spans) {
+    const raw = text.slice(span.contentStart, span.contentEnd);
+    const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
+    if (content) out.push({ kind: span.kind, content });
+  }
+  return out;
+}
+function unwrapFinalTags(text) {
+  FINAL_TAG_RE.lastIndex = 0;
+  if (!FINAL_TAG_RE.test(text)) {
+    FINAL_TAG_RE.lastIndex = 0;
+    return text;
+  }
+  FINAL_TAG_RE.lastIndex = 0;
+  const regions = findCodeRegions(text);
+  const cuts = [];
+  for (const match of text.matchAll(FINAL_TAG_RE)) {
+    const start = match.index ?? 0;
+    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
+  }
+  let out = text;
+  for (let i = cuts.length - 1; i >= 0; i--) {
+    const cut = cuts[i];
+    out = out.slice(0, cut.start) + out.slice(cut.start + cut.length);
+  }
+  return out;
+}
+var MAX_FRAGMENT_CHARS = 40;
+var REPLY_OPENER = /^[A-Z0-9#*\-_>`[|("']/;
+function isFragment(text) {
+  return text.length > 0 && text.length <= MAX_FRAGMENT_CHARS && !REPLY_OPENER.test(text);
+}
+function promoteSwallowedAnswer(segments) {
+  const answers = segments.filter((s) => s.kind === "answer");
+  if (answers.length === 0) return segments;
+  const answerText = answers.map((s) => s.content).join(" ").trim();
+  if (!isFragment(answerText)) return segments;
+  const thoughts = segments.filter((s) => s.kind === "thought");
+  const richest = thoughts.reduce(
+    (best, s) => !best || s.content.length > best.content.length ? s : best,
+    null
+  );
+  if (!richest || richest.content.length <= answerText.length) return segments;
+  const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
+  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
+  return promoted;
+}
+var UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
+var LOWERCASE_OPENER = /^\p{Ll}/u;
+function lastSentenceStart(text) {
+  let cut = text.lastIndexOf("\n") + 1;
+  for (const match of text.matchAll(/[.!?](?=\s)/g)) {
+    const after = (match.index ?? 0) + 1;
+    if (after > cut) cut = after;
+  }
+  return cut;
+}
+function stitchSplitSentence(segments) {
+  const out = [...segments];
+  for (let i = 1; i < out.length; i++) {
+    const prev = out[i - 1];
+    const cur = out[i];
+    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
+    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
+    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
+    const cut = lastSentenceStart(prev.content);
+    const head = prev.content.slice(0, cut).trim();
+    out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };
+    if (head) {
+      out[i - 1] = { kind: "thought", content: head };
+    } else {
+      out.splice(i - 1, 1);
+      i -= 1;
+    }
+  }
+  return out;
+}
+function answerTextOf(content) {
+  return splitReasoningSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
+}
+function thoughtTextOf(content) {
+  return splitReasoningSegments(content).filter((s) => s.kind === "thought").map((s) => s.content).join("\n\n").trim();
+}
+function detailsText(details) {
+  if (!Array.isArray(details)) return "";
+  return details.map((d) => {
+    const item = d;
+    return item && (item.type === void 0 || item.type === "reasoning.text") && typeof item.text === "string" ? item.text : "";
+  }).filter(Boolean).join("\n");
+}
+function splitVendorReasoning(message) {
+  const rawContent = typeof message?.content === "string" ? message.content : "";
+  const inlineThought = thoughtTextOf(rawContent);
+  const content = inlineThought ? answerTextOf(rawContent) : rawContent;
+  const structured = [
+    typeof message?.reasoning_content === "string" ? message.reasoning_content : "",
+    typeof message?.reasoning === "string" ? message.reasoning : "",
+    detailsText(message?.reasoning_details)
+  ].map((s) => s.trim()).filter(Boolean);
+  const reasoning = [...structured, ...inlineThought ? [inlineThought] : []].join("\n\n").trim();
+  return { content, reasoning };
+}
+function canonicalReasoningText(content, reasoning) {
+  const answer = (content ?? "").trim();
+  const thought = (reasoning ?? "").trim();
+  if (!thought) return answer;
+  return answer ? `<think>${thought}</think>
+
+${answer}` : `<think>${thought}</think>`;
+}
+
+// ../packages/agent-loop/src/index.ts
+var ASK_USER_TOOL = "ask_user";
+var ASK_USER_TOOL_SPEC = {
+  type: "function",
+  function: {
+    name: ASK_USER_TOOL,
+    description: "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The single, specific question to ask." },
+        options: {
+          type: "array",
+          description: "2\u20136 distinct, mutually-exclusive choices (unless multiSelect).",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Short choice text (1\u20135 words)." },
+              description: { type: "string", description: "Optional one-line explanation of this choice." }
+            },
+            required: ["label"]
+          }
+        },
+        multiSelect: { type: "boolean", description: "Allow choosing more than one option. Default false." }
+      },
+      required: ["question", "options"]
+    }
+  }
+};
+var ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
+function coerceAskUserPayload(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw;
+  const question = typeof o.question === "string" ? o.question.trim() : "";
+  const optionsIn = Array.isArray(o.options) ? o.options : [];
+  const options = optionsIn.map((it) => {
+    if (typeof it === "string") return it.trim() ? { label: it.trim() } : null;
+    if (it && typeof it === "object") {
+      const rec = it;
+      const label = typeof rec.label === "string" ? rec.label.trim() : "";
+      const description = typeof rec.description === "string" ? rec.description.trim() : void 0;
+      return label ? { label, ...description ? { description } : {} } : null;
+    }
+    return null;
+  }).filter((x) => !!x);
+  if (!question || options.length < 2) return null;
+  return { question, options, multiSelect: o.multiSelect === true };
+}
+function serializeAskUser(payload) {
+  return ["```ask-user", JSON.stringify(payload), "```"].join("\n");
+}
+function askUserBlock(args) {
+  const payload = coerceAskUserPayload(args);
+  return payload ? serializeAskUser(payload) : null;
+}
+function parseAskUser(text) {
+  if (!text || !text.includes("ask-user")) return null;
+  const body = text.match(ASK_USER_FENCE)?.[1];
+  if (!body) return null;
+  try {
+    return coerceAskUserPayload(JSON.parse(body));
+  } catch {
+    return null;
+  }
+}
+function stripAskUser(text) {
+  if (!text) return text;
+  return text.replace(ASK_USER_FENCE, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+function askUserAnchorId(messageId) {
+  return `bf-ask-${messageId}`;
+}
+function selectPendingAskUser(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg) continue;
+    if (msg.role === "user") return null;
+    if (msg.role !== "assistant") continue;
+    const payload = parseAskUser(msg.content);
+    if (payload) return { payload, messageId: msg.id };
+  }
+  return null;
+}
+
 // src/streamChatCompletion.ts
 var StreamInterruptedError = class extends Error {
   model;
@@ -260,6 +706,8 @@ var RepetitionLoopError = class extends StreamInterruptedError {
   kept;
   block;
   copies;
+  // Structural, not `RepetitionLoop` by name: this class is published, and its
+  // declaration must not reach into the source-only loop package for a type.
   constructor(loop, model) {
     const quote = loop.block.trim();
     const shown = quote.length > LOOP_QUOTE_CHARS ? `${quote.slice(0, LOOP_QUOTE_CHARS - 1).trimEnd()}\u2026` : quote;
@@ -1574,6 +2022,132 @@ function consolidationMarkerContent(summary) {
   return `${CONSOLIDATION_MARKER_PREFIX}${summary.trim()}`;
 }
 
+// src/persistedSteps.ts
+function traceEventToPersistInput(ev) {
+  return {
+    kind: ev.category,
+    label: ev.label,
+    args: ev.args,
+    result: ev.result,
+    isError: ev.isError,
+    durationMs: ev.durationMs,
+    ttftMs: ev.ttftMs,
+    ts: ev.ts
+  };
+}
+function stepSig(category, label, tsIso) {
+  return `${category}|${label}|${tsIso ?? ""}`;
+}
+function parseStepMessage(metadata) {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata);
+    if (m.kind !== "step" || typeof m.category !== "string") return null;
+    return {
+      step: {
+        category: m.category,
+        label: typeof m.label === "string" ? m.label : m.category,
+        args: m.args,
+        result: m.result,
+        isError: m.isError,
+        durationMs: m.durationMs,
+        resultBytes: m.resultBytes,
+        truncated: m.truncated,
+        usage: m.usage,
+        finishReason: m.finishReason,
+        textChars: m.textChars,
+        ttftMs: m.ttftMs
+      },
+      tsIso: typeof m.ts === "string" ? m.ts : void 0
+    };
+  } catch {
+    return null;
+  }
+}
+function traceWithPersistedSteps(messages, trace) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
+  const fromMessages = [];
+  for (const message of messages) {
+    if (!isStepMessage(message)) continue;
+    const parsed = parseStepMessage(message.metadata);
+    if (!parsed) continue;
+    const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    const s = parsed.step;
+    fromMessages.push({
+      ts: parsed.tsIso ?? message.createdAt ?? "",
+      recovered: true,
+      category: s.category,
+      label: s.label,
+      args: s.args,
+      result: s.result,
+      ...s.isError ? { isError: true } : {},
+      ...s.durationMs != null ? { durationMs: s.durationMs } : {},
+      ...s.ttftMs != null ? { ttftMs: s.ttftMs } : {},
+      ...s.resultBytes != null ? { resultBytes: s.resultBytes } : {},
+      ...s.truncated ? { truncated: true } : {},
+      ...s.usage ? { usage: s.usage } : {},
+      ...s.finishReason !== void 0 ? { finishReason: s.finishReason } : {},
+      ...s.textChars != null ? { textChars: s.textChars } : {}
+    });
+  }
+  if (fromMessages.length === 0) return trace;
+  return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+}
+function mergeRecoveredTrace(recovered, live) {
+  if (recovered.length === 0) return live;
+  if (live.length === 0) return recovered;
+  const liveSigs = new Set(live.map((e) => stepSig(e.category, e.label, e.ts)));
+  const kept = recovered.filter((e) => !liveSigs.has(stepSig(e.category, e.label, e.ts)));
+  return kept.length === 0 ? live : [...kept, ...live];
+}
+
+// src/priorResearch.ts
+var ENTRY_RESULT_CHARS = 1200;
+var ENTRY_ARGS_CHARS = 200;
+var DIGEST_CHARS = 12e3;
+var MAX_ENTRIES = 40;
+var HEADER = [
+  "## Already done earlier in this chat",
+  "Earlier turns of this conversation already ran the tool calls below (newest first, each result trimmed). Their results are NOT in the transcript above \u2014 this list is the record of them.",
+  "Build on it. Do not repeat a call listed here to rediscover what it already answered; re-run one only when you need a part of its result that is not shown, or when the target may have changed since (for example, a file this chat has edited)."
+].join("\n");
+function clip(text, max) {
+  return text.length > max ? `${text.slice(0, max - 1)}\u2026` : text;
+}
+function resultText(result) {
+  if (typeof result === "string") return result;
+  try {
+    return JSON.stringify(result) ?? "";
+  } catch {
+    return String(result);
+  }
+}
+function priorResearchDigest(history) {
+  const entries = [];
+  const seen = /* @__PURE__ */ new Set();
+  let size = HEADER.length;
+  for (let i = history.length - 1; i >= 0 && entries.length < MAX_ENTRIES; i -= 1) {
+    const message = history[i];
+    if (!isStepMessage(message)) continue;
+    const parsed = parseStepMessage(message.metadata);
+    if (!parsed || parsed.step.category !== "tool") continue;
+    const { label, args, result, isError } = parsed.step;
+    const fullArgs = args == null ? "" : stableStringify(args);
+    const key = `${label}|${fullArgs}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const entry = `- ${label}(${clip(fullArgs, ENTRY_ARGS_CHARS)})${isError ? " \u2014 FAILED" : ""}
+  \u2192 ${clip(resultText(result), ENTRY_RESULT_CHARS)}`;
+    if (size + entry.length + 1 > DIGEST_CHARS) break;
+    entries.push(entry);
+    size += entry.length + 1;
+  }
+  return entries.length > 0 ? [HEADER, ...entries].join("\n") : null;
+}
+
 // src/directedMessage.ts
 var ADDRESSED_TO_META_KEY = "addressedTo";
 var AUTHORED_BY_META_KEY = "authoredBy";
@@ -1945,88 +2519,6 @@ function chooseStallFailover(input) {
   if (input.failoversUsed >= MAX_MODEL_FAILOVERS) return void 0;
   const next = input.pick ? input.pick(input.tried) : nextFallbackModel(input.surface, input.tried);
   return next && !input.tried.includes(next) ? next : void 0;
-}
-
-// src/persistedSteps.ts
-function traceEventToPersistInput(ev) {
-  return {
-    kind: ev.category,
-    label: ev.label,
-    args: ev.args,
-    result: ev.result,
-    isError: ev.isError,
-    durationMs: ev.durationMs,
-    ttftMs: ev.ttftMs,
-    ts: ev.ts
-  };
-}
-function stepSig(category, label, tsIso) {
-  return `${category}|${label}|${tsIso ?? ""}`;
-}
-function parseStepMessage(metadata) {
-  if (!metadata) return null;
-  try {
-    const m = JSON.parse(metadata);
-    if (m.kind !== "step" || typeof m.category !== "string") return null;
-    return {
-      step: {
-        category: m.category,
-        label: typeof m.label === "string" ? m.label : m.category,
-        args: m.args,
-        result: m.result,
-        isError: m.isError,
-        durationMs: m.durationMs,
-        resultBytes: m.resultBytes,
-        truncated: m.truncated,
-        usage: m.usage,
-        finishReason: m.finishReason,
-        textChars: m.textChars,
-        ttftMs: m.ttftMs
-      },
-      tsIso: typeof m.ts === "string" ? m.ts : void 0
-    };
-  } catch {
-    return null;
-  }
-}
-function traceWithPersistedSteps(messages, trace) {
-  const seen = /* @__PURE__ */ new Set();
-  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
-  const fromMessages = [];
-  for (const message of messages) {
-    if (!isStepMessage(message)) continue;
-    const parsed = parseStepMessage(message.metadata);
-    if (!parsed) continue;
-    const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
-    if (seen.has(sig)) continue;
-    seen.add(sig);
-    const s = parsed.step;
-    fromMessages.push({
-      ts: parsed.tsIso ?? message.createdAt ?? "",
-      recovered: true,
-      category: s.category,
-      label: s.label,
-      args: s.args,
-      result: s.result,
-      ...s.isError ? { isError: true } : {},
-      ...s.durationMs != null ? { durationMs: s.durationMs } : {},
-      ...s.ttftMs != null ? { ttftMs: s.ttftMs } : {},
-      ...s.resultBytes != null ? { resultBytes: s.resultBytes } : {},
-      ...s.truncated ? { truncated: true } : {},
-      ...s.usage ? { usage: s.usage } : {},
-      ...s.finishReason !== void 0 ? { finishReason: s.finishReason } : {},
-      ...s.textChars != null ? { textChars: s.textChars } : {}
-    });
-  }
-  if (fromMessages.length === 0) return trace;
-  return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
-}
-function mergeRecoveredTrace(recovered, live) {
-  if (recovered.length === 0) return live;
-  if (live.length === 0) return recovered;
-  const liveSigs = new Set(live.map((e) => stepSig(e.category, e.label, e.ts)));
-  const kept = recovered.filter((e) => !liveSigs.has(stepSig(e.category, e.label, e.ts)));
-  return kept.length === 0 ? live : [...kept, ...live];
 }
 
 // src/localWorkspaceTools.ts
@@ -3542,447 +4034,6 @@ function selectToolsForTurn(tools, options) {
   return { tools: chosen, trimmed: true, available };
 }
 
-// ../packages/agent-loop/src/types.ts
-var DEFAULT_TOOL_FAILURE_STREAK = 5;
-
-// ../packages/agent-loop/src/parseToolCall.ts
-function asToolArgs(value) {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value;
-  return null;
-}
-function parseToolArgs(raw) {
-  const text = typeof raw === "string" ? raw.trim() : "";
-  if (!text) return { args: {}, malformed: false };
-  try {
-    const bag = asToolArgs(JSON.parse(text));
-    return bag ? { args: bag, malformed: false } : { args: {}, malformed: true };
-  } catch {
-    return { args: {}, malformed: true };
-  }
-}
-function parseToolCall(raw) {
-  const { args, malformed } = parseToolArgs(raw.arguments);
-  return { id: raw.id, name: raw.name, args, raw, malformed };
-}
-
-// ../packages/agent-loop/src/loop.ts
-var Ctx = class {
-  constructor(messages, signal) {
-    this.messages = messages;
-    this.signal = signal;
-  }
-  messages;
-  signal;
-  step = 0;
-  stepInCall = 0;
-  output = "";
-  failureStreak = 0;
-};
-async function runAgentLoop(args) {
-  const { codec, ports, budget, signal } = args;
-  const hooks = args.hooks ?? {};
-  const ctx = new Ctx(args.messages, signal);
-  const startStep = Math.max(0, budget.startStep ?? 0);
-  const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
-  const stepCap = () => budget.stepCap ?? Number.POSITIVE_INFINITY;
-  const failureStreakCap = budget.failureStreakCap ?? DEFAULT_TOOL_FAILURE_STREAK;
-  ctx.step = startStep;
-  ctx.output = args.initialOutput ?? "";
-  let ok = true;
-  let finished = false;
-  let cancelled = false;
-  let failuresTripped = false;
-  let awaitingInput;
-  const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
-  for (; ctx.step < stepCap() && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
-    if (await isCancelled()) {
-      cancelled = true;
-      break;
-    }
-    const before = await hooks.beforeTurn?.(ctx);
-    if (before?.action === "stop") {
-      ok = before.ok ?? false;
-      if (before.output !== void 0) ctx.output = before.output;
-      finished = before.finished ?? true;
-      break;
-    }
-    let turnResult;
-    try {
-      turnResult = await ports.complete(ctx);
-    } catch (err) {
-      if (signal?.aborted) {
-        cancelled = true;
-        break;
-      }
-      throw err;
-    }
-    if ("skip" in turnResult) continue;
-    if ("failed" in turnResult) {
-      ok = false;
-      ctx.output = turnResult.failed;
-      finished = true;
-      break;
-    }
-    const turn = turnResult;
-    if (turn.content) ctx.output = turn.content;
-    await hooks.afterTurn?.(ctx, turn);
-    if (turn.toolCalls.length === 0) {
-      const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
-      if (decision.action === "continue") continue;
-      if (decision.action === "stop") {
-        ok = decision.ok ?? false;
-        if (decision.output !== void 0) ctx.output = decision.output;
-        finished = decision.finished ?? true;
-        break;
-      }
-      if (decision.output !== void 0) ctx.output = decision.output;
-      finished = true;
-      break;
-    }
-    const calls = turn.toolCalls.map(parseToolCall);
-    const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
-    if (gate?.action === "stop") {
-      ok = gate.ok ?? true;
-      if (gate.output !== void 0) ctx.output = gate.output;
-      finished = gate.finished ?? true;
-      break;
-    }
-    ctx.messages.push(codec.assistant(turn));
-    for (let i = 0; i < calls.length; i++) {
-      let call = calls[i];
-      let result;
-      const pre = await hooks.beforeDispatch?.(call, ctx);
-      if (pre && "result" in pre) result = pre.result;
-      else if (pre && "rewrite" in pre) call = pre.rewrite;
-      if (!result) result = await ports.dispatch(call, ctx);
-      if (result.control?.kind === "finish") {
-        const block = await hooks.onFinish?.(ctx, result.control.summary, call);
-        if (block) {
-          result = { data: { ok: false, error: block }, isError: true };
-        } else {
-          finished = true;
-          if (result.control.summary) ctx.output = result.control.summary;
-        }
-      } else if (result.control?.kind === "ask_human") {
-        await hooks.onAskHuman?.(ctx, result.control, call);
-        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
-      }
-      if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
-      const row = codec.tool(call, result);
-      ctx.messages.push(row);
-      const post = await hooks.afterDispatch?.(call, result, row, ctx);
-      if (post?.skipRemaining) {
-        const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-        for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
-        break;
-      }
-    }
-    const after = await hooks.afterToolCalls?.(ctx, finished);
-    if (after && after.finished !== void 0) finished = after.finished;
-    if (awaitingInput) break;
-    if (!finished && ctx.failureStreak >= failureStreakCap) {
-      ctx.step++;
-      ctx.stepInCall++;
-      failuresTripped = true;
-      break;
-    }
-  }
-  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap());
-  return {
-    ok,
-    output: ctx.output,
-    finished,
-    cancelled,
-    step: ctx.step,
-    exhausted,
-    ...exhausted ? { exhaustedBy: failuresTripped ? "failures" : "steps" } : {},
-    failureStreak: ctx.failureStreak,
-    ...awaitingInput ? { awaitingInput } : {}
-  };
-}
-
-// ../packages/agent-loop/src/openaiCodec.ts
-function toOpenAiToolCall(call) {
-  return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
-}
-var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
-function openAiChatCodec(serialize = defaultToolRowSerializer) {
-  return {
-    assistant(turn) {
-      const row = {
-        role: "assistant",
-        content: turn.content ?? "",
-        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
-      };
-      return row;
-    },
-    tool(call, result) {
-      const row = { role: "tool", tool_call_id: call.id, content: serialize(result, call) };
-      return row;
-    }
-  };
-}
-
-// ../packages/agent-loop/src/reasoning.ts
-var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
-var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
-var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
-var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
-function findCodeRegions(text) {
-  const regions = [];
-  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:\n\2(?:\n|$)|$)/g;
-  for (const match of text.matchAll(fencedRe)) {
-    const lead = match[1] ?? "";
-    const start = (match.index ?? 0) + lead.length;
-    regions.push({ start, end: start + match[0].length - lead.length });
-  }
-  const inlineRe = /`+[^`]+`+/g;
-  for (const match of text.matchAll(inlineRe)) {
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-    const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
-    if (!insideFenced) regions.push({ start, end });
-  }
-  regions.sort((a, b) => a.start - b.start);
-  return regions;
-}
-function isInsideCode(pos, regions) {
-  return regions.some((r) => pos >= r.start && pos < r.end);
-}
-function scanReasoning(text) {
-  const regions = findCodeRegions(text);
-  const spans = [];
-  let kind = "answer";
-  let start = 0;
-  let contentStart = 0;
-  REASONING_TAG_RE.lastIndex = 0;
-  for (const match of text.matchAll(REASONING_TAG_RE)) {
-    const idx = match.index ?? 0;
-    if (isInsideCode(idx, regions)) continue;
-    const isClose = match[1] === "/";
-    if (kind === "thought" && !isClose) continue;
-    const after = idx + match[0].length;
-    spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
-    kind = isClose ? "answer" : "thought";
-    start = isClose ? after : idx;
-    contentStart = after;
-  }
-  spans.push({
-    kind,
-    start,
-    contentStart,
-    contentEnd: text.length,
-    end: text.length,
-    unterminated: kind === "thought"
-  });
-  return spans;
-}
-function splitReasoningSegments(text) {
-  if (!text) return [];
-  if (!QUICK_TAG_RE.test(text)) return [{ kind: "answer", content: text }];
-  const cleaned = unwrapFinalTags(text);
-  const segments = segmentsOf(cleaned, scanReasoning(cleaned));
-  if (segments.length === 0) return [{ kind: "answer", content: text }];
-  return stitchSplitSentence(promoteSwallowedAnswer(segments));
-}
-var EMPTY_TOOL_CALL_WRAPPER = /<([a-z][\w-]*:tool_call)\b[^<>]*>\s*<\/\1>/gi;
-function segmentsOf(text, spans) {
-  const out = [];
-  for (const span of spans) {
-    const raw = text.slice(span.contentStart, span.contentEnd);
-    const content = (span.kind === "thought" ? raw.replace(EMPTY_TOOL_CALL_WRAPPER, "") : raw).trim();
-    if (content) out.push({ kind: span.kind, content });
-  }
-  return out;
-}
-function unwrapFinalTags(text) {
-  FINAL_TAG_RE.lastIndex = 0;
-  if (!FINAL_TAG_RE.test(text)) {
-    FINAL_TAG_RE.lastIndex = 0;
-    return text;
-  }
-  FINAL_TAG_RE.lastIndex = 0;
-  const regions = findCodeRegions(text);
-  const cuts = [];
-  for (const match of text.matchAll(FINAL_TAG_RE)) {
-    const start = match.index ?? 0;
-    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
-  }
-  let out = text;
-  for (let i = cuts.length - 1; i >= 0; i--) {
-    const cut = cuts[i];
-    out = out.slice(0, cut.start) + out.slice(cut.start + cut.length);
-  }
-  return out;
-}
-var MAX_FRAGMENT_CHARS = 40;
-var REPLY_OPENER = /^[A-Z0-9#*\-_>`[|("']/;
-function isFragment(text) {
-  return text.length > 0 && text.length <= MAX_FRAGMENT_CHARS && !REPLY_OPENER.test(text);
-}
-function promoteSwallowedAnswer(segments) {
-  const answers = segments.filter((s) => s.kind === "answer");
-  if (answers.length === 0) return segments;
-  const answerText = answers.map((s) => s.content).join(" ").trim();
-  if (!isFragment(answerText)) return segments;
-  const thoughts = segments.filter((s) => s.kind === "thought");
-  const richest = thoughts.reduce(
-    (best, s) => !best || s.content.length > best.content.length ? s : best,
-    null
-  );
-  if (!richest || richest.content.length <= answerText.length) return segments;
-  const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
-  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
-  return promoted;
-}
-var UNFINISHED_TAIL = /[\p{L}\p{N},]$/u;
-var LOWERCASE_OPENER = /^\p{Ll}/u;
-function lastSentenceStart(text) {
-  let cut = text.lastIndexOf("\n") + 1;
-  for (const match of text.matchAll(/[.!?](?=\s)/g)) {
-    const after = (match.index ?? 0) + 1;
-    if (after > cut) cut = after;
-  }
-  return cut;
-}
-function stitchSplitSentence(segments) {
-  const out = [...segments];
-  for (let i = 1; i < out.length; i++) {
-    const prev = out[i - 1];
-    const cur = out[i];
-    if (prev.kind !== "thought" || cur.kind !== "answer") continue;
-    if (cur.content.length <= MAX_FRAGMENT_CHARS) continue;
-    if (!LOWERCASE_OPENER.test(cur.content) || !UNFINISHED_TAIL.test(prev.content)) continue;
-    const cut = lastSentenceStart(prev.content);
-    const head = prev.content.slice(0, cut).trim();
-    out[i] = { kind: "answer", content: `${prev.content.slice(cut).trim()} ${cur.content}` };
-    if (head) {
-      out[i - 1] = { kind: "thought", content: head };
-    } else {
-      out.splice(i - 1, 1);
-      i -= 1;
-    }
-  }
-  return out;
-}
-function answerTextOf(content) {
-  return splitReasoningSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
-}
-function thoughtTextOf(content) {
-  return splitReasoningSegments(content).filter((s) => s.kind === "thought").map((s) => s.content).join("\n\n").trim();
-}
-function detailsText(details) {
-  if (!Array.isArray(details)) return "";
-  return details.map((d) => {
-    const item = d;
-    return item && (item.type === void 0 || item.type === "reasoning.text") && typeof item.text === "string" ? item.text : "";
-  }).filter(Boolean).join("\n");
-}
-function splitVendorReasoning(message) {
-  const rawContent = typeof message?.content === "string" ? message.content : "";
-  const inlineThought = thoughtTextOf(rawContent);
-  const content = inlineThought ? answerTextOf(rawContent) : rawContent;
-  const structured = [
-    typeof message?.reasoning_content === "string" ? message.reasoning_content : "",
-    typeof message?.reasoning === "string" ? message.reasoning : "",
-    detailsText(message?.reasoning_details)
-  ].map((s) => s.trim()).filter(Boolean);
-  const reasoning = [...structured, ...inlineThought ? [inlineThought] : []].join("\n\n").trim();
-  return { content, reasoning };
-}
-function canonicalReasoningText(content, reasoning) {
-  const answer = (content ?? "").trim();
-  const thought = (reasoning ?? "").trim();
-  if (!thought) return answer;
-  return answer ? `<think>${thought}</think>
-
-${answer}` : `<think>${thought}</think>`;
-}
-
-// ../packages/agent-loop/src/index.ts
-var ASK_USER_TOOL = "ask_user";
-var ASK_USER_TOOL_SPEC = {
-  type: "function",
-  function: {
-    name: ASK_USER_TOOL,
-    description: "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
-    parameters: {
-      type: "object",
-      properties: {
-        question: { type: "string", description: "The single, specific question to ask." },
-        options: {
-          type: "array",
-          description: "2\u20136 distinct, mutually-exclusive choices (unless multiSelect).",
-          items: {
-            type: "object",
-            properties: {
-              label: { type: "string", description: "Short choice text (1\u20135 words)." },
-              description: { type: "string", description: "Optional one-line explanation of this choice." }
-            },
-            required: ["label"]
-          }
-        },
-        multiSelect: { type: "boolean", description: "Allow choosing more than one option. Default false." }
-      },
-      required: ["question", "options"]
-    }
-  }
-};
-var ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
-function coerceAskUserPayload(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw;
-  const question = typeof o.question === "string" ? o.question.trim() : "";
-  const optionsIn = Array.isArray(o.options) ? o.options : [];
-  const options = optionsIn.map((it) => {
-    if (typeof it === "string") return it.trim() ? { label: it.trim() } : null;
-    if (it && typeof it === "object") {
-      const rec = it;
-      const label = typeof rec.label === "string" ? rec.label.trim() : "";
-      const description = typeof rec.description === "string" ? rec.description.trim() : void 0;
-      return label ? { label, ...description ? { description } : {} } : null;
-    }
-    return null;
-  }).filter((x) => !!x);
-  if (!question || options.length < 2) return null;
-  return { question, options, multiSelect: o.multiSelect === true };
-}
-function serializeAskUser(payload) {
-  return ["```ask-user", JSON.stringify(payload), "```"].join("\n");
-}
-function askUserBlock(args) {
-  const payload = coerceAskUserPayload(args);
-  return payload ? serializeAskUser(payload) : null;
-}
-function parseAskUser(text) {
-  if (!text || !text.includes("ask-user")) return null;
-  const body = text.match(ASK_USER_FENCE)?.[1];
-  if (!body) return null;
-  try {
-    return coerceAskUserPayload(JSON.parse(body));
-  } catch {
-    return null;
-  }
-}
-function stripAskUser(text) {
-  if (!text) return text;
-  return text.replace(ASK_USER_FENCE, "").replace(/\n{3,}/g, "\n\n").trim();
-}
-function askUserAnchorId(messageId) {
-  return `bf-ask-${messageId}`;
-}
-function selectPendingAskUser(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (!msg) continue;
-    if (msg.role === "user") return null;
-    if (msg.role !== "assistant") continue;
-    const payload = parseAskUser(msg.content);
-    if (payload) return { payload, messageId: msg.id };
-  }
-  return null;
-}
-
 // src/toolRouter.ts
 var TOOL_ROUTER_FIND = "builtin_tools_find";
 var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
@@ -4366,6 +4417,7 @@ var EMPTY_SNAPSHOT = {
 function makeCell() {
   return {
     transcript: [],
+    priorResearch: null,
     trace: [],
     running: false,
     streamingText: "",
@@ -4780,7 +4832,10 @@ async function startRun(chatId, req) {
   c.runId = runOutcomeId(chatId, Date.now());
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
-  if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
+  if (req.seed && c.transcript.length === 0) {
+    c.transcript = req.seed.slice();
+    c.priorResearch = req.priorResearch ?? null;
+  }
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
   emit(c);
   try {
@@ -5059,6 +5114,9 @@ ${turnOptimizationDirective()}`;
   if (canShip) systemPrompt = `${systemPrompt}
 
 ${selfReviewShipDirective(chatId)}`;
+  if (c.priorResearch) systemPrompt = `${systemPrompt}
+
+${c.priorResearch}`;
   const userRequest = latestUserText(convo);
   if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
     systemPrompt = `${systemPrompt}
@@ -5848,7 +5906,7 @@ function useBrainConversation(options) {
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
   const buildRequest = useCallback5(
-    (seed, userTurn) => ({
+    (seed, userTurn, priorResearch) => ({
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
       model,
@@ -5865,6 +5923,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       evermind,
       augmentSystemPrompt,
       seed,
+      priorResearch,
       userTurn,
       projectId,
       chatMode
@@ -5934,7 +5993,7 @@ ${refs}`;
           }
           return true;
         }
-        await startRun(id, buildRequest(seedFrom(messages), modelContent));
+        await startRun(id, buildRequest(seedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -5957,7 +6016,7 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    void startRun(chatId, buildRequest(seedFrom(messages.slice(0, -1)), last.content));
+    void startRun(chatId, buildRequest(seedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
   const rateMessage = useCallback5(async (msg, rating) => {
     setRatings((prev) => {
@@ -7305,7 +7364,6 @@ export {
   describeLiveStep,
   describeTool,
   detectAnnouncedButUnmadeToolCall,
-  detectRepetitionLoop,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
   dirtyPathsOf,

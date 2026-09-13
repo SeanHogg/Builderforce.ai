@@ -67,6 +67,8 @@ export interface WebviewRunStart {
   maxTokens?: number;
   reasoning?: ReasoningIntent;
   seed?: ChatCompletionMessage[];
+  /** Earlier turns' tool work, as a system-prompt block — see `BrainRunRequest.priorResearch`. */
+  priorResearch?: string | null;
   userTurn?: string | ContentPart[];
   projectId?: number | null;
   chatMode?: ChatMode;
@@ -392,6 +394,7 @@ ${p.systemPrompt}` : p.systemPrompt,
           ? { augmentSystemPrompt: (text: string) => ports.runContext!(projectId, chatId, text) }
           : {}),
         ...(p.seed ? { seed: p.seed } : {}),
+        ...(p.priorResearch ? { priorResearch: p.priorResearch } : {}),
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
         projectId: p.projectId ?? null,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
