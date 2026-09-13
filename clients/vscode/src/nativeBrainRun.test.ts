@@ -464,18 +464,26 @@ describe("a run whose tool calls keep failing", () => {
 
   it("never cuts off a long run of SUCCESSFUL calls — there is no step ceiling", async () => {
     const read = toolDef("read_file", { result: { content: "…" } });
+    // `ctx.turn` counts every request the loop makes, including a toolless auto-compaction
+    // summarizer call the history budget can interleave once a long tool loop crosses it —
+    // so the file numbering and the stop condition below track a counter of their own
+    // (real tool-bearing turns only), immune to however many summarizer calls land between
+    // them.
+    let toolTurn = 0;
     const { log, requests } = await runTurn({
       tools: [read],
       permissionMode: "acceptEdits",
-      script: (ctx) =>
-        // `turn` is 0-based: turns 0–49 call a tool, turn 50 answers.
-        ctx.toolless || ctx.turn >= 50
-          ? { text: "Done." }
-          : { toolCalls: [{ name: "read_file", args: { path: `f${ctx.turn}.ts` } }] },
+      script: (ctx) => {
+        if (ctx.toolless || toolTurn >= 50) return { text: "Done." };
+        const path = `f${toolTurn}.ts`;
+        toolTurn += 1;
+        return { toolCalls: [{ name: "read_file", args: { path } }] };
+      },
     });
-    // Fifty tool turns (past the participant's old 40-turn cap) + the model's own answer.
-    expect(requests).toHaveLength(51);
-    expect(requests.every((r) => !r.toolless)).toBe(true);
+    // Fifty tool turns (past the participant's old 40-turn cap) + the model's own answer —
+    // plus however many toolless compaction summarizer calls the history budget interleaved.
+    expect(read.calls).toHaveLength(50);
+    expect(requests.filter((r) => !r.toolless)).toHaveLength(51);
     expect(log.text).not.toContain(LABELS.dispatchHint);
   });
 

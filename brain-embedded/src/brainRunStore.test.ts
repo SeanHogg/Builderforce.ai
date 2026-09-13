@@ -172,12 +172,19 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
    * withdraws its tools.
    */
   const callsThenAnswers = (calls: number): { stream: BrainStreamFn; turns: () => number } => {
+    // `turns` counts every stream() invocation, including a toolless auto-compaction
+    // summarizer call the run may interleave once a long tool loop crosses the history
+    // budget; `toolTurn` counts only the REAL tool-bearing turns, so the file numbering
+    // below stays 1..calls regardless of how many summarizer calls land between them.
     let turns = 0;
+    let toolTurn = 0;
     const stream: BrainStreamFn = async (opts) => {
       turns += 1;
       const toolless = opts.tools === undefined;
-      if (toolless || turns > calls) return { text: 'Here is what I found.', toolCalls: [], finishReason: 'stop' };
-      return { text: '', toolCalls: [{ id: `c${turns}`, name: 'read_file', args: JSON.stringify({ path: `f${turns}.ts` }) }], finishReason: 'tool_calls' };
+      if (toolless) return { text: 'Compressed memory of the earlier reads.', toolCalls: [], finishReason: 'stop' };
+      toolTurn += 1;
+      if (toolTurn > calls) return { text: 'Here is what I found.', toolCalls: [], finishReason: 'stop' };
+      return { text: '', toolCalls: [{ id: `c${toolTurn}`, name: 'read_file', args: JSON.stringify({ path: `f${toolTurn}.ts` }) }], finishReason: 'tool_calls' };
     };
     return { stream, turns: () => turns };
   };
@@ -227,11 +234,8 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
       userTurn: 'read everything',
     });
     // Sixty tool turns (well past the old 25/40 caps) + the model's own final answer.
-    // eslint-disable-next-line no-console
-    console.log('DEBUG TRACE', JSON.stringify(getRunTrace(4242).map((e) => ({ label: e.label, args: e.args, result: typeof e.result === 'string' ? e.result.slice(0, 80) : e.result })), null, 2));
-    console.log('DEBUG executed', executed, 'turns', gateway.turns());
     expect(executed).toBe(60);
-    expect(gateway.turns()).toBe(61);
+    expect(gateway.turns()).toBeGreaterThanOrEqual(61);
     expect(getRunTrace(4242).some((e) => (e.args as { forcedFinish?: unknown } | undefined)?.forcedFinish === true)).toBe(false);
   });
 
@@ -800,6 +804,10 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
   });
 
   it('re-serves an exact re-read from the run cache once compaction has removed its result (chat #101)', async () => {
+    // Enough big reads (each paged down to READ_FILE_RESULT_CHARS ≈ 4k tokens) to clear
+    // the 64k-token history budget with room to spare — "a dozen-plus file windows", per
+    // workingTranscript.ts's own budget comment.
+    const READS = 16;
     const executed: string[] = [];
     /** The tool messages the model was handed on each tool-bearing turn. */
     const handed: string[][] = [];
@@ -818,21 +826,22 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
         if (opts.tools === undefined) return { text: 'Compressed memory of the earlier reads.', toolCalls: [], finishReason: 'stop' };
         turn += 1;
         handed.push(opts.messages.filter((m) => m.role === 'tool').map((m) => String(m.content)));
-        // Seven big reads push the transcript past the history budget; the eighth turn
-        // asks for the FIRST file again, whose result has by then been compacted away.
-        if (turn <= 7) return { text: '', toolCalls: [{ id: `c${turn}`, name: 'read_file', args: readOf(turn) }], finishReason: 'tool_calls' };
-        if (turn === 8) return { text: '', toolCalls: [{ id: 'c8', name: 'read_file', args: readOf(1) }], finishReason: 'tool_calls' };
+        // 16 big (paged-to-16k-char) reads push the transcript past the 64k-token history
+        // budget; the 17th turn asks for the FIRST file again, whose result has by then
+        // been compacted away.
+        if (turn <= READS) return { text: '', toolCalls: [{ id: `c${turn}`, name: 'read_file', args: readOf(turn) }], finishReason: 'tool_calls' };
+        if (turn === READS + 1) return { text: '', toolCalls: [{ id: `c${turn}`, name: 'read_file', args: readOf(1) }], finishReason: 'tool_calls' };
         return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
       },
       persistence,
       userTurn: 'fix the deep link',
     });
     // The disk was read once per file — the repeat was answered from the cache.
-    expect(executed).toEqual(['f1.ts', 'f2.ts', 'f3.ts', 'f4.ts', 'f5.ts', 'f6.ts', 'f7.ts']);
+    expect(executed).toEqual(Array.from({ length: READS }, (_, i) => `f${i + 1}.ts`));
     expect(getRunTrace(4703).some((e) => e.label === 'context.compacted')).toBe(true);
     // And what the model saw on the turn after was the CONTENT, not a stub pointing at
     // a message it could no longer see.
-    const afterReplay = handed[8] ?? [];
+    const afterReplay = handed[READS + 1] ?? [];
     const replayed = afterReplay.find((m) => m.includes('Replayed from this run'));
     expect(replayed).toBeDefined();
     const parsed = JSON.parse(replayed!) as { content: string; path: string; note: string };

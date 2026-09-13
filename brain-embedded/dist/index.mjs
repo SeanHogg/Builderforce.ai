@@ -2822,6 +2822,20 @@ function activityTarget(args) {
   }
   return void 0;
 }
+var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob"];
+var VISIT_QUESTION_SEPARATOR = " \u220B ";
+function visitTarget(args) {
+  const scope = activityTarget(args);
+  if (!scope) return void 0;
+  const record = args;
+  for (const key of QUESTION_KEYS) {
+    const value = record[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const question = shortenTarget(value);
+    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
+  }
+  return scope;
+}
 function toolActivity(label, args, step, startedAt) {
   const detail = activityTarget(args);
   return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
@@ -2860,7 +2874,7 @@ function callSignature(ev) {
   return `${ev.label}(${args})`;
 }
 function targetSignature(ev) {
-  const target = activityTarget(ev.args);
+  const target = visitTarget(ev.args);
   return target ? `${ev.label}:${target}` : null;
 }
 var IDLE_GAP_MS = 12e4;
@@ -3323,6 +3337,9 @@ function canonicalReadArgs(tool, args) {
   return out;
 }
 var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files"]);
+function visitedScopeIs(visited, target) {
+  return visited === target || (visited?.startsWith(`${target}${VISIT_QUESTION_SEPARATOR}`) ?? false);
+}
 function isReadOnlyShellCall(tool, args) {
   if (tool !== "run_command" || !args || typeof args !== "object") return false;
   const record = args;
@@ -3383,7 +3400,7 @@ var ReadCoverage = class _ReadCoverage {
    * circling around; the exact guard still applies).
    */
   record(tool, args) {
-    const target = activityTarget(args) ?? null;
+    const target = visitTarget(args) ?? null;
     this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
     if (!target) return null;
     const key = `${tool}:${target}`;
@@ -3447,10 +3464,10 @@ var ReadCoverage = class _ReadCoverage {
       const target = activityTarget(args);
       if (!target) return;
       for (const key of [...this.visits.keys()]) {
-        if (key.slice(key.indexOf(":") + 1) === target) this.visits.delete(key);
+        if (visitedScopeIs(key.slice(key.indexOf(":") + 1), target)) this.visits.delete(key);
       }
       for (const [key, read] of [...this.exact.entries()]) {
-        if (read.target === target || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
+        if (visitedScopeIs(read.target, target) || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
       }
       return;
     }
@@ -4542,6 +4559,145 @@ function turnOptimizationDirective() {
   ].join("\n");
 }
 
+// src/workingTranscript.ts
+var HISTORY_WINDOW = 80;
+var HISTORY_TOKEN_BUDGET = 64e3;
+var COMPACT_TAIL_TOKEN_BUDGET = 4e4;
+function estimateTokens(chars) {
+  return Math.ceil(chars / 4);
+}
+function messageTokens(m) {
+  let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
+  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
+  return estimateTokens(chars) + 4;
+}
+function windowed(convo) {
+  let w = convo.slice(-HISTORY_WINDOW);
+  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
+  if (w.length === 0) {
+    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
+  }
+  return tokenBounded(w);
+}
+function tokenBounded(w) {
+  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) return w;
+  const lastUser = w.map((m) => m.role).lastIndexOf("user");
+  let start = 0;
+  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
+    total -= messageTokens(w[start]);
+    start += 1;
+  }
+  let trimmed = w.slice(start);
+  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
+  return trimmed;
+}
+function stillInWorkingContext(state, anchor) {
+  const convo = state.transcript;
+  const idx = convo.indexOf(anchor);
+  if (idx < 0) return false;
+  if (state.compactMemo) return idx >= verbatimStart(convo, state.compactMemo.coveredEnd);
+  return windowed(convo).includes(convo[idx]);
+}
+var COMPACT_TAIL_TURNS = 8;
+var COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
+function verbatimStart(convo, from) {
+  let start = Math.max(0, Math.min(from, convo.length));
+  while (start < convo.length && convo[start].role === "tool") start += 1;
+  return start;
+}
+function compactTailStartForBudget(convo, budgetTokens) {
+  let start = convo.length;
+  let tokens2 = 0;
+  while (start > 0) {
+    const kept = convo.length - start;
+    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
+    const next = messageTokens(convo[start - 1]);
+    if (kept >= COMPACT_TAIL_TURNS && tokens2 + next > budgetTokens) break;
+    tokens2 += next;
+    start -= 1;
+  }
+  return verbatimStart(convo, start);
+}
+function pinnedDirectiveIndex(convo, tailStart) {
+  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
+}
+function assembleCompacted(systemPrompt, convo, note, coveredEnd) {
+  const tailStart = verbatimStart(convo, coveredEnd);
+  const out = [{ role: "system", content: systemPrompt }];
+  out.push({ role: "assistant", content: note });
+  const directiveIdx = pinnedDirectiveIndex(convo, tailStart);
+  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
+  out.push(...convo.slice(tailStart));
+  return out;
+}
+function renderForSummary(msgs) {
+  return msgs.map((m) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
+    return `${m.role}${calls}: ${content}`;
+  }).join("\n\n");
+}
+async function summarizeMiddle(stream, model, msgs, signal) {
+  if (msgs.length === 0) return null;
+  try {
+    const res = await stream({
+      messages: [
+        {
+          role: "system",
+          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Keep every file path, symbol name and line number the remaining work depends on, with the specific facts learned from each file \u2014 the agent no longer sees those results, so what you leave out it must read again. Be information-dense; drop pleasantries. No preamble."
+        },
+        { role: "user", content: renderForSummary(msgs) }
+      ],
+      model,
+      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
+      // Left unset, it inherited the run's full output ceiling and, on a thinking-
+      // capable model, the run's reasoning depth — the most expensive way to write a
+      // paragraph the user never sees. Bounded at ~2.5k tokens: the note is the agent's
+      // only record of every file it folds (paths, symbols, line numbers), and 1.2k was
+      // too little to carry them — the run re-read whatever the note had to leave out.
+      maxTokens: 2500,
+      reasoning: { level: "off" },
+      signal
+    });
+    const out = (res.text ?? "").trim();
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+function tokensOf(msgs) {
+  return msgs.reduce((sum, m) => sum + messageTokens(m), 0);
+}
+function fitsVerbatim(msgs, extraTokens = 0) {
+  return msgs.length <= HISTORY_WINDOW && extraTokens + tokensOf(msgs) <= HISTORY_TOKEN_BUDGET;
+}
+async function buildWorkingTranscript(state, systemPrompt, summarize, onFolded) {
+  const convo = state.transcript;
+  if (fitsVerbatim(convo)) {
+    state.compactMemo = null;
+    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const memo = state.compactMemo && state.compactMemo.coveredEnd <= convo.length ? state.compactMemo : null;
+  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), estimateTokens(memo.note.length))) {
+    return assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd);
+  }
+  const from = memo?.coveredEnd ?? 0;
+  const to = Math.max(from, compactTailStartForBudget(convo, COMPACT_TAIL_TOKEN_BUDGET));
+  const fold = memo ? [{ role: "assistant", content: memo.note }, ...convo.slice(from, to)] : convo.slice(from, to);
+  const summary = to > from ? await summarize(fold) : null;
+  if (summary == null) {
+    return memo ? assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd) : [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const note = `Compressed memory of the first ${to} message(s) of this conversation:
+${summary}`;
+  state.compactMemo = { note, coveredEnd: to };
+  onFolded(to - from);
+  return assembleCompacted(systemPrompt, convo, note, to);
+}
+
 // src/brainRunStore.ts
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
@@ -4549,7 +4705,6 @@ function provenanceMetadata(result) {
   const account = asProvenanceAccount(result.account);
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
-var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
 function accrueByoUnresolved(c, raw) {
@@ -4565,15 +4720,6 @@ function accrueProviderCap(c, raw) {
   const next = new Set(c.providerCap);
   for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
   if (next.size !== before) c.providerCap = [...next];
-}
-var HISTORY_TOKEN_BUDGET = 24e3;
-function estimateTokens(chars) {
-  return Math.ceil(chars / 4);
-}
-function messageTokens(m) {
-  let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
-  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
-  return estimateTokens(chars) + 4;
 }
 var MAX_CELLS = 50;
 var MAX_TRACE_EVENTS = 500;
@@ -4769,125 +4915,6 @@ function lastAssistantText(convo) {
     if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
   }
   return "";
-}
-function windowed(convo) {
-  let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
-  if (w.length === 0) {
-    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
-  }
-  return tokenBounded(w);
-}
-function tokenBounded(w) {
-  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
-  if (total <= HISTORY_TOKEN_BUDGET) return w;
-  const lastUser = w.map((m) => m.role).lastIndexOf("user");
-  let start = 0;
-  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
-    total -= messageTokens(w[start]);
-    start += 1;
-  }
-  let trimmed = w.slice(start);
-  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
-  return trimmed;
-}
-function stillInWorkingContext(c, anchor) {
-  const convo = c.transcript;
-  const idx = convo.indexOf(anchor);
-  if (idx < 0) return false;
-  if (c.compactMemo) return idx >= compactTailStart(convo, COMPACT_TAIL_TURNS);
-  return windowed(convo).includes(convo[idx]);
-}
-var COMPACT_TAIL_TURNS = 8;
-function compactTailStart(convo, tailTurns) {
-  let start = Math.max(0, convo.length - tailTurns);
-  while (start < convo.length && convo[start].role === "tool") start += 1;
-  return start;
-}
-function pinnedDirectiveIndex(convo, tailTurns) {
-  const tailStart = compactTailStart(convo, tailTurns);
-  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
-}
-function compactMiddleRange(convo, tailTurns) {
-  return { start: 0, end: compactTailStart(convo, tailTurns) };
-}
-function assembleCompacted(systemPrompt, convo, note, tailTurns) {
-  const tailStart = compactTailStart(convo, tailTurns);
-  const out = [{ role: "system", content: systemPrompt }];
-  out.push({ role: "assistant", content: note });
-  const directiveIdx = pinnedDirectiveIndex(convo, tailTurns);
-  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
-  out.push(...convo.slice(tailStart));
-  return out;
-}
-function renderForSummary(msgs) {
-  return msgs.map((m) => {
-    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
-    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
-    return `${m.role}${calls}: ${content}`;
-  }).join("\n\n");
-}
-async function summarizeMiddle(stream, model, msgs, signal) {
-  if (msgs.length === 0) return null;
-  try {
-    const res = await stream({
-      messages: [
-        {
-          role: "system",
-          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble."
-        },
-        { role: "user", content: renderForSummary(msgs) }
-      ],
-      model,
-      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
-      // Left unset, it inherited the run's full output ceiling and, on a thinking-
-      // capable model, the run's reasoning depth — the most expensive way to write a
-      // paragraph the user never sees. ~1.2k tokens holds a dense memory of any
-      // middle this loop compacts (the tail is 8 turns; the middle is summarised
-      // afresh at most once per 8 new turns).
-      maxTokens: 1200,
-      reasoning: { level: "off" },
-      signal
-    });
-    const out = (res.text ?? "").trim();
-    return out.length > 0 ? out : null;
-  } catch {
-    return null;
-  }
-}
-async function buildWorkingTranscript(c, systemPrompt, stream, model) {
-  const convo = c.transcript;
-  const total = convo.reduce((sum, m) => sum + messageTokens(m), 0);
-  if (total <= HISTORY_TOKEN_BUDGET) {
-    c.compactMemo = null;
-    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  const stale = !c.compactMemo || convo.length - c.compactMemo.atLen >= COMPACT_TAIL_TURNS;
-  let note = c.compactMemo?.note ?? null;
-  if (stale) {
-    const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
-    const middle = convo.slice(start, end);
-    const summary = await summarizeMiddle(stream, model, middle, c.abort?.signal);
-    if (summary != null) {
-      note = `Compressed memory of ${middle.length} earlier step(s):
-${summary}`;
-      c.compactMemo = { note, atLen: convo.length };
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "context.compacted",
-        args: { droppedMessages: middle.length },
-        result: `Compressed ${middle.length} earlier step(s) into a memory to stay within the context window.`
-      });
-      emit(c);
-    }
-  }
-  if (note == null) {
-    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  return assembleCompacted(systemPrompt, convo, note, COMPACT_TAIL_TURNS);
 }
 function resetBrainRunStore() {
   cells.clear();
@@ -5249,6 +5276,7 @@ async function runLoop(chatId, c, req) {
   const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const usedTools = /* @__PURE__ */ new Set();
+  const brokenModels = /* @__PURE__ */ new Set();
   const runMode = normalizeChatMode(req.chatMode ?? "work");
   const metadata = {
     chatId,
@@ -5520,7 +5548,7 @@ ${block}` : block : lead;
           if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
             const replayNote = `Replayed from this run's read cache: this exact ${call.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
             const visit = readCoverage.record(call.name, args);
-            const target = visit ? activityTarget(args) : void 0;
+            const target = visit ? visitTarget(args) : void 0;
             const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
             const replayed = trimToolResult(call.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
 
@@ -5546,7 +5574,7 @@ ${revisit}` : replayNote });
         const derived = readCoverage.derivedSearch(call.name, args);
         if (derived) {
           const visit = readCoverage.record(call.name, args);
-          const target = visit ? activityTarget(args) : void 0;
+          const target = visit ? visitTarget(args) : void 0;
           const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
           const served = trimToolResult(call.name, derived, { advisory: revisit });
           pendingReplay = { name: call.name, args, result: derived };
@@ -5699,7 +5727,21 @@ ${revisit}` : replayNote });
       const iter = ctx.step;
       c.streamingText = "";
       emit(c);
-      const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
+      const working = await buildWorkingTranscript(
+        c,
+        systemPrompt,
+        (msgs) => summarizeMiddle(stream, activeModel, msgs, c.abort?.signal),
+        (dropped) => {
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "message",
+            label: "context.compacted",
+            args: { droppedMessages: dropped },
+            result: `Compressed ${dropped} earlier step(s) into a memory to stay within the context window.`
+          });
+          emit(c);
+        }
+      );
       if (c.abort?.signal.aborted) throw new Error("run stopped");
       const llmStart = nowMs2();
       let firstTokenAt;
@@ -5787,20 +5829,21 @@ ${revisit}` : replayNote });
         emit(c);
       };
       try {
-        result = await request(turnRole, []);
+        result = await request(turnRole, [...brokenModels]);
       } catch (e) {
         if (c.abort?.signal.aborted) throw e;
         if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
+        brokenModels.add(e.model);
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "message",
           label: "llm.stream_interrupted",
           args: { model: e.model, step: iter },
-          result: `${e.message} \u2014 retrying this turn on another connected model.`
+          result: `${e.message} \u2014 retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`
         });
         restartTurn();
         try {
-          result = await request(turnRole, [e.model]);
+          result = await request(turnRole, [...brokenModels]);
         } catch (retryError) {
           if (c.abort?.signal.aborted) throw retryError;
           throw turnError(retryError);
@@ -5818,7 +5861,7 @@ ${revisit}` : replayNote });
         });
         restartTurn();
         try {
-          result = await request("code", []);
+          result = await request("code", [...brokenModels]);
         } catch (e) {
           if (c.abort?.signal.aborted) throw e;
           throw turnError(e);
@@ -5925,7 +5968,7 @@ ${revisit}` : replayNote });
         failures.clear(call.name, args);
         if (isReadTool) {
           const visit = readCoverage.record(call.name, args);
-          const target = visit ? activityTarget(args) : void 0;
+          const target = visit ? visitTarget(args) : void 0;
           advisory = visit && target ? revisitAdvisory(call.name, target, visit) : null;
           if (advisory) {
             pushTrace(c, {
@@ -5950,7 +5993,7 @@ ${revisit}` : replayNote });
     hooks,
     signal: c.abort?.signal,
     // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
-    // limit — see the note above `HISTORY_WINDOW`.
+    // limit — see the "no tool-iteration ceiling" note at the top of this module.
     budget: {}
   });
   if (loop.finished || loop.cancelled) return;
