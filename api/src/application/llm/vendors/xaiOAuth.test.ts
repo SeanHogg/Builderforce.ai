@@ -82,9 +82,9 @@ describe('xAI SuperGrok OAuth vendor', () => {
     expect(sent.max_output_tokens).toBeUndefined();
   });
 
-  /** System turns have no Responses role — they become `instructions`. Non-string
-   *  content must serialize, not stringify to `[object Object]`. */
-  it('folds system turns into instructions and serializes non-string content', async () => {
+  /** System turns have no Responses role — they become `instructions`. A part-array
+   *  system turn contributes its TEXT; it used to reach Grok as serialized JSON. */
+  it('folds system turns into instructions as text, whatever their content shape', async () => {
     let sent: Record<string, unknown> = {};
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
       sent = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -97,7 +97,37 @@ describe('xAI SuperGrok OAuth vendor', () => {
         { role: 'user', content: 'hi' },
       ],
     });
-    expect(sent.instructions).toBe('[{"type":"text","text":"be terse"}]');
+    expect(sent.instructions).toBe('be terse');
     expect(sent.input).toEqual([{ role: 'user', content: [{ type: 'input_text', text: 'hi' }] }]);
+  });
+
+  /** A pasted screenshot rides every later turn of the transcript. Forwarded in its
+   *  chat-completions shape it is not a Responses part, so every turn after the image
+   *  was sent to Grok as a malformed body. */
+  it('translates chat-completions text + image parts to input_text + input_image', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ id: 'resp_xai', output_text: 'OK' }), { status: 200 });
+    }));
+    await xaiOAuthModule.call({
+      apiKey: 'oauth-token', model: 'grok-4.5',
+      messages: [
+        { role: 'user', content: [
+          { type: 'text', text: 'add a collapse chevron here' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA', detail: 'high' } },
+        ] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Looking.' }] },
+        { role: 'tool', tool_call_id: 'c1', content: [{ type: 'text', text: 'file body' }] },
+      ],
+    });
+    expect(sent.input).toEqual([
+      { role: 'user', content: [
+        { type: 'input_text', text: 'add a collapse chevron here' },
+        { type: 'input_image', image_url: 'data:image/png;base64,AAA', detail: 'high' },
+      ] },
+      { role: 'assistant', content: [{ type: 'output_text', text: 'Looking.' }] },
+      { type: 'function_call_output', call_id: 'c1', output: 'file body' },
+    ]);
   });
 });

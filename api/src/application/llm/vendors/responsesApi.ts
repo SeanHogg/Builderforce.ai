@@ -77,13 +77,63 @@ function toResponsesToolChoice(toolChoice: unknown): unknown {
     : choice;
 }
 
-/** System/developer turns become the top-level `instructions` string; Responses has no
- *  system role. Non-string content is serialized rather than stringified to
+/** A chat-completions content part as callers send it (brain-embedded `ContentPart`). */
+interface ChatContentPart {
+  type?: string;
+  text?: string;
+  image_url?: { url?: string; detail?: string } | string;
+}
+
+/** The text a message's content carries: string content as-is, the `text` of a part
+ *  array joined. Anything else is serialized rather than stringified to
  *  `[object Object]`. */
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const texts = content
+      .map((part) => typeof part === 'string' ? part : (part as ChatContentPart | null)?.text)
+      .filter((text): text is string => typeof text === 'string');
+    if (texts.length > 0) return texts.join('\n');
+  }
+  return JSON.stringify(content ?? '');
+}
+
+/**
+ * Translate a message's content into Responses content parts.
+ *
+ * Chat-completions spells a multimodal turn `{ type:'text' }` + `{ type:'image_url',
+ * image_url:{ url } }`; Responses spells the same turn `input_text` + `input_image`, with
+ * `image_url` a bare string. The chat parts used to pass through verbatim, so every turn
+ * after a pasted screenshot sent a body the Responses surface does not accept, for as long
+ * as the image stayed in the transcript. Parts already in the Responses shape
+ * (`input_image`, `input_file`, …) pass through untouched. Responses has no assistant
+ * image part, so an assistant turn keeps its text only.
+ */
+function toResponsesContent(role: string, content: unknown): unknown[] {
+  const textType = role === 'assistant' ? 'output_text' : 'input_text';
+  if (typeof content === 'string') return [{ type: textType, text: content }];
+  if (!Array.isArray(content)) return [{ type: textType, text: contentText(content) }];
+  return content.flatMap((raw): unknown[] => {
+    if (typeof raw === 'string') return [{ type: textType, text: raw }];
+    const part = raw as ChatContentPart | null;
+    if (part?.type === 'text' || part?.type === 'input_text' || part?.type === 'output_text') {
+      return typeof part.text === 'string' ? [{ type: textType, text: part.text }] : [];
+    }
+    if (part?.type === 'image_url') {
+      const url = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url;
+      const detail = typeof part.image_url === 'object' ? part.image_url?.detail : undefined;
+      return url && role !== 'assistant' ? [{ type: 'input_image', image_url: url, ...(detail ? { detail } : {}) }] : [];
+    }
+    return [raw];
+  });
+}
+
+/** System/developer turns become the top-level `instructions` string; Responses has no
+ *  system role. */
 function toInstructions(messages: Array<Record<string, unknown>>): string {
   return messages
     .filter((message) => message['role'] === 'system' || message['role'] === 'developer')
-    .map((message) => typeof message['content'] === 'string' ? message['content'] : JSON.stringify(message['content'] ?? ''))
+    .map((message) => contentText(message['content'] ?? ''))
     .filter(Boolean)
     .join('\n\n') || 'You are a helpful assistant.';
 }
@@ -91,8 +141,7 @@ function toInstructions(messages: Array<Record<string, unknown>>): string {
 /**
  * Translate the remaining turns into Responses `input` items: a `tool` message becomes
  * a `function_call_output`, an assistant turn's `tool_calls` become sibling
- * `function_call` items, and text content is wrapped in the role-appropriate part type
- * (`output_text` for assistant, `input_text` otherwise).
+ * `function_call` items, and content becomes Responses parts ({@link toResponsesContent}).
  */
 function toInput(messages: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return messages
@@ -103,15 +152,13 @@ function toInput(messages: Array<Record<string, unknown>>): Array<Record<string,
         return [{
           type: 'function_call_output',
           call_id: String(message['tool_call_id'] ?? ''),
-          output: typeof message['content'] === 'string' ? message['content'] : JSON.stringify(message['content'] ?? ''),
+          output: contentText(message['content'] ?? ''),
         }];
       }
       const items: Array<Record<string, unknown>> = [];
       if (message['content'] !== undefined && message['content'] !== null && message['content'] !== '') {
-        const content = typeof message['content'] === 'string'
-          ? [{ type: role === 'assistant' ? 'output_text' : 'input_text', text: message['content'] }]
-          : message['content'];
-        items.push({ role, content });
+        const content = toResponsesContent(role, message['content']);
+        if (content.length > 0) items.push({ role, content });
       }
       if (role === 'assistant' && Array.isArray(message['tool_calls'])) {
         for (const raw of message['tool_calls']) {

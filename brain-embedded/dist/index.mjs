@@ -13,7 +13,14 @@ var DIALECTS = [
   { prefix: "<function_call>", open: /<function_call>/, close: "</function_call>", namedInOpenTag: false },
   { prefix: "<tool_use>", open: /<tool_use>/, close: "</tool_use>", namedInOpenTag: false },
   { prefix: "<invoke", open: /<invoke\s+name\s*=\s*"([^"]*)"\s*>/, close: "</invoke>", namedInOpenTag: true },
-  { prefix: "<function=", open: /<function\s*=\s*([^>]+)>/, close: "</function>", namedInOpenTag: true }
+  { prefix: "<function=", open: /<function\s*=\s*([^>]+)>/, close: "</function>", namedInOpenTag: true },
+  // Grok's own dialect, written when it drops out of native function calling:
+  // `<xai:function_call name="read_file"><parameter name="path">…</parameter></xai:function_call>`.
+  // `<function_call>` above needs the bare tag, so nothing matched it: the calls never
+  // ran, the markup reached the transcript as "narration", and Grok, seeing its own
+  // calls with no results, concluded the tools were not returning. The name is optional
+  // in the pattern so a body carrying `{"name":…}` JSON is lifted too.
+  { prefix: "<xai:function_call", open: /<xai:function_call(?:\s+name\s*=\s*"([^"]*)")?\s*>/, close: "</xai:function_call>", namedInOpenTag: true }
 ];
 function partialTailPrefix(buf, tag) {
   const max = Math.min(buf.length, tag.length - 1);
@@ -53,7 +60,7 @@ function coerceArg(raw) {
   }
 }
 var ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
-var PARAMETER_TAG = /<parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/parameter>/g;
+var PARAMETER_TAG = /<(?:xai:)?parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
 function argsFromTags(body) {
   const args = {};
   let found = false;
@@ -86,7 +93,7 @@ function parseNamedBody(name, body, seq) {
 function parseInner(inner, seq) {
   const trimmed = inner.trim();
   if (!trimmed) return null;
-  const firstArg = trimmed.search(/<arg_key>|<parameter\s/);
+  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter\s/);
   if (firstArg >= 0) {
     const name = trimmed.slice(0, firstArg).trim();
     if (!name) return null;
@@ -112,6 +119,10 @@ function parseInner(inner, seq) {
   }
   return { id: `xmltc_${seq}`, name: trimmed, args: "{}" };
 }
+var CALL_MARKUP = /<\/?(?:[\w-]+:)?(?:function_call|tool_call|tool_use|invoke)\b/i;
+function hasCallMarkup(text) {
+  return CALL_MARKUP.test(text);
+}
 var XmlToolCallFilter = class {
   buf = "";
   inside = null;
@@ -120,9 +131,10 @@ var XmlToolCallFilter = class {
   clean = "";
   calls = [];
   seq = 0;
-  /** Close the call currently being accumulated and record it. */
+  /** Close the call currently being accumulated and record it. A dialect whose name
+   *  is optional in the open tag falls back to reading the name from the body. */
   commit() {
-    const parsed = this.inside?.namedInOpenTag ? parseNamedBody(this.insideName ?? "", this.innerBuf, this.seq++) : parseInner(this.innerBuf, this.seq++);
+    const parsed = this.inside?.namedInOpenTag && this.insideName !== void 0 ? parseNamedBody(this.insideName, this.innerBuf, this.seq++) : parseInner(this.innerBuf, this.seq++);
     if (parsed) this.calls.push(parsed);
     this.innerBuf = "";
     this.inside = null;
@@ -2067,6 +2079,7 @@ function targetSignature(ev) {
   const target = activityTarget(ev.args);
   return target ? `${ev.label}:${target}` : null;
 }
+var IDLE_GAP_MS = 12e4;
 function computeRunProgress(events, messages = []) {
   const tools = events.filter((e) => e.category === "tool");
   const seenCalls = /* @__PURE__ */ new Set();
@@ -2108,20 +2121,22 @@ function computeRunProgress(events, messages = []) {
   let modelMs = 0;
   let toolMs = 0;
   let slowestStep = null;
-  let first = Number.POSITIVE_INFINITY;
-  let last = Number.NEGATIVE_INFINITY;
+  const timed = [];
   for (const ev of events) {
-    const t = Date.parse(ev.ts);
-    if (Number.isFinite(t)) {
-      first = Math.min(first, t);
-      last = Math.max(last, t);
-    }
     const ms = typeof ev.durationMs === "number" && Number.isFinite(ev.durationMs) ? ev.durationMs : 0;
+    const t = Date.parse(ev.ts);
+    if (Number.isFinite(t)) timed.push({ t, ms });
     if (ev.category === "llm") modelMs += ms;
     else if (ev.category === "tool") toolMs += ms;
     if (ms > 0 && (!slowestStep || ms > slowestStep.ms)) slowestStep = { label: ev.label, ms };
   }
-  const wallClockMs = Number.isFinite(first) && Number.isFinite(last) && last > first ? last - first : 0;
+  timed.sort((a, b) => a.t - b.t);
+  let idleMs = 0;
+  for (let i = 1; i < timed.length; i++) {
+    const uncovered = timed[i].t - timed[i - 1].t - timed[i].ms;
+    if (uncovered > IDLE_GAP_MS) idleMs += uncovered;
+  }
+  const wallClockMs = timed.length > 1 ? timed[timed.length - 1].t - timed[0].t : 0;
   const editIntent = hasEditIntent(messages);
   const didWork = tools.length > 0;
   const noEffect = editIntent && didWork && mutationsSucceeded === 0;
@@ -2142,6 +2157,7 @@ function computeRunProgress(events, messages = []) {
     noEffect,
     spinning,
     wallClockMs,
+    idleMs,
     modelMs,
     toolMs,
     slowestStep
@@ -2179,8 +2195,9 @@ function formatRunProgress(p) {
     lines.push(`Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded.`);
   }
   if (p.wallClockMs > 0) {
+    const active = Math.max(0, p.wallClockMs - p.idleMs);
     lines.push(
-      `Time: ${progressDuration(p.wallClockMs)} wall clock \xB7 ${progressDuration(p.modelMs)} in the model \xB7 ${progressDuration(p.toolMs)} in tools${p.slowestStep ? ` \xB7 slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ""}`
+      `Time: ${progressDuration(active)} wall clock \xB7 ${progressDuration(p.modelMs)} in the model \xB7 ${progressDuration(p.toolMs)} in tools${p.slowestStep ? ` \xB7 slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ""}${p.idleMs > 0 ? ` \xB7 ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ""}`
     );
   }
   return lines;
@@ -2194,6 +2211,56 @@ function runProgressVerdict(p) {
   const effect = p.noEffect ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : " \u2014 it never attempted one"}, so nothing was actually modified. ` : "";
   const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the repetition, not its cause. ${streak && p.longestStreak && p.longestStreak.failed > 0 ? "A call repeated back-to-back after FAILING is the model ignoring the error it was given: the failure text usually names the exact change to make (a `repo`, a path, a missing argument). Check that the tool result reached the model un-truncated, and that the repeated-failure advisory fired; if it did and the model still repeated the call, the model is not reading tool results \u2014 switch models for this run." : streak ? "A call repeated back-to-back after SUCCEEDING is the model not retaining the answer it already has: the result was truncated, or too large to keep in the transcript. Check the truncated-results count above, and shrink or page that result rather than the transcript." : "Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models."}` : 'Check the "Answered from memory" line first \u2014 a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
   return `${loop}${effect}${remedy}`;
+}
+
+// src/modelScorecard.ts
+var SILENT_TURNS_AT = 3;
+function modelOf(ev) {
+  const m = ev.args?.model;
+  return typeof m === "string" && m && m !== "default" ? m : null;
+}
+function modelScorecard(events) {
+  const byModel = /* @__PURE__ */ new Map();
+  const row = (model) => {
+    let score = byModel.get(model);
+    if (!score) {
+      score = { model, turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0 };
+      byModel.set(model, score);
+    }
+    return score;
+  };
+  for (const ev of events) {
+    if (ev.label !== "llm.complete") continue;
+    const model = modelOf(ev);
+    if (!model) continue;
+    if (ev.category === "error") {
+      row(model).failures += 1;
+      continue;
+    }
+    if (ev.category !== "llm") continue;
+    const score = row(model);
+    const args = ev.args;
+    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
+    score.turns += 1;
+    score.toolCalls += calls;
+    if (calls === 0 && (ev.textChars ?? 0) > 0) score.textOnlyTurns += 1;
+    if (args?.unliftedCallMarkup === true) score.unliftedMarkupTurns += 1;
+  }
+  return [...byModel.values()];
+}
+function formatModelScorecard(scores) {
+  const markup = scores.some((s) => s.unliftedMarkupTurns > 0);
+  if (scores.length < 2 && !markup) return [];
+  const anyActed = scores.some((s) => s.toolCalls > 0);
+  const lines = ["Per model:"];
+  for (const s of scores) {
+    const parts = [`${s.turns} turn(s)`, `${s.toolCalls} tool call(s)`];
+    if (s.textOnlyTurns) parts.push(`${s.textOnlyTurns} text-only`);
+    if (s.failures) parts.push(`${s.failures} failed`);
+    const flag = s.unliftedMarkupTurns ? ` \xB7 \u26A0 ${s.unliftedMarkupTurns} turn(s) wrote a tool call as MARKUP that no parser lifted, so the call never ran. The model tried to act; this is a parser gap, not a refusal.` : scores.length > 1 && anyActed && s.toolCalls === 0 && s.turns >= SILENT_TURNS_AT ? " \xB7 \u26A0 made NO tool calls while another model in this run did: this model is not emitting structured calls on its route." : "";
+    lines.push(`  \u2022 ${s.model}: ${parts.join(" \xB7 ")}${flag}`);
+  }
+  return lines;
 }
 
 // src/readOnlyShell.ts
@@ -2972,6 +3039,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   }
   const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => ({ label: e.label, message: errorMessageOf(e) }));
   const modelsUsed = modelsUsedInTrace(events);
+  const modelScores = modelScorecard(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
   const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
@@ -3007,6 +3075,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     pagedReadWindows,
     largestToolResult,
     modelsUsed,
+    modelScores,
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
@@ -3077,6 +3146,7 @@ function formatBrainDiagnostics(d) {
       `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : " \xB7 recovered"}`
     );
   }
+  lines.push(...formatModelScorecard(d.modelScores ?? []));
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
@@ -5398,7 +5468,11 @@ ${revisit}` : replayNote });
           // only ever carried the registry-wide total.
           advertisedTools: advertised.length,
           catalogTools: allTools?.length ?? 0,
-          ...narratedUnadvertised.length ? { narratedUnadvertised } : {}
+          ...narratedUnadvertised.length ? { narratedUnadvertised } : {},
+          // The stream filter strips every call it lifts, so call markup still IN the text
+          // is a dialect it does not know: the model tried to act and the call never ran.
+          // Recorded so a copied report says "parser gap" instead of "won't call tools".
+          ...result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {}
         },
         // Structured diagnostics fields — the A-vs-B triage reads these directly.
         usage: result.usage,

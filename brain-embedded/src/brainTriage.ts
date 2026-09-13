@@ -14,6 +14,7 @@ import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
+import { formatModelScorecard, modelScorecard, type ModelScore } from './modelScorecard';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { READ_FILE_TOOL } from './toolResultBudget';
 
@@ -522,6 +523,8 @@ export interface BrainDiagnostics {
   errorSteps: { label: string; message: string }[];
   /** Distinct models that actually answered, first-seen order. */
   modelsUsed: string[];
+  /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
+  modelScores: ModelScore[];
   /** Distinct Evermind/SSM artifacts among them. */
   evermindUsed: string[];
   /** Turns where the resolved model differed from what was requested. */
@@ -743,6 +746,7 @@ export function computeBrainDiagnostics(
     .map((e) => ({ label: e.label, message: errorMessageOf(e) }));
 
   const modelsUsed = modelsUsedInTrace(events);
+  const modelScores = modelScorecard(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
 
@@ -823,6 +827,7 @@ export function computeBrainDiagnostics(
     pagedReadWindows,
     largestToolResult,
     modelsUsed,
+    modelScores,
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
@@ -944,6 +949,9 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
       `Stall handling: ${d.stallRecoveries} re-prompt(s) · ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? ' · GAVE UP (the stall survived every attempt)' : ' · recovered'}`,
     );
   }
+  // WHICH model did what. "Models used: a, b" cannot say that one of them never called
+  // a tool, or that its calls were written in markup nothing parsed; these lines can.
+  lines.push(...formatModelScorecard(d.modelScores ?? []));
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(', ')}`);

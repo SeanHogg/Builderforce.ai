@@ -1,3 +1,45 @@
+## ✅ RESOLVED 2026-09-13 — Grok's text tool calls run, Grok 4.6 by default, and diagnostics name the model that stalled
+
+Reported as "why isn't the VSIX working for Grok?" from chat #104 (qwen3.8-max plus grok-4.5). The
+first message made 46 tool calls and no edit. On the follow-up ("Close this task") the run made
+ZERO tool calls: about ten "Reading…/Retrying…" turns, then "file and shell tools aren't
+returning in this session".
+
+- **Grok's own call dialect was never lifted** (`brain-embedded/src/xmlToolCalls.ts`). When Grok
+  drops out of native function calling it writes `<xai:function_call name="…"><parameter
+  name="…">…</parameter></xai:function_call>`, the format its system prompt teaches and xAI's
+  decoding grammar enforces. None of the five inline dialects matched the namespaced tag, so the
+  call never ran. Grok then saw its own calls come back with no result and concluded the tools
+  were down. The dialect is added (name optional, JSON body accepted), and `<xai:parameter>`
+  children parse too.
+- **Unknown call markup is now a recorded fact.** `hasCallMarkup` flags call-shaped markup still
+  in a turn's clean text, meaning a dialect nothing lifted. The run loop stamps it on the turn
+  (`llm.complete` `args.unliftedCallMarkup`), so the next unknown dialect shows up as a report line
+  instead of a model that "won't call tools".
+- **Chat-completions content parts reached the Responses API untranslated**
+  (`api/…/vendors/responsesApi.ts`, used by `xai-oauth` and `openai-codex`). `{type:'text'}` /
+  `{type:'image_url'}` parts went through verbatim, while xAI's schema accepts only `input_text` /
+  `input_image` with a string `image_url`. So every turn after a pasted screenshot sent a
+  malformed body. A part-array system turn also reached `instructions` as serialized JSON. Both
+  are now translated (`toResponsesContent`, `contentText`). This run recorded no failed completion,
+  so the defect did not visibly break chat #104.
+- **Grok 4.6 is the default** (`xaiOAuth.ts` catalog, `modelPool.ts` flagships, the direct `xai`
+  catalog, the workflow step default). xAI shipped grok-4.6 in August 2026 and its docs recommend
+  it for code. grok-4.5 stays catalogued, so a pinned choice still routes.
+- **Diagnostics: per-model scorecard** (`brain-embedded/src/modelScorecard.ts`, rendered by
+  `formatBrainDiagnostics`). "Models used: a, b" could not say that one model never called a tool.
+  The block now lists turns, tool calls and text-only turns per model. It flags a model that made
+  no calls while another model in the run did, and a model whose calls were written as markup
+  nothing parsed.
+- **Diagnostics: idle time is not run time** (`runProgress.ts` `idleMs`). A chat's trace spans every
+  message in it, so a follow-up sent hours later reported "191m wall clock · 8m in the model". An
+  uncovered gap between steps longer than two minutes is now reported as waiting on the user and
+  excluded.
+- Tests: `modelScorecard.test.ts` (new, 5), `xmlToolCalls.test.ts` (+5), `runProgress.test.ts` (+2),
+  `xaiOAuth.test.ts` (image and system-part cases). The api vendor/pool suites (241) and
+  brain-embedded (646) pass, and both typecheck clean. api 2026.9.27 · brain-embedded 2026.9.17 ·
+  VSIX 2026.9.51.
+
 ## ✅ RESOLVED 2026-09-13 — The Room roster compiles again (and keeps its new collapse chevron)
 
 Commit 27b587187 ("Chevron") replaced `frontend/src/components/creation-canvas/room/RoomRoster.tsx`

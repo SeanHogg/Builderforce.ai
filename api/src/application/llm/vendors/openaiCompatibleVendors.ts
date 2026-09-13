@@ -95,8 +95,9 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   {
     id: 'xai', brand: 'xAI', apiKeyEnv: 'XAI_API_KEY',
     baseUrl: 'https://api.x.ai/v1/chat/completions',
-    // grok-4.5 is the same model the SuperGrok subscription route (xaiOAuth) catalogues ULTRA.
-    models: ['ULTRA:grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
+    // The same ids the SuperGrok subscription route (xaiOAuth) catalogues ULTRA: grok-4.6
+    // (xAI's current flagship) leads, grok-4.5 stays routable for a pinned choice.
+    models: ['ULTRA:grok-4.6', 'ULTRA:grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
   },
   {
     id: 'perplexity', brand: 'Perplexity', apiKeyEnv: 'PERPLEXITY_API_KEY',

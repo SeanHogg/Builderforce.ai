@@ -277,7 +277,7 @@ const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: s
   anthropic: { agentic: 'claude-opus-5', chat: 'claude-sonnet-5' },
   openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
   'openai-codex': { agentic: 'openai-codex/gpt-5.6-sol', chat: 'openai-codex/gpt-5.6-sol' },
-  'xai-oauth': { agentic: 'xai-oauth/grok-4.5', chat: 'xai-oauth/grok-4.5' },
+  'xai-oauth': { agentic: 'xai-oauth/grok-4.6', chat: 'xai-oauth/grok-4.6' },
   googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
   meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
   moonshot:  { agentic: 'direct/moonshot/kimi-k2.5', chat: 'direct/moonshot/kimi-k2.5' },
@@ -289,7 +289,7 @@ const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: s
   'kimi-code': { agentic: 'direct/kimi-code/kimi-for-coding', chat: 'direct/kimi-code/kimi-for-coding' },
   qwen:      { agentic: 'direct/qwen/qwen3.8-max', chat: 'direct/qwen/qwen3.7-plus' },
   minimax:   { agentic: 'direct/minimax/MiniMax-M1', chat: 'direct/minimax/MiniMax-Text-01' },
-  xai:       { agentic: 'direct/xai/grok-4.5', chat: 'direct/xai/grok-4.5' },
+  xai:       { agentic: 'direct/xai/grok-4.6', chat: 'direct/xai/grok-4.6' },
 };
 
 function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {

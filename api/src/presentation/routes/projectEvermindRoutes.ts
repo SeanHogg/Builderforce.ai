@@ -570,7 +570,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
       // would 503 forever with nothing to self-correct it (see isRoutableModel).
       if (!isRoutableModel(model)) {
         return c.json({
-          error: `'${model}' is not a routable model id. Use a catalog id or an explicit vendor prefix (e.g. 'direct/xai/grok-4.5', 'xai-oauth/grok-4.5').`,
+          error: `'${model}' is not a routable model id. Use a catalog id or an explicit vendor prefix (e.g. 'direct/xai/grok-4.6', 'xai-oauth/grok-4.6').`,
         }, 400);
       }
       // Setting a frontier teacher IS frontier use — gate it on frontier access

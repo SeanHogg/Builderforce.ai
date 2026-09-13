@@ -167,12 +167,27 @@ export interface RunProgress {
   spinning: boolean;
   /** Wall-clock span of the recorded run, first step to last (ms). */
   wallClockMs: number;
+  /**
+   * Time inside that span the run was WAITING rather than working (ms): the user
+   * between two messages, or an `ask_user` answer. A chat's trace spans every message
+   * in it, so without this a follow-up sent hours later reported "191m wall clock ·
+   * 8m in the model", which reads as three hours lost inside the run.
+   */
+  idleMs: number;
   /** Measured time inside model completions / inside tools (ms). */
   modelMs: number;
   toolMs: number;
   /** The single slowest step, whatever kind — usually the one worth fixing. */
   slowestStep: { label: string; ms: number } | null;
 }
+
+/**
+ * An uncovered gap between two steps longer than this is the run WAITING, not working.
+ * No step of the loop leaves time unaccounted for this long: a completion or a tool
+ * call carries its own duration, so only a person (a new message, an `ask_user`
+ * answer) opens a gap this wide.
+ */
+const IDLE_GAP_MS = 120_000;
 
 /** Compute the progress/repetition picture for a recorded run. Pure. */
 export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMessage[] = []): RunProgress {
@@ -229,24 +244,29 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
   const revisitRatio = targetedCalls > 0 ? revisits / targetedCalls : 0;
 
   // Timing. `durationMs` is recorded per step; the wall clock comes from the
-  // timestamps, so unmeasured steps (and the gaps between them) still count.
+  // timestamps, so unmeasured steps (and the gaps between them) still count, except
+  // IDLE gaps. A step is stamped when it COMPLETES, so the part of the gap before it
+  // that its own duration does not cover is time in which nothing ran; past
+  // IDLE_GAP_MS that is the run waiting on a person, not working.
   let modelMs = 0;
   let toolMs = 0;
   let slowestStep: { label: string; ms: number } | null = null;
-  let first = Number.POSITIVE_INFINITY;
-  let last = Number.NEGATIVE_INFINITY;
+  const timed: Array<{ t: number; ms: number }> = [];
   for (const ev of events) {
-    const t = Date.parse(ev.ts);
-    if (Number.isFinite(t)) {
-      first = Math.min(first, t);
-      last = Math.max(last, t);
-    }
     const ms = typeof ev.durationMs === 'number' && Number.isFinite(ev.durationMs) ? ev.durationMs : 0;
+    const t = Date.parse(ev.ts);
+    if (Number.isFinite(t)) timed.push({ t, ms });
     if (ev.category === 'llm') modelMs += ms;
     else if (ev.category === 'tool') toolMs += ms;
     if (ms > 0 && (!slowestStep || ms > slowestStep.ms)) slowestStep = { label: ev.label, ms };
   }
-  const wallClockMs = Number.isFinite(first) && Number.isFinite(last) && last > first ? last - first : 0;
+  timed.sort((a, b) => a.t - b.t);
+  let idleMs = 0;
+  for (let i = 1; i < timed.length; i++) {
+    const uncovered = timed[i]!.t - timed[i - 1]!.t - timed[i]!.ms;
+    if (uncovered > IDLE_GAP_MS) idleMs += uncovered;
+  }
+  const wallClockMs = timed.length > 1 ? timed[timed.length - 1]!.t - timed[0]!.t : 0;
 
   const editIntent = hasEditIntent(messages);
   const didWork = tools.length > 0;
@@ -273,6 +293,7 @@ export function computeRunProgress(events: BrainTraceEvent[], messages: BrainMes
     noEffect,
     spinning,
     wallClockMs,
+    idleMs,
     modelMs,
     toolMs,
     slowestStep,
@@ -333,9 +354,11 @@ export function formatRunProgress(p: RunProgress): string[] {
   }
 
   if (p.wallClockMs > 0) {
+    const active = Math.max(0, p.wallClockMs - p.idleMs);
     lines.push(
-      `Time: ${progressDuration(p.wallClockMs)} wall clock · ${progressDuration(p.modelMs)} in the model · ${progressDuration(p.toolMs)} in tools`
-      + `${p.slowestStep ? ` · slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ''}`,
+      `Time: ${progressDuration(active)} wall clock · ${progressDuration(p.modelMs)} in the model · ${progressDuration(p.toolMs)} in tools`
+      + `${p.slowestStep ? ` · slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ''}`
+      + `${p.idleMs > 0 ? ` · ${progressDuration(p.idleMs)} waiting on the user between turns, excluded (span ${progressDuration(p.wallClockMs)})` : ''}`,
     );
   }
 

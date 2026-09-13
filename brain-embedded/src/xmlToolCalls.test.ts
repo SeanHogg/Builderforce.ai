@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
+import { XmlToolCallFilter, extractXmlToolCalls, hasCallMarkup } from './xmlToolCalls';
 
 /** Feed a string in fixed-size chunks to exercise the split-across-deltas paths. */
 function streamInChunks(raw: string, size: number): { text: string; calls: ReturnType<XmlToolCallFilter['toolCalls']> } {
@@ -146,5 +146,48 @@ describe('XmlToolCallFilter — additional inline dialects', () => {
     const { text, toolCalls } = extractXmlToolCalls(raw);
     expect(text).toBe(raw);
     expect(toolCalls).toEqual([]);
+  });
+});
+
+describe('XmlToolCallFilter — Grok <xai:function_call>', () => {
+  /** Grok's own dialect (the format its system prompt teaches). Unlifted, the call
+   *  never ran and Grok, seeing its calls come back with nothing, concluded the tools
+   *  were down. */
+  it('lifts <xai:function_call name="…"> with <parameter> arguments', () => {
+    const raw = 'Reading the roster.<xai:function_call name="read_file">\n<parameter name="path">frontend/src/room/RoomRoster.tsx</parameter>\n<parameter name="offset">1</parameter>\n</xai:function_call>';
+    const { text, toolCalls } = extractXmlToolCalls(raw);
+    expect(text).toBe('Reading the roster.');
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0].name).toBe('read_file');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ path: 'frontend/src/room/RoomRoster.tsx', offset: 1 });
+  });
+
+  it('accepts namespaced <xai:parameter> children', () => {
+    const { toolCalls } = extractXmlToolCalls('<xai:function_call name="search_code"><xai:parameter name="query">rosterHead</xai:parameter></xai:function_call>');
+    expect(toolCalls[0].name).toBe('search_code');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ query: 'rosterHead' });
+  });
+
+  it('reads the name from a JSON body when the open tag carries none', () => {
+    const { toolCalls } = extractXmlToolCalls('<xai:function_call>{"name":"list_files","arguments":{"path":"src"}}</xai:function_call>');
+    expect(toolCalls[0].name).toBe('list_files');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ path: 'src' });
+  });
+
+  it('holds back an <xai:function_call open tag split across chunks', () => {
+    const f = new XmlToolCallFilter();
+    let visible = f.push('Checking.<xai:function_ca');
+    visible += f.push('ll name="git_status"></xai:function_call> done');
+    visible += f.flush();
+    expect(visible).toBe('Checking. done');
+    expect(f.toolCalls().map((c) => c.name)).toEqual(['git_status']);
+  });
+});
+
+describe('hasCallMarkup', () => {
+  it('flags call markup of a dialect the filter does not lift, and nothing else', () => {
+    expect(hasCallMarkup('<acme:tool_call>{"name":"x"}</acme:tool_call>')).toBe(true);
+    expect(hasCallMarkup('I will read the file.')).toBe(false);
+    expect(hasCallMarkup('Use <div> for layout and compare a < b.')).toBe(false);
   });
 });

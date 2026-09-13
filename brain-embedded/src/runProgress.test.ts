@@ -281,6 +281,29 @@ describe('formatRunProgress', () => {
     expect(lines).toContain('NOTHING WAS CHANGED');
     expect(lines).toContain('Time:');
   });
+
+  /** A follow-up sent hours later: a chat's trace spans both messages, and the gap
+   *  between them was reported as run time ("191m wall clock · 8m in the model"). */
+  it("excludes the wait for the user's next message from the wall clock", () => {
+    const at = (ms: number): string => new Date(ms).toISOString();
+    const threeHours = 3 * 3_600_000;
+    const events: BrainTraceEvent[] = [
+      { ts: at(10_000), category: 'llm', label: 'llm.complete', durationMs: 10_000, args: { model: 'kimi', toolCalls: 0 } },
+      { ts: at(threeHours + 20_000), category: 'llm', label: 'llm.complete', durationMs: 20_000, args: { model: 'kimi', toolCalls: 1 } },
+      { ts: at(threeHours + 25_000), category: 'tool', label: 'read_file', durationMs: 5_000, args: { path: 'a.ts' }, result: { ok: true } },
+    ];
+    const p = computeRunProgress(events);
+    expect(p.wallClockMs).toBe(threeHours + 15_000);
+    expect(p.idleMs).toBe(threeHours - 10_000);
+    const time = formatRunProgress(p).find((l) => l.startsWith('Time:'))!;
+    expect(time).toContain('Time: 25s wall clock');
+    expect(time).toContain('waiting on the user between turns, excluded');
+  });
+
+  it('counts no idle time for a run whose steps follow one another', () => {
+    const { events, messages } = spinningRun();
+    expect(computeRunProgress(events, messages).idleMs).toBe(0);
+  });
 });
 
 describe('the verdict this replaced', () => {

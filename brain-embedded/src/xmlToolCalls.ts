@@ -10,6 +10,7 @@
  *   <tool_use>delete_task {"id":75}</tool_use>
  *   <invoke name="delete_task"><parameter name="id">75</parameter></invoke>
  *   <function=delete_task>{"id":75}</function>
+ *   <xai:function_call name="delete_task"><parameter name="id">75</parameter></xai:function_call>
  *
  * Left untouched that markup (a) renders as literal tags in the chat bubble — the
  * "garbled reply" symptom — and (b), worse, means the call NEVER executes, because
@@ -53,6 +54,13 @@ const DIALECTS: Dialect[] = [
   { prefix: '<tool_use>', open: /<tool_use>/, close: '</tool_use>', namedInOpenTag: false },
   { prefix: '<invoke', open: /<invoke\s+name\s*=\s*"([^"]*)"\s*>/, close: '</invoke>', namedInOpenTag: true },
   { prefix: '<function=', open: /<function\s*=\s*([^>]+)>/, close: '</function>', namedInOpenTag: true },
+  // Grok's own dialect, written when it drops out of native function calling:
+  // `<xai:function_call name="read_file"><parameter name="path">…</parameter></xai:function_call>`.
+  // `<function_call>` above needs the bare tag, so nothing matched it: the calls never
+  // ran, the markup reached the transcript as "narration", and Grok, seeing its own
+  // calls with no results, concluded the tools were not returning. The name is optional
+  // in the pattern so a body carrying `{"name":…}` JSON is lifted too.
+  { prefix: '<xai:function_call', open: /<xai:function_call(?:\s+name\s*=\s*"([^"]*)")?\s*>/, close: '</xai:function_call>', namedInOpenTag: true },
 ];
 
 /**
@@ -109,7 +117,8 @@ function coerceArg(raw: string): unknown {
 }
 
 const ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
-const PARAMETER_TAG = /<parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/parameter>/g;
+/** `<parameter name="…">`, or Grok's namespaced `<xai:parameter name="…">`. */
+const PARAMETER_TAG = /<(?:xai:)?parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
 
 /**
  * Pull key/value arguments out of a body written in either tag style
@@ -157,7 +166,7 @@ function parseInner(inner: string, seq: number): ParsedXmlToolCall | null {
 
   // Primary format: `name<arg_key>k</arg_key><arg_value>v</arg_value>…`, or the
   // same shape with `<parameter name="k">v</parameter>`.
-  const firstArg = trimmed.search(/<arg_key>|<parameter\s/);
+  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter\s/);
   if (firstArg >= 0) {
     const name = trimmed.slice(0, firstArg).trim();
     if (!name) return null;
@@ -188,6 +197,20 @@ function parseInner(inner: string, seq: number): ParsedXmlToolCall | null {
   return { id: `xmltc_${seq}`, name: trimmed, args: '{}' };
 }
 
+/** Call-shaped markup of any dialect, known or not, namespaced or bare. */
+const CALL_MARKUP = /<\/?(?:[\w-]+:)?(?:function_call|tool_call|tool_use|invoke)\b/i;
+
+/**
+ * Does `text` still carry tool-call markup? The filter strips every call it lifts, so
+ * a match in a turn's CLEAN text is a dialect this module does not know: the model
+ * tried to call a tool and nothing ran. The run loop records it per turn and the
+ * diagnostics name it, so the next unknown dialect shows up as one report line instead
+ * of a run that "won't call tools".
+ */
+export function hasCallMarkup(text: string): boolean {
+  return CALL_MARKUP.test(text);
+}
+
 /**
  * Stateful streaming filter. Feed `push(delta)`; it returns the clean text safe
  * to display now (markup withheld). Call `flush()` once at end-of-stream.
@@ -201,10 +224,11 @@ export class XmlToolCallFilter {
   private calls: ParsedXmlToolCall[] = [];
   private seq = 0;
 
-  /** Close the call currently being accumulated and record it. */
+  /** Close the call currently being accumulated and record it. A dialect whose name
+   *  is optional in the open tag falls back to reading the name from the body. */
   private commit(): void {
-    const parsed = this.inside?.namedInOpenTag
-      ? parseNamedBody(this.insideName ?? '', this.innerBuf, this.seq++)
+    const parsed = this.inside?.namedInOpenTag && this.insideName !== undefined
+      ? parseNamedBody(this.insideName, this.innerBuf, this.seq++)
       : parseInner(this.innerBuf, this.seq++);
     if (parsed) this.calls.push(parsed);
     this.innerBuf = '';

@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.51] — Grok acts instead of narrating
+
+- **Grok's tool calls run.** Grok sometimes writes a tool call as text in its own `<xai:function_call>` format instead of making a native call. The extension now reads that format and runs the call. Before, the call was dropped: Grok said "Reading the file…", got nothing back, and eventually told you the tools weren't returning.
+- **Grok 4.6 by default.** A connected SuperGrok account now runs xAI's current model, the one xAI recommends for code. Grok 4.5 is still available if you pinned it.
+- **Screenshots reach Grok in the format its API expects.** A pasted image is sent as an image part on the first turn and on every turn after it.
+- **Diagnostics name the model that stalled.** "Copy chat diagnostics" now shows what each model did: the turns it served, the tool calls it made, and the turns it only wrote text. It flags a model that never called a tool while another model in the same run did, and a turn whose call was written in a format nothing recognised. Time spent waiting for your next message no longer counts as run time.
+
 ## [2026.9.48] — Choose who answers, not just who you ask
 
 - **"Acting as" is in the editor.** The chat composer now lets you choose who the Brain answers as: your default coding assistant, a Website, Mobile, Web + Mobile, Evermind, Fine-tune or Voice persona, or any agent assigned to the Brain in your workspace. Until now that choice existed only on the web. The persona is added on top of what the editor already tells the model about your workspace, files and tools, so a Mobile persona changes how it builds, not where it thinks your code lives.

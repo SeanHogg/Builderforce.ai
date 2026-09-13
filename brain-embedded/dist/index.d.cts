@@ -1199,6 +1199,7 @@ declare function toolSpecsFor(actions: readonly BrainAction[]): BrainToolSpec[];
  *   <tool_use>delete_task {"id":75}</tool_use>
  *   <invoke name="delete_task"><parameter name="id">75</parameter></invoke>
  *   <function=delete_task>{"id":75}</function>
+ *   <xai:function_call name="delete_task"><parameter name="id">75</parameter></xai:function_call>
  *
  * Left untouched that markup (a) renders as literal tags in the chat bubble — the
  * "garbled reply" symptom — and (b), worse, means the call NEVER executes, because
@@ -1233,7 +1234,8 @@ declare class XmlToolCallFilter {
     private clean;
     private calls;
     private seq;
-    /** Close the call currently being accumulated and record it. */
+    /** Close the call currently being accumulated and record it. A dialect whose name
+     *  is optional in the open tag falls back to reading the name from the body. */
     private commit;
     /** Feed a content delta; returns clean (markup-free) text to emit now. */
     push(delta: string): string;
@@ -1725,6 +1727,13 @@ interface RunProgress {
     spinning: boolean;
     /** Wall-clock span of the recorded run, first step to last (ms). */
     wallClockMs: number;
+    /**
+     * Time inside that span the run was WAITING rather than working (ms): the user
+     * between two messages, or an `ask_user` answer. A chat's trace spans every message
+     * in it, so without this a follow-up sent hours later reported "191m wall clock ·
+     * 8m in the model", which reads as three hours lost inside the run.
+     */
+    idleMs: number;
     /** Measured time inside model completions / inside tools (ms). */
     modelMs: number;
     toolMs: number;
@@ -1751,6 +1760,38 @@ declare function formatRunProgress(p: RunProgress): string[];
  * must be sent at the real fault. Null when neither condition holds.
  */
 declare function runProgressVerdict(p: RunProgress): string | null;
+
+/**
+ * Which model did what: the per-model half of the Brain diagnostics.
+ *
+ * An auto-routed run is served by more than one model (the planner, the coder, a
+ * failover after a stall), and the report used to name them only as a set:
+ * "Models used: qwen3.8-max, grok-4.5". A run where one of them never made a single
+ * tool call read exactly like a run where both worked, so "why isn't Grok working"
+ * could not be answered from a copied report at all. This scores each model on the
+ * turns it actually served, from the `llm` steps the run loop records.
+ *
+ * Pure over the recorded trace, like `brainTriage.ts` and `runProgress.ts`, so every
+ * copy surface renders the identical lines.
+ */
+
+/** What one model did across the turns it served. */
+interface ModelScore {
+    model: string;
+    /** Completions this model answered. */
+    turns: number;
+    /** Structured tool calls it emitted across them. */
+    toolCalls: number;
+    /** Turns that produced text and no tool call: a final answer, or a narrated step. */
+    textOnlyTurns: number;
+    /**
+     * Turns whose text still held tool-call markup that no inline dialect lifted. The
+     * model tried to call a tool and the parser missed it, so the call never ran.
+     */
+    unliftedMarkupTurns: number;
+    /** Completions against this model that failed outright. */
+    failures: number;
+}
 
 /**
  * What the run is doing RIGHT NOW — the live activity value.
@@ -2122,6 +2163,8 @@ interface BrainDiagnostics {
     }[];
     /** Distinct models that actually answered, first-seen order. */
     modelsUsed: string[];
+    /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
+    modelScores: ModelScore[];
     /** Distinct Evermind/SSM artifacts among them. */
     evermindUsed: string[];
     /** Turns where the resolved model differed from what was requested. */

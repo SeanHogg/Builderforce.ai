@@ -47,6 +47,7 @@ import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
 import { isCodeChangeTool, canChangeCodeHere, canShipHere, localToolsIn, memoryToolsIn } from './localWorkspaceTools';
+import { hasCallMarkup } from './xmlToolCalls';
 import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcomeReport';
 import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
@@ -2521,6 +2522,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           advertisedTools: advertised.length,
           catalogTools: allTools?.length ?? 0,
           ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
+          // The stream filter strips every call it lifts, so call markup still IN the text
+          // is a dialect it does not know: the model tried to act and the call never ran.
+          // Recorded so a copied report says "parser gap" instead of "won't call tools".
+          ...(result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {}),
         },
         // Structured diagnostics fields — the A-vs-B triage reads these directly.
         usage: result.usage,

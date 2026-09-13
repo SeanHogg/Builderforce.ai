@@ -89,8 +89,13 @@ export const xaiOAuthModule: VendorModule = {
   id: 'xai-oauth', autoRoute: false,
   // Keep the subscription route on xAI's current stable model. Pinning the stale
   // grok-4.3 id made model availability indistinguishable from a real plan rejection:
-  // both surfaced as the same 403 and told the owner to upgrade.
-  catalog: [{ id: 'grok-4.5', label: 'Grok 4.5', brand: 'xAI SuperGrok', tier: 'ULTRA', capabilities: ['tools', 'structured_output', 'vision'], contextWindow: 500000 }],
+  // both surfaced as the same 403 and told the owner to upgrade. grok-4.6 (Aug 2026)
+  // is the flagship xAI's docs recommend for code; grok-4.5 stays routable for a
+  // workspace that pinned it.
+  catalog: [
+    { id: 'grok-4.6', label: 'Grok 4.6', brand: 'xAI SuperGrok', tier: 'ULTRA', capabilities: ['tools', 'structured_output', 'vision'], contextWindow: 500000 },
+    { id: 'grok-4.5', label: 'Grok 4.5', brand: 'xAI SuperGrok', tier: 'ULTRA', capabilities: ['tools', 'structured_output', 'vision'], contextWindow: 500000 },
+  ],
   tierFor(): AiModelTier { return 'ULTRA'; },
   apiKeyFrom(env: VendorEnv): string | null { return env.XAI_OAUTH_TOKEN ?? null; },
   call,
