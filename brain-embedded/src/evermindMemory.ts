@@ -194,15 +194,30 @@ function tokenSet(s: string): Set<string> {
 export function formatEvermindMemoryBlock(items: EvermindRecallItem[]): string {
   if (items.length === 0) return '';
   const lines = items
-    .map((it, i) => `${i + 1}. ${it.text.replace(/\s+/g, ' ').trim()}`)
-    .filter((l) => l.length > 3);
+    .map((it) => ({ it, text: it.text.replace(/\s+/g, ' ').trim() }))
+    .filter(({ text }) => text.length > 0)
+    .map(({ it, text }, i) => `${i + 1}. ${it.tier ? `${TIER_LABEL[it.tier]} ` : ''}${text}`);
   if (lines.length === 0) return '';
   return [
     "[Evermind Memory — recalled from this project's self-learning model]",
-    'Prior learnings this project recalled as relevant to the request. Treat them as grounding; if any is outdated or wrong, correct it in your answer (this project learns write-through — your reply updates its memory).',
+    // Recall always fills its budget from the whole project, so a NEW chat is handed
+    // eight other conversations' replies. Framed as "relevant … treat as grounding",
+    // chat #105 (grok-4.6) took them as its own agenda: asked to wire Room chat bubbles,
+    // it announced "closing out linked work" and "the roster collapse code" — another
+    // chat's task — for three turns and never touched the request.
+    'Prior learnings matched to this request automatically. The match is by similarity, so any of them may be unrelated: use one only where it bears on what the user asked in THIS conversation, and ignore the rest.',
+    `Memories marked ${TIER_LABEL.project} come from other conversations and runs — never resume, close out, or act on their work here.`,
+    'If one is outdated or wrong, correct it in your answer (this project learns write-through — your reply updates its memory).',
     ...lines,
   ].join('\n');
 }
+
+/** How each recall tier is marked in the block, so the model can tell this chat's own
+ *  history from another conversation's. */
+const TIER_LABEL: Record<NonNullable<EvermindRecallItem['tier']>, string> = {
+  chat: '(this conversation)',
+  project: '(elsewhere in the project)',
+};
 
 /**
  * How many recalled memories this answer RECONCILES — restates enough of, that

@@ -66,7 +66,7 @@ const ANNOUNCE_FILLER =
  * ANNOUNCE_VERB, so "I need to know your budget" (verb excluded) stays out.
  */
 const ANNOUNCE_VERB =
-  '(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)';
+  '(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|act|see|walk|trace|map)';
 
 /** Bare gerund sign-offs ("Searching now.", "Pulling the data.") — no subject at all. */
 const ANNOUNCE_GERUND =
@@ -125,6 +125,12 @@ const ANNOUNCED_ACTION = new RegExp(
     `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
     '(one|just a) (moment|second|sec)\\b',
     `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
+    // A sentence that OPENS on a gerund and signs off with "now": "Pulling linked tickets
+    // and the roster code now." The object-led form above wants the/this/now straight
+    // after the verb, so a bare noun phrase slipped through. Measured on VS Code chat #105
+    // (`xai-oauth/grok-4.6`): turns 1-2 were caught and re-prompted, turn 3 said exactly
+    // this, scored as a complete answer, and the run ended with a recovery still unspent.
+    `(?:^|[.!?\\n]\\s*)${ANNOUNCE_GERUND}\\b[^.!?\\n]{0,80}\\bnow\\b`,
     'stand ?by\\b',
     ...PSEUDO_CALL,
   ].join('|'),

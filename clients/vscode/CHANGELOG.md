@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.52] — A new chat stays on your request
+
+- **A new chat works on what you asked.** The Brain adds learnings from your project's other conversations to each request. It used to present all of them as relevant, so a model could take up another chat's unfinished task: asked to make Room chat bubbles scroll the chat, Grok spent its turns "closing out linked work" on an unrelated roster fix. Each learning is now marked as from this conversation or from elsewhere in the project, and the model is told to ignore any that don't bear on your request and never to pick up another chat's work.
+- **A model that keeps announcing work gets pushed to do it.** "Pulling linked tickets and the roster code now." and "I'll act on whatever is still open." are now recognised as promises. The chat sends the model back to make the call, and switches to a different model if it keeps stalling. Before, a reply like that ended the run with nothing done.
+- **Diagnostics no longer call a stalled run "recovered".** "Copy chat diagnostics" says a stall was recovered only when a tool actually ran after the last retry. Otherwise it says "NOT recovered", so a run that did nothing no longer looks as if it fixed itself.
+
 ## [2026.9.51] — Grok acts instead of narrating
 
 - **Grok's tool calls run.** Grok sometimes writes a tool call as text in its own `<xai:function_call>` format instead of making a native call. The extension now reads that format and runs the call. Before, the call was dropped: Grok said "Reading the file…", got nothing back, and eventually told you the tools weren't returning.

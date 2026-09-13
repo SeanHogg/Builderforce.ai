@@ -21,6 +21,17 @@ describe('formatEvermindMemoryBlock', () => {
     expect(block.toLowerCase()).toContain('write-through');
   });
 
+  it('marks each memory with its tier and says memories may be unrelated', () => {
+    const block = formatEvermindMemoryBlock([
+      { ...item(1, 'Bubble click scrolls the transcript'), tier: 'chat' },
+      { ...item(2, 'Closing out linked work on the roster collapse'), tier: 'project' },
+    ]);
+    expect(block).toContain('1. (this conversation) Bubble click scrolls the transcript');
+    expect(block).toContain('2. (elsewhere in the project) Closing out linked work on the roster collapse');
+    expect(block).toContain('may be unrelated');
+    expect(block).toContain('never resume, close out, or act on their work');
+  });
+
   it('collapses whitespace and drops empty snippets', () => {
     const block = formatEvermindMemoryBlock([item(1, '  multi\n  line   text '), item(2, '   ')]);
     expect(block).toContain('1. multi line text');

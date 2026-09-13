@@ -1,3 +1,37 @@
+## ✅ RESOLVED 2026-09-13 — A new chat followed another chat's recalled work, and the stall detector let it stop
+
+Reported from VS Code chat #105 (new chat, `xai-oauth/grok-4.6`, auto-routed): "on the canvas in Room
+mode, clicking a contributor's chat bubble should scroll Brain Chat to that response". Three turns, zero
+tool calls, and the diagnostics read "Stall handling: 2 re-prompt(s) · 0 model failover(s) · recovered".
+The replies talked about "closing out linked work" and "the roster collapse code", neither of which is in
+this chat.
+
+- **The gateway did not drop calls.** `responsesStream.ts` translates Responses `function_call` items to
+  chat `tool_calls` correctly, and no turn carried call markup (no `unliftedCallMarkup`, so no "Per model"
+  line). Grok answered with text only.
+- **Recalled memories from other chats were framed as the request's agenda**
+  (`brain-embedded/src/evermindMemory.ts` `formatEvermindMemoryBlock`). Reply-time recall always fills its
+  8-item budget from the whole project (`tierRecallByChat`; the embedding path's only floor is cosine
+  > 0.05 in `ProjectEvermindCoordinatorDO.handleRecall`). In a new chat every item comes from another
+  conversation, and the block called them "relevant to the request … treat them as grounding". Grok took
+  another chat's "close out linked work / roster collapse" replies as its own task. The block now marks
+  each item `(this conversation)` or `(elsewhere in the project)`. It says matches are by similarity and
+  may be unrelated, and that other conversations' work must never be resumed or closed out here. The
+  canvas AI (`frontend/src/lib/creationCanvasAi.ts`) renders through the same function.
+- **The run ended on a narration the stall detector missed** (`packages/agent-stall`). Turns 1-2 matched
+  and were re-prompted. Turn 3, "Pulling linked tickets and the roster code now. I'll act on whatever is
+  still open.", matched nothing: the gerund form required the/this/now straight after the verb, and "act"
+  was not a stall verb. It was accepted as the final answer with one recovery and every failover unspent.
+  Now covered: `act` is in `ANNOUNCE_VERB`, and a sentence that opens with a gerund and ends in "now" is
+  a stall. This applies to the Brain loop and the server-side loops (`BrainService`, `projectMemory`).
+- **"recovered" was printed for any stall that was not formally given up** (`brainTriage.ts`). New
+  `stallRecoveredInTrace` requires a tool step after the last re-prompt. Otherwise the line reads
+  "NOT recovered (no tool ran after the last re-prompt …)".
+- Tests: `agent-stall/src/index.test.ts` (chat #105's three turns), `evermindMemory.test.ts` (tier marks +
+  framing), `brainTriage.test.ts` (recovered vs NOT recovered). Suites: agent-stall 100/100,
+  brain-embedded 648/648 + type-check, api brain/projectMemory 88/88.
+- Versions: brain-embedded 2026.9.18 · agent-stall 2026.9.23 · VSIX 2026.9.52.
+
 ## ✅ RESOLVED 2026-09-13 — Grok's text tool calls run, Grok 4.6 by default, and diagnostics name the model that stalled
 
 Reported as "why isn't the VSIX working for Grok?" from chat #104 (qwen3.8-max plus grok-4.5). The

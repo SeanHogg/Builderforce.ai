@@ -658,14 +658,25 @@ function tokenSet(s) {
 }
 function formatEvermindMemoryBlock(items) {
   if (items.length === 0) return "";
-  const lines = items.map((it, i) => `${i + 1}. ${it.text.replace(/\s+/g, " ").trim()}`).filter((l) => l.length > 3);
+  const lines = items.map((it) => ({ it, text: it.text.replace(/\s+/g, " ").trim() })).filter(({ text }) => text.length > 0).map(({ it, text }, i) => `${i + 1}. ${it.tier ? `${TIER_LABEL[it.tier]} ` : ""}${text}`);
   if (lines.length === 0) return "";
   return [
     "[Evermind Memory \u2014 recalled from this project's self-learning model]",
-    "Prior learnings this project recalled as relevant to the request. Treat them as grounding; if any is outdated or wrong, correct it in your answer (this project learns write-through \u2014 your reply updates its memory).",
+    // Recall always fills its budget from the whole project, so a NEW chat is handed
+    // eight other conversations' replies. Framed as "relevant … treat as grounding",
+    // chat #105 (grok-4.6) took them as its own agenda: asked to wire Room chat bubbles,
+    // it announced "closing out linked work" and "the roster collapse code" — another
+    // chat's task — for three turns and never touched the request.
+    "Prior learnings matched to this request automatically. The match is by similarity, so any of them may be unrelated: use one only where it bears on what the user asked in THIS conversation, and ignore the rest.",
+    `Memories marked ${TIER_LABEL.project} come from other conversations and runs \u2014 never resume, close out, or act on their work here.`,
+    "If one is outdated or wrong, correct it in your answer (this project learns write-through \u2014 your reply updates its memory).",
     ...lines
   ].join("\n");
 }
+var TIER_LABEL = {
+  chat: "(this conversation)",
+  project: "(elsewhere in the project)"
+};
 function countReconciledMemories(items, answer) {
   const ans = tokenSet(answer);
   if (ans.size === 0) return 0;
@@ -1685,7 +1696,7 @@ function handoffRecoveryNudge(lastChance) {
 // ../packages/agent-stall/src/index.ts
 var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
 var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
-var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
+var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|act|see|walk|trace|map)";
 var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
 var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
 function toolNamesMentionedIn(text) {
@@ -1705,6 +1716,12 @@ var ANNOUNCED_ACTION = new RegExp(
     `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
     "(one|just a) (moment|second|sec)\\b",
     `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
+    // A sentence that OPENS on a gerund and signs off with "now": "Pulling linked tickets
+    // and the roster code now." The object-led form above wants the/this/now straight
+    // after the verb, so a bare noun phrase slipped through. Measured on VS Code chat #105
+    // (`xai-oauth/grok-4.6`): turns 1-2 were caught and re-prompted, turn 3 said exactly
+    // this, scored as a complete answer, and the run ended with a recovery still unspent.
+    `(?:^|[.!?\\n]\\s*)${ANNOUNCE_GERUND}\\b[^.!?\\n]{0,80}\\bnow\\b`,
     "stand ?by\\b",
     ...PSEUDO_CALL
   ].join("|"),
@@ -2850,6 +2867,13 @@ function modelFailoversInTrace(events) {
 function stallUnrecoveredInTrace(events) {
   return events.some((e) => e.label === LOOP_STEP.unrecovered);
 }
+function stallRecoveredInTrace(events) {
+  let lastRecovery = -1;
+  events.forEach((e, i) => {
+    if (e.label === LOOP_STEP.recovery) lastRecovery = i;
+  });
+  return lastRecovery >= 0 && events.slice(lastRecovery + 1).some((e) => e.category === "tool");
+}
 function toolExposureInTrace(events) {
   let lastTurn = null;
   let min = null;
@@ -3052,6 +3076,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const stallRecoveries = stallRecoveriesInTrace(events);
   const modelFailovers = modelFailoversInTrace(events);
   const stallUnrecovered = stallUnrecoveredInTrace(events);
+  const stallRecovered = stallRecoveredInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
   const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
@@ -3083,6 +3108,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     stallRecoveries,
     modelFailovers,
     stallUnrecovered,
+    stallRecovered,
     advertisedToolsLastTurn: exposure.lastTurn,
     advertisedToolsMin: exposure.min,
     catalogTools: exposure.catalog,
@@ -3143,7 +3169,7 @@ function formatBrainDiagnostics(d) {
   }
   if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
     lines.push(
-      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : " \xB7 recovered"}`
+      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : d.stallRecovered ? " \xB7 recovered" : " \xB7 NOT recovered (no tool ran after the last re-prompt \u2014 the run ended on a turn the stall detector accepted as an answer)"}`
     );
   }
   lines.push(...formatModelScorecard(d.modelScores ?? []));

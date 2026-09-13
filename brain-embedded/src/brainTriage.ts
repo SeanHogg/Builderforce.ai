@@ -228,6 +228,20 @@ export function stallUnrecoveredInTrace(events: BrainTraceEvent[]): boolean {
   return events.some((e) => e.label === LOOP_STEP.unrecovered);
 }
 
+/**
+ * True when a re-prompt actually WORKED: a tool step ran after the last one.
+ *
+ * "Not given up" is not the same fact. The loop only records `stall_unrecovered` when a
+ * stall survives the whole budget; a model whose last narration slips past the stall
+ * detector ends the run as a "final answer" with budget to spare. Chat #105 did exactly
+ * that — two re-prompts, zero tool calls — and the report said "recovered".
+ */
+export function stallRecoveredInTrace(events: BrainTraceEvent[]): boolean {
+  let lastRecovery = -1;
+  events.forEach((e, i) => { if (e.label === LOOP_STEP.recovery) lastRecovery = i; });
+  return lastRecovery >= 0 && events.slice(lastRecovery + 1).some((e) => e.category === 'tool');
+}
+
 /** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
 export interface ToolExposure {
   /** Tools advertised on the LAST measured turn (what the model could call at the end). */
@@ -543,6 +557,8 @@ export interface BrainDiagnostics {
   modelFailovers: number;
   /** True when the stall survived every recovery and every failover — the run gave up. */
   stallUnrecovered: boolean;
+  /** A tool step ran after the last re-prompt — see {@link stallRecoveredInTrace}. */
+  stallRecovered: boolean;
   /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
   advertisedToolsLastTurn: number | null;
   /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
@@ -781,6 +797,7 @@ export function computeBrainDiagnostics(
   const stallRecoveries = stallRecoveriesInTrace(events);
   const modelFailovers = modelFailoversInTrace(events);
   const stallUnrecovered = stallUnrecoveredInTrace(events);
+  const stallRecovered = stallRecoveredInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
   // A turn offered ZERO tools cannot emit one. That is a configuration/catalog failure
@@ -835,6 +852,7 @@ export function computeBrainDiagnostics(
     stallRecoveries,
     modelFailovers,
     stallUnrecovered,
+    stallRecovered,
     advertisedToolsLastTurn: exposure.lastTurn,
     advertisedToolsMin: exposure.min,
     catalogTools: exposure.catalog,
@@ -946,7 +964,11 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // three times and swapped models twice before giving up.
   if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
     lines.push(
-      `Stall handling: ${d.stallRecoveries} re-prompt(s) · ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? ' · GAVE UP (the stall survived every attempt)' : ' · recovered'}`,
+      `Stall handling: ${d.stallRecoveries} re-prompt(s) · ${d.modelFailovers} model failover(s)${d.stallUnrecovered
+        ? ' · GAVE UP (the stall survived every attempt)'
+        : d.stallRecovered
+          ? ' · recovered'
+          : ' · NOT recovered (no tool ran after the last re-prompt — the run ended on a turn the stall detector accepted as an answer)'}`,
     );
   }
   // WHICH model did what. "Models used: a, b" cannot say that one of them never called

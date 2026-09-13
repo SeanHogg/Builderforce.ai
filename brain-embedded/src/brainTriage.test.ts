@@ -316,6 +316,23 @@ describe('tool exposure + stall handling signals', () => {
     expect(formatBrainDiagnostics(d).join('\n')).toContain('Stall handling: 2 re-prompt(s) · 1 model failover(s) · GAVE UP');
   });
 
+  /**
+   * Regression, chat #105: two re-prompts, zero tool calls, and the run ended on a
+   * narration the stall detector missed. No `stall_unrecovered` step was written, so
+   * the report used to say "recovered" about a run that never ran a tool.
+   */
+  it('says NOT recovered when no tool ran after the last re-prompt', () => {
+    const recovery = (s: number): BrainTraceEvent => ({ ts: `2026-09-13T00:00:0${s}.000Z`, category: 'message', label: 'loop.recover_announced_tool_call', result: 'x' });
+    const stalled = computeBrainDiagnostics([turn(0, { advertisedTools: 67 }), recovery(1), turn(1, { advertisedTools: 67 }), recovery(2), turn(2, { advertisedTools: 67 })]);
+    expect(stalled.stallRecovered).toBe(false);
+    expect(formatBrainDiagnostics(stalled).join('\n')).toContain('Stall handling: 2 re-prompt(s) · 0 model failover(s) · NOT recovered');
+
+    const tool: BrainTraceEvent = { ts: '2026-09-13T00:00:03.000Z', category: 'tool', label: 'builtin_chats_list_tickets', result: { ok: true } };
+    const recovered = computeBrainDiagnostics([turn(0, { advertisedTools: 67 }), recovery(1), tool]);
+    expect(recovered.stallRecovered).toBe(true);
+    expect(formatBrainDiagnostics(recovered).join('\n')).toContain('Stall handling: 1 re-prompt(s) · 0 model failover(s) · recovered');
+  });
+
   it('does not count the loop\u2019s OWN deliberate model failover as a gateway downgrade', () => {
     // After a failover every turn differs from the run's original ask. Comparing against
     // that ask made a run the loop successfully RESCUED report "context exhaustion".

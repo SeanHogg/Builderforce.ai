@@ -61,6 +61,22 @@ describe('announcesUntakenAction', () => {
     for (const s of stalls) expect(announcesUntakenAction(s), s).toBe(true);
   });
 
+  /**
+   * Regression, measured on VS Code chat #105 (`xai-oauth/grok-4.6`): turns 1-2 were
+   * caught and re-prompted, turn 3 (the last line) matched nothing, scored as a complete
+   * answer, and the run ended with zero tool calls and a recovery still unspent.
+   */
+  it('matches every narration of chat #105, including the one that ended the run', () => {
+    const stalls = [
+      "I'll start by checking this chat's linked tickets and locating the Room-mode chat-bubble and Brain Chat scroll code. I'll also recall what we already know about the roster/room surface.",
+      'Closing out linked work now — pulling this chat’s tickets and the roster collapse code in parallel.',
+      "Pulling linked tickets and the roster code now. I'll act on whatever is still open.",
+      'Pulling linked tickets and the roster code now.',
+      "I'll act on whatever is still open.",
+    ];
+    for (const s of stalls) expect(announcesUntakenAction(s), s).toBe(true);
+  });
+
   it('does NOT match a complete answer that merely mentions checking something', () => {
     const answers = [
       'Let me know if you want a different chart type.',
