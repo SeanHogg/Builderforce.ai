@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { activityTarget, shortenTarget, toolActivity, describeLiveStep, midRunNotice } from './runActivity';
+import { activityTarget, visitTarget, shortenTarget, toolActivity, describeLiveStep, midRunNotice } from './runActivity';
 
 describe('activityTarget', () => {
   it('names the file a read is aimed at', () => {
@@ -32,6 +32,22 @@ describe('activityTarget', () => {
 
   it('ignores an empty string — a blank path names nothing', () => {
     expect(activityTarget({ path: '   ' })).toBeUndefined();
+  });
+});
+
+describe('visitTarget', () => {
+  it('keys a search by its scope AND its question — two searches of one folder are two visits', () => {
+    const a = visitTarget({ path: 'frontend/src', query: 'RoomScene' });
+    const b = visitTarget({ path: 'frontend/src', query: 'scrollIntoView' });
+    expect(a).not.toBe(b);
+    expect(a).toContain('frontend/src');
+    expect(a).toContain('RoomScene');
+  });
+
+  it('is the plain target for a call that asks no question of it', () => {
+    expect(visitTarget({ path: 'src/App.tsx', offset: 140 })).toBe('src/App.tsx');
+    expect(visitTarget({ query: 'Board one-pager' })).toBe('Board one-pager');
+    expect(visitTarget({ limit: 10 })).toBeUndefined();
   });
 });
 

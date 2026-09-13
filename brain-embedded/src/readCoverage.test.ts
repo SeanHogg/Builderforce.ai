@@ -28,6 +28,26 @@ describe('ReadCoverage', () => {
     expect(cov.record('search_code', { path: CSS })!.count).toBe(1);
   });
 
+  /**
+   * Chat #105: sixteen DIFFERENT searches under `frontend/src` were tallied as one target
+   * visited sixteen times, so the model was told to STOP RE-READING while it explored.
+   */
+  it('keeps different QUESTIONS of one scope apart, and still counts the same question twice', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'RoomScene', path: 'frontend/src' });
+    expect(cov.record('search_code', { query: 'scrollIntoView', path: 'frontend/src' })!.count).toBe(1);
+    expect(cov.record('search_code', { query: 'RoomScene', path: './frontend/src/' })!.count).toBe(1);
+    expect(cov.record('search_code', { query: 'RoomScene', path: 'frontend/src' })!.count).toBe(2);
+  });
+
+  it('forgets a search scoped to the file an edit just changed', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { query: 'height', path: CSS });
+    cov.record('search_code', { query: 'height', path: CSS });
+    cov.invalidate('edit_file', { path: CSS });
+    expect(cov.record('search_code', { query: 'height', path: CSS })!.count).toBe(1);
+  });
+
   it('ignores a call with no discernible target', () => {
     expect(new ReadCoverage().record('list_files', { recursive: true })).toBeNull();
   });

@@ -321,8 +321,15 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(cards[0]).toHaveAttribute('aria-pressed', 'true');
   });
 
-  /** The x of `translate3d(x, y, z)`, which is where the space has put a card. */
-  const cardX = (card: HTMLElement) => Number(/translate3d\((-?[\d.]+)px/.exec(card.style.transform)?.[1]);
+  /**
+   * The x of `translate3d(x, y, z)`, which is where the space has put a card. A card
+   * drawn with the board's own component is placed by its face wrapper, with the
+   * handle button laid over it, so the position is read off whichever element holds it.
+   */
+  const cardX = (card: HTMLElement) => {
+    const placed = card.closest<HTMLElement>('[data-testid="canvas-3d-face"]') ?? card;
+    return Number(/translate3d\((-?[\d.]+)px/.exec(placed.style.transform)?.[1]);
+  };
 
   it('moves an object across the space and leaves it where it was dropped', async () => {
     render(<CreationCanvas sessionId="three-d-move-test" persistence="local" />);

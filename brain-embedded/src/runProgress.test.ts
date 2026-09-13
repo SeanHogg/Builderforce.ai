@@ -86,6 +86,16 @@ describe('computeRunProgress', () => {
     expect(p.spinning).toBe(true);
   });
 
+  it('counts different searches of one folder as different targets, not revisits (chat #105)', () => {
+    clock = 0;
+    const events = ['RoomScene', 'scrollIntoView', 'BrainTimeline', 'speech'].flatMap((query) => [
+      llm(), tool('search_code', { query, path: 'frontend/src' }),
+    ]);
+    const p = computeRunProgress(events, [msg('user', 'make the bubble scroll the chat')]);
+    expect(p.repeatedTargets).toEqual([]);
+    expect(p.distinctTargets).toBe(4);
+  });
+
   it('counts a byte-identical repeat as an exact duplicate too', () => {
     const { events, messages } = spinningRun();
     expect(computeRunProgress(events, messages).duplicateCalls).toBe(1);

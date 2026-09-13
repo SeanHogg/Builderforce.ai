@@ -9,15 +9,9 @@ import {
   getRunSnapshot,
   getRunTrace,
   stopRun,
-  windowed,
-  compactTailStart,
-  compactMiddleRange,
-  assembleCompacted,
-  pinnedDirectiveIndex,
-  COMPACT_TAIL_TURNS,
 } from './brainRunStore';
 import type { BrainStreamFn } from './brainRunStore';
-import { StreamInterruptedError, type ChatCompletionMessage } from './streamChatCompletion';
+import { StreamInterruptedError } from './streamChatCompletion';
 import { isCoderReask } from './roleHandoff';
 import { isStoppedTurn } from './stoppedTurn';
 import { parseMessageProvenance } from './provenance';
@@ -170,98 +164,6 @@ describe('cross-chat run state (the session-list / dropdown indicators)', () => 
   });
 });
 
-describe('windowed history (must begin with a user turn)', () => {
-  const msg = (role: ChatCompletionMessage['role'], content = 'x'): ChatCompletionMessage => ({ role, content });
-
-  it('keeps a normal short conversation intact', () => {
-    const convo = [msg('user'), msg('assistant'), msg('user'), msg('assistant')];
-    expect(windowed(convo)).toEqual(convo);
-  });
-
-  it('drops a leading orphaned tool result', () => {
-    const convo = [msg('tool'), msg('user'), msg('assistant')];
-    expect(windowed(convo)[0].role).toBe('user');
-  });
-
-  it('drops a leading assistant turn so the payload starts at a user turn (the googleai 400)', () => {
-    // After a long tool-loop slid the user turn out of the last-N slice, the
-    // window would otherwise start on an assistant tool-call turn — which Gemini
-    // rejects with INVALID_ARGUMENT.
-    const convo = [msg('assistant'), msg('tool'), msg('user'), msg('assistant'), msg('tool')];
-    expect(windowed(convo)[0].role).toBe('user');
-  });
-
-  it('anchors to the last user turn when the window has none (tool loop > window)', () => {
-    // 90 assistant/tool messages after a single user turn: the last-80 slice has
-    // no user turn, so we fall back to the most recent user turn in the full
-    // transcript rather than emit a user-less (invalid) request.
-    const convo: ChatCompletionMessage[] = [msg('user', 'go')];
-    for (let i = 0; i < 90; i++) convo.push(msg(i % 2 === 0 ? 'assistant' : 'tool'));
-    const w = windowed(convo);
-    expect(w[0].role).toBe('user');
-    expect(w[0].content).toBe('go');
-  });
-});
-
-describe('auto-compaction partitioning (summarize the middle, never orphan a tool)', () => {
-  const msg = (role: ChatCompletionMessage['role'], content = 'x'): ChatCompletionMessage => ({ role, content });
-
-  it('walks the tail forward off a leading orphaned tool result', () => {
-    // A tail that would start on a `tool` message (its assistant call is in the
-    // summarized middle) must advance past it so nothing is orphaned.
-    const convo = [msg('user'), msg('assistant'), msg('tool'), msg('assistant'), msg('user')];
-    const start = compactTailStart(convo, 3); // last 3 = [tool, assistant, user]
-    expect(convo[start].role).not.toBe('tool');
-  });
-
-  it('assembled output is [system, memo, active directive, ...tail] and never orphans a tool', () => {
-    const convo: ChatCompletionMessage[] = [msg('user', 'task')];
-    for (let i = 0; i < 30; i++) convo.push(msg(i % 2 === 0 ? 'assistant' : 'tool', `s${i}`));
-    const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
-    expect(out[0]).toEqual({ role: 'system', content: 'SYS' });
-    // Memo first (the compressed history), THEN the active directive verbatim — not the
-    // other way round, so the model reads the directive as the current instruction.
-    expect(out[1]).toEqual({ role: 'assistant', content: 'MEMO' });
-    expect(out[2].role).toBe('user');
-    expect(out[2].content).toBe('task');
-    // The first tail message after the directive is never an orphaned tool result.
-    expect(out[3].role).not.toBe('tool');
-  });
-
-  it('re-injects the MOST RECENT user directive, not the first, when several fell out of the tail', () => {
-    // The opening request, then a superseding instruction, then a long tool loop that
-    // pushes BOTH out of the verbatim tail. The active directive is the latest one.
-    const convo: ChatCompletionMessage[] = [msg('user', 'run a self-diagnostic'), msg('assistant', 'ok')];
-    convo.push(msg('user', 'now create the gap and fix the code'));
-    for (let i = 0; i < 30; i++) convo.push(msg(i % 2 === 0 ? 'assistant' : 'tool', `s${i}`));
-    const idx = pinnedDirectiveIndex(convo, COMPACT_TAIL_TURNS);
-    expect(convo[idx].content).toBe('now create the gap and fix the code');
-    const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
-    const directive = out[2];
-    expect(directive.role).toBe('user');
-    expect(directive.content).toBe('now create the gap and fix the code');
-    // The stale opening request is NOT re-injected verbatim (it lives only in the memo).
-    expect(out.filter((m) => m.content === 'run a self-diagnostic')).toHaveLength(0);
-  });
-
-  it('middle range covers the whole history before the recent tail', () => {
-    const convo: ChatCompletionMessage[] = [msg('user', 'task')];
-    for (let i = 0; i < 20; i++) convo.push(msg('assistant', `a${i}`));
-    const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
-    expect(start).toBe(0); // the memo summarizes everything, incl. earlier user turns
-    expect(end).toBe(convo.length - COMPACT_TAIL_TURNS); // before the recent tail
-    expect(start).toBeLessThan(end);
-  });
-
-  it('does not re-inject the directive when the latest user turn already lives in the tail', () => {
-    const convo = [msg('user', 'task'), msg('assistant'), msg('user', 'later')];
-    // Latest user turn ('later') is inside the tail → nothing to re-inject.
-    expect(pinnedDirectiveIndex(convo, COMPACT_TAIL_TURNS)).toBe(-1);
-    const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
-    expect(out.filter((m) => m.content === 'later')).toHaveLength(1);
-  });
-});
-
 describe('a run has no tool-call limit — only the consecutive-failure breaker', () => {
   /**
    * A gateway that asks for one more tool call per turn, with DISTINCT arguments each
@@ -325,6 +227,9 @@ describe('a run has no tool-call limit — only the consecutive-failure breaker'
       userTurn: 'read everything',
     });
     // Sixty tool turns (well past the old 25/40 caps) + the model's own final answer.
+    // eslint-disable-next-line no-console
+    console.log('DEBUG TRACE', JSON.stringify(getRunTrace(4242).map((e) => ({ label: e.label, args: e.args, result: typeof e.result === 'string' ? e.result.slice(0, 80) : e.result })), null, 2));
+    console.log('DEBUG executed', executed, 'turns', gateway.turns());
     expect(executed).toBe(60);
     expect(gateway.turns()).toBe(61);
     expect(getRunTrace(4242).some((e) => (e.args as { forcedFinish?: unknown } | undefined)?.forcedFinish === true)).toBe(false);
@@ -467,6 +372,26 @@ describe('a model that breaks mid-answer (the "Grok starts and then stops" run)'
     expect(excluded).toEqual([undefined, ['xai-oauth/grok-4.5']]);
     expect(getRunTrace(5201).some((e) => e.label === 'llm.stream_interrupted')).toBe(true);
     expect(getRunSnapshot(5201).error).toBe('');
+  });
+
+  it('leaves a model that broke out of every LATER turn of the run, not just the retry (chat #105)', async () => {
+    // Excluding it for the retry alone sent the next turn straight back to it: Grok broke
+    // and was retried on eighteen separate turns of one run.
+    const excluded: Array<string[] | undefined> = [];
+    await startRun(5291, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: true, content: 'ok' }),
+      stream: async (opts) => {
+        excluded.push(opts.excludeModels);
+        if (excluded.length === 1) throw new StreamInterruptedError('the model got stuck repeating itself', 'xai-oauth/grok-4.6');
+        if (excluded.length === 2) return { text: '', toolCalls: [{ id: 'c1', name: 'read_file', args: JSON.stringify({ path: 'a.ts' }) }], finishReason: 'tool_calls' };
+        return { text: 'Here is the answer.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence,
+      userTurn: 'explain a.ts',
+    });
+    expect(excluded).toEqual([undefined, ['xai-oauth/grok-4.6'], ['xai-oauth/grok-4.6']]);
   });
 
   it('does not route around a model the user pinned', async () => {

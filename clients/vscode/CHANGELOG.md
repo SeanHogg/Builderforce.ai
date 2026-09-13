@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.61] — The agent remembers the files it read and gets to the edit
+
+- **The agent no longer forgets what it just read.** On a coding task the chat kept only a small slice of the run in front of the model, so after about six file reads the earlier ones were squeezed into a short note and the agent went back to read them again — sometimes for dozens of turns, without ever changing a line. It now keeps several times more of its work in view, and when a long run does need condensing, the summary keeps the file paths and findings the rest of the task needs, and no step between the summary and the recent work is dropped.
+- **Different searches are no longer called "repeating".** Searching one folder for different things counted as re-reading one target, so the agent was told to stop while it was still exploring, and the copied diagnostics reported a loop that wasn't there. Each search now counts by what it looked for.
+- **A model that breaks mid-reply is set aside for the rest of the run.** When a model got stuck and its turn went to another model, the very next turn went straight back to the one that broke. It now stays out until the run ends.
+
 ## [2026.9.60] — Pressing Stop keeps what the model wrote, and names the model
 
 - **Stop no longer erases the reply.** When a model went off the rails and you pressed Stop, everything it had written vanished, so you couldn't see what went wrong. The partial reply now stays in the chat, marked as stopped by you, with the model that wrote it shown underneath.

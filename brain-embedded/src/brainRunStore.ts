@@ -82,6 +82,7 @@ import {
   type EvermindRecallResult,
   type MemoryFirstAnswer,
 } from './evermindMemory';
+import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, type CompactMemo } from './workingTranscript';
 
 /**
  * Build the provenance metadata for a persisted assistant turn from the stream
@@ -114,9 +115,6 @@ function provenanceMetadata(result: StreamChatResult): string | undefined {
 // the runs it should not have: a review of forty ticket branches, a rename across a
 // repository, "assign these to the agents and merge them" — long because the work was
 // long, not because the model was stuck. A stuck run announces itself by failing.
-
-/** How much history we send to the model (message-count ceiling). */
-const HISTORY_WINDOW = 80;
 
 /** Read-only, idempotent LOCAL file/search tools whose exact-repeat call within a run is
  *  suppressed (the result is already in context). Read-only PLATFORM (`builtin_*`) tools
@@ -154,46 +152,9 @@ function accrueProviderCap(c: RunCell, raw: string | undefined): void {
   for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
   if (next.size !== before) c.providerCap = [...next];
 }
-/**
- * Token budget for the working transcript sent to the model each turn — how much of this
- * run the model can SEE: the file windows it read, the searches it ran, what it decided.
- *
- * It bounds context, which message-count windowing (HISTORY_WINDOW) alone does not: one
- * `tasks.list` result can be tens of thousands of tokens. It is NOT what keeps a request
- * inside the serving model's window — the gateway fits every request to a model that can
- * hold it (`modelsFittingContext` over `estimateRequestTokens`, with 413 failover behind).
- *
- * It was 24k, "sized under the smallest pool model's window". That protected nothing — the
- * ~16k-token system prompt + tool catalog in front of it already put a full turn at ~40k,
- * past any 32k window — and it cost every coding run its memory. Six 4k-token file windows
- * filled it, compaction folded them into a 1.2k-token note, and the model went back for the
- * files it had just read (chat #105: 55 turns, 63% of calls revisiting, zero edits, prompt
- * peak 40,351). 64k holds a coding task's working set — a dozen-plus file windows —
- * verbatim, while a full turn stays well inside the 128k window every coding-capable pool
- * model has. See {@link windowed} and {@link buildWorkingTranscript}.
- */
-const HISTORY_TOKEN_BUDGET = 64_000;
-/**
- * How much of {@link HISTORY_TOKEN_BUDGET} the verbatim TAIL may keep when the older part
- * of the transcript is compacted. The rest is headroom new work fills before the next
- * fold, so the memo is re-folded once per ~20k tokens of progress, not on every turn.
- */
-const COMPACT_TAIL_TOKEN_BUDGET = 40_000;
 // The per-result cap on what the MODEL transcript carries for one tool result (the trace
 // keeps the full result) lives in `toolResultBudget.ts`: a generic head slice for list
 // results, and LINE-paged windows with an intact continuation offset for `read_file`.
-
-/** Cheap token estimate from a char count — chars/4, the gateway's heuristic. */
-function estimateTokens(chars: number): number {
-  return Math.ceil(chars / 4);
-}
-
-/** Estimated tokens for one chat message (content + any tool-call payloads). */
-function messageTokens(m: ChatCompletionMessage): number {
-  let chars = typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length;
-  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
-  return estimateTokens(chars) + 4; // +4 for role/framing overhead
-}
 
 /**
  * Memory bounds. Run cells are session-lived (the transcript IS the cross-turn
@@ -476,13 +437,15 @@ interface RunCell {
    */
   runTraceFrom: number;
   /**
-   * Cached compressed-memory of the run's older turns. When the transcript exceeds
-   * {@link HISTORY_TOKEN_BUDGET} the loop SUMMARIZES the bulky middle (instead of
-   * dropping it, which made a weak model re-read and thrash into "LOOP EXHAUSTED"),
-   * and memoizes the note here so the growing prefix is summarized at most once per
-   * overflow rather than every iteration. Null until the first overflow / reset.
+   * Cached compressed-memory of the transcript's older part. When the transcript exceeds
+   * the working-transcript token budget (`HISTORY_TOKEN_BUDGET` in `workingTranscript.ts`)
+   * the loop SUMMARIZES `transcript[0, coveredEnd)` into this
+   * note (instead of dropping it, which made a weak model re-read and thrash into "LOOP
+   * EXHAUSTED") and sends every message from `coveredEnd` on verbatim. Re-folded
+   * incrementally only once that remainder no longer fits (see `buildWorkingTranscript`).
+   * Null until the first overflow / reset.
    */
-  compactMemo: { note: string; atLen: number } | null;
+  compactMemo: CompactMemo | null;
   /**
    * The completion in flight ({@link asLiveTurn}), null between completions. The only
    * record of which model a Stop cut off: an aborted stream never returns its result.
@@ -810,21 +773,6 @@ function isFollowUpTurn(convo: ChatCompletionMessage[]): boolean {
 }
 
 /**
- * Trim the in-memory transcript to the history window before sending it to the
- * model. Slicing the last N can leave the window starting on an `assistant`
- * tool-call turn or an orphaned `tool` result (whose owning call fell off the
- * front). That payload is invalid for strict vendors: Gemini rejects a request
- * whose conversation does not begin with a user turn — surfaced as the cascade
- * `[googleai] 400 INVALID_ARGUMENT` after a long tool-loop crossed the window
- * boundary (it succeeded for ~20 steps, then 400'd once the triggering user
- * turn slid out of the last-N slice). So anchor the window at a user turn.
- *
- * If the last-N slice contains no user turn (a tool loop longer than the
- * window), fall back to the most recent user turn in the FULL transcript and
- * keep everything after it — correctness over the size cap, and bounded by the
- * run's max iterations anyway.
- */
-/**
  * The text of the most recent ASSISTANT turn — the counterpart to
  * {@link latestUserText}. Read as a pair to decide whether a bare directive
  * ("Fix") is a continuation of a proposal the previous turn left unfinished.
@@ -837,266 +785,6 @@ function lastAssistantText(convo: ChatCompletionMessage[]): string {
     if (m.role === 'assistant') return typeof m.content === 'string' ? m.content.trim() : '';
   }
   return '';
-}
-
-export function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[] {
-  let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role !== 'user') w = w.slice(1);
-  if (w.length === 0) {
-    const lastUser = convo.map((m) => m.role).lastIndexOf('user');
-    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
-  }
-  return tokenBounded(w);
-}
-
-/**
- * Enforce the token budget on an already message-count-windowed slice. Drops the
- * OLDEST turns first, then re-anchors on a user turn (a strict vendor like
- * Gemini rejects a window that doesn't start on `user`, and dropping a turn can
- * orphan a `tool` result whose `assistant` tool-call fell off the front — so we
- * also drop leading `tool`/`assistant` turns after trimming). The most recent
- * user turn is never dropped: correctness over the budget when a single turn is
- * itself oversized (its tool results are already per-result trimmed on the way
- * into the transcript, so this is rare).
- */
-function tokenBounded(w: ChatCompletionMessage[]): ChatCompletionMessage[] {
-  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
-  if (total <= HISTORY_TOKEN_BUDGET) return w;
-  // The last user turn's index — never trim past it.
-  const lastUser = w.map((m) => m.role).lastIndexOf('user');
-  let start = 0;
-  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
-    total -= messageTokens(w[start]!);
-    start += 1;
-  }
-  let trimmed = w.slice(start);
-  // Re-anchor: never begin on a tool result or an assistant tool-call turn whose
-  // partner was just dropped.
-  while (trimmed.length > 1 && trimmed[0].role !== 'user') trimmed = trimmed.slice(1);
-  return trimmed;
-}
-
-/**
- * Is a transcript message still part of what the model sees? False once auto-compaction
- * has folded it into the memory note, or the drop-oldest window has let it fall off the
- * front. Deliberately conservative: it judges against the CURRENT transcript (which has
- * grown since the last working set was built), so it can only ever call a message gone a
- * turn early — a needless replay costs tokens, a stub for a vanished result costs the run.
- */
-function stillInWorkingContext(c: RunCell, anchor: unknown): boolean {
-  const convo = c.transcript;
-  const idx = convo.indexOf(anchor as ChatCompletionMessage);
-  if (idx < 0) return false;
-  if (c.compactMemo) return idx >= verbatimStart(convo, c.compactMemo.coveredEnd);
-  return windowed(convo).includes(convo[idx]!);
-}
-
-// ---------------------------------------------------------------------------
-// Auto-compaction — summarize the bulky MIDDLE instead of dropping it.
-//
-// `tokenBounded` above keeps the request inside the model window by DROPPING the
-// oldest turns. That never 413s, but it silently LOSES context — which made a weak
-// model re-read files and thrash until it burned the tool-iteration cap ("LOOP
-// EXHAUSTED", the chat #50 failure). When a summarizer is available we instead
-// compress the older turns into ONE concise memory note (the same pattern the cloud
-// coding loop uses server-side via compactMessages), so the model keeps working from
-// a distilled memory and converges. Falls back to `tokenBounded` (drop) when no
-// summarizer is reachable, so correctness never depends on the extra LLM call.
-// ---------------------------------------------------------------------------
-
-/** The fewest recent messages the verbatim tail keeps, however large they are. */
-export const COMPACT_TAIL_TURNS = 8;
-
-/** The most recent messages the verbatim tail may hold — half the message window, so a
- *  compacted transcript stays inside {@link HISTORY_WINDOW} with room to grow. */
-const COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
-
-/** The first index at or after `from` that is not a `tool` result: a tool row whose
- *  assistant call was folded into the memo would be orphaned (strict vendors 400 on it).
- *  Pure/testable. */
-export function verbatimStart(convo: ChatCompletionMessage[], from: number): number {
-  let start = Math.max(0, Math.min(from, convo.length));
-  while (start < convo.length && convo[start]!.role === 'tool') start += 1;
-  return start;
-}
-
-/** Start index of the last `tailTurns` messages, walked off a leading `tool` result. Pure/testable. */
-export function compactTailStart(convo: ChatCompletionMessage[], tailTurns: number): number {
-  return verbatimStart(convo, convo.length - tailTurns);
-}
-
-/**
- * Where the verbatim tail begins when the transcript is compacted: as many of the most
- * recent messages as fit in `budgetTokens` — never fewer than {@link COMPACT_TAIL_TURNS},
- * never more than {@link COMPACT_TAIL_MAX_MESSAGES} — walked off a leading tool result.
- *
- * Sized by TOKENS, not a message count. The tail used to be a fixed eight messages, which
- * is four tool results: after a fold the model kept its last four reads verbatim and one
- * short note for everything else, so the fifth file it needed was always the one it had to
- * read again. Pure/testable.
- */
-export function compactTailStartForBudget(convo: ChatCompletionMessage[], budgetTokens: number): number {
-  let start = convo.length;
-  let tokens = 0;
-  while (start > 0) {
-    const kept = convo.length - start;
-    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
-    const next = messageTokens(convo[start - 1]!);
-    if (kept >= COMPACT_TAIL_TURNS && tokens + next > budgetTokens) break;
-    tokens += next;
-    start -= 1;
-  }
-  return verbatimStart(convo, start);
-}
-
-/**
- * Index of the MOST RECENT user turn to re-inject verbatim ahead of the tail — the
- * ACTIVE directive — or -1 when the latest user turn is already inside the tail (so it
- * needs no re-injection). This is the fix for the "reverts to the opening request"
- * failure: compaction used to pin the FIRST user turn as the run anchor, so in a chat
- * with several successive instructions the model kept re-anchoring on the stale
- * opening message (chat #55: it re-ran the initial "self-diagnostic" and abandoned the
- * live "create the gap and fix the code" order — twice). The current instruction is
- * always the LATEST user turn, never the first, so that is what must survive verbatim.
- * Pure/testable.
- */
-export function pinnedDirectiveIndex(convo: ChatCompletionMessage[], tailTurns: number): number {
-  const tailStart = compactTailStart(convo, tailTurns);
-  const lastUser = convo.map((m) => m.role).lastIndexOf('user');
-  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
-}
-
-/** The middle span [start,end) to summarize: the whole history before the recent tail.
- *  Every earlier user turn is captured in the memo (in prose); the LATEST directive is
- *  additionally re-injected verbatim by {@link assembleCompacted}, so anchoring never
- *  drifts to a stale opening request. Pure/testable. */
-export function compactMiddleRange(convo: ChatCompletionMessage[], tailTurns: number): { start: number; end: number } {
-  return { start: 0, end: compactTailStart(convo, tailTurns) };
-}
-
-/**
- * Assemble the working transcript from a compressed-memory `note`: system + the memory
- * note + the ACTIVE user directive re-injected verbatim (the most recent user turn,
- * when it fell outside the tail) + the recent tail (verbatim, tool-pairing safe via
- * {@link compactTailStart}). Pure so partitioning is unit-tested; the note text comes
- * from the async summarizer.
- *
- * The directive sits immediately before the tail — the most-recent pre-tail position —
- * so the model reads it as the CURRENT instruction, not a stale opening task the memo
- * also mentions. Pinning the FIRST user turn here (the previous behavior) is exactly
- * what made a multi-instruction chat revert to its opening request and ignore the live
- * order.
- */
-export function assembleCompacted(
-  systemPrompt: string,
-  convo: ChatCompletionMessage[],
-  note: string,
-  tailTurns: number,
-): ChatCompletionMessage[] {
-  const tailStart = compactTailStart(convo, tailTurns);
-  const out: ChatCompletionMessage[] = [{ role: 'system', content: systemPrompt }];
-  out.push({ role: 'assistant', content: note });
-  const directiveIdx = pinnedDirectiveIndex(convo, tailTurns);
-  if (directiveIdx >= 0) out.push(convo[directiveIdx]!);
-  out.push(...convo.slice(tailStart));
-  return out;
-}
-
-/** Render a slice of the transcript to a compact text the summarizer compresses. */
-function renderForSummary(msgs: ChatCompletionMessage[]): string {
-  return msgs
-    .map((m) => {
-      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '');
-      const calls = m.tool_calls?.length
-        ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(', ')}]`
-        : '';
-      return `${m.role}${calls}: ${content}`;
-    })
-    .join('\n\n');
-}
-
-/** Client-side summarizer built from the injected `stream` transport: one no-tools
- *  completion that compresses an in-progress agent transcript into a dense memory.
- *  Returns null on any failure/empty so the caller falls back to drop-oldest. */
-async function summarizeMiddle(
-  stream: BrainStreamFn,
-  model: string | undefined,
-  msgs: ChatCompletionMessage[],
-  signal: AbortSignal | undefined,
-): Promise<string | null> {
-  if (msgs.length === 0) return null;
-  try {
-    const res = await stream({
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative — earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble.',
-        },
-        { role: 'user', content: renderForSummary(msgs) },
-      ],
-      model,
-      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
-      // Left unset, it inherited the run's full output ceiling and, on a thinking-
-      // capable model, the run's reasoning depth — the most expensive way to write a
-      // paragraph the user never sees. ~1.2k tokens holds a dense memory of any
-      // middle this loop compacts (the tail is 8 turns; the middle is summarised
-      // afresh at most once per 8 new turns).
-      maxTokens: 1_200,
-      reasoning: { level: 'off' },
-      signal,
-    });
-    const out = (res.text ?? '').trim();
-    return out.length > 0 ? out : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Build the working transcript for a turn. Under budget → the existing message-count
- * + drop-oldest window (a no-op when it fits). Over budget → summarize the older
- * middle into a memoized memory note and keep the recent tail verbatim; a visible
- * `context.compacted` step is recorded so the chat SHOWS the compression. Re-summarizes
- * at most once per {@link COMPACT_TAIL_TURNS} new turns (memoized on the cell), and
- * falls back to drop-oldest if the summarizer is unavailable.
- */
-async function buildWorkingTranscript(
-  c: RunCell,
-  systemPrompt: string,
-  stream: BrainStreamFn,
-  model: string | undefined,
-): Promise<ChatCompletionMessage[]> {
-  const convo = c.transcript;
-  const total = convo.reduce((sum, m) => sum + messageTokens(m), 0);
-  if (total <= HISTORY_TOKEN_BUDGET) {
-    c.compactMemo = null; // back under budget — a later overflow summarizes afresh
-    return [{ role: 'system', content: systemPrompt }, ...windowed(convo)];
-  }
-  const stale = !c.compactMemo || convo.length - c.compactMemo.atLen >= COMPACT_TAIL_TURNS;
-  let note = c.compactMemo?.note ?? null;
-  if (stale) {
-    const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
-    const middle = convo.slice(start, end);
-    const summary = await summarizeMiddle(stream, model, middle, c.abort?.signal);
-    if (summary != null) {
-      note = `Compressed memory of ${middle.length} earlier step(s):\n${summary}`;
-      c.compactMemo = { note, atLen: convo.length };
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'context.compacted',
-        args: { droppedMessages: middle.length },
-        result: `Compressed ${middle.length} earlier step(s) into a memory to stay within the context window.`,
-      });
-      emit(c);
-    }
-  }
-  if (note == null) {
-    // Summarizer unavailable/failed → preserve the proven drop-oldest behavior.
-    return [{ role: 'system', content: systemPrompt }, ...windowed(convo)];
-  }
-  return assembleCompacted(systemPrompt, convo, note, COMPACT_TAIL_TURNS);
 }
 
 // ---------------------------------------------------------------------------
@@ -1746,6 +1434,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // Tools this run has actually called — pinned into every later turn's selection
   // so a multi-step task never loses a tool it is mid-way through using.
   const usedTools = new Set<string>();
+  // Models that broke mid-turn under auto-routing this run — routed around on every later
+  // turn, not just the one retry (see the StreamInterruptedError handling in `complete`).
+  const brokenModels = new Set<string>();
   // Caller provenance for the gateway's audit emit — this is what makes the
   // DEFAULT agent's turn show WHICH MODEL served it in the activity log (the
   // server no-ops without a chat id). Built once and shared by every
@@ -2473,7 +2164,21 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // when the transcript exceeds the token budget (instead of silently dropping it
       // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
       // drop-oldest window when no summarizer is reachable.
-      const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
+      const working = await buildWorkingTranscript(
+        c,
+        systemPrompt,
+        (msgs) => summarizeMiddle(stream, activeModel, msgs, c.abort?.signal),
+        (dropped) => {
+          pushTrace(c, {
+            ts: nowIso(),
+            category: 'message',
+            label: 'context.compacted',
+            args: { droppedMessages: dropped },
+            result: `Compressed ${dropped} earlier step(s) into a memory to stay within the context window.`,
+          });
+          emit(c);
+        },
+      );
       // User hit Stop while compacting — the kernel reports it as `cancelled` (the
       // run's signal is the one it watches) and the run unwinds quietly.
       if (c.abort?.signal.aborted) throw new Error('run stopped');
@@ -2579,7 +2284,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         emit(c);
       };
       try {
-        result = await request(turnRole, []);
+        result = await request(turnRole, [...brokenModels]);
       } catch (e) {
         // Aborting the fetch rejects the stream — that's a user Stop; the kernel
         // reports it as `cancelled` (no error trace, no error message).
@@ -2590,17 +2295,21 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // the run: this is the "Grok starts and then stops" failure. A pinned model is the
         // user's own choice, so it is not routed around.
         if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
+        // Out of every LATER turn too, not only this retry. Excluding it for the retry alone
+        // sent the next turn straight back to it: chat #105 broke on the same model and was
+        // retried on eighteen separate turns — a wasted, often looping, attempt per step.
+        brokenModels.add(e.model);
         // Durable, so a reopened chat's report can still say which model broke and was retried.
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'message',
           label: 'llm.stream_interrupted',
           args: { model: e.model, step: iter },
-          result: `${e.message} — retrying this turn on another connected model.`,
+          result: `${e.message} — retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`,
         });
         restartTurn();
         try {
-          result = await request(turnRole, [e.model]);
+          result = await request(turnRole, [...brokenModels]);
         } catch (retryError) {
           if (c.abort?.signal.aborted) throw retryError;
           throw turnError(retryError);
@@ -2623,7 +2332,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         });
         restartTurn();
         try {
-          result = await request('code', []);
+          result = await request('code', [...brokenModels]);
         } catch (e) {
           if (c.abort?.signal.aborted) throw e;
           throw turnError(e);
@@ -2841,7 +2550,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     hooks,
     signal: c.abort?.signal,
     // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
-    // limit — see the note above `HISTORY_WINDOW`.
+    // limit — see the "no tool-iteration ceiling" note at the top of this module.
     budget: {},
   });
   // A settled reply (the final-answer hook stopped the loop) or a user Stop ends the

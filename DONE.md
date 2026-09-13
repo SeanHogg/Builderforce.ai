@@ -1,3 +1,38 @@
+## ✅ RESOLVED 2026-09-13 — VSIX runs re-read the same files and never edited: the model was starved of its own reads
+
+Reported from VS Code chat #105 (VSIX 2026.9.60): 55 turns, 61 tool calls, "63% of calls revisited ground", zero edits,
+prompt peak 40,351 — after the repetition guard, the read-cache replay and the priorResearch digest had all shipped.
+Those treated symptoms. The cause was the working transcript in `brain-embedded/src/brainRunStore.ts`:
+
+- **History budget 24k → 64k tokens** (`HISTORY_TOKEN_BUDGET`). Six 4k-token `read_file` windows filled the old one, so
+  a coding task could never hold the files it needed and re-read them. It protected nothing: the gateway already fits
+  every request to a model that can hold it (`modelsFittingContext` over `estimateRequestTokens`), and the ~16k-token
+  prompt + tool prefix already put a turn past any 32k window.
+- **Compaction tail sized by tokens** (`compactTailStartForBudget`, `COMPACT_TAIL_TOKEN_BUDGET` 40k, min 8, max 40
+  messages). It was a fixed 8 messages — four tool results.
+- **Gap-free, incremental fold.** The old fold re-summarised "all but the last 8" once per 8 new messages, so messages
+  that slid out of the tail between folds were in neither the memo nor the tail. `compactMemo` is now
+  `{ note, coveredEnd }`; a fold summarises the previous note plus exactly `transcript[coveredEnd, newEnd)`;
+  `assembleCompacted` sends every message from `coveredEnd` on (`verbatimStart` keeps tool pairing). A note is reused
+  until its remainder no longer fits. A message-count overflow (> `HISTORY_WINDOW`) folds too instead of silently
+  dropping the oldest. The memo is 2.5k tokens (was 1.2k) and is told to keep paths, symbols and line numbers.
+  `compactMiddleRange` removed (no callers left).
+- **Search visits keyed by scope ∋ question** (`visitTarget`, `runActivity.ts`). `activityTarget` prefers `path` over
+  `query`, so 16 different searches under `frontend/src` counted as one target ×16 — the live `revisitAdvisory` told an
+  exploring model "STOP RE-READING", and the run report blamed a loop it had manufactured. Used by
+  `ReadCoverage.record/invalidate` (an edit still forgets searches scoped to its file), the three guard sites in
+  `brainRunStore`, and `runProgress.targetSignature`.
+- **A model that breaks mid-turn stays out for the rest of the run** (`brokenModels`). `excludeModels` covered only
+  the one retry, so auto-routing sent the next turn straight back to it: Grok broke and was retried on 18 turns.
+- **Windowing + compaction extracted from the `brainRunStore` god module** into `brain-embedded/src/workingTranscript.ts`
+  (budgets, `windowed`, the fold, `stillInWorkingContext`). Its contract is `{ transcript, compactMemo }` plus an
+  injected summarizer and an `onFolded` callback — the run store supplies the transport and records the
+  `context.compacted` trace step. Pure move, no behaviour change.
+- Tests: `workingTranscript.test.ts` (windowing + compaction partitioning, moved out of `brainRunStore.test.ts` and
+  rewritten to the index API, +3 tail/coverage cases), `brainRunStore.test.ts` (+1 run-wide exclusion),
+  `readCoverage.test.ts` (+2), `runActivity.test.ts` (+2 `visitTarget`), `runProgress.test.ts` (+1).
+- Versions: brain-embedded 2026.9.25, VSIX 2026.9.61.
+
 ## ✅ RESOLVED 2026-09-13 — Stop threw away the looping reply AND the name of the model that wrote it
 
 Reported from VS Code chat #106 (VSIX 2026.9.59) with two screenshots: a Grok turn writing "1. 2. 3. … NOW. EMIT." and
