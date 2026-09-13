@@ -1528,6 +1528,12 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   hallucinationRate: real('hallucination_rate'),
   /** 'lexical' | 'llm' — which evaluation backend scored this run. */
   evalMethod:       varchar('eval_method', { length: 8 }),
+  /** The call-purpose role this run resolved as — 'code' for every top-level run
+   *  today (migration 1167); nullable because rows scored before it carry none.
+   *  Lets `routingTable.ts` eventually rank within a role once child delegations
+   *  (verify/explore/…) accumulate enough of their own outcomes to be worth
+   *  scoring separately from the top-level coding run. */
+  role:             varchar('role', { length: 16 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -1974,6 +1980,12 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
    *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */
   surface:          varchar('surface', { length: 16 }).notNull().default('web'),
+  /** What kind of call this row was (plan/code/verify/explore/chat/utility),
+   *  when the producer knew it — migration 1167. Nullable: most producers do not
+   *  set it yet (only a cloud run's `spawn_agent` delegation resolves one today);
+   *  present so per-role spend/latency becomes a real report once role adoption
+   *  widens, instead of a retrofit. */
+  role:             varchar('role', { length: 16 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

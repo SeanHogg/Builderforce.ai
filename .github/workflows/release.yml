@@ -89,7 +89,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test:fast
+
+      # vendor/ and apps/shared/BuilderForceAgentsKit are gitignored (Docker builds
+      # exclude them too), so a fresh checkout here has neither the A2UI renderer
+      # sources nor a prebuilt bundle. bundle-a2ui.sh's own documented escape hatch
+      # for exactly this environment: skip bundling and ship the CLI without the
+      # canvas feature rather than failing the whole package.
       - run: pnpm build && pnpm ui:build
+        env:
+          BUILDERFORCE_AGENTS_A2UI_SKIP_MISSING: "1"
 
       # The tarball's entry point must actually start before it reaches every installer.
       - name: Smoke-test the CLI

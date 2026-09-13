@@ -61,6 +61,7 @@ import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import type { ArcStage, ModelRole } from '../llm/modelRoles';
 import { byoRoutingOptions } from '../llm/tenantProxy';
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
 import { TenantPlan } from '../../domain/shared/types';
@@ -392,6 +393,11 @@ async function imageRunTurn(
     cloudAgentRef: string | undefined;
     /** The run's explicit model pin, if it has one. */
     model: string | undefined;
+    /** What kind of call this turn is — 'code' for the parent's own turn, or the
+     *  `spawn` op's declared delegation role for a child's. Absent `model` + a
+     *  non-code role lets the BYO soft seed re-resolve tier-ranked toward that
+     *  role's objective instead of inheriting the parent's exact pin. */
+    role?: ModelRole;
   },
   args: {
     messages: Array<Record<string, unknown>>;
@@ -404,7 +410,7 @@ async function imageRunTurn(
     signal?: AbortSignal;
   },
 ): Promise<{ ok: true; content: string; toolCalls: unknown[] } | { ok: false; error: string; code?: string }> {
-  const { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model } = run;
+  const { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role } = run;
   const tGen0 = args.tGen0 ?? Date.now();
   // A connected Claude subscription powers a direct-Claude turn; BYO OpenAI/Google/
   // Anthropic api-keys override the operator keys for their vendors (tenant-funded →
@@ -421,6 +427,7 @@ async function imageRunTurn(
   const evermindCoding = await resolveEvermindCodingRoute(env, db, tenantId, model);
   const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
     ...(evermindCoding ? { evermindCoding } : {}),
+    role,
     // Context-aware seed: a small-window model isn't picked for a big turn.
     estimatedTokens: estimateRequestTokens(args.messages, args.tools),
     byoVendors: byoVendorIdsFromCredentials(creds),
@@ -581,6 +588,10 @@ export interface CloudLoopOpts {
    *  runs (board lane auto-run, scheduled, CI-fix). Merged as a nudge over the KV
    *  routing table on the first tick. */
   routingBias?: Record<string, number>;
+  /** The launching canvas session's arc stage (idea/make/run/measure/reach), when
+   *  known — an ephemeral per-run nudge on the role objective, never a durable
+   *  fact (see `modelRoles.ts`). Absent for a headless/non-canvas launch. */
+  arcStage?: ArcStage;
   /** Brain chat that launched this run. Enables exactly one scoped write-back tool. */
   originatingChatId?: number;
   /** Exact accountability slot a reviewer run must sign before it may finish. */
@@ -1159,6 +1170,10 @@ async function runCloudToolLoop(
         actionType: learned.actionType,
         actionStats: learned.actionStats,
         bias: opts?.routingBias,
+        // The primary agentic loop IS the run's coding work; a delegated child gets
+        // its own role via `imageRunTurn`/`SubagentDeps.complete` instead.
+        role: 'code',
+        arcStage: opts?.arcStage,
         // Context-aware seed: don't pick a small-window model for a big first turn.
         estimatedTokens: estimateRequestTokens(messages, cloudTools),
         // A free tenant may pin a model their connected provider (BYO) serves.
@@ -1839,6 +1854,9 @@ export interface CloudEngineContext {
    *  parsed off the run payload. Absent on headless runs. Threaded to the loop's
    *  first-tick model seed. */
   routingBias?: Record<string, number>;
+  /** Mirrors {@link CloudLoopOpts.arcStage} — carried on the context so `run()`
+   *  can thread it into the loop options on every tick. */
+  arcStage?: ArcStage;
   /** Brain chat that launched the execution, when this is a conversation-originated run. */
   originatingChatId?: number;
   /** Resolved assigned artifacts (skills/personas/content). Used by V3 to derive
@@ -1903,6 +1921,7 @@ export class CloudLimbicEngine implements AgentEngine {
       rc.isCancelled, rc.projectId,
       {
         routingBias: rc.routingBias,
+        arcStage: rc.arcStage,
         ...(rc.originatingChatId != null ? { originatingChatId: rc.originatingChatId } : {}),
         ...(rc.requiredSignoff ? { requiredSignoff: rc.requiredSignoff } : {}),
         ...(directive ? { dynamicSystem: directive } : {}),

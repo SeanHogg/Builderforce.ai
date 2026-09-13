@@ -20,7 +20,7 @@ import { scopedToTenant } from '../database/tenantScope';
 import { prepareCloudRun, resolveAgentEngine, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
 import type { LimbicState, AgentExecParams } from '@builderforce/agent-tools';
-import { parseRoutingBias, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId } from '../../application/runtime/cloudDispatch';
+import { parseRoutingBias, parseArcStage, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
 import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
@@ -194,6 +194,7 @@ export class CloudRunnerDO implements DurableObject {
         : undefined;
       const originatingChatId = parseOriginatingChatId(cursor.payload);
       const routingBias = parseRoutingBias(cursor.payload);
+      const arcStage = parseArcStage(cursor.payload);
       const policyGates = parsePolicyGates(cursor.payload);
       const engine = resolveAgentEngine({
         env: this.env, db: this.db, executionId: cursor.executionId, tenantId: cursor.tenantId,
@@ -201,6 +202,7 @@ export class CloudRunnerDO implements DurableObject {
         projectId: cursor.projectId, agentLabel: cursor.agentLabel, cloudAgentRef: cursor.cloudAgentRef,
         isCancelled: () => this.isAlreadyConcluded(cursor.executionId),
         ...(routingBias ? { routingBias } : {}),
+        ...(arcStage ? { arcStage } : {}),
         ...(originatingChatId != null ? { originatingChatId } : {}),
         ...(requiredSignoff ? { requiredSignoff } : {}),
         ...(cursor.execParams ? { execParams: cursor.execParams } : {}),

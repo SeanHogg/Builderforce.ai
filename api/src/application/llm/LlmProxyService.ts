@@ -133,6 +133,8 @@ import {
   resolveVendorTimeoutOverride,
 } from './modelPool';
 export * from './modelPool';
+import type { ArcStage, ModelRole } from './modelRoles';
+export type { ArcStage, ModelRole } from './modelRoles';
 // ---------------------------------------------------------------------------
 // Public types — kept stable for callers (llmRoutes, ideAiRoutes)
 // ---------------------------------------------------------------------------
@@ -2409,6 +2411,15 @@ export interface PickCloudModelOptions {
    * never an error. Operator decision 2026-09-12.
    */
   evermindCoding?: { model: string; qualified: boolean };
+  /** What kind of call this is (plan/code/verify/explore/chat/utility) — reorders
+   *  the BYO soft seed's per-vendor candidates toward that role's objective (see
+   *  {@link resolveRoleObjective}) instead of leaving every call on one global
+   *  precedence order regardless of what it is actually doing. Absent → balanced,
+   *  today's behaviour. */
+  role?: ModelRole;
+  /** The launching canvas session's arc stage, when known — a further nudge on
+   *  top of `role`'s objective. Ephemeral (see `modelRoles.ts`), never persisted. */
+  arcStage?: ArcStage;
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -2562,10 +2573,13 @@ export function pickCloudModel(
   // the run locks onto whatever this seed resolves on turn 1. Shared with the gateway
   // completion seed so both surfaces agree. Soft (not strict) so a transient provider
   // error still fails over.
-  const byoSeed = opts?.preferredRegisteredModel
-    ?? byoAutoSeedModels(opts?.byoVendors, {
+  const byoCandidates = opts?.preferredRegisteredModel
+    ? [opts.preferredRegisteredModel]
+    : byoAutoSeedModels(opts?.byoVendors, {
       agentic: true,
       vendorPriority: opts?.byoVendorPriority,
+      role: opts?.role,
+      arcStage: opts?.arcStage,
       // A provider the tenant chose models for leads with its first choice — the same
       // seed the gateway completion path builds, so a cloud run and a chat agree.
       ...(opts?.byoSelectedModels ? { selectedModels: opts.byoSelectedModels } : {}),
@@ -2574,8 +2588,23 @@ export function pickCloudModel(
       ...(opts?.byoAlertedVendors?.length
         ? { demotedVendors: new Set(opts.byoAlertedVendors) }
         : {}),
-    })[0];
-  if (byoSeed) return { model: byoSeed, strict: false };
+    });
+  if (byoCandidates.length > 0) {
+    // Learned routing used to apply ONLY in the soft-seed branch below, which a BYO
+    // tenant never reaches — every BYO run's `action_type` outcomes were recorded
+    // but never fed back into ordering. Reusing the SAME ranker here means a BYO
+    // tenant's connected accounts also benefit from what has empirically worked for
+    // this action type, on top of (not instead of) the role/tier ordering above —
+    // `byoCandidates` is already role-ranked per vendor group, so this is a nudge
+    // among those candidates, never a reach past what the tenant connected.
+    const byoBias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
+    const byoRanked = rankModelsForAction(byoCandidates, opts?.actionStats, { minSamples: opts?.minSamples, bias: byoBias });
+    const byoSeed = byoRanked[0];
+    if (byoSeed) {
+      const seedStat = opts?.actionStats?.find((s) => s.model === byoSeed);
+      return { model: byoSeed, strict: false, ranked: byoRanked, seedSamples: seedStat ? qualityEvidence(seedStat) : 0, biasApplied: !!byoBias };
+    }
+  }
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the
   // plan-reachable coding pool by the learned stats (+ optional bias) and seed the

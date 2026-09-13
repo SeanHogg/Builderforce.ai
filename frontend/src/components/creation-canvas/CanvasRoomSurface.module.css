@@ -98,7 +98,61 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Header row pairs the "N PEOPLE" label with the collapse chevron. */
+.rosterHeadRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 8px;
+}
+
+.rosterToggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.rosterToggle:hover,
+.rosterToggle:focus-visible {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+/* Collapsed: the chevron flips to point back out and the rail narrows to just it. */
+.rosterToggleCollapsed svg {
+  transform: rotate(180deg);
+}
+
+.rosterCollapsed {
+  flex: 0 0 44px;
+  padding: 12px 8px;
+  overflow: hidden;
+}
+
+.rosterCollapsed > *:not(.rosterHeadRow) {
+  display: none;
+}
+
+.rosterCollapsed .rosterHead {
+  display: none;
+}
+
+.rosterCollapsed .rosterHeadRow {
+  justify-content: center;
+  margin: 0;
 }
 
 .seat {

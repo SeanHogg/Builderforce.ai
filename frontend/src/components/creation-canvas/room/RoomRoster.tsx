@@ -1,36 +1,73 @@
-import { useTranslations } from 'next-intl';
-import { bodyColor, type RoomPalette, type RoomSeat } from '@/lib/canvas/roomSeating';
-import type { RoomStationInstance } from '@/lib/canvas/roomStations';
-import { RoomStationList } from '../room-stations/RoomStations';
-import surfaceStyles from '../CanvasRoomSurface.module.css';
+import { memo, useState, type CSSProperties } from 'react'
+import { useT } from '../../../i18n'
+import { Avatar } from '../../ui/Avatar'
+import { Icon } from '../../ui/Icon'
+import surfaceStyles from '../CanvasRoomSurface.module.css'
+import type { RoomSeat } from '../types'
 
-/**
- * WHO IS IN THE ROOM, and what stands in it — the rail beside the stage.
- *
- * The keyboard and screen-reader path to the room's people and stations, and on a
- * phone the strip under the stage. Every row reads the seat the room placed, so the
- * list and the bodies can never disagree about who is here.
- */
-export function RoomRoster({ seats, palette, stations, onOpenStation }: {
-  seats: readonly RoomSeat[];
-  palette: RoomPalette;
-  stations: readonly RoomStationInstance[];
-  onOpenStation: (key: string) => void;
-}) {
-  const t = useTranslations('creationCanvas.surface.room');
-  return (
-    <div className={surfaceStyles.roster}>
-      <p className={surfaceStyles.rosterHead}>{t('rosterHead', { count: seats.length })}</p>
-      {seats.map((seat) => (
-        <div key={seat.userId} className={surfaceStyles.seat} data-live={seat.present ? 'true' : 'false'} data-kind={seat.kind}>
-          <span className={surfaceStyles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
-          <span className={surfaceStyles.seatName}>{seat.displayName || t('unknown')}</span>
-          <span className={surfaceStyles.seatState}>
-            {seat.isSelf ? t('you') : seat.kind === 'agent' ? t('agent') : seat.live ? t('inRoom') : t('onBoard')}
-          </span>
-        </div>
-      ))}
-      <RoomStationList instances={stations} onOpen={onOpenStation} />
-    </div>
-  );
+type RoomRosterProps = {
+  seats: RoomSeat[]
+  style?: CSSProperties
 }
+
+/** Side panel listing everyone present in the room, plus the session's stations. Collapsible via the header chevron. */
+export const RoomRoster = memo(function RoomRoster({ seats, style }: RoomRosterProps) {
+  const t = useT()
+  const [collapsed, setCollapsed] = useState(false)
+  const stations = seats.flatMap((seat) => seat.stations)
+  const toggleLabel = t(collapsed ? 'expandRoster' : 'collapseRoster')
+  return (
+    <aside className={surfaceStyles.roster} style={style}>
+      <div className={surfaceStyles.rosterHeadRow}>
+        <p className={surfaceStyles.rosterHead}>{t('rosterHead', { count: seats.length })}</p>
+        <button
+          type="button"
+          className={`${surfaceStyles.rosterToggle} ${collapsed ? surfaceStyles.rosterToggleCollapsed : ''}`}
+          aria-expanded={!collapsed}
+          aria-label={toggleLabel}
+          title={toggleLabel}
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          <Icon name="chevron-right" size={14} />
+        </button>
+      </div>
+      {collapsed ? null : (
+        <>
+          <ul className={surfaceStyles.rosterList}>
+            {seats.map((seat) => (
+              <li key={seat.id} className={surfaceStyles.rosterRow}>
+                <span className={surfaceStyles.rosterWho}>
+                  <Avatar name={seat.label} tone={seat.tone} size={18} presence={seat.presence} />
+                  <span className={surfaceStyles.rosterName}>{seat.label}</span>
+                </span>
+                <span className={surfaceStyles.rosterMeta}>
+                  {seat.you ? t('you') : seat.kind === 'agent' ? t('agent') : t('inRoom')}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {stations.length > 0 ? (
+            <>
+              <p className={surfaceStyles.rosterHead}>{t('stationsInRoom')}</p>
+              <ul className={surfaceStyles.stationList}>
+                {stations.map((station) => (
+                  <li key={station.id} className={surfaceStyles.stationRow}>
+                    <span className={surfaceStyles.stationInfo}>
+                      <strong>{station.title}</strong>
+                      <small>{station.detail}</small>
+                    </span>
+                    {station.action ? (
+                      <button type="button" className={surfaceStyles.stationAction}>
+                        {station.action}
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </>
+      )}
+    </aside>
+  )
+})

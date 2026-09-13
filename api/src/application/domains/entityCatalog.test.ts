@@ -247,7 +247,21 @@ describe('the entity catalog', () => {
     // raw relation and re-fold it; nobody opens a tally. The relation it summarises is
     // not in the catalog either, so this is the append-only-fact case, not a family
     // split like `job_invites`.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(27);
+    //
+    // Ceiling moved 26 → 27 (2026-09-13) with `tenant_llm_provider_models` (migration
+    // 1165), adjudicated rather than counted: it is a CHILD of `tenant_llm_provider_keys`
+    // on its `(tenant_id, provider)` key, `ON DELETE CASCADE`, and unlike `job_invites` it
+    // is not even entity-shaped on its own merits — no id, no title, no status, just a
+    // `position` integer ordering a provider's failover model list, read and replaced as a
+    // WHOLE LIST (`listProviderModelSelections` / `replaceProviderModelSelection` in
+    // `providerModelSelection.ts`) rather than addressed row-by-row. Its parent
+    // `tenant_llm_provider_keys` is not in the catalog either — it predates the 0418
+    // series (migration 0088), so it isn't even in `created` to be counted — and it holds
+    // the actual credential (`key_enc`). Registering the child while the credential-bearing
+    // parent stays unregistered would put one member of an unregistered family on the
+    // generic reader, the exact `job_invites`/`job_postings` situation above. This leaves
+    // the pair together, not before it.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(28);
   });
 
   it('declares nothing that no migration creates', () => {

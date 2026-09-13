@@ -24044,6 +24044,8 @@
         "regionLabel": "This session's room",
         "here": "{here} of {total} here",
         "rosterHead": "{count, plural, =0 {Nobody yet} one {# person} other {# people}}",
+        "collapseRoster": "Collapse the people panel",
+        "expandRoster": "Expand the people panel",
         "unknown": "Collaborator",
         "you": "You",
         "inRoom": "In the room",

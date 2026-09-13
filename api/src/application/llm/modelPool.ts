@@ -26,6 +26,7 @@ import {
   MAX_VENDOR_CALL_TIMEOUT_MS,
   type VendorId,
 } from './vendors';
+import { resolveRoleObjective, type ArcStage, type ModelRole } from './modelRoles';
 import {
   byoVendorIdsFromCredentials,
 } from './tenantProviderKeyService';
@@ -329,6 +330,26 @@ function frontierTierRank(model: string): number {
   return order[tierForModel(model)] ?? 4;
 }
 
+/** The BALANCED band: an objective this close to 0 leaves the tenant's own order
+ *  alone rather than reordering on a barely-there preference. */
+const BALANCED_OBJECTIVE_THRESHOLD = 0.15;
+
+/**
+ * Reorder ONE vendor's own candidates (the tenant's selection, or — trivially — its
+ * single flagship) toward a role's objective: quality-first promotes the tenant's
+ * STRONGEST reachable tier to the lead, cost-first the CHEAPEST. Never adds, drops
+ * or invents a candidate — a single-item list, or a near-zero (balanced) objective,
+ * returns the input untouched, so a vendor the tenant never gave a choice for (no
+ * selection made, just the one flagship) is completely unaffected. Pure +
+ * unit-testable.
+ */
+export function rankByObjective(models: readonly string[], objective: number): string[] {
+  if (models.length <= 1 || Math.abs(objective) < BALANCED_OBJECTIVE_THRESHOLD) return [...models];
+  return [...models].sort((a, b) => (objective > 0
+    ? frontierTierRank(a) - frontierTierRank(b)
+    : frontierTierRank(b) - frontierTierRank(a)));
+}
+
 /**
  * The connected owner's OWN premium frontier models to lead auto-select with — ONE
  * flagship per connected provider, so an auto-select turn (no explicit model) uses the
@@ -362,9 +383,18 @@ export function byoAutoSeedModels(
      *  dispatch vendor. A selected vendor contributes its whole ordered list — lead model
      *  first, then its own failover — in place of its single flagship. */
     selectedModels?: Readonly<Record<string, readonly string[]>>;
+    /** What kind of call this seed is for, and the launching session's arc stage —
+     *  combine into ONE objective ({@link resolveRoleObjective}) that reorders each
+     *  vendor's OWN selected candidates toward the tenant's strongest or cheapest
+     *  reachable tier. A vendor with only its single flagship (no selection made)
+     *  has nothing to reorder, so this only ever matters once a tenant has chosen
+     *  more than one model for a provider. */
+    role?: ModelRole;
+    arcStage?: ArcStage;
   },
 ): string[] {
   if (!byoVendors || byoVendors.size === 0) return [];
+  const objective = resolveRoleObjective(opts.role, opts.arcStage);
   // One GROUP per connected vendor: the tenant's ordered selection when they made one,
   // else the vendor's frontier flagship. A selection is taken as given — its refs route
   // by their `direct/<vendor>/` prefix, not catalog membership, which is the whole point
@@ -373,7 +403,7 @@ export function byoAutoSeedModels(
   const groups = [...byoVendors]
     .map((v): string[] => {
       const selected = opts.selectedModels?.[v];
-      if (selected?.length) return [...selected];
+      if (selected?.length) return rankByObjective(selected, objective);
       const flagship = providerFrontierFlagship(v, opts.agentic);
       return flagship !== null && isDispatchableSeed(flagship) ? [flagship] : [];
     })

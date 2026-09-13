@@ -26,6 +26,7 @@
  */
 
 import type { SymbolKind } from "./symbols.js";
+import type { ModelRole } from "./modelRoles.js";
 
 /**
  * The set of capabilities a tool can require / a surface can provide. Adding a new
@@ -286,6 +287,11 @@ export interface SubagentRequest {
   /** When true (the default) the child is given read/search capabilities only, so a
    *  delegated investigation cannot change the working tree behind the parent. */
   readOnly?: boolean;
+  /** What KIND of call the child's turns are — lets the surface pick a model suited
+   *  to the delegated work (e.g. a cheap reader for `explore`) instead of pinning
+   *  the child to whatever the parent happens to be running as. Defaults are applied
+   *  by the tool itself from `readOnly` before this ever reaches the capability. */
+  role?: ModelRole;
 }
 
 export interface SubagentResult {

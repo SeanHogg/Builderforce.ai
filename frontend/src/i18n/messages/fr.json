@@ -24044,6 +24044,8 @@
         "regionLabel": "La salle de cette session",
         "here": "{here} sur {total} présents",
         "rosterHead": "{count, plural, =0 {Personne pour l'instant} one {# personne} other {# personnes}}",
+        "collapseRoster": "Replier le panneau des personnes",
+        "expandRoster": "Déplier le panneau des personnes",
         "unknown": "Collaborateur",
         "you": "Vous",
         "inRoom": "Dans la salle",

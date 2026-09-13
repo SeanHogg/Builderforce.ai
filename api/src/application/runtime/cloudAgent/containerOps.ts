@@ -60,6 +60,7 @@ import { teardownCrashedRunArtifacts } from '../runRollback';
 import { scoreRunOutcome } from '../scoreRunOutcome';
 import { agentCommitMessage, buildPrdCapability, recordTaskFileChange } from './prd';
 import { readOpenAiToolCalls } from '@builderforce/agent-loop';
+import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { RuntimeService } from '../RuntimeService';
@@ -397,6 +398,10 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     if (!task) return { status: 200, body: { ok: false, error: 'task is required — the child sees none of your conversation' } };
     const label = typeof args.label === 'string' && args.label.trim() ? args.label.trim() : task.slice(0, 60);
     const readOnly = args.read_only !== false;
+    // Same default the Worker-driven `spawn_agent` tool applies (subagent-tools.ts):
+    // an unset role follows readOnly, since choosing to write already typed the
+    // intent to edit and choosing to read already typed the intent to investigate.
+    const role: ModelRole = isModelRole(args.role) ? args.role : readOnly ? 'explore' : 'code';
     if (await isExecutionCancelled(db, executionId)) {
       return { status: 200, body: { ok: false, error: 'this run was cancelled; do not delegate, just stop' } };
     }
@@ -419,7 +424,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       parentCaps,
       provider,
       registry: cloudToolRegistry,
-      complete: async ({ messages: childMessages, tools }) => {
+      complete: async ({ messages: childMessages, tools, role: turnRole }) => {
         // Cancel BEFORE the paid call, on every child turn. The image polls cancel from
         // its own loop, but it is blocked on this op for the whole delegation — so
         // without this, stopping a run would leave its sub-agent spending to the end of
@@ -427,8 +432,15 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
         if (await isExecutionCancelled(db, executionId)) {
           return { failed: 'the run was cancelled while this sub-agent was working' };
         }
+        // Only a CODE delegation inherits the parent's exact pin verbatim — every
+        // other role gets its own fresh soft-seed resolution (still scoped to this
+        // tenant's connected accounts), tier-ranked toward that role's objective, so
+        // e.g. an `explore` child does not ride the parent's Opus pin for a read-only
+        // search. `imageRunTurn` resolves credentials itself, so passing `undefined`
+        // here is enough to hand it back to the normal per-turn pick.
+        const childModel = (turnRole ?? role) === 'code' ? model : undefined;
         const childTurn = await engine.imageRunTurn(
-          { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model },
+          { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model: childModel, role: turnRole ?? role },
           // `notify: false` — a child's turns are an implementation detail of one
           // parent tool call, not messages the run's subscribers should see.
           { messages: childMessages, tools, notify: false },
@@ -443,7 +455,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
         });
       },
     });
-    const result = await orchestration.spawn({ task, label, readOnly });
+    const result = await orchestration.spawn({ task, label, readOnly, role });
     await heartbeatExecution(db, executionId);
     // A child's writes are the RUN's writes. The provider already did the Worker-side
     // bookkeeping (the commit, the `task_file_changes` row, the subscriber notify), but
@@ -505,7 +517,8 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // sub-agent commissioned from an image surface is routed, funded, metered and
     // attributed exactly like the parent turn that commissioned it.
     const turn = await engine.imageRunTurn(
-      { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model },
+      // The parent's own turn is always the primary coding work this run exists for.
+      { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role: 'code' as const },
       { messages: sendMessages, tools: containerTools, notify: true, tGen0 },
     );
     // Heartbeat: a live container keeps the run out of the orphan reaper.

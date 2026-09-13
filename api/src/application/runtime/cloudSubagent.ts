@@ -19,6 +19,7 @@
 import {
   type Capability,
   type CapabilityProvider,
+  type ModelRole,
   type OrchestrationCapability,
   type SubagentRequest,
   type SubagentResult,
@@ -96,8 +97,11 @@ export interface SubagentDeps {
   provider: CapabilityProvider;
   registry: ToolRegistry;
   /** Take one model turn on the child's transcript. The surface owns metering,
-   *  model selection and telemetry; the kernel owns the loop. */
-  complete(args: { messages: Record<string, unknown>[]; tools: ToolSchema[]; step: number }): Promise<LoopTurnResult>;
+   *  model selection and telemetry; the kernel owns the loop. `role` is the
+   *  delegation's declared purpose (defaulted from `readOnly` by the tool before
+   *  the request ever reaches `spawn`), so the surface can pick a model suited to
+   *  the work instead of inheriting the parent's pin verbatim. */
+  complete(args: { messages: Record<string, unknown>[]; tools: ToolSchema[]; step: number; role?: ModelRole }): Promise<LoopTurnResult>;
   /** The parent run's cancel signal — a cancelled run must not leave a child spending. */
   signal?: AbortSignal;
   maxSteps?: number;
@@ -137,7 +141,11 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
           task: input.task,
           readOnly,
           tools,
-          complete: deps.complete,
+          // The kernel's `complete` port carries no purpose field (it is generic
+          // over any surface) — the role this delegation declared is closed over
+          // here, at the one place that knows it, rather than threaded through the
+          // loop itself.
+          complete: (a) => deps.complete({ ...a, role: input.role }),
           dispatch: async (call) => {
             const dispatched = await deps.registry.dispatch(call.name, call.args, ctx);
             return { data: dispatched.data, ...(dispatched.control ? { control: dispatched.control } : {}) };

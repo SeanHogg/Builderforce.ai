@@ -14,6 +14,7 @@
 import { coercePolicyGates, type PolicyGate } from '@builderforce/agent-tools';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { canonicalModelId } from '../llm/modelPool';
+import { isArcStage, type ArcStage } from '../llm/modelRoles';
 
 export type CloudSurface = 'durable' | 'container' | 'github_actions';
 
@@ -302,6 +303,24 @@ export function parseRoutingBias(payload: string | undefined): Record<string, nu
       if (model && Number.isFinite(n) && n !== 0) out[model] = Math.max(-1, Math.min(1, n));
     }
     return Object.keys(out).length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Parse the launching canvas session's ARC STAGE off a run payload — same shape
+ * and same reason as {@link parseRoutingBias}: a per-session client fact
+ * (`frontend/src/lib/canvasPhases.ts` — "no field anywhere stores it") riding the
+ * dispatch payload as an ephemeral nudge rather than becoming a durable column. A
+ * task-runner launch outside any canvas simply omits it. Returns undefined on
+ * anything but one of the five known stages.
+ */
+export function parseArcStage(payload: string | undefined): ArcStage | undefined {
+  if (!payload) return undefined;
+  try {
+    const raw = (JSON.parse(payload) as { arcStage?: unknown }).arcStage;
+    return isArcStage(raw) ? raw : undefined;
   } catch {
     return undefined;
   }

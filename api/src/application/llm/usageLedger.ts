@@ -273,6 +273,10 @@ export interface UsageAttribution {
   taskId?: number | null;
   /** Project the spend is attributed to (0103) — rolls up project → account. */
   projectId?: number | null;
+  /** Call-purpose role this call resolved as, when the producer knew it (1167) —
+   *  e.g. a cloud run's `spawn_agent` delegation. Most callers omit it; absent is
+   *  recorded as null, not guessed. */
+  role?: string | null;
 }
 
 export interface RecordUsageRow {
@@ -513,6 +517,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       executionId:         row.attribution?.executionId ?? null,
       taskId:              row.attribution?.taskId ?? null,
       projectId:           row.attribution?.projectId ?? null,
+      role:                row.attribution?.role ?? null,
       costUsdMillicents,
       traceId:             row.traceId ?? null,
       paidOverflow:        row.paidOverflow ?? false,

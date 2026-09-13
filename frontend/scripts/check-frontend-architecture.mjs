@@ -30,6 +30,35 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   976 → 978 (`useClientFiles`, 2026-09-13) — the BYO provider model-order picker
+ *   (the settings-side counterpart of migration 1165's `tenant_llm_provider_models`).
+ *   Net +2 across three additions and one removal, diffed against the commit that
+ *   recorded 976 rather than the stale `.frontend-architecture-tally.json` sidecar,
+ *   which would otherwise print ~70 files that moved in earlier, already-argued passes:
+ *
+ *     - `lib/useProviderModels.ts` — the hook owning one provider's fetched model list,
+ *       an editable DRAFT order and the dirty/save state. A hook is client by
+ *       construction.
+ *     - `components/llm/ReorderableList.tsx` — THE drag-and-arrow-key reorder row,
+ *       shared by every "position 1 wins" list on the BYO settings surface (account
+ *       precedence, OpenRouter model order, connected-provider model order) so a second
+ *       hand-rolled reorder control cannot drift from this one. It binds
+ *       `useDragReorder` and reads `useTranslations`; neither renders on the server.
+ *     - `components/llm/ProviderModelPicker.tsx` — the panel composing the two above
+ *       for one provider.
+ *
+ *   The one removal, `components/PromptInput.tsx`, is dead-code cleanup bundled in the
+ *   same pass and not a page-splitting trade: `MeetingRoom.tsx` already imports the
+ *   shared `PromptInput` from `@seanhogg/builderforce-brain-embedded`, so the local
+ *   150-line duplicate had no reason left to exist.
+ *
+ *   `useClientPages` tightens 23 → 21 in the same window — not this feature's, but the
+ *   entry immediately below's: the "977 → 976" page split (dashboard, insights, personas,
+ *   skills, content-manager, create, disputes, freelancer disputes/earnings, plus the
+ *   `webcontainer/connect` pair) removed exactly these 11 page-level directives when it
+ *   landed, and only the `useClientFiles` half of that entry's baseline was applied at the
+ *   time. Closed here as a TIGHTENING, which needs no argument beyond the entry it belongs to.
+ *
  *   977 → 976 (`useClientFiles`, 2026-09-12, later the same day) — a CUT, recorded
  *   because the tree had drifted to 980 against 977. `git grep` against 99f5576ca
  *   names every move:

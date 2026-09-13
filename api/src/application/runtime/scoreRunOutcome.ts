@@ -214,6 +214,10 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         costUsdMillicents: costMc,
         terminalStatus: o.terminalStatus,
         rateLimited: !!o.rateLimited,
+        // The client-reported run is the top-level agent's own work, same as a
+        // cloud run's primary turn — see modelRoles.ts for why every top-level
+        // run resolves 'code' today.
+        role: 'code',
       })
       .onConflictDoNothing({ target: runModelOutcomes.clientRunId })
       .returning({ id: runModelOutcomes.id });
@@ -437,6 +441,10 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       answerRelevance: evalScores?.answerRelevance ?? null,
       hallucinationRate: evalScores?.hallucinationRate ?? null,
       evalMethod: evalScores?.method ?? null,
+      // The scored run is the top-level agent loop's own work — see modelRoles.ts
+      // for why every top-level run resolves 'code' today. A spawn_agent child's
+      // OWN outcome is not separately scored here.
+      role: 'code',
     };
 
     // Insert-once: a newly inserted row folds into the routing blobs; an existing one
