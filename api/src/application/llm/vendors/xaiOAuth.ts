@@ -1,4 +1,5 @@
 import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, fetchWithVendorTimeout, isCapacityLimitBody, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
 import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
@@ -60,8 +61,12 @@ async function saveReasoningChain(
   if (!next) return;
   try {
     await params.reasoningReplay!.save(await reasoningReplayKey(params.apiKey, next.firstCallId), next.chain);
-  } catch {
-    /* best-effort */
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/llm/vendors/xaiOAuth.ts',
+      operation: 'saveReasoningChain',
+      level: 'warning',
+    });
   }
 }
 
