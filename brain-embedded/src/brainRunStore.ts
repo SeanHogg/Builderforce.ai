@@ -73,7 +73,7 @@ import {
   continuationDirective,
   memoryReplayable,
 } from '@builderforce/agent-stall';
-import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -1686,7 +1686,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       } catch { memAnswer = null; }
       const finalText = canonicalTurnText(memAnswer?.text ?? '');
       if (finalText) {
-        convo.push({ role: 'assistant', content: finalText });
+        convo.push({ role: 'assistant', content: replayTextOf(finalText) });
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
         c.streamingText = '';
         recordAppended(c, assistantMsg);
@@ -1960,7 +1960,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
    */
   const settleReply = async (rawText: string, result: StreamResult) => {
     const text = canonicalTurnText(rawText);
-    convo.push({ role: 'assistant', content: text });
+    convo.push({ role: 'assistant', content: replayTextOf(text) });
     const meta = provenanceMetadata(result);
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, ...(meta ? { metadata: meta } : {}) }]);
     c.streamingText = '';
@@ -2214,7 +2214,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
           recordAppended(c, narrationMsg);
         }
-        convo.push({ role: 'assistant', content: result.text });
+        convo.push({ role: 'assistant', content: replayTextOf(result.text) });
         convo.push({ role: 'user', content: nudge });
       };
       if (runTool && shouldRecoverStalledTurn(stallInput)) {
@@ -2426,7 +2426,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           category: 'error',
           label: 'llm.complete',
           durationMs: nowMs() - llmStart,
-          args: { model: activeModel ?? 'default', step: iter },
+          // The model that broke, not the requested one: under auto-routing that is 'default'.
+          args: { model: (e instanceof StreamInterruptedError && e.model) || activeModel || 'default', step: iter },
           result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
           isError: true,
         });
@@ -2587,7 +2588,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const toolCalls = runTool
         ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args }))
         : [];
-      return { content: result.text, toolCalls, meta };
+      return { content: replayTextOf(result.text), toolCalls, meta };
     },
 
     dispatch: async (call, ctx) => {
@@ -2751,7 +2752,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       });
       const closingText = canonicalTurnText(closing.text);
       if (closingText) {
-        convo.push({ role: 'assistant', content: closingText });
+        convo.push({ role: 'assistant', content: replayTextOf(closingText) });
         const meta = provenanceMetadata(closing);
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: closingText, ...(meta ? { metadata: meta } : {}) }]);
         c.streamingText = '';

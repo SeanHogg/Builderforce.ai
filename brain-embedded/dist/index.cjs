@@ -991,6 +991,9 @@ function answerTextOf(content) {
 function thoughtTextOf(content) {
   return splitReasoningSegments(content).filter((s) => s.kind === "thought").map((s) => s.content).join("\n\n").trim();
 }
+function replayTextOf(content) {
+  return answerTextOf(content) || thoughtTextOf(content);
+}
 function detailsText(details) {
   if (!Array.isArray(details)) return "";
   return details.map((d) => {
@@ -4101,7 +4104,10 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     if (!paged && bytes > largestLossyResultBytes) largestLossyResultBytes = bytes;
     if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
   }
-  const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => ({ label: e.label, message: errorMessageOf(e) }));
+  const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => {
+    const model = e.args?.model;
+    return { label: e.label, message: errorMessageOf(e), ...typeof model === "string" && model !== "default" ? { model } : {} };
+  });
   const modelsUsed = modelsUsedInTrace(events);
   const modelScores = modelScorecard(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
@@ -4193,7 +4199,7 @@ function formatBrainDiagnostics(d) {
   );
   lines.push(...d.progress ? formatRunProgress(d.progress) : []);
   if (d.errorSteps?.length) {
-    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label} \u2014 ${e.message}`);
+    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}`);
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
   }
   if (d.advertisedToolsLastTurn != null) {
@@ -5537,7 +5543,7 @@ ${block}`;
       }
       const finalText = canonicalTurnText(memAnswer?.text ?? "");
       if (finalText) {
-        convo.push({ role: "assistant", content: finalText });
+        convo.push({ role: "assistant", content: replayTextOf(finalText) });
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
         c.streamingText = "";
         recordAppended(c, assistantMsg);
@@ -5675,7 +5681,7 @@ ${continuationDirective()}`;
   let pendingRun = null;
   const settleReply = async (rawText, result) => {
     const text = canonicalTurnText(rawText);
-    convo.push({ role: "assistant", content: text });
+    convo.push({ role: "assistant", content: replayTextOf(text) });
     const meta = provenanceMetadata(result);
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
     c.streamingText = "";
@@ -5855,7 +5861,7 @@ ${revisit}` : replayNote });
           const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
           recordAppended(c, narrationMsg);
         }
-        convo.push({ role: "assistant", content: result.text });
+        convo.push({ role: "assistant", content: replayTextOf(result.text) });
         convo.push({ role: "user", content: nudge });
       };
       if (runTool && shouldRecoverStalledTurn(stallInput)) {
@@ -6014,7 +6020,8 @@ ${revisit}` : replayNote });
           category: "error",
           label: "llm.complete",
           durationMs: nowMs2() - llmStart,
-          args: { model: activeModel ?? "default", step: iter },
+          // The model that broke, not the requested one: under auto-routing that is 'default'.
+          args: { model: e instanceof StreamInterruptedError && e.model || activeModel || "default", step: iter },
           result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
           isError: true
         });
@@ -6126,7 +6133,7 @@ ${revisit}` : replayNote });
       }
       const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
       const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
-      return { content: result.text, toolCalls, meta };
+      return { content: replayTextOf(result.text), toolCalls, meta };
     },
     dispatch: async (call, ctx) => {
       const iter = ctx.step;
@@ -6232,7 +6239,7 @@ ${revisit}` : replayNote });
       });
       const closingText = canonicalTurnText(closing.text);
       if (closingText) {
-        convo.push({ role: "assistant", content: closingText });
+        convo.push({ role: "assistant", content: replayTextOf(closingText) });
         const meta = provenanceMetadata(closing);
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
         c.streamingText = "";
@@ -6261,7 +6268,11 @@ ${revisit}` : replayNote });
 
 // src/useBrainConversation.ts
 function seedFrom(history) {
-  return scopeToConsolidation(history).filter((m) => !isStepMessage(m)).map((m) => ({ role: m.role, content: m.content }));
+  return scopeToConsolidation(history).filter((m) => !isStepMessage(m)).flatMap((m) => {
+    if (m.role !== "assistant") return [{ role: m.role, content: m.content }];
+    const content = replayTextOf(m.content);
+    return content ? [{ role: "assistant", content }] : [];
+  });
 }
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();

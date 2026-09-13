@@ -2181,6 +2181,7 @@ interface BrainDiagnostics {
     errorSteps: {
         label: string;
         message: string;
+        model?: string;
     }[];
     /** Distinct models that actually answered, first-seen order. */
     modelsUsed: string[];

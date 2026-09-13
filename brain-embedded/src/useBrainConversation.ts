@@ -24,6 +24,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { replayTextOf } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
 import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
@@ -238,12 +239,18 @@ export interface UseBrainConversation {
  * the last consolidation marker (a consolidated chat sends its summary as base context
  * instead of the full history), WITHOUT the durable tool/memory STEP rows — those are
  * timeline records, not model turns, and re-sending an orphaned tool message 400s
- * strict vendors. One builder for the send path and the trailing-message auto-reply.
+ * strict vendors. Assistant turns go back as `replayTextOf` reads them: without the
+ * `<think>` blocks they were persisted with, which a model copies as markup instead of
+ * calling tools. One builder for the send path and the trailing-message auto-reply.
  */
 function seedFrom(history: BrainMessage[]): ChatCompletionMessage[] {
   return scopeToConsolidation(history)
     .filter((m) => !isStepMessage(m))
-    .map((m) => ({ role: m.role as ChatCompletionMessage['role'], content: m.content }));
+    .flatMap((m) => {
+      if (m.role !== 'assistant') return [{ role: m.role as ChatCompletionMessage['role'], content: m.content }];
+      const content = replayTextOf(m.content);
+      return content ? [{ role: 'assistant' as const, content }] : [];
+    });
 }
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {

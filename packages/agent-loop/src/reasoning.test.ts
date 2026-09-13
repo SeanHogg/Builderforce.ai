@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   answerTextOf,
   canonicalReasoningText,
+  replayTextOf,
   splitReasoningSegments,
   splitVendorReasoning,
   stripReasoningScratchpad,
@@ -158,6 +159,23 @@ describe("answerTextOf / thoughtTextOf", () => {
   it("joins several blocks and returns nothing when the turn carried no reasoning", () => {
     expect(thoughtTextOf("<think>one</think>mid<think>two</think>")).toBe("one\n\ntwo");
     expect(thoughtTextOf("plain answer")).toBe("");
+  });
+});
+
+describe("replayTextOf — what a model is shown of its own past turn", () => {
+  it("drops the reasoning block from a persisted turn", () => {
+    expect(replayTextOf(canonicalReasoningText("Reading roomSpeech.ts next.", "plan: find the seat key"))).toBe("Reading roomSpeech.ts next.");
+  });
+
+  it("keeps a reasoning-only turn as plain text, without the tags", () => {
+    const replayed = replayTextOf("<think>The keys already match.</think>");
+    expect(replayed).toBe("The keys already match.");
+    expect(replayed).not.toContain("<");
+  });
+
+  it("passes a plain turn through and is empty for an empty one", () => {
+    expect(replayTextOf("Done.")).toBe("Done.");
+    expect(replayTextOf("")).toBe("");
   });
 });
 

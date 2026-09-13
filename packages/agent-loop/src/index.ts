@@ -14,6 +14,7 @@ export { detectRepetitionLoop, trimRepetitionLoop } from "./repetitionLoop.js";
 export {
   answerTextOf,
   canonicalReasoningText,
+  replayTextOf,
   splitReasoningSegments,
   splitVendorReasoning,
   stripReasoningScratchpad,

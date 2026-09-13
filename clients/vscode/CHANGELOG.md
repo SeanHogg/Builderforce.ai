@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.58] — "Continue" and reopened chats stop copying old dead-end replies
+
+- **A model no longer repeats its own past dead ends.** After a long research turn, the chat could show the agent narrating reads it never actually made and typing out empty formatting blocks until it had to be stopped. Its own earlier turns are now replayed as a plain answer, not the internal notes that came with them — so it builds on what it already found instead of copying the shape of a turn that went nowhere.
+- **A failed turn now names which model broke.** The copied diagnostics used to blame "the model" with no name attached when a turn failed under auto-routing. It now names the exact model that failed.
+
 ## [2026.9.57] — Grok's replies stay readable, and the tools it asks for actually run
 
 - **No more stray `<|eos|>` in a reply.** Grok sometimes finished a turn by printing its own end-of-message marker. The chat now removes those markers from every model's replies.

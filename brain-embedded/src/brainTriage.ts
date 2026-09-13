@@ -534,7 +534,7 @@ export interface BrainDiagnostics {
    * whole transcript hunting for the failure. Capped, because a run that fails
    * repeatedly should not push everything else out of the report.
    */
-  errorSteps: { label: string; message: string }[];
+  errorSteps: { label: string; message: string; model?: string }[];
   /** Distinct models that actually answered, first-seen order. */
   modelsUsed: string[];
   /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
@@ -759,7 +759,10 @@ export function computeBrainDiagnostics(
   const errorSteps = errors
     .slice(-MAX_REPORTED_ERRORS)
     .reverse()
-    .map((e) => ({ label: e.label, message: errorMessageOf(e) }));
+    .map((e) => {
+      const model = (e.args as { model?: unknown } | undefined)?.model;
+      return { label: e.label, message: errorMessageOf(e), ...(typeof model === 'string' && model !== 'default' ? { model } : {}) };
+    });
 
   const modelsUsed = modelsUsedInTrace(events);
   const modelScores = modelScorecard(events);
@@ -938,7 +941,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // WHICH steps failed. `Errors: 1` alone forced a reader to scroll the transcript
   // hunting for the failure; naming it is the difference between a number and a lead.
   if (d.errorSteps?.length) {
-    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label} — ${e.message}`);
+    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label}${e.model ? ` on ${e.model}` : ''} — ${e.message}`);
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
   }
   // What the model could actually CALL, per turn — not the registry-wide total. A run

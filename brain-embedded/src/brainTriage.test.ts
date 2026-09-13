@@ -156,6 +156,20 @@ describe('context verdict — paged reads are not lost context', () => {
     expect(report).toContain('1 tool result(s) were cut before the model saw them');
     expect(report).not.toContain('outgrew the model window');
   });
+
+  it('names the model a failed turn broke on, and omits the auto-routing placeholder', () => {
+    const failed = (model: string): BrainTraceEvent => ({
+      ts: '', category: 'error', label: 'llm.complete', isError: true,
+      args: { model, step: 3 }, result: 'RepetitionLoopError: the model got stuck repeating itself',
+    });
+    const report = formatBrainDiagnostics(computeBrainDiagnostics(
+      [llmTurn(3_000), failed('direct/qwen/qwen3.8-max'), failed('default')],
+      undefined,
+      [msg('user', 'fix this')],
+    )).join('\n');
+    expect(report).toContain('Failed step: llm.complete on direct/qwen/qwen3.8-max — RepetitionLoopError');
+    expect(report).toContain('Failed step: llm.complete — RepetitionLoopError');
+  });
 });
 
 describe('detectUnbackedTicketClaim', () => {

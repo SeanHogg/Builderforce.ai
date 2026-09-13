@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-09-13 — qwen wrote `<details><summary>Tool details</summary>` blocks instead of calling tools
+
+Reported from VS Code chat #106 (`direct/qwen/qwen3.8-max`, 35 of 36 turns). After "fix this" the run narrated
+reads it never made, then wrote empty `<details>` blocks until the repetition guard cut the stream.
+
+- **A model is no longer shown its own reasoning tags.** Assistant turns are persisted as `canonicalReasoningText`
+  (`<think>…</think>` + reply), and `seedFrom` (`brain-embedded/src/useBrainConversation.ts`) replayed them verbatim
+  — with the tool calls stripped — so the model's history read as tag blocks followed by "Let me read X:" and no
+  call. Every replay site (the seed, the run's `convo` pushes, the tool-turn content in `brainRunStore.ts`) now goes
+  through `replayTextOf` (`packages/agent-loop/src/reasoning.ts`): the reply, else the reasoning as plain text.
+- **A failed turn names its model.** The `llm.complete` error step recorded the requested model, which under auto
+  is `default`; it now records the model that broke (`StreamInterruptedError.model`), and the report prints
+  `Failed step: llm.complete on <model> — …`.
+
 ## ✅ RESOLVED 2026-09-13 — Grok showed `<<|eos|>`, wrote its tool calls as `<|"0":{…}}` text, then counted to 593
 
 Reported from VS Code chat #106 (VSIX 2026.9.56, API 2026.9.30, `xai-oauth/grok-4.6`). One Grok turn ended with

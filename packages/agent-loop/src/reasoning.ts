@@ -424,6 +424,15 @@ export function thoughtTextOf(content: string): string {
     .trim();
 }
 
+/**
+ * A past turn as the model is shown it again: the reply, else its reasoning as plain
+ * text — never the tags. Replayed tags are copied: a model fed its own `<think>` blocks
+ * back, with the tool calls stripped, writes markup blocks instead of calling tools.
+ */
+export function replayTextOf(content: string): string {
+  return answerTextOf(content) || thoughtTextOf(content);
+}
+
 export interface ChoiceMessageLike {
   content?: unknown;
   reasoning_content?: unknown;
