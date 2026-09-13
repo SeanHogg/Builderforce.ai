@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { streamChatCompletion, StreamInterruptedError, type BrainTransport } from './streamChatCompletion';
+import { streamChatCompletion, StreamInterruptedError, RepetitionLoopError, type BrainTransport } from './streamChatCompletion';
 import { BrainRequestError, chatErrorAction } from './chatError';
 
 /** Build a Response whose body streams the given SSE lines. */
@@ -20,6 +20,38 @@ const baseTransport: BrainTransport = {
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+describe('streamChatCompletion repetition guard', () => {
+  const sentence = "I'll start by checking this chat's linked tickets and locating the Room bubble code. ";
+  const frames = (copies: number): string[] => [
+    ...Array.from({ length: copies }, () => `data: ${JSON.stringify({ choices: [{ delta: { content: sentence } }] })}\n`),
+    'data: [DONE]\n',
+  ];
+
+  it('cuts a stream that loops on one sentence and names the model so the caller can route around it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(frames(20), { headers: { 'x-builderforce-model': 'direct/qwen/qwen3.8-max' } })));
+    const deltas: string[] = [];
+    const err = await streamChatCompletion(
+      { messages: [], transport: baseTransport },
+      { onTextDelta: (d) => deltas.push(d) },
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(RepetitionLoopError);
+    // Still an interruption, so the Brain run's retry-on-another-model path takes it.
+    expect(err).toBeInstanceOf(StreamInterruptedError);
+    expect((err as RepetitionLoopError).model).toBe('direct/qwen/qwen3.8-max');
+    expect((err as RepetitionLoopError).kept).toBe(sentence);
+    expect((err as RepetitionLoopError).message).toMatch(/stuck repeating itself/);
+    // The copy that completed the loop was never shown.
+    expect(deltas.join('')).toBe(sentence.repeat(2));
+  });
+
+  it('lets a sentence said twice finish normally', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(frames(2))));
+    const result = await streamChatCompletion({ messages: [], transport: baseTransport });
+    expect(result.text).toBe(sentence.repeat(2));
+  });
+});
 
 describe('streamChatCompletion transport injection', () => {
   it('targets the transport baseUrl and sends the injected bearer token', async () => {

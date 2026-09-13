@@ -21,6 +21,7 @@
  */
 
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
+import { detectRepetitionLoop, type RepetitionLoop } from './repetitionLoop';
 import { brainRequestError } from './chatError';
 import type { ReasoningIntent } from './effort';
 
@@ -280,6 +281,34 @@ export class StreamInterruptedError extends Error {
   }
 }
 
+/** How much of a looped block the error message quotes. */
+const LOOP_QUOTE_CHARS = 90;
+
+/**
+ * The model fell into a decoding loop — the same block of prose, verbatim, over and over
+ * (`repetitionLoop.ts`). The stream is cut the moment it is seen instead of running to the
+ * output ceiling while the reader watches one sentence repeat.
+ *
+ * An interruption like any other: the model is still answering, just uselessly, and only
+ * the caller can route around it — so a caller that retries interrupted turns on another
+ * model (the Brain run) does so here without knowing the difference. `kept` is what the
+ * model said before it looped, for a caller that would rather show that than retry.
+ */
+export class RepetitionLoopError extends StreamInterruptedError {
+  readonly kept: string;
+  readonly block: string;
+  readonly copies: number;
+  constructor(loop: RepetitionLoop, model: string | undefined) {
+    const quote = loop.block.trim();
+    const shown = quote.length > LOOP_QUOTE_CHARS ? `${quote.slice(0, LOOP_QUOTE_CHARS - 1).trimEnd()}…` : quote;
+    super(`the model got stuck repeating itself (${loop.copies}× "${shown}")`, model);
+    this.name = 'RepetitionLoopError';
+    this.kept = loop.kept;
+    this.block = loop.block;
+    this.copies = loop.copies;
+  }
+}
+
 /**
  * Default error mapper used when the transport doesn't supply one.
  *
@@ -409,6 +438,8 @@ export async function streamChatCompletion(
   // calls and yields only clean text for display.
   const xml = new XmlToolCallFilter();
   let finishReason: string | null = null;
+  // Every visible character so far — what the repetition guard reads on each delta.
+  let shown = '';
 
   /** Stitch the native + inline-XML tool calls; native first, XML as fallback. */
   const allToolCalls = (): AssembledToolCall[] => [...assemble(toolAcc), ...xml.toolCalls()];
@@ -423,6 +454,8 @@ export async function streamChatCompletion(
     readUsage((data as { usage?: unknown } | null)?.usage);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? '');
+    const loop = detectRepetitionLoop(text);
+    if (loop) throw new RepetitionLoopError(loop, resolvedModel());
     if (text) handlers.onTextDelta?.(text);
     (choice?.message?.tool_calls ?? []).forEach((tc, i) => {
       const idx = tc.index ?? i;
@@ -499,7 +532,17 @@ export async function streamChatCompletion(
         '';
       if (contentDelta) {
         const visible = xml.push(contentDelta);
-        if (visible) handlers.onTextDelta?.(visible);
+        if (visible) {
+          shown += visible;
+          // A decoder loop is cut here, not at the output ceiling — the delta that
+          // completed the third copy is never shown.
+          const loop = detectRepetitionLoop(shown);
+          if (loop) {
+            reader.cancel().catch(() => undefined);
+            throw new RepetitionLoopError(loop, resolvedModel());
+          }
+          handlers.onTextDelta?.(visible);
+        }
       }
 
       const tcDeltas = choice?.delta?.tool_calls;

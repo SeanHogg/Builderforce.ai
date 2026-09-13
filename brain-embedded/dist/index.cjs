@@ -69,6 +69,7 @@ __export(src_exports, {
   REVISIT_HARD_AT: () => REVISIT_HARD_AT,
   REVISIT_NUDGE_AT: () => REVISIT_NUDGE_AT,
   ReadCoverage: () => ReadCoverage,
+  RepetitionLoopError: () => RepetitionLoopError,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   StreamInterruptedError: () => StreamInterruptedError,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
@@ -132,6 +133,7 @@ __export(src_exports, {
   describeLiveStep: () => describeLiveStep,
   describeTool: () => describeTool,
   detectAnnouncedButUnmadeToolCall: () => detectAnnouncedButUnmadeToolCall,
+  detectRepetitionLoop: () => detectRepetitionLoop,
   detectUnbackedTicketClaim: () => detectUnbackedTicketClaim,
   detectUnbackedWriteClaim: () => detectUnbackedWriteClaim,
   dirtyPathsOf: () => dirtyPathsOf,
@@ -492,6 +494,47 @@ function extractXmlToolCalls(raw) {
   return { text: f.cleanText(), toolCalls: f.toolCalls() };
 }
 
+// src/repetitionLoop.ts
+var LOOP_MIN_COPIES = 3;
+var LOOP_MIN_BLOCK_CHARS = 40;
+var LOOP_MAX_BLOCK_CHARS = 800;
+var LOOP_MIN_BLOCK_WORDS = 5;
+function inOpenCodeFence(text) {
+  let fences = 0;
+  for (let i = text.indexOf("```"); i !== -1; i = text.indexOf("```", i + 3)) fences += 1;
+  return fences % 2 === 1;
+}
+function readsAsProse(block) {
+  let words2 = 0;
+  for (const word of block.split(/\s+/)) {
+    if (/\p{L}/u.test(word)) words2 += 1;
+    if (words2 >= LOOP_MIN_BLOCK_WORDS) return true;
+  }
+  return false;
+}
+function tailHasPeriod(text, p, span) {
+  const end = text.length;
+  for (let i = end - 1; i >= end - span + p; i -= 1) {
+    if (text.charCodeAt(i) !== text.charCodeAt(i - p)) return false;
+  }
+  return true;
+}
+function detectRepetitionLoop(text) {
+  const length = text.length;
+  if (length < LOOP_MIN_COPIES * LOOP_MIN_BLOCK_CHARS) return null;
+  const maxBlock = Math.min(LOOP_MAX_BLOCK_CHARS, Math.floor(length / LOOP_MIN_COPIES));
+  for (let p = LOOP_MIN_BLOCK_CHARS; p <= maxBlock; p += 1) {
+    if (!tailHasPeriod(text, p, LOOP_MIN_COPIES * p)) continue;
+    let start = length - LOOP_MIN_COPIES * p;
+    while (start > 0 && text.charCodeAt(start - 1) === text.charCodeAt(start - 1 + p)) start -= 1;
+    const block = text.slice(start, start + p);
+    if (!readsAsProse(block)) continue;
+    if (inOpenCodeFence(text)) return null;
+    return { block, copies: Math.floor((length - start) / p), kept: text.slice(0, start + p) };
+  }
+  return null;
+}
+
 // src/chatError.ts
 var BrainRequestError = class extends Error {
   status;
@@ -558,6 +601,21 @@ var StreamInterruptedError = class extends Error {
     super(message);
     this.name = "StreamInterruptedError";
     this.model = model;
+  }
+};
+var LOOP_QUOTE_CHARS = 90;
+var RepetitionLoopError = class extends StreamInterruptedError {
+  kept;
+  block;
+  copies;
+  constructor(loop, model) {
+    const quote = loop.block.trim();
+    const shown = quote.length > LOOP_QUOTE_CHARS ? `${quote.slice(0, LOOP_QUOTE_CHARS - 1).trimEnd()}\u2026` : quote;
+    super(`the model got stuck repeating itself (${loop.copies}\xD7 "${shown}")`, model);
+    this.name = "RepetitionLoopError";
+    this.kept = loop.kept;
+    this.block = loop.block;
+    this.copies = loop.copies;
   }
 };
 async function defaultMapError(res) {
@@ -653,6 +711,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const toolAcc = /* @__PURE__ */ new Map();
   const xml = new XmlToolCallFilter();
   let finishReason = null;
+  let shown = "";
   const allToolCalls = () => [...assemble(toolAcc), ...xml.toolCalls()];
   const reader = res.body?.getReader();
   if (!reader) {
@@ -661,6 +720,8 @@ async function streamChatCompletion(opts, handlers = {}) {
     readUsage(data?.usage);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? "");
+    const loop = detectRepetitionLoop(text);
+    if (loop) throw new RepetitionLoopError(loop, resolvedModel());
     if (text) handlers.onTextDelta?.(text);
     (choice?.message?.tool_calls ?? []).forEach((tc, i) => {
       const idx = tc.index ?? i;
@@ -713,7 +774,15 @@ async function streamChatCompletion(opts, handlers = {}) {
       const contentDelta = (typeof choice?.delta?.content === "string" ? choice.delta.content : null) || parsed.response || parsed.text || parsed.delta || "";
       if (contentDelta) {
         const visible = xml.push(contentDelta);
-        if (visible) handlers.onTextDelta?.(visible);
+        if (visible) {
+          shown += visible;
+          const loop = detectRepetitionLoop(shown);
+          if (loop) {
+            reader.cancel().catch(() => void 0);
+            throw new RepetitionLoopError(loop, resolvedModel());
+          }
+          handlers.onTextDelta?.(visible);
+        }
       }
       const tcDeltas = choice?.delta?.tool_calls;
       if (tcDeltas) {
@@ -1951,6 +2020,17 @@ function isContinuationDirective(text) {
   const t = (text ?? "").trim();
   if (!t || t.length > MAX_CONTINUATION_CHARS) return false;
   return CONTINUATION.test(t);
+}
+var CURRENT_STATE = /^\s*(?:(?:so|ok(?:ay)?|and|hey)[,\s]+)?(?:(?:what(?:'s| is) )?(?:the )?(?:current |latest )?(?:status|progress|update|updates|news|eta|state of (?:play|things))\b|any (?:updates?|news|progress)\b|where (?:are|do) (?:we|things|you) (?:stand|at)\b|where are we\b|how(?:'s| is) it going\b|how far along\b|is it (?:done|finished|ready|working|fixed)\b|are (?:we|you) done\b|what(?:'s| is) (?:left|next|remaining|the latest|happening)\b|still working\b)/i;
+function asksAboutCurrentState(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  return CURRENT_STATE.test(t.slice(0, 200));
+}
+function memoryReplayable(question, context = {}) {
+  const q = (question ?? "").trim();
+  if (!q || context.followUp === true) return false;
+  return !asksForChange(q) && !asksAboutCurrentState(q) && !isContinuationDirective(q);
 }
 function continuationDirective() {
   return `The user's last message is a bare directive ("fix", "do it", "go ahead") with no subject of its own. It refers to the proposal in YOUR immediately preceding message, which described work you had not yet carried out. Carry out that exact proposal now, using the tools, starting from the files and the change it already named \u2014 do NOT ask the user what to fix, and do NOT re-derive the analysis you have already done and can read above. If the earlier proposal named a specific file and edit, apply that edit. Report what you changed when it is done.`;
@@ -4789,6 +4869,14 @@ function latestUserText(convo) {
   }
   return "";
 }
+function isFollowUpTurn(convo) {
+  let users = 0;
+  for (const m of convo) {
+    if (m.role === "assistant") return true;
+    if (m.role === "user") users += 1;
+  }
+  return users > 1;
+}
 function lastAssistantText(convo) {
   for (let i = convo.length - 1; i >= 0; i -= 1) {
     const m = convo[i];
@@ -5260,7 +5348,8 @@ ${block}`;
       }
     }
   }
-  if (evermind?.answer && !c.abort?.signal.aborted) {
+  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  if (evermind?.answer && memoryReplay && !c.abort?.signal.aborted) {
     const query = latestUserText(convo);
     if (query) {
       let memAnswer = null;
@@ -5392,7 +5481,7 @@ ${continuationDirective()}`;
         result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
       });
     }
-    if (evermind?.cacheAnswer) {
+    if (evermind?.cacheAnswer && memoryReplay) {
       const q = latestUserText(convo);
       if (q) {
         void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
@@ -7501,6 +7590,7 @@ function PromptInput({
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
   ReadCoverage,
+  RepetitionLoopError,
   STEP_MESSAGE_ROLE,
   StreamInterruptedError,
   TICKET_RECORDING_TOOLS,
@@ -7564,6 +7654,7 @@ function PromptInput({
   describeLiveStep,
   describeTool,
   detectAnnouncedButUnmadeToolCall,
+  detectRepetitionLoop,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
   dirtyPathsOf,

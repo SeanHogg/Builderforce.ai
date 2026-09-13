@@ -71,6 +71,7 @@ import {
   isContinuationDirective,
   promisesUnfinishedWork,
   continuationDirective,
+  memoryReplayable,
 } from '@builderforce/agent-stall';
 import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import {
@@ -739,6 +740,20 @@ function latestUserText(convo: ChatCompletionMessage[]): string {
     return '';
   }
   return '';
+}
+
+/**
+ * Is the latest user turn a FOLLOW-UP — i.e. does anything precede it in the
+ * conversation? A follow-up means what the turns above it make it mean, so no memory
+ * tier keyed on the question's words may answer it or store its answer.
+ */
+function isFollowUpTurn(convo: ChatCompletionMessage[]): boolean {
+  let users = 0;
+  for (const m of convo) {
+    if (m.role === 'assistant') return true;
+    if (m.role === 'user') users += 1;
+  }
+  return users > 1;
 }
 
 /**
@@ -1623,6 +1638,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   }
 
+  // May memory stand in for this turn at all — and may this turn's answer be stored for
+  // next time? Decided ONCE, here, before the transcript grows, because only this loop
+  // holds the conversation: a stored reply is keyed on the question's words, so it can
+  // only answer a question that means the same thing everywhere — the opening turn of a
+  // conversation, not "status?" three turns in (which replayed another chat's ticket
+  // report). The same gate covers every tier: on-device, the Q&A cache and Evermind.
+  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+
   // Memory-first short-circuit: if the project's OWN memory can answer this request —
   // an exact-repeat Q&A cache hit, or its Evermind SSM (opt-in) — adopt that answer and
   // SKIP the paid model entirely. This is the token-reduction core: for a repeated or
@@ -1635,7 +1658,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // tools in play the server may only replay a cached answer, never generate a fresh
   // one from the Evermind SSM — the SSM cannot call a tool, so letting it answer
   // stranded any request whose answer lives behind one.
-  if (evermind?.answer && !c.abort?.signal.aborted) {
+  if (evermind?.answer && memoryReplay && !c.abort?.signal.aborted) {
     const query = latestUserText(convo);
     if (query) {
       let memAnswer: MemoryFirstAnswer | null = null;
@@ -1876,7 +1899,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // (see the memory-first block at loop start) — the write half of the cache. Only
     // caches genuine model answers; the server guards length + skips trivial ones.
     // Best-effort, fire-and-forget — never delays or fails the reply.
-    if (evermind?.cacheAnswer) {
+    if (evermind?.cacheAnswer && memoryReplay) {
       const q = latestUserText(convo);
       if (q) { void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => { /* best-effort */ }); }
     }

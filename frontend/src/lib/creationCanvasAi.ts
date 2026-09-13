@@ -2,6 +2,7 @@ import {
   fetchMcpToolEntries,
   mcpActionsFrom,
   streamChatCompletion,
+  RepetitionLoopError,
   formatEvermindMemoryBlock,
   countReconciledMemories,
   type BrainAction,
@@ -423,6 +424,21 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
           }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
         } catch (error) {
+          // A model LOOPING on one sentence (cut by the stream client's repetition guard) is
+          // a fault of that model, not of the connection, so asking it again buys nothing:
+          // the turn goes straight to a model that already worked in this session. With none
+          // to switch to, the turn stops and keeps what was said before the loop.
+          if (error instanceof RepetitionLoopError) {
+            throwIfStopped();
+            options.onTrace?.({
+              ts: new Date().toISOString(), category: 'error', label: 'model stuck repeating itself', isError: true,
+              result: { model: error.model ?? activeModel ?? null, copies: error.copies },
+            });
+            const switched = switchToProvenModel(error.model ?? activeModel, 'The prior model got stuck repeating the same sentence and has been disabled for this session.');
+            finalText = switched ? '' : error.kept;
+            options.onText?.(finalText);
+            return switched ? { skip: true } : { failed: 'model stuck repeating itself' };
+          }
           // A STALLED provider is a routing problem, not a content problem, so the ladder is
           // shorter than the interruption one: try again once (a stall is often a single bad
           // connection), then hand the turn to a model that has already worked in it, then

@@ -12,7 +12,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * fact tier (`project_facts`) plus the project's Evermind SSM.
  *
  * Storage:
- *   - Q&A cache   → `project_facts` rows under key `qa:<hash(question)>`, source
+ *   - Q&A cache   → `project_facts` rows under key `qa:v2:<hash(question)>`, source
  *                   `qa-cache` (excluded from the RAG facts block by projectFacts).
  *   - Evermind    → the project's registered SSM head (opt-in via `inferenceEnabled`).
  *
@@ -26,7 +26,7 @@ import type { Env } from '../../env';
 import { getProjectEvermindHead, resolveEffectiveEvermindProjectId, recordEvermindServeOutcome } from './projectEvermind';
 import { getProjectFactByKey, upsertProjectFact, QA_CACHE_SOURCE } from './projectFacts';
 import { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText, isServableText } from './textCoherence';
-import { asksForChange, promisesUnfinishedWork } from '@builderforce/agent-stall';
+import { memoryReplayable, promisesUnfinishedWork } from '@builderforce/agent-stall';
 
 // Re-exported from the shared, zero-dep coherence module so existing importers keep
 // resolving these from projectMemory — one home for "is this a real, coherent answer"
@@ -91,10 +91,20 @@ function hashQuestion(normalized: string): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
+/**
+ * Generation of the Q&A cache keyspace. Bumped when the rules for what may be CACHED
+ * change, so rows written under the old rules are never read again. `v2` (2026-09-13):
+ * rows written before {@link memoryReplayable} gated the write held follow-up and status
+ * answers ("status?" → another chat's ticket report) that are wrong in any other
+ * conversation; the old `qa:<hash>` rows stay inert until the maintenance cleanup
+ * (`purgeProjectQaCache`, keyed on source) removes them.
+ */
+const QA_KEY_GENERATION = 'v2';
+
 /** The stable `project_facts` key a question's cached answer lives under. Exported so
  *  the writer and reader (and tests) agree on the one key derivation. */
 export function qaCacheKey(question: string): string {
-  return `qa:${hashQuestion(normalizeQuestion(question))}`;
+  return `qa:${QA_KEY_GENERATION}:${hashQuestion(normalizeQuestion(question))}`;
 }
 
 /**
@@ -129,7 +139,12 @@ export async function resolveMemoryAnswer(
   // reasoning that already bars the Evermind path when the caller has tools (an answer
   // that lives behind a tool call must not be pre-empted), and it applies with more
   // force here: the cache cannot even see the current state of the world.
-  if (asksForChange(q)) return null;
+  //
+  // The same goes for a question about how things stand NOW ("status?") and a bare
+  // continuation ("go ahead"): the words alone do not determine the answer, so a reply
+  // keyed on the words is someone else's answer. A follow-up turn is barred by the
+  // caller, which alone holds the conversation (see `memoryReplayable`).
+  if (!memoryReplayable(q)) return null;
 
   // 1) Exact-repeat Q&A cache.
   const cached = await getProjectFactByKey(env, db, tenantId, projectId, qaCacheKey(q)).catch(() => null);
@@ -208,9 +223,9 @@ export async function cacheProjectAnswer(
   // replays the promise instead of running, so the work it undertakes to do can never
   // happen, and the user is told again that it will.
   if (promisesUnfinishedWork(a)) return;
-  // A work order is not cacheable in the first place (see resolveMemoryAnswer), so
-  // writing one would only ever produce a row that is never read.
-  if (asksForChange(q)) return;
+  // Nothing resolveMemoryAnswer would refuse to serve (a work order, a status question,
+  // a bare continuation) is worth writing — it would only ever be a row that is never read.
+  if (!memoryReplayable(q)) return;
   await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch((error) => {
     /* best-effort — caching never breaks a reply */
   

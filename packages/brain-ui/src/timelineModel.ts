@@ -38,6 +38,10 @@ export type TimelineNode =
   | { key: string; kind: 'error'; ts: number; order: number; label: string; message: string }
   // Project-Evermind memory steps — recall (before answering), learn + reconcile (after).
   | { key: string; kind: 'recall'; ts: number; order: number; version: number; count: number; items: EvermindRecallItem[] }
+  // A memory-first ANSWER: the model was skipped and memory replied. Not a recall — it
+  // grounded nothing and carries no memories, so it must not render as "Recalled 0
+  // memories from Evermind v0". `version` is set only when Evermind generated it.
+  | { key: string; kind: 'memoryAnswer'; ts: number; order: number; source: 'qa-cache' | 'evermind'; version: number | null }
   | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason; targets?: EvermindLearnTarget[] }
   | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
   | { key: string; kind: 'streaming'; ts: number; order: number; text: string };
@@ -57,6 +61,7 @@ export interface BuildTimelineInput {
 const ORDER: Record<TimelineNode['kind'], number> = {
   user: 0,
   recall: 1,
+  memoryAnswer: 1,
   thinking: 2,
   assistant: 3,
   // An activity line reports what happened AFTER the turn that triggered it, so it sorts
@@ -148,7 +153,14 @@ function stepNode(step: PersistedStep, ts: number, key: string): TimelineNode | 
     case 'error':
       return { key, kind: 'error', ts, order: ORDER.error, label: step.label, message: typeof step.result === 'string' ? step.result : JSON.stringify(step.result ?? '') };
     case 'recall': {
-      const r = (step.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[] };
+      const r = (step.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[]; skippedLlm?: boolean; source?: string };
+      // The memory-first answer shares the `recall` category (it IS memory) but reports
+      // an answer, not recalled items — see the run loop's `memory.answer` /
+      // `evermind.answer` step.
+      if (r.skippedLlm === true || step.label === 'memory.answer' || step.label === 'evermind.answer') {
+        const source = r.source === 'evermind' || step.label === 'evermind.answer' ? 'evermind' : 'qa-cache';
+        return { key, kind: 'memoryAnswer', ts, order: ORDER.memoryAnswer, source, version: typeof r.version === 'number' && r.version > 0 ? r.version : null };
+      }
       return { key, kind: 'recall', ts, order: ORDER.recall, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0), items: Array.isArray(r.items) ? r.items : [] };
     }
     case 'learn': {

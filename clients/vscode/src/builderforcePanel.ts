@@ -159,6 +159,20 @@ function buildLabels(): Record<string, string> {
     "tl.apply": t("Apply"),
     "tl.createFile": t("Create file"),
     "tl.preview": t("Preview"),
+    // Evermind memory steps — recall before answering, a memory-first answer that skipped
+    // the model, and learn / reconcile after. `{count}` / `{version}` / `{name}` /
+    // `{projectId}` / `{reason}` are substituted by the renderer, not by l10n.
+    "tl.recallTitle": t("Recalled {count} memories from Evermind v{version}"),
+    "tl.recallHint": t("This project's self-learning Evermind recalled these prior learnings and grounded the answer on them."),
+    "tl.memoryAnswerCache": t("Answered from a saved reply — no model was called"),
+    "tl.memoryAnswerEvermind": t("Answered by Evermind v{version} — no other model was called"),
+    "tl.memoryAnswerHint": t("This project's memory already held an answer to this exact question, so it was replayed instead of running a model."),
+    "tl.learnTitle": t("Contributed this turn to Evermind v{version}"),
+    "tl.learnHint": t("This turn was contributed back to the project Evermind — it will be merged into the learned model."),
+    "tl.learnTargetContributed": t("Contributed to {name} (project #{projectId} v{version})"),
+    "tl.learnTargetSkipped": t("Skipped {name} (project #{projectId}) — {reason}"),
+    "tl.reconcileTitle": t("Reconciled {count} learned memories in Evermind v{version}"),
+    "tl.reconcileHint": t("The answer restated these recalled learnings, so it updates them (write-through cognition)."),
     // Run milestones + agent dispatch render as system ACTIVITY lines in the shared
     // transcript, composed client-side from each message's structured metadata. The
     // server records the FACTS in one language; these templates are what make the line

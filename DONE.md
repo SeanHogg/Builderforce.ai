@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-09-13 — "status?" replayed another chat's answer; a memory answer rendered as "Recalled … Evermind v0"
+
+Reported from VS Code chat #106 (VSIX 2026.9.53, API 2026.9.28). Mid-conversation, "status?" came back as a
+status report on tickets #2394/#2395, which that chat had never touched. The diagnostics read "Answered from
+memory (LLM skipped): 1 turn(s) — Q&A cache", and the timeline showed "Recalled … memories from Evermind v0".
+
+- **The Q&A cache was keyed on the question's words, project-wide, with no check that the words carry their
+  own meaning.** Another chat's "status?" answer was stored as `qa:<hash("status")>` and served to every
+  later "status?" in the project. New `memoryReplayable(question, { followUp })` and
+  `asksAboutCurrentState` (`packages/agent-stall/src/requestIntent.ts`) make one gate for every memory tier.
+  - A follow-up turn is never replayed or stored. The run loop (`brainRunStore.ts`, new `isFollowUpTurn`)
+    decides this once per run because it alone holds the conversation. It gates the on-device tier, the
+    Q&A cache and the Evermind leg.
+  - A status / progress question, a work order or a bare continuation is refused on both read and write,
+    by the server (`projectMemory.ts`) and the client alike.
+  - Keys moved to `qa:v2:<hash>` (`QA_KEY_GENERATION`), so rows written under the old rules are never read
+    again. They are inert (excluded from RAG by source) until `purgeProjectQaCache` removes them.
+- **The memory-first answer step rendered as a recall.** It shares the `recall` category but carries no
+  version or items, so the timeline said "Recalled 0 memories from Evermind v0". New `memoryAnswer` node
+  (`timelineModel.ts`), rendered by `BrainTimeline.tsx`: "Answered from a saved reply — no model was called",
+  or "Answered by Evermind vN — …". Labels are in all five web catalogs and the VSIX host bundle.
+- **The VSIX host never supplied the Evermind timeline labels** (`tl.recallTitle`, learn, reconcile and so
+  on), so those lines were English in every editor language. `builderforcePanel.ts` and the four l10n
+  bundles now carry them.
+- **The learn gate's summary version named the first contributed target.** That was the container's
+  default head ("v152"), not the Evermind the project reads ("v10252"). `evaluateBrainLearnGate` now reports
+  the target `resolveEffectiveEvermindProjectId` names when several learned.
+- Tests written, not run: `requestIntent.test.ts` (`asksAboutCurrentState`, `memoryReplayable`) and
+  `projectMemory.test.ts` ("status?" neither served nor cached; `qa:v2:` key shape).
+
 ## ✅ RESOLVED 2026-09-13 — The chat and the Evermind view named different Everminds; the Evermind view did not scroll
 
 Reported from VS Code: the Evermind sidebar showed "EverMind · Learning · v10217", while the Brain chat

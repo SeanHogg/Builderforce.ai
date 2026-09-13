@@ -55,7 +55,7 @@ const headRow = (over: Record<string, unknown> = {}) => ({
 describe('qaCacheKey', () => {
   it('is deterministic and normalizes case/spacing/punctuation to the same key', () => {
     const a = qaCacheKey('How does auth work?');
-    expect(a).toMatch(/^qa:[0-9a-f]{8}$/);
+    expect(a).toMatch(/^qa:v2:[0-9a-f]{8}$/);
     expect(qaCacheKey('  how   DOES auth WORK ')).toBe(a); // punctuation + case + spacing folded
     expect(qaCacheKey('how does auth work')).toBe(a);
   });
@@ -268,6 +268,19 @@ describe('looksLikeCoherentText', () => {
   it('rejects empty / whitespace', () => {
     expect(looksLikeCoherentText('')).toBe(false);
     expect(looksLikeCoherentText('   ')).toBe(false);
+  });
+});
+
+describe('memory never answers, or caches, a question about how things stand NOW', () => {
+  it('does not replay a cached "status?" — it is another conversation’s status report', async () => {
+    const { db } = memoryDb([[{ content: 'In progress — Bob Developer is working on #2395.' }]]);
+    expect(await resolveMemoryAnswer(env, db, 7, 42, 'status?', {})).toBeNull();
+  });
+
+  it('never caches an answer to a status question', async () => {
+    const { db, insert } = memoryDb([]);
+    await cacheProjectAnswer(env, db, 7, 42, 'status?', 'In progress — Bob Developer is working on ticket #2395 now.');
+    expect(insert).not.toHaveBeenCalled();
   });
 });
 

@@ -4,7 +4,39 @@ import {
   promisesUnfinishedWork,
   isContinuationDirective,
   continuationDirective,
+  asksAboutCurrentState,
+  memoryReplayable,
 } from './requestIntent';
+
+describe('asksAboutCurrentState', () => {
+  it('reads status / progress questions as questions about NOW', () => {
+    for (const t of ['status?', 'Status', 'what is the status', "what's the current status?", 'any update?', 'progress?',
+      'where are we', 'how is it going?', 'is it done?', "what's next", 'ok, status?']) {
+      expect(asksAboutCurrentState(t)).toBe(true);
+    }
+  });
+  it('leaves self-contained questions alone', () => {
+    for (const t of ['How does auth work?', 'What does projectMemory.ts do?', 'Where is the board height set?',
+      'Explain the status field on tickets in the schema']) {
+      expect(asksAboutCurrentState(t)).toBe(false);
+    }
+  });
+});
+
+describe('memoryReplayable', () => {
+  it('never replays a follow-up — its meaning is the conversation above it', () => {
+    expect(memoryReplayable('How does auth work?', { followUp: true })).toBe(false);
+  });
+  it('never replays a status question, a work order or a bare continuation', () => {
+    expect(memoryReplayable('status?')).toBe(false);
+    expect(memoryReplayable('Fix the login redirect')).toBe(false);
+    expect(memoryReplayable('go ahead')).toBe(false);
+  });
+  it('replays a self-contained opening question', () => {
+    expect(memoryReplayable('How does auth work?')).toBe(true);
+    expect(memoryReplayable('How does auth work?', { followUp: false })).toBe(true);
+  });
+});
 
 describe('asksForChange', () => {
   it('reads a work order as a change request', () => {

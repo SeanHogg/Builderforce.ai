@@ -631,6 +631,8 @@ export {
   promisesUnfinishedWork,
   isContinuationDirective,
   continuationDirective,
+  asksAboutCurrentState,
+  memoryReplayable,
 } from './requestIntent.js';
 
 // The HANDOFF shape — the turn that ends by assigning the user the commands it holds

@@ -2,6 +2,17 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.55] — A model stuck on one sentence no longer takes over the chat
+
+- **A reply that starts repeating itself is stopped for you.** A model could fall into a loop and write the same sentence ("I'll start by checking this chat's linked tickets…") over and over until you pressed Stop. The chat now notices once a sentence has come back three times in a row, drops the repeats, and asks another connected model to take the turn from the same point, so the work carries on. If you picked the model yourself, the chat stops and tells you it was repeating itself rather than switching models without asking.
+
+## [2026.9.54] — A follow-up gets an answer about this chat
+
+- **"status?" answers about this conversation.** Asking a follow-up like "status?" could return a saved reply from a different chat: a report on tickets this conversation had never touched, with no model run at all. Saved replies now answer only the opening question of a conversation, and never a question about how things stand right now, such as "status?", "any update?" or "is it done?". Those always go to the model, which can check.
+- **A replayed answer says so.** When the project's memory does answer, the chat says "Answered from a saved reply — no model was called", not "Recalled 0 memories from Evermind v0".
+- **The learning line names your project's Evermind.** "Contributed this turn to Evermind vN" now shows the version of the Evermind your project uses, the same one the Evermind panel shows.
+- **Evermind steps in the chat are translated.** Recall, learning and reconcile lines now follow the editor's language.
+
 ## [2026.9.53] — The Evermind panel and the chat now agree
 
 - **The Evermind panel shows everything, and you can scroll to see it.** The panel was clipped to the editor's visible height with no way to reach content below the fold. It now scrolls on its own.

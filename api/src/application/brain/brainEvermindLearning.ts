@@ -19,7 +19,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { resolveEvermindTargets, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
+import { resolveEvermindTargets, resolveEffectiveEvermindProjectId, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
 import { stripReasoningScratchpad } from '@builderforce/agent-loop';
 
 /** A one-line assistant turn is not a teaching signal; require some substance. */
@@ -175,6 +175,14 @@ export async function evaluateBrainLearnGate(
     return { projectId: h.projectId, ref: h.ref, version: h.version, name: h.name, learned: isLiveLearnTarget(h), reason };
   });
   const contributed = targets.filter((t) => t.learned);
+  // The SUMMARY version names the Evermind this project READS — the one its head badge,
+  // recall and Evermind view show — when it learned. Taking the first contributed
+  // target reported the container's own default head ("v152") beside a project whose
+  // Evermind is its build ("v10252"). Per-target detail stays in `targets`.
+  const readId = contributed.length > 1
+    ? await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId).catch(() => projectId)
+    : null;
+  const primary = contributed.find((t) => t.projectId === readId) ?? contributed[0];
   // Summary reason when NOTHING learned: 'frozen' only if every candidate that HAS an
   // Evermind is frozen; otherwise 'not-seeded' (no live Evermind to teach).
   const summaryReason: BrainLearnSkipReason | null =
@@ -186,7 +194,7 @@ export async function evaluateBrainLearnGate(
   return {
     outcome: {
       learned: contributed.length > 0,
-      version: contributed[0]?.version ?? 0,
+      version: primary?.version ?? 0,
       reason: summaryReason,
       targets,
     },
