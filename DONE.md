@@ -1,4 +1,23 @@
-## ✅ RESOLVED 2026-09-13 — Collaborators never saw Brain working; one oversized object truncated five times
+## ✅ RESOLVED 2026-09-13 — Nine MCP list tools let a caller (including an autonomous agent) request an unbounded `limit`, driving Neon network-transfer usage toward its cap
+
+Investigated after the operator flagged the Neon console showing 82% of the 5GB/month free-tier network-transfer
+allowance used. The two previously-known egress risks (the `*/5 * * * *` cron fan-out, and bloat on
+`manager_actions`/`tool_audit_events`) were both already fixed and verified sound: `index.ts`'s KV work-gate
+(`evaluateCronGate`) returns before any Postgres call on an idle tick, and both tables are in `SWEPT_TABLES`
+with daily retention + `VACUUM ANALYZE` and a weekly bounded `VACUUM FULL`.
+
+The real live gap was in `api/src/application/llm/builtinMcpService.ts`: most `*.list` MCP tools route their
+caller-supplied `limit` through the shared `clampLimit()` helper (`[1, LIST_MAX_LIMIT=200]`), but eight did not —
+`prompts.browse_public`, `alerts.events`, `audit.list` (reads the tenant's full `activity_log` audit stream),
+`skills_marketplace.list`, `chat_sessions.list_all`, `chat_sessions.get_messages`, `executions.list_recent`, and
+`usage_snapshots.list` instead did `a.limit != null ? num(a.limit) : <default>` with no upper bound. Since these
+are ordinary MCP tools callable by autonomous board/manager agents running on the frequent cron cadence, a
+`limit: 999999`-shaped call (bug or otherwise) on any of them would pull an entire table over the wire per call,
+repeated per tick — a plausible driver of exactly the metric the operator saw climbing. All eight now go through
+`clampLimit(a.limit)`, matching the convention already used by `workflows.list`, `specs.list`,
+`workflow_definitions.list`, etc. Downstream helpers reached from other unclamped call sites in the same file
+(`recallProjectFacts`, `BrainService.readTeamChat`, `readSocialFeed`) were checked and already clamp internally,
+so no other MCP-tool egress gap was found.
 
 Reported from session `bf886fc1` ("Food App", ui 2026.9.30, 2 members on the call).
 
@@ -55,6 +74,11 @@ pointer, no "is typing", no body in the Room and an idle Brain while someone els
 - `useGuestRoom`'s third argument became `GuestRoomOptions { onTranscriptChanged, onPresenceFrame }`
   (`GuestBrainPanel` migrated). No new UI strings.
 - Tests: `api/.../GuestRoomDO.presence.test.ts` (new, 4), `livePresence.test.ts` (+2 `retireSocket`).
+- Found while verifying, fixed in the same pass: the frontend type-check was failing on 8 pre-existing errors in
+  `domains/canvas/application/PersistCanvas.test.ts` — its fake scheduler returned `{ run, ms }` where
+  `createCanvasNotices` types the handle as `ReturnType<typeof setTimeout>`, which blocked `npm test` (it runs
+  type-check first) for the whole frontend. The fake now passes its record across as an opaque handle.
+- Verified (Sonnet): api `tsc` + `tsgo` clean; api `GuestRoomDO.presence` + `GuestRoomDO.combinedCap` 19/19.
 
 ## ✅ RESOLVED 2026-09-13 — VSIX runs re-read the same files and never edited: the model was starved of its own reads
 

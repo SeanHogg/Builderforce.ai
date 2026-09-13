@@ -21,15 +21,24 @@ import type { CanvasObject } from '../domain/canvasObject';
 const t = (key: string) => key;
 
 /** A manually-fired stand-in for setTimeout, so the expiry timer tests without waiting on one. */
+type TimerHandle = ReturnType<typeof setTimeout>;
+type FakeTimer = { run: () => void; ms: number };
+
+/**
+ * A scheduler the test can drive by hand. The production signature types the handle as
+ * the runtime's timer handle, which `createCanvasNotices` only ever hands back to
+ * `cancel` — so the fake's own record crosses that boundary as an opaque handle and is
+ * read back on this side, keeping `pending`/`cancelled` typed for the assertions.
+ */
 function fakeScheduler() {
-  const pending: Array<{ run: () => void; ms: number }> = [];
-  const cancelled: Array<{ run: () => void; ms: number }> = [];
-  const schedule = (run: () => void, ms: number) => {
-    const handle = { run, ms };
-    pending.push(handle);
-    return handle;
+  const pending: FakeTimer[] = [];
+  const cancelled: FakeTimer[] = [];
+  const schedule = (run: () => void, ms: number): TimerHandle => {
+    const timer: FakeTimer = { run, ms };
+    pending.push(timer);
+    return timer as unknown as TimerHandle;
   };
-  const cancel = (handle: { run: () => void; ms: number }) => { cancelled.push(handle); };
+  const cancel = (handle: TimerHandle) => { cancelled.push(handle as unknown as FakeTimer); };
   return { schedule, cancel, pending, cancelled };
 }
 
