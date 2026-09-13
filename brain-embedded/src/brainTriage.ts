@@ -242,6 +242,16 @@ export function stallRecoveredInTrace(events: BrainTraceEvent[]): boolean {
   return lastRecovery >= 0 && events.slice(lastRecovery + 1).some((e) => e.category === 'tool');
 }
 
+/** Models whose stream broke mid-turn (a loop, a dropped connection) and whose turn was retried on another. */
+export function streamRetriesInTrace(events: BrainTraceEvent[]): string[] {
+  return events
+    .filter((e) => e.label === 'llm.stream_interrupted')
+    .map((e) => {
+      const model = (e.args as { model?: unknown } | undefined)?.model;
+      return typeof model === 'string' && model ? model : 'unknown model';
+    });
+}
+
 /** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
 export interface ToolExposure {
   /** Tools advertised on the LAST measured turn (what the model could call at the end). */
@@ -559,6 +569,8 @@ export interface BrainDiagnostics {
   stallUnrecovered: boolean;
   /** A tool step ran after the last re-prompt — see {@link stallRecoveredInTrace}. */
   stallRecovered: boolean;
+  /** Models whose stream broke mid-turn and were retried on another — see {@link streamRetriesInTrace}. */
+  streamRetries: string[];
   /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
   advertisedToolsLastTurn: number | null;
   /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
@@ -801,6 +813,7 @@ export function computeBrainDiagnostics(
   const modelFailovers = modelFailoversInTrace(events);
   const stallUnrecovered = stallUnrecoveredInTrace(events);
   const stallRecovered = stallRecoveredInTrace(events);
+  const streamRetries = streamRetriesInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
   // A turn offered ZERO tools cannot emit one. That is a configuration/catalog failure
@@ -856,6 +869,7 @@ export function computeBrainDiagnostics(
     modelFailovers,
     stallUnrecovered,
     stallRecovered,
+    streamRetries,
     advertisedToolsLastTurn: exposure.lastTurn,
     advertisedToolsMin: exposure.min,
     catalogTools: exposure.catalog,
@@ -973,6 +987,10 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
           ? ' · recovered'
           : ' · NOT recovered (no tool ran after the last re-prompt — the run ended on a turn the stall detector accepted as an answer)'}`,
     );
+  }
+  // A turn whose stream broke is retried ONCE on another model; a second break ends the run.
+  if (d.streamRetries?.length) {
+    lines.push(`Stream retries: ${d.streamRetries.length} — ${d.streamRetries.join(', ')} broke mid-turn and the turn was retried on another model (one retry per turn).`);
   }
   // WHICH model did what. "Models used: a, b" cannot say that one of them never called
   // a tool, or that its calls were written in markup nothing parsed; these lines can.

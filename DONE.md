@@ -11,6 +11,10 @@ reads it never made, then wrote empty `<details>` blocks until the repetition gu
 - **A failed turn names its model.** The `llm.complete` error step recorded the requested model, which under auto
   is `default`; it now records the model that broke (`StreamInterruptedError.model`), and the report prints
   `Failed step: llm.complete on <model> — …`.
+- **A retried turn shows in the report.** `llm.stream_interrupted` (a model's stream broke, the turn went to
+  another model once) was live-only and triage never read it, so a 2026.9.58 report of Grok looping could not
+  say whether Grok was the retry after another model's loop or the first attempt. It is now a durable step, and
+  the report prints `Stream retries: N — <models> broke mid-turn and the turn was retried on another model`.
 
 ## ✅ RESOLVED 2026-09-13 — Grok showed `<<|eos|>`, wrote its tool calls as `<|"0":{…}}` text, then counted to 593
 

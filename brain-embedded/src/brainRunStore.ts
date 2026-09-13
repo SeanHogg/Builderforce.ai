@@ -2451,7 +2451,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // the run: this is the "Grok starts and then stops" failure. A pinned model is the
         // user's own choice, so it is not routed around.
         if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
-        pushTrace(c, {
+        // Durable, so a reopened chat's report can still say which model broke and was retried.
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'message',
           label: 'llm.stream_interrupted',

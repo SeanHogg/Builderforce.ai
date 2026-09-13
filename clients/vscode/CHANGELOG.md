@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.59] — Copied diagnostics show when a turn was handed to another model
+
+- **You can see when a model was swapped mid-turn.** When a model got stuck repeating itself, the chat quietly gave the turn to another connected model, and the copied diagnostics never said so. They now list which model broke and that the turn was retried, so a report shows whether the second model failed too.
+
 ## [2026.9.58] — "Continue" and reopened chats stop copying old dead-end replies
 
 - **A model no longer repeats its own past dead ends.** After a long research turn, the chat could show the agent narrating reads it never actually made and typing out empty formatting blocks until it had to be stopped. Its own earlier turns are now replayed as a plain answer, not the internal notes that came with them — so it builds on what it already found instead of copying the shape of a turn that went nowhere.

@@ -170,6 +170,16 @@ describe('context verdict — paged reads are not lost context', () => {
     expect(report).toContain('Failed step: llm.complete on direct/qwen/qwen3.8-max — RepetitionLoopError');
     expect(report).toContain('Failed step: llm.complete — RepetitionLoopError');
   });
+
+  it('reports which model broke mid-turn and was retried, so a retry that also failed is visible', () => {
+    const interrupted: BrainTraceEvent = {
+      ts: '', category: 'message', label: 'llm.stream_interrupted',
+      args: { model: 'direct/qwen/qwen3.8-max', step: 4 }, result: 'RepetitionLoopError — retrying this turn on another connected model.',
+    };
+    const d = computeBrainDiagnostics([llmTurn(3_000), interrupted], undefined, [msg('user', 'fix this')]);
+    expect(d.streamRetries).toEqual(['direct/qwen/qwen3.8-max']);
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('Stream retries: 1 — direct/qwen/qwen3.8-max broke mid-turn');
+  });
 });
 
 describe('detectUnbackedTicketClaim', () => {
