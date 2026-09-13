@@ -3917,6 +3917,12 @@ function stallRecoveredInTrace(events) {
   });
   return lastRecovery >= 0 && events.slice(lastRecovery + 1).some((e) => e.category === "tool");
 }
+function streamRetriesInTrace(events) {
+  return events.filter((e) => e.label === "llm.stream_interrupted").map((e) => {
+    const model = e.args?.model;
+    return typeof model === "string" && model ? model : "unknown model";
+  });
+}
 function toolExposureInTrace(events) {
   let lastTurn = null;
   let min = null;
@@ -4123,6 +4129,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const modelFailovers = modelFailoversInTrace(events);
   const stallUnrecovered = stallUnrecoveredInTrace(events);
   const stallRecovered = stallRecoveredInTrace(events);
+  const streamRetries = streamRetriesInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
   const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
@@ -4155,6 +4162,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     modelFailovers,
     stallUnrecovered,
     stallRecovered,
+    streamRetries,
     advertisedToolsLastTurn: exposure.lastTurn,
     advertisedToolsMin: exposure.min,
     catalogTools: exposure.catalog,
@@ -4217,6 +4225,9 @@ function formatBrainDiagnostics(d) {
     lines.push(
       `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : d.stallRecovered ? " \xB7 recovered" : " \xB7 NOT recovered (no tool ran after the last re-prompt \u2014 the run ended on a turn the stall detector accepted as an answer)"}`
     );
+  }
+  if (d.streamRetries?.length) {
+    lines.push(`Stream retries: ${d.streamRetries.length} \u2014 ${d.streamRetries.join(", ")} broke mid-turn and the turn was retried on another model (one retry per turn).`);
   }
   lines.push(...formatModelScorecard(d.modelScores ?? []));
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
@@ -6037,7 +6048,7 @@ ${revisit}` : replayNote });
       } catch (e) {
         if (c.abort?.signal.aborted) throw e;
         if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
-        pushTrace(c, {
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "message",
           label: "llm.stream_interrupted",

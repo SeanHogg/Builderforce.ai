@@ -2207,6 +2207,8 @@ interface BrainDiagnostics {
     stallUnrecovered: boolean;
     /** A tool step ran after the last re-prompt — see {@link stallRecoveredInTrace}. */
     stallRecovered: boolean;
+    /** Models whose stream broke mid-turn and were retried on another — see {@link streamRetriesInTrace}. */
+    streamRetries: string[];
     /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
     advertisedToolsLastTurn: number | null;
     /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
