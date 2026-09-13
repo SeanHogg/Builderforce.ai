@@ -64,13 +64,29 @@ export interface CanvasNotices {
 
 export function createCanvasNotices(
   publish: (text: string) => void,
-  { holdMs = OUTCOME_HOLD_MS, now = () => Date.now() }: { holdMs?: number; now?: () => number } = {},
+  {
+    holdMs = OUTCOME_HOLD_MS,
+    now = () => Date.now(),
+    schedule = (run: () => void, ms: number) => setTimeout(run, ms),
+    cancel = (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle),
+  }: {
+    holdMs?: number;
+    now?: () => number;
+    schedule?: (run: () => void, ms: number) => ReturnType<typeof setTimeout>;
+    cancel?: (handle: ReturnType<typeof setTimeout>) => void;
+  } = {},
 ): CanvasNotices {
   let lastOutcomeAt = 0;
+  let expiry: ReturnType<typeof setTimeout> | null = null;
   return {
     outcome(text) {
       lastOutcomeAt = now();
+      if (expiry != null) cancel(expiry);
       publish(text);
+      // `saveState` only clears the line on the NEXT save, which never comes for an
+      // outcome nobody edits past (a share link nobody clicked into) — the pill has
+      // no dismiss of its own, so without this it sits in the corner forever.
+      expiry = schedule(() => { expiry = null; publish(''); }, holdMs);
     },
     saveState(text) {
       // A save that stays quiet is not a save that did not happen: the outcome

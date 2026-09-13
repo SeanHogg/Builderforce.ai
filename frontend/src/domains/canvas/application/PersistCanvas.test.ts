@@ -20,6 +20,19 @@ import type { CanvasObject } from '../domain/canvasObject';
 
 const t = (key: string) => key;
 
+/** A manually-fired stand-in for setTimeout, so the expiry timer tests without waiting on one. */
+function fakeScheduler() {
+  const pending: Array<{ run: () => void; ms: number }> = [];
+  const cancelled: Array<{ run: () => void; ms: number }> = [];
+  const schedule = (run: () => void, ms: number) => {
+    const handle = { run, ms };
+    pending.push(handle);
+    return handle;
+  };
+  const cancel = (handle: { run: () => void; ms: number }) => { cancelled.push(handle); };
+  return { schedule, cancel, pending, cancelled };
+}
+
 function object(id: string, title: string): CanvasObject {
   return { id, type: 'creation', position: { x: 0, y: 0 }, data: { kind: 'task' as CanvasObject['data']['kind'], title } };
 }
@@ -35,7 +48,8 @@ describe('createCanvasNotices', () => {
     // and the one message the person was waiting for.
     const shown: string[] = [];
     let time = 0;
-    const notices = createCanvasNotices((text) => shown.push(text), { holdMs: 4_000, now: () => time });
+    const { schedule, cancel } = fakeScheduler();
+    const notices = createCanvasNotices((text) => shown.push(text), { holdMs: 4_000, now: () => time, schedule, cancel });
 
     notices.outcome('Sketch added');
     time = 300;
@@ -47,7 +61,8 @@ describe('createCanvasNotices', () => {
   it('lets the save state through once the outcome has had its moment', () => {
     const shown: string[] = [];
     let time = 0;
-    const notices = createCanvasNotices((text) => shown.push(text), { holdMs: 4_000, now: () => time });
+    const { schedule, cancel } = fakeScheduler();
+    const notices = createCanvasNotices((text) => shown.push(text), { holdMs: 4_000, now: () => time, schedule, cancel });
     notices.outcome('Sketch added');
     time = 4_500;
     notices.saveState('Saved on this device');
@@ -56,10 +71,42 @@ describe('createCanvasNotices', () => {
 
   it('never suppresses an outcome, however fast they arrive', () => {
     const shown: string[] = [];
-    const notices = createCanvasNotices((text) => shown.push(text), { now: () => 0 });
+    const { schedule, cancel } = fakeScheduler();
+    const notices = createCanvasNotices((text) => shown.push(text), { now: () => 0, schedule, cancel });
     notices.outcome('one');
     notices.outcome('two');
     expect(shown).toEqual(['one', 'two']);
+  });
+
+  it('clears itself once the hold expires, so a pill nobody edits past does not sit in the corner forever', () => {
+    // "Shared — send the link to invite people" is shown once, on a click, and often
+    // nothing else touches the board afterward — there is no later save to piggyback
+    // a clear on, and the pill itself has no dismiss button.
+    const shown: string[] = [];
+    const { schedule, cancel, pending } = fakeScheduler();
+    const notices = createCanvasNotices((text) => shown.push(text), { holdMs: 4_000, now: () => 0, schedule, cancel });
+
+    notices.outcome('Shared — send the link to invite people');
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.ms).toBe(4_000);
+
+    pending[0]!.run();
+
+    expect(shown).toEqual(['Shared — send the link to invite people', '']);
+  });
+
+  it('cancels the pending clear when a new outcome supersedes it', () => {
+    const shown: string[] = [];
+    const { schedule, cancel, pending, cancelled } = fakeScheduler();
+    const notices = createCanvasNotices((text) => shown.push(text), { now: () => 0, schedule, cancel });
+
+    notices.outcome('one');
+    notices.outcome('two');
+
+    expect(cancelled).toEqual([pending[0]]);
+    // Only the SECOND clear should still be able to fire.
+    pending[1]!.run();
+    expect(shown).toEqual(['one', 'two', '']);
   });
 });
 
