@@ -195,6 +195,14 @@ describe('listBuiltinTools', () => {
     expect(byName.get('builtin_meetings_schedule')?.mutates).toBe(true);
   });
 
+  it('advertises the manager switch tools as project-scoped mutations', () => {
+    for (const id of ['manager.enable', 'manager.disable', 'manager.configure']) {
+      const entry = tools.find((tool) => tool.tool === id);
+      expect(entry?.mutates, `${id} should be an MCP mutation`).toBe(true);
+      expect(entry?.parameters).toMatchObject({ required: ['projectId'] });
+    }
+  });
+
   it('advertises projects + tasks as gateway-safe, builtin-tagged tools', () => {
     expect(tools.length).toBeGreaterThanOrEqual(11);
     expect(tools.every((t) => t.extensionId === BUILTIN_EXTENSION_ID)).toBe(true);

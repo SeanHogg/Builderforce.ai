@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_TOOL_FAILURE_STREAK } from '@seanhogg/builderforce-brain-embedded';
 import { runScenario } from './runScenario';
 import { scenarioById, SCENARIOS } from './scenarios';
 
@@ -141,13 +142,16 @@ describe('context pressure', () => {
     expect(run.transcript).toMatch(/truncated before the model saw them/);
   });
 
-  it('forces a prose answer when the tool budget runs out instead of dying', async () => {
-    const run = await runScenario(scenario('tool-budget-exhausted'));
+  it('stops a run whose tool keeps failing and forces a prose answer instead of dying', async () => {
+    const run = await runScenario(scenario('tool-failure-streak'));
 
+    // The failure breaker is the ONLY stop — there is no step cap — so the run ends
+    // after exactly that many consecutive failures, not after some iteration count.
+    expect(run.toolCalls.length).toBe(DEFAULT_TOOL_FAILURE_STREAK);
     // The closing synthesis turn is the one sent with no tools at all.
     expect(run.requests.some((r) => r.toolless)).toBe(true);
     const last = run.messages.filter((m) => m.role === 'assistant').at(-1);
-    expect(last?.content).toMatch(/ran out of budget/i);
+    expect(last?.content).toMatch(/search index unavailable/i);
     expect(run.diagnostics.loopExhausted).toBe(false);
   });
 });

@@ -160,14 +160,17 @@ export const SCENARIOS: Scenario[] = [
     },
   },
   {
-    id: 'tool-budget-exhausted',
-    what: 'Model chains tool calls without ever concluding — the loop must force a final prose answer instead of dying',
+    // There is no step cap (see DEFAULT_TOOL_FAILURE_STREAK): a model that keeps calling a
+    // tool that SUCCEEDS runs until it concludes. The only stop is consecutive failures, so
+    // the tool here fails — that is what trips the breaker and ends the script.
+    id: 'tool-failure-streak',
+    what: 'Model keeps calling a tool that keeps failing — the breaker must stop it and force a final prose answer instead of dying',
     prompt: 'Find every place the gateway base URL is read.',
     script: (ctx) =>
       ctx.toolless
-        ? { text: 'The base URL is read in gateway.ts and bfApi.ts. I ran out of budget before checking the webview.' }
+        ? { text: 'I could not finish: every search_code call failed with "search index unavailable". Rebuild the index, or tell me which files to read directly.' }
         : { text: '', toolCalls: [{ name: 'search_code', args: { query: `getBaseUrl-${ctx.turn}` } }] },
-    toolResults: { search_code: { matches: [] } },
+    toolResults: { search_code: { ok: false, error: 'search index unavailable' } },
   },
   {
     id: 'gateway-error',

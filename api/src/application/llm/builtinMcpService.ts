@@ -46,7 +46,7 @@ import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
 import { buildTaskProgressBreakdown, normalizeTaskPrState } from '../task/taskProgressBreakdown';
 import { addManagerDirective } from '../manager/managerDirectives';
-import { createManagerCoachingTask, getEffectiveManagerPolicy, upsertManagerConfig } from '../manager/ManagerService';
+import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
@@ -84,7 +84,7 @@ import { pmoVersionKey } from '../pmo/pmoCacheKeys';
 import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
-import { ChatTicketService } from '../brain/ChatTicketService';
+import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { BrainService } from '../brain/BrainService';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
@@ -2021,7 +2021,11 @@ const CATALOG: BuiltinTool[] = [
       const text = a.text != null ? str(a.text) : '';
       const seen = new Set<number>();
       const ids: number[] = [];
-      const push = (n: number) => { if (Number.isFinite(n) && n > 0 && !seen.has(n)) { seen.add(n); ids.push(n); } };
+      // One message's worth of tags — bounds the in-tenant lookups below.
+      const MAX_HASHTAGS = 25;
+      const push = (n: number) => {
+        if (Number.isFinite(n) && n > 0 && !seen.has(n) && ids.length < MAX_HASHTAGS) { seen.add(n); ids.push(n); }
+      };
       for (const m of text.matchAll(/#\s*(\d{1,10})\b/g)) push(Number(m[1]));
       if (ids.length === 0 && /^\s*\d{1,10}\s*$/.test(text)) push(Number(text.trim()));
 
@@ -2036,9 +2040,32 @@ const CATALOG: BuiltinTool[] = [
       }
 
       // Resolve each id: prefer a chat-linked match, else look up the ticket by id in-tenant.
+      // Only task-like links answer to a numeric #id — a roadmap item or objective whose
+      // ref happens to be "12" is not ticket #12.
       const byRef = new Map<string, (typeof linked)[number]>();
-      for (const t of linked) byRef.set(String(t.ref), t);
+      for (const t of linked) {
+        if (t.kind === 'task' || t.kind === 'epic' || t.kind === 'gap') byRef.set(t.ref, t);
+      }
 
+      // Unlinked ids: tenant-scoped lookup (optionally narrowed to projectId), the shared
+      // security mask (a restricted ticket is surfaced, never leaked), then ONE batched
+      // health read so progress is derived exactly as it is for the linked chips.
+      const scopeProjectId = a.projectId != null ? num(a.projectId) : null;
+      const lookups = await Promise.all(
+        ids.filter((id) => !byRef.has(String(id))).map((id) => getTenantTask(ctx, id).catch(() => null)),
+      );
+      const found = await maskSecurityTasks(ctx, lookups
+        .filter((t): t is NonNullable<typeof t> => t != null && (scopeProjectId == null || t.projectId === scopeProjectId))
+        .map((t) => t.toPlain() as unknown as Record<string, unknown>));
+      const kindOf = (row: Record<string, unknown>) => ticketKindForTaskType(typeof row.taskType === 'string' ? row.taskType : null);
+      const health = await svc.ticketHealthBatch(ctx.tenantId, found
+        .filter((row) => row.restricted !== true)
+        .map((row) => ({ kind: kindOf(row), ref: String(row.id) })));
+      const healthByRef = new Map([...health.values()].map((h) => [h.ref, h]));
+      const foundById = new Map(found.map((row) => [Number(row.id), row]));
+
+      // `?task=<id>` opens the ticket drawer on its own — the board fetches it by id.
+      const deepLink = (id: number) => `/projects?tab=tasks&task=${id}`;
       const resolved: Array<{
         hashtag: string;
         id: number;
@@ -2047,6 +2074,7 @@ const CATALOG: BuiltinTool[] = [
         progressPct: number | null;
         kind: string;
         linked: boolean;
+        restricted?: true;
         deepLink: string;
       }> = [];
       const missing: string[] = [];
@@ -2055,34 +2083,28 @@ const CATALOG: BuiltinTool[] = [
         const tag = `#${id}`;
         const hit = byRef.get(String(id));
         if (hit) {
+          if (!hit.exists) { missing.push(tag); continue; }
           resolved.push({
-            hashtag: tag,
-            id,
-            title: hit.label ?? hit.title ?? `Ticket #${id}`,
-            status: hit.status ?? null,
-            progressPct: hit.progressPct ?? null,
-            kind: hit.kind ?? 'task',
-            linked: true,
-            deepLink: `/projects?tab=tasks&project=${hit.projectId ?? ''}&task=${id}`,
+            hashtag: tag, id, title: hit.label, status: hit.status, progressPct: hit.progressPct,
+            kind: hit.kind, linked: true, deepLink: deepLink(id),
           });
-        } else {
-          // Not in chat links — look it up in the project.
-          const lookup = await svc.getTicketById(ctx.tenantId, id).catch(() => null);
-          if (lookup && 'id' in lookup) {
-            resolved.push({
-              hashtag: tag,
-              id,
-              title: lookup.title ?? `Ticket #${id}`,
-              status: lookup.status ?? null,
-              progressPct: lookup.progressPct ?? null,
-              kind: lookup.kind ?? 'task',
-              linked: false,
-              deepLink: `/projects?tab=tasks&project=${lookup.projectId ?? ''}&task=${id}`,
-            });
-          } else {
-            missing.push(tag);
-          }
+          continue;
         }
+        const row = foundById.get(id);
+        if (!row) { missing.push(tag); continue; }
+        const status = typeof row.status === 'string' ? row.status : null;
+        if (row.restricted === true) {
+          resolved.push({
+            hashtag: tag, id, title: '', status, progressPct: null,
+            kind: kindOf(row), linked: false, restricted: true, deepLink: deepLink(id),
+          });
+          continue;
+        }
+        const h = healthByRef.get(String(id));
+        resolved.push({
+          hashtag: tag, id, title: h?.label ?? String(row.title ?? ''), status: h?.status ?? status,
+          progressPct: h?.progressPct ?? null, kind: kindOf(row), linked: false, deepLink: deepLink(id),
+        });
       }
 
       return {
@@ -3844,74 +3866,50 @@ const CATALOG: BuiltinTool[] = [
       };
     },
   },
+  // ---- AI Manager: switch + tune — the SAME validated write as the Manager tab ----
+  // All three replay PUT /api/manager/:projectId (see putManagerConfig), so the manager-
+  // role gate, the policy normalizers, tri-state inherit (null), the roster role sync and
+  // the stall-census invalidation apply exactly as when a human flips the tab.
   {
     tool: 'manager.enable', mutates: true,
-    description: 'ENABLE THE AI MANAGER for a project so it can autonomously dispatch agents, assign tickets, and manage the board. This is the switch that turns on agent execution — when disabled, no autonomous runs will be dispatched regardless of ticket state. Pass projectId to target a specific project. Optionally pass enabled:true/false to change the state.',
-    parameters: obj({ projectId: N, enabled: O(B) }, ['projectId']),
-    run: async (ctx, a) => {
-      const projectId = num(a.projectId);
-      await assertProjectInTenant(ctx, projectId);
-      const { upsertManagerConfig } = await import('../manager/ManagerService');
-      const enabled = a.enabled !== undefined ? a.enabled : true;
-      const result = await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, { enabled });
-      return { success: true, message: 'Manager ' + (enabled ? 'enabled' : 'disabled') + ' for project ' + projectId, config: result };
-    },
+    description: 'ENABLE THE AI MANAGER for a project so it can autonomously dispatch agents, assign tickets, and manage the board. This is the switch that turns on agent execution — while it is off, no autonomous runs are dispatched regardless of ticket state. To turn it off use manager.disable; to tune it use manager.configure.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: (ctx, a) => putManagerConfig(ctx, a.projectId, { enabled: true }),
   },
   {
     tool: 'manager.disable', mutates: true,
-    description: 'DISABLE THE AI MANAGER for a project, stopping all autonomous agent dispatch, auto-assignment, and board management. Pass projectId to target a specific project.',
+    description: 'DISABLE THE AI MANAGER for a project, stopping all autonomous agent dispatch, auto-assignment, and board management.',
     parameters: obj({ projectId: N }, ['projectId']),
-    run: async (ctx, a) => {
-      const projectId = num(a.projectId);
-      await assertProjectInTenant(ctx, projectId);
-      const { upsertManagerConfig } = await import('../manager/ManagerService');
-      await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, { enabled: false });
-      return { success: true, message: 'Manager disabled for project ' + projectId };
-    },
+    run: (ctx, a) => putManagerConfig(ctx, a.projectId, { enabled: false }),
   },
   {
     tool: 'manager.configure', mutates: true,
-    description: 'CONFIGURE THE AI MANAGER settings for a project. Pass any subset of settings to update. Available settings: enabled (boolean), managerRef (string), prMergePolicy ("immediate" | "approved" | "manual"), autoAssign (boolean), autoBusinessValue (boolean), autoPrioritize (boolean), autoSchedule (boolean), managerType ("ai" | "human"), requireSignoffToComplete (boolean), allowAutoMerge (boolean), allowUnattendedCeremonies (boolean), allowAgentReassignment (boolean), agentReassignIdleHours (number), agentReassignMaxPerSession (number), allowAutoStaffLanes (boolean).',
-    parameters: obj({ 
-      projectId: N, 
-      enabled: O(B),
-      managerRef: O(S),
-      prMergePolicy: O(S),
-      autoAssign: O(B),
-      autoBusinessValue: O(B),
-      autoPrioritize: O(B),
-      autoSchedule: O(B),
-      managerType: O(S),
-      requireSignoffToComplete: O(B),
-      allowAutoMerge: O(B),
-      allowUnattendedCeremonies: O(B),
-      allowAgentReassignment: O(B),
-      agentReassignIdleHours: O(N),
-      agentReassignMaxPerSession: O(N),
-      allowAutoStaffLanes: O(B)
+    description: 'CONFIGURE THE AI MANAGER for a project. Pass only the settings to change; omitted settings keep their stored value. '
+      + 'managerRef: who manages — "u:<userId>" for a person, "c:<agentRef>" for a cloud agent, "" for the system service. '
+      + 'prMergePolicy: "immediate" | "on_green" | "queue". managerType: a manager type id (e.g. "general"). '
+      + 'allowAutoMerge, allowUnattendedCeremonies, allowAgentReassignment, allowAutoStaffLanes, agentReassignIdleHours and agentReassignMaxPerSession also accept null = inherit the workspace default. '
+      + 'Read the current values with manager.policy first.',
+    parameters: obj({
+      projectId: N,
+      enabled: B,
+      managerRef: S,
+      prMergePolicy: S,
+      autoAssign: B,
+      autoBusinessValue: B,
+      autoPrioritize: B,
+      autoSchedule: B,
+      managerType: S,
+      requireSignoffToComplete: B,
+      allowAutoMerge: B,
+      allowUnattendedCeremonies: B,
+      allowAgentReassignment: B,
+      agentReassignIdleHours: N,
+      agentReassignMaxPerSession: N,
+      allowAutoStaffLanes: B,
     }, ['projectId']),
-    run: async (ctx, a) => {
-      const projectId = num(a.projectId);
-      await assertProjectInTenant(ctx, projectId);
-      const { upsertManagerConfig } = await import('../manager/ManagerService');
-      const patch: Parameters<typeof upsertManagerConfig>[3] = {};
-      if (a.enabled !== undefined) patch.enabled = a.enabled;
-      if (a.managerRef !== undefined) patch.managerRef = a.managerRef;
-      if (a.prMergePolicy !== undefined) patch.prMergePolicy = a.prMergePolicy as any;
-      if (a.autoAssign !== undefined) patch.autoAssign = a.autoAssign;
-      if (a.autoBusinessValue !== undefined) patch.autoBusinessValue = a.autoBusinessValue;
-      if (a.autoPrioritize !== undefined) patch.autoPrioritize = a.autoPrioritize;
-      if (a.autoSchedule !== undefined) patch.autoSchedule = a.autoSchedule;
-      if (a.managerType !== undefined) patch.managerType = a.managerType;
-      if (a.requireSignoffToComplete !== undefined) patch.requireSignoffToComplete = a.requireSignoffToComplete;
-      if (a.allowAutoMerge !== undefined) patch.allowAutoMerge = a.allowAutoMerge;
-      if (a.allowUnattendedCeremonies !== undefined) patch.allowUnattendedCeremonies = a.allowUnattendedCeremonies;
-      if (a.allowAgentReassignment !== undefined) patch.allowAgentReassignment = a.allowAgentReassignment;
-      if (a.agentReassignIdleHours !== undefined) patch.agentReassignIdleHours = a.agentReassignIdleHours;
-      if (a.agentReassignMaxPerSession !== undefined) patch.agentReassignMaxPerSession = a.agentReassignMaxPerSession;
-      if (a.allowAutoStaffLanes !== undefined) patch.allowAutoStaffLanes = a.allowAutoStaffLanes;
-      const result = await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, patch);
-      return { success: true, message: 'Manager configured for project ' + projectId, config: result };
+    run: (ctx, a) => {
+      const { projectId, ...patch } = a;
+      return putManagerConfig(ctx, projectId, patch);
     },
   },
   {
@@ -4091,6 +4089,16 @@ async function getTenantTask(ctx: BuiltinCtx, id: number) {
   const task = await ctx.tasks.getTask(id);
   await ctx.projects.getProject(task.projectId, ctx.tenantId); // throws Forbidden/NotFound on mismatch
   return task;
+}
+
+/**
+ * The ONE manager-config write for tools: replays the Manager tab's own
+ * `PUT /api/manager/:projectId`, which owns the manager-role gate, the tenant project
+ * check, the policy normalizers, the roster role sync and the stall-census
+ * invalidation. Writing the row directly would skip every one of them.
+ */
+function putManagerConfig(ctx: BuiltinCtx, projectId: unknown, patch: Json): Promise<unknown> {
+  return replayRoute(ctx, 'PUT', `/api/manager/${num(projectId)}`, patch);
 }
 
 /**

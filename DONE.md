@@ -1,3 +1,47 @@
+## ✅ RESOLVED 2026-09-12 — The VSIX harness no longer runs out of memory: its "tool budget" scenario is rewritten for the no-cap loop
+
+The `clients/vscode` vitest suite crashed every run: one worker hit an out-of-memory error, even with an 8 GB heap, after about 20 minutes. The defect was found and fixed in the same pass.
+
+- **Cause:** `harness/scenarios.ts` `tool-budget-exhausted` scripted a model that calls
+  `search_code` forever, and every call succeeded (`{ matches: [] }`). It was written for the old
+  step cap. With that cap gone (the only stop is `DEFAULT_TOOL_FAILURE_STREAK`), the loop never
+  ended.
+- **Fix:** the scenario is now `tool-failure-streak`. `search_code` answers
+  `{ ok: false, error: 'search index unavailable' }`, so the breaker trips and the loop forces its
+  one tools-free closing answer.
+- **Guard:** the test asserts that exactly `DEFAULT_TOOL_FAILURE_STREAK` dispatches happen, then a
+  tools-free request, then a closing answer that names the failure, with `loopExhausted` false.
+- **Result:** harness 14/14 tests in about 3 s, and the rest of the `clients/vscode` suite 33/33
+  files.
+
+## ✅ RESOLVED 2026-09-12 — The api typechecks again: `chats.resolve_hashtag` and the `manager.*` switch tools fixed
+
+Commit 18f1b49ca added four Brain tools to `api/src/application/llm/builtinMcpService.ts` that
+did not compile. The defect was found and fixed in the same pass.
+
+- **`manager.enable` / `manager.disable` / `manager.configure`:**
+  - **Compile error:** the schemas called an `O()` helper that does not exist.
+  - **Bypassed checks:** the tools wrote `project_manager_configs` directly, skipping everything the
+    Manager tab's `PUT /api/manager/:projectId` enforces: the MANAGER role gate,
+    `normalizePrMergePolicy` / `normalizeManagerType`, tri-state `null` = inherit, the roster role
+    sync and the stall-census invalidation.
+  - **Wrong values in the description:** `manager.configure` advertised merge policies
+    (`approved` / `manual`) and manager types (`ai` / `human`) that don't exist.
+  - **Fix:** all three now replay that route through ONE helper, `putManagerConfig`. The
+    description names the real values: `immediate` / `on_green` / `queue`, and type ids such as
+    `general`.
+- **`chats.resolve_hashtag`:**
+  - **Fields that don't exist:** it read `title` / `projectId` from `ChatTicketLink` and called
+    `ChatTicketService.getTicketById`. None of these exist.
+  - **Fix for linked tickets:** they use the link's own `label` / `status` / `progressPct`, and only
+    task, epic and gap links answer to `#id`.
+  - **Fix for unlinked ids:** they resolve through `getTenantTask`, optionally narrowed to
+    `projectId`. The shared `maskSecurityTasks` then applies, so a restricted ticket is surfaced but
+    never leaked. One batched `ticketHealthBatch` call supplies progress.
+  - **Deep links:** they point at `?task=<id>`, which the board opens on its own.
+  - **Lookup cap:** tags are capped at 25 per call.
+- **Guard:** `builtinMcpService.test.ts` pins the three manager tools as project-scoped mutations.
+
 ## ✅ RESOLVED 2026-09-12 — Group turns name who they went to; ONE "To" and ONE "Acting as" control on the web and in the editor
 
 Two Gap-Register entries (Brain & chat) plus one defect found on the way, closed together.
