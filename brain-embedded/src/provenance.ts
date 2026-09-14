@@ -52,6 +52,13 @@ export interface MessageProvenance {
    *  Absent for turns served by a frontier/pool model — so the "🧠 Evermind vN" chip
    *  shows ONLY when the learned model actually spoke. */
   evermind?: { version: number };
+  /**
+   * What the surface ASKED for when it differed from {@link model} (gateway failover /
+   * downgrade). Absent on a turn that got exactly what it requested — so a copied
+   * transcript can stamp `## BuilderForce · actual (requested X)` only when the two
+   * disagree. Optional: older turns never carried it.
+   */
+  requestedModel?: string;
 }
 
 /** The wire's account literal, or undefined for anything else — the one reading of it,
@@ -79,11 +86,15 @@ export function parseMessageProvenance(msg: { metadata?: string | null }): Messa
       const ev = (p as { evermind?: { version?: unknown } }).evermind;
       const evermind = ev && typeof ev.version === 'number' && ev.version >= 1 ? { version: ev.version } : undefined;
       const account = asProvenanceAccount(p.account);
+      const requestedModel = typeof p.requestedModel === 'string' && p.requestedModel && p.requestedModel !== p.model
+        ? p.requestedModel
+        : undefined;
       return {
         model: p.model,
         ...(account ? { account } : {}),
         ...(typeof p.vendor === 'string' ? { vendor: p.vendor } : {}),
         ...(evermind ? { evermind } : {}),
+        ...(requestedModel ? { requestedModel } : {}),
       };
     }
   } catch {
@@ -120,4 +131,22 @@ export function withProvenanceMetadata(
   const meta: Record<string, unknown> = { ...(base ?? {}) };
   if (provenance) meta[PROVENANCE_META_KEY] = provenance;
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : undefined;
+}
+
+/**
+ * Markdown heading for one assistant turn in a copied transcript.
+ *
+ * Without this every block is just `## BuilderForce`, so a multi-model run looks like
+ * one voice and the aggregate "Models used" / "Per model" lines are the only attribution.
+ * Prefer the resolved model id from persisted provenance; when the turn was downgraded,
+ * append `(requested …)` so failover is visible on the block itself.
+ */
+export function formatAssistantTranscriptHeading(
+  assistantName: string,
+  message: { metadata?: string | null },
+): string {
+  const prov = parseMessageProvenance(message);
+  if (!prov?.model) return `## ${assistantName}`;
+  if (prov.requestedModel) return `## ${assistantName} · ${prov.model} (requested ${prov.requestedModel})`;
+  return `## ${assistantName} · ${prov.model}`;
 }

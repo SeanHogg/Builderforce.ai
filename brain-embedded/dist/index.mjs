@@ -2163,11 +2163,13 @@ function parseMessageProvenance(msg) {
       const ev = p.evermind;
       const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
       const account = asProvenanceAccount(p.account);
+      const requestedModel = typeof p.requestedModel === "string" && p.requestedModel && p.requestedModel !== p.model ? p.requestedModel : void 0;
       return {
         model: p.model,
         ...account ? { account } : {},
         ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
-        ...evermind ? { evermind } : {}
+        ...evermind ? { evermind } : {},
+        ...requestedModel ? { requestedModel } : {}
       };
     }
   } catch {
@@ -2185,6 +2187,12 @@ function withProvenanceMetadata(provenance, base) {
   const meta = { ...base ?? {} };
   if (provenance) meta[PROVENANCE_META_KEY] = provenance;
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+function formatAssistantTranscriptHeading(assistantName, message) {
+  const prov = parseMessageProvenance(message);
+  if (!prov?.model) return `## ${assistantName}`;
+  if (prov.requestedModel) return `## ${assistantName} \xB7 ${prov.model} (requested ${prov.requestedModel})`;
+  return `## ${assistantName} \xB7 ${prov.model}`;
 }
 
 // src/stoppedTurn.ts
@@ -2699,6 +2707,9 @@ function stallExhaustedNotice(model, tried, shape = false) {
   const others = (tried ?? []).filter((m) => m && m !== model);
   return `${who} ${whatItDid(kind)}, so nothing was actually run and ` + whatYouGot(kind) + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : kind === "handed-off" ? " Nothing upstream failed here \u2014 the model reached the right answer and declined to carry it out, which is an agency limitation. Run the steps it listed, or retry on a model from the coding pool, which is selected for exactly this." : " Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream \u2014 a prompt over the context limit, an exhausted quota \u2014 produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.");
 }
+function stallRecoveryToolChoice(input) {
+  return input.availableToolCount > 0 ? "required" : void 0;
+}
 function ids(list) {
   return (list ?? []).map((m) => m.id).filter((id) => !!id);
 }
@@ -2711,8 +2722,8 @@ function nextFallbackModel(surface, tried) {
   const pool = ids(surface.data);
   const tiers = [
     coding.filter((m) => byoSet.has(m)),
-    coding,
     byo,
+    coding,
     pool
   ];
   for (const tier of tiers) {
@@ -3033,9 +3044,9 @@ function modelOf(ev) {
 function modelScorecard(events) {
   const byModel = /* @__PURE__ */ new Map();
   const row = (model) => {
-    let score = byModel.get(model);
-    if (!score) {
-      score = {
+    let score2 = byModel.get(model);
+    if (!score2) {
+      score2 = {
         model,
         turns: 0,
         toolCalls: 0,
@@ -3048,9 +3059,9 @@ function modelScorecard(events) {
         upstreamRecovered: 0,
         adapterLossTurns: 0
       };
-      byModel.set(model, score);
+      byModel.set(model, score2);
     }
-    return score;
+    return score2;
   };
   for (const ev of events) {
     if (ev.label === STOPPED_TURN_STEP) {
@@ -3066,18 +3077,18 @@ function modelScorecard(events) {
       continue;
     }
     if (ev.category !== "llm") continue;
-    const score = row(model);
+    const score2 = row(model);
     const args = ev.args;
     const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
-    score.turns += 1;
-    score.toolCalls += calls;
-    if (calls === 0 && (ev.textChars ?? 0) > 0) score.textOnlyTurns += 1;
-    if (args?.unliftedCallMarkup === true) score.unliftedMarkupTurns += 1;
+    score2.turns += 1;
+    score2.toolCalls += calls;
+    if (calls === 0 && (ev.textChars ?? 0) > 0) score2.textOnlyTurns += 1;
+    if (args?.unliftedCallMarkup === true) score2.unliftedMarkupTurns += 1;
     if (typeof args?.upstreamFunctionCalls === "number") {
-      score.upstreamReportedTurns += 1;
-      score.upstreamFunctionCalls += args.upstreamFunctionCalls;
-      if (typeof args.upstreamRecovered === "number") score.upstreamRecovered += args.upstreamRecovered;
-      if (args.upstreamFunctionCalls > calls) score.adapterLossTurns += 1;
+      score2.upstreamReportedTurns += 1;
+      score2.upstreamFunctionCalls += args.upstreamFunctionCalls;
+      if (typeof args.upstreamRecovered === "number") score2.upstreamRecovered += args.upstreamRecovered;
+      if (args.upstreamFunctionCalls > calls) score2.adapterLossTurns += 1;
     }
   }
   return [...byModel.values()];
@@ -3109,6 +3120,66 @@ function formatModelScorecard(scores) {
     lines.push(`  \u2022 ${s.model}: ${parts.join(" \xB7 ")}${flag}`);
   }
   return lines;
+}
+function modelTurnLog(events) {
+  const turns = [];
+  for (const ev of events) {
+    if (ev.label !== "llm.complete") continue;
+    const model = modelOf(ev);
+    if (!model) continue;
+    const args = ev.args;
+    const requested = typeof args?.requestedModel === "string" && args.requestedModel && args.requestedModel !== "default" && args.requestedModel !== model ? args.requestedModel : void 0;
+    if (ev.category === "error") {
+      turns.push({
+        index: turns.length + 1,
+        model,
+        ...requested ? { requestedModel: requested } : {},
+        toolCalls: 0,
+        textOnly: false,
+        failed: true,
+        ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {}
+      });
+      continue;
+    }
+    if (ev.category !== "llm") continue;
+    const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
+    const turn = {
+      index: turns.length + 1,
+      model,
+      ...requested ? { requestedModel: requested } : {},
+      toolCalls: calls,
+      textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
+      ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
+      ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}
+    };
+    if (typeof args?.upstreamFunctionCalls === "number") {
+      turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
+      if (typeof args.upstreamRecovered === "number") turn.upstreamRecovered = args.upstreamRecovered;
+    }
+    turns.push(turn);
+  }
+  return turns;
+}
+function formatOneTurn(t) {
+  const model = t.requestedModel ? `${t.model} (requested ${t.requestedModel})` : t.model;
+  const parts = [];
+  if (t.failed) {
+    parts.push("FAILED");
+  } else {
+    parts.push(`${t.toolCalls} tool call(s)`);
+    if (t.textOnly) parts.push("text-only");
+  }
+  if (typeof t.upstreamFunctionCalls === "number") {
+    parts.push(`raw response: ${t.upstreamFunctionCalls} structured call(s)`);
+  }
+  if (t.upstreamRecovered) parts.push(`${t.upstreamRecovered} rebuilt from the final frame`);
+  if (t.unliftedCallMarkup) parts.push("\u26A0 unlifted call markup");
+  if (typeof t.durationMs === "number") parts.push(`${t.durationMs}ms`);
+  return `  ${t.index}. ${model} \xB7 ${parts.join(" \xB7 ")}`;
+}
+function formatModelTurnLog(turns) {
+  if (!turns.length) return [];
+  return ["Turn log:", ...turns.map(formatOneTurn)];
 }
 
 // src/readOnlyShell.ts
@@ -3907,6 +3978,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   });
   const modelsUsed = modelsUsedInTrace(events);
   const modelScores = modelScorecard(events);
+  const modelTurns = modelTurnLog(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
   const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
@@ -3945,6 +4017,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     largestToolResult,
     modelsUsed,
     modelScores,
+    modelTurns,
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
@@ -4021,6 +4094,7 @@ function formatBrainDiagnostics(d) {
     lines.push(`Stream retries: ${d.streamRetries.length} \u2014 ${d.streamRetries.join(", ")} broke mid-turn and the turn was retried on another model (one retry per turn).`);
   }
   lines.push(...formatModelScorecard(d.modelScores ?? []));
+  lines.push(...formatModelTurnLog(d.modelTurns ?? []));
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
@@ -4070,7 +4144,10 @@ function buildBrainTriageReport(opts) {
   if (messages.length) {
     lines.push("", `--- Conversation (${messages.length}) ---`);
     for (const m of messages) {
-      lines.push(`[${m.createdAt ?? ""}] ${m.role.toUpperCase()}: ${cap(m.content, 1500)}`);
+      const who = m.role.toUpperCase();
+      const model = m.role === "assistant" ? parseMessageProvenance(m)?.model : void 0;
+      const stamp = model ? ` \xB7 ${model}` : "";
+      lines.push(`[${m.createdAt ?? ""}] ${who}${stamp}: ${cap(m.content, 1500)}`);
     }
   }
   return lines.join("\n");
@@ -4129,10 +4206,10 @@ var EQUIVALENCE_CLASSES = [
 ];
 var SYNONYMS = (() => {
   const map = /* @__PURE__ */ new Map();
-  for (const group of EQUIVALENCE_CLASSES) {
-    for (const term of group) {
+  for (const group2 of EQUIVALENCE_CLASSES) {
+    for (const term of group2) {
       const existing = map.get(term) ?? [];
-      for (const other of group) if (!existing.includes(other)) existing.push(other);
+      for (const other of group2) if (!existing.includes(other)) existing.push(other);
       map.set(term, existing);
     }
   }
@@ -4223,17 +4300,17 @@ function scoreTool(tool, queryStems, synonymStems) {
   const name = (tool.function?.name ?? "").toLowerCase();
   const description = (tool.function?.description ?? "").toLowerCase();
   if (!name) return 0;
-  let score = 0;
+  let score2 = 0;
   const nameStems = new Set(tokenize(name).map(stem));
   for (const s of nameStems) {
-    if (queryStems.has(s)) score += NAME_HIT;
-    else if (synonymStems.has(s)) score += NAME_SYNONYM_HIT;
+    if (queryStems.has(s)) score2 += NAME_HIT;
+    else if (synonymStems.has(s)) score2 += NAME_SYNONYM_HIT;
   }
   const descStems = new Set(tokenize(description).map(stem));
   for (const s of descStems) {
-    if (queryStems.has(s) || synonymStems.has(s)) score += DESCRIPTION_HIT;
+    if (queryStems.has(s) || synonymStems.has(s)) score2 += DESCRIPTION_HIT;
   }
-  return score;
+  return score2;
 }
 function selectToolsForTurn(tools, options) {
   const available = tools?.length ?? 0;
@@ -4344,12 +4421,12 @@ function findTools(catalog, query, limit = FIND_LIMIT) {
     const description = tool.function?.description ?? "";
     const haystackName = name.toLowerCase();
     const haystackDesc = description.toLowerCase();
-    let score = 0;
+    let score2 = 0;
     for (const t of terms) {
-      if (haystackName.includes(t)) score += 10;
-      else if (haystackDesc.includes(t)) score += 1;
+      if (haystackName.includes(t)) score2 += 10;
+      else if (haystackDesc.includes(t)) score2 += 1;
     }
-    if (score > 0) scored.push({ m: { name, description }, score, index });
+    if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
   });
   return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
 }
@@ -4601,6 +4678,1368 @@ function turnOptimizationDirective() {
     "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
   ].join("\n");
 }
+
+// ../packages/agent-tools/src/modelRoles.ts
+var MODEL_ROLES = ["plan", "code", "verify", "explore", "chat", "utility"];
+var MODEL_ROLE_DESCRIPTIONS = {
+  plan: "Deciding an approach or breaking work down \u2014 no code written yet.",
+  code: "Writing or editing code. Default when the delegated work is itself an edit.",
+  verify: "Checking work already done \u2014 reading test/build output, reviewing a diff.",
+  explore: "Read-only investigation \u2014 locating, searching, summarising. Default when `read_only` is left true.",
+  chat: "A conversational answer with no task-shaped work behind it.",
+  utility: "Small, mechanical, low-stakes work \u2014 formatting, extraction, a lookup."
+};
+var ROLE_SET = new Set(MODEL_ROLES);
+function isModelRole(value) {
+  return typeof value === "string" && ROLE_SET.has(value);
+}
+function delegationRole(raw, readOnly) {
+  return isModelRole(raw) ? raw : readOnly ? "explore" : "code";
+}
+
+// ../packages/agent-tools/src/tool.ts
+function defineTool(def) {
+  return {
+    name: def.name,
+    requires: def.requires ?? [],
+    schema: {
+      type: "function",
+      function: { name: def.name, description: def.description, parameters: def.parameters }
+    },
+    execute: def.execute
+  };
+}
+
+// ../packages/agent-tools/src/toolAliases.ts
+var TOOL_NAME_ALIASES = {
+  list_dir: "list_files",
+  listdir: "list_files",
+  list_directory: "list_files",
+  list_directories: "list_files",
+  ls_dir: "list_files",
+  // Shell / terminal
+  bash: "run_command",
+  shell: "run_command",
+  run_terminal_cmd: "run_command",
+  execute_command: "run_command",
+  run_shell_command: "run_command",
+  // Search
+  grep: "search_code",
+  codebase_search: "search_code",
+  search_files: "search_code",
+  find_files: "list_files",
+  glob_file_search: "list_files",
+  // Edit / write
+  str_replace: "edit_file",
+  search_replace: "edit_file",
+  apply_patch: "edit_file",
+  write_to_file: "write_file",
+  create_file: "write_file",
+  delete: "delete_file"
+};
+function resolveToolAlias(name) {
+  const key = name.trim().toLowerCase();
+  return TOOL_NAME_ALIASES[key] ?? name;
+}
+
+// ../packages/agent-tools/src/git-tools.ts
+function safeGitArg(v) {
+  return typeof v === "string" && /^[\w./@-]+$/.test(v) ? v : null;
+}
+function safeRepoArg(repo) {
+  const arg = safeGitArg(repo);
+  return arg && !arg.split(/[\\/]/).includes("..") && !arg.startsWith("/") ? arg : null;
+}
+function repoScopedScript(script, repo) {
+  const dir = safeRepoArg(repo);
+  return dir ? `cd "${dir}" || exit 1
+${script}` : script;
+}
+function notARepoResult(action) {
+  return {
+    data: {
+      ok: false,
+      action,
+      error: `not a git repository at the workspace root \u2014 this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). Do not conclude git is unavailable: call \`list_files\` to see the top-level directories, then re-run this tool with \`repo\` set to the one holding the code you are working on (e.g. { "repo": "my-project" }). If none of them is a checkout, say so plainly \u2014 file edits still work, only the git tools need a repository.`
+    }
+  };
+}
+var RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+function buildGitCommand(action, opts) {
+  const path = safeGitArg(opts?.path);
+  const pathArg = path ? ` -- "${path}"` : "";
+  const repo = safeRepoArg(opts?.repo);
+  const scoped = (cmd) => repo ? `cd "${repo}" && ${cmd}` : cmd;
+  const scopedScript = (lines) => repoScopedScript(lines.join("\n"), opts?.repo);
+  switch (action) {
+    case "status":
+      return scoped("git status --short --branch");
+    case "diff":
+      return scoped(`git --no-pager diff${pathArg}`);
+    case "history": {
+      const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
+      return scoped(`git --no-pager log --oneline -n ${limit}${pathArg}`);
+    }
+    case "sync_latest": {
+      const base = safeGitArg(opts?.baseBranch);
+      const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
+      return scopedScript([
+        "set -e",
+        resolveBase,
+        'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
+        'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+        'git fetch origin "$BASE"',
+        'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+        'echo "Synced with origin/$BASE"'
+      ]);
+    }
+    case "undo":
+      return scopedScript([
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        "git reset --hard HEAD~1",
+        'echo "Undid the last commit (use git_redo to reapply)"'
+      ]);
+    case "redo":
+      return scopedScript([
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        'git reset --hard "HEAD@{1}"',
+        'echo "Reapplied the last undone change"'
+      ]);
+  }
+}
+function gitToolResult(action, r) {
+  const out = (r.stdout ?? "").trim();
+  if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
+    return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
+  }
+  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
+    return { data: { ok: false, action, error: "you have uncommitted changes \u2014 commit or discard them before git_" + action + " (it refuses to discard uncommitted work)." } };
+  }
+  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
+}
+var NOT_A_REPO = /not a git repository/i;
+function isNotARepo(r) {
+  return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
+}
+async function runGitTool(action, opts, ctx) {
+  const r = await ctx.caps.shell.run(buildGitCommand(action, opts));
+  if (isNotARepo(r) && !opts.repo) return notARepoResult(action);
+  const result = gitToolResult(action, r);
+  if (opts.repo && result.data.ok) {
+    result.data.repo = opts.repo;
+  }
+  return result;
+}
+var REPO_PARAM = {
+  type: "string",
+  description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.'
+};
+var gitStatusTool = defineTool({
+  name: "git_status",
+  description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you mean.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("status", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitDiffTool = defineTool({
+  name: "git_diff",
+  description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitHistoryTool = defineTool({
+  name: "git_history",
+  description: "Show recent commit history (git log --oneline), optionally scoped to a path. Use it to understand how a file evolved before changing it.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
+      limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : void 0, limit: typeof args.limit === "number" ? args.limit : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitSyncLatestTool = defineTool({
+  name: "git_sync_latest",
+  description: "Fetch the latest base branch (e.g. main) and merge it into your working branch so you are NOT building on stale code. Run this FIRST, before editing \u2014 a branch created earlier can be far behind main, so its build fails against old dependencies and its pull request would revert newer work. On a merge conflict it safely aborts and tells you which to resolve.",
+  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." }, repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0, repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitUndoTool = defineTool({
+  name: "git_undo",
+  description: "Undo your most recent commit (keeps the change recoverable \u2014 use git_redo to reapply). Refuses if you have uncommitted changes, so it can never discard unsaved work. Use it to back out a change that was wrong.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("undo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+var gitRedoTool = defineTool({
+  name: "git_redo",
+  description: "Reapply the change you most recently undid with git_undo (reflog redo). Refuses if you have uncommitted changes.",
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
+  requires: ["shell"],
+  execute: (args, ctx) => runGitTool("redo", { repo: typeof args.repo === "string" ? args.repo : void 0 }, ctx)
+});
+function shellQuote(v) {
+  return `'${v.replace(/'/g, `'\\''`)}'`;
+}
+function commitPathCandidates(path, repo) {
+  const out = [path];
+  const dir = safeRepoArg(repo);
+  if (dir) {
+    const prefix = `${dir.replace(/\/+$/, "")}/`;
+    if (path.startsWith(prefix)) out.push(path.slice(prefix.length));
+    const leaf = dir.split("/").filter(Boolean).pop();
+    if (leaf && path.startsWith(`${leaf}/`)) out.push(path.slice(leaf.length + 1));
+  }
+  return [...new Set(out)].filter((p) => p.trim() !== "");
+}
+function buildCommitCommand(opts) {
+  const branch = safeGitArg(opts.branch);
+  const resolveLines = opts.paths.map((p, i) => {
+    const candidates = commitPathCandidates(p, opts.repo).map(shellQuote).join(" ");
+    return `P${i}="$(pick ${candidates})" || MISSING="$MISSING ${shellQuote(p).slice(1, -1)}"`;
+  });
+  const paths = opts.paths.map((_, i) => `"$P${i}"`).join(" ");
+  return [
+    "set -e",
+    RESOLVE_BASE,
+    'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
+    'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    // A ticket branch was named: switch to it, creating it if new. Otherwise the base
+    // branch is refused — unless the caller DECLARED it, the same declared act `git_push`
+    // takes. Without that declaration "commit and push to main" had no reachable path at
+    // all: push accepted `allowBaseBranch`, but the commit before it could never land on
+    // main, so an explicit human instruction ended in a refusal every time.
+    ...branch ? [`git rev-parse --verify --quiet "${branch}" >/dev/null && git checkout "${branch}" || git checkout -b "${branch}"`] : opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
+    // A path is "there" if it is on disk OR tracked by git — the second arm is what
+    // lets a DELETION be committed, since the file is gone by definition.
+    'pick() { for c in "$@"; do if [ -e "$c" ] || git ls-files --error-unmatch -- "$c" >/dev/null 2>&1; then printf %s "$c"; return 0; fi; done; return 1; }',
+    'MISSING=""',
+    ...resolveLines,
+    '[ -z "$MISSING" ] || { echo "MISSING_PATHS:$MISSING"; exit 8; }',
+    `git add -- ${paths}`,
+    // Nothing staged is a fact, not a failure — say which rather than exiting 1 with
+    // git's own "nothing to commit" that reads like a broken tool.
+    "git diff --cached --quiet && { echo NOTHING_STAGED; exit 6; }",
+    `git commit -m ${shellQuote(opts.message)}`,
+    'echo "Committed on $(git rev-parse --abbrev-ref HEAD): $(git rev-parse --short HEAD)"'
+  ].join("\n");
+}
+function buildPushCommand(opts) {
+  return [
+    "set -e",
+    RESOLVE_BASE,
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    ...opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }'],
+    // `-u` so a brand-new ticket branch gets its upstream on the first push.
+    'git push -u origin "$CUR"',
+    'echo "Pushed $CUR to origin"',
+    // Report where the push LANDED — the branch header (`## main...origin/main`, with any
+    // `[ahead N]` still owed) plus whatever is still uncommitted. That is the evidence a
+    // host needs to call the change shipped, so the push verifies itself rather than
+    // depending on the agent remembering a separate status call. Never fails the push.
+    "git status --short --branch 2>/dev/null || true"
+  ].join("\n");
+}
+function buildPullRequestCommand(opts) {
+  const base = safeGitArg(opts.base);
+  const reviewers = (opts.reviewers ?? []).map((r) => safeGitArg(r)).filter((r) => !!r);
+  return [
+    "set -e",
+    "command -v gh >/dev/null 2>&1 || { echo NO_GH_CLI; exit 7; }",
+    ...base ? [`BASE="${base}"`] : [RESOLVE_BASE],
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    '[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }',
+    // Push first when the branch has no upstream — `gh pr create` fails on an unpushed
+    // head, and "open a PR" plainly means the branch has to exist on the remote.
+    'git rev-parse --abbrev-ref "@{upstream}" >/dev/null 2>&1 || git push -u origin "$CUR"',
+    `gh pr create --base "$BASE" --head "$CUR" --title ${shellQuote(opts.title)} --body ${shellQuote(opts.body)}` + reviewers.map((r) => ` --reviewer "${r}"`).join("")
+  ].join("\n");
+}
+function buildCleanupCommand(opts) {
+  const branch = safeGitArg(opts.branch);
+  const base = safeGitArg(opts.baseBranch);
+  return [
+    "set -e",
+    ...base ? [`BASE="${base}"`] : [RESOLVE_BASE],
+    ...branch ? [`TARGET="${branch}"`] : ['TARGET="$(git rev-parse --abbrev-ref HEAD)"'],
+    '[ "$TARGET" != "$BASE" ] || { echo NOTHING_TO_CLEAN; exit 9; }',
+    '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+    'git rev-parse --verify --quiet "$TARGET" >/dev/null || { echo NO_SUCH_BRANCH; exit 11; }',
+    // Was this branch ever pushed? Read BEFORE the prune, which is what removes the
+    // evidence — a branch that had an upstream and no longer exists on the remote was
+    // merged and deleted by the host, however it was merged.
+    'HAD_UPSTREAM=0; git rev-parse --verify --quiet "refs/remotes/origin/$TARGET" >/dev/null && HAD_UPSTREAM=1',
+    "git fetch --prune origin",
+    'REMOTE_EXISTS=0; git ls-remote --exit-code --heads origin "$TARGET" >/dev/null 2>&1 && REMOTE_EXISTS=1',
+    // Get onto the base branch and bring it up to date — the state the user expects to
+    // be left in. `--ff-only` so a divergent local base is reported, never merged.
+    'git checkout "$BASE"',
+    'git merge --ff-only "origin/$BASE" >/dev/null 2>&1 || echo "note: local $BASE has diverged from origin/$BASE and was left alone"',
+    'MERGED=0; git branch --merged "origin/$BASE" | sed "s/^[* ] *//" | grep -qx "$TARGET" && MERGED=1',
+    // Squash-merged: the commits are in the base under a new hash, so `--merged` says
+    // no, but the host deleted the remote branch when the PR landed.
+    '[ "$MERGED" = 1 ] || { [ "$HAD_UPSTREAM" = 1 ] && [ "$REMOTE_EXISTS" = 0 ] && MERGED=1; } || true',
+    ...opts.force ? ["MERGED=1"] : [],
+    '[ "$MERGED" = 1 ] || { echo NOT_MERGED; exit 10; }',
+    // `-D`, not `-d`: the merged-ness check above is STRICTER than git's own (it also
+    // accepts the squash-merge case git cannot see), so `-d` would refuse exactly the
+    // branches this tool exists to remove. Nothing reaches this line unmerged.
+    'git branch -D "$TARGET"',
+    // The remote branch is usually ALREADY gone (the host deletes it on merge). That is
+    // the goal state, not an error, so it is only pushed when it is actually there.
+    '[ "$REMOTE_EXISTS" = 0 ] || git push origin --delete "$TARGET"',
+    "git remote prune origin >/dev/null 2>&1 || true",
+    'echo "Cleaned up $TARGET \u2014 on $BASE (updated), branch deleted locally and on origin"'
+  ].join("\n");
+}
+function publishToolResult(action, r) {
+  const out = (r.stdout ?? "").trim();
+  const fail = (error) => ({ data: { ok: false, action, error, output: out } });
+  if (r.exitCode === 5 || /\bON_BASE_BRANCH\b/.test(out)) {
+    return fail(
+      action === "push" ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 pushing here bypasses pull-request review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it." : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set \u2014 committing here bypasses pull-request review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it."
+    );
+  }
+  if (r.exitCode === 6 || /\bNOTHING_STAGED\b/.test(out)) {
+    return fail("none of the named paths have uncommitted changes \u2014 nothing was committed. Run git_status to see what actually differs; do not report a commit that did not happen.");
+  }
+  const missing = /MISSING_PATHS:([^\n]*)/.exec(out);
+  if (r.exitCode === 8 || missing) {
+    const named = (missing?.[1] ?? "").trim();
+    return fail(
+      `these paths do not exist in the repository, so nothing was committed:${named ? ` ${named}` : ""}. \`paths\` are relative to the REPOSITORY root \u2014 when you pass \`repo\`, that means relative to the repo directory, NOT to the workspace root your file tools use. Run git_status (with the same \`repo\`) and copy the paths it prints.`
+    );
+  }
+  if (r.exitCode === 9 || /\bNOTHING_TO_CLEAN\b/.test(out)) {
+    return fail("you are already on the base branch and no ticket branch was named \u2014 there is nothing to clean up. Pass `branch` to name the merged branch to delete.");
+  }
+  if (r.exitCode === 10 || /\bNOT_MERGED\b/.test(out)) {
+    return fail(
+      "that branch's commits are NOT in the base branch, so it was left alone \u2014 deleting it would destroy unmerged work. If the pull request was SQUASH-merged (the commits are in main under a new hash and the remote branch still exists), re-call with force:true to delete it anyway."
+    );
+  }
+  if (r.exitCode === 11 || /\bNO_SUCH_BRANCH\b/.test(out)) {
+    return fail("no local branch by that name \u2014 it has already been deleted. Nothing to do.");
+  }
+  if (r.exitCode === 4 || /\bDIRTY\b/.test(out)) {
+    return fail("you have uncommitted changes \u2014 commit or discard them before cleaning up (this refuses to discard uncommitted work).");
+  }
+  if (r.exitCode === 7 || /\bNO_GH_CLI\b/.test(out)) {
+    return fail("the GitHub CLI (`gh`) is not installed or not on PATH, so a pull request cannot be opened from here. The branch is committed and pushed; tell the human to open the PR, and give them the branch name.");
+  }
+  return { data: { ok: r.ok, action, output: out.slice(0, 2e4), ...r.error ? { error: r.error } : {} } };
+}
+async function runPublishTool(action, command, repo, ctx) {
+  const scoped = repoScopedScript(command, repo);
+  const r = await ctx.caps.shell.run(scoped);
+  if (isNotARepo(r) && !repo) return notARepoResult(action);
+  const result = publishToolResult(action, r);
+  if (repo && result.data.ok) result.data.repo = repo;
+  return result;
+}
+var gitCommitTool = defineTool({
+  name: "git_commit",
+  description: "Commit the files you changed. You must list the exact `paths` to commit \u2014 the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. The DEFAULT route is a TICKET BRANCH: pass `branch` to name it (created for you if it does not exist), then use open_pull_request so the work is reviewed. Without `branch`, a commit is refused while you are on the base branch (main/master) \u2014 unless the human has EXPLICITLY asked you to commit to main directly, or your session instructions make you the reviewer of your own change (a local editor session, after you have verified and self-reviewed it); then pass allowBaseBranch:true (the human is prompted to approve it) and follow with git_push allowBaseBranch:true.",
+  parameters: {
+    type: "object",
+    properties: {
+      message: { type: "string", description: "Commit message. One line saying what changed and why." },
+      paths: { type: "array", items: { type: "string" }, description: "Repo-relative paths to commit. Exactly the files YOU changed \u2014 never a catch-all." },
+      branch: { type: "string", description: 'Ticket branch to commit on, created if new (e.g. "ticket/2394-mobile-board-height"). The default route; required when on the base branch unless allowBaseBranch is set.' },
+      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to commit to the base branch (main/master) directly. Default false, which refuses on the base branch and tells you to use a ticket branch." },
+      repo: REPO_PARAM
+    },
+    required: ["message", "paths"]
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const message = typeof args.message === "string" ? args.message.trim() : "";
+    if (!message) return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
+    const paths = Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
+    if (paths.length === 0) {
+      return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
+    }
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    return runPublishTool(
+      "commit",
+      buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : void 0, allowBaseBranch: args.allowBaseBranch === true, repo }),
+      repo,
+      ctx
+    );
+  }
+});
+var gitPushTool = defineTool({
+  name: "git_push",
+  description: "Push the current branch to origin (setting its upstream on the first push), then report where it landed (`git status --short --branch`). Pushing the BASE branch (main/master) is refused unless you pass allowBaseBranch \u2014 that path skips pull-request review, so only set it when the human has explicitly asked for it, or when your session instructions make you the reviewer of your own change (a local editor session, after verifying and self-reviewing it); the human is prompted to approve it either way. Otherwise the route is a ticket branch: git_commit with a `branch`, git_push, then open_pull_request.",
+  parameters: {
+    type: "object",
+    properties: {
+      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to push the base branch directly. Default false, which refuses and tells you to open a pull request." },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true, repo }), repo, ctx);
+  }
+});
+var openPullRequestTool = defineTool({
+  name: "open_pull_request",
+  description: "Open a pull request for the current ticket branch against the base branch, pushing it first if it has no upstream yet. This is how a change gets REVIEWED \u2014 prefer it over pushing the base branch, and say so when someone asks you to push directly. Pass `reviewers` to request review from specific people or teams. Returns the pull request URL; report that URL rather than claiming the work is shipped, because it is not until the PR is merged.",
+  parameters: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Pull request title \u2014 what this change does, in one line." },
+      body: { type: "string", description: "Pull request description: what changed, why, and how a reviewer can verify it." },
+      base: { type: "string", description: "Base branch to target. Defaults to the remote's default branch (usually main)." },
+      reviewers: { type: "array", items: { type: "string" }, description: "GitHub usernames or org/team slugs to request review from." },
+      repo: REPO_PARAM
+    },
+    required: ["title", "body"]
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const title = typeof args.title === "string" ? args.title.trim() : "";
+    const body = typeof args.body === "string" ? args.body : "";
+    if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r) => typeof r === "string") : void 0;
+    return runPublishTool(
+      "pull_request",
+      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : void 0, reviewers, repo }),
+      repo,
+      ctx
+    );
+  }
+});
+var gitCleanupMergedTool = defineTool({
+  name: "git_cleanup_merged",
+  description: "Clean up after work that has LANDED: switch to the base branch, fast-forward it to origin, and delete the merged ticket branch locally and on origin. Call it once the pull request is merged (or once you have pushed the base branch directly) so the checkout is not left sitting on a dead branch with a stale base \u2014 do not hand-roll this with run_command. It is IDEMPOTENT: a remote branch the host already deleted on merge is the expected state, not an error. It REFUSES to delete a branch whose commits are not in the base branch, and refuses to run on a dirty working tree, so it can never destroy unmerged or uncommitted work. If the pull request was SQUASH-merged and the remote branch still exists, git cannot see the merge \u2014 re-call with force:true.",
+  parameters: {
+    type: "object",
+    properties: {
+      branch: { type: "string", description: "The merged branch to delete. Defaults to the branch you are currently on." },
+      baseBranch: { type: "string", description: "Branch to return to and update. Defaults to the remote's default branch (usually main)." },
+      force: { type: "boolean", description: "Delete the branch even though git cannot see its commits in the base branch. ONLY for a squash-merged pull request you have confirmed is merged." },
+      repo: REPO_PARAM
+    }
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const repo = typeof args.repo === "string" ? args.repo : void 0;
+    return runPublishTool(
+      "cleanup",
+      buildCleanupCommand({
+        branch: typeof args.branch === "string" ? args.branch : void 0,
+        baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : void 0,
+        force: args.force === true,
+        repo
+      }),
+      repo,
+      ctx
+    );
+  }
+});
+var GIT_TOOLS = [
+  gitStatusTool,
+  gitDiffTool,
+  gitHistoryTool,
+  gitSyncLatestTool,
+  gitUndoTool,
+  gitRedoTool,
+  gitCommitTool,
+  gitPushTool,
+  openPullRequestTool,
+  gitCleanupMergedTool
+];
+
+// ../packages/agent-tools/src/symbols.ts
+var SYMBOL_KINDS = [
+  "function",
+  "method",
+  "class",
+  "interface",
+  "type",
+  "enum",
+  "const",
+  "struct",
+  "trait",
+  "module",
+  "table",
+  "heading"
+];
+var MAX_SYMBOLS_PER_FILE = 400;
+var LANGUAGE_BY_EXT = {
+  ts: "js",
+  tsx: "js",
+  js: "js",
+  jsx: "js",
+  mjs: "js",
+  cjs: "js",
+  mts: "js",
+  cts: "js",
+  py: "python",
+  go: "go",
+  rs: "rust",
+  java: "oo",
+  kt: "oo",
+  kts: "oo",
+  cs: "oo",
+  swift: "oo",
+  php: "oo",
+  scala: "oo",
+  rb: "ruby",
+  sql: "sql",
+  md: "markdown",
+  mdx: "markdown"
+};
+function extensionOf(path) {
+  const base = path.slice(path.lastIndexOf("/") + 1);
+  const dot = base.lastIndexOf(".");
+  return dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
+}
+function languageOf(path) {
+  return LANGUAGE_BY_EXT[extensionOf(path.replace(/\\/g, "/"))];
+}
+function group(m, n) {
+  return m[n] ?? "";
+}
+function eachLine(lines, out, visit) {
+  for (let i = 0; i < lines.length && out.length < MAX_SYMBOLS_PER_FILE; i += 1) {
+    visit(lines[i] ?? "", i + 1);
+  }
+}
+var ID = "[A-Za-z_$][\\w$]*";
+var JS_RULES = [
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s*\\*?\\s*(${ID})`), kind: "function" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:default\\s+)?(?:abstract\\s+)?class\\s+(${ID})`), kind: "class" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?interface\\s+(${ID})`), kind: "interface" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?type\\s+(${ID})\\s*[<=]`), kind: "type" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const\\s+)?enum\\s+(${ID})`), kind: "enum" },
+  { re: new RegExp(`^(\\s*export\\s+)?(?:declare\\s+)?(?:const|let|var)\\s+(${ID})`), kind: "const" }
+];
+var JS_METHOD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(.*\\)?[^;]*\\{\\s*$`
+);
+var JS_KEYWORDS = /* @__PURE__ */ new Set(["if", "for", "while", "switch", "catch", "return", "function", "with", "do", "else", "try"]);
+function extractJs(lines, out) {
+  let inClass = false;
+  eachLine(lines, out, (line, lineNo) => {
+    if (/^\}/.test(line)) inClass = false;
+    for (const rule of JS_RULES) {
+      const m = rule.re.exec(line);
+      if (!m) continue;
+      const exported = !!m[1];
+      if (!exported && /^\s/.test(line)) continue;
+      out.push({ name: group(m, 2), kind: rule.kind, line: lineNo, exported });
+      if (rule.kind === "class") inClass = true;
+      return;
+    }
+    if (!inClass) return;
+    const method = JS_METHOD.exec(line);
+    const name = method ? group(method, 1) : "";
+    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false });
+  });
+}
+function extractPython(lines, out) {
+  eachLine(lines, out, (line, lineNo) => {
+    const m = /^(\s*)(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)/.exec(line);
+    if (!m) return;
+    const indent = group(m, 1);
+    if (indent.length > 4 && !indent.startsWith("	")) return;
+    const name = group(m, 3);
+    const kind = group(m, 2) === "class" ? "class" : indent.length > 0 ? "method" : "function";
+    out.push({ name, kind, line: lineNo, exported: !name.startsWith("_") });
+  });
+}
+function extractGo(lines, out) {
+  eachLine(lines, out, (line, lineNo) => {
+    const fn = /^func\s+(\([^)]*\)\s*)?([A-Za-z_]\w*)/.exec(line);
+    if (fn) {
+      const name2 = group(fn, 2);
+      out.push({ name: name2, kind: fn[1] ? "method" : "function", line: lineNo, exported: /^[A-Z]/.test(name2) });
+      return;
+    }
+    const ty = /^type\s+([A-Za-z_]\w*)\s+(struct|interface)?/.exec(line);
+    if (!ty) return;
+    const name = group(ty, 1);
+    const word = group(ty, 2);
+    const kind = word === "struct" ? "struct" : word === "interface" ? "interface" : "type";
+    out.push({ name, kind, line: lineNo, exported: /^[A-Z]/.test(name) });
+  });
+}
+function extractRust(lines, out) {
+  eachLine(lines, out, (line, lineNo) => {
+    const m = /^(\s*)(pub(?:\([^)]*\))?\s+)?(?:(?:async|unsafe|const|extern(?:\s+"[^"]*")?)\s+)*(fn|struct|enum|trait|mod|type)\s+([A-Za-z_]\w*)/.exec(line);
+    if (!m) return;
+    const word = group(m, 3);
+    const kind = word === "fn" ? group(m, 1).length > 0 ? "method" : "function" : word === "mod" ? "module" : word;
+    out.push({ name: group(m, 4), kind, line: lineNo, exported: !!m[2] });
+  });
+}
+var OO_TYPE = /^\s*(?:(?:public|private|protected|internal|static|final|abstract|sealed|open|data|partial|export|inline|value)\s+)*(class|interface|enum|record|object|struct|protocol|trait)\s+([A-Za-z_]\w*)/;
+var OO_FUNC = /^\s*(?:(?:public|private|protected|internal|static|final|override|open|suspend|inline|abstract)\s+)*(?:fun|func|function)\s+([A-Za-z_]\w*)/;
+function extractOo(lines, out) {
+  eachLine(lines, out, (line, lineNo) => {
+    const exported = !/\bprivate\b/.test(line);
+    const ty = OO_TYPE.exec(line);
+    if (ty) {
+      const word = group(ty, 1);
+      const kind = word === "interface" || word === "protocol" ? "interface" : word === "enum" ? "enum" : word === "struct" ? "struct" : word === "trait" ? "trait" : "class";
+      out.push({ name: group(ty, 2), kind, line: lineNo, exported });
+      return;
+    }
+    const fn = OO_FUNC.exec(line);
+    if (fn) out.push({ name: group(fn, 1), kind: /^\s/.test(line) ? "method" : "function", line: lineNo, exported });
+  });
+}
+function extractRuby(lines, out) {
+  eachLine(lines, out, (line, lineNo) => {
+    const ty = /^\s*(class|module)\s+([A-Z]\w*(?:::\w+)*)/.exec(line);
+    if (ty) {
+      out.push({ name: group(ty, 2), kind: group(ty, 1) === "module" ? "module" : "class", line: lineNo, exported: true });
+      return;
+    }
+    const fn = /^(\s*)def\s+(?:self\.)?([A-Za-z_]\w*[?!=]?)/.exec(line);
+    if (fn) out.push({ name: group(fn, 2), kind: group(fn, 1).length > 0 ? "method" : "function", line: lineNo, exported: true });
+  });
+}
+var SQL_CREATE = /^\s*create\s+(?:or\s+replace\s+)?(?:unique\s+)?(table|view|materialized\s+view|function|procedure|index|type|trigger)\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?([\w."]+)/i;
+function extractSql(lines, out) {
+  eachLine(lines, out, (line, lineNo) => {
+    const m = SQL_CREATE.exec(line);
+    if (!m) return;
+    const word = group(m, 1).toLowerCase();
+    const kind = word === "function" || word === "procedure" || word === "trigger" ? "function" : word === "index" || word === "type" ? "type" : "table";
+    out.push({ name: group(m, 2).replace(/"/g, ""), kind, line: lineNo, exported: true });
+  });
+}
+function extractMarkdown(lines, out) {
+  let fenced = false;
+  eachLine(lines, out, (line, lineNo) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      return;
+    }
+    if (fenced) return;
+    const m = /^(#{1,4})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (m) out.push({ name: `${group(m, 1)} ${group(m, 2).slice(0, 120)}`, kind: "heading", line: lineNo, exported: true });
+  });
+}
+var EXTRACTORS = {
+  js: extractJs,
+  python: extractPython,
+  go: extractGo,
+  rust: extractRust,
+  oo: extractOo,
+  ruby: extractRuby,
+  sql: extractSql,
+  markdown: extractMarkdown
+};
+function extractSymbols(path, content) {
+  const language = languageOf(path);
+  if (!language) return [];
+  const out = [];
+  EXTRACTORS[language](content.split(/\r?\n/), out);
+  return out;
+}
+function formatSymbol(symbol) {
+  return `L${symbol.line} ${symbol.kind} ${symbol.name}${symbol.exported && symbol.kind !== "heading" ? " (export)" : ""}`;
+}
+
+// ../packages/agent-tools/src/symbol-tools.ts
+var FIND_DEFAULT_LIMIT = 20;
+var FIND_MAX_LIMIT = 50;
+var OUTLINE_MAX_ENTRIES = 150;
+function asKind(v) {
+  return typeof v === "string" && SYMBOL_KINDS.includes(v) ? v : void 0;
+}
+var findSymbolTool = defineTool({
+  name: "find_symbol",
+  description: "Find where a function, class, method, type, constant, SQL table or Markdown heading is DEFINED, from the workspace's symbol index \u2014 one instant call instead of search_code plus reading files to tell the definition from its call sites. Pass `query` as the symbol name or part of it (case-insensitive; exact matches rank first). Each match is `path:line kind name`; then read_file with `offset` a few lines above that line and a small `limit`. Narrow with `path` (a subdirectory) or `kind`. For USAGES, string literals or config values (not definitions), use search_code instead.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: 'Symbol name or a distinctive part of it, e.g. "buildGitCommand" or "GitCommand".' },
+      path: { type: "string", description: 'Optional repo-relative subdirectory to restrict to, e.g. "api/src".' },
+      kind: { type: "string", enum: [...SYMBOL_KINDS], description: "Optional: only this kind of definition." },
+      limit: { type: "number", description: `Max matches (default ${FIND_DEFAULT_LIMIT}, max ${FIND_MAX_LIMIT}).` }
+    },
+    required: ["query"]
+  },
+  requires: ["repo.symbols"],
+  async execute(args, ctx) {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) return { data: { ok: false, error: "query is required" } };
+    const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : void 0;
+    const kind = asKind(args.kind);
+    const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : FIND_DEFAULT_LIMIT;
+    const limit = Math.min(FIND_MAX_LIMIT, Math.max(1, requested));
+    const r = await ctx.caps.symbols.find(query, { scope, kind, limit });
+    if (!r.ok) return { data: r };
+    const data = {
+      ok: true,
+      query,
+      total: r.total ?? 0,
+      truncated: r.truncated === true,
+      matches: (r.matches ?? []).map((m) => `${m.path}:${m.line} ${m.kind} ${m.name}${m.exported && m.kind !== "heading" ? " (export)" : ""}`),
+      indexedFiles: r.indexedFiles
+    };
+    if ((r.total ?? 0) === 0) {
+      data.note = r.partialIndex ? `No definition named like "${query}" in the indexed files \u2014 but the index is PARTIAL (file cap reached), so this is not proof it does not exist. Try search_code${scope ? "" : " with a `path`"}.` : `No definition named like "${query}"${scope ? ` under "${scope}"` : ""}. It may be defined in a form the index does not recognise (a re-export, an object property, a generated file) \u2014 use search_code for the exact text.`;
+    } else if (r.truncated) {
+      data.note = `Showing ${r.matches?.length ?? 0} of ${r.total} matches \u2014 pass a longer \`query\`, a \`path\` or a \`kind\` to narrow.`;
+    }
+    return { data };
+  }
+});
+var fileOutlineTool = defineTool({
+  name: "file_outline",
+  description: "List what a file DEFINES \u2014 functions, classes, methods, types, constants, or a Markdown file's headings \u2014 each with its line number, without reading the file's contents. Call this BEFORE paging through a large file: find the symbol you need, then read_file with `offset` at its line and a small `limit`, instead of reading 2,000-line windows until you reach it. Pass `kind` to list only one kind of definition.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: 'Repo-relative file path, e.g. "api/src/service.ts".' },
+      kind: { type: "string", enum: [...SYMBOL_KINDS], description: "Optional: only this kind of definition." }
+    },
+    required: ["path"]
+  },
+  requires: ["repo.read", "repo.symbols"],
+  async execute(args, ctx) {
+    const path = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path) return { data: { ok: false, error: "path is required" } };
+    const kind = asKind(args.kind);
+    const file = await ctx.caps.repoRead.readFile(path);
+    if (!file.ok) return { data: file };
+    const content = file.content ?? "";
+    const all = extractSymbols(path, content).filter((s) => !kind || s.kind === kind);
+    const shown = all.slice(0, OUTLINE_MAX_ENTRIES);
+    const data = {
+      ok: true,
+      path: file.path ?? path,
+      totalLines: content.split("\n").length,
+      total: all.length,
+      symbols: shown.map(formatSymbol)
+    };
+    if (all.length === 0) {
+      data.note = kind ? `No ${kind} definitions found in ${path}.` : `No definitions recognised in ${path} (unsupported language, or a data/config file) \u2014 read_file it directly.`;
+    } else if (all.length > shown.length) {
+      const lastLine = shown.at(-1)?.line ?? 0;
+      data.note = `Showing the first ${shown.length} of ${all.length} definitions (through line ${lastLine}). Pass \`kind\` to list one kind, or find_symbol for a specific name.`;
+    }
+    return { data };
+  }
+});
+var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
+
+// ../packages/agent-tools/src/core-tools.ts
+var listFilesTool = defineTool({
+  name: "list_files",
+  description: "List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` \u2014 e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo's unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: 'Optional repo-relative subdirectory to scope to, e.g. "src/components".' },
+      glob: { type: "string", description: 'Optional filename/glob filter, e.g. "ROADMAP.md", "*.md", or "src/**/*.ts". Case-insensitive; a name with no "/" matches the basename at any depth.' }
+    }
+  },
+  requires: ["repo.read"],
+  async execute(args, ctx) {
+    const sub = typeof args.path === "string" ? args.path : void 0;
+    const glob = typeof args.glob === "string" && args.glob.trim() ? args.glob.trim() : void 0;
+    const r = await ctx.caps.repoRead.listFiles(sub, glob);
+    if (glob && r.ok && (r.paths?.length ?? 0) === 0) {
+      return {
+        data: {
+          ...r,
+          note: `No file matches glob "${glob}". Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists \u2014 do not claim one is missing without trying a broader glob first.`
+        }
+      };
+    }
+    return { data: r };
+  }
+});
+var searchCodeTool = defineTool({
+  name: "search_code",
+  description: 'Search the repo for a string/symbol in one call \u2014 use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. Pass `query` as an EXACT substring/regex (a symbol, import path, or config key), NOT a natural-language phrase \u2014 a multi-word phrase rarely appears verbatim on one line and will match nothing. On a large monorepo, scope the search with `path` (a subdirectory) to search just that subtree. 0 results with `truncated:false` means the term does not appear (so "remove all references to X" then means there is nothing to remove \u2014 say so, do not invent a change); 0 results with `truncated:true` means the search was cut short before scanning everything \u2014 narrow it with `path` or a more specific `query` and try again, do NOT conclude the term is absent. Then read_file the matches you intend to edit.',
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Exact text or symbol to find, e.g. a model id, function name, import path, or config key. NOT a natural-language phrase." },
+      path: { type: "string", description: 'Optional repo-relative subdirectory to restrict the search to, e.g. "packages/brain-ui". Use this to avoid truncation on a big repo.' }
+    },
+    required: ["query"]
+  },
+  requires: ["repo.search"],
+  async execute(args, ctx) {
+    const query = typeof args.query === "string" ? args.query : "";
+    if (!query.trim()) return { data: { ok: false, error: "query is required" } };
+    const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : void 0;
+    const r = await ctx.caps.repoRead.searchCode(query, scope);
+    if (r.ok && r.total === 0) {
+      const note = r.truncated ? `Search was truncated before scanning the whole${scope ? " subtree" : " repo"} \u2014 this is NOT proof the term is absent. Re-run scoped to a subdirectory via \`path\`${scope ? " (a narrower one)" : ""}, or use a more specific \`query\`.` : `No matches${scope ? ` under "${scope}"` : ""} \u2014 the term is not referenced${scope ? " there (try without `path` to search the whole repo)" : ""}. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.`;
+      return { data: { ...r, note } };
+    }
+    return { data: r };
+  }
+});
+var READ_DEFAULT_LINE_LIMIT = 2e3;
+function windowFileContent(content, opts) {
+  const lines = content.split("\n");
+  const totalLines = lines.length;
+  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
+  const slice = lines.slice(start - 1, start - 1 + limit);
+  const end = start - 1 + slice.length;
+  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+}
+var readFileTool = defineTool({
+  name: "read_file",
+  description: "Read a repo file on the ticket branch. Returns up to " + READ_DEFAULT_LINE_LIMIT + " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains \u2014 read the next chunk by calling again with `offset`. Always read a file before editing it so you preserve existing code and only change what is needed.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
+      limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` }
+    },
+    required: ["path"]
+  },
+  requires: ["repo.read"],
+  async execute(args, ctx) {
+    const path = typeof args.path === "string" ? args.path : "";
+    if (!path) return { data: { ok: false, error: "path is required" } };
+    const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0;
+    const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0;
+    const r = await ctx.caps.repoRead.readFile(path);
+    if (!r.ok) return { data: r };
+    const win = windowFileContent(r.content ?? "", { offset, limit });
+    const data = {
+      ok: true,
+      path: r.path ?? path,
+      content: win.content,
+      truncated: win.truncated || r.truncated === true,
+      totalLines: win.totalLines,
+      offset: win.offset
+    };
+    if (win.truncated) {
+      const lastLine = win.offset + win.returnedLines - 1;
+      data.note = `Showing lines ${win.offset}\u2013${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
+    }
+    return { data };
+  }
+});
+var writeFileTool = defineTool({
+  name: "write_file",
+  description: 'Create or update a file, writing its complete contents. How the write lands depends on the surface: in an editor/on-prem workspace it edits the file in place; in a cloud/review run it is staged on the ticket branch as a reviewable pending change. Do NOT narrate a specific mechanism (e.g. "opened a PR") \u2014 just state what the file now contains. Use once per deliverable file. Provide the FULL file content.',
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      content: { type: "string", description: "Complete file content (no placeholders)." },
+      summary: { type: "string", description: "One-line description of the change." }
+    },
+    required: ["path", "content"]
+  },
+  requires: ["repo.write"],
+  async execute(args, ctx) {
+    const path = typeof args.path === "string" ? args.path : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    const summary = typeof args.summary === "string" ? args.summary : void 0;
+    if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    const r = await ctx.caps.repoWrite.writeFile(path, content, summary);
+    return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
+  }
+});
+var deleteFileTool = defineTool({
+  name: "delete_file",
+  description: 'Remove a file from the ticket branch so it does NOT ship in the pull request. Use this to clean up dead code: a stub/placeholder, an unreferenced file, or a file a PRIOR pass on this branch created that should not be part of the final change. The "Files already on this branch" list in your context shows what a prior pass left \u2014 reconcile against it. Verify the file is genuinely unused (search_code for its exports) before deleting. Deleting a file not on the branch is a no-op (reported back), not an error.',
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: 'Repo-relative path to remove, e.g. "src/utils/email.ts".' },
+      reason: { type: "string", description: 'One-line why this file should not ship (e.g. "stub superseded by existing email infra").' }
+    },
+    required: ["path"]
+  },
+  requires: ["repo.delete"],
+  async execute(args, ctx) {
+    const path = typeof args.path === "string" ? args.path : "";
+    if (!path) return { data: { ok: false, error: "path is required" } };
+    const reason = typeof args.reason === "string" ? args.reason : void 0;
+    const r = await ctx.caps.repoWrite.deleteFile(path, reason);
+    if (r.ok && r.deleted === false) return { data: { ok: true, deleted: false, note: r.note } };
+    return { data: r.ok ? { ok: true, deleted: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
+  }
+});
+var editFileTool = defineTool({
+  name: "edit_file",
+  description: "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files.",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      old_string: { type: "string", description: "The exact text to replace (must match the file byte-for-byte)." },
+      new_string: { type: "string", description: "The replacement text." },
+      replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring a unique match. Default false." }
+    },
+    required: ["path", "old_string", "new_string"]
+  },
+  requires: ["repo.edit"],
+  async execute(args, ctx) {
+    const path = typeof args.path === "string" ? args.path : "";
+    const oldString = typeof args.old_string === "string" ? args.old_string : "";
+    const newString = typeof args.new_string === "string" ? args.new_string : "";
+    const replaceAll = args.replace_all === true;
+    if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
+    const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
+    return {
+      data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl, replaced: r.replaced } : { ok: false, error: r.error }
+    };
+  }
+});
+var memoryRecallTool = defineTool({
+  name: "memory_recall",
+  description: "Recall durable facts from cross-run memory that are relevant to a query \u2014 decisions, fixes, project conventions, user preferences you (or another run) stored earlier. Call this FIRST when a task touches an area you may have worked before, instead of re-reading large files or history. Returns the most relevant stored entries (key + content); 0 results means nothing relevant is stored yet.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "What you want to remember about, e.g. a subsystem, decision, or convention." },
+      limit: { type: "number", description: "Max entries to return (default 5)." }
+    },
+    required: ["query"]
+  },
+  requires: ["memory"],
+  async execute(args, ctx) {
+    const query = typeof args.query === "string" ? args.query : "";
+    if (!query.trim()) return { data: { ok: false, error: "query is required" } };
+    const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : void 0;
+    const r = await ctx.caps.memory.recall(query, limit);
+    return { data: r };
+  }
+});
+var memoryRememberTool = defineTool({
+  name: "memory_remember",
+  description: "Store ONE durable fact in cross-run memory so a future run can recall it instead of re-deriving it \u2014 a decision, a non-obvious fix, a project constraint, or a user preference. Keep content to one tight line. Use a stable, descriptive key (e.g. 'release-checklist', 'auth-flow'); reusing a key overwrites it. Do NOT store things the repo/git already records or facts that only matter to the current turn.",
+  parameters: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "Stable, descriptive identifier for the fact, e.g. 'deploy-command'." },
+      content: { type: "string", description: "The fact, as one concise line." },
+      tags: { type: "array", items: { type: "string" }, description: "Optional tags for grouping/filtering." },
+      importance: { type: "number", description: "0\u20131; higher surfaces earlier. Default 0.5." },
+      scope: {
+        type: "string",
+        enum: ["tenant", "project", "ticket"],
+        description: "How widely this fact should be visible. 'ticket' = only this ticket's runs; 'project' (default) = every run on this project; 'tenant' = the whole workspace. Prefer the NARROWEST scope that is still true \u2014 a project convention is 'project', not 'tenant'."
+      },
+      ttl_days: {
+        type: "number",
+        description: "Forget automatically after this many days. Use it for anything time-bound (a release date, a temporary workaround, an in-flight migration). Omit only for facts that stay true indefinitely."
+      }
+    },
+    required: ["key", "content"]
+  },
+  requires: ["memory"],
+  async execute(args, ctx) {
+    const key = typeof args.key === "string" ? args.key : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    if (!key.trim() || !content.trim()) return { data: { ok: false, error: "key and content are required" } };
+    const tags = Array.isArray(args.tags) ? args.tags.filter((t) => typeof t === "string") : void 0;
+    const importance = typeof args.importance === "number" && Number.isFinite(args.importance) ? args.importance : void 0;
+    const scope = MEMORY_SCOPES.includes(args.scope) ? args.scope : void 0;
+    const ttlDays = typeof args.ttl_days === "number" && Number.isFinite(args.ttl_days) && args.ttl_days > 0 ? args.ttl_days : void 0;
+    const r = await ctx.caps.memory.remember(key, content, { tags, importance, scope, ttlDays });
+    return { data: r };
+  }
+});
+var MEMORY_SCOPES = ["tenant", "project", "ticket"];
+var memoryForgetTool = defineTool({
+  name: "memory_forget",
+  description: "Delete one stored fact from cross-run memory by its key. Use when a fact you (or an earlier run) stored has become WRONG \u2014 a decision was reversed, a workaround was removed, a convention changed. Correcting a fact is memory_remember with the same key; this is for facts that should no longer exist at all.",
+  parameters: {
+    type: "object",
+    properties: { key: { type: "string", description: "The key of the fact to delete." } },
+    required: ["key"]
+  },
+  requires: ["memory", "memory.forget"],
+  async execute(args, ctx) {
+    const key = typeof args.key === "string" ? args.key : "";
+    if (!key.trim()) return { data: { ok: false, error: "key is required" } };
+    const r = await ctx.caps.memory.forget(key);
+    return { data: r };
+  }
+});
+var claimResourceTool = defineTool({
+  name: "claim_resource",
+  description: "Reserve a shared resource before you work on it, so a peer agent working the same ticket does not change it underneath you. Pass a file path ('src/app.ts'), a directory ('src/api/'), or 'repo' for the whole tree. Returns granted:false with the current holder when someone else has it \u2014 then work on something else, or leave a workspace_note explaining what you need. Writes to a path held by another agent are refused whether or not you claim first.",
+  parameters: {
+    type: "object",
+    properties: {
+      resource: { type: "string", description: "What to reserve: a repo-relative file path, a directory, or 'repo'." },
+      mode: {
+        type: "string",
+        enum: ["exclusive", "shared"],
+        description: "'exclusive' (default) to write it; 'shared' to signal you are reading it and block others' exclusive claims."
+      },
+      reason: { type: "string", description: "One line on why you need it \u2014 shown to the peer agent that gets refused." }
+    },
+    required: ["resource"]
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx) {
+    const resource = typeof args.resource === "string" ? args.resource : "";
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
+    const mode = args.mode === "shared" || args.mode === "exclusive" ? args.mode : void 0;
+    const reason = typeof args.reason === "string" ? args.reason : void 0;
+    const r = await ctx.caps.coordination.claim(resource, { mode, reason });
+    return { data: r };
+  }
+});
+var releaseResourceTool = defineTool({
+  name: "release_resource",
+  description: "Release a resource you claimed, so a peer agent can take it. Do this as soon as you are finished with it rather than holding it to the end of the run. Every lease this run holds is released automatically when the run ends, so this is an optimisation, not a requirement.",
+  parameters: {
+    type: "object",
+    properties: { resource: { type: "string", description: "The resource string you claimed." } },
+    required: ["resource"]
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx) {
+    const resource = typeof args.resource === "string" ? args.resource : "";
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
+    const r = await ctx.caps.coordination.release(resource);
+    return { data: r };
+  }
+});
+var workspaceNoteTool = defineTool({
+  name: "workspace_note",
+  description: "Publish a short note on the shared workspace for this ticket, readable by every agent working it (now or later in the ticket's lifecycle). Use it to declare intent ('I own the DB migration'), hand off a finding, or record a decision a peer must not contradict. Reusing a key overwrites that note. This is WORKING state for the current ticket \u2014 durable cross-ticket knowledge belongs in memory_remember.",
+  parameters: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "Short stable identifier, e.g. 'owns-migration' or 'api-contract'." },
+      content: { type: "string", description: "The note, in one or two lines." }
+    },
+    required: ["key", "content"]
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx) {
+    const key = typeof args.key === "string" ? args.key : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    if (!key.trim() || !content.trim()) return { data: { ok: false, error: "key and content are required" } };
+    const r = await ctx.caps.coordination.postNote(key, content);
+    return { data: r };
+  }
+});
+var workspaceReadTool = defineTool({
+  name: "workspace_read",
+  description: "Read the shared workspace for this ticket \u2014 notes posted by peer agents plus the resources they currently hold. Call this EARLY when a ticket may be staffed by more than one agent, so you plan around what others already own instead of colliding with them.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Optional filter; omit to read everything." },
+      limit: { type: "number", description: "Max notes to return (default 20)." }
+    }
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx) {
+    const query = typeof args.query === "string" && args.query.trim() ? args.query : void 0;
+    const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : void 0;
+    const [notes, leases] = await Promise.all([
+      ctx.caps.coordination.readNotes(query, limit),
+      ctx.caps.coordination.listClaims()
+    ]);
+    if (!notes.ok) return { data: notes };
+    return { data: { ok: true, notes: notes.notes ?? [], heldResources: leases.ok ? leases.leases ?? [] : [] } };
+  }
+});
+var webFetchTool = defineTool({
+  name: "web_fetch",
+  description: "Fetch a single URL and return its readable text content (HTML is reduced to text/markdown). Use to read documentation, an API spec, an issue, or any page you have an exact URL for. Returns the status and the (possibly truncated) content.",
+  parameters: {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "The absolute http(s) URL to fetch." }
+    },
+    required: ["url"]
+  },
+  requires: ["web"],
+  async execute(args, ctx) {
+    const url = typeof args.url === "string" ? args.url : "";
+    if (!url.trim()) return { data: { ok: false, error: "url is required" } };
+    const r = await ctx.caps.web.fetch(url);
+    return { data: r };
+  }
+});
+var webSearchTool = defineTool({
+  name: "web_search",
+  description: 'Search the public web for a query and return ranked results (title, url, snippet) plus `coverage` and `attribution`. Use to discover sources/docs when you don\'t have an exact URL; then web_fetch the most relevant result. `coverage: "owned_index"` means this workspace\'s own previously-crawled corpus answered directly; `"web"` or `"encyclopedic"` means a vendor answered and the found pages are being indexed for next time. When `coverage` is "encyclopedic" the index behind this workspace is narrower than a general web engine \u2014 report what you actually found and say what you could not find, rather than filling the gap from memory.',
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "The search query." }
+    },
+    required: ["query"]
+  },
+  requires: ["web.search"],
+  async execute(args, ctx) {
+    const query = typeof args.query === "string" ? args.query : "";
+    if (!query.trim()) return { data: { ok: false, error: "query is required" } };
+    if (!ctx.caps.web?.search) return { data: { ok: false, error: "web search is not available on this surface" } };
+    const r = await ctx.caps.web.search(query);
+    return { data: r };
+  }
+});
+var runChecksTool = defineTool({
+  name: "run_checks",
+  description: "Statically validate the files you have written: it parses committed JSON/YAML and runs the platform's shell-free changed-source quality policies, returning structured path/line/rule diagnostics to fix BEFORE finishing. The same validation runs automatically at finish, so it cannot be skipped. IMPORTANT: this serverless executor has NO shell, so it does NOT run the full build, project-wide type-check, lint, or tests \u2014 those run in CI on the pull request (the source of truth). Never claim those checks passed.",
+  parameters: { type: "object", properties: {} },
+  requires: ["static-check"],
+  async execute(_args, ctx) {
+    const r = await ctx.caps.staticCheck.verify();
+    return { data: r };
+  }
+});
+var runCommandTool = defineTool({
+  name: "run_command",
+  description: "Run a shell command in the checked-out repository (real shell). Use it to install dependencies and run the build, type-check, lint, and tests. Returns combined stdout/stderr and the exit code. Verify your changes this way BEFORE calling finish.",
+  parameters: {
+    type: "object",
+    properties: {
+      command: { type: "string", description: 'The shell command to run, e.g. "npm install" or "npm test".' }
+    },
+    required: ["command"]
+  },
+  requires: ["shell"],
+  async execute(args, ctx) {
+    const command = typeof args.command === "string" ? args.command : "";
+    if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+    const r = await ctx.caps.shell.run(command);
+    return { data: r };
+  }
+});
+var askHumanTool = defineTool({
+  name: "ask_human",
+  description: `Pause and ask a human for input when you are genuinely BLOCKED \u2014 a requirement is ambiguous, you cannot find an expected file/system after searching, a decision needs product/business judgement, or you would otherwise have to guess. The run pauses (no further token spend) and the question goes to the team's human-requests queue with a notification; when someone answers, you resume automatically with their answer and continue. Prefer this over guessing or finishing with a "could not proceed" summary \u2014 a blocked task that asks gets unblocked; one that gives up silently does not. Do NOT use it for things you can determine yourself with list_files/search_code/read_file.`,
+  parameters: {
+    type: "object",
+    properties: {
+      question: { type: "string", description: "The specific question for the human. Be concrete and self-contained \u2014 they may not have the full task context." },
+      context: { type: "string", description: "Optional: what you have tried / why you are blocked, so the human can answer well." }
+    },
+    required: ["question"]
+  },
+  requires: ["human"],
+  async execute(args, ctx) {
+    const question = typeof args.question === "string" ? args.question.trim() : "";
+    const context = typeof args.context === "string" ? args.context : void 0;
+    if (!question) return { data: { ok: false, error: "question is required to ask a human" } };
+    const r = await ctx.caps.human.ask(question, context);
+    if (r.paused) {
+      return {
+        control: { kind: "ask_human", approvalId: r.approvalId, question },
+        data: { ok: true, paused: true, note: r.note ?? "Question sent to a human. The run is paused until it is answered; you will resume with the answer." }
+      };
+    }
+    return { data: { ok: true, paused: false, answer: r.answer ?? null, note: r.note } };
+  }
+});
+var updatePrdTool = defineTool({
+  name: "update_prd",
+  description: `Record a change on THIS TICKET'S PRD \u2014 the shared spec you were given in your context and that every other agent on this ticket reads. Use mode "append" (the default, and the safe one) to add a dated, signed note: a decision you made, a constraint you discovered, an assumption you had to take, or work you deliberately left out of scope. Use mode "section" ONLY to correct a section that is actually WRONG \u2014 it replaces that section's whole body, so pass the full replacement text, not a fragment; name the section by its exact heading (e.g. "Acceptance criteria", "Implementation Notes"). If the heading does not exist the call fails and returns the headings that do \u2014 retry with one of those, or append instead. This is not a substitute for doing the work: keep it to what a later run genuinely needs to know.`,
+  parameters: {
+    type: "object",
+    properties: {
+      mode: {
+        type: "string",
+        enum: ["append", "section"],
+        description: `"append" adds a dated, attributed note at the end (nothing already written is lost). "section" REPLACES the named section's body \u2014 only for correcting something wrong.`
+      },
+      section: {
+        type: "string",
+        description: 'Required when mode is "section": the exact heading to replace, without the leading "##" (e.g. "Acceptance criteria").'
+      },
+      content: {
+        type: "string",
+        description: `The markdown to record. For mode "append", the note. For mode "section", the section's COMPLETE new body.`
+      }
+    },
+    required: ["mode", "content"]
+  },
+  requires: ["prd.write"],
+  async execute(args, ctx) {
+    const mode = args.mode === "section" ? "section" : "append";
+    const content = typeof args.content === "string" ? args.content.trim() : "";
+    if (!content) return { data: { ok: false, error: "content is required" } };
+    if (mode === "section") {
+      const heading = typeof args.section === "string" ? args.section.trim() : "";
+      if (!heading) {
+        return {
+          data: {
+            ok: false,
+            error: 'section is required when mode is "section" \u2014 pass the exact heading to replace, or use mode "append" to add a note instead.'
+          }
+        };
+      }
+      const edited = await ctx.caps.prd.editSection(heading, content);
+      return { data: edited };
+    }
+    const appended = await ctx.caps.prd.append(content);
+    return { data: appended };
+  }
+});
+var finishTool = defineTool({
+  name: "finish",
+  description: 'Call ONLY when the task is fully complete \u2014 every deliverable file written with real, working content (no stubs/placeholders) and every task/PRD requirement implemented. Your changes open a pull request for human review, so a partial scaffold is not "done". Provide a concise summary of what was delivered. Do NOT assert that a build/type-check/lint/test passed \u2014 you cannot run those here (CI on the PR verifies). If you are blocked rather than done, call ask_human instead of finishing with a "could not proceed" summary.',
+  parameters: {
+    type: "object",
+    properties: { summary: { type: "string", description: "What was delivered." } },
+    required: ["summary"]
+  },
+  // No capability: every surface can finish. The engine applies the honesty +
+  // anti-stub finish gates around this control signal (loop policy, not a tool).
+  async execute(args) {
+    const summary = typeof args.summary === "string" ? args.summary.trim() : "";
+    return { control: { kind: "finish", summary }, data: { ok: true } };
+  }
+});
+var CORE_TOOLS = [
+  listFilesTool,
+  searchCodeTool,
+  readFileTool,
+  ...SYMBOL_TOOLS,
+  writeFileTool,
+  editFileTool,
+  deleteFileTool,
+  runChecksTool,
+  runCommandTool,
+  ...GIT_TOOLS,
+  webFetchTool,
+  webSearchTool,
+  memoryRecallTool,
+  memoryRememberTool,
+  memoryForgetTool,
+  claimResourceTool,
+  releaseResourceTool,
+  workspaceNoteTool,
+  workspaceReadTool,
+  askHumanTool,
+  updatePrdTool,
+  finishTool
+];
+
+// ../packages/agent-tools/src/skill-tools.ts
+var skillProposeTool = defineTool({
+  name: "skill_propose",
+  description: "Propose a reusable SKILL \u2014 a procedure a future agent can follow \u2014 drafted from work you just completed and verified. Use it when you worked out a repeatable way to do something non-obvious in this codebase (a migration + guard + test sequence, a release path, a debugging route) and a future run would otherwise rediscover it. Do NOT propose a skill for a one-off fix, for something the repo already documents, or for a procedure you did not actually complete. The draft goes to a human for review; it does not take effect until approved.",
+  parameters: {
+    type: "object",
+    properties: {
+      slug: {
+        type: "string",
+        description: "Stable kebab-case id, e.g. 'add-a-schema-column'. Re-using one revises your existing draft."
+      },
+      name: { type: "string", description: "Short human title, e.g. 'Add a schema column end to end'." },
+      description: {
+        type: "string",
+        description: "One line saying WHEN to use this skill \u2014 a future agent matches on this, so name the situation, not the steps."
+      },
+      body: {
+        type: "string",
+        description: "The procedure as Markdown: ordered steps, exact commands, and how to tell it worked."
+      },
+      evidence: {
+        type: "string",
+        description: "What proves this procedure works \u2014 the graded proof, the merged PR, the passing check."
+      }
+    },
+    required: ["slug", "name", "description", "body"]
+  },
+  requires: ["skill.author"],
+  async execute(args, ctx) {
+    const str2 = (v) => typeof v === "string" ? v.trim() : "";
+    const slug = str2(args.slug);
+    const name = str2(args.name);
+    const description = str2(args.description);
+    const body = str2(args.body);
+    if (!slug || !name || !description || !body) {
+      return { data: { ok: false, error: "slug, name, description and body are all required" } };
+    }
+    const evidence = str2(args.evidence);
+    const r = await ctx.caps.skillAuthor.propose({
+      slug,
+      name,
+      description,
+      body,
+      ...evidence ? { evidence } : {}
+    });
+    return { data: r };
+  }
+});
+var skillListTool = defineTool({
+  name: "skill_list",
+  description: "List the skills this workspace already has \u2014 approved ones you can follow, and drafts awaiting review. Call it before proposing, so you revise an existing draft instead of adding a near-duplicate.",
+  parameters: { type: "object", properties: {} },
+  requires: ["skill.author"],
+  async execute(_args, ctx) {
+    const r = await ctx.caps.skillAuthor.list();
+    return { data: r };
+  }
+});
+
+// ../packages/agent-tools/src/subagent-tools.ts
+var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
+var spawnAgentTool = defineTool({
+  name: "spawn_agent",
+  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back a single answer. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two, and do NOT delegate the actual writing of the deliverable: you are accountable for what ships.",
+  parameters: {
+    type: "object",
+    properties: {
+      label: {
+        type: "string",
+        description: "A few words naming the delegation, e.g. 'locate the auth middleware'. Shown on the run timeline."
+      },
+      task: {
+        type: "string",
+        description: "The child's complete brief: what to find out or do, where to look, and exactly what to report back. Assume it knows nothing about the ticket beyond what you write here."
+      },
+      read_only: {
+        type: "boolean",
+        description: "Default true \u2014 the child may read, search and reason but not modify the working tree. Pass false ONLY when the delegated work is itself an edit you want it to make."
+      },
+      role: {
+        type: "string",
+        enum: [...MODEL_ROLES],
+        description: `What kind of call the child's turns are \u2014 lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'explore' when read_only, else 'code'. ${ROLE_ENUM_DESCRIPTION}`
+      }
+    },
+    required: ["label", "task"]
+  },
+  requires: ["orchestrate"],
+  async execute(args, ctx) {
+    const str2 = (v) => typeof v === "string" ? v.trim() : "";
+    const label = str2(args.label);
+    const task = str2(args.task);
+    if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
+    const readOnly = args.read_only !== false;
+    const role = delegationRole(args.role, readOnly);
+    const r = await ctx.caps.orchestration.spawn({
+      label: label || task.slice(0, 60),
+      task,
+      readOnly,
+      role
+    });
+    return { data: r, ...r.ok ? {} : { isError: true } };
+  }
+});
 
 // src/workingTranscript.ts
 var HISTORY_WINDOW = 80;
@@ -5445,6 +6884,7 @@ ${continuationDirective()}`;
     }
     return advisory;
   };
+  let forceToolChoice;
   let announcementRecoveries = 0;
   let phase = c.codeChanged ? "code" : "plan";
   let shipRecoveryUsed = false;
@@ -5550,6 +6990,10 @@ ${block}` : block : lead;
       pendingReplay = null;
       pendingRun = null;
       let call = rawCall;
+      {
+        const aliased = resolveToolAlias(call.name);
+        if (aliased !== call.name) call = { ...call, name: aliased };
+      }
       if (isRouterTool(call.name)) {
         const routed = handleRouterCall(allTools ?? [], call.name, call.args);
         if ("result" in routed) {
@@ -5691,6 +7135,7 @@ ${revisit}` : replayNote });
       if (runTool && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+        forceToolChoice = stallRecoveryToolChoice(stallInput);
         await requeueWithNudge(stallRecoveryNudge(lastChance, shape));
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
@@ -5743,6 +7188,7 @@ ${revisit}` : replayNote });
           });
           activeModel = next;
           announcementRecoveries = 0;
+          forceToolChoice = stallRecoveryToolChoice(stallInput);
           convo.push({ role: "user", content: stallRecoveryNudge(false, shape) });
           c.streamingText = "";
           emit(c);
@@ -5836,11 +7282,13 @@ ${revisit}` : replayNote });
         }
       };
       let turnRole = tools ? phase : "chat";
+      const turnToolChoice = forceToolChoice;
+      forceToolChoice = void 0;
       const request = (role, excludeModels) => asLiveTurn(c, () => stream(
         {
           messages: working,
           tools,
-          tool_choice: tools ? "auto" : void 0,
+          tool_choice: tools ? turnToolChoice ?? "auto" : void 0,
           model: activeModel,
           modelStrict: !!activeModel && modelStrict,
           routingMode,
@@ -7708,11 +9156,14 @@ export {
   filterModelItems,
   findTools,
   forgetResolvedModels,
+  formatAssistantTranscriptHeading,
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
   formatEvermindLearnStep,
   formatEvermindMemoryBlock,
+  formatModelScorecard,
+  formatModelTurnLog,
   formatRunProgress,
   gatherChatDiagnostics,
   getGlobalRunState,
@@ -7762,6 +9213,8 @@ export {
   modelCategoryLabel,
   modelFailoversInTrace,
   modelInUse,
+  modelScorecard,
+  modelTurnLog,
   modelsUsedInTrace,
   narratedUnadvertisedInTrace,
   nextFallbackModel,

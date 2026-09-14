@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { allowanceState } from './chatDiagnostics';
-import { parseMessageProvenance, withProvenanceMetadata } from './provenance';
+import { formatAssistantTranscriptHeading, parseMessageProvenance, withProvenanceMetadata } from './provenance';
 
 describe('allowanceState', () => {
   it('never reports exhausted for an UNCAPPED tenant, however large usage grows', () => {
@@ -60,5 +60,28 @@ describe('parseMessageProvenance', () => {
     const parsed = JSON.parse(serialized as string) as Record<string, unknown>;
     expect(parsed.authoredBy).toEqual({ kind: 'agent', ref: 'a' });
     expect(parseMessageProvenance({ metadata: serialized ?? null })?.model).toBe('m');
+  });
+});
+
+describe('formatAssistantTranscriptHeading', () => {
+  it('stamps the resolved model on the BuilderForce heading', () => {
+    const metadata = withProvenanceMetadata({ model: 'xai-oauth/grok-4.6' });
+    expect(formatAssistantTranscriptHeading('BuilderForce', { metadata })).toBe(
+      '## BuilderForce · xai-oauth/grok-4.6',
+    );
+  });
+
+  it('shows requested vs actual on failover', () => {
+    const metadata = withProvenanceMetadata({
+      model: 'xai-oauth/grok-4.6',
+      requestedModel: 'anthropic/claude-opus-5',
+    });
+    expect(formatAssistantTranscriptHeading('BuilderForce', { metadata })).toBe(
+      '## BuilderForce · xai-oauth/grok-4.6 (requested anthropic/claude-opus-5)',
+    );
+  });
+
+  it('falls back to the bare name when provenance is missing', () => {
+    expect(formatAssistantTranscriptHeading('BuilderForce', { metadata: null })).toBe('## BuilderForce');
   });
 });
