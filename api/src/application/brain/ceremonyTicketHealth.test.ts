@@ -140,3 +140,37 @@ describe('batching', () => {
     expect(out.get('poker:p3')!.progressPct).toBe(100); // closed, no stories
   });
 });
+
+describe('epic health (container, over its children)', () => {
+  /**
+   * The chip used to stay at 0/5 after the epic shipped because the rollup
+   * counted `completed_at` only. The SQL now counts status-done children too;
+   * these tests lock the mapping the service applies to that rollup.
+   */
+  it('reads 5/5 when every child is counted done — even if completed_at was never stamped', async () => {
+    queue = [
+      [{ id: 2473, title: 'Speech hop', status: 'done', completedAt: new Date() }],
+      [{ parentId: 2473, total: 5, done: 5 }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2473' }])).get('epic:2473')!;
+    expect(h).toMatchObject({ kind: 'epic', done: 5, total: 5, progressPct: 100, exists: true, status: 'done' });
+  });
+
+  it('stays at 0/5 while children are still open, even if the parent is done', async () => {
+    queue = [
+      [{ id: 2473, title: 'Speech hop', status: 'done', completedAt: new Date() }],
+      [{ parentId: 2473, total: 5, done: 0 }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2473' }])).get('epic:2473')!;
+    expect(h).toMatchObject({ done: 0, total: 5, progressPct: 0, status: 'done' });
+  });
+
+  it('mixes closed and open children', async () => {
+    queue = [
+      [{ id: 1, title: 'Partial', status: 'in_progress', completedAt: null }],
+      [{ parentId: 1, total: 5, done: 3 }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '1' }])).get('epic:1')!;
+    expect(h).toMatchObject({ done: 3, total: 5, progressPct: 60 });
+  });
+});

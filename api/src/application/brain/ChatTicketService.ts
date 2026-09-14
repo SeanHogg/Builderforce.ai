@@ -145,6 +145,14 @@ function isTicketKind(v: string): v is TicketKind {
 /** Task/epic statuses that count as complete when a ticket has no completed_at. */
 const DONE_STATUS = new Set(['done', 'completed', 'archived']);
 
+/**
+ * Container rollup: count a child as done the same way a leaf chip does
+ * (`completed_at` stamped OR status in {@link DONE_STATUS}). `count(completed_at)`
+ * alone reported 0/N for children that were Done by status only — the epic-close
+ * chip that stayed at 0/5 after the parent shipped.
+ */
+const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${tasks.completedAt} IS NOT NULL OR ${tasks.status} IN ('done', 'completed', 'archived') THEN 1 ELSE 0 END), 0)`;
+
 /** Roadmap-item statuses that count as delivered ('shipped' is the publish marker). */
 const ROADMAP_DONE = new Set(['shipped', 'done', 'complete', 'completed', 'released']);
 
@@ -400,7 +408,7 @@ export class ChatTicketService {
           .select({
             parentId: tasks.parentTaskId,
             total: sql<number>`count(*)`,
-            done: sql<number>`count(${tasks.completedAt})`,
+            done: SQL_COUNT_DONE,
           })
           .from(tasks)
           .where(scopedToTenant(tasks, tenantId, inArray(tasks.parentTaskId, [...epicIds])))
@@ -448,7 +456,7 @@ export class ChatTicketService {
       const rollup = await this.db.select({
         initiativeId: tasks.initiativeId,
         total: sql<number>`count(*)`,
-        done: sql<number>`count(${tasks.completedAt})`,
+        done: SQL_COUNT_DONE,
       }).from(tasks).where(scopedToTenant(tasks, tenantId, inArray(tasks.initiativeId, [...initIds]))).groupBy(tasks.initiativeId);
       const byInit = new Map(rollup.map((r) => [String(r.initiativeId), { total: Number(r.total), done: Number(r.done) }]));
       const initById = new Map(initRows.map((r) => [r.id, r]));
@@ -468,7 +476,7 @@ export class ChatTicketService {
       const rollup = await this.db.select({
         portfolioId: initiatives.portfolioId,
         total: sql<number>`count(${tasks.id})`,
-        done: sql<number>`count(${tasks.completedAt})`,
+        done: SQL_COUNT_DONE,
       }).from(tasks)
         .innerJoin(initiatives, eq(initiatives.id, tasks.initiativeId))
         .where(scopedToTenant(tasks, tenantId, inArray(initiatives.portfolioId, [...pfIds])))

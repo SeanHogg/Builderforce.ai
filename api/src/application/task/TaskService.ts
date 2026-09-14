@@ -4,8 +4,9 @@ import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
 import {
   ProjectId, TaskId, TaskStatus, TaskPriority, TaskType, AgentType, TenantId,
-  asProjectId, asTaskId, asTenantId, asAgentHostId,
+  asProjectId, asTaskId, asTenantId, asAgentHostId, isTerminalTaskStatus,
 } from '../../domain/shared/types';
+import { isDoneStatus } from '../../domain/shared/doneClass';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../domain/shared/errors';
 import {
   EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer, DecompositionSource, normalizeChildTitle,
@@ -298,6 +299,14 @@ export class TaskService {
       dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
     });
     const saved = await this.tasks.update(updated);
+    // Closing a parent (an Epic, or any ticket with children) without closing its
+    // still-open descendants is what left shipped epics reading 0/N: the parent
+    // entered Done, heuristic AC children stayed in backlog. Recurse through
+    // `tasks.update` rather than `updateTask` so we do not re-enter on-assign
+    // decomposition. Already-terminal children (cancelled, archived, done) stay put.
+    if (dto.status !== undefined && isDoneStatus(dto.status) && !isDoneStatus(task.status)) {
+      await this.closeOpenDescendants(saved.id as number);
+    }
     // On-assign hook: only when this update is what newly handed the task to an
     // agent (a transition into agent-ownership), and only for a plain `task`
     // (an Epic is already decomposed; never re-decompose).
@@ -305,6 +314,20 @@ export class TaskService {
       return this.onAssignedToAgent(saved);
     }
     return saved;
+  }
+
+  /**
+   * Move every still-open descendant of `parentId` into Done. Nested epics
+   * cascade: a grandchild under an open child is closed too. Cancelled /
+   * archived / already-done rows are left alone.
+   */
+  private async closeOpenDescendants(parentId: number): Promise<void> {
+    const children = await this.tasks.findChildren(asTaskId(parentId));
+    for (const child of children) {
+      if (isTerminalTaskStatus(child.status)) continue;
+      const closed = await this.tasks.update(child.update({ status: TaskStatus.DONE }));
+      await this.closeOpenDescendants(closed.id as number);
+    }
   }
 
   /**

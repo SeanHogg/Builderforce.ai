@@ -29,7 +29,7 @@ import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
 import { fireEventTriggers } from '../workflow/eventTriggers';
-import { TaskStatus, ExecutionStatus } from '../../domain/shared/types';
+import { TaskStatus, ExecutionStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
 import { awardForCompletedTask } from "../points/taskEarning";
 import { loadLaneOrdinals, type OrdinalMap } from '../swimlane/laneOrdinals';
@@ -134,6 +134,11 @@ export interface RecordTransitionInput extends TransitionActorInput {
   taskId: number;
   fromStatus: string | null;
   toStatus: string;
+  /**
+   * Ids already visited while cascading a parent-done close. Prevents a
+   * parent↔child cycle from re-entering {@link recordStatusTransition}.
+   */
+  cascadeSeen?: Set<number>;
 }
 
 /**
@@ -262,6 +267,48 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
       .catch((error) => {
         reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
       });
+    // Parent entered Done: close still-open descendants (heuristic AC children of
+    // an Epic were staying in backlog so the chat ring read 0/N). Nested
+    // recordStatusTransition stamps completedAt / transitions on each child.
+    await closeOpenDescendantsOnParentDone(env, db, input, ordinals);
+  }
+}
+
+/**
+ * Close every still-open descendant of a ticket that just entered a done-class
+ * lane. Already-terminal children (cancelled, archived, done) are left alone.
+ * Recurses via {@link recordStatusTransition} so nested epics cascade too.
+ */
+async function closeOpenDescendantsOnParentDone(
+  env: Env,
+  db: Db,
+  input: RecordTransitionInput,
+  ordinals: OrdinalMap,
+): Promise<void> {
+  const seen = input.cascadeSeen ?? new Set<number>();
+  seen.add(input.taskId);
+  const children = await db
+    .select({ id: tasks.id, status: tasks.status, projectId: tasks.projectId })
+    .from(tasks)
+    .where(scopedToTenant(tasks, input.tenantId, eq(tasks.parentTaskId, input.taskId)));
+  for (const child of children) {
+    if (seen.has(child.id)) continue;
+    if (isDoneClass(child.status, ordinals) || isTerminalTaskStatus(child.status)) continue;
+    await db
+      .update(tasks)
+      .set({ status: TaskStatus.DONE, updatedAt: new Date() })
+      .where(eq(tasks.id, child.id));
+    await recordStatusTransition(env, db, {
+      tenantId: input.tenantId,
+      projectId: child.projectId,
+      taskId: child.id,
+      fromStatus: child.status,
+      toStatus: TaskStatus.DONE,
+      actorUserId: input.actorUserId,
+      actorAgentRef: input.actorAgentRef,
+      actorAgentHostId: input.actorAgentHostId,
+      cascadeSeen: seen,
+    });
   }
 }
 

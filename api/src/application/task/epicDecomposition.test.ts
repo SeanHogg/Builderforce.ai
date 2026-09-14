@@ -6,7 +6,7 @@ import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
 import { Project } from '../../domain/project/Project';
 import {
-  ProjectId, TaskId, TenantId, TaskType, ProjectStatus,
+  ProjectId, TaskId, TenantId, TaskType, ProjectStatus, TaskStatus,
   asTaskId, asProjectId, asTenantId,
 } from '../../domain/shared/types';
 
@@ -480,5 +480,76 @@ describe('TaskService.getEpicTree', () => {
     const tree = await service.getEpicTree(epic.id as number);
     expect(tree.epic.id).toBe(epic.id);
     expect(tree.children.map(c => c.title)).toEqual(['Add the invite route', 'Add the welcome email']);
+  });
+});
+
+describe('TaskService.updateTask — closing a parent closes open descendants', () => {
+  async function seedEpicWithChildren(service: TaskService, repo: InMemoryTaskRepo) {
+    const epic = await service.createTask(
+      {
+        projectId: PROJECT_ID as number,
+        title: 'Ship the speech hop',
+        description: '- [ ] Wire the click\n- [ ] Scroll the timeline\n- [ ] Highlight the reply',
+        assignedAgentRef: 'ide-agent-9',
+      },
+      TENANT as number,
+    );
+    const children = await repo.findChildren(epic.id);
+    return { epic, children };
+  }
+
+  it('moves every still-open child to done when the epic is closed', async () => {
+    const { repo, service } = makeService();
+    const { epic, children } = await seedEpicWithChildren(service, repo);
+    expect(children.length).toBeGreaterThanOrEqual(3);
+    expect(children.every((c) => c.status === TaskStatus.BACKLOG || c.status === 'backlog')).toBe(true);
+
+    await service.updateTask(epic.id as number, { status: TaskStatus.DONE });
+
+    const after = await repo.findChildren(epic.id);
+    expect(after.every((c) => c.status === TaskStatus.DONE)).toBe(true);
+    expect((await repo.findById(epic.id))!.status).toBe(TaskStatus.DONE);
+  });
+
+  it('leaves a cancelled child alone and still closes the rest', async () => {
+    const { repo, service } = makeService();
+    const { epic, children } = await seedEpicWithChildren(service, repo);
+    const cancelled = children[0]!;
+    await repo.update(cancelled.update({ status: 'cancelled' as TaskStatus }));
+
+    await service.updateTask(epic.id as number, { status: TaskStatus.DONE });
+
+    const after = await repo.findChildren(epic.id);
+    const cancelledAfter = after.find((c) => c.id === cancelled.id)!;
+    expect(cancelledAfter.status).toBe('cancelled');
+    expect(after.filter((c) => c.id !== cancelled.id).every((c) => c.status === TaskStatus.DONE)).toBe(true);
+  });
+
+  it('closes nested grandchildren under an open child', async () => {
+    const { repo, service } = makeService();
+    const { epic, children } = await seedEpicWithChildren(service, repo);
+    const child = children[0]!;
+    const grand = await service.createTask(
+      {
+        projectId: PROJECT_ID as number,
+        title: 'Nested hop wiring',
+        parentTaskId: child.id as number,
+      },
+      TENANT as number,
+    );
+    expect(grand.status).not.toBe(TaskStatus.DONE);
+
+    await service.updateTask(epic.id as number, { status: TaskStatus.DONE });
+
+    expect((await repo.findById(child.id))!.status).toBe(TaskStatus.DONE);
+    expect((await repo.findById(grand.id))!.status).toBe(TaskStatus.DONE);
+  });
+
+  it('does not touch children when the parent is not entering done', async () => {
+    const { repo, service } = makeService();
+    const { epic, children } = await seedEpicWithChildren(service, repo);
+    await service.updateTask(epic.id as number, { status: TaskStatus.IN_PROGRESS });
+    const after = await repo.findChildren(epic.id);
+    expect(after.map((c) => c.status)).toEqual(children.map((c) => c.status));
   });
 });
