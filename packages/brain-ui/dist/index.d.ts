@@ -283,6 +283,15 @@ interface BrainTimelineProps {
     onAnswerQuestion?: (answer: string) => void;
     /** Auto-scroll to the newest node while near the bottom (default true). */
     autoScroll?: boolean;
+    /**
+     * Scroll this transcript message into view and highlight it. The nonce lets a host
+     * ask again for the same id (clicking the same speech bubble twice) without the
+     * jump no-op'ing. Absent or null ⇒ no jump, no highlight.
+     */
+    revealMessage?: {
+        id: number;
+        nonce: number;
+    } | null;
 }
 /**
  * The unified Brain chat transcript: a vertical lineage of gutter dots (joined by
@@ -291,7 +300,7 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, activity, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, activity, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, revealMessage, }: BrainTimelineProps): React__default.JSX.Element;
 /**
  * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
  * composer, which lives in the same component tree) does not re-render the whole

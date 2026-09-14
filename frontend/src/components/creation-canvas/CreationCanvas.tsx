@@ -11893,6 +11893,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     () => roomSpeech(timeline, seatedAgents, activeAgentIds),
     [activeAgentIds, seatedAgents, timeline],
   );
+  // A room speech bubble asked to show the full reply. Nonce so a second click on
+  // the same bubble still jumps; the dock may already be open on that turn.
+  const [brainReveal, setBrainReveal] = useState<{ id: number; nonce: number } | null>(null);
+  const revealSpeechInChat = useCallback((messageId: number) => {
+    openBrainDock();
+    setBrainReveal((current) => ({ id: messageId, nonce: (current?.nonce ?? 0) + 1 }));
+  }, [openBrainDock]);
   // The board as the room's stations and a framed third-party widget read and edit it.
   const boardBridge = useCanvasBoardBridgeFor({ sessionId, title, persistence, objects: nodes, act: cardActBoard, patch: cardsEditable ? updateNodeData : null, remove: cardsEditable ? deleteObjects : null, selfId: rosterSelfId, occupants: roomOccupants });
   // Who is walking which space — a level played in the room, a game on its own surface.
@@ -12990,6 +12997,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               objectCount={nodes.length}
               participants={rosterMembers}
               messages={brainMessages}
+              revealMessage={brainReveal}
               trace={brainTrace}
               running={brainRunning}
               runStartedAt={brainRunShownStartedAt}
@@ -13028,6 +13036,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               sessionTitle={title}
               members={roomOccupants}
               speech={roomSpeechBySeat}
+              onSelectSpeech={revealSpeechInChat}
               currentUserId={rosterSelfId}
               live={livePresence}
               onPresence={sendPresence}
@@ -13358,6 +13367,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onExecutionDetailChange={(showExecutionDetail) => updateBrainDock({ showExecutionDetail })}
           onClose={() => updateBrainDock({ open: false })}
           messages={brainMessages}
+          revealMessage={brainReveal}
           trace={brainTrace}
           running={brainRunning}
           runStartedAt={brainRunShownStartedAt}

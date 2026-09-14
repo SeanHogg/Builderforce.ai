@@ -1081,7 +1081,8 @@ function BrainTimelineInner({
   onApplyCode,
   onCreateFile,
   onAnswerQuestion,
-  autoScroll = true
+  autoScroll = true,
+  revealMessage = null
 }) {
   const labels = useMemo3(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
   const assistant = assistantName ?? labels.assistant;
@@ -1112,6 +1113,28 @@ function BrainTimelineInner({
     ro.observe(content);
     return () => ro.disconnect();
   }, [autoScroll]);
+  useEffect2(() => {
+    if (revealMessage == null) return;
+    pinnedRef.current = false;
+    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const jump = () => {
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      const target = document.getElementById(brainMessageAnchorId(revealMessage.id));
+      if (!target || !scroller.contains(target)) return;
+      const sRect = scroller.getBoundingClientRect();
+      const tRect = target.getBoundingClientRect();
+      const delta = tRect.top - sRect.top - (sRect.height - tRect.height) / 2;
+      scroller.scrollTo({ top: scroller.scrollTop + delta, behavior: reduce ? "auto" : "smooth" });
+    };
+    jump();
+    const raf = requestAnimationFrame(jump);
+    const later = window.setTimeout(jump, 80);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(later);
+    };
+  }, [revealMessage]);
   const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ jsx7(
     Markdown,
     {
@@ -1123,6 +1146,8 @@ function BrainTimelineInner({
     }
   );
   const isEmpty = nodes.length === 0 && !loading;
+  const focusedId = revealMessage?.id ?? null;
+  const focusClass = (messageId) => focusedId === messageId ? " bf-tl__item--focus" : "";
   return /* @__PURE__ */ jsxs6("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
     loading && /* @__PURE__ */ jsx7("div", { className: "bf-tl-status", children: labels.loading }),
     isEmpty && (emptyState ?? /* @__PURE__ */ jsx7("div", { className: "bf-tl-empty", children: labels.empty })),
@@ -1131,7 +1156,7 @@ function BrainTimelineInner({
         if (node.kind === "user") {
           const to = parseDirectedRecipients(node.message);
           const author = parseMessageAuthor(node.message);
-          return /* @__PURE__ */ jsxs6("li", { id: brainMessageAnchorId(node.message.id), className: "bf-tl__item bf-tl__item--user", children: [
+          return /* @__PURE__ */ jsxs6("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--user${focusClass(node.message.id)}`, children: [
             /* @__PURE__ */ jsx7("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx7("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ jsx7(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("user") }) }),
             /* @__PURE__ */ jsxs6("div", { className: "bf-tl__body", children: [
               /* @__PURE__ */ jsxs6("div", { className: "bf-tl__role", style: to.length > 0 ? { display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" } : void 0, children: [
@@ -1153,7 +1178,7 @@ function BrainTimelineInner({
           const rescued = node.key === stranded ? thoughtTextOf(bodyText) : "";
           const stopped = isStoppedTurn(node.message);
           if (!answer && bodyText && !card && !rescued && !stopped) {
-            return /* @__PURE__ */ jsxs6("li", { id: brainMessageAnchorId(node.message.id), className: "bf-tl__item bf-tl__item--thought", children: [
+            return /* @__PURE__ */ jsxs6("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--thought${focusClass(node.message.id)}`, children: [
               /* @__PURE__ */ jsx7("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx7("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
               /* @__PURE__ */ jsxs6("div", { className: "bf-tl__body bf-tl__thought-line", children: [
                 renderMsg(node.message, "assistant", bodyText),
@@ -1161,7 +1186,7 @@ function BrainTimelineInner({
               ] })
             ] }, node.key);
           }
-          return /* @__PURE__ */ jsxs6("li", { id: brainMessageAnchorId(node.message.id), className: "bf-tl__item bf-tl__item--assistant", children: [
+          return /* @__PURE__ */ jsxs6("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--assistant${focusClass(node.message.id)}`, children: [
             /* @__PURE__ */ jsx7("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx7("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ jsx7(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ jsxs6("div", { className: "bf-tl__body", children: [
               /* @__PURE__ */ jsx7("div", { className: "bf-tl__role", children: author ? author.name : assistant }),
