@@ -39,6 +39,9 @@ import type { RepoSearchResult } from "@builderforce/agent-tools";
 /** Directories no local walk or search descends into — build output and dependencies. */
 export const SKIP_DIRS: ReadonlySet<string> = new Set([
   "node_modules", ".git", "dist", "build", ".next", "out", "coverage", ".turbo", ".vercel", ".cache",
+  // Compiled webview chunks (`clients/vscode/media/webview`) — a 60KB minified line
+  // matching the query used to drown directory search so the source tree never ran.
+  "media",
 ]);
 
 /** Matches handed back per search. Past this the result says `truncated`. */
@@ -93,11 +96,57 @@ function relPosix(root: string, abs: string): string {
  * not a match (a blank, or a `--max-columns` omission notice). Exported for the test.
  */
 export function parseRipgrepLine(line: string): SearchMatch | null {
-  const m = /^(.+?):(\d+):(.*)$/.exec(line);
+  if (!line || line === "[Omitted long matching line]") return null;
+  // Greedy path so a Windows drive colon (`C:\foo\bar.ts:12:text`) is not taken as
+  // the split — the LAST `:digits:` is the line number. The earlier non-greedy
+  // `^(.+?):` treated `C:` as path + line and dropped every match on this OS
+  // (chat #111: directory `search_code` returned total:0 truncated:false).
+  const m = /^(.+):(\d+):(.*)$/.exec(line);
   if (!m) return null;
   const rel = m[1].split("\\").join("/").replace(/^(?:\.\/)+/, "");
   if (!rel) return null;
-  return { path: rel, line: Number(m[2]), text: m[3].trim().slice(0, MATCH_TEXT_MAX) };
+  const text = m[3].trim();
+  if (text === "[Omitted long matching line]") return null;
+  return { path: rel, line: Number(m[2]), text: text.slice(0, MATCH_TEXT_MAX) };
+}
+
+/**
+ * One `--json` event from ripgrep. `type:"match"` becomes a {@link SearchMatch}
+ * with a repo-relative path (absolute Windows paths are stripped back to `root`).
+ * Null for begin/end/summary events, malformed JSON, or the colon-format fallback
+ * when the line is not a match either.
+ */
+export function parseRipgrepJsonLine(line: string, root: string): SearchMatch | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  try {
+    const ev = JSON.parse(trimmed) as {
+      type?: string;
+      data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } };
+    };
+    if (ev.type !== "match") return null;
+    const printed = ev.data?.path?.text;
+    const lineNo = ev.data?.line_number;
+    if (!printed || typeof lineNo !== "number") return null;
+    const text = (ev.data?.lines?.text ?? "").trim().slice(0, MATCH_TEXT_MAX);
+    return { path: toRepoRel(root, printed), line: lineNo, text };
+  } catch {
+    const colon = parseRipgrepLine(trimmed);
+    if (!colon) return null;
+    return { ...colon, path: toRepoRel(root, colon.path) };
+  }
+}
+
+/** Repo-relative POSIX path from whatever ripgrep printed (relative, `./`, or `C:\...`). */
+function toRepoRel(root: string, printed: string): string {
+  const posix = printed.split("\\").join("/").replace(/^(?:\.\/)+/, "");
+  const rootPosix = root.split("\\").join("/").replace(/\/+$/, "");
+  if (posix.length > rootPosix.length) {
+    const prefix = posix.slice(0, rootPosix.length);
+    const same = prefix === rootPosix || prefix.toLowerCase() === rootPosix.toLowerCase();
+    if (same && posix.charAt(rootPosix.length) === "/") return posix.slice(rootPosix.length + 1);
+  }
+  return posix;
 }
 
 /** Sort by path then line so a result set reads like a file, whichever backend produced it. */
@@ -162,8 +211,9 @@ async function searchOneFile(root: string, abs: string, re: RegExp, size: number
 export function ripgrepSearch(root: string, start: string, query: string, ripgrep: string): Promise<RepoSearchResult | null> {
   const target = relPosix(root, start) || ".";
   const args = [
-    "--line-number", "--no-heading", "--with-filename", "--color", "never", "--no-messages",
-    "--ignore-case", "--max-columns", "400", "--max-filesize", `${SEARCH_MAX_FILE_BYTES}`,
+    // JSON events, not `path:line:text` — on Windows that colon format collides with
+    // drive letters and a directory search silently reported total:0 (chat #111).
+    "--json", "--ignore-case", "--max-columns", "400", "--max-filesize", `${SEARCH_MAX_FILE_BYTES}`,
     // Mirror the walker's skip list so the two backends agree on what "the repo" is.
     ...[...SKIP_DIRS].flatMap((dir) => ["--glob", `!**/${dir}/**`]),
     // The JS engine's escaping rule, expressed as ripgrep's own flag: a query that is not
@@ -204,7 +254,7 @@ export function ripgrepSearch(root: string, start: string, query: string, ripgre
       const lines = pending.split("\n");
       pending = lines.pop() ?? "";
       for (const line of lines) {
-        const match = parseRipgrepLine(line);
+        const match = parseRipgrepJsonLine(line, root);
         if (!match) continue;
         matches.push(match);
         if (matches.length >= SEARCH_MAX_MATCHES) {
@@ -217,11 +267,13 @@ export function ripgrepSearch(root: string, start: string, query: string, ripgre
     });
     child.on("close", (code) => {
       if (settled) return;
-      const last = parseRipgrepLine(pending);
+      const last = parseRipgrepJsonLine(pending, root);
       if (last && matches.length < SEARCH_MAX_MATCHES) matches.push(last);
       // 0 = matches, 1 = none; 2 = ripgrep could not do this search (an unsupported
       // pattern, an unreadable target). A 2 with nothing found means "let the walk try".
-      if (code === 2 && matches.length === 0) finish(null);
+      // Exit 0 with ZERO parsed matches is the Windows colon-split lie: rg found hits
+      // whose lines we could not parse, so falling through to "absent" is the bug.
+      if (matches.length === 0 && code !== 1) finish(null);
       else done();
     });
   });

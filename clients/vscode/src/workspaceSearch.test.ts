@@ -2,7 +2,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { compileSearchPattern, parseRipgrepLine, ripgrepSearch, searchWorkspace, walkSearch } from "./workspaceSearch";
+import { compileSearchPattern, parseRipgrepJsonLine, parseRipgrepLine, ripgrepSearch, searchWorkspace, walkSearch } from "./workspaceSearch";
 import { bundledRipgrepCandidates, findRipgrep } from "./ripgrep";
 
 /**
@@ -35,11 +35,27 @@ describe("parseRipgrepLine", () => {
     expect(parseRipgrepLine("./src/a.ts:12:  const x = 1;")).toEqual({ path: "src/a.ts", line: 12, text: "const x = 1;" });
     expect(parseRipgrepLine(".\\src\\a.ts:12:  const x = 1;")).toEqual({ path: "src/a.ts", line: 12, text: "const x = 1;" });
     expect(parseRipgrepLine("packages/x/b.ts:3:export interface B {}")).toEqual({ path: "packages/x/b.ts", line: 3, text: "export interface B {}" });
+    // Drive-letter path: the first colon is NOT the split (chat #111 false 0).
+    expect(parseRipgrepLine("C:\\code\\agentic\\src\\a.ts:12:  const x = 1;")).toEqual({
+      path: "C:/code/agentic/src/a.ts", line: 12, text: "const x = 1;",
+    });
   });
 
   it("ignores lines that are not matches", () => {
     expect(parseRipgrepLine("")).toBeNull();
     expect(parseRipgrepLine("[Omitted long matching line]")).toBeNull();
+    expect(parseRipgrepLine("media/webview/index.js:45:[Omitted long matching line]")).toBeNull();
+  });
+
+  it("parses --json match events and strips the workspace root off an absolute path", () => {
+    const ev = JSON.stringify({
+      type: "match",
+      data: { path: { text: "C:\\foo\\webview\\src\\a.tsx" }, line_number: 830, lines: { text: "  addressedTo: queued.recipient\n" } },
+    });
+    expect(parseRipgrepJsonLine(ev, "C:\\foo")).toEqual({
+      path: "webview/src/a.tsx", line: 830, text: "addressedTo: queued.recipient",
+    });
+    expect(parseRipgrepJsonLine("{\"type\":\"begin\"}", "C:\\foo")).toBeNull();
   });
 
   it("keeps a colon inside the matched text", () => {
@@ -126,5 +142,44 @@ describe("searchWorkspace on a workspace tree", () => {
     // A literal that is not a valid regex goes through as a fixed string, not an error.
     const literal = await ripgrepSearch(root, root, "listBrainChats(", rg);
     expect(literal?.matches?.map((m) => m.path)).toEqual(["clients/vscode/src/bfApi.ts"]);
+  });
+});
+
+/**
+ * Chat #111: a directory search for `addressedTo` reported total:0 because the
+ * compiled `media/webview/index.js` bundle (one giant line) and Windows colon
+ * parsing hid `webview/src/chat/VsCodeChatSurface.tsx`. Skipping `media/` and
+ * actually scanning the source tree is the recovery.
+ */
+describe("directory search finds source next to a bundled media hit (chat #111)", () => {
+  let root = "";
+  beforeAll(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), "bf-search-media-"));
+    await fs.mkdir(path.join(root, "media", "webview"), { recursive: true });
+    await fs.mkdir(path.join(root, "webview", "src", "chat"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, "media", "webview", "index.js"),
+      `${"x".repeat(8_000)}addressedTo${"y".repeat(8_000)}\n`,
+    );
+    await fs.writeFile(
+      path.join(root, "webview", "src", "chat", "VsCodeChatSurface.tsx"),
+      "void conv.send(queued.text, { addressedTo: queued.recipient });\n",
+    );
+  });
+  afterAll(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it("walks the source file and does not treat media/ as the tree", async () => {
+    const r = await walkSearch(root, root, "addressedTo");
+    expect(r.ok).toBe(true);
+    expect(r.truncated).toBe(false);
+    expect(r.matches?.map((m) => m.path)).toEqual(["webview/src/chat/VsCodeChatSurface.tsx"]);
+  });
+
+  it("searchWorkspace on the folder finds the source file", async () => {
+    const r = await searchWorkspace({ root, start: root, query: "addressedTo", ripgrep: null });
+    expect(r.ok).toBe(true);
+    expect(r.matches?.some((m) => String(m.path).endsWith("VsCodeChatSurface.tsx"))).toBe(true);
   });
 });

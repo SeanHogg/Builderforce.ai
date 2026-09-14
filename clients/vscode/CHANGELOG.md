@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.68] — A folder search on Windows actually finds the term
+
+- **A folder search no longer reports a confident 0 while the file sitting in that folder has the term.** Directory `search_code` used ripgrep's `path:line:text` lines; on Windows the first colon is the drive letter, so every match was dropped and the tool said the term was not referenced. It now reads ripgrep's JSON events, falls back to walking the tree when a successful run parsed nothing, and skips compiled `media/` bundles so a minified webview chunk cannot hide `webview/src`.
+
 ## [2026.9.67] — A failed folder search is not proof a file is empty
 
 - **A file-scoped search still runs after a folder search found nothing.** When a folder search came back empty, a follow-up search of a file in that folder was answered from the empty result ("the term does not appear") instead of actually searching the file. A later read of the same file could then show the term sitting there. The file search now runs.
