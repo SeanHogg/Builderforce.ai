@@ -1961,6 +1961,35 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: stub });
           return { result: { data: stub } };
         }
+        // A `read_file` window fully inside an earlier successful window of the same
+        // file (chat #109: fourteen overlapping offsets of one service file). Different
+        // exact-repeat keys, same bytes. Stub while the covering result is still in
+        // context; replay it from cache once compaction has dropped it. See
+        // `ReadCoverage.coveredRead`. A jump to uncovered lines still runs.
+        const covered = readCoverage.coveredRead(call.name, args);
+        if (covered) {
+          const visit = readCoverage.record(call.name, args);
+          const target = visit ? visitTarget(args) : undefined;
+          const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          const note = revisit ? `${covered.note}\n\n${revisit}` : covered.note;
+          if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
+            const replayed = trimToolResult(call.name, covered.cached.result ?? null, { advisory: note });
+            pendingReplay = { name: call.name, args, result: covered.cached.result };
+            pushTrace(c, {
+              ts: nowIso(),
+              category: 'tool',
+              label: call.name,
+              args,
+              result: { covered: true, replayed: true, note },
+              resultBytes: replayed.bytes,
+              truncated: replayed.truncated,
+            });
+            return { result: { data: replayed.content } };
+          }
+          const stub = { note };
+          pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { covered: true, note } });
+          return { result: { data: stub } };
+        }
         // A narrower search whose answer is already held: the same query run earlier
         // over an ancestor directory, complete. Served by filtering that result — the
         // same bytes a re-run would return — and cached like any read so a repeat of it

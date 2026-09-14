@@ -22,11 +22,15 @@
  *    budget is gone and the user's actual request — a one-line CSS change — is never
  *    made. Every existing signal scores that run clean.
  *
- * The fix is not to block the read: a legitimate second pass over a large file is
- * normal, and refusing it would break real work. The fix is to make the model AWARE
- * that it is circling, at the only moment it can act on that — inside the tool
- * result it is about to read — and to tell it exactly what it has already been
- * shown, so "I'll just look again" stops being the cheapest next move.
+ * 3. The COVERED window — chat #109: `read_file(BrainService.ts)` fourteen times at
+ *    shifting offsets (1050, then 1080, then 1105…) that all sat inside a window the
+ *    run had already returned. The circling advisory at 3/5 visits fired and was
+ *    ignored; the bytes still flooded the context (prompt peak 97,669). An overlapping
+ *    window is an exact-repeat in disguise: those lines are already above. The loop
+ *    stubs (or replays from cache once compaction has dropped the original) and tells
+ *    the model to page FORWARD from the last line it already has. A jump to uncovered
+ *    lines, and a page that extends past a truncated window, still run — those are
+ *    the legitimate second pass. An edit of the file still forgets coverage.
  *
  * Both guards live in ONE object because they share the one question that decides
  * whether they are still valid: "did something just change what a re-read would see?"
@@ -119,6 +123,67 @@ function isUnderDir(p: string, dir: string): boolean {
 }
 
 /**
+ * Default `read_file` window when the caller omitted `limit` — matches
+ * `READ_DEFAULT_LINE_LIMIT` in `@builderforce/agent-tools`. Kept as a number here so
+ * this module stays free of that package.
+ */
+const READ_WINDOW_DEFAULT = 2000;
+
+interface LineSpan {
+  /** Inclusive 1-based first line. */
+  start: number;
+  /** Inclusive 1-based last line. */
+  end: number;
+}
+
+function asPositiveInt(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+/** The line range a `read_file` call is ASKING for. */
+function requestedReadWindow(args: Record<string, unknown>): LineSpan {
+  const start = asPositiveInt(args.offset, 1);
+  const limit = asPositiveInt(args.limit, READ_WINDOW_DEFAULT);
+  return { start, end: start + limit - 1 };
+}
+
+/**
+ * The line range an earlier `read_file` actually RETURNED. Null when the cached
+ * payload does not describe a window (a stub, a failure, an empty body).
+ */
+function servedReadWindow(result: unknown): LineSpan | null {
+  const data = resultObject(result);
+  if (!data || data.ok === false) return null;
+  const start = asPositiveInt(data.offset, 1);
+  const content = typeof data.content === 'string' ? data.content : '';
+  const returned = content === '' ? 0 : content.split('\n').length;
+  if (returned <= 0) return null;
+  let end = start + returned - 1;
+  // A complete (not truncated) read of the rest of the file covers through EOF, even
+  // when the caller asked for a 2000-line window of a 400-line file.
+  if (data.truncated !== true && typeof data.totalLines === 'number' && data.totalLines >= start) {
+    end = Math.max(end, Math.floor(data.totalLines));
+  }
+  return { start, end };
+}
+
+function spanContains(outer: LineSpan, inner: LineSpan): boolean {
+  return inner.start >= outer.start && inner.end <= outer.end;
+}
+
+/**
+ * Clip a requested window to EOF when the covering read actually reached the end of
+ * the file. A later default-size `read_file` of a 400-line file (asking for 1–2000)
+ * is the same question as the complete 1–400 already held — without the clip it
+ * would look like it extends past the covering window and would run again.
+ */
+function clipRequestedToEof(want: LineSpan, covering: unknown): LineSpan {
+  const data = resultObject(covering);
+  if (!data || data.truncated === true || typeof data.totalLines !== 'number' || data.totalLines < 1) return want;
+  return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
+}
+
+/**
  * Visits to one target before the model is told it is circling. Two reads of a
  * long file is ordinary (read the top, jump to the section); the THIRD is the
  * point where a pass stops being navigation and starts being a loop.
@@ -169,6 +234,18 @@ export interface CachedRead {
   /** The tool's UNTRIMMED result — the loop re-trims it to the budget on replay. */
   result: unknown;
   anchor: unknown;
+}
+
+/** What {@link ReadCoverage.coveredRead} hands the loop. */
+export interface CoveredRead {
+  /** Inclusive first line of the request (after EOF clip). */
+  start: number;
+  /** Inclusive last line of the request (after EOF clip). */
+  end: number;
+  /** The covering read's cache — replay this when compaction dropped the original. */
+  cached: CachedRead | null;
+  /** The note the model should read instead of another copy of those lines. */
+  note: string;
 }
 
 /** One successful read this run has already made, by its canonical fingerprint. */
@@ -311,6 +388,42 @@ export class ReadCoverage {
     for (const [key, read] of [...this.exact.entries()]) {
       if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }
+  }
+
+  /**
+   * Answer a `read_file` whose window is already inside an earlier successful window
+   * of the SAME file. Chat #109's fourteen overlapping reads of one service file were
+   * different exact-repeat keys (offset 1050, then 1080, then 1105) so the stub never
+   * ran; the circling advisory fired and was ignored; the bytes still filled the
+   * window. This is that stub for overlapping windows.
+   *
+   * A jump to lines the earlier read did not return, and a page that extends past a
+   * truncated window, return null — those still need the disk. An edit of the file
+   * forgets the covering cache via {@link invalidate}.
+   */
+  coveredRead(tool: string, args: unknown): CoveredRead | null {
+    if (tool !== 'read_file') return null;
+    const wanted = canonicalReadArgs(tool, args);
+    const path = typeof wanted.path === 'string' ? wanted.path : '';
+    if (!path) return null;
+    const want = requestedReadWindow(wanted);
+    for (const read of this.exact.values()) {
+      if (read.tool !== 'read_file' || !read.cached) continue;
+      const earlierPath = typeof read.args.path === 'string' ? read.args.path : '';
+      if (earlierPath !== path) continue;
+      const got = servedReadWindow(read.cached.result);
+      if (!got) continue;
+      const clipped = clipRequestedToEof(want, read.cached.result);
+      if (clipped.start > clipped.end) continue;
+      if (!spanContains(got, clipped)) continue;
+      return {
+        start: clipped.start,
+        end: clipped.end,
+        cached: read.cached,
+        note: `Lines ${clipped.start}–${clipped.end} of this file were already returned by an earlier read_file (lines ${got.start}–${got.end}). Reuse that result; if you need later lines, page forward with offset ${got.end + 1}. Do not re-open a window you already have.`,
+      };
+    }
+    return null;
   }
 
   /**

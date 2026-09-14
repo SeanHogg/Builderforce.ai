@@ -302,6 +302,89 @@ describe('ReadCoverage · derived searches', () => {
   });
 });
 
+/** n numbered lines so a served window's line count is n. */
+function numberedLines(n: number): string {
+  return Array.from({ length: n }, (_, i) => `line ${i + 1}`).join('\n');
+}
+
+describe('ReadCoverage · covered read windows', () => {
+  const complete400 = {
+    ok: true,
+    path: CSS,
+    content: numberedLines(400),
+    totalLines: 400,
+    offset: 1,
+    truncated: false,
+  };
+
+  it('covers a window fully inside an earlier complete read of the same file', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.cacheResult('read_file', { path: CSS }, { result: complete400, anchor: {} });
+    // Chat #109: offset 1050 then 1080 then 1105 of lines already returned.
+    const hit = cov.coveredRead('read_file', { path: CSS, offset: 140, limit: 40 })!;
+    expect(hit.start).toBe(140);
+    expect(hit.end).toBe(179);
+    expect(hit.cached?.result).toEqual(complete400);
+    expect(hit.note).toMatch(/already returned/);
+    expect(hit.note).toMatch(/offset 401/);
+  });
+
+  it('clips a default-size request to EOF of a complete shorter file', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.cacheResult('read_file', { path: CSS }, { result: complete400, anchor: {} });
+    // Asking for the default 1–2000 of a 400-line file is the same question.
+    const hit = cov.coveredRead('read_file', { path: CSS })!;
+    expect(hit.start).toBe(1);
+    expect(hit.end).toBe(400);
+  });
+
+  it('does not cover a page that extends past a truncated window', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS, offset: 1, limit: 2000 });
+    cov.cacheResult('read_file', { path: CSS, offset: 1, limit: 2000 }, {
+      result: { ok: true, path: CSS, content: numberedLines(2000), totalLines: 5000, offset: 1, truncated: true },
+      anchor: {},
+    });
+    // 1900–2099 needs lines the truncated window did not return.
+    expect(cov.coveredRead('read_file', { path: CSS, offset: 1900, limit: 200 })).toBeNull();
+  });
+
+  it('does not cover a jump to later uncovered lines', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS, offset: 1, limit: 200 });
+    cov.cacheResult('read_file', { path: CSS, offset: 1, limit: 200 }, {
+      result: { ok: true, path: CSS, content: numberedLines(200), totalLines: 1000, offset: 1, truncated: true },
+      anchor: {},
+    });
+    expect(cov.coveredRead('read_file', { path: CSS, offset: 400, limit: 80 })).toBeNull();
+  });
+
+  it('does not cover a different file or another tool', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.cacheResult('read_file', { path: CSS }, { result: complete400, anchor: {} });
+    expect(cov.coveredRead('read_file', { path: 'other.tsx', offset: 10, limit: 10 })).toBeNull();
+    expect(cov.coveredRead('search_code', { path: CSS, query: 'x' })).toBeNull();
+  });
+
+  it('forgets coverage when the file is edited', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.cacheResult('read_file', { path: CSS }, { result: complete400, anchor: {} });
+    cov.invalidate('edit_file', { path: CSS });
+    expect(cov.coveredRead('read_file', { path: CSS, offset: 140, limit: 40 })).toBeNull();
+  });
+
+  it('accepts a JSON-string result the host handed back unparsed', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.cacheResult('read_file', { path: CSS }, { result: JSON.stringify(complete400), anchor: {} });
+    expect(cov.coveredRead('read_file', { path: CSS, offset: 10, limit: 5 })?.start).toBe(10);
+  });
+});
+
 describe('ReadCoverage · the replay cache', () => {
   it('holds nothing for a read that never succeeded', () => {
     const cov = new ReadCoverage();
