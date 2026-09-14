@@ -8630,7 +8630,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const design = buildTheaterRoomDesign(Number(args.seats));
       const summary = theaterRoomSummary(design);
       const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : `Theater (${summary.seats})`;
-      const node = stage.createObject('room', { title });
+      const node = stage.createObject('room', {
+        ...(args.x != null ? { x: args.x } : {}),
+        ...(args.y != null ? { y: args.y } : {}),
+      });
       node.data = {
         ...node.data,
         title,

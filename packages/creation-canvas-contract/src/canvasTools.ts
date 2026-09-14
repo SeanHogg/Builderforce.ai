@@ -70,6 +70,10 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   // Authoring + layout over the local document. The API never executes these; they are
   // descriptions of operations the browser applies to the visitor's own canvas.
   'canvas_add_object',
+  // Theater seating is a local-document layout (chairs facing a screen on the
+  // visitor's own board). Same class as `canvas_add_object`; leaving it unclassified
+  // made the model plan around a tool the gateway stripped, then land an empty room.
+  'canvas_create_room',
   'canvas_update_object',
   'canvas_delete_object',
   'canvas_arrange_objects',

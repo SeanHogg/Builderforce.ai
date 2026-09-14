@@ -297,7 +297,7 @@ async function closeOpenDescendantsOnParentDone(
     await db
       .update(tasks)
       .set({ status: TaskStatus.DONE, updatedAt: new Date() })
-      .where(eq(tasks.id, child.id));
+      .where(scopedToTenant(tasks, input.tenantId, eq(tasks.id, child.id)));
     await recordStatusTransition(env, db, {
       tenantId: input.tenantId,
       projectId: child.projectId,
