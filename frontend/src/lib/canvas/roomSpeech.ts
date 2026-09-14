@@ -59,14 +59,40 @@ export function speechExcerpt(body: string, max = ROOM_SPEECH_MAX_CHARS): string
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
-/** Which agent at the table wrote this — by roster ref, card id (a draft persona), or name. */
+/**
+ * Which agent at the table wrote this — by roster ref, card id (a draft persona), or name.
+ *
+ * ── WHY THIS IS RANKED, NOT THE FIRST CARD THAT MATCHES ──────────────────────────
+ * The four ways a reply names its author are not equally trustworthy, and taking the
+ * first card that satisfied ANY of them handed a bubble to the wrong head whenever a
+ * weak match sat earlier in board order than the strong one. A card whose NAME is the
+ * seat title of a later card ("Security" on a draft persona, "Security Lead" seated
+ * from the roster) consumed that agent's reply, and the real speaker — matched only by
+ * an exact ref further down the board — was then left with nothing to say, so its head
+ * stayed silent through a standup it had answered. Two heads wrong per collision: the
+ * one wearing someone else's words, and the one wearing none.
+ *
+ * So identity beats resemblance. An exact `ref`/`objectId` match is the author saying
+ * who it is; a name or seat match is a guess from a title that two cards can share.
+ * Every candidate is scored and the strongest wins, board order only breaking ties.
+ */
 function speakerOf(author: { ref: string; name: string }, agents: readonly BoardAgent[]): BoardAgent | undefined {
-  return agents.find((agent) => (
-    agent.ref === author.ref
-    || agent.objectId === author.ref
-    || sameAgentName(agent.name, author.name)
-    || sameAgentName(agent.seat, author.name)
-  ));
+  /** 3 = the author's own id, 2 = its card, 1 = a shared title. 0 = not this agent. */
+  const rank = (agent: BoardAgent): number => {
+    if (agent.ref && agent.ref === author.ref) return 3;
+    if (agent.objectId === author.ref) return 2;
+    if (sameAgentName(agent.name, author.name) || sameAgentName(agent.seat, author.name)) return 1;
+    return 0;
+  };
+  let best: BoardAgent | undefined;
+  let bestRank = 0;
+  for (const agent of agents) {
+    const score = rank(agent);
+    // Strictly greater: the first card at a given strength keeps it, so board order
+    // still decides between two cards the author names equally well.
+    if (score > bestRank) { best = agent; bestRank = score; }
+  }
+  return best;
 }
 
 /**

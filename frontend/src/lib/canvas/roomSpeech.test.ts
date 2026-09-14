@@ -20,8 +20,8 @@ describe('roomSpeech', () => {
       said('No legal blockers.', { ref: 'card-counsel', name: 'Counsel' }),
       brain('Summary of both.'),
     ], [cfo, counsel], new Set());
-    expect(speech.get('agent:cfo-t2')).toEqual({ text: 'Eighteen months.', pending: false });
-    expect(speech.get('agent:counsel')).toEqual({ text: 'No legal blockers.', pending: false });
+    expect(speech.get('agent:cfo-t2')).toEqual({ text: 'Eighteen months.', pending: false, messageId: 2 });
+    expect(speech.get('agent:counsel')).toEqual({ text: 'No legal blockers.', pending: false, messageId: 3 });
     expect(speech.size).toBe(2);
   });
 
@@ -30,13 +30,35 @@ describe('roomSpeech', () => {
   });
 
   it('shows an agent still working as pending, until its reply lands', () => {
-    expect(roomSpeech([user('go')], [counsel], new Set(['card-counsel'])).get('agent:counsel')).toEqual({ text: null, pending: true });
+    expect(roomSpeech([user('go')], [counsel], new Set(['card-counsel'])).get('agent:counsel')).toEqual({ text: null, pending: true, messageId: null });
     expect(roomSpeech([user('go'), said('Done', { ref: 'card-counsel', name: 'Counsel' })], [counsel], new Set(['card-counsel']))
-      .get('agent:counsel')).toEqual({ text: 'Done', pending: false });
+      .get('agent:counsel')).toEqual({ text: 'Done', pending: false, messageId: 2 });
   });
 
   it('matches an author by name when the card carries no roster ref', () => {
     expect(roomSpeech([user('go'), said('Hi', { ref: 'agent-99', name: 'counsel' })], [counsel], new Set()).get('agent:counsel')?.text).toBe('Hi');
+  });
+
+  it('gives a reply to the agent whose ref it carries, not an earlier card wearing the same title', () => {
+    // The standup bug: a draft card NAMED "Security" sits before the rostered
+    // Security agent, so a first-match-wins lookup gave it that agent's reply —
+    // one head wearing someone else's words, and the real speaker left silent.
+    const draft: BoardAgent = { objectId: 'card-sec-draft', ref: null, name: 'Security', seat: null };
+    const rostered: BoardAgent = { objectId: 'card-sec', ref: 'sec-t7', name: 'Security Lead', seat: 'Security' };
+    const speech = roomSpeech([
+      user('standup'),
+      said('No open vulnerabilities.', { ref: 'sec-t7', name: 'Security' }),
+    ], [draft, rostered], new Set());
+    expect(speech.get('agent:sec-t7')?.text).toBe('No open vulnerabilities.');
+    expect(speech.has('agent:security')).toBe(false);
+  });
+
+  it('matches a card id only when no agent claims the ref outright', () => {
+    const other: BoardAgent = { objectId: 'cfo-t2', ref: 'ceo-t1', name: 'CEO', seat: 'CEO' };
+    // `other.objectId` collides with `cfo`'s ref: the exact ref owner must still win.
+    const speech = roomSpeech([user('go'), said('Runway is fine.', { ref: 'cfo-t2', name: 'CFO' })], [other, cfo], new Set());
+    expect(speech.get('agent:cfo-t2')?.text).toBe('Runway is fine.');
+    expect(speech.has('agent:ceo-t1')).toBe(false);
   });
 
   it('skips failure notices and replies from nobody at the table', () => {
