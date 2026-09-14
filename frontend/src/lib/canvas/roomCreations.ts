@@ -83,7 +83,7 @@ export const ROOM_CREATION_TOOL_NOTE = 'It stands in the Room: the canvas takes 
  * What Brain is told when it designs the room itself. It names the two fields that
  * make a `room` more than a title, because a title-only room is refused as a shell.
  */
-export const ROOM_DESIGN_TOOL_NOTE = 'It is the room this session meets in: the canvas takes the reader to the Room as soon as it lands, where it can be walked and rearranged. Set roomLayout to standup, boardroom, kitchen or openPlan, or send a complete roomDesign ({ floor: { width, depth }, wall: { height }, furniture: [{ kind, position: [x, 0, z], yaw, scale: [1, 1, 1] }] }).';
+export const ROOM_DESIGN_TOOL_NOTE = 'It is the room this session meets in: the canvas takes the reader to the Room as soon as it lands, where it can be walked and rearranged. Set roomLayout to standup, boardroom, kitchen or openPlan, or send a complete roomDesign ({ floor: { width, depth }, wall: { height }, furniture: [{ kind, position: [x, 0, z], yaw, scale: [1, 1, 1] }] }) using only valid furniture kinds (tableRound, tableLong, desk, counter, chair, stool, sofa, partition, whiteboard, screen, poster, shelf, fridge, plant, lamp, rug, model). Doors, lights and podiums are NOT kinds — use screen for projection and chair for seats. Prefer canvas_create_room when the user wants theater seating for N people. Content prose alone is refused as an empty shell.';
 
 /** The note a tool result carries for a kind that lands in the room, or null. */
 export function roomToolNote(kind: CreationObjectKind): string | null {

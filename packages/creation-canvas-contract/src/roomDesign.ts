@@ -591,14 +591,14 @@ export function roomDesignSummary(design: CanvasRoomDesign): RoomDesignSummary {
 
 // ─── Defensive read ──────────────────────────────────────────────────────────
 
-const MIN_FLOOR = 6;
-const MAX_FLOOR = 60;
+export const MIN_FLOOR = 6;
+export const MAX_FLOOR = 60;
 const MIN_WALL = 2.4;
 const MAX_WALL = 10;
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 8;
 /** More than this is not a room, it is a payload. */
-const MAX_FURNITURE = 400;
+export const MAX_FURNITURE = 400;
 
 function finite(value: unknown, fallback: number, min = -Infinity, max = Infinity): number {
   const n = typeof value === 'number' && Number.isFinite(value) ? value : fallback;

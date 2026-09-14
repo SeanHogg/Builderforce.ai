@@ -57,10 +57,25 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  /* The rail itself does not scroll — presets/furniture/walls scroll in
+     .designerScroll so Share stays pinned at the bottom of the rail. */
+  overflow: hidden;
   border-left: 1px solid var(--canvas-line);
   background: var(--canvas-panel);
   color: var(--canvas-ink);
+}
+
+.designerScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.designerShare {
+  flex: 0 0 auto;
+  border-bottom: 0;
+  border-top: 1px solid var(--canvas-line);
+  background: var(--canvas-panel);
 }
 
 .section {

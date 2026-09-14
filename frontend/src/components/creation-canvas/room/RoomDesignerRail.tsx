@@ -25,12 +25,13 @@ function numberIn(value: string, min: number, max: number): number | null {
 /**
  * THE ROOM DESIGNER — the rail that replaces the roster while the reader designs.
  *
- * Five things, top to bottom, in the order a person designing a room reaches for
- * them: which room this session meets in, a layout to start from, furniture to add
- * (or a model of their own to upload), the piece in hand, and the room's own walls
- * and floor — then sharing it, as a file or in the marketplace. It says what the
- * room holds before anything else (seats, pieces, floor area), because "will we all
- * fit" is the first question about any room.
+ * Five things above a pinned Share footer, in the order a person designing a room
+ * reaches for them: which room this session meets in, a layout to start from,
+ * furniture to add (or a model of their own to upload), the piece in hand, and the
+ * room's own walls and floor. Download / Upload / Sell stay fixed at the bottom of
+ * the rail (outside the scrolling middle) so they never scroll off a typical
+ * viewport. It says what the room holds before anything else (seats, pieces, floor
+ * area), because "will we all fit" is the first question about any room.
  *
  * Mounted only for a viewer who can edit the board (the surface asks the design hook);
  * every write goes through the board, so undo and collaborators see it as any edit.
@@ -76,6 +77,7 @@ export function RoomDesignerRail({ room, designer, palette, onPublishRoom }: {
 
   return (
     <aside className={styles.designer} aria-label={t('rail')} data-testid="room-designer">
+      <div className={styles.designerScroll}>
       <section className={styles.section}>
         <h4 className={styles.sectionHead}>{t('rooms')}</h4>
         <p className={styles.status} role="status">{t('summary', { seats: summary.seats, pieces: summary.pieces, area: Math.round(summary.area) })}</p>
@@ -168,7 +170,9 @@ export function RoomDesignerRail({ room, designer, palette, onPublishRoom }: {
         )}
       </section>
 
-      <section className={styles.section}>
+      </div>
+
+      <section className={`${styles.section} ${styles.designerShare}`} data-testid="room-designer-share">
         <h4 className={styles.sectionHead}>{t('share')}</h4>
         {room.active && onPublishRoom
           ? <>

@@ -51,6 +51,7 @@ import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
 import { COURSE_EXPORT_STANDARDS, emptyCourse } from '@/lib/courseLms';
 import { defaultCanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
+import { roomAuthorshipProblem } from '@/lib/canvas/roomAuthorship';
 
 // The union moved to `types.ts` so the derivation layer can be typed without importing
 // the registry it feeds. Re-exported here because every existing consumer imports it
@@ -896,6 +897,9 @@ function isAuthored(value: unknown): boolean {
  */
 export function emptyShellProblem(kind: CreationObjectKind, authored: Record<string, unknown>): string | null {
   if (SHELL_IS_LEGITIMATE.has(kind)) return null;
+  // A room's `content` is prose about the room, not the room — only a valid preset
+  // or a furniture design that survives sanitisation counts as authored work.
+  if (kind === 'room') return roomAuthorshipProblem(authored);
   const essential = ESSENTIAL_CONTENT_FIELDS[kind];
   if (essential && !essential.some((field) => isAuthored(authored[field]))) {
     return `A ${kind} without ${essential.join(' or ')} is an empty shell — a subject line is the envelope, not the letter, and the user cannot send or keep what was never written. Send the full authored message in fields.${essential[0]}.`;
