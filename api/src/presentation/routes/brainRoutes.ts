@@ -305,6 +305,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const directedAgents: { agentRef: string; agentName: string }[] = [];
     const seenAgents = new Set<string>();
     for (const m of body.messages ?? []) {
+      if (m.role && m.role !== 'user') continue;
       if (!m.metadata) continue;
       try {
         type Addressee = { kind?: string; ref?: unknown; name?: unknown; members?: Addressee[]; refs?: unknown };
