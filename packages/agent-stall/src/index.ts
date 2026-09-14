@@ -481,6 +481,19 @@ export function stallExhaustedNotice(model?: string | null, tried?: readonly str
   );
 }
 
+
+/**
+ * `tool_choice` for ONE recovery turn after a stall that narrated / omitted a tool
+ * call while tools were advertised.
+ *
+ * Returns `'required'` so the gateway (and Responses `toResponsesToolChoice`) forces
+ * a structured call instead of another prose promise. Returns `undefined` when the
+ * turn had nothing to call — leave `tool_choice` alone so ordinary chat is untouched.
+ */
+export function stallRecoveryToolChoice(input: Pick<StalledTurnInput, 'availableToolCount'>): 'required' | undefined {
+  return input.availableToolCount > 0 ? 'required' : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // MODEL FAILOVER — which model takes over once the recovery budget above is spent.
 //
@@ -519,9 +532,12 @@ function ids(list: Array<{ id?: string }> | undefined): string[] {
  *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
  *     nothing against the plan allowance) AND curated for tool calling, which is the
  *     capability that just failed. Best on both axes.
- *  2. **Coding pool** — curated for tool calling, plan-funded. We are failing over
- *     *because of* tool calling, so this outranks an arbitrary BYO model.
- *  3. **Anything else untried** — BYO first, then the rest of the plan pool.
+ *  2. **Remaining BYO** — another connected account, before the shared free pool. A
+ *     stall on BYO Grok that falls straight onto a shared coder surfaces as
+ *     `shared_byo_unused` even though Claude/Codex/etc. were connected and free to
+ *     try; preferring BYO here keeps the retry on the tenant's own keys.
+ *  3. **Coding pool** — curated for tool calling, plan-funded (shared).
+ *  4. **Rest of the plan pool.**
  *
  * A caller driving an AGENTIC turn should leave `data` unset: tier 4 is the general
  * plan pool, and falling a tool-loop onto a non-coder produces a run that flails and
@@ -544,8 +560,8 @@ export function nextFallbackModel(
 
   const tiers = [
     coding.filter((m) => byoSet.has(m)),
-    coding,
     byo,
+    coding,
     pool,
   ];
   for (const tier of tiers) {

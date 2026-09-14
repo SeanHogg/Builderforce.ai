@@ -73,7 +73,9 @@ import {
   promisesUnfinishedWork,
   continuationDirective,
   memoryReplayable,
+  stallRecoveryToolChoice,
 } from '@builderforce/agent-stall';
+import { resolveToolAlias } from '@builderforce/agent-tools';
 import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import {
   formatEvermindMemoryBlock,
@@ -1656,6 +1658,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // spending the single retry on the first stall left the user holding the SECOND
   // promise. The stall budget (`agent-stall`) bounds these recoveries on its own — a
   // run has no iteration ceiling to fall back on.
+  let forceToolChoice: 'required' | undefined;
   let announcementRecoveries = 0;
   // ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway what
   // kind of call it is. Until the run reaches its first code change the turns are
@@ -1851,6 +1854,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // still passes the confirm gate, the read-dedupe, the audit step and the
       // auto-link, exactly like a directly-advertised one.
       let call = rawCall;
+      // Common hallucinations (list_dir → list_files, …) remapped once here so every
+      // host's runTool sees the catalog name — confirm, dedupe, activity and dispatch
+      // all agree.
+      {
+        const aliased = resolveToolAlias(call.name);
+        if (aliased !== call.name) call = { ...call, name: aliased };
+      }
       if (isRouterTool(call.name)) {
         const routed = handleRouterCall(allTools ?? [], call.name, call.args);
         if ('result' in routed) {
@@ -2049,6 +2059,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       if (runTool && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+        // One recovery turn: force a structured call so Grok cannot answer the nudge
+        // with another prose promise. Cleared after the next complete().
+        forceToolChoice = stallRecoveryToolChoice(stallInput);
         await requeueWithNudge(stallRecoveryNudge(lastChance, shape));
         // Durable: "the loop caught this and re-prompted" is a fact a triage report must
         // still carry after a reload. Live-only, a reopened chat showed nine narrating
@@ -2130,6 +2143,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           // The new model starts with a full stall budget — the old one's failures say
           // nothing about this one, and carrying the count over would give it no chance.
           announcementRecoveries = 0;
+          forceToolChoice = stallRecoveryToolChoice(stallInput);
           convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
           c.streamingText = '';
           emit(c);
@@ -2254,9 +2268,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       };
       // A tool-less turn is conversation, not analysis or code.
       let turnRole: 'plan' | 'code' | 'chat' = tools ? phase : 'chat';
+      // Consume a one-shot forced tool_choice from stall recovery (if any).
+      const turnToolChoice = forceToolChoice;
+      forceToolChoice = undefined;
       const request = (role: string, excludeModels: string[]): Promise<StreamChatResult> => asLiveTurn(c, () => stream(
         {
-          messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
+          messages: working, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
           routingMode, maxTokens, reasoning, metadata, role,
           ...(excludeModels.length > 0 ? { excludeModels } : {}),
           signal: c.abort?.signal,

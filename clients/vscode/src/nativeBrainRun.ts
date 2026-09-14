@@ -41,6 +41,7 @@ import {
   type ChatMode,
   type EvermindRunHooks,
 } from "@seanhogg/builderforce-brain-embedded";
+import { resolveToolAlias } from "@builderforce/agent-tools";
 import { describeTool, type ToolDef } from "./fileTools";
 import { evaluatePolicyGate, renderPolicyDirectives, type PolicyGate } from "./policy";
 
@@ -290,15 +291,16 @@ export function createNativeRunTool(opts: {
   labels: Pick<NativeRunLabels, "blockedByPolicy">;
 }): (name: string, args: unknown) => Promise<unknown> {
   return async (name, args) => {
+    const resolved = resolveToolAlias(name);
     const record = argsRecord(args);
-    const label = toolLabel(opts.defs, name, record);
-    const decision = evaluatePolicyGate(opts.gates, name);
+    const label = toolLabel(opts.defs, resolved, record);
+    const decision = evaluatePolicyGate(opts.gates, resolved);
     if (decision.action === "block") {
       const message = opts.labels.blockedByPolicy(decision.reason);
       opts.events.onToolResult(label, false);
       return { ok: false, error: message };
     }
-    const def = opts.defs.find((candidate) => candidate.name === name);
+    const def = opts.defs.find((candidate) => candidate.name === resolved);
     if (!def) return { ok: false, error: `Unknown tool: ${name}` };
     opts.events.onToolStart(label);
     try {

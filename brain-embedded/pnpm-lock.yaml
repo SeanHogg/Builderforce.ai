@@ -14,6 +14,9 @@ importers:
       '@builderforce/agent-stall':
         specifier: link:../packages/agent-stall
         version: link:../packages/agent-stall
+      '@builderforce/agent-tools':
+        specifier: link:../packages/agent-tools
+        version: link:../packages/agent-tools
       '@testing-library/dom':
         specifier: ^10.4.1
         version: 10.4.1

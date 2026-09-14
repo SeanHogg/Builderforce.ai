@@ -11,6 +11,7 @@
 
 import type { Capability, CapabilityProvider } from "./capabilities.js";
 import type { ToolDefinition, ToolResult, ToolSchema, ToolContext } from "./tool.js";
+import { resolveToolAlias } from "./toolAliases.js";
 
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>();
@@ -76,7 +77,10 @@ export class ToolRegistry {
     args: Record<string, unknown>,
     ctx: ToolContext,
   ): Promise<ToolResult> {
-    const def = this.tools.get(name);
+    // Remap common hallucinations (list_dir → list_files, …) before the unknown-tool
+    // check so a structured call to a synonym actually runs the catalog tool.
+    const resolved = resolveToolAlias(name);
+    const def = this.tools.get(resolved);
     if (!def) {
       return {
         data: {
@@ -89,7 +93,7 @@ export class ToolRegistry {
       return {
         data: {
           ok: false,
-          error: `tool '${name}' is not available on this surface (missing capability: ${def.requires
+          error: `tool '${resolved}' is not available on this surface (missing capability: ${def.requires
             .filter((c) => !ctx.caps.capabilities.has(c))
             .join(", ")}).`,
         },

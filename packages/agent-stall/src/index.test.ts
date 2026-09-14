@@ -7,6 +7,7 @@ import {
   isEmptyTurn,
   catalogToolNamesMentionedIn,
   stallRecoveryNudge,
+  stallRecoveryToolChoice,
   stallExhaustedNotice,
   modelFailoverNotice,
   toolNamesMentionedIn,
@@ -437,5 +438,15 @@ describe('stallRecoveryNudge', () => {
   it('escalates only on the final attempt', () => {
     expect(stallRecoveryNudge(false)).not.toContain('last chance');
     expect(stallRecoveryNudge(true)).toContain('last chance');
+  });
+});
+
+describe('stallRecoveryToolChoice', () => {
+  it('forces tool_choice required when tools were advertised', () => {
+    expect(stallRecoveryToolChoice({ availableToolCount: 3 })).toBe('required');
+  });
+
+  it('leaves tool_choice alone for ordinary non-tool chat', () => {
+    expect(stallRecoveryToolChoice({ availableToolCount: 0 })).toBeUndefined();
   });
 });

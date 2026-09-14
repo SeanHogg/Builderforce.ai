@@ -24,15 +24,15 @@ describe('nextFallbackModel', () => {
     expect(nextFallbackModel(surface, ['xai-oauth/grok-4.3'])).toBe('byo-coder');
   });
 
-  it('falls to the coding pool next — we are failing over BECAUSE of tool calling', () => {
-    // A plain BYO chat model would be cheaper, but the curated tool-calling list is
-    // the one that addresses the actual failure.
-    expect(nextFallbackModel(surface, ['grok', 'byo-coder'])).toBe('coder-1');
+  it('prefers another connected BYO account before the shared coding pool', () => {
+    // Stall on BYO Grok with Claude still connected must not drop to a shared free
+    // coder (shared_byo_unused) while a connected account remains untried.
+    expect(nextFallbackModel(surface, ['grok', 'byo-coder'])).toBe('byo-chat');
   });
 
-  it('then any remaining BYO model, then the rest of the plan pool', () => {
-    expect(nextFallbackModel(surface, ['grok', 'byo-coder', 'coder-1', 'coder-2'])).toBe('byo-chat');
-    expect(nextFallbackModel(surface, ['grok', 'byo-coder', 'coder-1', 'coder-2', 'byo-chat'])).toBe('plan-a');
+  it('then the coding pool, then the rest of the plan pool', () => {
+    expect(nextFallbackModel(surface, ['grok', 'byo-coder', 'byo-chat'])).toBe('coder-1');
+    expect(nextFallbackModel(surface, ['grok', 'byo-coder', 'byo-chat', 'coder-1', 'coder-2'])).toBe('plan-a');
   });
 
   it('NEVER returns a model the run already burned', () => {
@@ -108,7 +108,8 @@ describe('chooseStallFailover', () => {
     });
     expect(tried).toEqual(['byo-coder']);
     expect(next).not.toBe('byo-coder');
-    expect(next).toBe('coder-1');
+    // Remaining BYO before shared coding pool.
+    expect(next).toBe('byo-chat');
   });
 
   it('stops at the budget rather than walking the catalog on the tenant\'s money', () => {

@@ -33,7 +33,7 @@ import { recordActionRating } from '../llm/actionRatings';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
-import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
+import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, stallRecoveryToolChoice, type ModelFallbackSurface } from '@builderforce/agent-stall';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock } from '@builderforce/agent-loop';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
@@ -1277,6 +1277,7 @@ export class BrainService {
     // Budget for the announced-but-untaken tool call recovery below (shared with the
     // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
     let announcementRecoveries = 0;
+    let forceToolChoice: 'required' | undefined;
     // The model this reply is currently talking to, plus every model already tried.
     // A model that burns its whole stall budget without emitting a tool call is spent;
     // the only remedy left is a DIFFERENT model, so the reply picks one itself.
@@ -1300,9 +1301,12 @@ export class BrainService {
      * turn, and a tool loop that falls onto a non-coder flails and ships nothing — the
      * same reason the proxy above is built `codingOnly`.
      */
+    const byoSeeds = byoAutoSeedModels(byoVendors, { agentic: true });
     const fallbackSurface: ModelFallbackSurface = {
-      codingModels: codingModelsForPlan(plan.effectivePlan, plan.premiumOverride),
-      byo: { models: byoAutoSeedModels(byoVendors, { agentic: true }).map((id) => ({ id })) },
+      // Fold BYO agentic flagships into codingModels so BYO ∩ coding is non-empty —
+      // codingModelsForPlan is the shared plan pool and correctly omits BYO-only ids.
+      codingModels: [...new Set([...byoSeeds, ...codingModelsForPlan(plan.effectivePlan, plan.premiumOverride)])],
+      byo: { models: byoSeeds.map((id) => ({ id })) },
     };
     let lastModel = pinnedModel ?? '';
     let lastFinish = '';
@@ -1370,6 +1374,7 @@ export class BrainService {
           const shape = stallShape(stallInput);
           if (shouldRecoverStalledTurn(stallInput)) {
             announcementRecoveries += 1;
+            forceToolChoice = stallRecoveryToolChoice(stallInput);
             convo.push({ role: 'assistant', content });
             convo.push({
               role: 'user',
@@ -1410,6 +1415,7 @@ export class BrainService {
               // The new model starts with a full stall budget — the old one's failures say
               // nothing about this one, and carrying the count over would give it no chance.
               announcementRecoveries = 0;
+              forceToolChoice = stallRecoveryToolChoice(stallInput);
               convo.push({ role: 'assistant', content });
               convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
               return { action: 'continue' };
@@ -1474,10 +1480,13 @@ export class BrainService {
       ports: {
         complete: async (ctx) => {
           iterations = ctx.step + 1;
+          const turnToolChoice = forceToolChoice;
+          forceToolChoice = undefined;
           const result = await this.completeTraced(service, {
             model: activeModel,
             messages: convo as never,
             tools,
+            ...(turnToolChoice ? { tool_choice: turnToolChoice } : {}),
             temperature: replyTemp,
             max_tokens: 1200,
           } as never, call);

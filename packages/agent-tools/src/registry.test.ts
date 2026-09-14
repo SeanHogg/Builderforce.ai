@@ -103,6 +103,24 @@ describe("ToolRegistry · capability gating", () => {
     expect(String(r.data.error)).not.toContain("write_file");
   });
 
+
+  it("remaps list_dir to list_files at the execute seam", async () => {
+    const r = await registry.dispatch("list_dir", { path: "." }, ctxFor(READ_ONLY));
+    expect(r.data.ok).toBe(true);
+    // Same args the catalog tool accepts — the alias must execute, not merely rename.
+    expect(r.data).toMatchObject({ ok: true });
+  });
+
+  it("remaps other common hallucinations (bash → run_command) before the capability gate", async () => {
+    // Remap first, THEN gate: the model hears "run_command is not available", not
+    // "unknown tool bash", so it can pick a tool that IS on this surface.
+    const bash = await registry.dispatch("bash", { command: "echo hi" }, ctxFor(READ_ONLY));
+    expect(bash.data.ok).toBe(false);
+    expect(String(bash.data.error)).toContain("run_command");
+    expect(String(bash.data.error)).toMatch(/not available on this surface/);
+    expect(String(bash.data.error)).not.toMatch(/unknown tool 'bash'/);
+  });
+
   it("rejects a duplicate registration instead of silently shadowing", () => {
     const r = new ToolRegistry();
     const def = defineTool({

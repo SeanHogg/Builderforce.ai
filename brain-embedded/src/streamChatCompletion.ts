@@ -142,7 +142,7 @@ export interface CompletionMetadata {
 export interface StreamChatOptions {
   messages: ChatCompletionMessage[];
   tools?: BrainToolSpec[];
-  tool_choice?: 'auto' | 'none';
+  tool_choice?: 'auto' | 'none' | 'required';
   model?: string;
   /** Hard-pin {@link model}. Used by an explicit user pick so validation cannot
    * silently succeed on a gateway substitute. */

@@ -1501,6 +1501,14 @@ export class LlmProxyService {
     const sanitizedBody = sanitizeRequestToolCalls(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
     const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
     const extraBody = stripStandardFields(sanitizedBody);
+    // Lift tools / tool_choice onto VendorCallParams. OpenAI-shaped vendors also see
+    // them via extraBody; Responses vendors (xai-oauth, openai-codex) read
+    // params.tools / params.toolChoice only — without this lift a forced
+    // `tool_choice: 'required'` from stall recovery never reaches Grok.
+    const liftedTools = Array.isArray((sanitizedBody as { tools?: unknown }).tools)
+      ? (sanitizedBody as { tools: unknown[] }).tools
+      : undefined;
+    const liftedToolChoice = (sanitizedBody as { tool_choice?: unknown }).tool_choice;
     // ── Client reasoning intent ─────────────────────────────────────────────
     // The optional vendor-neutral `reasoning: { level }` (VS Code "Thinking" toggle) is
     // validated into an `AgentExecParams` lever here and threaded to the vendor
@@ -1529,6 +1537,8 @@ export class LlmProxyService {
     const cacheTtl = resolveCacheTtl(sanitizedBody as unknown as Record<string, unknown>);
     const callParams = {
       messages,
+      ...(liftedTools ? { tools: liftedTools } : {}),
+      ...(liftedToolChoice !== undefined ? { toolChoice: liftedToolChoice } : {}),
       ...(sanitizedBody.max_tokens  != null ? { maxTokens:   sanitizedBody.max_tokens  } : {}),
       ...(sanitizedBody.temperature != null ? { temperature: sanitizedBody.temperature } : {}),
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),

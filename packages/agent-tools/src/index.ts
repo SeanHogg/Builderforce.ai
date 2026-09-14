@@ -13,6 +13,7 @@ export * from "./edit.js";
 export * from "./glob.js";
 export * from "./tool.js";
 export * from "./registry.js";
+export * from "./toolAliases.js";
 export * from "./engine.js";
 export * from "./spec.js";
 export * from "./core-tools.js";
