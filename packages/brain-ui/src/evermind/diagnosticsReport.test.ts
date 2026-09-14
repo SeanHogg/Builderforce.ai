@@ -162,4 +162,45 @@ describe('buildEvermindDiagnostics', () => {
     expect(report).not.toContain('NOT distilled (not_pinned)');
     expect(report).toContain('## Recommended next action');
   });
+
+it('includes coding gate, learn quality, path-to-serve, and flags narration-like self-learns', () => {
+    const report = buildEvermindDiagnostics({
+      data: head({
+        inferenceEnabled: false,
+        teacherModel: null,
+        quarantinedAt: '2026-07-26T16:10:30.453Z',
+        quarantineReason: 'coherence probe failed',
+        codingGate: {
+          qualified: false,
+          reason: 'quarantined',
+          bar: 0.9,
+          ratio: null,
+          headVersion: 1140,
+          evaluatedVersion: null,
+        },
+        recent: [{
+          id: 9, kind: 'text', version: 1140, at: NOW, weight: 1,
+          prompt: 'fix',
+          text: 'Let me re-read my last turn rather than assume. Looking back at it: I ran git_status and three tool calls.',
+          skipReason: 'not_pinned',
+        }],
+        eval: { version: 1140, at: NOW, baseLoss: 2.9, newLoss: 3.1, delta: -0.2, evalSize: 6 },
+      }),
+      host: 'vscode',
+      probe: {
+        version: 1140, mode: 'readiness', ready: false, passRate: 0,
+        samples: [{ prompt: 'Summarize', text: 'e e eed', coherent: false, failure: 'non-words', detail: 'invented tokens' }],
+      },
+      now: NOW,
+    });
+    expect(report).toContain('## Path to serve (local LLM)');
+    expect(report).toContain('BLOCKED (quarantined)');
+    expect(report).toContain('## Coding gate (IDE)');
+    expect(report).toContain('Reason: `quarantined`');
+    expect(report).toContain('## Learn quality');
+    expect(report).toContain('Narration-like self-learns');
+    expect(report).toContain('narration-like');
+    expect(report).toContain('teacher is unset');
+    expect(report).toContain('held-out loss REGRESSED');
+  });
 });

@@ -206,11 +206,117 @@ function recentSection(d: EvermindConsoleData): string[] {
       : status.state === 'fault'
         ? `NOT distilled (${status.reason}${status.detail ? `: ${status.detail}` : ''})`
         : status.state === 'self' ? 'self-learned from run output' : 'weight delta';
-    lines.push(`- v${e.version} ×${e.weight} ${when} [${e.kind}] ${provenance}`);
+    const narration = e.text && looksLikeRunNarration(e.text) ? ' · ⚠ narration-like' : '';
+    lines.push(`- v${e.version} ×${e.weight} ${when} [${e.kind}] ${provenance}${narration}`);
     if (e.prompt) lines.push(`  - task: ${clamp(e.prompt, 200)}`);
-    if (e.text) lines.push(`  - learned: ${clamp(e.text, 300).replace(/\n/g, ' ')}`);
+    if (e.text) lines.push(`  - learned: ${clamp(e.text, 500).replace(/\n/g, ' ')}`);
   }
   lines.push('');
+  return lines;
+}
+
+
+/** Narration / mid-fix chatter that should not train the head when teacher is none. */
+const NARRATION_HINTS = [
+  /\blet me\b/i,
+  /\bi('ll| will)\b/i,
+  /\bnow (let|i|the)\b/i,
+  /\blooking (back|at)\b/i,
+  /\btool calls?\b/i,
+  /\brun_command\b/i,
+  /\bgit_status\b/i,
+  /\bsettled\b/i,
+  /\brather than (just )?assert\b/i,
+  /\bmy (previous|last) turn\b/i,
+];
+
+function looksLikeRunNarration(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 40) return false;
+  let hits = 0;
+  for (const re of NARRATION_HINTS) if (re.test(t)) hits += 1;
+  return hits >= 2;
+}
+
+/** Coding-eval gate — missing from older reports, required for "use as local IDE LLM". */
+function codingGateSection(d: EvermindConsoleData): string[] {
+  const g = d.codingGate;
+  if (!g) {
+    return [
+      '## Coding gate (IDE)',
+      '',
+      '_Not reported by this server — upgrade the API to include `codingGate` on the console payload._',
+      '',
+    ];
+  }
+  const pct = g.ratio == null ? null : Math.round(g.ratio * 100);
+  const barPct = Math.round(g.bar * 100);
+  const lines = [
+    '## Coding gate (IDE)',
+    '',
+    `- Qualified for coding turns: ${g.qualified ? 'yes' : 'no'}`,
+    `- Reason: \`${g.reason}\``,
+    `- Bar: ${barPct}% of frontier baseline on this head version`,
+  ];
+  if (pct != null) lines.push(`- Score vs baseline: ${pct}%`);
+  if (g.evaluatedVersion != null) lines.push(`- Eval recorded for: v${g.evaluatedVersion} (head is v${g.headVersion})`);
+  if (g.baselineModel) lines.push(`- Baseline model: ${g.baselineModel}`);
+  if (g.dataset) lines.push(`- Dataset: ${g.dataset}`);
+  lines.push('');
+  return lines;
+}
+
+/**
+ * Learn-quality summary — answers "is training helping or poisoning recall?"
+ * Self-learned raw-run text with no teacher is the usual path into quarantine.
+ */
+function learnQualitySection(d: EvermindConsoleData): string[] {
+  const recent = d.recent;
+  let distilled = 0, self = 0, fault = 0, delta = 0, narration = 0;
+  for (const e of recent) {
+    const status = evermindLearnedStatus(e);
+    if (e.kind === 'delta' || status.state === 'delta') { delta += 1; continue; }
+    if (status.state === 'distilled') distilled += 1;
+    else if (status.state === 'fault') fault += 1;
+    else self += 1;
+    if (e.text && looksLikeRunNarration(e.text)) narration += 1;
+  }
+  const lines = [
+    '## Learn quality',
+    '',
+    `- Teacher pinned: ${d.teacherModel ? d.teacherModel : 'no — raw runs self-learn into the head'}`,
+    `- Recent mix (of ${recent.length}): distilled ${distilled} · self-learned ${self} · teacher-fault ${fault} · weight-delta ${delta}`,
+    `- Narration-like self-learns (heuristic): ${narration} of ${recent.length}`,
+  ];
+  if (!d.teacherModel && self > 0) {
+    lines.push('- Signal: teacher is unset while self-learned run text is landing — pin a frontier teacher before expecting coherence/coding gates to recover.');
+  }
+  if (narration > 0) {
+    lines.push(`- Signal: ${narration} recent memor(y/ies) look like agent mid-turn narration ("let me…", tool-call play-by-play), not clean task→answer exemplars.`);
+  }
+  if (d.eval && d.eval.delta < 0 && self + narration > distilled) {
+    lines.push('- Signal: held-out loss REGRESSED while learning is mostly raw/self — stop absorbing run chatter or pin a teacher before more merges.');
+  }
+  lines.push('');
+  return lines;
+}
+
+/** Explicit checklist toward "Evermind as the local LLM". */
+function pathToServeSection(d: EvermindConsoleData, probe: EvermindProbeResult | null | undefined): string[] {
+  const ready = probe ? (probe.ready ? 'PASS' : 'FAIL') : 'not run this session';
+  const coding = d.codingGate
+    ? (d.codingGate.qualified ? 'PASS' : `FAIL (${d.codingGate.reason})`)
+    : 'unknown (server omitted codingGate)';
+  const lines = [
+    '## Path to serve (local LLM)',
+    '',
+    `- [ ] Coherence / quarantine cleared: ${d.quarantinedAt ? 'BLOCKED (quarantined)' : 'ok'}`,
+    `- [ ] Readiness probe: ${ready}`,
+    `- [ ] Teacher pinned for clean exemplars: ${d.teacherModel ? `ok (${d.teacherModel})` : 'MISSING'}`,
+    `- [ ] Coding gate (≥90% frontier): ${coding}`,
+    `- [ ] Inference switch: ${d.inferenceEnabled ? 'ON' : 'off'}`,
+    '',
+  ];
   return lines;
 }
 
@@ -251,9 +357,12 @@ export function buildEvermindDiagnostics(input: EvermindDiagnosticsInput): strin
     probe,
   });
   lines.push('## Recommended next action', '', `- ${next.title}`, `- Why: ${next.detail}`, `- Go to: ${next.destination}`, '');
+  lines.push(...pathToServeSection(data, probe));
+  lines.push(...codingGateSection(data));
+  lines.push(...learnQualitySection(data));
   if (targets && targets.length > 0) lines.push(...targetsSection(targets));
   if (probe) lines.push(...probeSection(probe));
-  else lines.push('## Test bench', '', '_Not run in this session — run one before exporting to include what the model actually produces._', '');
+  else lines.push('## Test bench', '', '_Not run in this session — run readiness (Test → Readiness check) before exporting so the report includes verbatim model output._', '');
   if (analysis) lines.push(...analysisSection(analysis));
   lines.push(...recentSection(data));
 

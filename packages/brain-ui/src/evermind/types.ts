@@ -798,10 +798,10 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   tabTest: 'Test',
   tabCheck: 'Check',
   tabMaintain: 'Maintain',
-  diagnosticsTitle: 'Diagnostics',
+    diagnosticsTitle: 'Diagnostics',
   diagnosticsHint:
-    'Copy everything on this panel — the model’s state, what it actually produced, what it has learned and any problems found — as text you can paste to support or to an AI assistant.',
-  diagnosticsCta: 'Copy diagnostics',
+    'Copy a full triage pack: model state, path-to-serve checklist, coding gate, learn-quality mix (distilled vs raw-run), readiness samples with verbatim output, and recent memories. Run readiness first when you can — the report says when it was skipped.',
+  diagnosticsCta: 'Copy full diagnostics',
   diagnosticsCopied: 'Copied to your clipboard.',
   diagnosticsShow: 'Show report',
   diagnosticsHide: 'Hide report',
