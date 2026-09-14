@@ -131,6 +131,8 @@ export interface CanvasRoomSurfaceProps<T extends Canvas3DNode> {
   speech?: ReadonlyMap<string, RoomSpeech>;
   /** Arrive with the session already open — a model comparison lands in depth. */
   sessionInitiallyOpen?: boolean;
+  /** Show a speech bubble's source message in the chat. */
+  onSelectSpeech?: (messageId: number) => void;
   onExit: () => void;
 }
 
@@ -148,6 +150,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   onPublishRoom,
   speech,
   sessionInitiallyOpen = false,
+  onSelectSpeech,
   onExit,
 }: CanvasRoomSurfaceProps<T>) {
   const t = useTranslations('creationCanvas.surface.room');
