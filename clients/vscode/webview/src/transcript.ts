@@ -19,6 +19,7 @@ import {
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
+  formatAssistantTranscriptHeading,
   traceWithPersistedSteps,
   createPayloadBudget,
   midRunNotice,
@@ -168,7 +169,9 @@ export function buildTranscript(input: TranscriptInput): string {
         for (const img of node.images) lines.push(`[image: ${img.name ?? img.url}]`);
         break;
       case 'assistant': {
-        lines.push(`## ${input.assistantName}`);
+        // Stamp the resolved model on every assistant block so a multi-model paste
+        // attributes each output — not only the aggregate "Models used" / "Per model" lines.
+        lines.push(formatAssistantTranscriptHeading(input.assistantName, node.message));
         // Split the vendor's `<think>` blocks exactly as the UI does, so the report
         // shows what the USER saw. Dumping raw control tags made a reply look
         // mangled in the report when it had rendered fine, and — worse — hid the

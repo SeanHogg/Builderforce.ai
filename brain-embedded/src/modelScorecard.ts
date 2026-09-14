@@ -10,6 +10,14 @@
  *
  * Pure over the recorded trace, like `brainTriage.ts` and `runProgress.ts`, so every
  * copy surface renders the identical lines.
+ *
+ * The ordered {@link modelTurnLog} answers a question the aggregate scorecard cannot:
+ * "which specific outputs were Grok rambling?" — each `llm.complete` in run order,
+ * with its model, toolCalls, and (when the vendor reported it) raw upstream calls.
+ *
+ * NOTE: clearer diagnostics do NOT fix Grok tool calling. A run whose client is
+ * ahead of the gateway (e.g. client 2026.9.63 / API 2026.9.32) still lacks the
+ * Responses adapter on the production API until that deploy lands.
  */
 import type { BrainTraceEvent } from './brainTriage';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
@@ -151,4 +159,106 @@ export function formatModelScorecard(scores: ModelScore[]): string[] {
     lines.push(`  • ${s.model}: ${parts.join(' · ')}${flag}`);
   }
   return lines;
+}
+
+/** One `llm.complete` (or failed completion) in run order — the per-output half of the scorecard. */
+export interface ModelTurn {
+  /** 1-based index across this run's completions. */
+  index: number;
+  /** Model that answered (resolved). */
+  model: string;
+  /** What was requested when it differed from {@link model} (failover / downgrade). */
+  requestedModel?: string;
+  toolCalls: number;
+  /** True when the turn produced text and no tool call. */
+  textOnly: boolean;
+  /** Present when the vendor reported its raw response (Responses vendors). */
+  upstreamFunctionCalls?: number;
+  upstreamRecovered?: number;
+  durationMs?: number;
+  /** Completions that failed outright. */
+  failed?: boolean;
+  /** Call markup present that no dialect lifted. */
+  unliftedCallMarkup?: boolean;
+}
+
+/**
+ * Every `llm.complete` in first-seen order — including failures — so a pasted report
+ * attributes each output without reconstructing from the aggregate "Per model" counts.
+ */
+export function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[] {
+  const turns: ModelTurn[] = [];
+  for (const ev of events) {
+    if (ev.label !== 'llm.complete') continue;
+    const model = modelOf(ev);
+    if (!model) continue;
+    const args = ev.args as {
+      toolCalls?: unknown;
+      requestedModel?: unknown;
+      upstreamFunctionCalls?: unknown;
+      upstreamRecovered?: unknown;
+      unliftedCallMarkup?: unknown;
+    } | undefined;
+    const requested = typeof args?.requestedModel === 'string' && args.requestedModel && args.requestedModel !== 'default' && args.requestedModel !== model
+      ? args.requestedModel
+      : undefined;
+    if (ev.category === 'error') {
+      turns.push({
+        index: turns.length + 1,
+        model,
+        ...(requested ? { requestedModel: requested } : {}),
+        toolCalls: 0,
+        textOnly: false,
+        failed: true,
+        ...(typeof ev.durationMs === 'number' ? { durationMs: ev.durationMs } : {}),
+      });
+      continue;
+    }
+    if (ev.category !== 'llm') continue;
+    const calls = typeof args?.toolCalls === 'number' ? args.toolCalls : 0;
+    const turn: ModelTurn = {
+      index: turns.length + 1,
+      model,
+      ...(requested ? { requestedModel: requested } : {}),
+      toolCalls: calls,
+      textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
+      ...(typeof ev.durationMs === 'number' ? { durationMs: ev.durationMs } : {}),
+      ...(args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}),
+    };
+    if (typeof args?.upstreamFunctionCalls === 'number') {
+      turn.upstreamFunctionCalls = args.upstreamFunctionCalls;
+      if (typeof args.upstreamRecovered === 'number') turn.upstreamRecovered = args.upstreamRecovered;
+    }
+    turns.push(turn);
+  }
+  return turns;
+}
+
+/** One turn-log line: `1. xai-oauth/grok-4.6 · 0 tool call(s) · text-only · raw response: 0 structured call(s)`. */
+function formatOneTurn(t: ModelTurn): string {
+  const model = t.requestedModel ? `${t.model} (requested ${t.requestedModel})` : t.model;
+  const parts: string[] = [];
+  if (t.failed) {
+    parts.push('FAILED');
+  } else {
+    parts.push(`${t.toolCalls} tool call(s)`);
+    if (t.textOnly) parts.push('text-only');
+  }
+  if (typeof t.upstreamFunctionCalls === 'number') {
+    parts.push(`raw response: ${t.upstreamFunctionCalls} structured call(s)`);
+  }
+  if (t.upstreamRecovered) parts.push(`${t.upstreamRecovered} rebuilt from the final frame`);
+  if (t.unliftedCallMarkup) parts.push('⚠ unlifted call markup');
+  if (typeof t.durationMs === 'number') parts.push(`${t.durationMs}ms`);
+  return `  ${t.index}. ${model} · ${parts.join(' · ')}`;
+}
+
+/**
+ * Ordered per-turn model/toolCalls log. Emitted whenever the run had at least one
+ * named completion — the scorecard aggregates; this lists each output so a multi-model
+ * run is attributable without counting.
+ */
+export function formatModelTurnLog(turns: ModelTurn[]): string[] {
+  if (!turns.length) return [];
+  return ['Turn log:', ...turns.map(formatOneTurn)];
 }

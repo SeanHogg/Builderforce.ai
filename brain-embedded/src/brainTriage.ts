@@ -14,7 +14,8 @@ import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
-import { formatModelScorecard, modelScorecard, type ModelScore } from './modelScorecard';
+import { formatModelScorecard, formatModelTurnLog, modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
+import { parseMessageProvenance } from './provenance';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { READ_FILE_TOOL } from './toolResultBudget';
@@ -551,6 +552,8 @@ export interface BrainDiagnostics {
   modelsUsed: string[];
   /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
   modelScores: ModelScore[];
+  /** Each `llm.complete` in run order — which model produced which output. */
+  modelTurns: ModelTurn[];
   /** Distinct Evermind/SSM artifacts among them. */
   evermindUsed: string[];
   /** Turns where the resolved model differed from what was requested. */
@@ -780,6 +783,7 @@ export function computeBrainDiagnostics(
 
   const modelsUsed = modelsUsedInTrace(events);
   const modelScores = modelScorecard(events);
+  const modelTurns = modelTurnLog(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
 
@@ -863,6 +867,7 @@ export function computeBrainDiagnostics(
     largestToolResult,
     modelsUsed,
     modelScores,
+    modelTurns,
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
@@ -997,6 +1002,11 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // WHICH model did what. "Models used: a, b" cannot say that one of them never called
   // a tool, or that its calls were written in markup nothing parsed; these lines can.
   lines.push(...formatModelScorecard(d.modelScores ?? []));
+  // Ordered per-output attribution — the scorecard aggregates; this lists each
+  // llm.complete so "which outputs were Grok rambling" is answerable without counting.
+  // Clearer diagnostics do NOT fix Grok tool calling: production API must include the
+  // Responses adapter deploy (a client ahead of the gateway still lacks it).
+  lines.push(...formatModelTurnLog(d.modelTurns ?? []));
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(', ')}`);
@@ -1111,7 +1121,10 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   if (messages.length) {
     lines.push('', `--- Conversation (${messages.length}) ---`);
     for (const m of messages) {
-      lines.push(`[${m.createdAt ?? ''}] ${m.role.toUpperCase()}: ${cap(m.content, 1500)}`);
+      const who = m.role.toUpperCase();
+      const model = m.role === 'assistant' ? parseMessageProvenance(m)?.model : undefined;
+      const stamp = model ? ` · ${model}` : '';
+      lines.push(`[${m.createdAt ?? ''}] ${who}${stamp}: ${cap(m.content, 1500)}`);
     }
   }
 

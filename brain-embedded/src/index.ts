@@ -417,8 +417,13 @@ export {
   asProvenanceAccount,
   isConnectedAccountUnused,
   lastServedModel,
+  formatAssistantTranscriptHeading,
 } from './provenance';
 export type { MessageProvenance, ProvenanceAccount } from './provenance';
+
+// Per-model / per-turn scorecard for copied diagnostics (aggregate + ordered turn log).
+export { modelScorecard, formatModelScorecard, modelTurnLog, formatModelTurnLog } from './modelScorecard';
+export type { ModelScore, ModelTurn } from './modelScorecard';
 
 // A reply the user stopped mid-stream — kept, attributed, and never replayed to a model
 export { STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, stoppedTurnMetadata, isStoppedTurn } from './stoppedTurn';

@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.64] — The agent acts when it stalls, and common tool names just work
+
+- **A model that only describes what it will do is made to do it.** When a model answered with a promise ("I'll search the code…") instead of a real tool call, the chat nudged it and hoped. The retry now requires a real tool call, so a model like Grok can't answer the nudge with another promise.
+- **Familiar tool names run instead of failing.** Models used to other coding tools often ask for `list_dir`, `bash`, `grep` or `str_replace`, and those calls failed as "unknown tool". They now run the matching BuilderForce tool.
+- **Your own connected accounts are tried first when a model gives up.** When a model on one of your connected accounts stalled, the retry could jump straight to the shared pool while your other accounts (Claude, Codex, …) sat unused. It now tries your other connected accounts first.
+
 ## [2026.9.63] — A fresh build of 2026.9.62
 
 - **Nothing changes in how the extension works.** This release is 2026.9.62 rebuilt on the latest shared chat components. Grok's tool calls still reach the agent, and the copied diagnostics still show how many real tool calls each Grok turn sent.

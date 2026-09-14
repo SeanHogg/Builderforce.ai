@@ -1,11 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { formatModelScorecard, modelScorecard } from './modelScorecard';
+import { formatModelScorecard, formatModelTurnLog, modelScorecard, modelTurnLog } from './modelScorecard';
 import type { BrainTraceEvent } from './brainTriage';
 
 function turn(
   model: string,
   toolCalls: number,
-  opts: { unliftedCallMarkup?: boolean; upstream?: { calls: number; recovered?: number } } = {},
+  opts: {
+    unliftedCallMarkup?: boolean;
+    upstream?: { calls: number; recovered?: number };
+    requestedModel?: string;
+    durationMs?: number;
+  } = {},
 ): BrainTraceEvent {
   return {
     ts: new Date(0).toISOString(),
@@ -14,10 +19,12 @@ function turn(
     args: {
       model,
       toolCalls,
+      ...(opts.requestedModel ? { requestedModel: opts.requestedModel } : {}),
       ...(opts.unliftedCallMarkup ? { unliftedCallMarkup: true } : {}),
       ...(opts.upstream ? { upstreamFunctionCalls: opts.upstream.calls, upstreamRecovered: opts.upstream.recovered ?? 0 } : {}),
     },
     textChars: toolCalls ? 0 : 60,
+    ...(opts.durationMs != null ? { durationMs: opts.durationMs } : {}),
   };
 }
 
@@ -120,5 +127,34 @@ describe('formatModelScorecard', () => {
 
   it('stays silent for a single-model run with nothing to flag', () => {
     expect(formatModelScorecard(modelScorecard([turn('anthropic/claude-sonnet-5', 3)]))).toEqual([]);
+  });
+});
+
+describe('modelTurnLog / formatModelTurnLog', () => {
+  it('lists each llm.complete in order with model, toolCalls, text-only, upstream, duration', () => {
+    const turns = modelTurnLog([
+      turn('xai-oauth/grok-4.6', 0, { upstream: { calls: 0 }, durationMs: 1200 }),
+      turn('direct/qwen/qwen3.8-max', 2, { durationMs: 800 }),
+      turn('xai-oauth/grok-4.6', 0, { requestedModel: 'anthropic/claude-opus-5', upstream: { calls: 0 } }),
+    ]);
+    expect(turns).toEqual([
+      { index: 1, model: 'xai-oauth/grok-4.6', toolCalls: 0, textOnly: true, upstreamFunctionCalls: 0, upstreamRecovered: 0, durationMs: 1200 },
+      { index: 2, model: 'direct/qwen/qwen3.8-max', toolCalls: 2, textOnly: false, durationMs: 800 },
+      { index: 3, model: 'xai-oauth/grok-4.6', requestedModel: 'anthropic/claude-opus-5', toolCalls: 0, textOnly: true, upstreamFunctionCalls: 0, upstreamRecovered: 0 },
+    ]);
+    const lines = formatModelTurnLog(turns);
+    expect(lines[0]).toBe('Turn log:');
+    expect(lines[1]).toBe('  1. xai-oauth/grok-4.6 · 0 tool call(s) · text-only · raw response: 0 structured call(s) · 1200ms');
+    expect(lines[2]).toBe('  2. direct/qwen/qwen3.8-max · 2 tool call(s) · 800ms');
+    expect(lines[3]).toBe('  3. xai-oauth/grok-4.6 (requested anthropic/claude-opus-5) · 0 tool call(s) · text-only · raw response: 0 structured call(s)');
+  });
+
+  it('includes a failed completion and stays empty when nothing ran', () => {
+    expect(formatModelTurnLog([])).toEqual([]);
+    const lines = formatModelTurnLog(modelTurnLog([
+      { ts: '', category: 'error', label: 'llm.complete', args: { model: 'xai-oauth/grok-4.6' }, isError: true },
+    ]));
+    expect(lines[1]).toContain('FAILED');
+    expect(lines[1]).toContain('xai-oauth/grok-4.6');
   });
 });

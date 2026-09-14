@@ -429,3 +429,25 @@ describe('memory-first answers in the diagnostics', () => {
     expect(d.likelyCause).not.toBe('memory-answered');
   });
 });
+
+describe('formatBrainDiagnostics turn log', () => {
+  it('includes an ordered Turn log so each output is attributable', () => {
+    const events: BrainTraceEvent[] = [
+      {
+        ts: '', category: 'llm', label: 'llm.complete',
+        args: { model: 'xai-oauth/grok-4.6', toolCalls: 0, upstreamFunctionCalls: 0 },
+        textChars: 80, durationMs: 500,
+      },
+      {
+        ts: '', category: 'llm', label: 'llm.complete',
+        args: { model: 'direct/qwen/qwen3.8-max', toolCalls: 2 },
+        textChars: 0, durationMs: 400,
+      },
+    ];
+    const report = formatBrainDiagnostics(computeBrainDiagnostics(events)).join('\n');
+    expect(report).toContain('Turn log:');
+    expect(report).toContain('1. xai-oauth/grok-4.6 · 0 tool call(s) · text-only · raw response: 0 structured call(s) · 500ms');
+    expect(report).toContain('2. direct/qwen/qwen3.8-max · 2 tool call(s) · 400ms');
+    expect(report).toContain('Per model:');
+  });
+});
