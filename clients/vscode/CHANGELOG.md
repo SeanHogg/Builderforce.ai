@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.67] — A failed folder search is not proof a file is empty
+
+- **A file-scoped search still runs after a folder search found nothing.** When a folder search came back empty, a follow-up search of a file in that folder was answered from the empty result ("the term does not appear") instead of actually searching the file. A later read of the same file could then show the term sitting there. The file search now runs.
+
 ## [2026.9.66] — The agent stops re-reading lines it already has
 
 - **A file already in view is not fetched again as overlapping slices.** When the agent paged through a large file, later reads that sat inside an earlier window were injected in full, so it circled the same lines. Those overlapping windows now return a short stub pointing at the earlier result, so the run can page forward instead of circling.
