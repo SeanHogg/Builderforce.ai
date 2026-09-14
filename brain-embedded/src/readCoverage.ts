@@ -433,8 +433,16 @@ export class ReadCoverage {
    * is exactly what re-running the search would return, without running it.
    *
    * Measured on a ticket-review run: one directory searched nine times and one file six,
-   * mostly re-asking a question an earlier, broader search had already answered. Null when
-   * no complete covering result is held — then the search runs as normal.
+   * mostly re-asking a question an earlier, broader search had already answered.
+   *
+   * A derived 0 is never returned. Chat #111: a directory search for `addressedTo`
+   * under `Builderforce.ai/clients` came back `total:0 truncated:false` even though
+   * `VsCodeChatSurface.tsx` contains the term; the file-scoped retry was then answered
+   * from that parent ("the term does not appear") and the run concluded composers never
+   * pass `addressedTo`. A 0 from a parent is the most expensive lie this guard can tell —
+   * the tool's own copy treats `truncated:false` as proof of absence — so the narrower
+   * search must actually run. File-scope uses a different backend (`searchOneFile`) and
+   * is the recovery path. Null when no complete covering result with matches is held.
    */
   derivedSearch(tool: string, args: unknown): Record<string, unknown> | null {
     if (tool !== 'search_code') return null;
@@ -454,6 +462,9 @@ export class ReadCoverage {
       const matches = (result.matches as Array<Record<string, unknown>>).filter(
         (m) => typeof m.path === 'string' && isUnderDir(m.path, scope),
       );
+      // A derived 0 is not proof of absence — the parent may have been a false
+      // negative (chat #111). Let the narrower search actually run.
+      if (matches.length === 0) continue;
       return {
         ok: true,
         query: wanted.query,

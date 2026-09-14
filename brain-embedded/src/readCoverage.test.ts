@@ -290,7 +290,21 @@ describe('ReadCoverage · derived searches', () => {
     cov.record('search_code', { query: 'other' });
     cov.cacheResult('search_code', { query: 'other' }, { result: wide, anchor: {} });
     expect(cov.derivedSearch('search_code', { query: 'resolveRepo', path: 'frontend' })).toBeNull();
-    expect(cov.derivedSearch('search_code', { query: 'other', path: 'api/srcx' })?.total).toBe(0);
+    // A wider search that held no matches in this subtree is NOT proof of absence —
+    // the narrower search must actually run (chat #111).
+    expect(cov.derivedSearch('search_code', { query: 'other', path: 'api/srcx' })).toBeNull();
+  });
+
+  it('does not stub a file-scoped retry from a parent 0-match (chat #111)', () => {
+    const cov = new ReadCoverage();
+    const clients = 'Builderforce.ai/clients';
+    const file = `${clients}/vscode/webview/src/chat/VsCodeChatSurface.tsx`;
+    cov.record('search_code', { query: 'addressedTo', path: clients });
+    cov.cacheResult('search_code', { query: 'addressedTo', path: clients }, {
+      result: { ok: true, query: 'addressedTo', total: 0, truncated: false, matches: [] },
+      anchor: {},
+    });
+    expect(cov.derivedSearch('search_code', { query: 'addressedTo', path: file })).toBeNull();
   });
 
   it('derives nothing for an unscoped search or another tool', () => {
