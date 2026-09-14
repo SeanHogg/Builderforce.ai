@@ -2413,6 +2413,20 @@ function parseDirectedRecipients(msg) {
 function isDirectedToParticipant(msg) {
   return parseDirectedRecipients(msg).length > 0;
 }
+function directedAgentRecipients(recipient) {
+  if (recipient == null) return [];
+  const one = recipient;
+  const list = Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const r of list) {
+    if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
+    if (seen.has(r.ref)) continue;
+    seen.add(r.ref);
+    out.push({ kind: "agent", ref: r.ref, name: typeof r.name === "string" && r.name ? r.name : r.ref });
+  }
+  return out;
+}
 function activeMentionToken(text, caret) {
   const at = text.lastIndexOf("@", Math.max(0, caret - 1));
   if (at < 0 || at >= caret) return null;
@@ -3477,6 +3491,36 @@ function isUnderDir(p, dir) {
   const path = normalizePathArg(p);
   return path === dir || path.startsWith(`${dir}/`);
 }
+var READ_WINDOW_DEFAULT = 2e3;
+function asPositiveInt(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+function requestedReadWindow(args) {
+  const start = asPositiveInt(args.offset, 1);
+  const limit = asPositiveInt(args.limit, READ_WINDOW_DEFAULT);
+  return { start, end: start + limit - 1 };
+}
+function servedReadWindow(result) {
+  const data = resultObject(result);
+  if (!data || data.ok === false) return null;
+  const start = asPositiveInt(data.offset, 1);
+  const content = typeof data.content === "string" ? data.content : "";
+  const returned = content === "" ? 0 : content.split("\n").length;
+  if (returned <= 0) return null;
+  let end = start + returned - 1;
+  if (data.truncated !== true && typeof data.totalLines === "number" && data.totalLines >= start) {
+    end = Math.max(end, Math.floor(data.totalLines));
+  }
+  return { start, end };
+}
+function spanContains(outer, inner) {
+  return inner.start >= outer.start && inner.end <= outer.end;
+}
+function clipRequestedToEof(want, covering) {
+  const data = resultObject(covering);
+  if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
+  return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
+}
 var REVISIT_NUDGE_AT = 3;
 var REVISIT_HARD_AT = 5;
 var MAX_REMEMBERED_ARGS = 8;
@@ -3589,6 +3633,41 @@ var ReadCoverage = class _ReadCoverage {
     for (const [key, read] of [...this.exact.entries()]) {
       if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }
+  }
+  /**
+   * Answer a `read_file` whose window is already inside an earlier successful window
+   * of the SAME file. Chat #109's fourteen overlapping reads of one service file were
+   * different exact-repeat keys (offset 1050, then 1080, then 1105) so the stub never
+   * ran; the circling advisory fired and was ignored; the bytes still filled the
+   * window. This is that stub for overlapping windows.
+   *
+   * A jump to lines the earlier read did not return, and a page that extends past a
+   * truncated window, return null — those still need the disk. An edit of the file
+   * forgets the covering cache via {@link invalidate}.
+   */
+  coveredRead(tool, args) {
+    if (tool !== "read_file") return null;
+    const wanted = canonicalReadArgs(tool, args);
+    const path = typeof wanted.path === "string" ? wanted.path : "";
+    if (!path) return null;
+    const want = requestedReadWindow(wanted);
+    for (const read of this.exact.values()) {
+      if (read.tool !== "read_file" || !read.cached) continue;
+      const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
+      if (earlierPath !== path) continue;
+      const got = servedReadWindow(read.cached.result);
+      if (!got) continue;
+      const clipped = clipRequestedToEof(want, read.cached.result);
+      if (clipped.start > clipped.end) continue;
+      if (!spanContains(got, clipped)) continue;
+      return {
+        start: clipped.start,
+        end: clipped.end,
+        cached: read.cached,
+        note: `Lines ${clipped.start}\u2013${clipped.end} of this file were already returned by an earlier read_file (lines ${got.start}\u2013${got.end}). Reuse that result; if you need later lines, page forward with offset ${got.end + 1}. Do not re-open a window you already have.`
+      };
+    }
+    return null;
   }
   /**
    * Answer a `search_code` from a WIDER search already held: the same query (and the same
@@ -7063,6 +7142,32 @@ ${revisit}` : replayNote });
           pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: stub });
           return { result: { data: stub } };
         }
+        const covered = readCoverage.coveredRead(call.name, args);
+        if (covered) {
+          const visit = readCoverage.record(call.name, args);
+          const target = visit ? visitTarget(args) : void 0;
+          const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          const note = revisit ? `${covered.note}
+
+${revisit}` : covered.note;
+          if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
+            const replayed = trimToolResult(call.name, covered.cached.result ?? null, { advisory: note });
+            pendingReplay = { name: call.name, args, result: covered.cached.result };
+            pushTrace(c, {
+              ts: nowIso(),
+              category: "tool",
+              label: call.name,
+              args,
+              result: { covered: true, replayed: true, note },
+              resultBytes: replayed.bytes,
+              truncated: replayed.truncated
+            });
+            return { result: { data: replayed.content } };
+          }
+          const stub = { note };
+          pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: { covered: true, note } });
+          return { result: { data: stub } };
+        }
         const derived = readCoverage.derivedSearch(call.name, args);
         if (derived) {
           const visit = readCoverage.record(call.name, args);
@@ -7746,7 +7851,8 @@ ${extraSystem}` : resolvedSystemPrompt;
 
 ${refs}`;
       }
-      const metadata = withDirectedMetadata(addressedTo, attachments.length > 0 ? { attachments } : void 0);
+      const addressedList = addressedTo == null ? null : Array.isArray(addressedTo) ? addressedTo : addressedTo.kind === "group" ? addressedTo.members : [addressedTo];
+      const metadata = withDirectedMetadata(addressedList, attachments.length > 0 ? { attachments } : void 0);
       const imageAtts = attachments.filter((a) => a.imageUrl);
       let modelContent = displayContent;
       if (imageAtts.length > 0) {
@@ -7763,13 +7869,22 @@ ${refs}`;
         onActivity?.(id);
         if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         if (addressedTo) {
-          if (addressedTo.kind === "agent" && persistence.requestAgentReply) {
-            try {
-              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
-              if (stillOpen()) setMessages((prev) => [...prev, reply]);
-              onActivity?.(id);
-            } catch (e) {
-              if (stillOpen()) setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
+          const agents = directedAgentRecipients(addressedTo);
+          if (agents.length > 0) {
+            if (!persistence.requestAgentReply) {
+              if (stillOpen()) setLocalError("This session cannot ask an agent to reply.");
+            } else {
+              for (const agent of agents) {
+                try {
+                  const reply = await persistence.requestAgentReply(id, { agentRef: agent.ref, agentName: agent.name });
+                  if (reply && stillOpen()) {
+                    setMessages((prev) => reply.id != null && prev.some((m) => m.id === reply.id) ? prev : [...prev, reply]);
+                    onActivity?.(id);
+                  }
+                } catch (e) {
+                  if (stillOpen()) setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
+                }
+              }
             }
           }
           return true;
@@ -9150,6 +9265,7 @@ export {
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
+  directedAgentRecipients,
   dirtyPathsOf,
   displayModelName,
   effortProfile,

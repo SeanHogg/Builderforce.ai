@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.66] — The agent stops re-reading lines it already has
+
+- **A file already in view is not fetched again as overlapping slices.** When the agent paged through a large file, later reads that sat inside an earlier window were injected in full, so it circled the same lines. Those overlapping windows now return a short stub pointing at the earlier result, so the run can page forward instead of circling.
+
 ## [2026.9.65] — Replies note the model you asked for, and the Evermind report flags weak memories
 
 - **A reply notes when a different model answered.** When the model you picked failed or stalled and another one answered for it, the reply now records the model you asked for as well as the one that answered, so a swap is no longer invisible.
