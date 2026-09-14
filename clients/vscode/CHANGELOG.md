@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.62] — Grok's tool calls reach the agent, and the diagnostics say who dropped one
+
+- **Grok's tool calls no longer go missing on the way.** Grok sends each tool call in one piece, sometimes only in the very last part of its reply. Calls sent that way could be lost before they reached the agent, so a run looked like Grok was only describing what it would do while its calls were sitting in the reply. They now reach the agent and run.
+- **The copied diagnostics say whether the model or the connection dropped the call.** For each Grok turn, the report now shows how many real tool calls the model sent. When it says zero, the model itself didn't act. When the model sent more than the agent received, the report names it as a delivery fault instead of blaming the model.
+
 ## [2026.9.61] — The agent remembers the files it read and gets to the edit
 
 - **The agent no longer forgets what it just read.** On a coding task the chat kept only a small slice of the run in front of the model, so after about six file reads the earlier ones were squeezed into a short note and the agent went back to read them again — sometimes for dozens of turns, without ever changing a line. It now keeps several times more of its work in view, and when a long run does need condensing, the summary keeps the file paths and findings the rest of the task needs, and no step between the summary and the recent work is dropped.
