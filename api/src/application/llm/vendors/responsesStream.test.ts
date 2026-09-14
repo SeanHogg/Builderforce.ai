@@ -413,6 +413,61 @@ describe('a call xAI delivers whole, or only in the terminal frame', () => {
     expect(finish.choices[0].finish_reason).toBe('stop');
     expect(finish.x_builderforce_upstream).toEqual({ items: { reasoning: 1, message: 1 }, functionCalls: 0, recovered: 0 });
   });
+
+  it('stringifies arguments delivered as an object on output_item.added', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"c1","name":"search_code","arguments":{"query":"RoomRoster"}}}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r"}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    expect(argsFor(parsed)).toBe('{"query":"RoomRoster"}');
+    expect(parsed.find((c) => c.choices?.[0]?.finish_reason)?.choices[0].finish_reason).toBe('tool_calls');
+  });
+
+  it('rebuilds a tool_call alias that appears only in response.completed', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.completed","response":{"id":"r","output":[{"type":"tool_call","call_id":"call_1","function":{"name":"read_file","arguments":{"path":"a.ts"}}}]}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    const opener = parsed.flatMap((c) => c.choices?.[0]?.delta?.tool_calls ?? []).find((tc: any) => tc.id);
+    expect(opener).toMatchObject({ id: 'call_1', function: { name: 'read_file' } });
+    expect(argsFor(parsed, opener.index)).toBe('{"path":"a.ts"}');
+    expect(parsed.find((c) => c.choices?.[0]?.finish_reason).x_builderforce_upstream).toMatchObject({ functionCalls: 1, recovered: 1 });
+  });
+
+  it('recovers a call that appears only on response.incomplete', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.incomplete","response":{"id":"r","output":[{"type":"function_call","call_id":"c9","name":"search_code","arguments":"{\\"query\\":\\"x\\"}"}]}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    expect(parsed.flatMap((c) => c.choices?.[0]?.delta?.tool_calls ?? []).some((tc: any) => tc.id === 'c9')).toBe(true);
+    expect(parsed.find((c) => c.choices?.[0]?.finish_reason)?.choices[0].finish_reason).toBe('length');
+  });
+
+  it('reads the SSE event: field when the JSON body omits type', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'event: response.output_item.added\ndata: {"output_index":0,"item":{"type":"function_call","call_id":"c1","name":"search_code","arguments":"{\\"query\\":\\"x\\"}"}}\n\n',
+      'event: response.completed\ndata: {"response":{"id":"r","output":[{"type":"function_call","call_id":"c1","name":"search_code","arguments":"{\\"query\\":\\"x\\"}"}]}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    expect(parsed.flatMap((c) => c.choices?.[0]?.delta?.tool_calls ?? []).some((tc: any) => tc.id === 'c1')).toBe(true);
+    expect(argsFor(parsed)).toBe('{"query":"x"}');
+  });
+
+  it('translates OpenAI chat-completions tool_calls mixed onto the Responses stream', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"id":"chatcmpl_1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":"search_code","arguments":"{\\"query\\":\\"x\\"}"}}]}}]}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r"}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    expect(parsed.flatMap((c) => c.choices?.[0]?.delta?.tool_calls ?? []).some((tc: any) => tc.id === 'c1')).toBe(true);
+    expect(argsFor(parsed)).toBe('{"query":"x"}');
+    expect(parsed.find((c) => c.choices?.[0]?.finish_reason)?.choices[0].finish_reason).toBe('tool_calls');
+  });
+
+  it('routes function_call_arguments.delta by item_id when output_index is missing', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"c1","name":"lookup"}}\n\n',
+      'data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\\"q\\":1}"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r"}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    expect(argsFor(parsed)).toBe('{"q":1}');
+  });
 });
 
 describe('Responses vendors stream for real', () => {

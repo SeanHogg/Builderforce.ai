@@ -272,6 +272,11 @@ function thoughtTextOf(content) {
   return splitReasoningSegments(content).filter((s) => s.kind === "thought").map((s) => s.content).join("\n\n").trim();
 }
 
+// ../agent-loop/src/index.ts
+function brainMessageAnchorId(messageId) {
+  return `bf-msg-${messageId}`;
+}
+
 // src/Markdown.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
 var DEFAULT_LABELS = { copy: "Copy", copied: "Copied", apply: "Apply", createFile: "Create file", thought: "Thought" };
@@ -1225,7 +1230,7 @@ function BrainTimelineInner({
         if (node.kind === "user") {
           const to = (0, import_builderforce_brain_embedded4.parseDirectedRecipients)(node.message);
           const author = (0, import_builderforce_brain_embedded4.parseMessageAuthor)(node.message);
-          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--user", children: [
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { id: brainMessageAnchorId(node.message.id), className: "bf-tl__item bf-tl__item--user", children: [
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("user") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__role", style: to.length > 0 ? { display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" } : void 0, children: [
@@ -1247,7 +1252,7 @@ function BrainTimelineInner({
           const rescued = node.key === stranded ? thoughtTextOf(bodyText) : "";
           const stopped = (0, import_builderforce_brain_embedded4.isStoppedTurn)(node.message);
           if (!answer && bodyText && !card && !rescued && !stopped) {
-            return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--thought", children: [
+            return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { id: brainMessageAnchorId(node.message.id), className: "bf-tl__item bf-tl__item--thought", children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body bf-tl__thought-line", children: [
                 renderMsg(node.message, "assistant", bodyText),
@@ -1255,7 +1260,7 @@ function BrainTimelineInner({
               ] })
             ] }, node.key);
           }
-          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { id: brainMessageAnchorId(node.message.id), className: "bf-tl__item bf-tl__item--assistant", children: [
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__role", children: author ? author.name : assistant }),

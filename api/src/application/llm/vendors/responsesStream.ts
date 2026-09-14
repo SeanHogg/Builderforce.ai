@@ -45,7 +45,9 @@
  */
 import { parseSseDataFrames, parseSseDataLine } from '../sseFrames';
 import { pickUsage, VendorRetryableError, type VendorId } from './types';
-import { UPSTREAM_EVIDENCE_FIELD, upstreamTurnEvidence } from './responsesApi';
+import {
+  UPSTREAM_EVIDENCE_FIELD, asFunctionCallItem, functionCallArguments, upstreamTurnEvidence,
+} from './responsesApi';
 
 /** The Responses stream events this transform reads. Anything else is ignored. */
 interface ResponsesStreamEvent {
@@ -54,9 +56,13 @@ interface ResponsesStreamEvent {
   output_index?: number;
   /** `response.function_call_arguments.done` carries the call's COMPLETE arguments. */
   arguments?: unknown;
-  item?: { type?: string; call_id?: string; id?: string; name?: string; arguments?: unknown };
+  item?: { type?: string; call_id?: string; id?: string; name?: string; arguments?: unknown; function?: { name?: string; arguments?: unknown } };
+  /** `function_call_arguments.*` frames identify the call by item id when `output_index` is absent. */
+  item_id?: string;
   /** `output` rides the terminal frame: the turn's complete item list, authoritative for order. */
   response?: { id?: string; usage?: unknown; error?: { message?: string } | string; output?: unknown };
+  /** OpenAI chat-completions chunks mixed onto a Responses stream (observed on SuperGrok). */
+  choices?: Array<{ delta?: Record<string, unknown>; finish_reason?: string | null }>;
   error?: { message?: string } | string;
   /** xAI's `response.doom_loop_check` payload: the CUMULATIVE set of loop triggers so far. */
   doom_loop_check?: { triggers?: unknown };
@@ -169,6 +175,8 @@ export function responsesSseToChatSse(
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let pending = '';
+  /** Last SSE `event:` name — xAI may put the type only there, not in the JSON. */
+  let pendingEventType = '';
   let responseId = `chatcmpl_${crypto.randomUUID()}`;
   let sawFirstDelta = false;
   let sawToolCall = false;
@@ -184,6 +192,8 @@ export function responsesSseToChatSse(
   /** Ids (`call_id` and item `id`) of every call already opened, so the terminal output
    *  can tell which of its calls never streamed. */
   const openedCallIds = new Set<string>();
+  /** Slot lookup by item id — argument deltas may carry `item_id` instead of `output_index`. */
+  const toolSlotByItemId = new Map<string, number>();
   /** Whether any visible text streamed, so text only the terminal output carries is
    *  emitted once and never twice. */
   let sawText = false;
@@ -203,26 +213,89 @@ export function responsesSseToChatSse(
    * in whole in a single chunk, not streamed across chunks"; reading only the id and name
    * here left such a call with empty arguments unless a later frame restated them.
    */
-  function openToolCall(outputIndex: number, item: NonNullable<ResponsesStreamEvent['item']>): string[] {
+  function openToolCall(outputIndex: number, raw: unknown): string[] {
+    const item = asFunctionCallItem(raw);
+    if (!item) return [];
     const slot = toolSlotByOutputIndex.size;
     toolSlotByOutputIndex.set(outputIndex, slot);
     sawToolCall = true;
-    for (const id of [item.call_id, item.id]) if (id) openedCallIds.add(id);
+    for (const id of [item.call_id, item.id]) {
+      if (!id) continue;
+      openedCallIds.add(id);
+      toolSlotByItemId.set(id, slot);
+    }
     const toolCall = {
       index: slot,
       id: item.call_id ?? item.id ?? `call_${slot}`,
       type: 'function',
-      function: { name: item.name ?? '', arguments: '' },
+      function: { name: item.name, arguments: '' },
     };
     const delta: Record<string, unknown> = sawFirstDelta
       ? { tool_calls: [toolCall] }
       : { role: 'assistant', content: '', tool_calls: [toolCall] };
     sawFirstDelta = true;
     const frames = [chunk(responseId, opts.model, { choices: [{ index: 0, delta, finish_reason: null }] })];
-    if (typeof item.arguments === 'string' && item.arguments !== '') {
+    if (item.arguments !== '') {
       argsSeen.add(slot);
       argsWhole.add(slot);
       frames.push(argumentsChunk(slot, item.arguments));
+    }
+    return frames;
+  }
+
+  /** Slot for an arguments frame: `output_index` first, then `item_id`, then the sole open slot. */
+  function resolveSlot(event: ResponsesStreamEvent): number | undefined {
+    if (typeof event.output_index === 'number' && toolSlotByOutputIndex.has(event.output_index)) {
+      return toolSlotByOutputIndex.get(event.output_index);
+    }
+    if (typeof event.item_id === 'string' && toolSlotByItemId.has(event.item_id)) {
+      return toolSlotByItemId.get(event.item_id);
+    }
+    if (toolSlotByOutputIndex.size === 1) return toolSlotByOutputIndex.values().next().value;
+    return undefined;
+  }
+
+  /** Argument text from a delta / done frame — string, `{arguments}`, `{text}`, or an object. */
+  function argumentText(value: unknown): string | undefined {
+    if (typeof value === 'string' && value !== '') return value;
+    if (value && typeof value === 'object') {
+      const obj = value as { arguments?: unknown; text?: unknown };
+      if (typeof obj.arguments === 'string' && obj.arguments !== '') return obj.arguments;
+      if (typeof obj.text === 'string' && obj.text !== '') return obj.text;
+    }
+    const encoded = functionCallArguments(value);
+    return encoded && encoded !== '{}' ? encoded : undefined;
+  }
+
+  /**
+   * SuperGrok has mixed OpenAI chat-completions chunks onto a Responses SSE
+   * (`choices[0].delta.tool_calls` with no `type`). Without this, those calls
+   * vanish unless `response.completed.output` restates them.
+   */
+  function translateChatDelta(event: ResponsesStreamEvent): string[] {
+    const choice = event.choices?.[0];
+    const delta = choice?.delta;
+    if (!delta || typeof delta !== 'object') return [];
+    const frames: string[] = [];
+    if (typeof delta['content'] === 'string' && delta['content'] !== '') frames.push(textChunk(delta['content'] as string));
+    const tcs = delta['tool_calls'];
+    if (!Array.isArray(tcs)) return frames;
+    for (const raw of tcs) {
+      const tc = raw as { index?: number; id?: string; function?: { name?: string; arguments?: unknown } };
+      const outputIndex = typeof tc.index === 'number' ? tc.index : toolSlotByOutputIndex.size;
+      if (tc.id && !openedCallIds.has(tc.id)) {
+        frames.push(...openToolCall(outputIndex, {
+          type: 'function_call', call_id: tc.id, name: tc.function?.name, arguments: tc.function?.arguments,
+        }));
+        continue;
+      }
+      const slot = (typeof tc.index === 'number' ? toolSlotByOutputIndex.get(tc.index) : undefined)
+        ?? (tc.id ? toolSlotByItemId.get(tc.id) : undefined);
+      const args = argumentText(tc.function?.arguments);
+      if (slot !== undefined && args && !argsWhole.has(slot)) {
+        argsSeen.add(slot);
+        frames.push(argumentsChunk(slot, args));
+      }
     }
     return frames;
   }
@@ -249,8 +322,8 @@ export function responsesSseToChatSse(
       if (text) frames.push(textChunk(text));
     }
     output.forEach((raw, index) => {
-      if (raw['type'] !== 'function_call') return;
-      const item = raw as NonNullable<ResponsesStreamEvent['item']>;
+      const item = asFunctionCallItem(raw);
+      if (!item) return;
       const ids = [item.call_id, item.id].filter((id): id is string => !!id);
       if (ids.length > 0 ? ids.some((id) => openedCallIds.has(id)) : toolSlotByOutputIndex.has(index)) return;
       frames.push(...openToolCall(TERMINAL_INDEX_BASE + index, item));
@@ -279,18 +352,18 @@ export function responsesSseToChatSse(
       }
 
       case 'response.output_item.added': {
-        if (event.item?.type !== 'function_call') return [];
+        if (!asFunctionCallItem(event.item)) return [];
         const outputIndex = typeof event.output_index === 'number' ? event.output_index : toolSlotByOutputIndex.size;
         return openToolCall(outputIndex, event.item);
       }
 
       case 'response.function_call_arguments.delta': {
-        if (typeof event.delta !== 'string' || event.delta === '') return [];
-        const outputIndex = typeof event.output_index === 'number' ? event.output_index : 0;
-        const slot = toolSlotByOutputIndex.get(outputIndex) ?? 0;
-        if (argsWhole.has(slot)) return [];
+        const delta = argumentText(event.delta);
+        if (!delta) return [];
+        const slot = resolveSlot(event);
+        if (slot === undefined || argsWhole.has(slot)) return [];
         argsSeen.add(slot);
-        return [argumentsChunk(slot, event.delta)];
+        return [argumentsChunk(slot, delta)];
       }
 
       // A backend may deliver a call's arguments WHOLE — on `function_call_arguments.done`
@@ -301,21 +374,22 @@ export function responsesSseToChatSse(
       case 'response.output_item.done': {
         const isItem = event.type === 'response.output_item.done';
         if (isItem && event.item) streamedItems.push(event.item as unknown as Record<string, unknown>);
-        if (isItem && (event.item?.type === 'reasoning' || event.item?.type === 'function_call')) {
+        if (isItem && (event.item?.type === 'reasoning' || asFunctionCallItem(event.item))) {
           completedItems.push(event.item as unknown as Record<string, unknown>);
         }
-        if (isItem && event.item?.type !== 'function_call') return [];
+        if (isItem && !asFunctionCallItem(event.item)) return [];
         const outputIndex = typeof event.output_index === 'number' ? event.output_index : 0;
         const frames: string[] = [];
-        let slot = toolSlotByOutputIndex.get(outputIndex);
+        let slot = resolveSlot(event) ?? toolSlotByOutputIndex.get(outputIndex);
         if (slot === undefined) {
           // Only a finished ITEM carries the name needed to open a call never announced.
           if (!isItem || !event.item) return [];
           frames.push(...openToolCall(outputIndex, event.item));
           slot = toolSlotByOutputIndex.get(outputIndex)!;
         }
-        const args = isItem ? event.item?.arguments : event.arguments;
-        if (!argsSeen.has(slot) && typeof args === 'string' && args !== '') {
+        const args = argumentText(isItem ? event.item?.arguments : event.arguments)
+          ?? (isItem ? asFunctionCallItem(event.item)?.arguments || undefined : undefined);
+        if (slot !== undefined && !argsSeen.has(slot) && args) {
           argsSeen.add(slot);
           frames.push(argumentsChunk(slot, args));
         }
@@ -334,8 +408,10 @@ export function responsesSseToChatSse(
         const frames: string[] = [];
         if (event.type === 'response.completed') {
           finishedItems = output ?? completedItems;
-          if (output) frames.push(...recoverFromTerminalOutput(output));
         }
+        // Recover on both completed and incomplete — a cap-cut turn can still
+        // carry function_calls only in the terminal output list.
+        if (output) frames.push(...recoverFromTerminalOutput(output));
         const finish = event.type === 'response.incomplete' ? 'length' : sawToolCall ? 'tool_calls' : 'stop';
         frames.push(chunk(responseId, model, {
           choices: [{ index: 0, delta: {}, finish_reason: finish }],
@@ -379,7 +455,7 @@ export function responsesSseToChatSse(
       }
 
       default:
-        return [];
+        return translateChatDelta(event);
     }
   }
 
@@ -408,9 +484,19 @@ export function responsesSseToChatSse(
         pending = lines.pop() ?? '';
         let emitted = false;
         for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('event:')) {
+            pendingEventType = trimmed.slice(6).trim();
+            continue;
+          }
           const parsed = parseSseDataLine(line);
           if (parsed === undefined) continue;
-          for (const frame of translate(parsed as ResponsesStreamEvent)) {
+          const event = (parsed && typeof parsed === 'object'
+            ? { ...(parsed as object) }
+            : parsed) as ResponsesStreamEvent;
+          if (!event.type && pendingEventType) event.type = pendingEventType;
+          pendingEventType = '';
+          for (const frame of translate(event)) {
             controller.enqueue(encoder.encode(frame));
             emitted = true;
           }

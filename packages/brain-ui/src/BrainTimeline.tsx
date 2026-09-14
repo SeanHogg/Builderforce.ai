@@ -18,7 +18,7 @@ import {
   type BrainRunActivity,
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
-import { answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
+import { answerTextOf, brainMessageAnchorId, thoughtTextOf } from '@builderforce/agent-loop';
 import { Avatar, RecipientsBadge } from './ParticipantBadge';
 import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
 import { buildSettledTimeline, formatDuration, strandedReplyKey, streamingNode, type TimelineNode } from './timelineModel';

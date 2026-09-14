@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.63] — A fresh build of 2026.9.62
+
+- **Nothing changes in how the extension works.** This release is 2026.9.62 rebuilt on the latest shared chat components. Grok's tool calls still reach the agent, and the copied diagnostics still show how many real tool calls each Grok turn sent.
+
 ## [2026.9.62] — Grok's tool calls reach the agent, and the diagnostics say who dropped one
 
 - **Grok's tool calls no longer go missing on the way.** Grok sends each tool call in one piece, sometimes only in the very last part of its reply. Calls sent that way could be lost before they reached the agent, so a run looked like Grok was only describing what it would do while its calls were sitting in the reply. They now reach the agent and run.

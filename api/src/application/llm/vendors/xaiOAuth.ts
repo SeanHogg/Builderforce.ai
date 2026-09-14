@@ -80,7 +80,17 @@ async function saveReasoningChain(
  * applies.
  */
 function requestBody(params: VendorCallParams, chain: ReasoningChain, extra?: Record<string, unknown>): Record<string, unknown> {
-  const body = buildResponsesBody(params, { extra: { include: [REASONING_INCLUDE], ...extra }, omitMaxOutputTokens: true });
+  const body = buildResponsesBody(params, {
+    extra: {
+      include: [REASONING_INCLUDE],
+      // SuperGrok has been observed to default parallel tool calling OFF and then
+      // honour only the first function_call. xAI's public docs say the default is
+      // on; sending the flag makes the contract explicit either way.
+      parallel_tool_calls: true,
+      ...extra,
+    },
+    omitMaxOutputTokens: true,
+  });
   return Object.keys(chain).length > 0
     ? { ...body, input: withReplayedReasoning(body['input'] as Array<Record<string, unknown>>, chain) }
     : body;

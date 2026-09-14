@@ -52,6 +52,7 @@ describe('xAI SuperGrok OAuth vendor', () => {
     });
     expect(sent.tool_choice).toEqual({ type: 'function', name: 'save_note' });
     expect(sent.tools).toEqual([{ type: 'function', name: 'save_note', parameters: { type: 'object' } }]);
+    expect(sent.parallel_tool_calls).toBe(true);
     const raw = result.raw as { choices: Array<{ finish_reason: string; message: { tool_calls?: Array<{ function: { name: string } }> } }> };
     expect(raw.choices[0]?.finish_reason).toBe('tool_calls');
     expect(raw.choices[0]?.message.tool_calls?.[0]?.function.name).toBe('save_note');
@@ -130,4 +131,23 @@ describe('xAI SuperGrok OAuth vendor', () => {
       { type: 'function_call_output', call_id: 'c1', output: 'file body' },
     ]);
   });
+
+
+  it('normalizes a tool_call alias with object-shaped arguments', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'resp_xai',
+      output: [{ type: 'tool_call', call_id: 'c2', function: { name: 'read_file', arguments: { path: 'a.ts' } } }],
+    }), { status: 200 })));
+    const result = await xaiOAuthModule.call({
+      apiKey: 'oauth-token', model: 'grok-4.6', messages: [{ role: 'user', content: 'read it' }],
+    });
+    const raw = result.raw as {
+      choices: Array<{ finish_reason: string; message: { tool_calls?: Array<{ function: { name: string; arguments: string } }> } }>;
+      x_builderforce_upstream?: { functionCalls: number };
+    };
+    expect(raw.choices[0]?.finish_reason).toBe('tool_calls');
+    expect(raw.choices[0]?.message.tool_calls?.[0]?.function).toEqual({ name: 'read_file', arguments: '{"path":"a.ts"}' });
+    expect(raw.x_builderforce_upstream?.functionCalls).toBe(1);
+  });
+
 });

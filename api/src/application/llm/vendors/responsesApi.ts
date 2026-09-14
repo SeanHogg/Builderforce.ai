@@ -228,14 +228,73 @@ export interface UpstreamTurnEvidence {
   recovered: number;
 }
 
+/** Types the Responses surface (and xAI's chat-completions alias) use for a structured call. */
+const FUNCTION_CALL_TYPES = new Set(['function_call', 'tool_call']);
+
+/**
+ * Arguments as the chat-completions contract wants them: a JSON string.
+ * xAI has been observed to put a parsed object on the item (or nest name/arguments
+ * under `function`); leaving either shape un-normalized drops the call's parameters
+ * or the call itself.
+ */
+export function functionCallArguments(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    try { return JSON.stringify(value); } catch { return undefined; }
+  }
+  return undefined;
+}
+
+export interface FunctionCallItem {
+  type: 'function_call';
+  call_id?: string;
+  id?: string;
+  name: string;
+  /** Empty when the item has not carried arguments yet (deltas still to come). */
+  arguments: string;
+}
+
+/**
+ * A Responses (or aliased) output item as a structured function call, or null.
+ * Shared by the buffered normalizer and the stream translator so a `tool_call`
+ * alias, a nested `function:{name,arguments}`, or object-shaped arguments cannot
+ * be counted as "the model never called" on one path and emitted on the other.
+ */
+export function asFunctionCallItem(raw: unknown): FunctionCallItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const item = raw as Record<string, unknown>;
+  const nested = item['function'] && typeof item['function'] === 'object'
+    ? item['function'] as Record<string, unknown>
+    : null;
+  const type = typeof item['type'] === 'string' ? item['type'] : '';
+  const name = (typeof item['name'] === 'string' && item['name'])
+    || (typeof nested?.['name'] === 'string' && nested['name'])
+    || '';
+  const typed = FUNCTION_CALL_TYPES.has(type);
+  const inferred = !type && name !== '' && (
+    item['call_id'] != null || item['arguments'] != null || nested?.['arguments'] != null
+  );
+  if (!typed && !inferred) return null;
+  const rawArgs = item['arguments'] ?? nested?.['arguments'];
+  return {
+    type: 'function_call',
+    call_id: typeof item['call_id'] === 'string' ? item['call_id'] : undefined,
+    id: typeof item['id'] === 'string' ? item['id'] : undefined,
+    name,
+    arguments: rawArgs === undefined ? '' : (functionCallArguments(rawArgs) ?? '{}'),
+  };
+}
+
 /** Count a Responses output list. Anything that is not an item list counts as empty. */
 export function upstreamTurnEvidence(output: unknown, recovered = 0): UpstreamTurnEvidence {
   const items: Record<string, number> = {};
+  let functionCalls = 0;
   for (const raw of Array.isArray(output) ? output : []) {
     const type = typeof (raw as { type?: unknown } | null)?.type === 'string' ? (raw as { type: string }).type : 'unknown';
     items[type] = (items[type] ?? 0) + 1;
+    if (asFunctionCallItem(raw)) functionCalls += 1;
   }
-  return { items, functionCalls: items['function_call'] ?? 0, recovered };
+  return { items, functionCalls, recovered };
 }
 
 /** The terminal Responses object both vendors read, whether it arrived as plain JSON or
@@ -258,11 +317,15 @@ export function normalizeResponsesPayload(raw: ResponsesPayload): VendorCallResu
   const content = raw.output_text
     ?? raw.output?.flatMap((item) => item.content ?? []).filter((c) => c.type === 'output_text').map((c) => c.text ?? '').join('')
     ?? '';
-  const toolCalls = raw.output?.filter((item) => item.type === 'function_call').map((item, index) => ({
-    id: item.call_id ?? `call_${index}`,
-    type: 'function',
-    function: { name: item.name ?? '', arguments: item.arguments ?? '{}' },
-  })) ?? [];
+  const toolCalls = raw.output?.flatMap((item, index) => {
+    const call = asFunctionCallItem(item);
+    if (!call) return [];
+    return [{
+      id: call.call_id ?? call.id ?? `call_${index}`,
+      type: 'function' as const,
+      function: { name: call.name, arguments: call.arguments || '{}' },
+    }];
+  }) ?? [];
   const usage = pickUsage(raw.usage);
   const chatRaw = {
     id: raw.id ?? `chatcmpl_${crypto.randomUUID()}`,
