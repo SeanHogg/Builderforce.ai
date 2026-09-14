@@ -34,7 +34,7 @@ import type { ReasoningIntent } from './effort';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { priorResearchDigest } from './priorResearch';
-import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
+import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, type DirectedRecipient, type DirectedGroup } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { BrainRunActivity } from './runActivity';
 import { ratedTurnContext } from './turnRating';
@@ -441,7 +441,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   );
 
   const send = useCallback(
-    async (text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean> => {
+    async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null }): Promise<boolean> => {
       const trimmed = text.trim();
       // Busy only for THIS chat: a run in flight elsewhere never blocks this one.
       if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -485,7 +485,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join('\n');
         displayContent = `${trimmed}\n\n${refs}`;
       }
-      const metadata = withDirectedMetadata(addressedTo, attachments.length > 0 ? { attachments } : undefined);
+      const addressedList = addressedTo == null
+        ? null
+        : Array.isArray(addressedTo)
+          ? addressedTo
+          : (addressedTo as DirectedRecipient | DirectedGroup).kind === 'group'
+            ? (addressedTo as DirectedGroup).members
+            : [addressedTo as DirectedRecipient];
+      const metadata = withDirectedMetadata(addressedList, attachments.length > 0 ? { attachments } : undefined);
 
       // Model-visible content: inline images as `image_url` vision parts (the
       // gateway routes these to a vision model), keeping any non-image
@@ -518,15 +525,26 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // a later reload won't answer it either.
         if (addressedTo) {
           // An @agent participant actually answers: a chat-scoped run replies AS
-          // that agent and posts an assistant turn attributed to it. A @human just
-          // gets the posted turn (they'll be notified out-of-band).
-          if (addressedTo.kind === 'agent' && persistence.requestAgentReply) {
-            try {
-              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
-              if (stillOpen()) setMessages((prev) => [...prev, reply]);
-              onActivity?.(id);
-            } catch (e) {
-              if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
+          // that agent and posts an assistant turn attributed to it. A group turn
+          // fans out to every agent member. A @human just gets the posted turn
+          // (they'll be notified out-of-band). Missing requestAgentReply used to
+          // skip silently, so the user saw their message and nothing answered.
+          const agents = directedAgentRecipients(addressedTo);
+          if (agents.length > 0) {
+            if (!persistence.requestAgentReply) {
+              if (stillOpen()) setLocalError('This session cannot ask an agent to reply.');
+            } else {
+              for (const agent of agents) {
+                try {
+                  const reply = await persistence.requestAgentReply(id, { agentRef: agent.ref, agentName: agent.name });
+                  if (reply && stillOpen()) {
+                    setMessages((prev) => (reply.id != null && prev.some((m) => m.id === reply.id) ? prev : [...prev, reply]));
+                    onActivity?.(id);
+                  }
+                } catch (e) {
+                  if (stillOpen()) setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
+                }
+              }
             }
           }
           return true;

@@ -374,6 +374,7 @@ export {
   parseDirectedRecipients,
   parseMessageAuthor,
   isDirectedToParticipant,
+  directedAgentRecipients,
   mentionRecipient,
   resolveRecipient,
   activeMentionToken,

@@ -25,6 +25,7 @@ const persistence = {
   ),
   setMessageFeedback: vi.fn(async () => ({ ok: true })),
   markChatRead: vi.fn(async () => ({ lastReadSeq: 0 })),
+  requestAgentReply: vi.fn(),
   upload: vi.fn(),
   uploadUrl: (key: string) => `https://x/${key}`,
 } as unknown as BrainPersistenceAdapter;
@@ -62,6 +63,7 @@ beforeEach(() => {
     async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
       msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
   );
+  vi.mocked(persistence.requestAgentReply!).mockReset();
   // The run engine is a module-level singleton keyed by chatId; reset it so a
   // chat's session-lived transcript doesn't leak between tests reusing chatId 1.
   resetBrainRunStore();
@@ -530,5 +532,79 @@ describe('parallel chats on one hook instance (a panel that walks between chats)
     expect(hook.current.sending).toBe(true);
     await act(async () => { releaseA?.(); await sendA; });
     expect(hook.current.sending).toBe(false);
+  });
+});
+
+describe('useBrainConversation directed agent reply', () => {
+  const bob = { kind: 'agent' as const, ref: '42', name: 'Bob' };
+  const ada = { kind: 'human' as const, ref: 'u_1', name: 'Ada' };
+  const carol = { kind: 'agent' as const, ref: '7', name: 'Carol' };
+
+  function hookForChat() {
+    return renderHook(
+      () => useBrainConversation({ chatId: 1, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+  }
+
+  it('asks the addressed agent to reply and does not start a BRAIN run', async () => {
+    const reply = { id: 99, role: 'assistant', content: 'hi from bob', metadata: JSON.stringify({ authoredBy: bob }), seq: 99, createdAt: '' };
+    vi.mocked(persistence.requestAgentReply!).mockResolvedValue(reply as never);
+    const { result: hook } = hookForChat();
+    let ok = false;
+    await act(async () => { ok = await hook.current.send('hello bob', { addressedTo: bob }); });
+    expect(ok).toBe(true);
+    expect(persistence.requestAgentReply).toHaveBeenCalledWith(1, { agentRef: '42', agentName: 'Bob' });
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(hook.current.messages.map((m) => m.content)).toEqual(['hello bob', 'hi from bob']);
+  });
+
+  it('fans a group out to every agent member and skips humans', async () => {
+    vi.mocked(persistence.requestAgentReply!).mockImplementation(async (_chatId, input) => ({
+      id: Number(input.agentRef),
+      role: 'assistant',
+      content: `from ${input.agentName}`,
+      metadata: null,
+      seq: Number(input.agentRef),
+      createdAt: '',
+    }) as never);
+    const { result: hook } = hookForChat();
+    await act(async () => {
+      await hook.current.send('hi team', { addressedTo: { kind: 'group', members: [bob, ada, carol] } });
+    });
+    expect(persistence.requestAgentReply).toHaveBeenCalledTimes(2);
+    expect(persistence.requestAgentReply).toHaveBeenCalledWith(1, { agentRef: '42', agentName: 'Bob' });
+    expect(persistence.requestAgentReply).toHaveBeenCalledWith(1, { agentRef: '7', agentName: 'Carol' });
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(hook.current.messages.map((m) => m.content)).toEqual(['hi team', 'from Bob', 'from Carol']);
+  });
+
+  it('does not request a reply when the addressee is a human', async () => {
+    const { result: hook } = hookForChat();
+    await act(async () => { await hook.current.send('hey ada', { addressedTo: ada }); });
+    expect(persistence.requestAgentReply).not.toHaveBeenCalled();
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(hook.current.messages.map((m) => m.content)).toEqual(['hey ada']);
+  });
+
+  it('surfaces an error when the persistence cannot dispatch an agent', async () => {
+    const saved = persistence.requestAgentReply;
+    delete (persistence as { requestAgentReply?: unknown }).requestAgentReply;
+    try {
+      const { result: hook } = hookForChat();
+      await act(async () => { await hook.current.send('hello bob', { addressedTo: bob }); });
+      expect(hook.current.error).toBe('This session cannot ask an agent to reply.');
+      expect(mockStream).not.toHaveBeenCalled();
+    } finally {
+      persistence.requestAgentReply = saved;
+    }
+  });
+
+  it('surfaces the agent-reply failure on the conversation', async () => {
+    vi.mocked(persistence.requestAgentReply!).mockRejectedValue(new Error('LLM not configured'));
+    const { result: hook } = hookForChat();
+    await act(async () => { await hook.current.send('hello bob', { addressedTo: bob }); });
+    expect(hook.current.error).toBe('LLM not configured');
+    expect(mockStream).not.toHaveBeenCalled();
   });
 });

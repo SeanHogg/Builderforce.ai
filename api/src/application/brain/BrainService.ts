@@ -194,6 +194,27 @@ const chatDetailColumns = {
   isArchived: brainChats.isArchived,
 } as const;
 
+/** The assistant turn this agent already posted after the latest user message, if any. */
+function alreadyRepliedAsAgent<T extends { role: string; metadata?: string | null }>(
+  msgs: readonly T[],
+  agentRef: string,
+): T | undefined {
+  let lastUserIdx = -1;
+  for (let i = 0; i < msgs.length; i++) if (msgs[i]!.role === 'user') lastUserIdx = i;
+  if (lastUserIdx < 0) return undefined;
+  for (let i = lastUserIdx + 1; i < msgs.length; i++) {
+    const m = msgs[i]!;
+    if (m.role !== 'assistant' || !m.metadata) continue;
+    try {
+      const authored = (JSON.parse(m.metadata) as { authoredBy?: { kind?: string; ref?: unknown } }).authoredBy;
+      if (authored?.kind === 'agent' && String(authored.ref) === String(agentRef)) return m;
+    } catch (error) { /* not an attributed turn */
+      reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "alreadyRepliedAsAgent" });
+    }
+  }
+  return undefined;
+}
+
 const messageColumns = {
   id: brainChatMessages.id,
   role: brainChatMessages.role,
@@ -1099,12 +1120,16 @@ export class BrainService {
     if (!apiKey) return { error: 'LLM not configured' as const };
 
     const msgs = await this.db
-      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata })
+      .select(messageColumns)
       .from(brainChatMessages)
       .where(eq(brainChatMessages.chatId, chatId))
       .orderBy(brainChatMessages.seq)
       .limit(80);
     if (msgs.length === 0) return { error: 'Nothing to reply to' as const };
+    // Client fan-out AND sendMessages waitUntil can both call this for the same
+    // turn; return the already-posted reply instead of running the LLM twice.
+    const already = alreadyRepliedAsAgent(msgs, input.agentRef);
+    if (already) return already;
 
     // Persona + own-knowledge grounding for a workforce agent (ref = ide_agents.id).
     const lastUser = [...msgs].reverse().find((m) => m.role === 'user')?.content ?? '';

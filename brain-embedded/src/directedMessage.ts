@@ -127,6 +127,34 @@ export function isDirectedToParticipant(msg: { metadata?: string | null }): bool
 }
 
 /**
+ * The invited agents a directed turn should dispatch to. Humans are omitted —
+ * they are notified out-of-band, not run. A missing `kind` still dispatches
+ * (composer/roster bugs used to drop `kind` and then silently skip the reply).
+ */
+export function directedAgentRecipients(
+  recipient: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null | undefined,
+): DirectedRecipient[] {
+  if (recipient == null) return [];
+  // Array.isArray is the runtime check; `readonly T[]` does not narrow, so we
+  // cast. A single object with a dropped `kind` must still dispatch as an agent.
+  const one = recipient as DirectedRecipient | DirectedGroup;
+  const list: readonly { kind?: string; ref?: string; name?: string }[] = Array.isArray(recipient)
+    ? recipient
+    : one.kind === 'group'
+      ? (one.members ?? [])
+      : [one];
+  const seen = new Set<string>();
+  const out: DirectedRecipient[] = [];
+  for (const r of list) {
+    if (!r || typeof r.ref !== 'string' || !r.ref || r.kind === 'human') continue;
+    if (seen.has(r.ref)) continue;
+    seen.add(r.ref);
+    out.push({ kind: 'agent', ref: r.ref, name: typeof r.name === 'string' && r.name ? r.name : r.ref });
+  }
+  return out;
+}
+
+/**
  * A composer's recipient choice: `null` = auto (follow any leading @mention),
  * `'brain'` = explicitly the BRAIN, or an explicit participant. An explicit
  * choice always wins over a typed @mention.

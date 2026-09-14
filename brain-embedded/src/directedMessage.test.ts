@@ -3,6 +3,7 @@ import {
   withDirectedMetadata,
   parseDirectedRecipients,
   isDirectedToParticipant,
+  directedAgentRecipients,
   mentionRecipient,
   resolveRecipient,
   activeMentionToken,
@@ -133,5 +134,30 @@ describe('resolveRecipient', () => {
   it('falls back to the mention, then the BRAIN', () => {
     expect(resolveRecipient(null, bob)).toEqual(bob);
     expect(resolveRecipient(null, null)).toBeNull();
+  });
+});
+
+describe('directedAgentRecipients', () => {
+  it('returns the single agent', () => {
+    expect(directedAgentRecipients(bob)).toEqual([bob]);
+  });
+  it('omits humans and fans a group out to its agents', () => {
+    expect(directedAgentRecipients({ kind: 'group', members: [bob, ada] })).toEqual([bob]);
+  });
+  it('fans an array of recipients', () => {
+    const carol: DirectedRecipient = { kind: 'agent', ref: 'c', name: 'Carol' };
+    expect(directedAgentRecipients([ada, bob, carol])).toEqual([bob, carol]);
+  });
+  it('treats a missing kind as an agent so a dropped kind still replies', () => {
+    expect(directedAgentRecipients({ ref: '42', name: 'Bob' } as DirectedRecipient)).toEqual([
+      { kind: 'agent', ref: '42', name: 'Bob' },
+    ]);
+  });
+  it('dedupes the same agent listed twice', () => {
+    expect(directedAgentRecipients([bob, bob])).toEqual([bob]);
+  });
+  it('returns empty for null / human-only', () => {
+    expect(directedAgentRecipients(null)).toEqual([]);
+    expect(directedAgentRecipients(ada)).toEqual([]);
   });
 });

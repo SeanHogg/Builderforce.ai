@@ -297,14 +297,38 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     // member of a group turn) so an offline teammate learns they were pinged —
     // in-app + optional email. `addressedTo` is one participant or
     // `{kind:'group', members}` (brain-embedded `directedMessage.ts`).
+    // Directed @agent turns are ALSO dispatched here: the client used to skip
+    // group fan-out and silently skip a missing persistence hook, so the
+    // Worker is the source of truth. Duplicate POSTs to /agent-reply no-op
+    // via alreadyRepliedAsAgent.
     const mentioned = new Set<string>();
+    const directedAgents: { agentRef: string; agentName: string }[] = [];
+    const seenAgents = new Set<string>();
     for (const m of body.messages ?? []) {
       if (!m.metadata) continue;
       try {
-        type Addressee = { kind?: string; ref?: string };
-        const a = (JSON.parse(m.metadata) as { addressedTo?: Addressee & { members?: Addressee[] } }).addressedTo;
-        const addressees = a?.kind === 'group' ? (Array.isArray(a.members) ? a.members : []) : a ? [a] : [];
-        for (const r of addressees) if (r?.kind === 'human' && typeof r.ref === 'string' && r.ref) mentioned.add(r.ref);
+        type Addressee = { kind?: string; ref?: unknown; name?: unknown; members?: Addressee[]; refs?: unknown };
+        const a = (JSON.parse(m.metadata) as { addressedTo?: Addressee }).addressedTo;
+        const addressees: Addressee[] = a?.kind === 'group'
+          ? (Array.isArray(a.members)
+            ? a.members
+            : Array.isArray(a.refs)
+              ? (a.refs as unknown[]).filter((r): r is string => typeof r === 'string').map((ref) => ({ kind: 'agent', ref, name: ref }))
+              : [])
+          : a ? [a] : [];
+        for (const r of addressees) {
+          if (!r) continue;
+          if (r.kind === 'human' && typeof r.ref === 'string' && r.ref) mentioned.add(r.ref);
+          else if (r.kind !== 'human' && r.ref != null && r.ref !== '') {
+            const agentRef = String(r.ref);
+            if (seenAgents.has(agentRef)) continue;
+            seenAgents.add(agentRef);
+            directedAgents.push({
+              agentRef,
+              agentName: typeof r.name === 'string' && r.name ? r.name : agentRef,
+            });
+          }
+        }
       } catch (error) { /* not directed */
         reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
       }
@@ -324,6 +348,22 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
           }
         }
       })());
+    }
+    const userId = c.get('userId') as string;
+    for (const agent of directedAgents) {
+      c.executionCtx.waitUntil(
+        brainService.agentReply(id, tenantId, userId, agent, c.env as Env, {
+          role: c.get('role') as string | undefined,
+          authToken: c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? null,
+          executionCtx: c.executionCtx,
+        }).then((reply) => {
+          if (reply && typeof reply === 'object' && 'error' in reply && reply.error) {
+            reportCaughtError(new Error(String(reply.error)), { source: 'presentation/routes/brainRoutes.ts', operation: 'dispatchDirectedAgentReply' });
+          }
+        }).catch((error: unknown) => {
+          reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'dispatchDirectedAgentReply' });
+        }),
+      );
     }
 
     // Train the project's Evermind FROM this conversation (not just agent runs): a
