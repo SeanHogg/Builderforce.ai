@@ -4,6 +4,7 @@ import type { RoomPalette, RoomSeat } from '@/lib/canvas/roomSeating';
 import type { RoomStationInstance } from '@/lib/canvas/roomStations';
 import { RoomStationList } from '../room-stations/RoomStations';
 import { RoomSeatMark } from './RoomSeatMark';
+import { readRoomRosterCollapsed, writeRoomRosterCollapsed } from './roomRosterPreferences';
 import surfaceStyles from '../CanvasRoomSurface.module.css';
 
 /**
@@ -23,10 +24,13 @@ export function RoomRoster({ seats, palette, stations, onOpenStation }: {
   onOpenStation: (key: string) => void;
 }) {
   const t = useTranslations('creationCanvas.surface.room');
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(readRoomRosterCollapsed);
   const toggleLabel = t(collapsed ? 'expandRoster' : 'collapseRoster');
   return (
-    <div className={`${surfaceStyles.roster} ${collapsed ? surfaceStyles.rosterCollapsed : ''}`}>
+    <div
+      className={`${surfaceStyles.roster} ${collapsed ? surfaceStyles.rosterCollapsed : ''}`}
+      data-collapsed={collapsed ? 'true' : 'false'}
+    >
       <div className={surfaceStyles.rosterHeadRow}>
         <p className={surfaceStyles.rosterHead}>{t('rosterHead', { count: seats.length })}</p>
         <button
@@ -35,7 +39,11 @@ export function RoomRoster({ seats, palette, stations, onOpenStation }: {
           aria-expanded={!collapsed}
           aria-label={toggleLabel}
           title={toggleLabel}
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={() => {
+            const next = !collapsed;
+            setCollapsed(next);
+            writeRoomRosterCollapsed(next);
+          }}
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 3l5 5-5 5" />
