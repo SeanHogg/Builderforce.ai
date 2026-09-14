@@ -307,6 +307,8 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
                     hiddenUserId={walking ? currentUserId : null}
                     speech={speech}
                     thinkingLabel={t('thinking')}
+                    onSelectSpeech={onSelectSpeech}
+                    selectSpeechLabel={t('showReplyInChat')}
                   >
                     <RoomFurnitureLayer design={design} palette={palette} designing={designing ? designer.designing : undefined} />
                     {scene && <RoomSessionDiorama

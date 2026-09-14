@@ -77,15 +77,32 @@ export interface CanvasAppSurfaceProps {
   onExit: () => void;
   /** Send the reader to the card a file came from. */
   onOpenObject?: (nodeId: string) => void;
+  /**
+   * The object the reader just opened elsewhere — set when they pressed "Open the site"
+   * on a website card, because that site and this app are the same thing read two ways.
+   * The surface opens THAT object's file rather than the entry it would otherwise guess,
+   * so arriving here does not silently change which thing is in hand. Unset when the
+   * reader came from the rail, where there is no such object and the entry is right.
+   */
+  focusNodeId?: string | null;
 }
 
-export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfaceProps) {
+export function CanvasAppSurface({ nodes, onExit, onOpenObject, focusNodeId }: CanvasAppSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.app');
   const app = useMemo(() => canvasApp(nodes), [nodes]);
   const [reading, setReading] = useState<AppReading>('preview');
   const [viewport, setViewport] = useState<CanvasViewport>('desktop');
   const [running, setRunning] = useState(false);
   const [openFile, setOpenFile] = useState<string | null>(null);
+
+  // Arriving from a site: show that object's file. Keyed on the id rather than done once
+  // on mount, because the surface stays mounted while the reader opens a second site —
+  // and it must follow them rather than keep showing the first one's page.
+  useEffect(() => {
+    if (!focusNodeId) return;
+    const owned = app.files.find((file) => file.nodeId === focusNodeId);
+    if (owned) setOpenFile(owned.path);
+  }, [focusNodeId, app.files]);
   // Bumping this remounts the frame, which is what "restart" means for a document that
   // has no server to reload from.
   const [runNonce, setRunNonce] = useState(0);

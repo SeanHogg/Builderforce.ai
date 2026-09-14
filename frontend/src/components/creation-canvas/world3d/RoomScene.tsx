@@ -58,6 +58,14 @@ export interface RoomSceneProps {
   speech?: ReadonlyMap<string, RoomSpeech>;
   /** Shown over an agent still working on its reply. Translated by the host. */
   thinkingLabel?: string;
+  /**
+   * Take the reader to the full reply a bubble excerpts, by transcript message id. The
+   * room knows WHICH message each bubble quotes but nothing about the surface showing
+   * it, so the host does the revealing. Absent ⇒ bubbles stay plain text.
+   */
+  onSelectSpeech?: ((messageId: number) => void) | undefined;
+  /** Accessible name for that jump. Translated by the host. */
+  selectSpeechLabel?: string | undefined;
   children?: ReactNode;
 }
 
@@ -69,7 +77,7 @@ function bubbleFor(said: RoomSpeech | undefined, thinkingLabel: string | undefin
 
 export function RoomScene({
   seats, palette, design, unknownLabel, controlsEnabled = true, orbit = true, hiddenUserId = null,
-  speech, thinkingLabel, children,
+  speech, thinkingLabel, onSelectSpeech, selectSpeechLabel, children,
 }: RoomSceneProps) {
   const width = design.floor.width;
   const depth = design.floor.depth;
@@ -127,18 +135,29 @@ export function RoomScene({
         );
       })}
 
-      {seats.filter((seat) => seat.userId !== hiddenUserId).map((seat) => (
-        <PeerAvatar
-          key={seat.userId}
-          position={seat.position}
-          yaw={seat.yaw}
-          color={bodyColor(seat.userId, palette, seat.isSelf)}
-          label={seat.displayName || unknownLabel}
-          avatarUrl={seat.avatarUrl}
-          live={seat.present}
-          speech={bubbleFor(speech?.get(seat.userId), thinkingLabel)}
-        />
-      ))}
+      {seats.filter((seat) => seat.userId !== hiddenUserId).map((seat) => {
+        const said = speech?.get(seat.userId);
+        // Clickable only when there IS a message behind the bubble and the host offered
+        // somewhere to show it — a thinking bubble quotes nothing yet.
+        const messageId = said?.messageId ?? null;
+        const reveal = onSelectSpeech && messageId !== null
+          ? () => onSelectSpeech(messageId)
+          : undefined;
+        return (
+          <PeerAvatar
+            key={seat.userId}
+            position={seat.position}
+            yaw={seat.yaw}
+            color={bodyColor(seat.userId, palette, seat.isSelf)}
+            label={seat.displayName || unknownLabel}
+            avatarUrl={seat.avatarUrl}
+            live={seat.present}
+            speech={bubbleFor(said, thinkingLabel)}
+            onSelectSpeech={reveal}
+            selectSpeechLabel={selectSpeechLabel}
+          />
+        );
+      })}
 
       {children}
 

@@ -220,7 +220,42 @@ export interface CompletionUsage {
   total?: number;
 }
 
+/**
+ * What the vendor's RAW response carried, counted by the gateway before it translated
+ * the turn (the `x_builderforce_upstream` field the Responses vendors — Grok, Codex —
+ * put on the finishing chunk). It answers the first question of any "the model won't
+ * call tools" report: did the vendor return a structured function call at all?
+ */
+export interface UpstreamTurnEvidence {
+  /** Output items by type, as the vendor returned them. */
+  items: Record<string, number>;
+  /** Structured function calls the vendor returned. */
+  functionCalls: number;
+  /** How many of those the gateway rebuilt from the final frame. */
+  recovered: number;
+}
+
+/** The chunk field carrying {@link UpstreamTurnEvidence}; the gateway's
+ *  `vendors/responsesApi.ts` writes the same literal. */
+const UPSTREAM_EVIDENCE_FIELD = 'x_builderforce_upstream';
+
+/** The evidence on a chunk, when it carries a well-formed one. */
+function readUpstreamEvidence(frame: unknown): UpstreamTurnEvidence | undefined {
+  const raw = (frame as Record<string, unknown> | null)?.[UPSTREAM_EVIDENCE_FIELD] as Partial<UpstreamTurnEvidence> | undefined;
+  if (!raw || typeof raw.functionCalls !== 'number') return undefined;
+  return {
+    items: raw.items && typeof raw.items === 'object' ? raw.items : {},
+    functionCalls: raw.functionCalls,
+    recovered: typeof raw.recovered === 'number' ? raw.recovered : 0,
+  };
+}
+
 export interface StreamChatResult {
+  /**
+   * What the vendor's raw response carried before translation — see
+   * {@link UpstreamTurnEvidence}. Absent for vendors that do not report it.
+   */
+  upstream?: UpstreamTurnEvidence;
   text: string;
   toolCalls: AssembledToolCall[];
   finishReason: string | null;
@@ -450,6 +485,8 @@ export async function streamChatCompletion(
     const next: CompletionUsage = { prompt: num(o.prompt_tokens), completion: num(o.completion_tokens), total: num(o.total_tokens) };
     if (next.prompt != null || next.completion != null || next.total != null) usage = next;
   };
+  // The vendor's raw-response count, from whichever chunk carried it (the finishing one).
+  let upstream: UpstreamTurnEvidence | undefined;
 
   // Tool calls are accumulated by index across deltas.
   const toolAcc = new Map<number, { id: string; name: string; args: string }>();
@@ -472,6 +509,7 @@ export async function streamChatCompletion(
     if (typeof data?.model === 'string' && data.model) streamModel = data.model;
     announceModel();
     readUsage((data as { usage?: unknown } | null)?.usage);
+    upstream = readUpstreamEvidence(data);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? '');
     const loop = detectRepetitionLoop(text);
@@ -483,7 +521,7 @@ export async function streamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
   }
 
   const decoder = new TextDecoder();
@@ -510,7 +548,7 @@ export async function streamChatCompletion(
         const tail = xml.flush();
         if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
       }
       let parsed: {
         model?: string;
@@ -542,6 +580,7 @@ export async function streamChatCompletion(
       // The usage-bearing chunk (OpenAI stream_options) typically arrives last,
       // often with an empty `choices` array — read it whenever present.
       if (parsed.usage) readUsage(parsed.usage);
+      upstream = readUpstreamEvidence(parsed) ?? upstream;
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
 
@@ -593,7 +632,7 @@ export async function streamChatCompletion(
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {

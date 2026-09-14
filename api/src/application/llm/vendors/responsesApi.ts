@@ -204,6 +204,40 @@ export function buildResponsesBody(params: VendorCallParams, opts?: ResponsesBod
   };
 }
 
+/**
+ * The chunk field carrying {@link UpstreamTurnEvidence} to the client. Rides the finish
+ * chunk of a translated stream and the top level of a normalized completion; the client
+ * (`brain-embedded/src/streamChatCompletion.ts`) reads the same literal.
+ */
+export const UPSTREAM_EVIDENCE_FIELD = 'x_builderforce_upstream';
+
+/**
+ * What the vendor's Responses turn ACTUALLY carried, counted before any translation.
+ *
+ * A run where Grok made "0 tool calls · 12 text-only" has two opposite explanations: the
+ * model never emitted a structured `function_call`, or it did and the translation lost
+ * it. The client sees only the translated stream, so it cannot tell them apart. This
+ * count can: the diagnostics compare it with the calls that reached the loop.
+ */
+export interface UpstreamTurnEvidence {
+  /** Output items by type, as returned: `reasoning`, `message`, `function_call`, … */
+  items: Record<string, number>;
+  /** Structured function calls the vendor returned. */
+  functionCalls: number;
+  /** How many of those appeared ONLY in the terminal output and were rebuilt from it. */
+  recovered: number;
+}
+
+/** Count a Responses output list. Anything that is not an item list counts as empty. */
+export function upstreamTurnEvidence(output: unknown, recovered = 0): UpstreamTurnEvidence {
+  const items: Record<string, number> = {};
+  for (const raw of Array.isArray(output) ? output : []) {
+    const type = typeof (raw as { type?: unknown } | null)?.type === 'string' ? (raw as { type: string }).type : 'unknown';
+    items[type] = (items[type] ?? 0) + 1;
+  }
+  return { items, functionCalls: items['function_call'] ?? 0, recovered };
+}
+
 /** The terminal Responses object both vendors read, whether it arrived as plain JSON or
  *  as the `response.completed` frame of an SSE stream. */
 export interface ResponsesPayload {
@@ -239,6 +273,7 @@ export function normalizeResponsesPayload(raw: ResponsesPayload): VendorCallResu
       finish_reason: toolCalls.length ? 'tool_calls' : 'stop',
     }],
     usage,
+    [UPSTREAM_EVIDENCE_FIELD]: upstreamTurnEvidence(raw.output),
   };
   return { raw: chatRaw, content, usage };
 }

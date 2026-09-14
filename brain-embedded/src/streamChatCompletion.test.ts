@@ -47,6 +47,27 @@ describe('streamChatCompletion onModel', () => {
   });
 });
 
+describe('streamChatCompletion upstream evidence', () => {
+  it('surfaces what the vendor\'s raw response carried, from the finishing chunk', async () => {
+    const evidence = { items: { reasoning: 1, message: 1 }, functionCalls: 0, recovered: 0 };
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'I will call search_code' } }] })}\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], x_builderforce_upstream: evidence })}\n`,
+      'data: [DONE]\n',
+    ])));
+    const result = await streamChatCompletion({ messages: [], transport: baseTransport }, {});
+    expect(result.upstream).toEqual(evidence);
+  });
+
+  it('leaves it unset for a vendor that does not report one', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'hi' }, finish_reason: 'stop' }] })}\n`,
+      'data: [DONE]\n',
+    ])));
+    expect((await streamChatCompletion({ messages: [], transport: baseTransport }, {})).upstream).toBeUndefined();
+  });
+});
+
 describe('streamChatCompletion repetition guard', () => {
   const sentence = "I'll start by checking this chat's linked tickets and locating the Room bubble code. ";
   const frames = (copies: number): string[] => [

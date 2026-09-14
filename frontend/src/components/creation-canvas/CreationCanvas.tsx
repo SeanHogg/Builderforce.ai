@@ -1173,6 +1173,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the reason a surface can be `page` at all: a page is a page OF something.
    */
   const [surfaceTarget, setSurfaceTarget] = useState<string | null>(null);
+  /**
+   * The object the App surface should mount, when the reader got there by opening a
+   * SITE rather than by pressing App in the rail.
+   *
+   * It is deliberately not `surfaceTarget`. That one is cleared the moment a board
+   * surface opens, because a board surface is about the whole session — and the App
+   * surface IS board-scoped, so it would lose this the instant it was needed. This
+   * remembers which object the reader last chose so the App modality opens the same
+   * thing the site modality is showing, and it is cleared when they pick an object
+   * that has no code on this board (below), so it can never point at a stale card.
+   */
+  const [appTarget, setAppTarget] = useState<string | null>(null);
   const surfaceDef = canvasSurfaceDefinition(surface);
   /**
    * Whether the session bar is folded to what the canvas IS DOING.
@@ -1215,6 +1227,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // projection of the board they were already on, and never a surface that cannot be
     // restored without the object it was about.
     writeCanvasSurface(next);
+    /**
+     * OPENING A SITE ALSO ARMS THE APP.
+     *
+     * A website on this board is not only a set of pages: when the session carries the
+     * code that serves it, the SAME thing is also a running application. Pressing "Open
+     * the site" used to land on `site` alone, and the App modality stayed on whatever it
+     * last showed — so the reader had to find the rail and press App to see the very
+     * build they had just opened, and the two surfaces disagreed about which object was
+     * in hand.
+     *
+     * So the site's target is carried over to the App surface here, at the ONE place
+     * every door into a surface passes through (the card header, the anchored panel and
+     * the room all call this). The App surface stays a board-scoped reading — it is
+     * still "the session as one application" — this only tells it which object the
+     * reader just chose, so it mounts that one rather than its own last guess.
+     */
+    if (next === 'site' && targetId) setAppTarget(targetId);
   }, []);
   /** Leave an object surface: back to wherever it was opened from, else the board. */
   const exitSurface = useCallback(() => setSurface(surfaceOrigin ?? 'graph'), [setSurface, surfaceOrigin]);
@@ -12935,6 +12964,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               nodes={nodes}
               onExit={() => setSurface('graph')}
               onOpenObject={revealObject}
+              // Set when the reader arrived by opening a SITE, so the App modality shows
+              // that same object rather than the entry file it would otherwise guess.
+              focusNodeId={appTarget}
             />,
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.

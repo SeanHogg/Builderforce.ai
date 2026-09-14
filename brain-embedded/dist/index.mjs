@@ -823,6 +823,16 @@ function selectPendingAskUser(messages) {
 }
 
 // src/streamChatCompletion.ts
+var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
+function readUpstreamEvidence(frame) {
+  const raw = frame?.[UPSTREAM_EVIDENCE_FIELD];
+  if (!raw || typeof raw.functionCalls !== "number") return void 0;
+  return {
+    items: raw.items && typeof raw.items === "object" ? raw.items : {},
+    functionCalls: raw.functionCalls,
+    recovered: typeof raw.recovered === "number" ? raw.recovered : 0
+  };
+}
 var StreamInterruptedError = class extends Error {
   model;
   constructor(message, model) {
@@ -946,6 +956,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     const next = { prompt: num(o.prompt_tokens), completion: num(o.completion_tokens), total: num(o.total_tokens) };
     if (next.prompt != null || next.completion != null || next.total != null) usage = next;
   };
+  let upstream;
   const toolAcc = /* @__PURE__ */ new Map();
   const xml = new XmlToolCallFilter();
   let finishReason = null;
@@ -957,6 +968,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     if (typeof data?.model === "string" && data.model) streamModel = data.model;
     announceModel();
     readUsage(data?.usage);
+    upstream = readUpstreamEvidence(data);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? "");
     const loop = detectRepetitionLoop(text);
@@ -968,7 +980,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -993,7 +1005,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
       }
       let parsed;
       try {
@@ -1009,6 +1021,7 @@ async function streamChatCompletion(opts, handlers = {}) {
       if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
       announceModel();
       if (parsed.usage) readUsage(parsed.usage);
+      upstream = readUpstreamEvidence(parsed) ?? upstream;
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
       const contentDelta = (typeof choice?.delta?.content === "string" ? choice.delta.content : null) || parsed.response || parsed.text || parsed.delta || "";
@@ -1046,7 +1059,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -3022,7 +3035,19 @@ function modelScorecard(events) {
   const row = (model) => {
     let score = byModel.get(model);
     if (!score) {
-      score = { model, turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0, stopped: 0 };
+      score = {
+        model,
+        turns: 0,
+        toolCalls: 0,
+        textOnlyTurns: 0,
+        unliftedMarkupTurns: 0,
+        failures: 0,
+        stopped: 0,
+        upstreamReportedTurns: 0,
+        upstreamFunctionCalls: 0,
+        upstreamRecovered: 0,
+        adapterLossTurns: 0
+      };
       byModel.set(model, score);
     }
     return score;
@@ -3048,21 +3073,39 @@ function modelScorecard(events) {
     score.toolCalls += calls;
     if (calls === 0 && (ev.textChars ?? 0) > 0) score.textOnlyTurns += 1;
     if (args?.unliftedCallMarkup === true) score.unliftedMarkupTurns += 1;
+    if (typeof args?.upstreamFunctionCalls === "number") {
+      score.upstreamReportedTurns += 1;
+      score.upstreamFunctionCalls += args.upstreamFunctionCalls;
+      if (typeof args.upstreamRecovered === "number") score.upstreamRecovered += args.upstreamRecovered;
+      if (args.upstreamFunctionCalls > calls) score.adapterLossTurns += 1;
+    }
   }
   return [...byModel.values()];
+}
+function silentModelFlag(s) {
+  const base = " \xB7 \u26A0 made NO tool calls while another model in this run did";
+  if (s.upstreamReportedTurns > 0 && s.upstreamFunctionCalls === 0) {
+    return `${base}. Its raw responses carried 0 structured function calls on the ${s.upstreamReportedTurns} turn(s) its vendor reported, so the MODEL did not call \u2014 nothing was lost on the way.`;
+  }
+  return `${base}: this model is not emitting structured calls on its route.`;
 }
 function formatModelScorecard(scores) {
   const markup = scores.some((s) => s.unliftedMarkupTurns > 0);
   const stopped = scores.some((s) => s.stopped > 0);
-  if (scores.length < 2 && !markup && !stopped) return [];
+  const lost = scores.some((s) => s.adapterLossTurns > 0);
+  if (scores.length < 2 && !markup && !stopped && !lost) return [];
   const anyActed = scores.some((s) => s.toolCalls > 0);
   const lines = ["Per model:"];
   for (const s of scores) {
     const parts = [`${s.turns} turn(s)`, `${s.toolCalls} tool call(s)`];
     if (s.textOnlyTurns) parts.push(`${s.textOnlyTurns} text-only`);
+    if (s.upstreamReportedTurns) {
+      parts.push(`raw response: ${s.upstreamFunctionCalls} structured call(s) over ${s.upstreamReportedTurns} reported turn(s)`);
+    }
+    if (s.upstreamRecovered) parts.push(`${s.upstreamRecovered} rebuilt from the final frame`);
     if (s.failures) parts.push(`${s.failures} failed`);
     if (s.stopped) parts.push(`${s.stopped} stopped by the user mid-stream`);
-    const flag = s.unliftedMarkupTurns ? ` \xB7 \u26A0 ${s.unliftedMarkupTurns} turn(s) wrote a tool call as MARKUP that no parser lifted, so the call never ran. The model tried to act; this is a parser gap, not a refusal.` : scores.length > 1 && anyActed && s.toolCalls === 0 && s.turns >= SILENT_TURNS_AT ? " \xB7 \u26A0 made NO tool calls while another model in this run did: this model is not emitting structured calls on its route." : "";
+    const flag = s.unliftedMarkupTurns ? ` \xB7 \u26A0 ${s.unliftedMarkupTurns} turn(s) wrote a tool call as MARKUP that no parser lifted, so the call never ran. The model tried to act; this is a parser gap, not a refusal.` : s.adapterLossTurns ? ` \xB7 \u26A0 on ${s.adapterLossTurns} turn(s) the vendor returned structured tool calls that never reached the loop: the calls were lost in translation, so this is an adapter defect, not the model.` : scores.length > 1 && anyActed && s.toolCalls === 0 && s.turns >= SILENT_TURNS_AT ? silentModelFlag(s) : "";
     lines.push(`  \u2022 ${s.model}: ${parts.join(" \xB7 ")}${flag}`);
   }
   return lines;
@@ -5917,7 +5960,11 @@ ${revisit}` : replayNote });
           // The stream filter strips every call it lifts, so call markup still IN the text
           // is a dialect it does not know: the model tried to act and the call never ran.
           // Recorded so a copied report says "parser gap" instead of "won't call tools".
-          ...result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {}
+          ...result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {},
+          // What the vendor's RAW response carried, counted before the gateway translated
+          // it — so a text-only turn reads as "the model returned no call" or "a returned
+          // call was lost on the way", never as a guess. Absent when the vendor does not report it.
+          ...result.upstream ? { upstreamFunctionCalls: result.upstream.functionCalls, upstreamRecovered: result.upstream.recovered } : {}
         },
         // Structured diagnostics fields — the A-vs-B triage reads these directly.
         usage: result.usage,

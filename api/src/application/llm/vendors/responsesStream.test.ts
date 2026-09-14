@@ -353,6 +353,68 @@ describe('Responses SSE → OpenAI chat SSE passthrough', () => {
   });
 });
 
+/** The concatenated arguments every emitted tool_call delta carried for slot `slot`. */
+function argsFor(parsed: Array<any>, slot = 0): string {
+  return parsed
+    .flatMap((c) => c.choices?.[0]?.delta?.tool_calls ?? [])
+    .filter((tc: any) => tc.index === slot && tc.function?.arguments)
+    .map((tc: any) => tc.function.arguments)
+    .join('');
+}
+
+describe('a call xAI delivers whole, or only in the terminal frame', () => {
+  it('carries arguments that ride the output_item.added frame, and ignores deltas restating them', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"c1","name":"search_code","arguments":"{\\"query\\":\\"RoomRoster\\"}"}}\n\n',
+      'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\\"query\\":\\"RoomRoster\\"}"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r"}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    expect(argsFor(parsed)).toBe('{"query":"RoomRoster"}');
+    expect(parsed.find((c) => c.choices?.[0]?.finish_reason)?.choices[0].finish_reason).toBe('tool_calls');
+  });
+
+  it('rebuilds a call that appears ONLY in response.completed — the turn used to arrive with no tool calls', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.completed","response":{"id":"r","output":[{"type":"reasoning","id":"rs_1"},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","arguments":"{\\"path\\":\\"a.ts\\"}"}]}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    const opener = parsed.flatMap((c) => c.choices?.[0]?.delta?.tool_calls ?? []).find((tc: any) => tc.id);
+    expect(opener).toMatchObject({ id: 'call_1', function: { name: 'read_file' } });
+    expect(argsFor(parsed, opener.index)).toBe('{"path":"a.ts"}');
+    const finish = parsed.find((c) => c.choices?.[0]?.finish_reason);
+    expect(finish.choices[0].finish_reason).toBe('tool_calls');
+    expect(finish.x_builderforce_upstream).toEqual({ items: { reasoning: 1, function_call: 1 }, functionCalls: 1, recovered: 1 });
+  });
+
+  it('does not repeat a call the stream already opened when the terminal output restates it', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","arguments":"{}"}}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","arguments":"{}"}]}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    expect(parsed.flatMap((c) => c.choices?.[0]?.delta?.tool_calls ?? []).filter((tc: any) => tc.id)).toHaveLength(1);
+    expect(parsed.find((c) => c.choices?.[0]?.finish_reason).x_builderforce_upstream).toMatchObject({ functionCalls: 1, recovered: 0 });
+  });
+
+  it('emits text that only the terminal output carries, exactly once', async () => {
+    const terminal = 'data: {"type":"response.completed","response":{"id":"r","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}]}}\n\n';
+    const onlyTerminal = chunks(await drain(responsesSseToChatSse(sseStream([terminal]), { model: 'grok-4.6' })));
+    expect(onlyTerminal.map((c) => c.choices?.[0]?.delta?.content ?? '').join('')).toBe('done');
+    const streamedToo = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_text.delta","delta":"done"}\n\n', terminal,
+    ]), { model: 'grok-4.6' })));
+    expect(streamedToo.map((c) => c.choices?.[0]?.delta?.content ?? '').join('')).toBe('done');
+  });
+
+  it('reports a text-only turn as zero structured calls — the model, not the adapter', async () => {
+    const parsed = chunks(await drain(responsesSseToChatSse(sseStream([
+      'data: {"type":"response.output_text.delta","delta":"I will now call search_code"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"r","output":[{"type":"reasoning"},{"type":"message","content":[{"type":"output_text","text":"I will now call search_code"}]}]}}\n\n',
+    ]), { model: 'grok-4.6' })));
+    const finish = parsed.find((c) => c.choices?.[0]?.finish_reason);
+    expect(finish.choices[0].finish_reason).toBe('stop');
+    expect(finish.x_builderforce_upstream).toEqual({ items: { reasoning: 1, message: 1 }, functionCalls: 0, recovered: 0 });
+  });
+});
+
 describe('Responses vendors stream for real', () => {
   afterEach(() => vi.restoreAllMocks());
 

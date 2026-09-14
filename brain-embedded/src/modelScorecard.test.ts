@@ -2,15 +2,27 @@ import { describe, it, expect } from 'vitest';
 import { formatModelScorecard, modelScorecard } from './modelScorecard';
 import type { BrainTraceEvent } from './brainTriage';
 
-function turn(model: string, toolCalls: number, opts: { unliftedCallMarkup?: boolean } = {}): BrainTraceEvent {
+function turn(
+  model: string,
+  toolCalls: number,
+  opts: { unliftedCallMarkup?: boolean; upstream?: { calls: number; recovered?: number } } = {},
+): BrainTraceEvent {
   return {
     ts: new Date(0).toISOString(),
     category: 'llm',
     label: 'llm.complete',
-    args: { model, toolCalls, ...(opts.unliftedCallMarkup ? { unliftedCallMarkup: true } : {}) },
+    args: {
+      model,
+      toolCalls,
+      ...(opts.unliftedCallMarkup ? { unliftedCallMarkup: true } : {}),
+      ...(opts.upstream ? { upstreamFunctionCalls: opts.upstream.calls, upstreamRecovered: opts.upstream.recovered ?? 0 } : {}),
+    },
     textChars: toolCalls ? 0 : 60,
   };
 }
+
+/** The raw-response fields of a score for a vendor that reported nothing. */
+const NO_UPSTREAM = { upstreamReportedTurns: 0, upstreamFunctionCalls: 0, upstreamRecovered: 0, adapterLossTurns: 0 };
 
 describe('modelScorecard', () => {
   it('scores each model on the turns it served, first-seen order', () => {
@@ -20,8 +32,8 @@ describe('modelScorecard', () => {
       turn('direct/qwen/qwen3.8-max', 1),
     ]);
     expect(scores).toEqual([
-      { model: 'direct/qwen/qwen3.8-max', turns: 2, toolCalls: 3, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0, stopped: 0 },
-      { model: 'xai-oauth/grok-4.5', turns: 1, toolCalls: 0, textOnlyTurns: 1, unliftedMarkupTurns: 0, failures: 0, stopped: 0 },
+      { model: 'direct/qwen/qwen3.8-max', turns: 2, toolCalls: 3, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 0, stopped: 0, ...NO_UPSTREAM },
+      { model: 'xai-oauth/grok-4.5', turns: 1, toolCalls: 0, textOnlyTurns: 1, unliftedMarkupTurns: 0, failures: 0, stopped: 0, ...NO_UPSTREAM },
     ]);
   });
 
@@ -31,8 +43,17 @@ describe('modelScorecard', () => {
       { ts: '', category: 'error', label: 'llm.complete', args: { model: 'default' }, isError: true },
     ]);
     expect(scores).toEqual([
-      { model: 'xai-oauth/grok-4.5', turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 1, stopped: 0 },
+      { model: 'xai-oauth/grok-4.5', turns: 0, toolCalls: 0, textOnlyTurns: 0, unliftedMarkupTurns: 0, failures: 1, stopped: 0, ...NO_UPSTREAM },
     ]);
+  });
+
+  it('adds up what the vendor\'s raw responses carried, and counts a turn that lost a returned call', () => {
+    const [score] = modelScorecard([
+      turn('xai-oauth/grok-4.6', 1, { upstream: { calls: 1, recovered: 1 } }),
+      turn('xai-oauth/grok-4.6', 0, { upstream: { calls: 2 } }),
+      turn('xai-oauth/grok-4.6', 0),
+    ]);
+    expect(score).toMatchObject({ turns: 3, upstreamReportedTurns: 2, upstreamFunctionCalls: 3, upstreamRecovered: 1, adapterLossTurns: 1 });
   });
 
   it('counts a user Stop against the model that was streaming, even one that never completed a turn', () => {
@@ -72,6 +93,29 @@ describe('formatModelScorecard', () => {
       { ts: '', category: 'message', label: 'agent.stopped', args: { model: 'xai-oauth/grok-4.6' } },
     ]));
     expect(lines.join('\n')).toContain('xai-oauth/grok-4.6: 1 turn(s) · 0 tool call(s) · 1 text-only · 1 stopped by the user mid-stream');
+  });
+
+  it('says the MODEL did not call when its raw responses carried no structured call (chat #104)', () => {
+    const lines = formatModelScorecard(modelScorecard([
+      ...Array.from({ length: 4 }, () => turn('direct/qwen/qwen3.8-max', 2)),
+      ...Array.from({ length: 3 }, () => turn('xai-oauth/grok-4.6', 0, { upstream: { calls: 0 } })),
+    ]));
+    const grok = lines.find((l) => l.includes('grok-4.6'))!;
+    expect(grok).toContain('raw response: 0 structured call(s) over 3 reported turn(s)');
+    expect(grok).toContain('so the MODEL did not call — nothing was lost on the way');
+  });
+
+  it('names an adapter loss when the vendor returned a call that never reached the loop, even single-model', () => {
+    const lines = formatModelScorecard(modelScorecard([turn('xai-oauth/grok-4.6', 0, { upstream: { calls: 1 } })]));
+    expect(lines.join('\n')).toContain('the calls were lost in translation, so this is an adapter defect, not the model');
+  });
+
+  it('keeps the unproven wording when the route did not report its raw response', () => {
+    const lines = formatModelScorecard(modelScorecard([
+      ...Array.from({ length: 2 }, () => turn('direct/qwen/qwen3.8-max', 2)),
+      ...Array.from({ length: 3 }, () => turn('nvidia/some-model', 0)),
+    ]));
+    expect(lines.join('\n')).toContain('this model is not emitting structured calls on its route');
   });
 
   it('stays silent for a single-model run with nothing to flag', () => {

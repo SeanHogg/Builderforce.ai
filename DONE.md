@@ -1,3 +1,32 @@
+## ✅ RESOLVED 2026-09-13 — Grok (`xai-oauth`) turns could arrive with no tool calls while xAI had returned one, and no report could tell the model from the adapter
+
+Chat #104 ("add a collapse chevron to the Room roster") ended `xai-oauth/grok-4.6: 12 turn(s) · 0 tool call(s) ·
+12 text-only`, and every earlier pass treated that as model behaviour (text-dialect lifters, doom-loop header,
+re-prompts). The adapter was never proven innocent. xAI documents that a streamed function call "is returned in
+whole in a single chunk, not streamed across chunks", and `responsesStream.ts` had two gaps against that:
+
+1. `response.output_item.added` read only the call's id and name, and ignored `arguments` riding the same
+   frame, so a call delivered whole there ran with empty arguments unless a later frame restated them.
+2. `response.completed` never read its own `output` list for calls or text. A call present ONLY in the terminal
+   payload was saved for the reasoning replay but never emitted, so the client saw a text-only turn while the
+   call sat in the response.
+
+Both are fixed: `openToolCall` emits whole arguments (and ignores deltas restating them), and
+`recoverFromTerminalOutput` rebuilds every call and text the stream never announced (deduped by `call_id`/`id`).
+
+**The binary question is now answered on every turn.** The translator stamps `x_builderforce_upstream`
+(`UpstreamTurnEvidence`: output items by type, structured `function_call` count, how many were rebuilt) on the
+finishing chunk, and `normalizeResponsesPayload` → `pseudoStreamFromCall` carries the same field. brain-embedded
+reads it (`StreamChatResult.upstream`), records `upstreamFunctionCalls`/`upstreamRecovered` on `llm.complete`,
+and the "Per model:" line now says `raw response: N structured call(s) over M reported turn(s)`. It also says
+either "the MODEL did not call — nothing was lost on the way" or "the calls were lost in translation … an
+adapter defect", where it used to say only "not emitting structured calls on its route".
+
+Isolation ladder for the live verdict: `api/scripts/xai-tool-call-smoke.mjs` (raw xAI API, no gateway code,
+`--tools 2|5|67`, `--stream`, `--oauth`) and `api/src/application/llm/vendors/xaiOAuth.live.test.ts` (the same
+request through `xaiOAuthModule.callStream`, skipped unless `XAI_LIVE_KEY` is set). api 2026.9.32 ·
+brain-embedded 2026.9.26.
+
 ## ✅ RESOLVED 2026-09-13 — Nine MCP list tools let a caller (including an autonomous agent) request an unbounded `limit`, driving Neon network-transfer usage toward its cap
 
 Investigated after the operator flagged the Neon console showing 82% of the 5GB/month free-tier network-transfer

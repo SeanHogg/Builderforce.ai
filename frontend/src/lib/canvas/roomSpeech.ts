@@ -24,6 +24,20 @@ export interface RoomSpeech {
   text: string | null;
   /** Working on its reply right now. */
   pending: boolean;
+  /**
+   * WHICH message in the transcript this bubble is an excerpt OF — the id the Brain
+   * surface gives that same turn, so clicking the bubble can take the reader to the
+   * full reply instead of leaving them to hunt for it in the scroll.
+   *
+   * It is the message's 1-based position in the timeline, because that is exactly how
+   * the host mints `BrainMessage.id` for the transcript (`brainMessages` in
+   * `CreationCanvas`). Deriving it the same way from the same array is what keeps the
+   * two surfaces pointing at one message; a bubble is otherwise the only thing on
+   * screen that knows what was said but not where it was said.
+   *
+   * Null while an agent is still working — there is no message to jump to yet.
+   */
+  messageId: number | null;
 }
 
 /** Longest bubble. The full reply is in the transcript; a bubble is the gist. */
@@ -66,16 +80,20 @@ export function roomSpeech(
 ): Map<string, RoomSpeech> {
   const speech = new Map<string, RoomSpeech>();
   for (const agent of agents) {
-    if (pendingObjectIds.has(agent.objectId)) speech.set(boardAgentOccupantId(agent), { text: null, pending: true });
+    if (pendingObjectIds.has(agent.objectId)) speech.set(boardAgentOccupantId(agent), { text: null, pending: true, messageId: null });
   }
   let turnStart = timeline.length - 1;
   while (turnStart >= 0 && timeline[turnStart]!.messageRole !== 'user') turnStart -= 1;
-  for (const message of timeline.slice(turnStart + 1)) {
+  // Indexed over the WHOLE timeline, not the sliced turn: `messageId` has to be the
+  // message's position in the array the transcript was built from, so an offset into
+  // the slice would point the reader at some earlier, unrelated turn.
+  for (let index = turnStart + 1; index < timeline.length; index += 1) {
+    const message = timeline[index]!;
     const author = message.metadata?.authoredBy;
     if (message.messageRole !== 'assistant' || author?.kind !== 'agent' || message.metadata?.error === true) continue;
     const agent = speakerOf(author, agents);
     const text = agent ? speechExcerpt(message.body) : '';
-    if (agent && text) speech.set(boardAgentOccupantId(agent), { text, pending: false });
+    if (agent && text) speech.set(boardAgentOccupantId(agent), { text, pending: false, messageId: index + 1 });
   }
   return speech;
 }

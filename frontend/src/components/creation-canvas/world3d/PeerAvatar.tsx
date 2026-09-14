@@ -53,9 +53,14 @@ export interface PeerAvatarProps {
   /** What they are saying: an agent's reply to the latest turn, or the translated
    *  "thinking" line while it works. Absent for everyone who has not spoken. */
   speech?: { text: string; pending: boolean } | null;
+  /** Show the full reply this bubble excerpts, in the transcript. Absent ⇒ the bubble
+   *  is not clickable, which is the right answer while an agent is still thinking. */
+  onSelectSpeech?: (() => void) | undefined;
+  /** Accessible name for that jump. Translated by the host. */
+  selectSpeechLabel?: string | undefined;
 }
 
-export function PeerAvatar({ position, yaw, color, label, avatarUrl, live, speech }: PeerAvatarProps) {
+export function PeerAvatar({ position, yaw, color, label, avatarUrl, live, speech, onSelectSpeech, selectSpeechLabel }: PeerAvatarProps) {
   return (
     <group position={[position[0], position[1] + FOOT_OFFSET, position[2]]} rotation={[0, yaw, 0]}>
       <AvatarFigure color={color} faceUrl={avatarUrl} />
@@ -92,7 +97,15 @@ export function PeerAvatar({ position, yaw, color, label, avatarUrl, live, speec
           {label}
         </span>
       </Html>
-      {speech && <PeerSpeechBubble text={speech.text} pending={speech.pending} height={SPEECH_HEIGHT} />}
+      {speech && (
+        <PeerSpeechBubble
+          text={speech.text}
+          pending={speech.pending}
+          height={SPEECH_HEIGHT}
+          onSelect={onSelectSpeech}
+          selectLabel={selectSpeechLabel}
+        />
+      )}
     </group>
   );
 }

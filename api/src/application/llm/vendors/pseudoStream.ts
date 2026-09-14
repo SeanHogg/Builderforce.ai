@@ -22,6 +22,7 @@
  * shape the client's `readUsage` already handles.
  */
 import type { VendorCallParams, VendorCallResult, VendorStreamResult } from './types';
+import { UPSTREAM_EVIDENCE_FIELD } from './responsesApi';
 
 /** The OpenAI chat-completion shape a Responses-API `call()` normalizes into. */
 interface NormalizedChatCompletion {
@@ -42,8 +43,12 @@ export function pseudoStreamFromCall(result: VendorCallResult, params: VendorCal
   const choice = raw.choices?.[0];
   const id = raw.id ?? `chatcmpl_${crypto.randomUUID()}`;
   const toolCalls = choice?.message?.tool_calls;
+  // The raw-response count `normalizeResponsesPayload` took, carried to the client the
+  // same way the true stream carries it (on the finishing chunk).
+  const evidence = (result.raw as Record<string, unknown> | null)?.[UPSTREAM_EVIDENCE_FIELD];
 
   const chunk = {
+    ...(evidence ? { [UPSTREAM_EVIDENCE_FIELD]: evidence } : {}),
     id,
     object: 'chat.completion.chunk',
     model: params.model,

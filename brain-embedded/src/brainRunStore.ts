@@ -2421,6 +2421,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           // is a dialect it does not know: the model tried to act and the call never ran.
           // Recorded so a copied report says "parser gap" instead of "won't call tools".
           ...(result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {}),
+          // What the vendor's RAW response carried, counted before the gateway translated
+          // it — so a text-only turn reads as "the model returned no call" or "a returned
+          // call was lost on the way", never as a guess. Absent when the vendor does not report it.
+          ...(result.upstream ? { upstreamFunctionCalls: result.upstream.functionCalls, upstreamRecovered: result.upstream.recovered } : {}),
         },
         // Structured diagnostics fields — the A-vs-B triage reads these directly.
         usage: result.usage,

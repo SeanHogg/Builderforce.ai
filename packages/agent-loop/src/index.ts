@@ -217,6 +217,21 @@ export function askUserAnchorId(messageId: number): string {
   return `bf-ask-${messageId}`;
 }
 
+/**
+ * The DOM id of a rendered TRANSCRIPT MESSAGE. Same one-convention rule as
+ * {@link askUserAnchorId}: the timeline stamps it on every settled user/assistant
+ * turn, and any surface that wants to jump to a message resolves it through this
+ * helper rather than hand-writing the string.
+ *
+ * It exists because a reply can be shown somewhere OTHER than the transcript — a
+ * speech bubble over an agent's head in the room is the gist of a reply whose full
+ * text only the transcript holds — and clicking that gist has to land on the turn it
+ * came from.
+ */
+export function brainMessageAnchorId(messageId: number): string {
+  return `bf-msg-${messageId}`;
+}
+
 /** The minimal message shape {@link selectPendingAskUser} needs — structural on
  *  purpose, so this module stays free of any transcript import. */
 export interface AskUserMessageLike {

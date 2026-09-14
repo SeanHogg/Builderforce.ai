@@ -28,6 +28,7 @@ export type {
   StreamHandlers,
   StreamChatOptions,
   StreamChatResult,
+  UpstreamTurnEvidence,
   CompletionMetadata,
   AssembledToolCall,
 } from './streamChatCompletion';

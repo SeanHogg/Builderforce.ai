@@ -16,6 +16,13 @@
 .bubble {
   margin: 0;
   padding: 6px 10px;
+  /* Set explicitly because the bubble is a <button> when it can be clicked, and a
+     button brings its own font, colour and centred text that would otherwise make the
+     clickable bubble look like a different component from the plain one. */
+  font: inherit;
+  font-size: var(--font-size-small);
+  text-align: left;
+  width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-raised, var(--surface));
@@ -30,6 +37,35 @@
   line-clamp: 4;
   overflow: hidden;
   box-shadow: 0 6px 18px color-mix(in srgb, var(--text-primary) 16%, transparent);
+}
+
+/* A bubble that jumps to its message in the transcript. It has to opt BACK IN to the
+   pointer: the anchor above refuses it so a bubble never steals a click from the scene,
+   and only the clickable one is an exception to that. */
+.clickable {
+  pointer-events: auto;
+  cursor: pointer;
+  appearance: none;
+  display: -webkit-box;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.clickable:hover,
+.clickable:focus-visible {
+  border-color: var(--accent, var(--text-primary));
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--text-primary) 24%, transparent);
+  transform: translateY(-1px);
+}
+
+.clickable:focus-visible {
+  outline: 2px solid var(--accent, var(--text-primary));
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clickable { transition: none; }
+  .clickable:hover,
+  .clickable:focus-visible { transform: none; }
 }
 
 /* The tail, pointing down at the speaker. On the anchor rather than the bubble, because

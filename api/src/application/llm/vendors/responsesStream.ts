@@ -18,12 +18,16 @@
  *   response.created                       → capture the response id
  *   response.output_text.delta             → a content delta chunk
  *   response.output_item.added(function_call)
- *                                          → open a tool_call slot (id + name)
+ *                                          → open a tool_call slot (id + name), with
+ *                                            its arguments when the frame carries them
+ *                                            (xAI delivers a streamed call WHOLE)
  *   response.function_call_arguments.delta → an arguments delta on that slot
  *   response.function_call_arguments.done / response.output_item.done
  *                                          → the WHOLE arguments, when no delta
  *                                            carried them (opening the slot if needed)
- *   response.completed                     → finish_reason chunk, then the
+ *   response.completed                     → any call or text ONLY the terminal
+ *                                            output carries, the finish_reason chunk
+ *                                            (with the upstream evidence), the
  *                                            usage-only chunk, then `[DONE]`
  *   response.incomplete                    → the same, with finish_reason `length`
  *   response.failed / error                → an OpenAI-shaped error frame
@@ -41,6 +45,7 @@
  */
 import { parseSseDataFrames, parseSseDataLine } from '../sseFrames';
 import { pickUsage, VendorRetryableError, type VendorId } from './types';
+import { UPSTREAM_EVIDENCE_FIELD, upstreamTurnEvidence } from './responsesApi';
 
 /** The Responses stream events this transform reads. Anything else is ignored. */
 interface ResponsesStreamEvent {
@@ -81,6 +86,23 @@ function confidentDoomLoopTrigger(event: ResponsesStreamEvent): string | null {
     if (match && Number(match[1]) <= DOOM_LOOP_MAX_THRESHOLD) return trigger as string;
   }
   return null;
+}
+
+/**
+ * Slot key for a call first seen in the terminal output list. Past any streamed
+ * `output_index`, so a rebuilt call can never land on a slot a streamed one holds.
+ */
+const TERMINAL_INDEX_BASE = 1_000_000;
+
+/** The visible text of a terminal `message` item: its `output_text` parts, joined. */
+function messageText(item: Record<string, unknown>): string {
+  const content = item['content'];
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => part as { type?: unknown; text?: unknown } | null)
+    .filter((part) => part?.type === 'output_text' && typeof part.text === 'string')
+    .map((part) => part!.text as string)
+    .join('');
 }
 
 /** The chunk envelope every emitted frame shares. */
@@ -156,16 +178,36 @@ export function responsesSseToChatSse(
   /** Slots whose arguments already arrived as deltas, so a `.done` frame restating the
    *  whole string is not appended a second time. */
   const argsSeen = new Set<number>();
+  /** Slots whose COMPLETE arguments arrived on the frame that opened them, so a delta
+   *  restating them is not appended a second time. */
+  const argsWhole = new Set<number>();
+  /** Ids (`call_id` and item `id`) of every call already opened, so the terminal output
+   *  can tell which of its calls never streamed. */
+  const openedCallIds = new Set<string>();
+  /** Whether any visible text streamed, so text only the terminal output carries is
+   *  emitted once and never twice. */
+  let sawText = false;
+  /** Calls rebuilt from the terminal output — reported in the upstream evidence. */
+  let recoveredCalls = 0;
   /** Reasoning and function-call items as the stream completed them, in output order. */
   const completedItems: Array<Record<string, unknown>> = [];
+  /** Every item the stream finished, of any type — the evidence when the terminal frame
+   *  carries no output list. */
+  const streamedItems: Array<Record<string, unknown>> = [];
   /** Set by a clean `response.completed`: the turn's items, owed to `onTurnComplete`. */
   let finishedItems: ReadonlyArray<Record<string, unknown>> | null = null;
 
-  /** Open a chat tool_call slot for a Responses function_call item. */
-  function openToolCall(outputIndex: number, item: NonNullable<ResponsesStreamEvent['item']>): string {
+  /**
+   * Open a chat tool_call slot for a Responses function_call item, with its arguments
+   * when the item already carries them. xAI documents that a streamed call "is returned
+   * in whole in a single chunk, not streamed across chunks"; reading only the id and name
+   * here left such a call with empty arguments unless a later frame restated them.
+   */
+  function openToolCall(outputIndex: number, item: NonNullable<ResponsesStreamEvent['item']>): string[] {
     const slot = toolSlotByOutputIndex.size;
     toolSlotByOutputIndex.set(outputIndex, slot);
     sawToolCall = true;
+    for (const id of [item.call_id, item.id]) if (id) openedCallIds.add(id);
     const toolCall = {
       index: slot,
       id: item.call_id ?? item.id ?? `call_${slot}`,
@@ -176,7 +218,45 @@ export function responsesSseToChatSse(
       ? { tool_calls: [toolCall] }
       : { role: 'assistant', content: '', tool_calls: [toolCall] };
     sawFirstDelta = true;
+    const frames = [chunk(responseId, opts.model, { choices: [{ index: 0, delta, finish_reason: null }] })];
+    if (typeof item.arguments === 'string' && item.arguments !== '') {
+      argsSeen.add(slot);
+      argsWhole.add(slot);
+      frames.push(argumentsChunk(slot, item.arguments));
+    }
+    return frames;
+  }
+
+  /** A visible-text chunk; the first one of the turn also carries the assistant role. */
+  function textChunk(text: string): string {
+    const delta: Record<string, unknown> = sawFirstDelta ? { content: text } : { role: 'assistant', content: text };
+    sawFirstDelta = true;
+    sawText = true;
     return chunk(responseId, opts.model, { choices: [{ index: 0, delta, finish_reason: null }] });
+  }
+
+  /**
+   * Whatever the terminal output list carries that the stream never announced: a
+   * function call no `output_item` frame opened, and text no delta streamed. Without
+   * this, a backend that puts a call only in `response.completed` hands the loop a turn
+   * with ZERO tool calls while the call sits in the payload — indistinguishable, from the
+   * client, from a model that would not call tools.
+   */
+  function recoverFromTerminalOutput(output: ReadonlyArray<Record<string, unknown>>): string[] {
+    const frames: string[] = [];
+    if (!sawText) {
+      const text = output.filter((item) => item['type'] === 'message').map(messageText).join('');
+      if (text) frames.push(textChunk(text));
+    }
+    output.forEach((raw, index) => {
+      if (raw['type'] !== 'function_call') return;
+      const item = raw as NonNullable<ResponsesStreamEvent['item']>;
+      const ids = [item.call_id, item.id].filter((id): id is string => !!id);
+      if (ids.length > 0 ? ids.some((id) => openedCallIds.has(id)) : toolSlotByOutputIndex.has(index)) return;
+      frames.push(...openToolCall(TERMINAL_INDEX_BASE + index, item));
+      recoveredCalls += 1;
+    });
+    return frames;
   }
 
   function argumentsChunk(slot: number, args: string): string {
@@ -195,23 +275,20 @@ export function responsesSseToChatSse(
 
       case 'response.output_text.delta': {
         if (typeof event.delta !== 'string' || event.delta === '') return [];
-        const delta: Record<string, unknown> = sawFirstDelta
-          ? { content: event.delta }
-          : { role: 'assistant', content: event.delta };
-        sawFirstDelta = true;
-        return [chunk(responseId, model, { choices: [{ index: 0, delta, finish_reason: null }] })];
+        return [textChunk(event.delta)];
       }
 
       case 'response.output_item.added': {
         if (event.item?.type !== 'function_call') return [];
         const outputIndex = typeof event.output_index === 'number' ? event.output_index : toolSlotByOutputIndex.size;
-        return [openToolCall(outputIndex, event.item)];
+        return openToolCall(outputIndex, event.item);
       }
 
       case 'response.function_call_arguments.delta': {
         if (typeof event.delta !== 'string' || event.delta === '') return [];
         const outputIndex = typeof event.output_index === 'number' ? event.output_index : 0;
         const slot = toolSlotByOutputIndex.get(outputIndex) ?? 0;
+        if (argsWhole.has(slot)) return [];
         argsSeen.add(slot);
         return [argumentsChunk(slot, event.delta)];
       }
@@ -223,6 +300,7 @@ export function responsesSseToChatSse(
       case 'response.function_call_arguments.done':
       case 'response.output_item.done': {
         const isItem = event.type === 'response.output_item.done';
+        if (isItem && event.item) streamedItems.push(event.item as unknown as Record<string, unknown>);
         if (isItem && (event.item?.type === 'reasoning' || event.item?.type === 'function_call')) {
           completedItems.push(event.item as unknown as Record<string, unknown>);
         }
@@ -233,7 +311,7 @@ export function responsesSseToChatSse(
         if (slot === undefined) {
           // Only a finished ITEM carries the name needed to open a call never announced.
           if (!isItem || !event.item) return [];
-          frames.push(openToolCall(outputIndex, event.item));
+          frames.push(...openToolCall(outputIndex, event.item));
           slot = toolSlotByOutputIndex.get(outputIndex)!;
         }
         const args = isItem ? event.item?.arguments : event.arguments;
@@ -252,14 +330,20 @@ export function responsesSseToChatSse(
       case 'response.incomplete': {
         if (closed) return [];
         closed = true;
+        const output = Array.isArray(event.response?.output) ? event.response!.output as Array<Record<string, unknown>> : null;
+        const frames: string[] = [];
         if (event.type === 'response.completed') {
-          const output = event.response?.output;
-          finishedItems = Array.isArray(output) ? output as Array<Record<string, unknown>> : completedItems;
+          finishedItems = output ?? completedItems;
+          if (output) frames.push(...recoverFromTerminalOutput(output));
         }
         const finish = event.type === 'response.incomplete' ? 'length' : sawToolCall ? 'tool_calls' : 'stop';
-        const frames = [chunk(responseId, model, {
+        frames.push(chunk(responseId, model, {
           choices: [{ index: 0, delta: {}, finish_reason: finish }],
-        })];
+          // What the vendor actually returned, counted before translation — see
+          // `UpstreamTurnEvidence`. The terminal list is authoritative; without one,
+          // the items the stream finished stand in for it.
+          [UPSTREAM_EVIDENCE_FIELD]: upstreamTurnEvidence(output ?? streamedItems, recoveredCalls),
+        }));
         // Token counts ride their own trailing chunk, mirroring OpenAI's
         // `include_usage` behaviour — the only shape `readUsage` reads.
         const usage = pickUsage(event.response?.usage);

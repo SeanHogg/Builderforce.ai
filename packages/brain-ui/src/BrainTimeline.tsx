@@ -497,7 +497,7 @@ function BrainTimelineInner({
             const to = parseDirectedRecipients(node.message);
             const author = parseMessageAuthor(node.message);
             return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--user">
+              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className="bf-tl__item bf-tl__item--user">
                 <span className="bf-tl__gutter">
                   <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('user')}</span>
                 </span>
@@ -553,7 +553,7 @@ function BrainTimelineInner({
             const stopped = isStoppedTurn(node.message);
             if (!answer && bodyText && !card && !rescued && !stopped) {
               return (
-                <li key={node.key} className="bf-tl__item bf-tl__item--thought">
+                <li key={node.key} id={brainMessageAnchorId(node.message.id)} className="bf-tl__item bf-tl__item--thought">
                   <span className="bf-tl__gutter">
                     <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('thinking')}</span>
                   </span>
@@ -565,7 +565,7 @@ function BrainTimelineInner({
               );
             }
             return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--assistant">
+              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className="bf-tl__item bf-tl__item--assistant">
                 <span className="bf-tl__gutter">
                   <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('assistant')}</span>
                 </span>
