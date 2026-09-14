@@ -280,6 +280,12 @@ export interface BrainTimelineProps {
   onAnswerQuestion?: (answer: string) => void;
   /** Auto-scroll to the newest node while near the bottom (default true). */
   autoScroll?: boolean;
+  /**
+   * Scroll this transcript message into view and highlight it. The nonce lets a host
+   * ask again for the same id (clicking the same speech bubble twice) without the
+   * jump no-op'ing. Absent or null ⇒ no jump, no highlight.
+   */
+  revealMessage?: { id: number; nonce: number } | null;
 }
 
 function dotIcon(kind: TimelineNode['kind'], isError?: boolean): string {
@@ -423,6 +429,7 @@ function BrainTimelineInner({
   onCreateFile,
   onAnswerQuestion,
   autoScroll = true,
+  revealMessage = null,
 }: BrainTimelineProps) {
   // Stable across renders so the memoized <Markdown> children below keep their
   // identity and don't re-parse when only streaming text ticks over.
@@ -468,6 +475,37 @@ function BrainTimelineInner({
     return () => ro.disconnect();
   }, [autoScroll]);
 
+  // A speech bubble (or any other gist of a reply) asked to show THIS turn. Unpin so
+  // the stick-to-bottom observer does not yank the reader back to the newest node,
+  // then scroll the stamped `#bf-msg-{id}` row into view. The nonce is in the deps
+  // so a second click on the same bubble still jumps.
+  useEffect(() => {
+    if (revealMessage == null) return;
+    pinnedRef.current = false;
+    const reduce = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const jump = () => {
+      // Do not early-return on a missing scroller: the dock may still be laying
+      // out when this effect first fires. The rAF + timeout retry until it is there.
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      const target = document.getElementById(brainMessageAnchorId(revealMessage.id));
+      if (!target || !scroller.contains(target)) return;
+      // Scroll ONLY the transcript, not every ancestor (the page, the dock).
+      const sRect = scroller.getBoundingClientRect();
+      const tRect = target.getBoundingClientRect();
+      const delta = tRect.top - sRect.top - (sRect.height - tRect.height) / 2;
+      scroller.scrollTo({ top: scroller.scrollTop + delta, behavior: reduce ? 'auto' : 'smooth' });
+    };
+    jump();
+    const raf = requestAnimationFrame(jump);
+    const later = window.setTimeout(jump, 80);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(later);
+    };
+  }, [revealMessage]);
+
   const renderMsg = (msg: BrainMessage, role: 'user' | 'assistant', text: string) =>
     renderMessage ? (
       renderMessage(msg, { role, text })
@@ -482,6 +520,8 @@ function BrainTimelineInner({
     );
 
   const isEmpty = nodes.length === 0 && !loading;
+  const focusedId = revealMessage?.id ?? null;
+  const focusClass = (messageId: number) => (focusedId === messageId ? ' bf-tl__item--focus' : '');
 
   return (
     <div className="bf-tl-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -497,7 +537,7 @@ function BrainTimelineInner({
             const to = parseDirectedRecipients(node.message);
             const author = parseMessageAuthor(node.message);
             return (
-              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className="bf-tl__item bf-tl__item--user">
+              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--user${focusClass(node.message.id)}`}>
                 <span className="bf-tl__gutter">
                   <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('user')}</span>
                 </span>
@@ -553,7 +593,7 @@ function BrainTimelineInner({
             const stopped = isStoppedTurn(node.message);
             if (!answer && bodyText && !card && !rescued && !stopped) {
               return (
-                <li key={node.key} id={brainMessageAnchorId(node.message.id)} className="bf-tl__item bf-tl__item--thought">
+                <li key={node.key} id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--thought${focusClass(node.message.id)}`}>
                   <span className="bf-tl__gutter">
                     <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('thinking')}</span>
                   </span>
@@ -565,7 +605,7 @@ function BrainTimelineInner({
               );
             }
             return (
-              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className="bf-tl__item bf-tl__item--assistant">
+              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--assistant${focusClass(node.message.id)}`}>
                 <span className="bf-tl__gutter">
                   <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('assistant')}</span>
                 </span>

@@ -47,6 +47,27 @@
   padding: 4px 0 12px;
 }
 
+/* A gist elsewhere (a room speech bubble) asked to show this turn. The ring is the
+   durable cue; the wash fades so a jump does not leave the transcript looking selected. */
+.bf-tl__item--focus .bf-tl__bubble,
+.bf-tl__item--focus .bf-tl__thought-line {
+  box-shadow: 0 0 0 2px var(--bf-accent, #4f80ff);
+  border-radius: 8px;
+}
+
+.bf-tl__item--focus {
+  animation: bf-tl-reveal 1.8s ease;
+}
+
+@keyframes bf-tl-reveal {
+  from { background: color-mix(in srgb, var(--bf-accent, #4f80ff) 16%, transparent); }
+  to { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bf-tl__item--focus { animation: none; }
+}
+
 .bf-tl__gutter {
   position: relative;
   z-index: 1;

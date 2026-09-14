@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
@@ -93,6 +93,12 @@ export interface BrainSurfaceBodyProps {
   /** The guest wall this conversation ran into, when a turn was refused for want of
    *  an account. Null on every signed-in board, where the CTA renders nothing. */
   guestSignup?: GuestSignupPrompt | null;
+  /**
+   * Scroll this transcript message into view and highlight it. Used by the room: a
+   * speech bubble quotes a reply whose full text lives here. The nonce lets the same
+   * bubble be clicked twice. Absent ⇒ the transcript does not jump.
+   */
+  revealMessage?: { id: number; nonce: number } | null;
 }
 
 export interface BrainDockProps extends BrainSurfaceBodyProps {
@@ -129,6 +135,7 @@ export function BrainSurfaceBody({
   node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage,
   onRateMessage, ratings,
   guestSignup = null,
+  revealMessage = null,
 }: BrainSurfaceBodyProps) {
   const t = useTranslations('creationCanvas');
   const [tab, setTab] = useState<'chat' | 'context'>('chat');
@@ -174,6 +181,11 @@ export function BrainSurfaceBody({
     rateDown: t('rateDown'),
   }), [liveLine, t, liveLabels]);
   const timelineLabels = useBrainTimelineLabels(timelineOverrides);
+  // A room bubble asked to show a reply: the transcript is on the chat tab, so leave
+  // Context if that is where the reader was.
+  useEffect(() => {
+    if (revealMessage != null) setTab('chat');
+  }, [revealMessage]);
   const typingCollaborators = collaborators.filter((member) => member.typing);
   // Who the running animation below is for, when it is not this viewer's own turn.
   const askingCollaborators = collaborators.filter((member) => member.askingBrain);
@@ -225,6 +237,7 @@ export function BrainSurfaceBody({
             onReplayMessage={onReplayMessage}
             onRateMessage={onRateMessage}
             ratings={ratings}
+            revealMessage={revealMessage}
           />
         </div>
         {/* The refusal that ended the last turn is already the final message in the
@@ -247,6 +260,7 @@ export function BrainDock({
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
   messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
   onReplayMessage, onRateMessage, ratings, guestSignup = null,
+  revealMessage = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
 
@@ -314,6 +328,7 @@ export function BrainDock({
         onRateMessage={onRateMessage}
         ratings={ratings}
         guestSignup={guestSignup}
+        revealMessage={revealMessage}
       />
       {/* Last row of the column, under the transcript — where a chat puts its prompt.
           Nothing is positioned: it is in normal flow, so the transcript above it flexes

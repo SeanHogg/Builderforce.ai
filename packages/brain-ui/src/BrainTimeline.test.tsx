@@ -117,3 +117,26 @@ describe('<BrainTimeline> reply density', () => {
     expect(html.indexOf('secret plan')).toBeGreaterThan(html.indexOf('<summary>Thought</summary>'));
   });
 });
+
+describe('<BrainTimeline> revealMessage', () => {
+  it('stamps the requested turn with the focus class the room jump looks for', () => {
+    const html = renderToStaticMarkup(
+      <BrainTimeline
+        messages={[msg(1, 'user', 'what is the runway?'), msg(2, 'assistant', 'Eighteen months.', prov)]}
+        trace={[]}
+        streamingText=""
+        isRunning={false}
+        revealMessage={{ id: 2, nonce: 1 }}
+      />,
+    );
+    expect(html).toContain('id="bf-msg-2"');
+    expect(html).toContain('bf-tl__item--assistant bf-tl__item--focus');
+    expect(html).not.toContain('bf-tl__item--user bf-tl__item--focus');
+  });
+
+  it('does not mark any turn when nothing was asked to be revealed', () => {
+    const html = render([msg(1, 'user', 'hi'), msg(2, 'assistant', 'hello', prov)]);
+    expect(html).toContain('id="bf-msg-2"');
+    expect(html).not.toContain('bf-tl__item--focus');
+  });
+});

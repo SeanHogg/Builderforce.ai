@@ -24,7 +24,8 @@ import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIc
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { CanvasNodeFace } from '@/components/canvas/CanvasNodeFace';
 import type { CanvasRoomSurfaceProps } from './CanvasRoomSurface';
-import { ROOM_CREATION_TOOL_NOTE, leadsToRoom, roomToolNote, type RoomCreation } from '@/lib/canvas/roomCreations';
+import { ROOM_CREATION_TOOL_NOTE, ROOM_DESIGN_TOOL_NOTE, leadsToRoom, roomToolNote, type RoomCreation } from '@/lib/canvas/roomCreations';
+import { buildTheaterRoomDesign, roomAuthorshipProblem, theaterRoomSummary } from '@/lib/canvas/roomAuthorship';
 import { roomCreationsOf } from './roomCreationsOf';
 import { useCanvasStandupAction } from './useCanvasStandupAction';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
@@ -65,7 +66,7 @@ import { mergeLivePresence, peerBrainRuns, BRAIN_RUN_HEARTBEAT_MS, PRESENCE_SEND
 import { useLivePresence } from '@/lib/canvas/useLivePresence';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
-import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
+import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, ROOM_LAYOUT_CUSTOM, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
 import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
@@ -8612,6 +8613,48 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, {
+    name: 'canvas_create_room',
+    description: 'Build a theater-style room with seating for N people and put it on the canvas as the active room. ALWAYS prefer this over canvas_add_object for "a theater", "seating for N", "an auditorium" or similar — it places only valid furniture kinds (chairs facing a screen), sets roomDesign + layout custom + activatedAt, and never lands an empty black box. Doors, lights and podiums are not furniture kinds.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        seats: { type: 'number', description: 'How many people should fit. Clamped to a sensible theater range.' },
+        title: { type: 'string', description: 'Room title, e.g. "Main theater".' },
+        x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { seats?: number; title?: string; x?: number; y?: number; width?: number; height?: number };
+      const design = buildTheaterRoomDesign(Number(args.seats));
+      const summary = theaterRoomSummary(design);
+      const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : `Theater (${summary.seats})`;
+      const node = stage.createObject('room', { title });
+      node.data = {
+        ...node.data,
+        title,
+        status: 'Ready',
+        roomLayout: ROOM_LAYOUT_CUSTOM,
+        roomDesign: design,
+        activatedAt: new Date().toISOString(),
+      };
+      const width = Number(args.width); const height = Number(args.height);
+      if (Number.isFinite(width) || Number.isFinite(height)) {
+        node.style = {
+          width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined,
+          height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined,
+        };
+      }
+      stage.addObject(`Add room “${title}”`, node);
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'room', title },
+        seats: summary.seats, pieces: summary.pieces, area: summary.area,
+        instruction: ROOM_DESIGN_TOOL_NOTE,
+      };
+    },
+  }, {
     name: 'canvas_add_object',
     description: `Create a fully authored visual object. For an actual image, NEVER use this tool; use canvas_add_image so pixels are found or generated and attached immediately. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values. For kind="spreadsheet", a derived column is a FORMULA and never a column of typed numbers: ${sheetFormulaGuidance(FORMULA_FUNCTIONS)} ${approvalGuidance()}`,
     parameters: {
@@ -8726,6 +8769,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (target.data.kind === 'website' || target.data.kind === 'prototype') {
         const problem = authoredWebsiteProblem({ ...target.data, ...patch });
         if (problem) return { error: `${problem} Update this object with its complete WYSIWYG page structure.` };
+      }
+      if (target.data.kind === 'room') {
+        const roomProblem = roomAuthorshipProblem({ ...target.data, ...patch } as Record<string, unknown>);
+        if (roomProblem) return { error: roomProblem };
       }
       stage.updateObject(`Update ${args.objectId}`, args.objectId, patch);
       return { ok: true, proposed: true, objectId: args.objectId, updatedFields: Object.keys(patch) };
