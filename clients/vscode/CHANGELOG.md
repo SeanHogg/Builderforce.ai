@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.65] — Replies note the model you asked for, and the Evermind report flags weak memories
+
+- **A reply notes when a different model answered.** When the model you picked failed or stalled and another one answered for it, the reply now records the model you asked for as well as the one that answered, so a swap is no longer invisible.
+- **The Evermind diagnostics report tells you more.** The copied report now says whether the project's Evermind is qualified to take coding turns and why. It also summarizes how its recent learning went, flags learned memories that read like an agent's running commentary rather than a fact, and shows longer excerpts of what was learned.
+
 ## [2026.9.64] — The agent acts when it stalls, and common tool names just work
 
 - **A model that only describes what it will do is made to do it.** When a model answered with a promise ("I'll search the code…") instead of a real tool call, the chat nudged it and hoped. The retry now requires a real tool call, so a model like Grok can't answer the nudge with another promise.

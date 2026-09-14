@@ -6538,11 +6538,16 @@ ${summary}`;
 }
 
 // src/brainRunStore.ts
-function provenanceMetadata(result) {
+function provenanceMetadata(result, requested) {
   const model = result.resolvedModel;
   if (!model) return void 0;
   const account = asProvenanceAccount(result.account);
-  return withProvenanceMetadata({ model, ...account ? { account } : {} });
+  const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
+  return withProvenanceMetadata({
+    model,
+    ...account ? { account } : {},
+    ...asked ? { requestedModel: asked } : {}
+  });
 }
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
@@ -7300,10 +7305,10 @@ ${continuationDirective()}`;
   const codec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
   let pendingReplay = null;
   let pendingRun = null;
-  const settleReply = async (rawText, result) => {
+  const settleReply = async (rawText, result, requested) => {
     const text = canonicalTurnText(rawText);
     convo.push({ role: "assistant", content: replayTextOf(text) });
-    const meta = provenanceMetadata(result);
+    const meta = provenanceMetadata(result, requested);
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
     c.streamingText = "";
     recordAppended(c, assistantMsg);
@@ -7311,7 +7316,7 @@ ${continuationDirective()}`;
   };
   const hooks = {
     beforeToolCalls: async (_ctx, turn, calls) => {
-      const { result } = metaOf(turn);
+      const { result, requested } = metaOf(turn);
       const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
       if (askCall) {
         let block = null;
@@ -7325,7 +7330,7 @@ ${continuationDirective()}`;
 
 ${block}` : block : lead;
         if (reply) {
-          const assistantMsg = await settleReply(reply, result);
+          const assistantMsg = await settleReply(reply, result, requested);
           emit(c);
           emitEvermindLearnReconcile(assistantMsg, reply);
           onActivity?.(chatId);
@@ -7334,7 +7339,7 @@ ${block}` : block : lead;
       }
       const narration = canonicalTurnText(result.text);
       if (narration) {
-        const meta = provenanceMetadata(result);
+        const meta = provenanceMetadata(result, requested);
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
         recordAppended(c, narrationMsg);
       }
@@ -7469,7 +7474,7 @@ ${revisit}` : replayNote });
     },
     onNoToolCalls: async (ctx, turn) => {
       const iter = ctx.step;
-      const { result, resolved, advertised, advertisedNames } = metaOf(turn);
+      const { result, resolved, requested, advertised, advertisedNames } = metaOf(turn);
       const stallInput = {
         text: result.text,
         toolCallCount: result.toolCalls.length,
@@ -7482,7 +7487,7 @@ ${revisit}` : replayNote });
       const requeueWithNudge = async (nudge) => {
         const narration = canonicalTurnText(result.text);
         if (narration) {
-          const meta = provenanceMetadata(result);
+          const meta = provenanceMetadata(result, requested);
           const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
           recordAppended(c, narrationMsg);
         }
@@ -7525,7 +7530,7 @@ ${revisit}` : replayNote });
         return { action: "continue" };
       }
       const finalText = result.text.trim() || "No response.";
-      const assistantMsg = await settleReply(finalText, result);
+      const assistantMsg = await settleReply(finalText, result, requested);
       if (runTool && isExhaustedStall(stallInput)) {
         const next = chooseStallFailover({
           activeModel,
@@ -7892,7 +7897,7 @@ ${revisit}` : replayNote });
       const closingText = canonicalTurnText(closing.text);
       if (closingText) {
         convo.push({ role: "assistant", content: replayTextOf(closingText) });
-        const meta = provenanceMetadata(closing);
+        const meta = provenanceMetadata(closing, activeModel);
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
         c.streamingText = "";
         recordAppended(c, assistantMsg);
