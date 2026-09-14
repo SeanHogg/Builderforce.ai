@@ -3436,8 +3436,8 @@ var DEFAULT_EVERMIND_LABELS = {
   tabCheck: "Check",
   tabMaintain: "Maintain",
   diagnosticsTitle: "Diagnostics",
-  diagnosticsHint: "Copy everything on this panel \u2014 the model\u2019s state, what it actually produced, what it has learned and any problems found \u2014 as text you can paste to support or to an AI assistant.",
-  diagnosticsCta: "Copy diagnostics",
+  diagnosticsHint: "Copy a full triage pack: model state, path-to-serve checklist, coding gate, learn-quality mix (distilled vs raw-run), readiness samples with verbatim output, and recent memories. Run readiness first when you can \u2014 the report says when it was skipped.",
+  diagnosticsCta: "Copy full diagnostics",
   diagnosticsCopied: "Copied to your clipboard.",
   diagnosticsShow: "Show report",
   diagnosticsHide: "Hide report",
@@ -4311,11 +4311,105 @@ function recentSection(d) {
     const when = new Date(e.at).toISOString();
     const status = evermindLearnedStatus(e);
     const provenance = status.state === "distilled" ? `distilled by ${status.teacherModel ?? "a teacher"}` : status.state === "fault" ? `NOT distilled (${status.reason}${status.detail ? `: ${status.detail}` : ""})` : status.state === "self" ? "self-learned from run output" : "weight delta";
-    lines.push(`- v${e.version} \xD7${e.weight} ${when} [${e.kind}] ${provenance}`);
+    const narration = e.text && looksLikeRunNarration(e.text) ? " \xB7 \u26A0 narration-like" : "";
+    lines.push(`- v${e.version} \xD7${e.weight} ${when} [${e.kind}] ${provenance}${narration}`);
     if (e.prompt) lines.push(`  - task: ${clamp(e.prompt, 200)}`);
-    if (e.text) lines.push(`  - learned: ${clamp(e.text, 300).replace(/\n/g, " ")}`);
+    if (e.text) lines.push(`  - learned: ${clamp(e.text, 500).replace(/\n/g, " ")}`);
   }
   lines.push("");
+  return lines;
+}
+var NARRATION_HINTS = [
+  /\blet me\b/i,
+  /\bi('ll| will)\b/i,
+  /\bnow (let|i|the)\b/i,
+  /\blooking (back|at)\b/i,
+  /\btool calls?\b/i,
+  /\brun_command\b/i,
+  /\bgit_status\b/i,
+  /\bsettled\b/i,
+  /\brather than (just )?assert\b/i,
+  /\bmy (previous|last) turn\b/i
+];
+function looksLikeRunNarration(text) {
+  const t = text.trim();
+  if (t.length < 40) return false;
+  let hits = 0;
+  for (const re of NARRATION_HINTS) if (re.test(t)) hits += 1;
+  return hits >= 2;
+}
+function codingGateSection(d) {
+  const g = d.codingGate;
+  if (!g) {
+    return [
+      "## Coding gate (IDE)",
+      "",
+      "_Not reported by this server \u2014 upgrade the API to include `codingGate` on the console payload._",
+      ""
+    ];
+  }
+  const pct = g.ratio == null ? null : Math.round(g.ratio * 100);
+  const barPct = Math.round(g.bar * 100);
+  const lines = [
+    "## Coding gate (IDE)",
+    "",
+    `- Qualified for coding turns: ${g.qualified ? "yes" : "no"}`,
+    `- Reason: \`${g.reason}\``,
+    `- Bar: ${barPct}% of frontier baseline on this head version`
+  ];
+  if (pct != null) lines.push(`- Score vs baseline: ${pct}%`);
+  if (g.evaluatedVersion != null) lines.push(`- Eval recorded for: v${g.evaluatedVersion} (head is v${g.headVersion})`);
+  if (g.baselineModel) lines.push(`- Baseline model: ${g.baselineModel}`);
+  if (g.dataset) lines.push(`- Dataset: ${g.dataset}`);
+  lines.push("");
+  return lines;
+}
+function learnQualitySection(d) {
+  const recent = d.recent;
+  let distilled = 0, self = 0, fault = 0, delta = 0, narration = 0;
+  for (const e of recent) {
+    const status = evermindLearnedStatus(e);
+    if (e.kind === "delta" || status.state === "delta") {
+      delta += 1;
+      continue;
+    }
+    if (status.state === "distilled") distilled += 1;
+    else if (status.state === "fault") fault += 1;
+    else self += 1;
+    if (e.text && looksLikeRunNarration(e.text)) narration += 1;
+  }
+  const lines = [
+    "## Learn quality",
+    "",
+    `- Teacher pinned: ${d.teacherModel ? d.teacherModel : "no \u2014 raw runs self-learn into the head"}`,
+    `- Recent mix (of ${recent.length}): distilled ${distilled} \xB7 self-learned ${self} \xB7 teacher-fault ${fault} \xB7 weight-delta ${delta}`,
+    `- Narration-like self-learns (heuristic): ${narration} of ${recent.length}`
+  ];
+  if (!d.teacherModel && self > 0) {
+    lines.push("- Signal: teacher is unset while self-learned run text is landing \u2014 pin a frontier teacher before expecting coherence/coding gates to recover.");
+  }
+  if (narration > 0) {
+    lines.push(`- Signal: ${narration} recent memor(y/ies) look like agent mid-turn narration ("let me\u2026", tool-call play-by-play), not clean task\u2192answer exemplars.`);
+  }
+  if (d.eval && d.eval.delta < 0 && self + narration > distilled) {
+    lines.push("- Signal: held-out loss REGRESSED while learning is mostly raw/self \u2014 stop absorbing run chatter or pin a teacher before more merges.");
+  }
+  lines.push("");
+  return lines;
+}
+function pathToServeSection(d, probe) {
+  const ready = probe ? probe.ready ? "PASS" : "FAIL" : "not run this session";
+  const coding = d.codingGate ? d.codingGate.qualified ? "PASS" : `FAIL (${d.codingGate.reason})` : "unknown (server omitted codingGate)";
+  const lines = [
+    "## Path to serve (local LLM)",
+    "",
+    `- [ ] Coherence / quarantine cleared: ${d.quarantinedAt ? "BLOCKED (quarantined)" : "ok"}`,
+    `- [ ] Readiness probe: ${ready}`,
+    `- [ ] Teacher pinned for clean exemplars: ${d.teacherModel ? `ok (${d.teacherModel})` : "MISSING"}`,
+    `- [ ] Coding gate (\u226590% frontier): ${coding}`,
+    `- [ ] Inference switch: ${d.inferenceEnabled ? "ON" : "off"}`,
+    ""
+  ];
   return lines;
 }
 function buildEvermindDiagnostics(input) {
@@ -4347,9 +4441,12 @@ function buildEvermindDiagnostics(input) {
     probe
   });
   lines.push("## Recommended next action", "", `- ${next.title}`, `- Why: ${next.detail}`, `- Go to: ${next.destination}`, "");
+  lines.push(...pathToServeSection(data, probe));
+  lines.push(...codingGateSection(data));
+  lines.push(...learnQualitySection(data));
   if (targets && targets.length > 0) lines.push(...targetsSection(targets));
   if (probe) lines.push(...probeSection(probe));
-  else lines.push("## Test bench", "", "_Not run in this session \u2014 run one before exporting to include what the model actually produces._", "");
+  else lines.push("## Test bench", "", "_Not run in this session \u2014 run readiness (Test \u2192 Readiness check) before exporting so the report includes verbatim model output._", "");
   if (analysis) lines.push(...analysisSection(analysis));
   lines.push(...recentSection(data));
   return lines.join("\n");
