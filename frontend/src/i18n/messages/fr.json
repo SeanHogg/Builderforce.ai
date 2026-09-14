@@ -24074,6 +24074,7 @@
         },
         "open": "Ouvrir la salle",
         "walkHint": "ZQSD/WASD ou flèches pour marcher · Espace pour sauter · glisser pour regarder · molette pour zoomer",
+        "showReplyInChat": "Afficher cette réponse dans le chat",
         "mode": {
           "label": "Votre façon d’être dans la salle",
           "look": "Regarder",

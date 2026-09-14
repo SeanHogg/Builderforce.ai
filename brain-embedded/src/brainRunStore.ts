@@ -98,11 +98,19 @@ import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddl
  * Shared by both the mid-run narration and the final-answer persist so the chip
  * shows on every durable turn.
  */
-function provenanceMetadata(result: StreamChatResult): string | undefined {
+function provenanceMetadata(result: StreamChatResult, requested?: string): string | undefined {
   const model = result.resolvedModel;
   if (!model) return undefined;
   const account = asProvenanceAccount(result.account);
-  return withProvenanceMetadata({ model, ...(account ? { account } : {}) });
+  // Persist requested≠actual so a copied transcript can stamp failover on the assistant
+  // heading itself — not only in the aggregate diagnostics. Does not fix Grok tool
+  // calling; production API must still include the Responses adapter deploy.
+  const asked = requested && requested !== 'default' && requested !== model ? requested : undefined;
+  return withProvenanceMetadata({
+    model,
+    ...(account ? { account } : {}),
+    ...(asked ? { requestedModel: asked } : {}),
+  });
 }
 
 // Announced-but-untaken tool call detection lives in `@builderforce/agent-stall` —
@@ -1790,10 +1798,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
    * attributed, learned from and broadcast exactly like any other, or the surface
    * that renders it loses the provenance chip and the memory steps for that turn.
    */
-  const settleReply = async (rawText: string, result: StreamResult) => {
+  const settleReply = async (rawText: string, result: StreamResult, requested?: string) => {
     const text = canonicalTurnText(rawText);
     convo.push({ role: 'assistant', content: replayTextOf(text) });
-    const meta = provenanceMetadata(result);
+    const meta = provenanceMetadata(result, requested);
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, ...(meta ? { metadata: meta } : {}) }]);
     c.streamingText = '';
     recordAppended(c, assistantMsg);
@@ -1802,7 +1810,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
 
   const hooks: LoopHooks<ChatCompletionMessage> = {
     beforeToolCalls: async (_ctx, turn, calls) => {
-      const { result } = metaOf(turn);
+      const { result, requested } = metaOf(turn);
       // `ask_user` is TERMINAL: the agent is blocked on the user's decision, so the run
       // settles here and the reply carries any lead-in prose plus the canonical
       // ```ask-user block the transcript renders as a clickable card. Without this the
@@ -1818,7 +1826,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         const lead = result.text.trim();
         const reply = block ? (lead ? `${lead}\n\n${block}` : block) : lead;
         if (reply) {
-          const assistantMsg = await settleReply(reply, result);
+          const assistantMsg = await settleReply(reply, result, requested);
           emit(c);
           emitEvermindLearnReconcile(assistantMsg, reply);
           onActivity?.(chatId);
@@ -1835,7 +1843,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // empty (pure tool-call) turns persist nothing.
       const narration = canonicalTurnText(result.text);
       if (narration) {
-        const meta = provenanceMetadata(result);
+        const meta = provenanceMetadata(result, requested);
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
         recordAppended(c, narrationMsg);
       }
@@ -2019,7 +2027,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
 
     onNoToolCalls: async (ctx, turn) => {
       const iter = ctx.step;
-      const { result, resolved, advertised, advertisedNames } = metaOf(turn);
+      const { result, resolved, requested, advertised, advertisedNames } = metaOf(turn);
       // The model ended the turn without acting — it ANNOUNCED a call it never made
       // ("Calling the tool now." → finish: stop, 0 tool calls), said nothing at all, or
       // HANDED the remaining commands to the user to run. Accepting any of those as a
@@ -2049,7 +2057,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const requeueWithNudge = async (nudge: string): Promise<void> => {
         const narration = canonicalTurnText(result.text);
         if (narration) {
-          const meta = provenanceMetadata(result);
+          const meta = provenanceMetadata(result, requested);
           const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
           recordAppended(c, narrationMsg);
         }
@@ -2110,7 +2118,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
 
       // Final text — record in the transcript, persist, broadcast to mounted views.
       const finalText = result.text.trim() || 'No response.';
-      const assistantMsg = await settleReply(finalText, result);
+      const assistantMsg = await settleReply(finalText, result, requested);
 
       // This model spent its whole recovery budget still DESCRIBING calls instead of
       // making them — or still handing them to the user. Re-prompting it again is spent — the only remedy that works is a
@@ -2626,7 +2634,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const closingText = canonicalTurnText(closing.text);
       if (closingText) {
         convo.push({ role: 'assistant', content: replayTextOf(closingText) });
-        const meta = provenanceMetadata(closing);
+        const meta = provenanceMetadata(closing, activeModel);
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: closingText, ...(meta ? { metadata: meta } : {}) }]);
         c.streamingText = '';
         recordAppended(c, assistantMsg);

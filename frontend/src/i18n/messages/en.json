@@ -24074,6 +24074,7 @@
         },
         "open": "Open the room",
         "walkHint": "WASD or arrow keys to walk · Space to jump · drag to look · scroll to zoom",
+        "showReplyInChat": "Show this reply in the chat",
         "mode": {
           "label": "How you are in the room",
           "look": "Look",

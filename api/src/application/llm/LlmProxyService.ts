@@ -1506,7 +1506,7 @@ export class LlmProxyService {
     // params.tools / params.toolChoice only — without this lift a forced
     // `tool_choice: 'required'` from stall recovery never reaches Grok.
     const liftedTools = Array.isArray((sanitizedBody as { tools?: unknown }).tools)
-      ? (sanitizedBody as { tools: unknown[] }).tools
+      ? (sanitizedBody as unknown as { tools: unknown[] }).tools
       : undefined;
     const liftedToolChoice = (sanitizedBody as { tool_choice?: unknown }).tool_choice;
     // ── Client reasoning intent ─────────────────────────────────────────────

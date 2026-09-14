@@ -24074,6 +24074,7 @@
         },
         "open": "Raum öffnen",
         "walkHint": "WASD oder Pfeiltasten zum Gehen · Leertaste zum Springen · Ziehen zum Umsehen · Mausrad zum Zoomen",
+        "showReplyInChat": "Diese Antwort im Chat anzeigen",
         "mode": {
           "label": "Wie du im Raum bist",
           "look": "Ansehen",
