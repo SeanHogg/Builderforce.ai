@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
-import type { CanvasViewport } from '@builderforce/creation-canvas-contract';
+import { websitePalette, type CanvasViewport } from '@builderforce/creation-canvas-contract';
 import {
   CANVAS_WEBSITE_FRAME_SANDBOX,
   canvasWebsiteDocument,
@@ -54,28 +54,56 @@ import type { CreationNodeData } from './types';
  * the stylesheet decides what a phone-width preview looks like, not this component.
  */
 
+/*
+ * The pieces every section is made of, mirroring what `renderWebsiteDocument` prints for
+ * it. Each is ONE helper because a per-arm copy is how the editor came to drop the eyebrow
+ * the document printed on every section but the hero, and the buttons it printed on every
+ * section that had one — so the page being edited was not the page being previewed.
+ */
+function SectionHead({ section }: { section: WebsiteSection }) {
+  return <>
+    {section.eyebrow && <small className={styles.wysiwygEyebrow}>{section.eyebrow}</small>}
+    {section.heading && <h4>{section.heading}</h4>}
+  </>;
+}
+
+function SectionProse({ text }: { text: string | undefined }) {
+  return text ? <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{text}</ReactMarkdown> : null;
+}
+
+/** The document draws a secondary button only beside a primary one, so this does too. */
+function SectionActions({ section }: { section: WebsiteSection }) {
+  if (!section.cta) return null;
+  return <span className={styles.wysiwygActions}>
+    <button type="button">{section.cta}</button>
+    {section.secondaryCta && <button type="button" className={styles.wysiwygSecondary}>{section.secondaryCta}</button>}
+  </span>;
+}
+
 /** One section of one page. Kinds are DATA on the section, so a new section kind is an
- *  arm here and nothing else in the canvas learns about it. */
-function WebsiteSectionBody({ section, accent }: { section: WebsiteSection; accent: string }) {
+ *  arm here and nothing else in the canvas learns about it. Colours come from the site's
+ *  own palette as custom properties on `WebsiteBody`, never from a prop. */
+function WebsiteSectionBody({ section }: { section: WebsiteSection }) {
   const t = useTranslations('creationCanvas.node');
   if (isMarkupSectionBody(section)) return <section className={styles.wysiwygSection}>
-    {section.heading && <h4>{section.heading}</h4>}
+    <SectionHead section={section} />
     <iframe
       className={`${styles.wysiwygMarkupFrame} nodrag nowheel`}
       title={section.heading || t('websiteMarkupFrameTitle')}
       sandbox={WEBSITE_CONTENT_FRAME_SANDBOX}
       srcDoc={section.body}
     />
+    <SectionActions section={section} />
   </section>;
   if (section.kind === 'hero') return <section className={styles.wysiwygHero}>
-    <div>{section.eyebrow && <small>{section.eyebrow}</small>}<h3>{section.heading}</h3>{section.body && <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{section.body}</ReactMarkdown>}<span>{section.cta && <button style={{ background: accent }}>{section.cta}</button>}{section.secondaryCta && <button className={styles.wysiwygSecondary}>{section.secondaryCta}</button>}</span></div>
-    <div className={styles.wysiwygArt} style={{ color: accent }}><i /><i /><i /></div>
+    <div>{section.eyebrow && <small>{section.eyebrow}</small>}<h3>{section.heading}</h3><SectionProse text={section.body} /><SectionActions section={section} /></div>
+    <div className={styles.wysiwygArt} aria-hidden="true"><i /><i /><i /></div>
   </section>;
-  if (section.kind === 'features') return <section className={styles.wysiwygSection}><h4>{section.heading}</h4>{section.body && <p>{section.body}</p>}<div className={styles.wysiwygFeatures}>{section.items?.map((item, index) => <article key={`${item.title}-${index}`}><i style={{ color: accent }}>{String(index + 1).padStart(2, '0')}</i><strong>{item.title}</strong><p>{item.body}</p></article>)}</div></section>;
-  if (section.kind === 'stats') return <section className={styles.wysiwygStats}>{section.items?.map((item, index) => <span key={`${item.label}-${index}`}><strong style={{ color: accent }}>{item.value}</strong><small>{item.label}</small></span>)}</section>;
+  if (section.kind === 'features') return <section className={styles.wysiwygSection}><SectionHead section={section} /><SectionProse text={section.body} /><div className={styles.wysiwygFeatures}>{section.items?.map((item, index) => <article key={`${item.title}-${index}`}><i>{String(index + 1).padStart(2, '0')}</i><strong>{item.title}</strong><p>{item.body}</p></article>)}</div><SectionActions section={section} /></section>;
+  if (section.kind === 'stats') return <section className={styles.wysiwygSection}><SectionHead section={section} /><div className={styles.wysiwygStats}>{section.items?.map((item, index) => <span key={`${item.label}-${index}`}><strong>{item.value ?? item.title}</strong><small>{item.label ?? item.body}</small></span>)}</div></section>;
   if (section.kind === 'testimonial') return <section className={styles.wysiwygQuote}><blockquote>“{section.quote || section.body}”</blockquote>{section.author && <cite>{section.author}</cite>}</section>;
-  if (section.kind === 'cta') return <section className={styles.wysiwygCta} style={{ background: accent }}><h4>{section.heading}</h4>{section.body && <p>{section.body}</p>}{section.cta && <button>{section.cta}</button>}</section>;
-  return <section className={styles.wysiwygSection}><h4>{section.heading}</h4>{section.body && <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{section.body}</ReactMarkdown>}</section>;
+  if (section.kind === 'cta') return <section className={styles.wysiwygCta}><SectionHead section={section} /><SectionProse text={section.body} /><SectionActions section={section} /></section>;
+  return <section className={styles.wysiwygSection}><SectionHead section={section} /><SectionProse text={section.body} /><SectionActions section={section} /></section>;
 }
 
 export interface WebsiteBodyProps {
@@ -106,7 +134,17 @@ export function WebsiteBody({ data, onEdit, viewport, sectionControls }: Website
   const [localPageId, setLocalPageId] = useState(String(data.activeWebsitePageId || pages[0]?.id || ''));
   useEffect(() => { if (data.activeWebsitePageId) setLocalPageId(String(data.activeWebsitePageId)); }, [data.activeWebsitePageId]);
   const activePage = pages.find((page) => page.id === localPageId) || pages[0];
-  const accent = theme.accent || 'var(--coral-bright)';
+  // The SAME palette the published document paints in (light — the editor has no scheme
+  // switch; the preview does). A board-token fallback here is what made the editor's
+  // colours disagree with the preview's.
+  const palette = websitePalette(theme, 'light');
+  const siteColors = {
+    '--site-bg': palette.bg,
+    '--site-fg': palette.fg,
+    '--site-accent': palette.accent,
+    '--site-on-accent': palette.onAccent,
+    '--site-panel': palette.panel,
+  } as CSSProperties;
   // The caller's choice wins, then the object's own, then desktop. The surface passes one
   // and the card does not, which is what keeps "preview at phone width" a property of the
   // OBJECT and "look at it at phone width" a property of the person looking.
@@ -117,20 +155,21 @@ export function WebsiteBody({ data, onEdit, viewport, sectionControls }: Website
     const headline = typeof data.websiteHeadline === 'string' ? data.websiteHeadline : data.title;
     const description = typeof data.websiteBody === 'string' ? data.websiteBody : typeof data.content === 'string' ? data.content : data.subtitle || '';
     const cta = typeof data.websiteCta === 'string' ? data.websiteCta : t('websiteCta');
-    return <div className={styles.websitePreview} data-viewport={drawnAt} data-theme="minimal">
+    return <div className={styles.websitePreview} data-viewport={drawnAt} data-theme="minimal" style={siteColors}>
       <div className={styles.siteNav}><strong>{data.title}</strong><span /> </div>
-      <section className={styles.wysiwygHero}><div><h3>{headline}</h3>{description && <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{description}</ReactMarkdown>}<span><button style={{ background: accent }}>{cta}</button></span></div></section>
+      <section className={styles.wysiwygHero}><div><h3>{headline}</h3><SectionProse text={description} /><span className={styles.wysiwygActions}><button type="button">{cta}</button></span></div></section>
     </div>;
   }
+  const heroCta = activePage.sections.find((section) => section.kind === 'hero')?.cta;
   return (
-    <div className={styles.websitePreview} data-viewport={drawnAt} data-theme={theme.style} style={{ '--site-bg': theme.background, '--site-fg': theme.foreground } as CSSProperties}>
-      <nav className={`${styles.siteNav} nodrag nowheel`}><strong>{data.title}</strong><span>{pages.map((page) => <button key={page.id} type="button" data-active={page.id === activePage.id} onClick={(event) => { event.stopPropagation(); setLocalPageId(page.id); onEdit?.({ activeWebsitePageId: page.id }); }}>{page.name}</button>)}</span>{activePage.sections.find((section) => section.kind === 'hero')?.cta && <button style={{ background: accent }}>{activePage.sections.find((section) => section.kind === 'hero')?.cta}</button>}</nav>
+    <div className={styles.websitePreview} data-viewport={drawnAt} data-theme={theme.style} style={siteColors}>
+      <nav className={`${styles.siteNav} nodrag nowheel`}><strong>{data.title}</strong><span>{pages.map((page) => <button key={page.id} type="button" data-active={page.id === activePage.id} onClick={(event) => { event.stopPropagation(); setLocalPageId(page.id); onEdit?.({ activeWebsitePageId: page.id }); }}>{page.name}</button>)}</span>{heroCta && <button type="button">{heroCta}</button>}</nav>
       {activePage.sections.map((section) => (sectionControls
         ? <div key={section.id} className={styles.siteSectionSlot}>
             {sectionControls(section)}
-            <WebsiteSectionBody section={section} accent={accent} />
+            <WebsiteSectionBody section={section} />
           </div>
-        : <WebsiteSectionBody key={section.id} section={section} accent={accent} />))}
+        : <WebsiteSectionBody key={section.id} section={section} />))}
     </div>
   );
 }

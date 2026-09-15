@@ -216,6 +216,66 @@ describe('the site surface reads a site two ways', () => {
   });
 });
 
+describe('the preview and the editor draw the same page', () => {
+  /**
+   * THE regression (reported 2026-09-14): the editor drew a hero band with accent artwork
+   * and a "Learn More" button, and the preview — the real document — drew neither, because
+   * the document only printed buttons that had a published destination and had no artwork.
+   */
+  it('keeps the hero artwork and its call to action in the preview', () => {
+    const document = canvasWebsiteDocument(SITE)!;
+    expect(document).toContain('<div class="hero-art" aria-hidden="true">');
+    expect(document).toContain('<span class="cta">Book a visit</span>');
+    // The nav carries the hero's button too, as the editor's nav does.
+    expect(document).toContain('<span class="enter">Book a visit</span>');
+    // The theme style reaches the document's stylesheet, so a `bold` hero is a bold band.
+    expect(document).toContain('<body class="theme-editorial">');
+  });
+
+  it('shows the eyebrow in the editor wherever the document prints one', () => {
+    const data = {
+      ...SITE,
+      pages: [{
+        id: 'home',
+        name: 'Home',
+        sections: [
+          { id: 's1', kind: 'hero', heading: 'Our Solution' },
+          { id: 's2', kind: 'features', eyebrow: 'Why choose us', heading: 'Key Features' },
+        ],
+      }],
+    } as unknown as CreationNodeData;
+    expect(canvasWebsiteDocument(data)!).toContain('<p class="eyebrow">Why choose us</p>');
+
+    render(<CanvasSiteSurface data={data} onExit={() => undefined} onEdit={vi.fn()} />);
+    const surface = screen.getByTestId('canvas-site-surface');
+    fireEvent.click(within(surface).getByRole('button', { name: 'Edit' }));
+    expect(within(surface).getByText('Why choose us')).toBeInTheDocument();
+  });
+
+  /** The editor renders section copy as markdown; a document that printed it verbatim
+   *  showed visitors asterisks the author never saw. Untrusted input, so links are allowlisted. */
+  it('renders authored markdown as markup and refuses an unsafe link', () => {
+    const data = {
+      ...SITE,
+      pages: [{
+        id: 'home',
+        name: 'Home',
+        sections: [{
+          id: 's1',
+          kind: 'hero',
+          heading: 'H',
+          body: '**Fast** and [safe](https://example.test) not [bad](javascript:alert(1))\n\n- one\n- two',
+        }],
+      }],
+    } as unknown as CreationNodeData;
+    const document = canvasWebsiteDocument(data)!;
+    expect(document).toContain('<strong>Fast</strong>');
+    expect(document).toContain('<a href="https://example.test" rel="noopener noreferrer">safe</a>');
+    expect(document).not.toContain('href="javascript');
+    expect(document).toContain('<ul class="prose"><li>one</li><li>two</li></ul>');
+  });
+});
+
 describe('a page switched inside the frame reaches the board', () => {
   /**
    * The nav the reader clicks lives INSIDE the frame. Without the document reporting the

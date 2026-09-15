@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-09-14 — A site's Preview and Edit readings drew two different pages
+
+On the `site` surface, **Edit** (the React `WebsiteBody`) showed a hero band with accent artwork and a "Learn More" button. **Preview** (the framed `renderWebsiteDocument`, the same page the publisher serves) showed a plain white page with no artwork and no buttons. The editor also dropped eyebrows ("WHY CHOOSE US") on every section but the hero, and painted itself from its own fallback colours rather than the site's palette.
+
+- **The document is the truth; it now draws what the editor promised.** Changes in `packages/creation-canvas-contract/src/websiteDocument.ts`:
+  - Hero band plus `hero-art`.
+  - A `theme-<style>` body class, so `bold` / `minimal` / `soft` / `technical` style the hero the way the editor does.
+  - Inert `<span class="cta">` buttons when there is no destination. The preview used to drop them.
+  - The hero CTA in the nav when there is no app door.
+  - An accent `cta` band, a centred quote, numbered features, and a bordered secondary button.
+- **The editor paints in the document's palette.** `websitePalette` is exported and `WebsiteBody` sets `--site-bg/fg/accent/on-accent/panel` from it; `CreationCanvas.module.css` reads them. The eyebrow, prose and buttons are one helper each (`SectionHead` / `SectionProse` / `SectionActions`), so no section kind can drop them again.
+- **Authored markdown renders in the published page too.** `renderProse` is a small, escape-first renderer: paragraphs, lists, bold, italic, code, and allowlisted links. The editor rendered markdown; the document printed the asterisks.
+- Guarded in `canvasDeviceFrame.test.tsx` ("the preview and the editor draw the same page").
+
 ## ✅ RESOLVED 2026-09-15 — An open editor kept the core database awake: every request and poll read Postgres (api 2026.9.34 · frontend 2026.9.31 · VSIX 2026.9.70)
 
 Neon bills awake time at the 0.25 CU floor, and core only fits the Free plan if it autosuspends (5 minutes idle). An open VS Code window never let it:

@@ -97,7 +97,10 @@ describe('landing page rendering', () => {
 
   it('refuses a colour it cannot safely inline', () => {
     const html = renderLandingPage({ pages, theme: { style: 'bold', accent: 'red;}body{display:none' }, brand: 'A' })!;
-    expect(html).not.toContain('display:none');
+    // The injected payload, not the bare declaration: the stylesheet itself legitimately
+    // hides the hero artwork for the `minimal` style with `display:none`.
+    expect(html).not.toContain('red;}body{display:none');
+    expect(html).not.toContain('body{display:none');
   });
 
   it('produces nothing when there is no publishable page', () => {
