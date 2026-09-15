@@ -168,8 +168,8 @@ describe('subscriberStanding', () => {
     hostedListingStatus.mockResolvedValue(lifecycle({ state: 'readOnly', billable: false }));
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
-      [{ body: {} }],
       [liveRow({ status: 'suspended', currentPeriodEnd: new Date('2020-01-01') })],
+      [{ body: {} }],
     ]);
     const standing = await subscriberStanding(db as unknown as Db, env(), subscriber);
     expect(standing.subscription?.status).toBe('suspended');
@@ -185,7 +185,7 @@ describe('subscriberStanding', () => {
 
   it('does not hand the listing id to the site user', async () => {
     hostedListingStatus.mockResolvedValue(lifecycle());
-    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [{ body: {} }], [liveRow()]]);
+    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [liveRow()], [{ body: {} }]]);
     const standing = await subscriberStanding(db as unknown as Db, env(), subscriber);
     expect(Object.keys(standing).sort()).toEqual(['hosted', 'subscription', 'versionOffer']);
   });
@@ -197,13 +197,15 @@ describe('takeAbandonedBuild', () => {
   it('hands over the version THEY hold, not the seller’s latest', async () => {
     hostedListingStatus.mockResolvedValue(released());
     publishedSnapshot.mockResolvedValue({ title: 'Ledger', objects: [{ id: 'o1' }] });
-    // Four reads: catalogItemId (apps db), the listing body for the version offer
-    // (core db), the subscription row (apps db), then takeAbandonedBuild's own
-    // listing lookup for the fallback title/snapshot (core db).
+    // Four reads: catalogItemId (apps db), then — resolved concurrently, the
+    // subscription row settling first (see the note above) — the subscription
+    // row (apps db) and the listing body for the version offer (core db), then
+    // finally takeAbandonedBuild's OWN listing lookup for the fallback
+    // title/snapshot (core db), read sequentially after the other two settle.
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
-      [{ body: {} }],
       [liveRow({ snapshotId: 'snap-held' })],
+      [{ body: {} }],
       [{ body: { snapshotId: 'snap-newer' }, name: 'Ledger' }],
     ]);
     const build = await takeAbandonedBuild(db as unknown as Db, env(), subscriber);
@@ -216,8 +218,8 @@ describe('takeAbandonedBuild', () => {
     publishedSnapshot.mockResolvedValue({ title: '', objects: [] });
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
-      [{ body: {} }],
       [liveRow({ snapshotId: null })],
+      [{ body: {} }],
       [{ body: { snapshotId: 'snap-listing' }, name: 'Ledger' }],
     ]);
     const build = await takeAbandonedBuild(db as unknown as Db, env(), subscriber);
@@ -229,7 +231,7 @@ describe('takeAbandonedBuild', () => {
   it('REFUSES while the app is still running', async () => {
     // The gate is the lifecycle and nothing else — 44 days of a dark address.
     hostedListingStatus.mockResolvedValue(lifecycle({ state: 'grace' }));
-    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [{ body: {} }], [liveRow()]]);
+    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [liveRow()], [{ body: {} }]]);
     await expect(takeAbandonedBuild(db as unknown as Db, env(), subscriber))
       .rejects.toMatchObject({ status: 409 });
     expect(publishedSnapshot).not.toHaveBeenCalled();
@@ -246,8 +248,8 @@ describe('takeAbandonedBuild', () => {
     hostedListingStatus.mockResolvedValue(released());
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
-      [{ body: {} }],
       [liveRow({ status: 'cancelled', cancelledAt: new Date('2026-01-01') })],
+      [{ body: {} }],
     ]);
     await expect(takeAbandonedBuild(db as unknown as Db, env(), subscriber))
       .rejects.toMatchObject({ status: 403 });
@@ -258,8 +260,8 @@ describe('takeAbandonedBuild', () => {
     publishedSnapshot.mockResolvedValue(null);
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
-      [{ body: {} }],
       [liveRow()],
+      [{ body: {} }],
       [{ body: {}, name: 'Ledger' }],
     ]);
     await expect(takeAbandonedBuild(db as unknown as Db, env(), subscriber))
@@ -271,8 +273,8 @@ describe('takeAbandonedBuild', () => {
     publishedSnapshot.mockResolvedValue({ title: 'Ledger', objects: [] });
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
-      [{ body: {} }],
       [liveRow()],
+      [{ body: {} }],
       [{ body: {}, name: 'Ledger' }],
     ]);
     await takeAbandonedBuild(db as unknown as Db, env(), subscriber);
