@@ -140,10 +140,6 @@ Public copy describes evidence available today; stronger promises become roadmap
 
 ## Consolidated Gap Register — index by domain
 
-- **🟠 The frontend typecheck fails: seven places pass a plain number where a `MoneyValue` is now expected (seen 2026-09-15).** The files are `finance/CashflowView.tsx:40,79`, `finance/RunwayView.tsx:69`, `investor/InquiriesView.tsx:109`, `startups/RunwayVerdictCard.tsx:58` and `startups/StartupCard.tsx:84,89`, all under `frontend/src/components/`. Each fails with TS2559: a number has no properties in common with `MoneyValue`. Fixing them gets `npm run type-check` back to zero errors, so it can gate CI again.
-  - This came out of the idea-scratchpad verification run, which touched none of these files. It looks like a change to `lib/canvasMoney.ts`, or to a money formatter those views call, that is still being made in another session.
-  - *Blocker:* the session that is changing that signature. Either that session migrates these call sites, or someone confirms the change is finished before the calls are rewritten. Rewriting them now could collide with the edit still in flight.
-
 - **🟠 Core must stay inside Neon Free: confirm it on the console (since 2026-09-15).** Core runs on the Free project `builderforce-core`, which allows 100 CU-hrs a month. At the 0.25 CU floor that is about 400 awake hours, so core has to autosuspend for at least 45% of the month.
   - Every known always-on waker is fixed: the write churn (deployed 02:17Z), and the per-request auth reads plus the editor's polling (DONE 2026-09-15, "An open editor kept the core database awake").
   - **Watch:** the core compute chart in the Neon console for a few days after both deploys. The target is that core sleeps for most of the day, including while an editor is open.

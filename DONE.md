@@ -22,6 +22,24 @@ BurnRateOS's founder loop — create the company, list it, be found by investors
 - Release notes (`new`) by migration 1175; marketing in `content/blog/list-your-startup-and-meet-investors.md`.
 - **Operator step before deploy:** apply migrations 1173 and 1175.
 
+## ✅ RESOLVED 2026-09-15 — The frontend deploy was red on three guards, and the typecheck on seven `MoneyValue` call sites
+
+The "Deploy frontend" run failed at `pnpm run check`:
+
+- **check:design-tokens and check:design-scale — the Ideas surface stylesheet.** `CanvasIdeasSurface.module.css` had four problems:
+  - it used an undeclared `--canvas-on-accent` with a `#fff` fallback, so the text painted the same in both themes;
+  - two corners were off-scale `4px` radii;
+  - twelve font sizes were literals, the only net +12 on the font-size ratchet.
+
+  The file now reads only declared tokens: `--text-on-accent`, the `--radius-*` steps and the `--font-size-*` roles.
+- **check:architecture — `'use client'` files 998 against a baseline of 980.** Twenty-eight client files had entered with no entry in the guard's changelog:
+  - Eleven came from the 2026-09-12 page split (commits bbeba3bc8 and 556f92d82): nine route pages became Server Components, each with a client island beside it, and `useComponentCatalog` moved from `lib/components` to `components/widgets`.
+  - Seventeen came from the startup-listing and finance components.
+
+  Every file was checked for state or hooks at its root, and the raise is argued per file in `check-frontend-architecture.mjs`. `components/marketing/domainExtras.tsx` lost its directive, with the reason written in the file: it is a data registry, and a `'use client'` there hands any Server Component that reads it an opaque client reference. The baseline went 980 → 997.
+- **Typecheck.** The seven TS2559 `MoneyValue` errors in the finance, investor and startup views were logged to the Gap Register during the scratchpad verification. They were fixed in those views' own follow-up commits, and the entry was removed from the register.
+- **Verified by the Sonnet agent:** 23/23 guards pass, `type-check` is clean, and the Ideas surface tests pass (27/27).
+
 ## ✅ RESOLVED 2026-09-15 — The canvas had nowhere to write an idea down, or to track which ideas were ever tested (frontend 2026.9.32 · release note mig 1174)
 
 BurnRateOS's Ideas Scratch Pad (`/ideas`) is where a founder jots and works an idea. It is a multi-page doc with an AI co-founder, meetings, a notetaker, and "apply to company". The canvas could hold a researched segment, a battlecard, a customer interview and a scored experiment, but not the half-formed idea that started them. The concept was ported as canvas DATA, not as a second document editor:

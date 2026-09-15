@@ -30,6 +30,45 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   980 → 997 (`useClientFiles`, 2026-09-15) — the red deploy of 2026-09-15. The
+ *   tree stood at 998: twenty-eight client files entered with no entry in this
+ *   changelog, across two changes that landed unrecorded, and one directive left.
+ *   Judged per file, with each file's own root checked for state or hooks:
+ *
+ *     - The 2026-09-12 page split (commits bbeba3bc8 and 556f92d82) — ELEVEN, the
+ *       same shape the "876 → 881" entry accepted. Nine route roots dropped
+ *       `'use client'` from `page.tsx` and gained a client island beside it:
+ *       `ContentManagerRedirect`, `CanvasLibraryClient` (`/create`),
+ *       `DashboardClient`, `WorkspaceDisputesClient`, `FreelancerDisputesClient`,
+ *       `FreelancerEarningsClient`, `InsightsHomeClient`, `PersonasClient` and
+ *       `SkillsClient`. Every one holds `useState`/`useCallback`/`useEffect` at
+ *       its root, and each page they left is now a Server Component —
+ *       `useClientPages`, the number that measures the harm, went DOWN.
+ *       `components/widgets/useComponentCatalog.ts` is a MOVE, not an addition:
+ *       `lib/components/useComponentCatalog.ts` left the tally in the same
+ *       commit. The file-count rise is the payload win this ratchet exists to
+ *       encourage, counted as a cost.
+ *     - Startup listings and finance (the 2026-09-15 commits) — SEVENTEEN, under
+ *       `components/startups/` (the directory, its filters, doors and teaser, the
+ *       card and runway verdict, the express-interest button and panel, the runway
+ *       calculator, the four-step listing wizard, and its two hooks
+ *       `useStartupDirectory` / `useStartupLabels`), plus
+ *       `components/marketing/RunwayCalculatorSection.tsx` and
+ *       `components/finance/FinanceClient.tsx`. Each is interactive at its root (a
+ *       debounced search, a wizard step's form state, an inquiry submit, a
+ *       calculator's inputs) or reads next-intl/`useAuth` from a mount that is a
+ *       Server Component on the marketing domain pages and inside `/startups`.
+ *       They are reuse surfaces: the directory teaser mounts on the CEO explainer
+ *       as well as its own route, which is exactly the case that must not inherit
+ *       its boundary from whoever mounts it.
+ *     - `components/marketing/domainExtras.tsx` LOST its directive, argued in the
+ *       file. It is a registry object and not a component, and a `'use client'` on
+ *       a data module turns every value a Server Component reads from it into an
+ *       opaque client reference. That is why the baseline is 997, not 998.
+ *
+ *   No `useClientPages` raise: it is at or under 21. The sidecar tally
+ *   (`.frontend-architecture-tally.json`) is rewritten by the first green run.
+ *
  *   978 → 980 (`useClientFiles`, 2026-09-13) — a NET +2 across four new files in
  *   two unrelated commits landed on top of the "976 → 978" entry below, judged per
  *   file rather than per commit:
