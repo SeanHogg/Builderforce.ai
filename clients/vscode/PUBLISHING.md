@@ -36,14 +36,17 @@ npm run publish:openvsx -- builderforce-ai-*.vsix
 
 ## CI publish (recommended)
 
-Tag the commit and push — `.github/workflows/publish-vscode.yml` packages once and pushes
-to both registries:
+Every push to `main` runs `.github/workflows/release.yml`, whose `publish-extension` job
+packages the extension once, launches it in a real VS Code, and publishes the same `.vsix`
+to both registries. There is no tag step; bump `version` in `package.json` and push.
 
-```bash
-# version already bumped in package.json (YYYY.M.D scheme, e.g. 2026.6.17)
-git tag vscode-v2026.6.17
-git push origin vscode-v2026.6.17
-```
+**Each registry is skipped, with only a warning, while its secret is unset.** A green
+release therefore does NOT mean the extension shipped. Check the job's log for
+`VSCE_PAT is not set` / `OVSX_PAT is not set`, or check the listing itself.
+
+To publish a version whose release already ran, set the secrets and re-run just that
+job: `gh run rerun <run-id> --job <publish-extension job id>`. A version that already
+exists is rejected and reported as a warning, so a re-run is always safe.
 
 ## Versioning
 
