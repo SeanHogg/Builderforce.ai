@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.70] — Leaving the editor open no longer costs the platform anything
+
+- **An editor you are not looking at goes quiet.** The live "running / needs you" markers on your sessions and tasks still update within seconds while a run is going, but when nothing is live they check once a minute. When the window is in the background or you have stepped away, they check every five minutes. Coming back to the window refreshes them at once.
+- **Answers show up immediately, not on the next check.** Signing in, a change you make, or returning to the window always fetches the current state. Only the unattended background checks use the platform's cached copy.
+- **The Evermind view pauses while it is hidden.** It refreshes once a minute while you are looking at it (the title-bar refresh is still instant), and not at all while it is collapsed or behind another view.
+- **Fewer, larger background reports.** Activity time is sent in five-minute batches, and the connection check runs every fifteen minutes. Everything is recorded exactly as before, in far fewer requests.
+
 ## [2026.9.68] — A folder search on Windows actually finds the term
 
 - **A folder search no longer reports a confident 0 while the file sitting in that folder has the term.** Directory `search_code` used ripgrep's `path:line:text` lines; on Windows the first colon is the drive letter, so every match was dropped and the tool said the term was not referenced. It now reads ripgrep's JSON events, falls back to walking the tree when a successful run parsed nothing, and skips compiled `media/` bundles so a minified webview chunk cannot hide `webview/src`.
