@@ -147,6 +147,10 @@ async function sendVisitorEvents(events: VisitorEventInput[]): Promise<void> {
   const visitorId = getVisitorId();
   const visitId = getVisitId();
   if (!visitorId || events.length === 0) return;
+  // Hibernate and a dropped Wi-Fi both leave `onLine === false`. Posting then
+  // cannot succeed, and the failure used to surface as the global API-error
+  // toast — a support ticket for a request the visitor never asked to make.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
   try {
     await apiRequestStream('/api/visitor/events', {
       method: 'POST',

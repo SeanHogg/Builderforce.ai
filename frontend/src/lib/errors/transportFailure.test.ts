@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { API_ERROR_EVENT, type ApiErrorEvent } from './apiErrorEvent';
 import {
   ApiTransportError,
+  FOREGROUND_GRACE_MS,
   TRANSPORT_FAILURE_STATUS,
   classifyTransportFailure,
+  isAmbientTelemetryUrl,
+  noteDocumentForegrounded,
   reportTransportFailure,
   resetTransportFailureWindow,
 } from './transportFailure';
@@ -111,5 +114,45 @@ describe('reportTransportFailure', () => {
     const seen = captureEvents();
     reportTransportFailure({ url: '/a', method: 'GET', error: opaqueFetchRejection(), silent: true });
     expect(seen).toHaveLength(0);
+  });
+
+  it('never toasts a missed visitor-events POST, even without silent', () => {
+    const seen = captureEvents();
+    reportTransportFailure({
+      url: 'https://api.builderforce.ai/api/visitor/events',
+      method: 'POST',
+      error: opaqueFetchRejection(),
+    });
+    expect(seen).toHaveLength(0);
+  });
+
+  it('does not toast an outage in the seconds after the tab wakes', () => {
+    noteDocumentForegrounded();
+    const seen = captureEvents();
+    reportTransportFailure({
+      url: 'https://api.builderforce.ai/api/auth/login',
+      method: 'POST',
+      error: opaqueFetchRejection(),
+    });
+    expect(seen).toHaveLength(0);
+  });
+
+  it('toasts again once the wake grace has passed', () => {
+    noteDocumentForegrounded(Date.now() - FOREGROUND_GRACE_MS - 1);
+    const seen = captureEvents();
+    reportTransportFailure({
+      url: 'https://api.builderforce.ai/api/auth/login',
+      method: 'POST',
+      error: opaqueFetchRejection(),
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.code).toBe('unreachable');
+  });
+});
+
+describe('isAmbientTelemetryUrl', () => {
+  it('recognises visitor-event tracking and not a user action', () => {
+    expect(isAmbientTelemetryUrl('https://api.builderforce.ai/api/visitor/events')).toBe(true);
+    expect(isAmbientTelemetryUrl('https://api.builderforce.ai/api/auth/login')).toBe(false);
   });
 });

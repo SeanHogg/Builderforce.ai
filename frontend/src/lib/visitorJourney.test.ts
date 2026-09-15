@@ -4,12 +4,23 @@
  * The visit counters live in localStorage, so this one needs a browser: the
  * `lib` project runs in node, where `window` is not defined.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { API_ERROR_EVENT } from './errors/apiErrorEvent';
+import { resetTransportFailureWindow } from './errors/transportFailure';
 
-vi.mock('./apiClient', () => ({ apiRequestStream: vi.fn(async () => undefined) }));
-vi.mock('./visitor', () => ({ getVisitorId: () => 'visitor-1' }));
+vi.mock('./auth', () => ({
+  AUTH_API_URL: 'https://api.builderforce.test',
+  checkUnauthorizedAndRedirect: vi.fn(),
+  getStoredTenantToken: vi.fn(() => null),
+  getStoredWebToken: vi.fn(() => null),
+}));
 
-const { beginVisit, getVisitId } = await import('./visitorJourney');
+vi.mock('@/i18n/config', () => ({
+  LOCALE_HEADER: 'X-BuilderForce-Locale',
+  readLocaleCookie: vi.fn(() => 'en'),
+}));
+
+const { beginVisit, getVisitId, trackVisitorEvent } = await import('./visitorJourney');
 
 const VISIT_KEY = 'bf_visit_id';
 const VISIT_SEEN_KEY = 'bf_visit_last_seen';
@@ -56,5 +67,38 @@ describe('beginVisit', () => {
     const { visitId } = beginVisit();
     expect(visitId).toBeTruthy();
     expect(getVisitId()).toBe(visitId);
+  });
+});
+
+describe('visitor event flush', () => {
+  beforeEach(() => {
+    resetTransportFailureWindow();
+    localStorage.setItem('bf_visitor_id', 'visitor-test');
+    vi.stubGlobal('navigator', { onLine: true });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('does not POST while the device is offline', () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+    trackVisitorEvent({ kind: 'page_view', path: '/create/local-x' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not raise the global error toast when the events POST never arrives', async () => {
+    const seen: unknown[] = [];
+    window.addEventListener(API_ERROR_EVENT, (event) => {
+      seen.push((event as CustomEvent).detail);
+    });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+    trackVisitorEvent({ kind: 'page_view', path: '/create/local-x' });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/api/visitor/events');
+    expect(seen).toHaveLength(0);
   });
 });

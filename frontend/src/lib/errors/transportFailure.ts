@@ -116,9 +116,74 @@ export function describeTransportFailure(reason: TransportFailureReason): string
 const REPORT_WINDOW_MS = 10_000;
 const lastReportedAt = new Map<TransportFailureReason, number>();
 
+/**
+ * How long after the tab comes back (laptop wake, bfcache restore, tab switch)
+ * an unreachable/offline fetch is treated as the network stack catching up, not
+ * as an API outage. Windows reports `navigator.onLine === true` before Wi-Fi
+ * has actually associated; the first thing the page then does is flush visitor
+ * events, and that used to raise the support-ticket toast.
+ */
+export const FOREGROUND_GRACE_MS = 10_000;
+let lastForegroundAt = 0;
+
+/**
+ * Paths whose failure is the caller's business and never a person's: visitor
+ * journey, activity beacons, QA capture, the Quality ingest itself. Callers
+ * already list {@link AMBIENT_REQUEST_ERRORS}, but a forgotten `expectedErrors`
+ * on a keepalive flush still toasted "BuilderForce could not be reached" for a
+ * request the visitor never asked to make. Matching the URL is the floor
+ * underneath that — one miss cannot reach the toast.
+ */
+const AMBIENT_TELEMETRY_URL_MARKERS = [
+  '/api/visitor/',
+  '/api/qa/events',
+  '/api/activity/signals',
+  '/api/quality-ingest',
+  '/product-report',
+] as const;
+
+export function isAmbientTelemetryUrl(url: string): boolean {
+  return AMBIENT_TELEMETRY_URL_MARKERS.some((marker) => url.includes(marker));
+}
+
+function recentlyForegrounded(now: number): boolean {
+  return lastForegroundAt > 0 && now - lastForegroundAt < FOREGROUND_GRACE_MS;
+}
+
+/**
+ * The page just came to the foreground. Test seam as well as the listener
+ * below: a laptop wake is `visibilitychange` → `visible` and, when Chrome kept
+ * the tab in bfcache, `pageshow` with `persisted`.
+ */
+export function noteDocumentForegrounded(at = Date.now()): void {
+  lastForegroundAt = at;
+}
+
+function attachForegroundListeners(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  window.addEventListener('pageshow', (event: PageTransitionEvent) => {
+    if (event.persisted) noteDocumentForegrounded();
+  });
+  // Only the return from hidden (hibernate, tab switch, OS sleep) counts — a
+  // first-paint `visible` must not swallow a genuine outage on the landing page.
+  let wasHidden = document.visibilityState === 'hidden';
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      wasHidden = true;
+      return;
+    }
+    if (wasHidden) {
+      wasHidden = false;
+      noteDocumentForegrounded();
+    }
+  });
+}
+attachForegroundListeners();
+
 /** Test seam — clears the collapse window so one case cannot silence the next. */
 export function resetTransportFailureWindow(): void {
   lastReportedAt.clear();
+  lastForegroundAt = 0;
 }
 
 export interface TransportFailureReport {
@@ -136,16 +201,24 @@ export interface TransportFailureReport {
 export function reportTransportFailure({ url, method, error, silent }: TransportFailureReport): ApiTransportError {
   const reason = classifyTransportFailure(error);
   const failure = new ApiTransportError(reason, url, method, error);
+  const now = Date.now();
 
   // An abort is a cancellation we asked for. It is not an incident and must never
   // reach a toast, or every navigation away from a loading page files a report.
-  if (reason === 'aborted' || silent) return failure;
+  // Telemetry URLs and the seconds after a laptop-wake are the same class of miss:
+  // the person did not ask for this request, so a support-ticket toast is a lie.
+  if (
+    reason === 'aborted'
+    || silent
+    || isAmbientTelemetryUrl(url)
+    || (recentlyForegrounded(now) && (reason === 'unreachable' || reason === 'offline'))
+  ) {
+    return failure;
+  }
 
   // The bus is a DOM CustomEvent. On the server there is nobody listening and no
   // window to dispatch on, so a server-rendered caller gets the typed error only.
   if (typeof window === 'undefined') return failure;
-
-  const now = Date.now();
   const previous = lastReportedAt.get(reason);
   if (previous !== undefined && now - previous < REPORT_WINDOW_MS) return failure;
   lastReportedAt.set(reason, now);
