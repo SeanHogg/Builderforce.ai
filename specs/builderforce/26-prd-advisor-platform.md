@@ -1,6 +1,7 @@
 # PRD 26 — Advisor platform as marketplace composition (not a SCORE clone)
 
 **Status:** Proposed — research artifact for the Advisor epic · **Owner:** platform (Talent + Marketplace, CEO seat as buyer) · **Created:** 2026-09-16
+**Board:** epic #2545 · spec `400b7152-cd22-48da-afcb-8a791ac6cdfd` · roadmap `69584c3f-0b8c-49fe-975a-e40a7e1f0648`
 **Companion to:** [PRD 21 §11.5](./21-prd-unified-experience.md) (four marketplace families), [PRD 19 B7/B9](./19-prd-burnrateos-consolidation.md) (bookings, LMS, consultants), [PRD-marketplace-v2.md](./PRD-marketplace-v2.md)
 **Research source:** SCORE.org public feature set (mentoring, workshops, Academy, templates, chapters, lifecycle), captured 2026-09-16. SCORE is a U.S. SBA resource partner (since 1964). This PRD uses it as a **capability checklist**, not as a product to reproduce.
 
