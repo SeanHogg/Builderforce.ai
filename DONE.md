@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-09-15 — An open editor kept the core database awake: every request and poll read Postgres (VSIX 2026.9.70)
+## ✅ RESOLVED 2026-09-15 — An open editor kept the core database awake: every request and poll read Postgres (api 2026.9.34 · frontend 2026.9.31 · VSIX 2026.9.70)
 
 Neon bills awake time at the 0.25 CU floor, and core only fits the Free plan if it autosuspends (5 minutes idle). An open VS Code window never let it:
 
