@@ -84,7 +84,14 @@ export default function FinanceClient() {
         {error && <p style={errorStyle} role="alert">{error}</p>}
         {loading && !report && <p style={mutedStyle}>{t('loading')}</p>}
 
-        {report && tab === '' && <RunwayView report={report} onDeclared={() => financeApi.runway(companyId).then(setReport).catch(() => undefined)} />}
+        {report && tab === '' && (
+          <RunwayView
+            // Keyed by company so switching remounts the declared inputs (see RunwayView).
+            key={report.declared?.companyId ?? 'none'}
+            report={report}
+            onDeclared={() => financeApi.runway(companyId).then(setReport).catch(() => undefined)}
+          />
+        )}
         {report && tab === 'cashflow' && <CashflowView report={report} />}
       </div>
     </PageContainer>

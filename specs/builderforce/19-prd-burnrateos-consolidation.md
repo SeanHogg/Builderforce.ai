@@ -1073,7 +1073,7 @@ mid-pass: **startup listings are part of the marketplace.**
 | `/product-management` (8 owned features, funding-stage use cases, 5 FAQs) and the other eight domain explainers | `burnrateMarketing.domains.*` | Feature copy expanded from 3 to the catalog's owned features per domain (8 · 11 · 6 · 9 · 4 · 12 · 7 · 9 · 14), `useCases` for PM / BI / Investor, `faq` for all nine — rendered by `BurnrateDomainPage` (`useCases`, `faq` optional in the copy type). Five locales. |
 | `constants.ts` funding rounds / business stages / seeking types / investor types | contract package | `FUNDING_STAGES`, `BUSINESS_STAGES`, `STARTUP_SECTORS`, `SEEKING_TYPES`, `INVESTMENT_TYPES`, `INQUIRY_TIMEFRAMES`, `EXPERTISE_AREAS` — one declaration; labels in `startups.vocab.*`. |
 
-Release notes (category `new`) ship by migration 1174. Marketing: `content/blog/list-your-startup-and-meet-investors.md`.
+Release notes (category `new`) ship by migration 1175. Marketing: `content/blog/list-your-startup-and-meet-investors.md`.
 
 ### 10.2 What a stranger may see — the tier rule
 

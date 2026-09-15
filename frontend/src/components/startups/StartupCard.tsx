@@ -81,12 +81,12 @@ export function StartupCard({ startup, onInquire }: { startup: StartupCardData; 
       <div style={{ display: 'grid', gap: 6 }}>
         <div style={startupMetricRowStyle}>
           <span>{t('totalFunding')}</span>
-          <b style={{ color: 'var(--text-primary)' }}>{formatMoney(startup.totalFundingRaised ?? 0, { maximumFractionDigits: 0 })}</b>
+          <b style={{ color: 'var(--text-primary)' }}>{formatMoney({ amount: startup.totalFundingRaised ?? 0, currency: 'USD' }, { compact: false })}</b>
         </div>
         {startup.monthlyRevenue != null && startup.monthlyRevenue > 0 && (
           <div style={startupMetricRowStyle}>
             <span>{t('mrr')}</span>
-            <b style={{ color: 'var(--text-primary)' }}>{formatMoney(startup.monthlyRevenue, { maximumFractionDigits: 0 })}</b>
+            <b style={{ color: 'var(--text-primary)' }}>{formatMoney({ amount: startup.monthlyRevenue, currency: 'USD' }, { compact: false })}</b>
           </div>
         )}
         {startup.headcount != null && startup.headcount > 0 && (

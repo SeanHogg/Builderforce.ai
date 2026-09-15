@@ -11,8 +11,8 @@ BurnRateOS's founder loop — create the company, list it, be found by investors
 - **One runway formula.** `computeRunway` / `projectCashflow` in `packages/creation-canvas-contract/src/startupListing.ts` — cash ÷ NET burn — imported by the API, the web, the founder's step and the marketing calculator; tested once (dividing by gross spend understates a company with revenue fivefold).
 - **Free calculators** ported into the tools registry as the `finance` category (`application/tools/startupFinanceTools.ts`: runway, burn rate, break-even, churn, pricing simulator), localized through the tool catalogs; the BI explainer carries the live runway calculator (`domainExtras.tsx` registry) and the CEO explainer the newest listed startups plus the two doors.
 - **Content parity for all nine domain explainers**: features expanded from 3 to the BurnRateOS catalog's owned features per domain, funding-stage use cases (PM, BI, Investor) and FAQs, in five locales — with retired capabilities (VoIP, voice agent, web push, affiliates) and fabricated percentages removed under the Claim-to-Proof gate. Full route-by-route assessment in PRD 19 §10.3.
-- Release notes (`new`) by migration 1174; marketing in `content/blog/list-your-startup-and-meet-investors.md`.
-- **Operator step before deploy:** apply migrations 1173 and 1174.
+- Release notes (`new`) by migration 1175; marketing in `content/blog/list-your-startup-and-meet-investors.md`.
+- **Operator step before deploy:** apply migrations 1173 and 1175.
 
 ## ✅ RESOLVED 2026-09-15 — The canvas had nowhere to write an idea down, or to track which ideas were ever tested (frontend 2026.9.32 · release note mig 1174)
 

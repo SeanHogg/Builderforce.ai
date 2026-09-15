@@ -55,7 +55,7 @@ export function RunwayVerdictCard({
       </div>
       {!compact && (
         <div style={{ display: 'grid', gap: 4, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
-          <span>{t('netBurn', { amount: formatMoney(Math.max(0, verdict.netBurn), { maximumFractionDigits: 0 }) })}</span>
+          <span>{t('netBurn', { amount: formatMoney({ amount: Math.max(0, verdict.netBurn), currency: 'USD' }, { compact: false }) })}</span>
           {verdict.zeroCashDate && <span>{t('zeroCash', { date: fmt.date(new Date(verdict.zeroCashDate)) })}</span>}
         </div>
       )}

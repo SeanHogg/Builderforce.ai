@@ -29,15 +29,18 @@ export function CashflowView({ report }: { report: RunwayReport }) {
   const hasObserved = report.observed.cashflow.length > 0;
   const hasDeclared = (report.declared?.projection.length ?? 0) > 0;
   const [source, setSource] = useState<Source>(hasObserved ? 'observed' : 'declared');
-  const series: CashflowPoint[] = source === 'observed' ? report.observed.cashflow : report.declared?.projection ?? [];
 
-  const totals = useMemo(() => {
-    const inflows = series.reduce((sum, p) => sum + p.inflows, 0);
-    const outflows = series.reduce((sum, p) => sum + p.outflows, 0);
-    return { inflows, outflows, net: inflows - outflows, ending: series.at(-1)?.endingBalance ?? null };
-  }, [series]);
+  // The series and its totals are ONE derivation from (report, source), so the
+  // memo's inputs are the two facts that can change rather than a value picked
+  // differently per branch.
+  const { series, totals } = useMemo(() => {
+    const points: CashflowPoint[] = source === 'observed' ? report.observed.cashflow : report.declared?.projection ?? [];
+    const inflows = points.reduce((sum, p) => sum + p.inflows, 0);
+    const outflows = points.reduce((sum, p) => sum + p.outflows, 0);
+    return { series: points, totals: { inflows, outflows, net: inflows - outflows, ending: points.at(-1)?.endingBalance ?? null } };
+  }, [report, source]);
 
-  const money = (n: number | null) => (n == null ? '—' : formatMoney(n, { maximumFractionDigits: 0 }));
+  const money = (n: number | null) => (n == null ? '—' : formatMoney({ amount: n, currency: 'USD' }, { compact: false }));
 
   return (
     <div style={sectionStyle}>
@@ -76,7 +79,7 @@ export function CashflowView({ report }: { report: RunwayReport }) {
                 { key: 'ending', label: t('ending'), values: series.map((p) => p.endingBalance) },
               ]}
               height={220}
-              formatValue={(v) => formatMoney(v, { maximumFractionDigits: 0 })}
+              formatValue={(v) => formatMoney({ amount: v, currency: 'USD' }, { compact: false })}
               ariaLabel={t('chart')}
             />
           </div>

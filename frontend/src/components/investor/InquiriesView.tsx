@@ -34,17 +34,20 @@ export function InquiriesView({ detail }: { detail: CompanyDetail | null }) {
   const labels = useStartupLabels();
   const fmt = useFormat();
   const { formatMoney } = useMoneyFormat();
-  const [rows, setRows] = useState<InvestorInquiry[] | null>(null);
+  // Stamped with the company they were read for, so a switch is a comparison
+  // rather than a clear written synchronously inside the effect.
+  const [loaded, setLoaded] = useState<{ companyId: number; rows: InvestorInquiry[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const companyId = detail?.id ?? null;
+  const rows = loaded?.companyId === companyId ? loaded.rows : null;
 
   useEffect(() => {
-    if (companyId == null) { setRows(null); return undefined; }
+    if (companyId == null) return undefined;
     let cancelled = false;
     investorApi.inquiries.list(companyId)
-      .then((list) => { if (!cancelled) { setRows(list); setError(null); } })
-      .catch((cause: unknown) => { if (!cancelled) { setRows([]); setError(faultMessage(cause, t('error.load'))); } });
+      .then((list) => { if (!cancelled) { setLoaded({ companyId, rows: list }); setError(null); } })
+      .catch((cause: unknown) => { if (!cancelled) { setLoaded({ companyId, rows: [] }); setError(faultMessage(cause, t('error.load'))); } });
     return () => { cancelled = true; };
   }, [companyId, t]);
 
@@ -53,7 +56,9 @@ export function InquiriesView({ detail }: { detail: CompanyDetail | null }) {
     setBusyId(inquiry.id);
     setError(null);
     investorApi.inquiries.triage(companyId, inquiry.id, status)
-      .then((updated) => setRows((list) => (list ?? []).map((row) => (row.id === updated.id ? updated : row))))
+      .then((updated) => setLoaded((current) => (current && current.companyId === companyId
+        ? { companyId, rows: current.rows.map((row) => (row.id === updated.id ? updated : row)) }
+        : current)))
       .catch((cause: unknown) => setError(faultMessage(cause, t('error.triage'))))
       .finally(() => setBusyId(null));
   }, [companyId, t]);
@@ -106,7 +111,7 @@ export function InquiriesView({ detail }: { detail: CompanyDetail | null }) {
                 {inquiry.message && <p style={{ margin: 0, fontSize: 'var(--font-size-small)', whiteSpace: 'pre-wrap' }}>{inquiry.message}</p>}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {inquiry.interestedAmount != null && inquiry.interestedAmount > 0 && (
-                    <span style={gapChipStyle}>{t('amount', { amount: formatMoney(inquiry.interestedAmount, { maximumFractionDigits: 0 }) })}</span>
+                    <span style={gapChipStyle}>{t('amount', { amount: formatMoney({ amount: inquiry.interestedAmount, currency: 'USD' }, { compact: false }) })}</span>
                   )}
                   {typeof details.investmentType === 'string' && details.investmentType && <span style={gapChipStyle}>{labels.investmentType(details.investmentType)}</span>}
                   {typeof details.timeframe === 'string' && details.timeframe && <span style={gapChipStyle}>{labels.timeframe(details.timeframe)}</span>}

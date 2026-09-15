@@ -11,7 +11,7 @@
  * No `'use client'`: the boundary is `FinanceClient.tsx`.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { computeRunway } from '@builderforce/creation-canvas-contract';
@@ -40,16 +40,9 @@ export function RunwayView({ report, onDeclared }: { report: RunwayReport; onDec
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // A company switch replaces the inputs; a keystroke never does.
-  useEffect(() => {
-    setInputs({
-      cashOnHand: declared?.finance.cashOnHand ?? null,
-      monthlyBudget: declared?.finance.monthlyBudget ?? null,
-      monthlyRevenue: declared?.finance.monthlyRevenue ?? null,
-      teamCost: declared?.finance.teamCost ?? null,
-    });
-  }, [declared?.companyId, declared?.finance.cashOnHand, declared?.finance.monthlyBudget, declared?.finance.monthlyRevenue, declared?.finance.teamCost]);
+  // No effect re-seeds `inputs`: `FinanceClient` keys this view by company, so a
+  // company switch remounts it and the initial state above IS the declared numbers.
+  // A keystroke never gets overwritten by a refetch that returns the same values.
 
   const save = useCallback(() => {
     if (!declared) return;
@@ -66,7 +59,7 @@ export function RunwayView({ report, onDeclared }: { report: RunwayReport; onDec
       .finally(() => setBusy(false));
   }, [declared, inputs, onDeclared, t]);
 
-  const money = (n: number | null) => (n == null ? '—' : formatMoney(n, { maximumFractionDigits: 0 }));
+  const money = (n: number | null) => (n == null ? '—' : formatMoney({ amount: n, currency: 'USD' }, { compact: false }));
   const observed = report.observed;
   const observedVerdict = observed.available && observed.cash != null && observed.monthlyBurn != null
     ? computeRunway({ cashOnHand: observed.cash, monthlyBudget: observed.monthlyBurn, monthlyRevenue: 0 })

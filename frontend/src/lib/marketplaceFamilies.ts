@@ -187,7 +187,7 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     // somebody else registered remains the company graph's work and is not a
     // marketplace verb.
     flow: 'listing',
-    hueVar: '--seat-ceo',
+    hueVar: '--seat-cmo',
     kinds: ['business', 'storefront'],
     noteKey: 'note.company',
   },

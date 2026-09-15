@@ -136,7 +136,7 @@ describe('the destination tier', () => {
 describe('indexing', () => {
   it('indexes the destinations a visitor could plausibly search for', () => {
     const routes = indexableTeaserRoutes();
-    for (const route of ['/inbox', '/insights', '/incidents', '/seat/finance', '/growth']) {
+    for (const route of ['/inbox', '/insights', '/incidents', '/finance', '/growth']) {
       expect(routes).toContain(route);
     }
   });
