@@ -43,6 +43,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { appsDatabaseOf } from '../ide/appsDatabase';
 import type { Env } from '../../env';
 import {
   SESSION_PROJECT_LINK_APP,
@@ -145,9 +146,10 @@ const sessionAppCacheKey = (sessionId: string) => `session-app:${sessionId}`;
  * component decides its own visibility from this rather than taking a
  * `canConvert` prop the caller would have to derive.
  *
- * ONE round-trip: the link, its project and that project's site. A board is
- * opened constantly, so the three-table join is deliberate rather than three
- * awaited selects.
+ * TWO round-trips, not three separate selects: the link and its project join in
+ * one read on the core database, and the project's site is read by id on the
+ * apps database — the two cannot be joined, since they are different databases.
+ * A board is opened constantly, so collapsing to those two reads is deliberate.
  *
  * Uncached at this level ON PURPOSE — `cachedAppForSession` below is the cached
  * entry point. The session READ (`GET /:id`) already pays for a graph and folds
@@ -160,16 +162,14 @@ export async function appForSession(
   tenantId: number,
   sessionId: string,
 ): Promise<SessionAppLink | null> {
-  const [row] = await db
+  const [link] = await db
     .select({
       projectId: projects.id,
       projectKey: projects.key,
       name: projects.name,
-      subdomain: projectSites.subdomain,
     })
     .from(creationSessionProjectLinks)
     .innerJoin(projects, eq(projects.id, creationSessionProjectLinks.projectId))
-    .leftJoin(projectSites, eq(projectSites.projectId, projects.id))
     .where(and(
       eq(creationSessionProjectLinks.sessionId, sessionId),
       eq(creationSessionProjectLinks.linkKind, SESSION_PROJECT_LINK_APP),
@@ -179,7 +179,15 @@ export async function appForSession(
       eq(projects.tenantId, tenantId),
     ))
     .limit(1);
-  return row ?? null;
+  if (!link) return null;
+  // The address lives on the apps database, so it is read by the project id the
+  // tenant-gated read above returned rather than joined to it.
+  const [site] = await appsDatabaseOf(db)
+    .select({ subdomain: projectSites.subdomain })
+    .from(projectSites)
+    .where(eq(projectSites.projectId, link.projectId))
+    .limit(1);
+  return { ...link, subdomain: site?.subdomain ?? null };
 }
 
 /**
@@ -455,7 +463,7 @@ export async function convertSessionToApp(
   // conversions racing for one name must lose in the database.
   const versionToken = newVersionToken();
   try {
-    await db
+    await appsDatabaseOf(db)
       .insert(projectSites)
       .values({
         projectId: project.id,

@@ -29,6 +29,7 @@ import { TenantPlan } from '../../domain/shared/types';
 import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot';
 import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 import { notify } from '../notifications/notify';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 /** Millicents per US dollar — the unit `llm_usage_log.cost_usd_millicents` is
  *  stamped in (1 millicent = 1/100000 USD). Amounts are stored as millicents and
@@ -121,7 +122,7 @@ async function loadMemberSpendConfig(db: Db, env: Env | undefined, tenantId: num
  *  record cost 0, so summing the cost column is exactly "OpenRouter-rate spend". */
 async function sumMemberSpendMillicents(db: Db, env: Env | undefined, tenantId: number, userId: string, monthStart: Date): Promise<number> {
   const compute = async (): Promise<number> => {
-    const [row] = await db
+    const [row] = await usageDatabaseOf(db)
       .select({ spent: dsql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
       .from(llmUsageLog)
       .where(and(
@@ -310,7 +311,7 @@ export async function getTeamSpendOverview(db: Db, env: Env | undefined, tenantI
         .from(tenantMembers)
         .innerJoin(users, eq(users.id, tenantMembers.userId))
         .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.isActive, true))),
-      db
+      usageDatabaseOf(db)
         .select({ userId: llmUsageLog.userId, spent: dsql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
         .from(llmUsageLog)
         .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, monthStart)))

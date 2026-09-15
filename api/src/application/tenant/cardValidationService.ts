@@ -18,7 +18,7 @@ import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { invalidateTenantPlan } from './tenantPlanCache';
 import { tenants } from '../../infrastructure/database/schema';
-import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, siblingDatabase } from '../../infrastructure/database/connection';
 
 export type CardValidationStatus = 'none' | 'pending' | 'validated' | 'failed';
 
@@ -86,7 +86,7 @@ export function isCardValidated(
 }
 
 function writeDb(env: Env) {
-  return env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : buildDatabase(env);
+  return siblingDatabase(env, buildDatabase(env), 'operational');
 }
 
 /** Read a tenant's current card-validation state (never throws — defaults to none). */

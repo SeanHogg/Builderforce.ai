@@ -15,6 +15,7 @@ import { useEffect } from 'react';
 import { init, type QualityClient } from '@seanhogg/builderforce-quality';
 import { API_ERROR_EVENT, type ApiErrorEvent } from '@/lib/errors/apiErrorEvent';
 import { reportProductApiError } from '@/lib/reportError';
+import { isServiceOutage } from '@/lib/errors/serviceOutage';
 
 /**
  * The Quality-feed title for a browser error that carried no `Error` object (a
@@ -41,6 +42,8 @@ export function QualityErrorReporter({ apiKey, endpoint, environment, release }:
     };
     const captureApiError = (event: Event) => {
       const error = (event as CustomEvent<ApiErrorEvent>).detail;
+      // A platform outage refuses the report too — and one outage is not N defects.
+      if (isServiceOutage(error)) return;
       persist({
         title: `${error.status}${error.code ? ` ${error.code}` : ''}`,
         message: error.message,

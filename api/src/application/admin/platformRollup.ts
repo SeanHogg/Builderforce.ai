@@ -15,6 +15,7 @@ import { users, tenants, llmUsageLog, errorEvents } from '../../infrastructure/d
 import { densifyDaily, type MetricPoint } from '../dashboards/dailySeries';
 import type { Db } from '../../infrastructure/database/connection';
 import { DAY_MS } from '../../domain/shared/time';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 function windowStart(days: number, now: number): Date {
   const mid = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
@@ -61,11 +62,13 @@ export interface PlatformRollup {
 
 export async function computePlatformRollup(db: Db, days: number): Promise<PlatformRollup> {
   const now = Date.now();
+  // The usage ledger lives in its own database (operational in production).
+  const usageDb = usageDatabaseOf(db);
   const [newUsers, newTenants, tokens, spendMc, errs] = await Promise.all([
     platformCount(db, users, users.createdAt, days, now),
     platformCount(db, tenants, tenants.createdAt, days, now),
-    platformSum(db, llmUsageLog, llmUsageLog.createdAt, llmUsageLog.totalTokens, days, now),
-    platformSum(db, llmUsageLog, llmUsageLog.createdAt, llmUsageLog.costUsdMillicents, days, now),
+    platformSum(usageDb, llmUsageLog, llmUsageLog.createdAt, llmUsageLog.totalTokens, days, now),
+    platformSum(usageDb, llmUsageLog, llmUsageLog.createdAt, llmUsageLog.costUsdMillicents, days, now),
     platformCount(db, errorEvents, errorEvents.ts, days, now),
   ]);
   const spendUsd = spendMc.map((p) => ({ day: p.day, value: p.value / 100_000 }));

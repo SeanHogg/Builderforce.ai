@@ -1533,6 +1533,9 @@ export type AutoRunReason =
   | 'cooldown_active'
   | 'not_executable'
   | 'pending_approval'
+  /** A manager switched agent execution OFF for the workspace — nothing runs,
+   *  "Run now" included, until it is re-enabled in Settings. */
+  | 'execution_disabled'
   /** The lane owes a role sign-off, so its normal agent is suppressed. */
   | 'lane_requirement_gate';
 

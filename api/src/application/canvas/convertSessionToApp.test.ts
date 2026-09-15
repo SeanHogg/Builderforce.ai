@@ -87,21 +87,24 @@ describe('checkSubdomainAvailability', () => {
  * then cost a database round-trip per mount.
  */
 describe('cachedAppForSession', () => {
-  /** Enough of a db to answer the one three-table join, counting the calls. */
+  /**
+   * Enough of a db to answer `appForSession`'s TWO reads — the link/project join
+   * on the core database, then the site's subdomain by project id on the apps
+   * database — counting every `limit()` as one round trip. Unbound in this
+   * double, `appsDatabaseOf` resolves back to the same object, so both reads
+   * share this one mock.
+   */
   function countingDb(row: Record<string, unknown> | null) {
     const calls = { n: 0 };
+    const limit = async () => { calls.n += 1; return row ? [row] : []; };
+    const afterFrom = {
+      // The link/project read: select → from → innerJoin → where → limit.
+      innerJoin: () => ({ where: () => ({ limit }) }),
+      // The site read: select → from → where → limit (no join at all).
+      where: () => ({ limit }),
+    };
     const db = {
-      select: () => ({
-        from: () => ({
-          innerJoin: () => ({
-            leftJoin: () => ({
-              where: () => ({
-                limit: async () => { calls.n += 1; return row ? [row] : []; },
-              }),
-            }),
-          }),
-        }),
-      }),
+      select: () => ({ from: () => afterFrom }),
     } as unknown as Parameters<typeof cachedAppForSession>[0];
     return { db, calls };
   }
@@ -115,7 +118,10 @@ describe('cachedAppForSession', () => {
     const id = 'session-cache-hit';
     await expect(cachedAppForSession(db, env, 1, id)).resolves.toMatchObject({ projectId: 42 });
     await expect(cachedAppForSession(db, env, 1, id)).resolves.toMatchObject({ projectId: 42 });
-    expect(calls.n).toBe(1);
+    // Two round trips for the one uncached fetch (link, then the site's
+    // subdomain on the apps database) — never four, because the second ask is
+    // answered from the cache.
+    expect(calls.n).toBe(2);
   });
 
   it('reports a board that never became an app as null', async () => {

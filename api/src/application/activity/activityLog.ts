@@ -24,7 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { activityLog, agentHosts, freelancerEngagements, ideAgents, tenantMembers, users } from '../../infrastructure/database/schema';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
+import { siblingDatabase } from '../../infrastructure/database/connection';
 
 /**
  * WHO acted. `visitor` is an ANONYMOUS one — no user row, no tenant, an opaque
@@ -170,7 +170,7 @@ export function activityLogVersionKey(tenantId: number | null): string {
  * incomplete audit trail, so the choice belongs in ONE place that every site calls.
  */
 export function activityDatabase(env: Env | undefined, db: Db): Db {
-  return env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+  return siblingDatabase(env, db, 'operational');
 }
 
 /**

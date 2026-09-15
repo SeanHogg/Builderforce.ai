@@ -21,7 +21,7 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog, runModelOutcomes } from '../../infrastructure/database/schema';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
-import { normalizeByoProvider } from '../llm/usageLedger';
+import { normalizeByoProvider, usageDatabaseOf } from '../llm/usageLedger';
 import { vendorForModel } from '../llm/vendors/registry';
 import { DAY_MS, WEEK_MS } from '../../domain/shared/time';
 import { clamp01 } from '../../domain/shared/numbers';
@@ -447,7 +447,7 @@ export async function computeAiImpact(db: Db, tenantId: number, days: number): P
   const since = new Date(windowStart);
   const prevSince = new Date(windowStart - days * DAY_MS);
 
-  const usage = (await db
+  const usage = (await usageDatabaseOf(db)
     .select({
       model: llmUsageLog.model,
       totalTokens: llmUsageLog.totalTokens,

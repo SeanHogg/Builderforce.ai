@@ -15,20 +15,20 @@
      state. Muted ink pulled a quarter of the way back toward the primary ink, so
      it clears contrast at small sizes in both themes from this one definition. */
   --canvas-ink-soft: color-mix(in srgb, var(--canvas-muted) 74%, var(--canvas-ink));
-  --canvas-line: #e3ddd3;
+  --canvas-line: #E2E8F0;
   /* A cool neutral board keeps the workspace crisp in light mode without
      competing with white objects. Restrained blue/violet light gives the large
      empty surface depth without reading as a colored sheet. */
-  --canvas-board: #f5f7fb;
+  --canvas-board: #F1F5F9;
   --canvas-board-background:
     radial-gradient(circle at 18% 12%, rgba(59, 130, 246, .035), transparent 30rem),
     radial-gradient(circle at 82% 76%, rgba(109, 78, 233, .025), transparent 34rem),
     var(--canvas-board);
   --canvas-panel: #ffffff;
-  --canvas-panel-muted: #faf8f4;
-  --canvas-hover: #efeae1;
-  /* Shade, never glow: a warm neutral drop, not a tinted bloom. */
-  --canvas-shadow: rgba(60, 48, 36, .12);
+  --canvas-panel-muted: #F8FAFC;
+  --canvas-hover: #E2E8F0;
+  /* Shade, never glow: soft cool slate drop (BurnRate light). */
+  --canvas-shadow: rgba(15, 23, 42, .10);
   /* Wash held over the board while a file is dragged in from the desktop. */
   --canvas-drop-veil: color-mix(in srgb, var(--canvas-accent) 10%, transparent);
   /* Accent INK: a tint or a glyph drawn ON a canvas surface. A hue legible on ink
@@ -46,16 +46,16 @@
   --tone-danger-mark: #b91c1c; --tone-danger-ink: #991b1b; --tone-danger-bg: rgba(185,28,28,.12);
   /* Info is semantic blue; it may share the brand hue because text/icon context,
      rather than a second accent colour, distinguishes the role. */
-  --tone-info-mark: #1d4ed8; --tone-info-ink: #1e3a8a; --tone-info-bg: rgba(29,78,216,.11);
+  --tone-info-mark: #2D60FF; --tone-info-ink: #1E3A8A; --tone-info-bg: rgba(45,96,255,.11);
   /* TWO palettes, not twenty. Brain surfaces (the Brain Object and the prompt it
      owns) share one identity so the conversation reads as a single system; every
      other Object uses the neutral widget palette. Both are theme variables, so
      light and dark are one definition each instead of per-component overrides. */
   --canvas-widget-surface: #fff;
-  --canvas-widget-header: #faf8f4;
-  --canvas-widget-border: #ded7cc;
-  --canvas-widget-icon-bg: #f2ede5;
-  --canvas-widget-icon: #6b6157;
+  --canvas-widget-header: #F8FAFC;
+  --canvas-widget-border: #E2E8F0;
+  --canvas-widget-icon-bg: #F1F5F9;
+  --canvas-widget-icon: #64748B;
   --canvas-brain-surface: #f9f5fb;
   --canvas-brain-header: #f2ebfa;
   --canvas-brain-border: #d5c6ee;

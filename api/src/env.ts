@@ -10,6 +10,10 @@ export interface Env {
    * ledgers). When omitted during local/test rollout, the primary connection is
    * used for backwards compatibility. */
   NEON_TRANSACTIONAL_DATABASE_URL?: string;
+  /** Apps-runtime Postgres connection — the marketplace apps' own data
+   * (`project_sites` and the `site_*` tables), so public app traffic wakes this
+   * endpoint and not the core one. When omitted, the primary connection is used. */
+  NEON_APPS_DATABASE_URL?: string;
   /** Self-hosted Neon SQL endpoint for the HTTP driver, e.g.
    * "http://db-proxy:4444/sql". Local development only — it lets the driver
    * talk to the Postgres container from docker-compose.yml instead of Neon.

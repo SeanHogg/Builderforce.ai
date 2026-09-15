@@ -93,19 +93,17 @@ export async function drainExecutionLifecycleOutbox(
   const result: LifecycleOutboxDrainResult = { claimed: 0, projected: 0, retried: 0, dead: 0 };
   const touchedTenants = new Set<number>();
 
-  for (const row of due) {
-    const [claimed] = await db
-      .update(executionLifecycleOutbox)
-      .set({ status: 'processing', updatedAt: now })
-      .where(and(
-        eq(executionLifecycleOutbox.id, row.id),
-        eq(executionLifecycleOutbox.tenantId, row.tenantId),
-        inArray(executionLifecycleOutbox.status, ['pending', 'retry']),
-      ))
-      .returning({ id: executionLifecycleOutbox.id });
-    if (!claimed) continue;
-    result.claimed += 1;
+  // No separate `processing` claim. The projection is idempotent on `event_key`, so a
+  // row two drains both see is simply projected twice with one effect; the settle below
+  // is conditional on the row still being open, which makes it the claim and the
+  // acknowledgement in one write (three writes per event became one).
+  const stillOpen = (row: { id: number; tenantId: number }) => and(
+    eq(executionLifecycleOutbox.id, row.id),
+    eq(executionLifecycleOutbox.tenantId, row.tenantId),
+    inArray(executionLifecycleOutbox.status, ['pending', 'retry']),
+  );
 
+  for (const row of due) {
     try {
       const actor = actorFor(row);
       // The OUTBOX lives on primary (it foreign-keys executions/tasks); `activity_log`
@@ -140,12 +138,12 @@ export async function drainExecutionLifecycleOutbox(
         occurredAt: row.occurredAt,
       }).onConflictDoNothing({ target: activityLog.eventKey });
 
-      await db.update(executionLifecycleOutbox)
+      const [settled] = await db.update(executionLifecycleOutbox)
         .set({ status: 'done', processedAt: new Date(), lastError: null, updatedAt: new Date() })
-        .where(and(
-          eq(executionLifecycleOutbox.id, row.id),
-          eq(executionLifecycleOutbox.tenantId, row.tenantId),
-        ));
+        .where(stillOpen(row))
+        .returning({ id: executionLifecycleOutbox.id });
+      if (!settled) continue; // a concurrent drain settled it first
+      result.claimed += 1;
       touchedTenants.add(row.tenantId);
       result.projected += 1;
     } catch (error) {
@@ -161,7 +159,7 @@ export async function drainExecutionLifecycleOutbox(
         dead,
         error: message,
       } } });
-      await db.update(executionLifecycleOutbox)
+      const [failed] = await db.update(executionLifecycleOutbox)
         .set({
           status: dead ? 'dead' : 'retry',
           attempts,
@@ -169,10 +167,10 @@ export async function drainExecutionLifecycleOutbox(
           lastError: message,
           updatedAt: new Date(),
         })
-        .where(and(
-          eq(executionLifecycleOutbox.id, row.id),
-          eq(executionLifecycleOutbox.tenantId, row.tenantId),
-        ));
+        .where(stillOpen(row))
+        .returning({ id: executionLifecycleOutbox.id });
+      if (!failed) continue; // settled by a concurrent drain
+      result.claimed += 1;
       if (dead) result.dead += 1;
       else result.retried += 1;
     }
@@ -189,10 +187,4 @@ export async function drainExecutionLifecycleOutbox(
     }
   }));
   return result;
-}
-
-/** Frequent cron entry point. */
-export async function runExecutionLifecycleOutboxSweep(env: Env): Promise<LifecycleOutboxDrainResult> {
-  const { buildTransactionalDatabase } = await import('../../infrastructure/database/connection');
-  return drainExecutionLifecycleOutbox(env, buildTransactionalDatabase(env), { limit: 500 });
 }

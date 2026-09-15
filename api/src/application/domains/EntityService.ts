@@ -34,6 +34,7 @@
 import { and, asc, count, desc, eq, getTableColumns, ilike, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
+import { databaseForTable } from '../ide/appsDatabase';
 import {
   bumpCacheVersion,
   getCacheVersion,
@@ -295,15 +296,26 @@ export async function countScope(
     env,
     `kernel:entity:counts:${tenantId}:${scope}`,
     async () => {
-      const parts = defs.map((def) => {
-        const where = def.tenantKey ? sql` WHERE tenant_id = ${tenantId}` : sql``;
-        return sql`SELECT ${def.name} AS entity, COUNT(*)::int AS n FROM ${sql.identifier(def.name)}${where}`;
-      });
-      const rows = await db.execute(sql.join(parts, sql` UNION ALL `));
-      const list = ((rows as unknown as { rows?: unknown[] }).rows ?? (rows as unknown as unknown[])) as {
-        entity: string;
-        n: number | string;
-      }[];
+      // ONE statement per database the scope's tables live on — the Growth seat spans
+      // the core and apps databases, and a UNION cannot. Still one round trip per
+      // database, in parallel, never one per entity.
+      const byDatabase = new Map<Db, EntityDef[]>();
+      for (const def of defs) {
+        const target = databaseForTable(db, def.name);
+        byDatabase.set(target, [...(byDatabase.get(target) ?? []), def]);
+      }
+      const results = await Promise.all([...byDatabase].map(([target, group]) => {
+        const parts = group.map((def) => {
+          const where = def.tenantKey ? sql` WHERE tenant_id = ${tenantId}` : sql``;
+          return sql`SELECT ${def.name} AS entity, COUNT(*)::int AS n FROM ${sql.identifier(def.name)}${where}`;
+        });
+        return target.execute(sql.join(parts, sql` UNION ALL `));
+      }));
+      const list = results.flatMap((rows) =>
+        ((rows as unknown as { rows?: unknown[] }).rows ?? (rows as unknown as unknown[])) as {
+          entity: string;
+          n: number | string;
+        }[]);
       const out: Record<string, number> = {};
       for (const def of defs) out[def.name] = 0;
       for (const r of list) out[r.entity] = Number(r.n);
@@ -346,9 +358,10 @@ export async function listRows(
       const predicate = where.length ? and(...where) : undefined;
       const order = def.orderKey ? desc(col(def, def.orderKey)) : asc(primaryKeyColumn(def));
 
+      const source = databaseForTable(db, def.name);
       const [rows, totals] = await Promise.all([
-        db.select(projection(def)).from(def.table).where(predicate).orderBy(order).limit(limit).offset(offset),
-        db.select({ n: count() }).from(def.table).where(predicate),
+        source.select(projection(def)).from(def.table).where(predicate).orderBy(order).limit(limit).offset(offset),
+        source.select({ n: count() }).from(def.table).where(predicate),
       ]);
 
       return { rows: rows as EntityRow[], total: Number(totals[0]?.n ?? 0), limit, offset };
@@ -372,7 +385,7 @@ export async function getRow(
     const where: SQL[] = [eq(pk, coerce(pk, id, 'id'))];
     const scoped = tenantWhere(def, tenantId);
     if (scoped) where.push(scoped);
-    const [row] = await db.select(projection(def)).from(def.table).where(and(...where)).limit(1);
+    const [row] = await databaseForTable(db, def.name).select(projection(def)).from(def.table).where(and(...where)).limit(1);
     return (row as EntityRow | undefined) ?? null;
   });
 }
@@ -453,7 +466,7 @@ export async function createRow(
   const record = values(def, body, 'create');
   if (def.tenantKey) record[def.tenantKey] = tenantId;
 
-  const [row] = await db
+  const [row] = await databaseForTable(db, def.name)
     .insert(def.table)
     .values(record as never)
     .returning(projection(def));
@@ -478,7 +491,7 @@ export async function updateRow(
   const scoped = tenantWhere(def, tenantId);
   if (scoped) where.push(scoped);
 
-  const [row] = await db
+  const [row] = await databaseForTable(db, def.name)
     .update(def.table)
     .set(record as never)
     .where(and(...where))
@@ -512,8 +525,9 @@ export async function archiveRow(
   const scoped = tenantWhere(def, tenantId);
   if (scoped) where.push(scoped);
 
+  const target = databaseForTable(db, def.name);
   if (def.archiveKey) {
-    const [row] = await db
+    const [row] = await target
       .update(def.table)
       .set({ [def.archiveKey]: new Date() } as never)
       .where(and(...where))
@@ -523,7 +537,7 @@ export async function archiveRow(
     return { archived: true, deleted: false };
   }
 
-  const [row] = await db.delete(def.table).where(and(...where)).returning(projection(def));
+  const [row] = await target.delete(def.table).where(and(...where)).returning(projection(def));
   if (!row) throw new EntityError(404, `${def.name}/${id} not found`);
   await afterWrite(db, env, tenantId, def, row as EntityRow, 'archived', actor);
   return { archived: false, deleted: true };

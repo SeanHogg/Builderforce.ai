@@ -29,6 +29,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { projectSites, siteReleases } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { invalidateSite } from './siteHosting';
+import { appsDatabaseOf } from './appsDatabase';
 
 /**
  * Releases kept per site. Older ones have their assets deleted and their row
@@ -68,12 +69,14 @@ export async function recordSiteRelease(input: {
   totalBytes: number;
 }): Promise<void> {
   const { db, bucket, siteId, tenantId, versionToken, r2Prefix, source, assetCount, totalBytes } = input;
-  await db
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
+  await apps
     .insert(siteReleases)
     .values({ siteId, tenantId, versionToken, r2Prefix, source, assetCount, totalBytes, publishedAt: sql`NOW()` })
     .onConflictDoNothing();
 
-  const all = await db
+  const all = await apps
     .select({ id: siteReleases.id, r2Prefix: siteReleases.r2Prefix })
     .from(siteReleases)
     .where(scopedToTenant(siteReleases, tenantId, eq(siteReleases.siteId, siteId)))
@@ -82,19 +85,21 @@ export async function recordSiteRelease(input: {
     for (const object of (await bucket.list({ prefix: stale.r2Prefix })).objects ?? []) {
       await bucket.delete(object.key!);
     }
-    await db.delete(siteReleases).where(scopedToTenant(siteReleases, tenantId, eq(siteReleases.id, stale.id)));
+    await apps.delete(siteReleases).where(scopedToTenant(siteReleases, tenantId, eq(siteReleases.id, stale.id)));
   }
 }
 
 /** Every release of this project's site, newest first. */
 export async function listSiteReleases(db: Db, projectId: number, tenantId: number): Promise<ReleaseView[]> {
-  const [site] = await db
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
+  const [site] = await apps
     .select({ id: projectSites.id, current: projectSites.versionToken })
     .from(projectSites)
     .where(scopedToTenant(projectSites, tenantId, eq(projectSites.projectId, projectId)))
     .limit(1);
   if (!site) return [];
-  const rows = await db
+  const rows = await apps
     .select({
       versionToken: siteReleases.versionToken,
       source: siteReleases.source,
@@ -136,21 +141,23 @@ export async function restoreSiteRelease(
   versionToken: string,
   hostingApex: string,
 ): Promise<RestoreResult> {
-  const [site] = await db
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
+  const [site] = await apps
     .select({ id: projectSites.id, subdomain: projectSites.subdomain })
     .from(projectSites)
     .where(scopedToTenant(projectSites, tenantId, eq(projectSites.projectId, projectId)))
     .limit(1);
   if (!site) return { ok: false, status: 404, error: 'This project has no published site.' };
 
-  const [release] = await db
+  const [release] = await apps
     .select({ r2Prefix: siteReleases.r2Prefix, assetCount: siteReleases.assetCount, totalBytes: siteReleases.totalBytes })
     .from(siteReleases)
     .where(scopedToTenant(siteReleases, tenantId, eq(siteReleases.siteId, site.id), eq(siteReleases.versionToken, versionToken)))
     .limit(1);
   if (!release) return { ok: false, status: 404, error: 'That version is no longer available.' };
 
-  await db
+  await apps
     .update(projectSites)
     .set({
       r2Prefix: release.r2Prefix,

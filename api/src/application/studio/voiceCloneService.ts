@@ -17,6 +17,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { usageDatabaseOf } from '../llm/usageLedger';
 import type { Env } from '../../env';
 import {
   llmUsageLog,
@@ -261,7 +262,7 @@ async function meterSynthesis(
   costUsdMillicents: number,
 ): Promise<void> {
   try {
-    await db.insert(llmUsageLog).values({
+    await usageDatabaseOf(db).insert(llmUsageLog).values({
       tenantId: params.tenantId,
       userId: params.userId,
       llmProduct: 'voice_clone',

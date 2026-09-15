@@ -4,6 +4,7 @@ import { Project, ProjectProps } from '../../domain/project/Project';
 import { ProjectId, ProjectStatus, TenantId, asProjectId, asTenantId } from '../../domain/shared/types';
 import { projects as projectsTable } from '../database/schema';
 import type { Db } from '../database/connection';
+import { deleteAppsForProjects } from '../database/appsCascade';
 
 /**
  * Concrete Postgres implementation of IProjectRepository.
@@ -131,6 +132,8 @@ export class ProjectRepository implements IProjectRepository {
 
   async delete(id: ProjectId): Promise<void> {
     await this.db.delete(projectsTable).where(eq(projectsTable.id, id));
+    // The project's published site lives on the apps database, beyond the FK cascade.
+    await deleteAppsForProjects(this.db, [Number(id)]);
   }
 }
 

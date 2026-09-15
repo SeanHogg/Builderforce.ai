@@ -18,6 +18,7 @@ import { effectivePlanOf, loadTenantPlanRow } from '../../application/tenant/ten
 import { getLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan } from '../../domain/shared/types';
 import { estimateTokensFromChars } from '../../application/llm/tokenUsage';
+import { usageDatabaseOf } from '../../application/llm/usageLedger';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseBody, z } from './requestBody';
@@ -105,7 +106,7 @@ export function createCostForecastRoutes(db: Db): Hono<HonoEnv> {
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
 
-    const [usageRow] = await db
+    const [usageRow] = await usageDatabaseOf(db)
       .select({ used: sum(llmUsageLog.totalTokens) })
       .from(llmUsageLog)
       .where(

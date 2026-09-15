@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { MIGRATION_TRACKS } from './lib/migrationTracks.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -32,8 +33,9 @@ function loadDotEnv(path) {
 loadDotEnv(join(root, '.env'));
 
 const SECRET_KEYS = [
-  'NEON_DATABASE_URL',
-  'NEON_TRANSACTIONAL_DATABASE_URL',
+  // One connection string per database, from the track registry — a hand-kept pair here
+  // is how NEON_APPS_DATABASE_URL was missing when the apps database was split out.
+  ...MIGRATION_TRACKS.map((t) => t.env),
   'JWT_SECRET',
   'OPENROUTER_API_KEY',
   'OPENROUTER_API_KEY_PRO',

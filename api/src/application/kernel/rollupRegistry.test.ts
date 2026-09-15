@@ -18,6 +18,17 @@ import { describe, expect, it } from 'vitest';
 import { DOMAINS } from './ObjectRegistry';
 import { DOMAIN_MANIFEST, UNIVERSAL_METRICS, metricsFor } from './DomainService';
 import { METRIC_ROLLUPS, ROLLUP_BY_DOMAIN, writtenMetricKeys } from './rollupRegistry';
+import type { RollupSources } from './metricRollup';
+import type { Db } from '../../infrastructure/database/connection';
+
+/**
+ * A `RollupSources` stub for specs whose `build` reads the apps database before
+ * returning its statements (growth's leads/conversions). `execute` answers with no
+ * rows, which is exactly what "source table absent from this suite's fixture set"
+ * should look like — the spec's own present-table gating decides whether it runs at
+ * all, so this never needs to look realistic.
+ */
+const STUB_SOURCES: RollupSources = { apps: { execute: async () => ({ rows: [] }) } as unknown as Db };
 
 /**
  * Keys a writer produces as INPUTS to another metric rather than for a chart.
@@ -101,13 +112,17 @@ describe('every seat that charts a number has something that writes it', () => {
 
 describe('the numbers refuse rather than guess', () => {
   /** Every statement a writer would run against a database with everything present. */
-  const allStatements = () => METRIC_ROLLUPS.flatMap((rollup) => {
-    const present = new Set(ALL_TABLES);
-    return rollup.metrics.flatMap((spec) => {
-      const built = spec.build(present);
-      return built ? (Array.isArray(built) ? built : [built]) : [];
-    });
-  });
+  const allStatements = async () => {
+    const out = [];
+    for (const rollup of METRIC_ROLLUPS) {
+      const present = new Set(ALL_TABLES);
+      for (const spec of rollup.metrics) {
+        const built = await spec.build(present, STUB_SOURCES);
+        if (built) out.push(...(Array.isArray(built) ? built : [built]));
+      }
+    }
+    return out;
+  };
 
   /**
    * Every table any writer names. Kept as a literal so a spec that starts
@@ -127,34 +142,41 @@ describe('the numbers refuse rather than guess', () => {
     'intellectual_property',
   ];
 
-  it('never zero-fills: every statement is a grouped aggregate, so an absent row writes no fact', () => {
-    for (const statement of allStatements()) {
+  it('never zero-fills: every statement is a grouped aggregate, so an absent row writes no fact', async () => {
+    for (const statement of await allStatements()) {
       const text = JSON.stringify(statement);
       expect(text).toContain('INSERT INTO metric_facts');
       expect(text).toContain('ON CONFLICT');
     }
   });
 
-  it('builds a statement for every metric when every source table exists', () => {
+  it('builds a statement for every metric when every source table exists', async () => {
     const present = new Set(ALL_TABLES);
     for (const rollup of METRIC_ROLLUPS) {
       for (const spec of rollup.metrics) {
         for (const table of spec.requires) {
           expect(present.has(table), `${spec.key} requires ${table}, which this suite does not list`).toBe(true);
         }
-        expect(spec.build(present), `${spec.key} produced no statement with every table present`).toBeTruthy();
+        const built = await spec.build(present, STUB_SOURCES);
+        expect(built, `${spec.key} produced no statement with every table present`).toBeTruthy();
       }
     }
   });
 
-  it('skips a metric rather than failing the sweep when its source is absent', () => {
+  it('skips a metric rather than failing the sweep when its source is absent', async () => {
     // The whole point of `requires`: a projection map written against the target
     // schema lands ahead of some of it, and one missing table must not take the
     // other sixteen domains down with it.
     for (const rollup of METRIC_ROLLUPS) {
       for (const spec of rollup.metrics) {
         if (!spec.requires.length) continue;
-        expect(() => spec.build(new Set())).not.toThrow();
+        let threw = false;
+        try {
+          await spec.build(new Set(), STUB_SOURCES);
+        } catch {
+          threw = true;
+        }
+        expect(threw, `${spec.key} should not throw when its source table is absent`).toBe(false);
       }
     }
   });

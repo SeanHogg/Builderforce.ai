@@ -52,7 +52,12 @@ const raw: Record<string, unknown> = {
   ],
 };
 
-vi.mock('next-intl', () => ({
+// Partial mock: the shared template catalog's static build path
+// (`courseLms.ts`) calls the real `createTranslator` at module load for its
+// English fallback text, so fully replacing next-intl crashed the import
+// graph before any test ran. Only `useTranslations` is stubbed here.
+vi.mock('next-intl', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next-intl')>()),
   useTranslations: () => {
     const translate = (key: string) => key;
     translate.raw = (key: string) => raw[key] ?? [];

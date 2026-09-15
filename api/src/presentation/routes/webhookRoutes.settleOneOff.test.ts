@@ -36,7 +36,10 @@ vi.mock('../../application/finance/receivables', () => ({
 vi.mock('../../application/observability/caughtErrorReporter', () => ({
   reportCaughtError: mocks.reportCaughtError,
 }));
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: vi.fn(() => ({})) }));
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
+  buildDatabase: vi.fn(() => ({})),
+}));
 vi.mock('../../application/tenant/discountCodeService', () => ({ markDiscountRedeemed: vi.fn() }));
 vi.mock('../../application/sales/recordReferralConversion', () => ({ recordReferralConversion: vi.fn() }));
 

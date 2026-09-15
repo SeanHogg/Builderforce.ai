@@ -31,7 +31,8 @@ import { attributeRunToManifest } from './application/kanban/attributeRunToManif
 import { coordinateCompletedStage } from './application/manager/coordinateTicket';
 import { findCanonicalBoard } from './application/swimlane/canonicalBoard';
 import { resolvePolicyGates } from './application/governance/policyPackService';
-import { agentRegistrations, tenants } from './infrastructure/database/schema';
+import { agentRegistrations } from './infrastructure/database/schema';
+import { readAgentExecutionEnabled } from './application/runtime/agentExecutionGate';
 import { and, eq } from 'drizzle-orm';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
@@ -123,16 +124,9 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
         .limit(1);
       return row ? { active: row.status === 'active' } : null;
     },
-    isAgentExecutionEnabled: async (tenantId) => {
-      if (env.AGENT_EXECUTION_ENABLED?.trim().toLowerCase() === 'false') return false;
-      const [row] = await db.select({ enabled: tenants.agentExecutionEnabled })
-        .from(tenants)
-        .where(eq(tenants.id, tenantId))
-        .limit(1);
-      // Missing tenant is never a valid execution scope. Fail closed here and on
-      // database errors (which propagate) because this is an emergency control.
-      return row?.enabled === true;
-    },
+    // The AUTHORITATIVE, uncached read — see agentExecutionGate.ts for why submit must
+    // never enforce the emergency stop from a cache.
+    isAgentExecutionEnabled: (tenantId) => readAgentExecutionEnabled(env, db, tenantId),
     // Config-driven RUNNING advance: the lane the run was dispatched for, resolved by
     // the board's own lanes rather than the `in_progress` constant. On a board with no
     // such lane the ticket now stays where it is instead of being written to a status

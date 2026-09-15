@@ -32,6 +32,7 @@ import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { siteUsers, siteUserSessions } from '../../infrastructure/database/schema';
 import { fireEventTriggers } from '../workflow/eventTriggers';
+import { appsDatabaseOf } from './appsDatabase';
 import type { Env } from '../../env';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
@@ -99,7 +100,9 @@ export async function requestSiteSignIn(
     return { ok: false, status: 400, error: 'Enter a valid email address.' };
   }
 
-  const [user] = await db
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
+  const [user] = await apps
     .insert(siteUsers)
     .values({ siteId, tenantId, email })
     .onConflictDoUpdate({
@@ -129,7 +132,7 @@ export async function requestSiteSignIn(
   const code = newCode();
   const token = newSessionToken();
   const now = Date.now();
-  await db.insert(siteUserSessions).values({
+  await apps.insert(siteUserSessions).values({
     siteUserId: user.id,
     siteId,
     tenantId,
@@ -164,7 +167,9 @@ export async function verifySiteSignIn(
   const code = String(rawCode ?? '').trim();
   if (!email || !/^\d{6}$/.test(code)) return { ok: false, status: 400, error: 'Enter the 6-digit code.' };
 
-  const [user] = await db
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
+  const [user] = await apps
     .select({ id: siteUsers.id, status: siteUsers.status })
     .from(siteUsers)
     .where(scopedToTenant(siteUsers, tenantId, eq(siteUsers.siteId, siteId), eq(siteUsers.email, email)))
@@ -172,7 +177,7 @@ export async function verifySiteSignIn(
   if (!user || user.status !== 'active') return { ok: false, status: 400, error: 'That code is not valid.' };
 
   const codeHash = await hash(`${email}:${code}`);
-  const [pending] = await db
+  const [pending] = await apps
     .select({ id: siteUserSessions.id, attempts: siteUserSessions.attempts, expiresAt: siteUserSessions.expiresAt })
     .from(siteUserSessions)
     .where(scopedToTenant(
@@ -188,7 +193,7 @@ export async function verifySiteSignIn(
   if (!pending) {
     // Burn an attempt against every outstanding request for this user, so a
     // wrong guess costs the attacker their budget rather than nothing.
-    await db
+    await apps
       .update(siteUserSessions)
       .set({ attempts: sql`${siteUserSessions.attempts} + 1` })
       .where(scopedToTenant(siteUserSessions, tenantId, eq(siteUserSessions.siteUserId, user.id), isNull(siteUserSessions.redeemedAt)));
@@ -202,7 +207,7 @@ export async function verifySiteSignIn(
   // handed out, so issuing the same one would tie the live session's secret to a
   // row that existed while the code was still guessable.
   const token = newSessionToken();
-  await db
+  await apps
     .update(siteUserSessions)
     .set({
       tokenHash: await hash(token),
@@ -213,7 +218,7 @@ export async function verifySiteSignIn(
       expiresAt: new Date(Date.now() + SESSION_TTL_MS),
     })
     .where(scopedToTenant(siteUserSessions, tenantId, eq(siteUserSessions.id, pending.id)));
-  await db.update(siteUsers).set({ lastSeenAt: sql`NOW()` }).where(scopedToTenant(siteUsers, tenantId, eq(siteUsers.id, user.id)));
+  await apps.update(siteUsers).set({ lastSeenAt: sql`NOW()` }).where(scopedToTenant(siteUsers, tenantId, eq(siteUsers.id, user.id)));
 
   return { ok: true, token, userId: user.id, email, expiresAt: new Date(Date.now() + SESSION_TTL_MS) };
 }
@@ -233,7 +238,8 @@ export interface SiteUserIdentity {
  */
 export async function resolveSiteUser(db: Db, siteId: number, tenantId: number, token: string | null | undefined): Promise<SiteUserIdentity | null> {
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
-  const [row] = await db
+  // site tables live on the apps database — both sides of this join are site tables
+  const [row] = await appsDatabaseOf(db)
     .select({ userId: siteUsers.id, email: siteUsers.email, displayName: siteUsers.displayName, status: siteUsers.status })
     .from(siteUserSessions)
     .innerJoin(siteUsers, eq(siteUsers.id, siteUserSessions.siteUserId))
@@ -252,7 +258,7 @@ export async function resolveSiteUser(db: Db, siteId: number, tenantId: number, 
 /** End a session. Idempotent: an unknown token is already signed out. */
 export async function signOutSiteUser(db: Db, siteId: number, tenantId: number, token: string | null | undefined): Promise<void> {
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return;
-  await db
+  await appsDatabaseOf(db)
     .delete(siteUserSessions)
     .where(scopedToTenant(siteUserSessions, tenantId, eq(siteUserSessions.siteId, siteId), eq(siteUserSessions.tokenHash, await hash(token))));
 }

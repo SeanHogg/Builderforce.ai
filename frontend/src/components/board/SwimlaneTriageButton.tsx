@@ -58,6 +58,9 @@ const REASON_TONE: Readonly<Record<AutoRunReason, StatusTone>> = {
   terminal_lane: 'neutral',
   not_executable: 'neutral',
   pending_approval: 'warning',
+  // A deliberate stop on the WHOLE workspace that only a manager can lift — a warning
+  // that needs a decision, like the allowance stops, never an in-motion state.
+  execution_disabled: 'warning',
   lane_requirement_gate: 'warning',
 };
 

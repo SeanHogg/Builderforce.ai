@@ -22,6 +22,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { completeJson, type CompleteJsonRequest } from '../llm/completeJson';
 import { listProjectSecrets, loadProjectSecretValues, redactSecretValues } from '../secrets/projectSecrets';
 import { publishStaticSite } from '../ide/publishStaticSite';
+import { appsDatabaseOf } from '../ide/appsDatabase';
 import { HOSTING_APEX } from '../ide/siteHosting';
 import { writeWorkspaceBinary, writeWorkspaceFile } from '../ide/workspaceStore';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -233,7 +234,7 @@ async function buildContext(
     .from(projects)
     .where(scopedToTenant(projects, tenantId, eq(projects.id, projectId)))
     .limit(1);
-  const [site] = await db
+  const [site] = await appsDatabaseOf(db)
     .select({ subdomain: projectSites.subdomain, status: projectSites.status })
     .from(projectSites)
     .where(scopedToTenant(projectSites, tenantId, eq(projectSites.projectId, projectId)))

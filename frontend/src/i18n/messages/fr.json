@@ -3352,7 +3352,8 @@
         "lane_requirement_gate": "La colonne exige une validation de rôle encore en attente : la porte d'exigences a donc lancé ce relecteur et suspendu l'agent habituel de la colonne jusqu'à ce que la revue aboutisse.",
         "same_lane_reentry": "L'exécution qui vient de se terminer desservait déjà cette colonne : la protection anti-boucle a empêché un relancement immédiat. Rien ne s'exécute.",
         "tenant_token_limit": "L'espace de travail a épuisé son quota de jetons : l'autonomie est en pause pour tous ses tickets jusqu'à la réinitialisation du quota ou une montée en gamme.",
-        "cloud_run_limit": "L'espace de travail a épuisé son quota mensuel d'exécutions cloud. Réessayer n'y changera rien : passez à un forfait supérieur ou attendez la réinitialisation. Les exécutions on-premise et VS Code restent illimitées."
+        "cloud_run_limit": "L'espace de travail a épuisé son quota mensuel d'exécutions cloud. Réessayer n'y changera rien : passez à un forfait supérieur ou attendez la réinitialisation. Les exécutions on-premise et VS Code restent illimitées.",
+        "execution_disabled": "L'exécution des agents est désactivée pour cet espace de travail : rien ne s'exécute — « Exécuter maintenant » compris — tant qu'un responsable ne l'a pas réactivée dans les paramètres."
       }
     },
     "chatModes": {
@@ -11500,7 +11501,8 @@
         "pending_approval": "Demande externe — en attente d’approbation",
         "lane_requirement_gate": "En attente de validation du rôle",
         "same_lane_reentry": "Vient de terminer cette étape",
-        "tenant_token_limit": "Espace à court de jetons — passez à un forfait supérieur ou attendez la réinitialisation"
+        "tenant_token_limit": "Espace à court de jetons — passez à un forfait supérieur ou attendez la réinitialisation",
+        "execution_disabled": "Exécution des agents désactivée pour cet espace"
       }
     },
     "businessValue": {
@@ -18022,6 +18024,10 @@
       "offline": "Votre appareil est hors ligne : la requête n'a jamais quitté le navigateur. Tout refonctionnera dès le retour de la connexion.",
       "aborted": "La requête a été annulée avant qu'une réponse n'arrive.",
       "unreachable": "Impossible de joindre BuilderForce. La requête n'est pas arrivée, ou c'est autre chose que l'API qui y a répondu — ce n'est pas un problème de réglages de votre navigateur, et l'incident a été signalé automatiquement."
+    },
+    "outage": {
+      "title": "Temporairement indisponible",
+      "message": "BuilderForce est temporairement indisponible, ce contenu n'a donc pas pu être chargé. Le problème ne vient pas de vous — réessayez dans quelques minutes."
     },
     "ticket": {
       "heading": "Ticket de support — Erreur API",

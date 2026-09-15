@@ -38,7 +38,7 @@ import {
 import { startArchitectAnalysis } from '../repos/architectRunner';
 import type { TaskService } from '../task/TaskService';
 import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
-import { recordProxyUsage } from '../llm/usageLedger';
+import { recordProxyUsage, usageDatabaseOf } from '../llm/usageLedger';
 import { findBuiltinAgentRef, personaDirectiveFor } from './rfpAgents';
 import { computeRfpCostModel, RFP_COST_DEFAULTS } from './rfpCost';
 import { projectRiskRegister } from './rfpRegister';
@@ -404,7 +404,7 @@ async function estimateAgenticCostUsd(db: Db, tenantId: number, projectId: numbe
   let historicalUsd = 0;
   if (projectId != null) {
     try {
-      const [row] = await db
+      const [row] = await usageDatabaseOf(db)
         .select({ total: dsql<number>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
         .from(llmUsageLog)
         .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.projectId, projectId)));

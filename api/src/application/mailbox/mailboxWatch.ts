@@ -326,6 +326,12 @@ export async function drainMailboxWatch(db: Db, env: Env, row: WatchRow): Promis
 
   if (fresh.length === 0) return { ...EMPTY_DRAIN, seen: delta.messages.length };
 
+  // New mail is work for the inbox-automation sweep as well as for workflow triggers,
+  // so ARRIVAL is what wakes the frequent tick — not the sweep holding the cron gate
+  // open on every pass in case something arrived, which kept the core database awake
+  // around the clock for any workspace with one enabled rule.
+  await signalPendingWork(env).catch(() => undefined);
+
   const [fired, tiles] = await Promise.all([
     fireMailboxReceived(db, env, row, token.accountEmail, fresh),
     pushToInboxTiles(db, env, row, token.accountEmail, token.provider, fresh),

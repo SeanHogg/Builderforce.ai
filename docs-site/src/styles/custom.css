@@ -31,32 +31,32 @@
   --sl-color-black:       #050810;
 }
 
-/* Light mode */
+/* Light mode — BurnRateOS-inspired cool slate (mirrors frontend globals.css) */
 [data-theme='light'] {
-  --sl-color-accent-low:     #dbeafe;
-  --sl-color-accent:         #3b82f6;
-  --sl-color-accent-high:    #1e40af;
+  --sl-color-accent-low:     #DBEAFE;
+  --sl-color-accent:         #2D60FF;
+  --sl-color-accent-high:    #4F46E5;
 
-  --sl-color-bg:             #f8faff;
-  --sl-color-bg-nav:         #ffffff;
-  --sl-color-bg-sidebar:     #f0f4ff;
-  --sl-color-bg-inline-code: #e8edfc;
+  --sl-color-bg:             #F1F5F9;
+  --sl-color-bg-nav:         #FFFFFF;
+  --sl-color-bg-sidebar:     #F8FAFC;
+  --sl-color-bg-inline-code: #E2E8F0;
 
-  --sl-color-gray-1: #111827;
-  --sl-color-gray-2: #374151;
-  --sl-color-gray-3: #5a6480;
-  --sl-color-gray-4: #8892b0;
-  --sl-color-gray-5: #c8d0e8;
-  --sl-color-gray-6: #e8edfc;
-  --sl-color-gray-7: #f0f4ff;
+  --sl-color-gray-1: #0F172A;
+  --sl-color-gray-2: #334155;
+  --sl-color-gray-3: #475569;
+  --sl-color-gray-4: #64748B;
+  --sl-color-gray-5: #94A3B8;
+  --sl-color-gray-6: #E2E8F0;
+  --sl-color-gray-7: #F8FAFC;
 
-  --sl-color-hairline:       rgba(77, 158, 255, 0.2);
-  --sl-color-hairline-light: rgba(77, 158, 255, 0.1);
+  --sl-color-hairline:       rgba(15, 23, 42, 0.12);
+  --sl-color-hairline-light: rgba(15, 23, 42, 0.08);
 
-  --sl-color-text:        #111827;
-  --sl-color-text-accent: #3b82f6;
-  --sl-color-white:       #ffffff;
-  --sl-color-black:       #111827;
+  --sl-color-text:        #475569;
+  --sl-color-text-accent: #2D60FF;
+  --sl-color-white:       #FFFFFF;
+  --sl-color-black:       #0F172A;
 }
 
 /* Light mode readability fixes */
@@ -68,35 +68,35 @@
 
 [data-theme='light'] site-search button[data-open-modal] {
   background-color: #ffffff !important;
-  color: #111827 !important;
+  color: #0F172A !important;
   border: 1px solid rgba(77, 158, 255, 0.25) !important;
 }
 
 [data-theme='light'] site-search button[data-open-modal] svg {
-  color: #3b82f6 !important;
+  color: #2D60FF !important;
 }
 
 [data-theme='light'] site-search kbd {
-  background: #eff5ff !important;
-  color: #1f2937 !important;
+  background: #F1F5F9 !important;
+  color: #334155 !important;
   border-color: rgba(77, 158, 255, 0.3) !important;
 }
 
 [data-theme='light'] site-search dialog .dialog-frame,
 [data-theme='light'] #starlight__search {
   background-color: #ffffff !important;
-  color: #111827 !important;
+  color: #0F172A !important;
 }
 
 [data-theme='light'] .sidebar-content,
 [data-theme='light'] .sidebar-pane,
 [data-theme='light'] .right-sidebar {
-  color: #1f2937 !important;
+  color: #334155 !important;
 }
 
 [data-theme='light'] .sidebar-content :is(summary, a, button, label, h2, h3),
 [data-theme='light'] .sidebar-pane :is(summary, a, button, label, h2, h3) {
-  color: #1f2937 !important;
+  color: #334155 !important;
 }
 
 [data-theme='light'] .sidebar-content .group-label,

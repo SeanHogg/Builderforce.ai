@@ -11,7 +11,7 @@
  */
 import type { Context, Env as HonoBaseEnv } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { InternalError, RequestValidationError, isClientError, statusOf } from '../../domain/shared/errors';
+import { InternalError, RequestValidationError, ServiceUnavailableError, isClientError, statusOf } from '../../domain/shared/errors';
 import { reportCaughtError, type CaughtErrorDetails } from '../../application/observability/caughtErrorReporter';
 import type { HonoEnv } from '../../env';
 
@@ -35,7 +35,12 @@ export interface ErrorResponseBody {
 export function errorResponseBody(error: unknown): { status: number; body: ErrorResponseBody } {
   const status = statusOf(error);
   // An InternalError's message was written for the caller; any other 5xx text is a diagnostic.
-  if (status >= 500) return { status, body: { error: error instanceof InternalError ? error.message : GENERIC_SERVER_ERROR } };
+  if (status >= 500) {
+    const body: ErrorResponseBody = { error: error instanceof InternalError ? error.message : GENERIC_SERVER_ERROR };
+    // An outage's code lets the client say "temporarily unavailable" instead of "something broke".
+    if (error instanceof ServiceUnavailableError && error.code) body.code = error.code;
+    return { status, body };
+  }
   const message = error instanceof Error ? error.message : String(error);
   const body: ErrorResponseBody = { error: message };
   if (error instanceof RequestValidationError) body.issues = error.issues;

@@ -15,6 +15,7 @@ import { llmUsageLog } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { millicentsToUsd } from '../../domain/shared/money';
 import type { Env } from '../../env';
+import { usageDatabaseOf } from './usageLedger';
 
 export interface UsageCostSummary {
   estimatedCostUsd: number;
@@ -31,7 +32,7 @@ async function summarize(env: Env | undefined, db: Db, cacheKey: string, predica
     async () => {
       // ::bigint comes back as a STRING from the driver, ::int as a number — the
       // Number() coercions below are what normalise both.
-      const rows = await db
+      const rows = await usageDatabaseOf(db)
         .select({
           cost_mc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)::bigint`,
           tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)::bigint`,

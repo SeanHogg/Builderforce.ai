@@ -38,6 +38,7 @@ import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { siteCollections, siteRecords, siteUsers, projectSites, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { appsDatabaseOf } from './appsDatabase';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
@@ -143,14 +144,15 @@ export async function notifySiteRecordTicketDone(env: Env, db: Db, tenantId: num
       .limit(1);
     if (!task?.originSiteRecordId) return;
 
-    const [record] = await db
+    const apps = appsDatabaseOf(db);
+    const [record] = await apps
       .select({ collectionId: siteRecords.collectionId, email: siteRecords.email, siteUserId: siteRecords.siteUserId })
       .from(siteRecords)
       .where(scopedToTenant(siteRecords, tenantId, eq(siteRecords.id, task.originSiteRecordId)))
       .limit(1);
     if (!record) return;
 
-    const [collection] = await db
+    const [collection] = await apps
       .select({ siteId: siteCollections.siteId, name: siteCollections.name })
       .from(siteCollections)
       .where(scopedToTenant(siteCollections, tenantId, eq(siteCollections.id, record.collectionId)))
@@ -159,7 +161,7 @@ export async function notifySiteRecordTicketDone(env: Env, db: Db, tenantId: num
 
     let recipientEmail = record.email;
     if (record.siteUserId) {
-      const [user] = await db
+      const [user] = await apps
         .select({ email: siteUsers.email })
         .from(siteUsers)
         .where(scopedToTenant(siteUsers, tenantId, eq(siteUsers.id, record.siteUserId)))
@@ -171,7 +173,7 @@ export async function notifySiteRecordTicketDone(env: Env, db: Db, tenantId: num
     // carry an identity.
     if (!recipientEmail) return;
 
-    const [site] = await db
+    const [site] = await apps
       .select({ subdomain: projectSites.subdomain, customDomain: projectSites.customDomain })
       .from(projectSites)
       .where(scopedToTenant(projectSites, tenantId, eq(projectSites.id, collection.siteId)))

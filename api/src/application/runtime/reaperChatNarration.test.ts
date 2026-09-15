@@ -72,7 +72,10 @@ function fakeDb() {
   };
 }
 
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: () => fakeDb() }));
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
+  buildDatabase: () => fakeDb(),
+}));
 vi.mock('../maintenance/parkAgeTimeout', () => ({
   runParkAgeTimeoutSweep: async () => ({ stale: 0, unparked: 0 }),
 }));

@@ -1885,10 +1885,18 @@ export const coordinationNotes = pgTable('coordination_notes', {
  */
 
 
+/**
+ * Written and read through `resolveUsageDatabase`, which targets the operational Neon
+ * account when NEON_TRANSACTIONAL_DATABASE_URL is bound. PostgreSQL cannot enforce a
+ * foreign key across accounts, so every id here is a BARE value — matching
+ * `transactional-migrations/0001`, which created the table without them. The
+ * `.references()` this definition used to declare described constraints the live table
+ * does not have.
+ */
 export const llmUsageLog = pgTable('llm_usage_log', {
   id:               serial('id').primaryKey(),
-  tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
-  userId:           varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  tenantId:         integer('tenant_id'),
+  userId:           varchar('user_id', { length: 36 }),
   llmProduct:       varchar('llm_product', { length: 32 }).notNull().default('builderforceLLM'),
   model:            varchar('model', { length: 200 }).notNull(),
   promptTokens:     integer('prompt_tokens').notNull().default(0),
@@ -1918,7 +1926,7 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   // Agent attribution (0096) — lets usage/cost be split CLOUD vs ON-PREM vs WEB.
   // A row with all three null is a web/SDK call.
   /** Self-hosted (on-prem) agent host that made the call. */
-  agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  agentHostId:      integer('agent_host_id'),
   /** Cloud agent run (ide_agents.id, or null for the gateway-default bucket). */
   cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
   /** Execution a cloud-run usage row belongs to (trace key). */
@@ -1926,10 +1934,10 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   /** Ticket (task) this spend is attributed to (0104) — the finest grain. Cost
    *  rolls up ticket → project → account. Stamped from the run's task; null for
    *  web/SDK calls. */
-  taskId:           integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  taskId:           integer('task_id'),
   /** Project this spend is attributed to (0103) — lets cost roll up project →
    *  account. Stamped from the run's task→project; null for web/SDK calls. */
-  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  projectId:        integer('project_id'),
   /** Authoritative cost stamped at write time from the resolved model's price
    *  (incl. cache tiers), in millicents (1/100000 USD) — see migration 0097.
    *  The dashboard sums this instead of re-pricing tokens at read time. */

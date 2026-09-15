@@ -241,9 +241,12 @@ export async function runMailboxAutomationSweep(
       }
     }
   }
-  // Connected inboxes receive new work outside Builderforce, so keep the frequent
-  // tick hot while an enabled rule exists; idempotency keeps empty ticks cheap.
-  if (rules.length > 0) await signalPendingWork(env);
+  // Keep the next tick hot only when this pass actually took work — a pass is capped at
+  // 25 unread per inbox and by the dispatch budget, so more may be waiting. New mail
+  // arriving is signalled by the push drain (`mailboxWatch`), and a mailbox with no push
+  // is polled on the gate's floor. Signalling on every pass whenever a rule merely
+  // EXISTS held the cron gate open permanently, so the core database never slept.
+  if (summary.matched > 0) await signalPendingWork(env);
   return summary;
 }
 

@@ -15,13 +15,14 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   tasks, projects, sprints, costCalculations, featureRoi, llmUsageLog,
 } from '../../infrastructure/database/schema';
 import { notSystemTask } from '../../application/task/taskScope';
+import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { scope } from './segmentTrackerRoutes';
@@ -42,8 +43,14 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * `usageDb` owns `llm_usage_log` (`resolveUsageDatabase` — the operational database in
+ * production); everything else here is the core `db`. The two are separate Neon
+ * accounts, so no statement may join across them.
+ */
 async function computeRollup(
   db: Db,
+  usageDb: Db,
   tenantId: number,
   segmentId: string,
   projectId: number | undefined,
@@ -100,7 +107,7 @@ async function computeRollup(
   // ── agent LLM spend (already attributed per project, 0103/0104) ────────────
   const llmConds = [eq(llmUsageLog.tenantId, tenantId)];
   if (projectId !== undefined) llmConds.push(eq(llmUsageLog.projectId, projectId));
-  const [llmAgg] = await db
+  const [llmAgg] = await usageDb
     .select({ millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
     .from(llmUsageLog)
     .where(and(...llmConds));
@@ -112,28 +119,36 @@ async function computeRollup(
     .where(and(eq(costCalculations.tenantId, tenantId), eq(costCalculations.segmentId, segmentId)));
 
   // ── per-task agent spend (the real per-task dollar — llm_usage_log.task_id,
-  //    0104). Top spenders in scope; innerJoin tasks drops web/SDK (null task). ──
-  const taskCostConds = [eq(llmUsageLog.tenantId, tenantId)];
+  //    0104). Top spenders in scope; web/SDK rows (no task) are excluded. ────────
+  const taskCostConds = [eq(llmUsageLog.tenantId, tenantId), isNotNull(llmUsageLog.taskId)];
   if (projectId !== undefined) taskCostConds.push(eq(llmUsageLog.projectId, projectId));
-  const taskCostRows = await db
+  const taskSpend = await usageDb
     .select({
       taskId: llmUsageLog.taskId,
-      taskKey: tasks.key,
-      title: tasks.title,
       millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,
     })
     .from(llmUsageLog)
-    .innerJoin(tasks, eq(tasks.id, llmUsageLog.taskId))
     .where(and(...taskCostConds))
-    .groupBy(llmUsageLog.taskId, tasks.key, tasks.title)
+    .groupBy(llmUsageLog.taskId)
     .orderBy(desc(sql`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`))
-    .limit(10);
-  const byTask = taskCostRows.map((r) => ({
-    taskId: r.taskId as number,
-    taskKey: r.taskKey ?? '',
-    title: r.title ?? '',
-    agentLlmCostUsd: num(r.millicents) / MILLICENTS_PER_USD,
-  }));
+    // Over-fetched: a spender whose task was since deleted is dropped below, and
+    // must not shorten the top ten.
+    .limit(20);
+  const spendTaskIds = taskSpend.flatMap((r) => (r.taskId == null ? [] : [r.taskId]));
+  const spendTasks = spendTaskIds.length === 0 ? [] : await db
+    .select({ id: tasks.id, key: tasks.key, title: tasks.title })
+    .from(tasks)
+    .where(and(eq(tasks.tenantId, tenantId), inArray(tasks.id, spendTaskIds)));
+  const spendTaskById = new Map(spendTasks.map((t) => [t.id, t]));
+  const byTask = taskSpend.flatMap((r) => {
+    const task = r.taskId == null ? undefined : spendTaskById.get(r.taskId);
+    return task ? [{
+      taskId: task.id,
+      taskKey: task.key ?? '',
+      title: task.title ?? '',
+      agentLlmCostUsd: num(r.millicents) / MILLICENTS_PER_USD,
+    }] : [];
+  }).slice(0, 10);
 
   // ── feature ROI tracking list (segment-level) ──────────────────────────────
   const roi = await db
@@ -144,7 +159,7 @@ async function computeRollup(
   // ── per-project breakdown (portfolio only) ─────────────────────────────────
   let byProject: RoiRollup['byProject'] = [];
   if (projectId === undefined) {
-    const llmByProject = await db
+    const llmByProject = await usageDb
       .select({
         projectId: llmUsageLog.projectId,
         millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,
@@ -206,7 +221,7 @@ export function createRoiRoutes(db: Db): Hono<HonoEnv> {
     // short TTL keeps the spend figure fresh (≤60s lag) without cache thrash.
     const rollup = await getOrSetCached(
       env, key,
-      () => computeRollup(db, tenantId, segmentId, projectId, Date.now()),
+      () => computeRollup(db, resolveUsageDatabase(env, db), tenantId, segmentId, projectId, Date.now()),
       { kvTtlSeconds: 60, l1TtlMs: 15_000 },
     );
     return c.json(rollup);

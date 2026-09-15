@@ -21,11 +21,11 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDrizzleTables } from './lib/drizzleSchema.mjs';
+import { SIBLING_TRACKS } from './lib/migrationTracks.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const srcDir = resolve(here, '../src');
 const migrationsDir = resolve(here, '../migrations');
-const transactionalDir = resolve(here, '../transactional-migrations');
 const allowlistFile = resolve(here, '.schema-drift-allowlist.txt');
 
 // Pre-existing drift captured when this script first landed — mostly tables
@@ -54,10 +54,10 @@ const drizzleTables = [...parseDrizzleTables(srcDir)].map(([table, cols]) => ({
 
 // ── Parse all migrations ────────────────────────────────────────────────────
 //
-// Parsed ONCE PER TRACK. `api/migrations` targets NEON_DATABASE_URL;
-// `api/transactional-migrations` targets NEON_TRANSACTIONAL_DATABASE_URL. A
-// table that lives on the operational track must have its columns declared
-// THERE — see the operational-track check further down.
+// Parsed ONCE PER TRACK. `api/migrations` targets NEON_DATABASE_URL; each sibling
+// track (scripts/lib/migrationTracks.mjs) targets its own database. A table that
+// lives on a sibling track must have its columns declared THERE — see the
+// sibling-track check further down.
 
 function parseTrack(dir) {
 
@@ -252,7 +252,7 @@ return migratedColumns;
 }
 
 const migratedColumns = parseTrack(migrationsDir);
-const operationalColumns = parseTrack(transactionalDir);
+const siblingTracks = SIBLING_TRACKS.map((track) => ({ track, columns: parseTrack(resolve(here, '..', track.dir)) }));
 
 // ── Compare ─────────────────────────────────────────────────────────────────
 
@@ -276,13 +276,12 @@ for (const { table, cols } of drizzleTables) {
   }
 }
 
-// ── Operational track: a table's columns must exist on the DB it is WRITTEN to ──
+// ── Sibling tracks: a table's columns must exist on the DB it is WRITTEN to ──
 //
-// `api/migrations` and `api/transactional-migrations` target two DIFFERENT Neon
-// databases. The forward check above is satisfied by EITHER track, so a column
-// added to the primary track for a table that actually lives on the operational
-// one looks perfectly migrated — and then fails at runtime, on every write,
-// forever.
+// `api/migrations` and each sibling track target DIFFERENT Neon databases. The
+// forward check above is satisfied by the primary track, so a column added there
+// for a table that actually lives on a sibling (operational, apps) looks perfectly
+// migrated — and then fails at runtime, on every write, forever.
 //
 // That has now happened twice, both silent because the writers swallow their own
 // errors:
@@ -291,20 +290,23 @@ for (const { table, cols } of drizzleTables) {
 //   - activity_log.event_key (mig 0374 → primary): the unified audit log dropped
 //     every event, ~350/hour.
 //
-// Any table CREATED in transactional-migrations lives on the operational
-// database, so every Drizzle column it declares must be present in THAT track.
+// Any table CREATED in a sibling track lives on that sibling's database, so every
+// Drizzle column it declares must be present in THAT track.
 
-const operationalTables = new Set(operationalColumns.keys());
+let siblingTableCount = 0;
 let operationalAllowed = 0;
 
-for (const { table, cols } of drizzleTables) {
-  if (!operationalTables.has(table)) continue;
-  const present = operationalColumns.get(table);
-  for (const col of cols) {
-    if (present.has(col.toLowerCase())) continue;
-    const msg = `Column '${table}.${col}' is missing from the OPERATIONAL migration track — ${table} is written to NEON_TRANSACTIONAL_DATABASE_URL, so adding it under api/migrations/ does not create it.`;
-    if (allowlist.has(msg)) { operationalAllowed++; continue; }
-    errors.push(msg);
+for (const { track, columns } of siblingTracks) {
+  siblingTableCount += columns.size;
+  for (const { table, cols } of drizzleTables) {
+    const present = columns.get(table);
+    if (!present) continue;
+    for (const col of cols) {
+      if (present.has(col.toLowerCase())) continue;
+      const msg = `Column '${table}.${col}' is missing from the ${track.label} migration track — ${table} is written to ${track.env}, so adding it under api/migrations/ does not create it.`;
+      if (allowlist.has(msg)) { operationalAllowed++; continue; }
+      errors.push(msg);
+    }
   }
 }
 
@@ -359,7 +361,7 @@ if (errors.length > 0) {
   console.error('NEW schema drift detected (not in allowlist):\n');
   for (const err of errors) console.error('  - ' + err);
   console.error('\nAdd a migration in api/migrations/ that creates the missing column(s), or remove from schema.ts.');
-  console.error('For an OPERATIONAL-track column, the migration belongs in api/transactional-migrations/ — that table is written to a different database.');
+  console.error(`For a sibling-track column, the migration belongs in that track's directory (${SIBLING_TRACKS.map((t) => `api/${t.dir}/`).join(', ')}) — that table is written to a different database.`);
   console.error('For a reverse-column item, declare the migrated column in schema.ts or explicitly grandfather the exact message in scripts/.schema-drift-allowlist.txt.');
   console.error('To deliberately grandfather this drift (e.g. for a baseline-push table), add the bullet to scripts/.schema-drift-allowlist.txt.');
   console.error("For a migrated table with no pgTable() declaration: add it to schema.ts, or list the bare table name in scripts/.schema-missing-allowlist.txt if it is intentionally unmapped (e.g. a pure join/audit table written only by SQL migrations).");
@@ -369,7 +371,7 @@ if (errors.length > 0) {
 console.log(
   `Schema drift check passed: ${drizzleTables.length} drizzle tables, ` +
   `${[...migratedColumns.values()].reduce((sum, s) => sum + s.size, 0)} migrated columns, ` +
-  `${operationalTables.size} operational-track tables verified against transactional-migrations, ` +
+  `${siblingTableCount} sibling-track tables verified against ${SIBLING_TRACKS.map((t) => t.dir).join(' + ')}, ` +
   `${allowed + operationalAllowed} pre-existing drift items grandfathered, ` +
   `${reverseAllowed} migrated tables intentionally unmapped.`,
 );

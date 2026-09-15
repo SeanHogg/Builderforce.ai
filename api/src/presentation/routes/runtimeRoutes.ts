@@ -33,6 +33,9 @@ import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollo
 import { startFollowUpRun } from '../../application/runtime/followUpRun';
 import { listExecutionLlmTurns } from '../../application/llm/executionTraces';
 import { executionUsageCost, taskUsageCost } from '../../application/llm/usageCostSummary';
+import { modelUsageByExecution } from '../../application/llm/executionModelUsage';
+import { invalidateAgentExecutionGate } from '../../application/runtime/agentExecutionGate';
+import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 import { notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import { broadcastExecutionEvent, executionRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
@@ -809,6 +812,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .where(eq(tenants.id, tenantId))
       .returning({ enabled: tenants.agentExecutionEnabled });
     if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    // The evaluator's and dispatcher's pre-check must see the new value at once.
+    await invalidateAgentExecutionGate(c.env as Env, tenantId);
 
     // Disable first, then drain. RuntimeService.submit observes FALSE while this
     // snapshot is being cancelled, so schedulers cannot refill the fleet.
@@ -1728,15 +1733,6 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
             AND a.tool_name = 'llm.complete'
             AND substring(a.args from '"model"\\s*:\\s*"([^"]+)"') IS NOT NULL
         )`,
-        modelUsage: sql<Array<{ model: string; byo: boolean; provider: string | null }>>`COALESCE((
-          SELECT jsonb_agg(DISTINCT jsonb_build_object(
-            'model', u.model,
-            'byo', u.byo,
-            'provider', u.byo_provider
-          ))
-          FROM llm_usage_log u
-          WHERE u.execution_id = ${taskFileChanges}.execution_id AND u.tenant_id = ${taskFileChanges}.tenant_id
-        ), '[]'::jsonb)`,
       })
       .from(taskFileChanges)
       .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, c.get('tenantId'))))
@@ -1748,8 +1744,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // Changes tab (and its diff viewer) is executor-agnostic — see
     // application/task/taskFileChangeFeed.
     const fromDispatches = await readDispatchFileChanges(db, c.get('tenantId'), taskId);
-    const seen = new Set(rows.map((r) => r.path));
-    const changes = [...rows, ...fromDispatches.filter((d) => !seen.has(d.path))]
+    // Which models each run used (BYO or platform) — from the database that owns the
+    // usage ledger (operational in production), not a subquery against the core copy.
+    const usage = await modelUsageByExecution(
+      resolveUsageDatabase(c.env as Env, db), c.get('tenantId'), rows.map((r) => r.executionId),
+    );
+    const withUsage = rows.map((r) => ({
+      ...r, modelUsage: r.executionId == null ? [] : usage.get(r.executionId) ?? [],
+    }));
+    const seen = new Set(withUsage.map((r) => r.path));
+    const changes = [...withUsage, ...fromDispatches.filter((d) => !seen.has(d.path))]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return c.json({ changes });
   });

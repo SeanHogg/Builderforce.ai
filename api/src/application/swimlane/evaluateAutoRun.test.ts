@@ -339,15 +339,19 @@ describe('evaluateTaskAutoRun — the lane comes from the ROW, not the caller', 
   const noRuns = { listByTask: async () => [] } as unknown as RuntimeService;
 
   /**
-   * Query order inside the evaluator: task row → PINNED board → board → lane → lane
-   * staffing → lane requirements.
+   * Query order inside the evaluator: task row → tenants execution-enabled gate →
+   * PINNED board → board → lane → lane staffing → lane requirements.
    *
-   * The empty slot is `findCanonicalBoard` asking `projects.primary_board_id` first
-   * (migration 1081). These projects have no pointer, so it falls through to the derived
-   * board below — which is the path this suite is about.
+   * The tenants row is `agentExecutionEnabledCached` falling back to an uncached read
+   * (no `env` in these args) — enabled by default so it never blocks the case under
+   * test. The empty slot after it is `findCanonicalBoard` asking
+   * `projects.primary_board_id` first (migration 1081). These projects have no
+   * pointer, so it falls through to the derived board below — which is the path this
+   * suite is about.
    */
   const rows = (taskStatus: string, gate: 'auto' | 'human') => [
     [{ assignedAgentRef: 'owner-1', source: null, status: taskStatus }],
+    [{ enabled: true }],
     [],
     [{ id: 1, projectId: 7, tenantId: 3, lifecycleManaged: false }],
     [{ id: 10, gate, isTerminal: false }],
@@ -400,9 +404,25 @@ describe('evaluateTaskAutoRun — the lane comes from the ROW, not the caller', 
   });
 
   it('falls back to the caller\'s status only when the row is gone', async () => {
-    const e = await evaluateTaskAutoRun(stubDb([[], []]), noRuns, args);
+    const e = await evaluateTaskAutoRun(stubDb([[], [{ enabled: true }]]), noRuns, args);
     expect(e.status).toBe(TaskStatus.IN_PROGRESS);
     expect(e.reason).toBe('no_board');
+  });
+
+  it('holds EVERY dispatch — Run now included — when the workspace switch is off, before any lane is even resolved', async () => {
+    const e = await evaluateTaskAutoRun(
+      stubDb([
+        [{ assignedAgentRef: 'owner-1', source: null, status: TaskStatus.IN_PROGRESS }],
+        [{ enabled: false }],
+      ]),
+      noRuns,
+      args,
+    );
+    expect(e.reason).toBe('execution_disabled');
+    expect(e.canRunNow).toBe(false);
+    // Never even reaches lane resolution — the switch is checked before findCanonicalBoard.
+    expect(e.laneResolved).toBe(false);
+    expect(e.candidate).toBeNull();
   });
 });
 
@@ -429,11 +449,12 @@ describe('evaluateTaskAutoRun — a lifecycle-managed board', () => {
 
   const noRuns = { listByTask: async () => [] } as unknown as RuntimeService;
 
-  /** Query order: task row → PINNED board (empty; see the note above) → board → lane →
-   *  lane staffing. (The managed branch resolves its producer through the mocked
-   *  `resolveManagedProducer`, not through this db.) */
+  /** Query order: task row → tenants execution-enabled gate → PINNED board (empty; see
+   *  the note above) → board → lane → lane staffing. (The managed branch resolves its
+   *  producer through the mocked `resolveManagedProducer`, not through this db.) */
   const rows = (status: string) => [
     [{ assignedAgentRef: 'coordinator-1', source: null, status, taskType: 'task', actionType: null }],
+    [{ enabled: true }],
     [],
     [{ id: 'b1', projectId: 11, tenantId: 1, lifecycleManaged: true }],
     [{ id: 'lane-1', gate: 'auto', isTerminal: false }],

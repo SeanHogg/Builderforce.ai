@@ -79,7 +79,8 @@ function fakeDb() {
   };
 }
 
-vi.mock('../../infrastructure/database/connection', () => ({
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: () => fakeDb(),
 }));
 

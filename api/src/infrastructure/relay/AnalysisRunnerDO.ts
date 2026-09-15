@@ -21,6 +21,7 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  * first run does. The (run_id, kind) upserts make a redo idempotent.
  */
 import { and, eq } from 'drizzle-orm';
+import { usageDatabaseOf } from '../../application/llm/usageLedger';
 import { buildDatabase, type Db } from '../database/connection';
 import {
   integrationCredentials,
@@ -793,7 +794,9 @@ export class AnalysisRunnerDO implements DurableObject {
 
   private async meterUsage(cursor: Cursor, art: GeneratedArtifact): Promise<void> {
     if (!art.tokens || !art.model) return;
-    await this.db
+    // Written to the ledger's own database (operational in production) — the core
+    // copy is not read by any meter, so a row there was usage nobody was billed for.
+    await usageDatabaseOf(this.db)
       .insert(llmUsageLog)
       .values({
         tenantId: cursor.tenantId,

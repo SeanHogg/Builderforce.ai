@@ -60,7 +60,6 @@ import { reapStaleExecutions } from './application/runtime/staleExecutionReaper'
 import { sweepIdlePreviews } from './application/runtime/previewSessions';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
 import { runAgentWorkflowRefreshSweep } from './application/runtime/agentWorkflowRefresh';
-import { runExecutionLifecycleOutboxSweep } from './application/runtime/executionLifecycleOutbox';
 import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
 import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
@@ -712,17 +711,6 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       // Quiet when everything is up, which is the normal day. A log line per healthy
       // sweep is how the one that matters gets scrolled past.
       return r.dark > 0 ? `probed=${r.probed} dark=${r.dark} suspended=${r.suspended}` : null;
-    },
-  },
-  {
-    key: 'exec-events',
-    cadence: 'frequent',
-    description: 'Project durable execution lifecycle outbox events into each tenant audit log.',
-    run: async ({ env }) => {
-      const r = await runExecutionLifecycleOutboxSweep(env);
-      return r.projected > 0 || r.retried > 0 || r.dead > 0
-        ? `projected=${r.projected} retried=${r.retried} dead=${r.dead}`
-        : null;
     },
   },
   {

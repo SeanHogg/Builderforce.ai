@@ -19,6 +19,7 @@ import { executions } from '../database/schema';
 import { scopedToTenant } from '../database/tenantScope';
 import { prepareCloudRun, resolveAgentEngine, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
+import { heartbeatExecution } from '../../application/runtime/cloudAgent/runContext';
 import type { LimbicState, AgentExecParams } from '@builderforce/agent-tools';
 import { parseRoutingBias, parseArcStage, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
@@ -141,15 +142,10 @@ export class CloudRunnerDO implements DurableObject {
       return;
     }
     // Heartbeat: prove the run is alive so the orphan reaper doesn't reap an
-    // actively-ticking run (the cloud ceiling measures from updated_at).
-    await this.db.update(executions)
-      .set({ updatedAt: new Date() })
-      .where(eq(executions.id, cursor.executionId))
-      .catch((error) => this.reportError(error, { operation: "alarm", context: { logMessage: '[cloud-runner] heartbeat write failed', details: {
-        executionId: cursor.executionId,
-        tenantId: cursor.tenantId,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      } } }));
+    // actively-ticking run (the cloud ceiling measures from updated_at). The ONE
+    // throttled writer the container ops use too — the alarm re-arms per LLM step, so
+    // an unthrottled beat here was a write every few seconds per run.
+    await heartbeatExecution(this.db, cursor.executionId);
 
     try {
       if (cursor.stage === 'prep') {

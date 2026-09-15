@@ -22,6 +22,7 @@ import type { Env } from '../../env';
 import { resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { enforceMonthlyTenantCap, type MonthlyTenantCapResult } from '../shared/monthlyTenantCap';
 import { dailyTenantCounts, sumDailyCounts, type DailyCount } from '../shared/dailyTenantCounts';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 /** Only cloud-surface usage rows that carry an execution id count as a run. */
 const cloudRunRow = and(eq(llmUsageLog.surface, 'cloud'), isNotNull(llmUsageLog.executionId));
@@ -40,7 +41,7 @@ const CLOUD_RUN_ROWS = {
  * totals sum to {@link sumTenantCloudRuns}; drives the consumption-meter sparkline.
  */
 export async function dailyTenantCloudRuns(db: Db, tenantId: number, since: Date): Promise<DailyCount[]> {
-  return dailyTenantCounts(db, tenantId, since, CLOUD_RUN_ROWS);
+  return dailyTenantCounts(usageDatabaseOf(db), tenantId, since, CLOUD_RUN_ROWS);
 }
 
 /**

@@ -24,6 +24,7 @@
  */
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { usageDatabaseOf } from '../llm/usageLedger';
 import { memberMetricsPeriod, deploymentEvents, llmUsageLog, projects, runModelOutcomes, ticketAudits, tasks } from '../../infrastructure/database/schema';
 import { computeDora, computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
@@ -539,7 +540,7 @@ const collectAiSpend = async (db: Db, tenantId: number, days: number, projectId?
   const since = new Date(Date.now() - days * DAY_MS);
   const forProject = projectId != null;
 
-  const [usage] = await db
+  const [usage] = await usageDatabaseOf(db)
     .select({
       calls: sql<number>`count(*)::int`,
       millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)`,

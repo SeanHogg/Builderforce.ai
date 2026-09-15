@@ -112,8 +112,10 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
       },
     );
     this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
-    this.panel.webview.html = this.renderHtml(this.panel.webview);
+    // Listener before html — same race as EvermindViewProvider: the bundle posts
+    // `ready` at module load, and a dropped ready leaves the panel on the sign-in wall.
     this.panel.webview.onDidReceiveMessage((m) => void this.dispatchMessage(m as M), undefined, this.disposables);
+    this.panel.webview.html = this.renderHtml(this.panel.webview);
     this.panel.onDidDispose(() => this.teardown(), undefined, this.disposables);
   }
 

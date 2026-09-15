@@ -53,6 +53,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Domain } from './ObjectRegistry';
+import { appsDatabaseOf } from '../ide/appsDatabase';
 
 /** `metric_facts.bucket`. */
 export type Bucket = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'total';
@@ -122,8 +123,20 @@ export function fact(spec: FactSpec): SQL {
   `;
 }
 
-/** The tables a rollup found on this database. */
+/** The tables a rollup found — on the core database and every source it may read. */
 export type PresentTables = ReadonlySet<string>;
+
+/**
+ * The databases a metric may READ besides the core one it writes `metric_facts` to.
+ *
+ * `apps` holds `project_sites` and every `site_*` table (the core database itself when
+ * the apps runtime is not split out). A statement cannot span two databases, so a
+ * metric over site rows aggregates them HERE first and hands the result to its fact as
+ * a derived table — see {@link rowsTable}.
+ */
+export interface RollupSources {
+  apps: Db;
+}
 
 /**
  * One metric a seat charts, and how to produce it.
@@ -140,10 +153,11 @@ export interface MetricSpec {
   requires: readonly string[];
   /**
    * The statements. Receives the present-table set so a metric that UNIONs
-   * several optional registers (legal's renewals) can build over what exists.
-   * `null` = nothing to write on this database.
+   * several optional registers (legal's renewals) can build over what exists, and
+   * the {@link RollupSources} so one whose rows live on another database can read
+   * them first (which is what makes it async). `null` = nothing to write.
    */
-  build: (present: PresentTables) => SQL | SQL[] | null;
+  build: (present: PresentTables, sources: RollupSources) => SQL | SQL[] | null | Promise<SQL | SQL[] | null>;
 }
 
 /** A domain's writer: its specs, plus any derivation its aggregates read. */
@@ -201,6 +215,7 @@ export async function runDomainRollup(
   let extra: Record<string, number> = {};
 
   if (rollup.prepare) extra = await rollup.prepare(db, present);
+  const sources: RollupSources = { apps: appsDatabaseOf(db) };
 
   for (const spec of rollup.metrics) {
     const missing = spec.requires.filter((table) => !present.has(table));
@@ -208,7 +223,7 @@ export async function runDomainRollup(
       skipped.push(`${spec.key} (${missing.join(', ')} absent)`);
       continue;
     }
-    const built = spec.build(present);
+    const built = await spec.build(present, sources);
     if (!built) {
       skipped.push(`${spec.key} (no source on this database)`);
       continue;
@@ -229,12 +244,63 @@ export async function runDomainRollup(
   };
 }
 
+/**
+ * Every table a rollup can reach: the core catalogue, plus the apps database's when
+ * it is split out. Without the second read, a site table that had moved would read as
+ * ABSENT and its metrics would be skipped with a log line instead of written — the
+ * number would simply stop moving.
+ */
+export async function reachableTables(db: Db): Promise<PresentTables> {
+  const apps = appsDatabaseOf(db);
+  if (apps === db) return presentTables(db);
+  const [core, appTables] = await Promise.all([presentTables(db), presentTables(apps)]);
+  return new Set([...core, ...appTables]);
+}
+
 /** Run several writers over ONE catalogue read. */
 export async function runRollups(db: Db, rollups: readonly DomainRollup[]): Promise<RollupResult[]> {
-  const present = await presentTables(db);
+  const present = await reachableTables(db);
   const out: RollupResult[] = [];
   for (const rollup of rollups) out.push(await runDomainRollup(db, rollup, present));
   return out;
+}
+
+/** One column of a {@link rowsTable}: its name and the Postgres type to cast to. */
+export interface RowsColumn {
+  name: string;
+  type: 'int' | 'bigint' | 'numeric' | 'text' | 'timestamp' | 'date' | 'uuid' | 'jsonb';
+}
+
+/**
+ * Rows read from ANOTHER database, as a relation a fact's `tail` can select from:
+ * `jsonb_to_recordset($1::jsonb) AS alias(col type, …)`.
+ *
+ * This is how a metric over site rows keeps the one `INSERT … SELECT … ON CONFLICT`
+ * envelope: it aggregates on the apps database, then selects from these rows here —
+ * UNIONed with core rows where the metric spans both (a lead from a site form and one
+ * typed into the CRM are one series).
+ *
+ * ONE bound parameter however many rows, rather than a `VALUES` list with a parameter
+ * per cell: 90 days of per-site rows for a hundred sites is ~45k cells, and Postgres
+ * caps a statement at 65,535 parameters — a VALUES list would have needed chunking,
+ * and chunking a total that must be summed in one statement is not possible. The
+ * column list is from the caller's constant, never from data; an empty array is an
+ * empty relation, so the fact simply writes nothing, per the honesty rule.
+ */
+export function rowsTable(
+  alias: string,
+  columns: readonly RowsColumn[],
+  rows: ReadonlyArray<Record<string, unknown>>,
+): SQL {
+  const defs = sql.raw(columns.map((c) => `${c.name} ${c.type}`).join(', '));
+  const payload = JSON.stringify(rows.map((row) => Object.fromEntries(columns.map((c) => [c.name, row[c.name] ?? null]))));
+  return sql`jsonb_to_recordset(${payload}::jsonb) AS ${sql.raw(alias)}(${defs})`;
+}
+
+/** The rows of a `db.execute` result, whichever shape the driver returned. */
+export function resultRows(result: unknown): Array<Record<string, unknown>> {
+  return (result as { rows?: Array<Record<string, unknown>> }).rows
+    ?? (result as Array<Record<string, unknown>>);
 }
 
 /**

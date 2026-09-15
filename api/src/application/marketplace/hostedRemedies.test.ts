@@ -151,7 +151,14 @@ describe('suspendSubscriptionsForListing', () => {
 describe('subscriberStanding', () => {
   it('reports the subscription AND the app lifecycle from one call', async () => {
     hostedListingStatus.mockResolvedValue(lifecycle({ state: 'grace', daysUntilNextState: 9 }));
-    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [liveRow()]]);
+    // Three reads with the apps database split out: the subscriber's catalogItemId
+    // (apps db), then — resolved together — the subscription row itself (apps db,
+    // via siteSubscriptionState) and the listing body for the version offer (core
+    // db). This double's `limit()` settles lazily on `.then()` rather than
+    // synchronously, so the two concurrent reads settle in the order their OWN
+    // awaits were reached — siteSubscriptionState's, started inside
+    // `Promise.all`'s first element, resolves before the plain listing select.
+    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [liveRow()], [{ body: {} }]]);
     const standing = await subscriberStanding(db as unknown as Db, env(), subscriber);
     expect(standing.subscription?.snapshotId).toBe('snap-held');
     expect(standing.hosted?.state).toBe('grace');
@@ -161,6 +168,7 @@ describe('subscriberStanding', () => {
     hostedListingStatus.mockResolvedValue(lifecycle({ state: 'readOnly', billable: false }));
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
+      [{ body: {} }],
       [liveRow({ status: 'suspended', currentPeriodEnd: new Date('2020-01-01') })],
     ]);
     const standing = await subscriberStanding(db as unknown as Db, env(), subscriber);
@@ -177,7 +185,7 @@ describe('subscriberStanding', () => {
 
   it('does not hand the listing id to the site user', async () => {
     hostedListingStatus.mockResolvedValue(lifecycle());
-    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [liveRow()]]);
+    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [{ body: {} }], [liveRow()]]);
     const standing = await subscriberStanding(db as unknown as Db, env(), subscriber);
     expect(Object.keys(standing).sort()).toEqual(['hosted', 'subscription', 'versionOffer']);
   });
@@ -189,8 +197,12 @@ describe('takeAbandonedBuild', () => {
   it('hands over the version THEY hold, not the seller’s latest', async () => {
     hostedListingStatus.mockResolvedValue(released());
     publishedSnapshot.mockResolvedValue({ title: 'Ledger', objects: [{ id: 'o1' }] });
+    // Four reads: catalogItemId (apps db), the listing body for the version offer
+    // (core db), the subscription row (apps db), then takeAbandonedBuild's own
+    // listing lookup for the fallback title/snapshot (core db).
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
+      [{ body: {} }],
       [liveRow({ snapshotId: 'snap-held' })],
       [{ body: { snapshotId: 'snap-newer' }, name: 'Ledger' }],
     ]);
@@ -204,6 +216,7 @@ describe('takeAbandonedBuild', () => {
     publishedSnapshot.mockResolvedValue({ title: '', objects: [] });
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
+      [{ body: {} }],
       [liveRow({ snapshotId: null })],
       [{ body: { snapshotId: 'snap-listing' }, name: 'Ledger' }],
     ]);
@@ -216,7 +229,7 @@ describe('takeAbandonedBuild', () => {
   it('REFUSES while the app is still running', async () => {
     // The gate is the lifecycle and nothing else — 44 days of a dark address.
     hostedListingStatus.mockResolvedValue(lifecycle({ state: 'grace' }));
-    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [liveRow()]]);
+    const db = fakeDb([[{ catalogItemId: 'listing-1' }], [{ body: {} }], [liveRow()]]);
     await expect(takeAbandonedBuild(db as unknown as Db, env(), subscriber))
       .rejects.toMatchObject({ status: 409 });
     expect(publishedSnapshot).not.toHaveBeenCalled();
@@ -233,6 +246,7 @@ describe('takeAbandonedBuild', () => {
     hostedListingStatus.mockResolvedValue(released());
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
+      [{ body: {} }],
       [liveRow({ status: 'cancelled', cancelledAt: new Date('2026-01-01') })],
     ]);
     await expect(takeAbandonedBuild(db as unknown as Db, env(), subscriber))
@@ -244,6 +258,7 @@ describe('takeAbandonedBuild', () => {
     publishedSnapshot.mockResolvedValue(null);
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
+      [{ body: {} }],
       [liveRow()],
       [{ body: {}, name: 'Ledger' }],
     ]);
@@ -256,6 +271,7 @@ describe('takeAbandonedBuild', () => {
     publishedSnapshot.mockResolvedValue({ title: 'Ledger', objects: [] });
     const db = fakeDb([
       [{ catalogItemId: 'listing-1' }],
+      [{ body: {} }],
       [liveRow()],
       [{ body: {}, name: 'Ledger' }],
     ]);

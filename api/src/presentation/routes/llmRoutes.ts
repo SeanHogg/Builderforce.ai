@@ -50,7 +50,7 @@ import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody, imageTraceResult } from '../../application/llm/traceLogger';
 import { wrapStreamForTrace } from '../../application/llm/streamTrace';
-import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
+import { recordUsageRow, resolveUsageDatabase, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
 import { pickUsage, vendorForModel, type VendorEgress } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
@@ -2978,7 +2978,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const days = daysParam(c.req.query('days'), 30, 90);
-    const db = requestDb(c);
+    const core = requestDb(c);
+    // Every figure below is read from the database that owns the usage ledger — the
+    // operational one in production. The core copy stopped receiving rows at the split,
+    // so reading it here reported frozen totals. Only API-key names come from `core`.
+    const db = resolveUsageDatabase(c.env as Env, core);
 
     // ── Detail mode — row-level pageable per-call ledger for reconciliation
     // against the caller's own usage table. Same auth, same tenant scoping.
@@ -3092,25 +3096,36 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Credential attribution is independent of model attribution: a single BYO
     // integration or bfk_* API key may consume several models in this window.
-    const byCredential = await db.execute(sql`
+    // Aggregated on the ledger's database, then named from the core `tenant_api_keys`
+    // (the two are in different Neon accounts, so this cannot be one JOIN).
+    const credentialRows = (await db.execute(sql`
       SELECT
-        CASE WHEN u.byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END AS "type",
-        COALESCE(u.byo_provider, u.tenant_api_key_id::text) AS "id",
-        COALESCE(u.byo_provider, k.name, 'Unnamed API key') AS "name",
+        CASE WHEN byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END AS "type",
+        COALESCE(byo_provider, tenant_api_key_id::text) AS "id",
         COUNT(*)::int AS requests,
-        COUNT(DISTINCT u.model)::int AS "modelCount",
-        SUM(u.total_tokens)::bigint AS tokens
-      FROM llm_usage_log u
-      LEFT JOIN tenant_api_keys k ON k.id = u.tenant_api_key_id
-      WHERE u.tenant_id = ${access.tenantId}
-        AND u.created_at >= NOW() - (${days} || ' days')::interval
-        AND (u.byo_provider IS NOT NULL OR u.tenant_api_key_id IS NOT NULL)
-      GROUP BY
-        CASE WHEN u.byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END,
-        COALESCE(u.byo_provider, u.tenant_api_key_id::text),
-        COALESCE(u.byo_provider, k.name, 'Unnamed API key')
+        COUNT(DISTINCT model)::int AS "modelCount",
+        SUM(total_tokens)::bigint AS tokens
+      FROM llm_usage_log
+      WHERE tenant_id = ${access.tenantId}
+        AND created_at >= NOW() - (${days} || ' days')::interval
+        AND (byo_provider IS NOT NULL OR tenant_api_key_id IS NOT NULL)
+      GROUP BY 1, 2
       ORDER BY tokens DESC NULLS LAST
-    `);
+    `)).rows as Array<{ type: 'integration' | 'api_key'; id: string; requests: number; modelCount: number; tokens: unknown }>;
+    const keyIds = credentialRows.flatMap((r) => (r.type === 'api_key' ? [r.id] : []));
+    const keyNames = new Map(keyIds.length === 0 ? [] : (await core
+      .select({ id: tenantApiKeys.id, name: tenantApiKeys.name })
+      .from(tenantApiKeys)
+      .where(and(eq(tenantApiKeys.tenantId, access.tenantId), inArray(tenantApiKeys.id, keyIds))))
+      .map((k) => [k.id, k.name] as const));
+    const byCredential = credentialRows.map((r) => ({
+      type: r.type,
+      id: r.id,
+      name: r.type === 'integration' ? r.id : keyNames.get(r.id) ?? 'Unnamed API key',
+      requests: r.requests,
+      modelCount: r.modelCount,
+      tokens: r.tokens,
+    }));
 
     const [totals] = (await db.execute(sql`
       SELECT
@@ -3167,7 +3182,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         completionTokens: Number(mine?.completion_tokens ?? 0),
       },
       byModel: byModel.rows,
-      byCredential: byCredential.rows,
+      byCredential,
       byDay: byDay.rows,
       byUser: byUser.rows,
       bySource: bySource.rows,

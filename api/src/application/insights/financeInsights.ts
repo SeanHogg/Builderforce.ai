@@ -8,10 +8,11 @@
  * {@link budgetStatus}) is pure for unit testing; the route caches the rollup.
  */
 
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { budgets, initiatives, llmUsageLog, projects, runModelOutcomes } from '../../infrastructure/database/schema';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 function num(v: unknown): number {
   const n = typeof v === 'number' ? v : Number(v);
@@ -103,9 +104,13 @@ export async function computeFinanceInsights(
   now: number,
 ): Promise<FinanceInsights> {
   const { start, end } = monthRange(periodMonth);
+  // The ledger lives in its own database (operational in production); projects,
+  // initiatives, budgets and outcomes live in the core one. Spend is aggregated where
+  // it is written and joined to names here — a cross-database JOIN is not possible.
+  const usageDb = usageDatabaseOf(db);
 
   // ── actuals (per-day + totals) over the attributed ledger ──────────────────
-  const usageRows = await db
+  const usageRows = await usageDb
     .select({
       day: sql<string>`to_char(${llmUsageLog.createdAt}, 'YYYY-MM-DD')`,
       usd: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,
@@ -125,40 +130,42 @@ export async function computeFinanceInsights(
   const cacheCreationTokens = usageRows.reduce((a, r) => a + num(r.cacheCreate), 0);
 
   // ── per-project spend ──────────────────────────────────────────────────────
-  const projRows = await db
+  const spendByProject = await usageDb
     .select({
       projectId: llmUsageLog.projectId,
-      projectName: projects.name,
       usd: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,
     })
     .from(llmUsageLog)
-    .innerJoin(projects, eq(projects.id, llmUsageLog.projectId))
-    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, start), lt(llmUsageLog.createdAt, end)))
-    .groupBy(llmUsageLog.projectId, projects.name)
-    .orderBy(sql`coalesce(sum(${llmUsageLog.costUsdMillicents}),0) desc`);
-  const byProject = projRows
-    .filter((r) => r.projectId != null)
-    .map((r) => ({ projectId: r.projectId as number, projectName: r.projectName ?? `Project ${r.projectId}`, usd: num(r.usd) / MILLICENTS_PER_USD }));
-  const usdByProject = new Map(byProject.map((p) => [p.projectId, p.usd]));
-
-  // ── per-initiative spend (the link path projects.initiative_id → initiative) ─
-  const initRows = await db
-    .select({
-      initiativeId: projects.initiativeId,
-      usd: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,
-    })
-    .from(llmUsageLog)
-    .innerJoin(projects, eq(projects.id, llmUsageLog.projectId))
     .where(and(
       eq(llmUsageLog.tenantId, tenantId),
       gte(llmUsageLog.createdAt, start),
       lt(llmUsageLog.createdAt, end),
-      sql`${projects.initiativeId} is not null`,
+      isNotNull(llmUsageLog.projectId),
     ))
-    .groupBy(projects.initiativeId);
-  const usdByInitiative = new Map(
-    initRows.filter((r) => r.initiativeId != null).map((r) => [r.initiativeId as string, num(r.usd) / MILLICENTS_PER_USD]),
-  );
+    .groupBy(llmUsageLog.projectId);
+  const projectIds = spendByProject.flatMap((r) => (r.projectId == null ? [] : [r.projectId]));
+  // Scoped to the tenant, so a stale id on a ledger row cannot surface another
+  // workspace's project — the guarantee the old INNER JOIN gave by construction.
+  const projectRows = projectIds.length === 0 ? [] : await db
+    .select({ id: projects.id, name: projects.name, initiativeId: projects.initiativeId })
+    .from(projects)
+    .where(and(eq(projects.tenantId, tenantId), inArray(projects.id, projectIds)));
+  const projectById = new Map(projectRows.map((p) => [p.id, p]));
+
+  const byProject = spendByProject
+    .flatMap((r) => {
+      const project = r.projectId == null ? undefined : projectById.get(r.projectId);
+      return project ? [{ projectId: project.id, projectName: project.name ?? `Project ${project.id}`, usd: num(r.usd) / MILLICENTS_PER_USD }] : [];
+    })
+    .sort((a, b) => b.usd - a.usd);
+  const usdByProject = new Map(byProject.map((p) => [p.projectId, p.usd]));
+
+  // ── per-initiative spend (the link path projects.initiative_id → initiative) ─
+  const usdByInitiative = new Map<string, number>();
+  for (const p of byProject) {
+    const initiativeId = projectById.get(p.projectId)?.initiativeId;
+    if (initiativeId != null) usdByInitiative.set(initiativeId, (usdByInitiative.get(initiativeId) ?? 0) + p.usd);
+  }
 
   // ── cost-per-merged-PR (join run_model_outcomes for the period) ────────────
   const [outcomeAgg] = await db

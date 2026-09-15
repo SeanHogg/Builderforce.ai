@@ -20,13 +20,13 @@
  * trimmed as the historical debt is paid down.
  *
  * SECOND GUARD — stray migration directories. `scripts/migrate.mjs` only ever
- * reads `api/migrations` (and `api/transactional-migrations`), so a `.sql` written
- * anywhere else is invisible to every environment: it never applies, and its number
- * gets handed out again to a DIFFERENT migration. That is exactly what happened to
- * `api/api/migrations/0197_tasks_action_type.sql` + `0198_run_model_outcomes.sql`
+ * reads the track directories `scripts/lib/migrationTracks.mjs` declares, so a `.sql`
+ * written anywhere else is invisible to every environment: it never applies, and its
+ * number gets handed out again to a DIFFERENT migration. That is exactly what happened
+ * to `api/api/migrations/0197_tasks_action_type.sql` + `0198_run_model_outcomes.sql`
  * (a generator run from the wrong cwd) — both orphaned while the real 0197/0198
- * shipped other work. This guard fails the build on any `.sql` outside the two
- * sanctioned directories so the mistake cannot recur silently.
+ * shipped other work. This guard fails the build on any `.sql` outside the sanctioned
+ * track directories so the mistake cannot recur silently.
  *
  * Run via `npm run check:migrations` and wired into `npm test` so CI catches any
  * new collision before it ships.
@@ -35,6 +35,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDrizzleTables } from './lib/drizzleSchema.mjs';
+import { MIGRATION_TRACKS, SIBLING_TRACKS } from './lib/migrationTracks.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const migrationsDir = resolve(here, '../migrations');
@@ -82,7 +83,7 @@ const staleAllowlist = [...allowlist].filter((p) => !collidingPrefixes.has(p));
 // ---------------------------------------------------------------------------
 
 /** The only directories `scripts/migrate.mjs` applies from, repo-root-relative. */
-const SANCTIONED_DIRS = ['api/migrations', 'api/transactional-migrations'];
+const SANCTIONED_DIRS = MIGRATION_TRACKS.map((t) => `api/${t.dir}`);
 /** Directories that legitimately hold .sql fixtures/scripts that are NOT migrations. */
 const IGNORED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', '.wrangler', 'build', 'out']);
 /**
@@ -493,16 +494,21 @@ if (fkUnresolvedTargets.length > 0) {
 //     it while it existed.
 // ---------------------------------------------------------------------------
 
-const transactionalDir = resolve(here, '../transactional-migrations');
-let transactionalTexts = [];
-try {
-  transactionalTexts = readdirSync(transactionalDir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort()
-    .map((f) => ({ file: `transactional-migrations/${f}`, text: readFileSync(join(transactionalDir, f), 'utf8') }));
-} catch { /* no transactional migrations — nothing to add */ }
+// Every sibling track's migrations (operational, apps, …) join the column model: a
+// table created on a sibling database is still a table the code references.
+const siblingTexts = SIBLING_TRACKS.flatMap((track) => {
+  const dir = resolve(here, '..', track.dir);
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .map((f) => ({ file: `${track.dir}/${f}`, text: readFileSync(join(dir, f), 'utf8') }));
+  } catch {
+    return []; // no migrations on this track yet — nothing to add
+  }
+});
 
-const allSqlTexts = [...sqlTexts, ...transactionalTexts];
+const allSqlTexts = [...sqlTexts, ...siblingTexts];
 
 /** table -> Set<column>: every column any migration declares, plus the live schema. */
 function buildKnownColumns() {

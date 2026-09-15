@@ -15,7 +15,7 @@
 import { and, eq, gte, lt, notInArray, sql, type SQL } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount } from './usageLedger';
+import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount, usageDatabaseOf } from './usageLedger';
 import { IMAGE_PRODUCT_NAMES } from './ImageProxyService';
 
 /**
@@ -94,7 +94,7 @@ export function secondsUntilNextUtcMonth(now: Date = new Date()): number {
  * Used by the consumption meter.
  */
 export async function sumTenantTextTokens(db: Db, tenantId: number, since: Date): Promise<number> {
-  const [row] = await db
+  const [row] = await usageDatabaseOf(db)
     .select({ used: sql<number>`COALESCE(SUM(${rowWeight}), 0)` })
     .from(llmUsageLog)
     .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), billableRow));
@@ -114,7 +114,7 @@ export async function dailyTenantTextTokens(
   since: Date,
 ): Promise<Array<{ day: string; value: number }>> {
   const dayExpr = sql<string>`to_char(${llmUsageLog.createdAt}, 'YYYY-MM-DD')`;
-  const rows = await db
+  const rows = await usageDatabaseOf(db)
     .select({ day: dayExpr, used: sql<number>`COALESCE(SUM(${rowWeight}), 0)` })
     .from(llmUsageLog)
     .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), billableRow))
@@ -143,7 +143,7 @@ export async function sumTenantTextTokensDayAndMonth(
    */
   monthEnd?: Date,
 ): Promise<{ day: number; month: number }> {
-  const [row] = await db
+  const [row] = await usageDatabaseOf(db)
     .select({
       month: sql<number>`COALESCE(SUM(${rowWeight}), 0)`,
       day: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,

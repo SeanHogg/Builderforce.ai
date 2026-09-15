@@ -446,6 +446,9 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
+          # One per track in api/scripts/lib/migrationTracks.mjs. The apps track is optional:
+          # unset, db:migrate skips it and the Worker serves those tables from the primary.
+          NEON_APPS_DATABASE_URL: ${{ secrets.NEON_APPS_DATABASE_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |

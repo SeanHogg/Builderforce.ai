@@ -35,6 +35,7 @@ import { isReviewLane } from '../task/taskLifecycle';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 import type { ExecutionReadMemo } from '../runtime/executionReadMemo';
+import { agentExecutionEnabledCached } from '../runtime/agentExecutionGate';
 
 /** Parse a swimlane assignment's `required_capabilities` JSON-text column. */
 export function parseRequiredCapabilities(raw: string | null | undefined): string[] {
@@ -67,6 +68,7 @@ export type AutoRunReason =
   | 'cooldown_active'     // the ticket's last run failed (or shipped nothing) too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
   | 'not_executable'      // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
   | 'pending_approval'    // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
+  | 'execution_disabled'  // a manager switched agent execution OFF for the WORKSPACE (or the deployment is stopped) — nothing runs, Run-now included, until it is re-enabled
   | 'lane_requirement_gate'; // the lane's REQUIREMENT gate suppressed the normal agent — a required reviewer/producer round-trip is owed first
 
 /**
@@ -98,6 +100,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   cooldown_active: 'No run yet: the ticket\'s last run failed or finished with nothing to show for it, so it is in its back-off window before the next autonomous attempt.',
   not_executable: 'No run: this is a system/coordination chore, never dispatched to an agent.',
   pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
+  execution_disabled: 'No run: agent execution is switched off for this workspace, so nothing runs — Run now included — until a manager re-enables it in Settings.',
   lane_requirement_gate: 'No run by the lane\'s normal agent: this lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer/producer instead and suppressed the normal agent until the review clears.',
 };
 
@@ -121,6 +124,7 @@ export const EVALUATED_AUTO_RUN_REASONS: ReadonlySet<AutoRunReason> = new Set<Au
   'will_run', 'no_board', 'no_lane', 'terminal_lane', 'human_gate', 'no_agent',
   'managed_no_role', 'lane_unconfigured', 'capability_mismatch', 'already_running', 'same_lane_reentry',
   'run_cap_exhausted', 'cooldown_active', 'not_executable', 'pending_approval', 'tenant_token_limit',
+  'execution_disabled',
   // MODELLED SINCE 2026-08-19. The requirement gate used to run only AFTER this
   // evaluator, inside the trigger, so the shared verdict answered `will_run` for a
   // ticket the trigger would then decline — and all four read-only consumers (board
@@ -708,6 +712,12 @@ export async function evaluateTaskAutoRun(
 
   // Done / terminal status: the ticket is finalized (commit + PR), never auto-run.
   if (status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });
+
+  // The WORKSPACE switch, before any lane or agent resolution: when a manager has turned
+  // agent execution off, nothing may start — and answering `will_run` here is what let
+  // every lane entry signal the cron gate and every sweep dispatch a run that
+  // `RuntimeService.submit` then refused, tick after tick (see agentExecutionGate.ts).
+  if (!(await agentExecutionEnabledCached(args.env, db, args.tenantId))) return base({ reason: 'execution_disabled' });
 
   const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
   if (!board) return base({ reason: 'no_board' });

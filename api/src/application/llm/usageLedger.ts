@@ -18,7 +18,7 @@ import type { Env } from '../../env';
 import { llmUsageLog, tenantLlmProviderKeys } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
 import { getCatalogCached } from './modelCatalog';
-import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase, hasSiblingDatabase, siblingDatabaseOf } from '../../infrastructure/database/connection';
 import { clearProviderAuthAlertAfterByoSuccess } from './providerAuthAlerts';
 import { providerForVendor } from './llmProviderCatalog';
 import { and, eq, gte, sql } from 'drizzle-orm';
@@ -348,7 +348,21 @@ export function resolveUsageDatabase(
   db: Db,
   buildTransactional: (env: Env) => Db = buildTransactionalDatabase,
 ): Db {
-  return env.NEON_TRANSACTIONAL_DATABASE_URL?.trim() ? buildTransactional(env) : db;
+  return hasSiblingDatabase(env, 'operational') ? buildTransactional(env) : db;
+}
+
+/**
+ * The usage-ledger database for a reader that holds only the core handle.
+ *
+ * Lenses several calls deep (finance, metric registry, forecasts, reports) receive a
+ * `Db` and no `env`; the handle remembers the env it was built from, so they resolve
+ * the same boundary as `resolveUsageDatabase` without threading `env` through every
+ * caller. A handle that was not built by `buildDatabase` (a test double, or a handle
+ * that is already the usage database) resolves to itself, which is also what a
+ * single-database environment gets.
+ */
+export function usageDatabaseOf(db: Db): Db {
+  return siblingDatabaseOf(db, 'operational');
 }
 
 /**

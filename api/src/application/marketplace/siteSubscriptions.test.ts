@@ -66,8 +66,12 @@ describe('subscriberStanding — the version offer', () => {
   });
 
   it('flags an update once the seller has re-published past what the subscriber holds', async () => {
+    // Three reads now that the apps database is split out: the subscriber's own
+    // catalogItemId (apps db), the listing's current body (core db), then the
+    // subscription row itself (apps db, via siteSubscriptionState).
     const db = fakeDb([
-      [{ catalogItemId: 'listing-1', heldSnapshotId: 'snap-1', latestBody: { snapshotId: 'snap-2' } }],
+      [{ catalogItemId: 'listing-1' }],
+      [{ body: { snapshotId: 'snap-2' } }],
       [{ id: 9, status: 'active', priceCents: 900, currency: 'USD', snapshotId: 'snap-1', currentPeriodEnd: null, cancelledAt: null }],
     ]);
     const standing = await subscriberStanding(db, env, { tenantId: 1, siteId: 1, siteUserId: 1 });
@@ -78,7 +82,8 @@ describe('subscriberStanding — the version offer', () => {
 describe('acceptSiteSubscriptionUpdate', () => {
   it('refuses a subscriber who is already current', async () => {
     const db = fakeDb([
-      [{ catalogItemId: 'listing-1', heldSnapshotId: 'snap-2', latestBody: { snapshotId: 'snap-2' } }],
+      [{ catalogItemId: 'listing-1' }],
+      [{ body: { snapshotId: 'snap-2' } }],
       [{ id: 9, status: 'active', priceCents: 900, currency: 'USD', snapshotId: 'snap-2', currentPeriodEnd: null, cancelledAt: null }],
     ]);
     await expect(acceptSiteSubscriptionUpdate(db, env, { tenantId: 1, siteId: 1, siteUserId: 1 }))
@@ -94,7 +99,8 @@ describe('acceptSiteSubscriptionUpdate', () => {
   it('moves the held snapshot to the one currently on sale', async () => {
     const db = fakeDb(
       [
-        [{ catalogItemId: 'listing-1', heldSnapshotId: 'snap-1', latestBody: { snapshotId: 'snap-2' } }],
+        [{ catalogItemId: 'listing-1' }],
+        [{ body: { snapshotId: 'snap-2' } }],
         [{ id: 9, status: 'active', priceCents: 900, currency: 'USD', snapshotId: 'snap-1', currentPeriodEnd: null, cancelledAt: null }],
       ],
       [{ id: 9, status: 'active', priceCents: 900, currency: 'USD', snapshotId: 'snap-2', currentPeriodEnd: null }],

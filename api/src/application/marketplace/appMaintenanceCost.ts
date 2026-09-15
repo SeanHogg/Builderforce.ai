@@ -40,6 +40,7 @@ import {
   SESSION_PROJECT_LINK_APP,
 } from '../../infrastructure/database/schema';
 import { USD_CENTS } from '../kernel/denominations';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 
 /** The `ledger_entries.entryKind` this module writes and reads — alongside
@@ -73,7 +74,7 @@ async function hostedListingProjectId(db: Db, catalogItemId: string, tenantId: n
  *  attribution the token caps already stamp on every run (0103), summed with the
  *  index that rollup was built for rather than re-read row by row. */
 async function sumProjectAgentCostCents(db: Db, tenantId: number, projectId: number): Promise<number> {
-  const [row] = await db
+  const [row] = await usageDatabaseOf(db)
     .select({ totalMillicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)` })
     .from(llmUsageLog)
     .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.projectId, projectId)));

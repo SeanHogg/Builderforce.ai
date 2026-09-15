@@ -48,8 +48,8 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus } from '../../domain/shared/types';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
-  recordManagerAction, MERGE_BLOCKED_ACTION, MERGE_FAILED_ACTION, PR_CONFLICT_ACTION,
-  PR_ACTION_TYPES,
+  recordManagerAction, recordManagerActionOnChange, stateFingerprint,
+  MERGE_BLOCKED_ACTION, MERGE_FAILED_ACTION, PR_CONFLICT_ACTION, PR_ACTION_TYPES,
 } from '../manager/managerActionJournal';
 import { getEffectiveManagerPolicy } from '../manager/managerPolicyStore';
 import { planMergeQueue, summarizeMergeQueue } from '../manager/prMergeQueue';
@@ -588,8 +588,17 @@ async function runPrMergeQueueBody(
           tenantId, taskId: pr.taskId, requireSignoff: policy.requireSignoffToComplete,
         });
         if (!gate.satisfied) {
-          await recordManagerAction(db, {
+          // A STATE, not an event: the same PR waits on the same sign-offs for many
+          // passes. Journalled once per change of the gate, not once per tick — this
+          // was the largest single source of `manager_actions` rows. Not counted by any
+          // ceiling (those count merge_blocked / merge_failed / pr_conflict / sync_pr).
+          await recordManagerActionOnChange(db, {
             tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: 'flag',
+            stateKey: `signoff-gate:${pr.id}`,
+            fingerprint: stateFingerprint([
+              gate.reason, gate.requiredCount, gate.satisfiedCount,
+              gate.outstanding.map((o) => `${o.roleKey}:${o.state}`).sort(),
+            ]),
             summary: `Did not merge PR #${pr.number ?? '?'} — ${gate.detail}`,
             detail: {
               signoffGate: gate.reason,

@@ -19,6 +19,7 @@
 import { and, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog, workDeltas } from '../../infrastructure/database/schema';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 /** `to_char(date_trunc('day', col), 'YYYY-MM-DD')` — UTC day bucket. */
 function dayCol(col: unknown) {
@@ -77,29 +78,32 @@ function addTotal(map: Map<string, number> | Map<number, number>, key: string | 
 export async function computeInteractionActivity(db: Db, tenantId: number, from: Date, to: Date): Promise<InteractionActivity> {
   const llmScope = and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, from), lte(llmUsageLog.createdAt, to));
   const deltaScope = and(eq(workDeltas.tenantId, tenantId), gte(workDeltas.createdAt, from), lte(workDeltas.createdAt, to));
+  // AI usage comes from the database that owns the ledger (operational in production);
+  // code-change deltas from the core one.
+  const usageDb = usageDatabaseOf(db);
 
   const [
     llmUserRows, llmHostRows, llmCloudRows, llmProjRows, llmDailyRows,
     deltaUserRows, deltaProjRows, deltaDailyRows,
   ] = await Promise.all([
     // AI usage by human user + day.
-    db.select({ userId: llmUsageLog.userId, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
+    usageDb.select({ userId: llmUsageLog.userId, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
       .from(llmUsageLog).where(and(llmScope, isNotNull(llmUsageLog.userId)))
       .groupBy(llmUsageLog.userId, dayTrunc(llmUsageLog.createdAt)),
     // AI usage by on-prem agent host + day.
-    db.select({ hostId: llmUsageLog.agentHostId, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
+    usageDb.select({ hostId: llmUsageLog.agentHostId, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
       .from(llmUsageLog).where(and(llmScope, isNotNull(llmUsageLog.agentHostId)))
       .groupBy(llmUsageLog.agentHostId, dayTrunc(llmUsageLog.createdAt)),
     // AI usage by cloud agent (ide_agents.id via cloud_agent_ref) + day.
-    db.select({ ref: llmUsageLog.cloudAgentRef, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
+    usageDb.select({ ref: llmUsageLog.cloudAgentRef, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
       .from(llmUsageLog).where(and(llmScope, isNotNull(llmUsageLog.cloudAgentRef)))
       .groupBy(llmUsageLog.cloudAgentRef, dayTrunc(llmUsageLog.createdAt)),
     // AI usage by project.
-    db.select({ projectId: llmUsageLog.projectId, c: sql<number>`count(*)::int` })
+    usageDb.select({ projectId: llmUsageLog.projectId, c: sql<number>`count(*)::int` })
       .from(llmUsageLog).where(and(llmScope, isNotNull(llmUsageLog.projectId)))
       .groupBy(llmUsageLog.projectId),
     // AI usage total-by-day (all rows, incl. gateway calls with no actor).
-    db.select({ day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
+    usageDb.select({ day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
       .from(llmUsageLog).where(llmScope).groupBy(dayTrunc(llmUsageLog.createdAt)),
     // Code-change interactions by author + day.
     db.select({ by: workDeltas.createdBy, day: dayCol(workDeltas.createdAt), c: sql<number>`count(*)::int` })

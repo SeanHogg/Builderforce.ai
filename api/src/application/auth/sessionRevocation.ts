@@ -36,12 +36,15 @@ import { UnauthorizedError } from '../../domain/shared/errors';
 /**
  * How stale a `last_seen_at` may get before it is written again.
  *
- * These columns drive the "active sessions" list and last-seen chips, where a
- * minute of lag is invisible. Writing them on every request turned each
- * authenticated GET into two write round-trips against neon-http — the largest
- * single latency contributor on this path, and a standing Neon-compute cost item.
+ * These columns only order the "active sessions" lists (auth, admin and tenant
+ * routes); nothing compares them to a threshold. Writing them on every request
+ * turned each authenticated GET into two write round-trips against neon-http. A
+ * one-minute throttle still meant ~1,440 writes per token per day from an always-on
+ * VS Code extension or on-prem runtime (auth_tokens: 331k writes on 3.6k rows,
+ * 2026-09-14), which alone keeps Neon compute from suspending. Fifteen minutes is
+ * invisible in a list sorted by recency.
  */
-export const LAST_SEEN_THROTTLE_MS = 60_000;
+export const LAST_SEEN_THROTTLE_MS = 15 * 60_000;
 
 export interface ActiveTokenRow {
   jti: string;

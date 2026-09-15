@@ -30,11 +30,13 @@
  * per-row alternative is N round trips against tables with six-figure row counts,
  * which is the fan-out anti-pattern the platform rejects outright.
  */
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { registeredEntities } from '../domains/entityCatalog';
 import { DOMAINS, isDomain, type Domain } from './ObjectRegistry';
+import { resultRows, rowsTable, type RowsColumn } from './metricRollup';
+import { databaseForTable } from '../ide/appsDatabase';
 
 /**
  * The projection map: which existing table becomes which registry kind.
@@ -144,6 +146,33 @@ async function tableExists(db: Db, table: string): Promise<boolean> {
   return list.length > 0;
 }
 
+/** The shape {@link registrationSource} hands the registry INSERT. */
+const REGISTRATION_COLUMNS: readonly RowsColumn[] = [
+  { name: 'tenant_id', type: 'int' },
+  { name: 'ref_id', type: 'text' },
+  { name: 'title', type: 'text' },
+];
+
+/**
+ * The rows to register, as a relation the core `INSERT INTO objects` selects from.
+ *
+ * A table on the core database stays ONE `INSERT … SELECT` — the per-row alternative
+ * is the fan-out this module refuses. A table on another database cannot be selected
+ * from a core statement, so its rows are read there first and passed in as one
+ * parameter ({@link rowsTable}). Identifiers come from the PROJECTIONS literal —
+ * never from a request — so `sql.raw` here is a constant, not interpolated input.
+ */
+async function registrationSource(db: Db, source: Db, p: Projection, titleColumn: string): Promise<SQL> {
+  const rows = sql`
+    SELECT tenant_id,
+           ${sql.raw(p.idColumn)}::text AS ref_id,
+           LEFT(COALESCE(${sql.raw(titleColumn)}::text, ''), 300) AS title
+      FROM ${sql.raw(p.table)}
+     WHERE tenant_id IS NOT NULL`;
+  if (source === db) return sql`(${rows}) AS src`;
+  return rowsTable('src', REGISTRATION_COLUMNS, resultRows(await source.execute(rows)));
+}
+
 /** Does a column exist? Guards the title/tenant column, which differs by table. */
 async function columnExists(db: Db, table: string, column: string): Promise<boolean> {
   const rows = await db.execute(sql`
@@ -168,31 +197,27 @@ export async function projectRegistry(env: Env, db: Db = buildDatabase(env)): Pr
   const skipped: string[] = [];
 
   for (const p of PROJECTIONS) {
-    if (!(await tableExists(db, p.table))) {
+    // A table is probed and read on the database that holds it — a published site
+    // lives on the apps database — while `objects` is always the core one. Probing
+    // the core catalogue for a moved table would find the stale copy, or nothing.
+    const source = databaseForTable(db, p.table);
+    if (!(await tableExists(source, p.table))) {
       skipped.push(`${p.table} (absent)`);
       continue;
     }
-    if (!(await columnExists(db, p.table, 'tenant_id'))) {
+    if (!(await columnExists(source, p.table, 'tenant_id'))) {
       // A table with no tenant column cannot be registered per tenant, and
       // guessing a tenant is worse than skipping: `check-tenant-column.mjs`
       // names 71 such tables and every one is a decision, not an oversight.
       skipped.push(`${p.table} (no tenant_id)`);
       continue;
     }
-    const titleColumn = (await columnExists(db, p.table, p.titleColumn)) ? p.titleColumn : p.idColumn;
+    const titleColumn = (await columnExists(source, p.table, p.titleColumn)) ? p.titleColumn : p.idColumn;
 
-    // Identifiers come from the PROJECTIONS literal above — never from a request —
-    // so `sql.raw` here is a constant, not interpolated input.
     const result = await db.execute(sql`
       INSERT INTO objects (tenant_id, kind, ref_id, domain, title, updated_at)
-      SELECT src.tenant_id,
-             ${p.kind},
-             src.${sql.raw(p.idColumn)}::text,
-             ${p.domain},
-             LEFT(COALESCE(src.${sql.raw(titleColumn)}::text, ''), 300),
-             NOW()
-      FROM ${sql.raw(p.table)} AS src
-      WHERE src.tenant_id IS NOT NULL
+      SELECT src.tenant_id, ${p.kind}, src.ref_id, ${p.domain}, src.title, NOW()
+      FROM ${await registrationSource(db, source, p, titleColumn)}
       ON CONFLICT (tenant_id, kind, ref_id) DO UPDATE
         SET title = EXCLUDED.title, updated_at = NOW()
     `);

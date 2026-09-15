@@ -15,6 +15,7 @@ import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { invalidateTenantPlan } from '../tenant/tenantPlanCache';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { deleteAppsForProjects } from '../../infrastructure/database/appsCascade';
 import {
   activityLog,
   errorEvents,
@@ -39,7 +40,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { activityDatabase, recordActivityBatch } from '../activity/activityLog';
-import { resolveUsageDatabase } from '../llm/usageLedger';
+import { resolveUsageDatabase, usageDatabaseOf } from '../llm/usageLedger';
 import { provisionBuiltinAgents } from '../agent/provisionBuiltinAgents';
 import { membershipChanged } from '../tenant/membershipChanged';
 import { getActiveTermsVersion } from '../legal/termsAcceptance';
@@ -257,7 +258,10 @@ async function wipeTenantContent(env: Env, db: Db, tenantId: number, keepProject
   await db.delete(portfolios).where(eq(portfolios.tenantId, tenantId));
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.tenantId, tenantId)); // versions/tags/acks cascade
   // Visitor-created projects go entirely; blueprint projects survive but their tasks reset.
-  await db.delete(projects).where(and(eq(projects.tenantId, tenantId), notInArray(projects.key, keepProjectKeys)));
+  const dropped = await db.delete(projects)
+    .where(and(eq(projects.tenantId, tenantId), notInArray(projects.key, keepProjectKeys)))
+    .returning({ id: projects.id });
+  await deleteAppsForProjects(db, dropped.map((p) => p.id));
   const remaining = await db.select({ id: projects.id }).from(projects).where(eq(projects.tenantId, tenantId));
   const ids = remaining.map((p) => p.id);
   if (ids.length > 0) await db.delete(tasks).where(scopedToTenant(tasks, tenantId, inArray(tasks.projectId, ids)));
@@ -484,7 +488,8 @@ async function seedPersona(env: Env, db: Db, bp: DemoBlueprint): Promise<DemoPer
       } as typeof llmUsageLog.$inferInsert);
     }
   }
-  if (usageRows.length > 0) await db.insert(llmUsageLog).values(usageRows);
+  // Same database the reset above deletes from — the one every lens reads.
+  if (usageRows.length > 0) await usageDatabaseOf(db).insert(llmUsageLog).values(usageRows);
 
   return { persona: bp.key, tenantId, created: tenant.created, tasks: taskCount, agents: bp.agents.length };
 }

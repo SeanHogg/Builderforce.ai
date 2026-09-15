@@ -26,6 +26,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { siteCollections, siteRecords } from '../../infrastructure/database/schema';
+import { appsDatabaseOf } from '../ide/appsDatabase';
 import { setRealizationVerdict, isRealizationVerdict, type RealizationVerdict, type Row } from './realizationStore';
 import { recordProofOutcome } from './proofOutcomes';
 import { VERDICT_COLLECTION } from './targets/shared';
@@ -40,7 +41,8 @@ interface DecidedRecord {
  *  or null when there isn't one (no collection yet, no submission yet, or a
  *  submission that did not carry a verdict this platform recognises). */
 async function latestVerdictRecord(db: Db, tenantId: number, projectId: number): Promise<DecidedRecord | null> {
-  const [collection] = await db
+  const apps = appsDatabaseOf(db);
+  const [collection] = await apps
     .select({ id: siteCollections.id })
     .from(siteCollections)
     .where(and(
@@ -51,7 +53,7 @@ async function latestVerdictRecord(db: Db, tenantId: number, projectId: number):
     .limit(1);
   if (!collection) return null;
 
-  const [record] = await db
+  const [record] = await apps
     .select({ payload: siteRecords.payload, createdAt: siteRecords.createdAt })
     .from(siteRecords)
     .where(and(eq(siteRecords.collectionId, collection.id), eq(siteRecords.tenantId, tenantId)))

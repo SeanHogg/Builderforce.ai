@@ -71,7 +71,7 @@ import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
-import { recordUsageRow, clampTokenCount, normalizeByoProvider } from '../llm/usageLedger';
+import { recordUsageRow, clampTokenCount, normalizeByoProvider, usageDatabaseOf } from '../llm/usageLedger';
 import { logTrace } from '../llm/traceLogger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision, editTaskPrdSection, findTaskPrimarySpec } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
@@ -1356,7 +1356,9 @@ async function runCloudToolLoop(
 
     beforeTurn: async (ctx) => {
       if (declaredLimits) {
-        const [spend] = await db.select({ total: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
+        // The run's spend so far, from the ledger's own database — read from the core
+        // copy it stayed at 0 and a declared spend limit could never trip.
+        const [spend] = await usageDatabaseOf(db).select({ total: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
           .from(llmUsageLog)
           .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.executionId, executionId)));
         const limitReason = checkRunLimits(declaredLimits, {

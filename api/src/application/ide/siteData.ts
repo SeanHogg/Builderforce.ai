@@ -34,6 +34,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 import { addAudienceMembers } from '../marketing/campaignEngine';
 import { raiseTicketForSiteRecord } from './siteTicketBridge';
+import { appsDatabaseOf } from './appsDatabase';
 
 /** The collection every published site gets for free. */
 export const DEFAULT_COLLECTION = 'signups';
@@ -168,10 +169,12 @@ export type SubmitResult =
  */
 export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult> {
   const { db, siteId, tenantId } = input;
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
   const name = normalizeCollectionName(input.collectionName);
   if (!name) return { ok: false, status: 404, error: 'Unknown collection.' };
 
-  const [collection] = await db
+  const [collection] = await apps
     .select({
       id: siteCollections.id,
       acceptsPublicWrites: siteCollections.acceptsPublicWrites,
@@ -197,7 +200,7 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
 
   const cap = collection.dailyWriteCap > 0 ? collection.dailyWriteCap : DEFAULT_DAILY_WRITE_CAP;
   const since = new Date(Date.now() - 86_400_000);
-  const [{ count } = { count: 0 }] = await db
+  const [{ count } = { count: 0 }] = await apps
     .select({ count: sql<number>`count(*)::int` })
     .from(siteRecords)
     .where(and(
@@ -209,7 +212,7 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
     return { ok: false, status: 429, error: 'This form has reached its limit for today.' };
   }
 
-  const [record] = await db
+  const [record] = await apps
     .insert(siteRecords)
     .values({
       collectionId: collection.id,
@@ -223,7 +226,7 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
     })
     .returning({ id: siteRecords.id });
 
-  await db
+  await apps
     .update(siteCollections)
     .set({ recordCount: sql`${siteCollections.recordCount} + 1`, updatedAt: sql`NOW()` })
     .where(and(eq(siteCollections.id, collection.id), eq(siteCollections.tenantId, tenantId)));
@@ -284,7 +287,7 @@ export async function listCollections(
   tenantId: number,
   siteId: number,
 ): Promise<CollectionView[]> {
-  return db
+  return appsDatabaseOf(db)
     .select({
       id: siteCollections.id,
       name: siteCollections.name,
@@ -324,14 +327,16 @@ export async function createCollection(
   if (!name) {
     return { ok: false, status: 400, error: 'Use lowercase letters, numbers and hyphens.' };
   }
-  const [existing] = await db
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
+  const [existing] = await apps
     .select({ id: siteCollections.id })
     .from(siteCollections)
     .where(and(eq(siteCollections.siteId, siteId), eq(siteCollections.name, name), eq(siteCollections.tenantId, tenantId)))
     .limit(1);
   if (existing) return { ok: false, status: 409, error: `"${name}" already exists.` };
 
-  const [row] = await db
+  const [row] = await apps
     .insert(siteCollections)
     .values({ siteId, tenantId, projectId, name, originSessionId: originSessionId ?? null })
     .returning({
@@ -360,7 +365,7 @@ export async function ensureDefaultCollection(
   siteId: number,
   projectId: number,
 ): Promise<void> {
-  await db
+  await appsDatabaseOf(db)
     .insert(siteCollections)
     .values({ siteId, tenantId, projectId, name: DEFAULT_COLLECTION })
     .onConflictDoNothing();
@@ -387,7 +392,7 @@ export async function listRecords(
   if (beforeId && Number.isFinite(beforeId)) {
     filters.push(sql`${siteRecords.id} < ${beforeId}` as never);
   }
-  return db
+  return appsDatabaseOf(db)
     .select({
       id: siteRecords.id,
       payload: siteRecords.payload,
@@ -452,7 +457,9 @@ export async function listSiteRecordsForHandler(args: {
   const name = normalizeCollectionName(args.collectionName);
   if (!name) return { collection: String(args.collectionName ?? ''), count: 0, records: [], error: 'Invalid collection name.' };
 
-  const [collection] = await args.db
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(args.db);
+  const [collection] = await apps
     .select({ id: siteCollections.id })
     .from(siteCollections)
     .where(and(
@@ -471,7 +478,7 @@ export async function listSiteRecordsForHandler(args: {
     filters.push(sql`${siteRecords.payload}->>${args.match.field} = ${args.match.value}` as never);
   }
 
-  const rows = await args.db
+  const rows = await apps
     .select({
       id: siteRecords.id,
       payload: siteRecords.payload,
@@ -516,7 +523,7 @@ export async function updateCollection(
   // the manager role on the tenant's own route, never from the app's data routes.
   if (patch.readPolicy === 'none' || patch.readPolicy === 'owner') set.readPolicy = patch.readPolicy;
 
-  const [row] = await db
+  const [row] = await appsDatabaseOf(db)
     .update(siteCollections)
     .set(set)
     .where(and(eq(siteCollections.id, collectionId), eq(siteCollections.tenantId, tenantId)))
@@ -576,10 +583,12 @@ export async function listOwnedSiteRecords(args: {
   limit?: number;
 }): Promise<OwnedRecordsResult> {
   const { db, siteId, tenantId, siteUserId } = args;
+  // site tables live on the apps database
+  const apps = appsDatabaseOf(db);
   const name = normalizeCollectionName(args.collectionName);
   if (!name) return { ok: false, status: 404, error: 'Unknown collection.' };
 
-  const [collection] = await db
+  const [collection] = await apps
     .select({ id: siteCollections.id, readPolicy: siteCollections.readPolicy })
     .from(siteCollections)
     .where(and(eq(siteCollections.siteId, siteId), eq(siteCollections.name, name), eq(siteCollections.tenantId, tenantId)))
@@ -592,7 +601,7 @@ export async function listOwnedSiteRecords(args: {
   }
 
   const limit = Math.min(Math.max(Number(args.limit) || 50, 1), 200);
-  const rows = await db
+  const rows = await apps
     .select({ id: siteRecords.id, payload: siteRecords.payload, createdAt: siteRecords.createdAt })
     .from(siteRecords)
     .where(scopedToTenant(siteRecords, tenantId, eq(siteRecords.collectionId, collection.id), eq(siteRecords.siteUserId, siteUserId)))
@@ -650,7 +659,8 @@ export async function exportOwnedSiteRecords(args: {
   siteUserId: number;
 }): Promise<ExportedCollection[]> {
   const { db, siteId, tenantId, siteUserId } = args;
-  const rows = await db
+  // site tables live on the apps database — both sides of this join are site tables
+  const rows = await appsDatabaseOf(db)
     .select({
       collection: siteCollections.name,
       id: siteRecords.id,

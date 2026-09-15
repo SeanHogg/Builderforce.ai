@@ -41,7 +41,10 @@ function fakeDb() {
   };
 }
 
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: () => fakeDb() }));
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
+  buildDatabase: () => fakeDb(),
+}));
 
 const decryptBox: { current: (s: string) => string } = { current: (s) => s };
 vi.mock('../../infrastructure/auth/MfaService', () => ({

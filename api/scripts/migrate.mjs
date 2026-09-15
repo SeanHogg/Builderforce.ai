@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import { splitSqlStatements } from './lib/splitSqlStatements.mjs';
 import { loadDotEnv } from './lib/loadDotEnv.mjs';
+import { trackForArgv } from './lib/migrationTracks.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -23,10 +24,16 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 loadDotEnv(join(here, '../.env'));
 
-const transactional = process.argv.includes('--transactional');
-const connectionKey = transactional ? 'NEON_TRANSACTIONAL_DATABASE_URL' : 'NEON_DATABASE_URL';
+// One track per database — see scripts/lib/migrationTracks.mjs. An OPTIONAL track
+// with no URL is skipped rather than applied to the primary (its tables live there).
+const track = trackForArgv(process.argv);
+const connectionKey = track.env;
 const NEON_DATABASE_URL = process.env[connectionKey];
 if (!NEON_DATABASE_URL) {
+  if (track.optional) {
+    console.log(`ℹ️  ${connectionKey} not set — the Worker serves this track from the primary; skipping ${track.dir}.`);
+    process.exit(0);
+  }
   console.error(`❌  ${connectionKey} not set.`);
   console.error(`   Create api/.env with: ${connectionKey}=postgresql://...`);
   process.exit(1);
@@ -65,7 +72,7 @@ const applied = new Set(
 // Discover & apply pending migrations
 // ---------------------------------------------------------------------------
 
-const migrationsDir = join(here, transactional ? '../transactional-migrations' : '../migrations');
+const migrationsDir = join(here, '..', track.dir);
 
 let files;
 try {

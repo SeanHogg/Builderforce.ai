@@ -3,6 +3,7 @@ import { manageMcpServers } from "./mcpServers";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
+import { promptSignInAgain, watchRejectedEditorKey } from "./editorKeyGuard";
 import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
 import { BuilderForcePanel } from "./builderforcePanel";
@@ -124,9 +125,18 @@ export function activate(context: vscode.ExtensionContext): void {
       getTreeItem: () => new vscode.TreeItem(""),
     } satisfies vscode.TreeDataProvider<never>),
     // Keep the key fresh when auth changes out-of-band (e.g. the device-code flow
-    // completing, or a sign-out in another window).
+    // completing, or a sign-out in another window). Also re-push webview init: the
+    // sidebar `when` clause reveals Evermind only AFTER this context flips, so a
+    // refresh that ran before the view existed was a silent no-op and left the
+    // panel on "Sign in" while the host already toasted "signed in".
     vscode.authentication.onDidChangeSessions((e) => {
-      if (e.provider.id === BuilderForceAuthProvider.id) void syncSignedInContext(context);
+      if (e.provider.id !== BuilderForceAuthProvider.id) return;
+      void (async () => {
+        await syncSignedInContext(context);
+        bfApi.clearJwt();
+        clearPlatformToolsCache();
+        refreshAuthBoundSurfaces();
+      })();
     }),
   );
   const tree = new SessionsTreeProvider(context.secrets);
@@ -509,8 +519,11 @@ export function activate(context: vscode.ExtensionContext): void {
     ...["builderforce.openBrain", "builderforce.openChat", "builderforce.editorChat"].map((id) =>
       vscode.commands.registerCommand(id, () => BuilderForcePanel.open(context)),
     ),
-    vscode.commands.registerCommand("builderforce.signIn", () => signIn(context)),
+    vscode.commands.registerCommand("builderforce.signIn", () => signIn(context, auth)),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
+    // A stored key the gateway refuses signs the editor OUT (login panel back, Sign in
+    // runs the real flow) instead of leaving "signed in" over empty panels.
+    watchRejectedEditorKey(context.secrets, () => signOut(context, auth, { quiet: true })),
     vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context)),
     vscode.commands.registerCommand("builderforce.rescanCodebase", () => maybeScan(context, true)),
     vscode.commands.registerCommand("builderforce.openSettings", () =>
@@ -1036,7 +1049,25 @@ export function deactivate(): void {
   /* no-op */
 }
 
-async function signIn(context: vscode.ExtensionContext): Promise<void> {
+/** Re-push every auth-gated surface after sign-in/out. Evermind and the Brain
+ *  panel both gate on the tenant JWT in `init`; a missed refresh leaves them on
+ *  the sign-in wall while the host already knows a key is stored. */
+function refreshAuthBoundSurfaces(): void {
+  BuilderForcePanel.refresh();
+  evermindView?.refresh();
+  void vscode.commands.executeCommand("builderforce.refreshSessions");
+  void vscode.commands.executeCommand("builderforce.refreshInbox");
+  void vscode.commands.executeCommand("builderforce.refreshProjects");
+  void insights?.start();
+  void diagnostics?.refresh();
+  meetings?.refresh();
+}
+
+async function signIn(context: vscode.ExtensionContext, auth: BuilderForceAuthProvider): Promise<void> {
+  // A stored key the gateway refuses would make the session lookup below hand back
+  // the dead session without opening the browser — "signed in", every panel empty,
+  // and this button a no-op. Drop it first so the flow below really signs in.
+  if ((await bfApi.probeEditorKey(context.secrets)) === "rejected") await auth.removeSession();
   try {
     await vscode.authentication.getSession(BuilderForceAuthProvider.id, ["gateway"], {
       createIfNone: true,
@@ -1047,23 +1078,32 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
     if (!/cancel/i.test(msg)) surfaceError(e, "auth:signIn", `BuilderForce: ${msg}`);
     return;
   }
-  vscode.window.showInformationMessage("BuilderForce: signed in.");
-  void syncSignedInContext(context); // reveal the feature views
+  // AWAIT the context flip so `when: builderforce.signedIn` reveals Evermind
+  // before we refresh it. A fire-and-forget sync made `evermindView?.refresh()`
+  // a no-op (view not resolved yet); the webview then never got a post-auth init.
+  await syncSignedInContext(context);
   bfApi.clearJwt();
   clearPlatformToolsCache();
-  BuilderForcePanel.refresh();
-  evermindView?.refresh();
-  void vscode.commands.executeCommand("builderforce.refreshSessions");
-  void vscode.commands.executeCommand("builderforce.refreshInbox");
+  // Toast what is TRUE: a key that cannot mint a tenant token is not a working sign-in.
+  const verdict = await bfApi.probeEditorKey(context.secrets);
+  if (verdict === "rejected" || verdict === "none") {
+    await signOut(context, auth, { quiet: true });
+    void promptSignInAgain();
+    return;
+  }
+  if (verdict === "ok") {
+    vscode.window.showInformationMessage(vscode.l10n.t("BuilderForce: signed in."));
+  } else {
+    vscode.window.showWarningMessage(
+      vscode.l10n.t("BuilderForce: signed in, but the gateway can't be reached right now. Your panels will load once it responds."),
+    );
+  }
+  refreshAuthBoundSurfaces();
   void heartbeat(context);
-  void vscode.commands.executeCommand("builderforce.refreshProjects");
   // Land the user on a ready board instead of "Select or create a project…":
   // zero-setup onboarding provisions a Default project, so auto-select it.
   void autoSelectDefaultProject(context);
   void maybeScan(context, false);
-  void insights?.start();
-  void diagnostics?.refresh();
-  meetings?.refresh();
 }
 
 /** After sign-in, if no project is selected yet, select the workspace's sole/first
@@ -1088,9 +1128,11 @@ async function autoSelectDefaultProject(context: vscode.ExtensionContext): Promi
 async function signOut(
   context: vscode.ExtensionContext,
   auth: BuilderForceAuthProvider,
+  /** `quiet`: the caller explains the sign-out itself (a refused key → "sign in again"). */
+  opts: { quiet?: boolean } = {},
 ): Promise<void> {
   await auth.removeSession();
-  void syncSignedInContext(context); // collapse back to the login-only Welcome panel
+  await syncSignedInContext(context); // collapse back to the login-only Welcome panel
   bfApi.clearJwt();
   clearPlatformToolsCache();
   clearPersonalityBlockCache();
@@ -1098,15 +1140,8 @@ async function signOut(
   await context.globalState.update(SELECTED_TENANT_KEY, undefined);
   setGroundingSummary(undefined);
   setSelectedProject(undefined);
-  vscode.window.showInformationMessage("BuilderForce: signed out.");
-  BuilderForcePanel.refresh();
-  evermindView?.refresh();
-  void vscode.commands.executeCommand("builderforce.refreshSessions");
-  void vscode.commands.executeCommand("builderforce.refreshInbox");
-  void vscode.commands.executeCommand("builderforce.refreshProjects");
-  void insights?.start();
-  void diagnostics?.refresh();
-  meetings?.refresh();
+  if (!opts.quiet) vscode.window.showInformationMessage("BuilderForce: signed out.");
+  refreshAuthBoundSurfaces();
 }
 
 /**

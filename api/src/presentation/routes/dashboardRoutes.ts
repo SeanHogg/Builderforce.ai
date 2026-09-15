@@ -9,7 +9,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, count, desc, eq, gte, sql, sum } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, sql, sum } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   approvals,
@@ -33,6 +33,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { USAGE_KIND } from '../../application/llm/usageSource';
+import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 import { millicentsToUsd } from '../../domain/shared/money';
 
 /** Millicents (1/100000 USD) → USD. */
@@ -45,133 +46,187 @@ function mcToUsd(millicents: unknown): number {
  * by model, and by agent host. Cost is the authoritative `cost_usd_millicents`
  * stamped at write time (0097) — summed here, not re-priced from the catalog.
  */
-async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) {
-  const where = and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, windowStart));
+/** The aggregate every breakdown groups: tokens, cost and request count. */
+const usageTotals = () => ({
+  totalTokens: sum(llmUsageLog.totalTokens),
+  costMc: sum(llmUsageLog.costUsdMillicents),
+  requests: count(),
+});
 
-  const [byKind, perModel, perAgentHost, perProject, perSegment, perUser, perTeam, perRepo, totalRow] = await Promise.all([
-    db.select({
+interface UsageTotals { totalTokens: number; costMc: number; requests: number }
+
+function totalsOf(row: { totalTokens: unknown; costMc: unknown; requests: unknown }): UsageTotals {
+  return { totalTokens: Number(row.totalTokens ?? 0), costMc: Number(row.costMc ?? 0), requests: Number(row.requests ?? 0) };
+}
+
+function addTotals(into: UsageTotals, t: UsageTotals): void {
+  into.totalTokens += t.totalTokens;
+  into.costMc += t.costMc;
+  into.requests += t.requests;
+}
+
+/** Largest spend first, capped at the 50 rows the single-database queries returned. */
+function topByCost<T extends UsageTotals>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => b.costMc - a.costMc).slice(0, 50);
+}
+
+/** An `IN (…)` read in bounded chunks, so a month of task ids stays under the driver's parameter limit. */
+async function readInChunks<K, R>(ids: readonly K[], read: (chunk: K[]) => PromiseLike<R[]>): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < ids.length; i += 500) out.push(...(await read(ids.slice(i, i + 500))));
+  return out;
+}
+
+/**
+ * `usageDb` is the database that OWNS `llm_usage_log` ({@link resolveUsageDatabase}) —
+ * the operational one in production. The names these rollups display (projects,
+ * workspaces, users, teams, repos) live in the core `db`, and the two are different
+ * Neon accounts, so the usage side is aggregated there by id and the names are joined
+ * here. These queries used to join both in one statement against the core database,
+ * whose `llm_usage_log` stopped receiving rows at the split — every figure was frozen.
+ */
+async function buildUsageBreakdown(db: Db, usageDb: Db, tenantId: number, windowStart: Date) {
+  const where = and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, windowStart));
+  // Team membership matches the heterogeneous member ref (human→userId,
+  // cloud_agent→cloudAgentRef, host_agent→agentHostId-as-text).
+  const memberRef = sql<string | null>`coalesce(${llmUsageLog.userId}, ${llmUsageLog.cloudAgentRef}, cast(${llmUsageLog.agentHostId} as text))`;
+
+  const [byKind, perModel, perAgentHost, byProject, byUser, byMemberRef, byTask, totalRow] = await Promise.all([
+    usageDb.select({
       kind: USAGE_KIND,
       promptTokens: sum(llmUsageLog.promptTokens),
       completionTokens: sum(llmUsageLog.completionTokens),
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
+      ...usageTotals(),
     }).from(llmUsageLog).where(where).groupBy(USAGE_KIND),
 
-    db.select({
-      model: llmUsageLog.model,
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
-    }).from(llmUsageLog).where(where).groupBy(llmUsageLog.model).orderBy(desc(sum(llmUsageLog.totalTokens))).limit(50),
+    usageDb.select({ model: llmUsageLog.model, ...usageTotals() })
+      .from(llmUsageLog).where(where).groupBy(llmUsageLog.model).orderBy(desc(sum(llmUsageLog.totalTokens))).limit(50),
 
     // Real per-agent-host breakdown (was a tenantId stand-in before 0096).
-    db.select({
-      agentHostId: llmUsageLog.agentHostId,
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
-    }).from(llmUsageLog).where(and(where, sql`${llmUsageLog.agentHostId} is not null`))
+    usageDb.select({ agentHostId: llmUsageLog.agentHostId, ...usageTotals() })
+      .from(llmUsageLog).where(and(where, sql`${llmUsageLog.agentHostId} is not null`))
       .groupBy(llmUsageLog.agentHostId).orderBy(desc(sum(llmUsageLog.totalTokens))).limit(50),
 
-    // Per-project spend (0103) — cost attributed to each project, the rollup
-    // beneath the account total. Joined to projects for the display name.
-    db.select({
-      projectId: llmUsageLog.projectId,
-      projectName: projects.name,
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
-    }).from(llmUsageLog)
-      .leftJoin(projects, eq(projects.id, llmUsageLog.projectId))
-      .where(and(where, sql`${llmUsageLog.projectId} is not null`))
-      .groupBy(llmUsageLog.projectId, projects.name)
-      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+    // Per-project spend (0103), uncapped: the workspace rollup below needs every project.
+    usageDb.select({ projectId: llmUsageLog.projectId, ...usageTotals() })
+      .from(llmUsageLog).where(and(where, sql`${llmUsageLog.projectId} is not null`))
+      .groupBy(llmUsageLog.projectId),
 
-    // Per-SEGMENT (workspace) spend — the dimension above project.
-    //
-    // `llm_usage_log` carries no segment column, and deliberately shouldn't: a segment
-    // is a property of the PROJECT the work belongs to, so denormalizing it onto every
-    // usage row would be a second copy that goes stale the moment a project moves
-    // between workspaces. Joining through `projects` keeps one source of truth and
-    // costs one indexed join. Rows with no project (gateway chat outside any project)
-    // are excluded rather than bucketed as "unknown" — a workspace rollup that
-    // silently included untargeted spend would overstate every workspace.
-    db.select({
-      segmentId: projects.segmentId,
-      segmentName: segments.displayName,
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
-    }).from(llmUsageLog)
-      .innerJoin(projects, eq(projects.id, llmUsageLog.projectId))
-      .leftJoin(segments, eq(segments.id, projects.segmentId))
-      .where(and(where, sql`${projects.segmentId} is not null`))
-      .groupBy(projects.segmentId, segments.displayName)
-      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+    // Per-user spend — the human / SDK caller that initiated the request (nullable
+    // for fully autonomous agent rows). Jellyfish-parity "by individual".
+    usageDb.select({ userId: llmUsageLog.userId, ...usageTotals() })
+      .from(llmUsageLog).where(and(where, sql`${llmUsageLog.userId} is not null`))
+      .groupBy(llmUsageLog.userId).orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
 
-    // Per-user spend — attributed to the individual human / SDK caller that
-    // initiated the request (userId, nullable for fully autonomous agent rows).
-    // Joined to users for the display name. Jellyfish-parity "by individual".
-    db.select({
-      userId: llmUsageLog.userId,
-      userName: users.displayName,
-      userEmail: users.email,
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
-    }).from(llmUsageLog)
-      .leftJoin(users, eq(users.id, llmUsageLog.userId))
-      .where(and(where, sql`${llmUsageLog.userId} is not null`))
-      .groupBy(llmUsageLog.userId, users.displayName, users.email)
-      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+    usageDb.select({ memberRef, ...usageTotals() })
+      .from(llmUsageLog).where(and(where, sql`${memberRef} is not null`)).groupBy(memberRef),
 
-    // Per-team spend — map each usage row to a team via team_members, matching
-    // the heterogeneous member ref (human→userId, cloud_agent→cloudAgentRef,
-    // host_agent→agentHostId-as-text). A row counts once per team it maps to;
-    // only rows that map to a tenant team are included. Jellyfish-parity "by team".
-    db.select({
-      teamId: teams.id,
-      teamName: teams.name,
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
-    }).from(llmUsageLog)
-      .leftJoin(
-        teamMembers,
-        eq(
-          teamMembers.memberRef,
-          sql`coalesce(${llmUsageLog.userId}, ${llmUsageLog.cloudAgentRef}, cast(${llmUsageLog.agentHostId} as text))`,
-        ),
-      )
-      .innerJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.tenantId, tenantId)))
-      .where(where)
-      .groupBy(teams.id, teams.name)
-      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+    usageDb.select({ taskId: llmUsageLog.taskId, ...usageTotals() })
+      .from(llmUsageLog).where(and(where, sql`${llmUsageLog.taskId} is not null`))
+      .groupBy(llmUsageLog.taskId),
 
-    // Per-repo spend — cost attributed to the explicit repo of the originating
-    // task (tasks.explicitRepoId → project_repositories). The inner join filters
-    // to rows with a known repo. Jellyfish-parity "by repo".
-    db.select({
-      repoId: projectRepositories.id,
-      owner: projectRepositories.owner,
-      repo: projectRepositories.repo,
-      totalTokens: sum(llmUsageLog.totalTokens),
-      costMc: sum(llmUsageLog.costUsdMillicents),
-      requests: count(),
-    }).from(llmUsageLog)
-      .leftJoin(tasks, eq(tasks.id, llmUsageLog.taskId))
-      .innerJoin(projectRepositories, eq(projectRepositories.id, tasks.explicitRepoId))
-      .where(where)
-      .groupBy(projectRepositories.id, projectRepositories.owner, projectRepositories.repo)
-      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
-
-    db.select({
+    usageDb.select({
       totalTokens: sum(llmUsageLog.totalTokens),
       totalRequests: count(),
       costMc: sum(llmUsageLog.costUsdMillicents),
     }).from(llmUsageLog).where(where),
   ]);
+
+  const projectIds = byProject.flatMap((r) => (r.projectId == null ? [] : [r.projectId]));
+  const userIds = byUser.flatMap((r) => (r.userId == null ? [] : [r.userId]));
+  const memberRefs = byMemberRef.flatMap((r) => (r.memberRef == null ? [] : [r.memberRef]));
+  const taskIds = byTask.flatMap((r) => (r.taskId == null ? [] : [r.taskId]));
+
+  const [projectRows, userRows, membershipRows, taskRepoRows] = await Promise.all([
+    projectIds.length === 0 ? [] : db
+      .select({ id: projects.id, name: projects.name, segmentId: projects.segmentId })
+      .from(projects).where(and(eq(projects.tenantId, tenantId), inArray(projects.id, projectIds))),
+    userIds.length === 0 ? [] : db
+      .select({ id: users.id, displayName: users.displayName, email: users.email })
+      .from(users).where(inArray(users.id, userIds)),
+    memberRefs.length === 0 ? [] : db
+      .select({ teamId: teams.id, teamName: teams.name, memberRef: teamMembers.memberRef })
+      .from(teamMembers)
+      .innerJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.tenantId, tenantId)))
+      .where(inArray(teamMembers.memberRef, memberRefs)),
+    readInChunks(taskIds, (chunk) => db
+      .select({ id: tasks.id, repoId: tasks.explicitRepoId })
+      .from(tasks)
+      .where(and(eq(tasks.tenantId, tenantId), inArray(tasks.id, chunk), sql`${tasks.explicitRepoId} is not null`))),
+  ]);
+
+  const segmentIds = [...new Set(projectRows.flatMap((p) => (p.segmentId == null ? [] : [p.segmentId])))];
+  const repoIds = [...new Set(taskRepoRows.flatMap((t) => (t.repoId == null ? [] : [t.repoId])))];
+  const [segmentRows, repoRows] = await Promise.all([
+    segmentIds.length === 0 ? [] : db
+      .select({ id: segments.id, name: segments.displayName })
+      .from(segments).where(inArray(segments.id, segmentIds)),
+    repoIds.length === 0 ? [] : db
+      .select({ id: projectRepositories.id, owner: projectRepositories.owner, repo: projectRepositories.repo })
+      .from(projectRepositories).where(inArray(projectRepositories.id, repoIds)),
+  ]);
+
+  const projectById = new Map(projectRows.map((p) => [p.id, p]));
+  const perProject = topByCost(byProject.flatMap((r) => (r.projectId == null ? [] : [{
+    projectId: r.projectId,
+    projectName: projectById.get(r.projectId)?.name ?? null,
+    ...totalsOf(r),
+  }])));
+
+  // Per-SEGMENT (workspace) spend — the dimension above project. `llm_usage_log`
+  // carries no segment column, and deliberately shouldn't: a segment is a property of
+  // the PROJECT, so a copy on every usage row would go stale the moment a project moves
+  // between workspaces. Rows with no project are excluded rather than bucketed as
+  // "unknown" — a workspace rollup that included untargeted spend would overstate it.
+  const segmentName = new Map(segmentRows.map((s) => [s.id, s.name]));
+  const bySegment = new Map<(typeof segmentIds)[number], UsageTotals>();
+  for (const r of byProject) {
+    const segmentId = r.projectId == null ? null : projectById.get(r.projectId)?.segmentId ?? null;
+    if (segmentId == null) continue;
+    const acc = bySegment.get(segmentId) ?? { totalTokens: 0, costMc: 0, requests: 0 };
+    addTotals(acc, totalsOf(r));
+    bySegment.set(segmentId, acc);
+  }
+  const perSegment = topByCost([...bySegment].map(([segmentId, t]) => ({
+    segmentId, segmentName: segmentName.get(segmentId) ?? null, ...t,
+  })));
+
+  const userById = new Map(userRows.map((u) => [u.id, u]));
+  const perUser = byUser.flatMap((r) => (r.userId == null ? [] : [{
+    userId: r.userId,
+    userName: userById.get(r.userId)?.displayName ?? null,
+    userEmail: userById.get(r.userId)?.email ?? null,
+    ...totalsOf(r),
+  }]));
+
+  // A usage row counts once per team its member ref belongs to; refs in no tenant
+  // team are excluded. Jellyfish-parity "by team".
+  const totalsByRef = new Map(byMemberRef.map((r) => [r.memberRef, totalsOf(r)]));
+  const byTeam = new Map<string, { teamId: (typeof membershipRows)[number]['teamId']; teamName: string } & UsageTotals>();
+  for (const m of membershipRows) {
+    const t = totalsByRef.get(m.memberRef);
+    if (!t) continue;
+    const key = String(m.teamId);
+    const acc = byTeam.get(key) ?? { teamId: m.teamId, teamName: m.teamName, totalTokens: 0, costMc: 0, requests: 0 };
+    addTotals(acc, t);
+    byTeam.set(key, acc);
+  }
+  const perTeam = topByCost([...byTeam.values()]);
+
+  // Per-repo spend — the explicit repo of the originating task
+  // (tasks.explicitRepoId → project_repositories). Jellyfish-parity "by repo".
+  const repoByTask = new Map(taskRepoRows.map((t) => [t.id, t.repoId]));
+  const repoById = new Map(repoRows.map((r) => [r.id, r]));
+  const byRepo = new Map<string, { repoId: string; owner: string; repo: string } & UsageTotals>();
+  for (const r of byTask) {
+    const repoId = r.taskId == null ? null : repoByTask.get(r.taskId) ?? null;
+    const repo = repoId == null ? undefined : repoById.get(repoId);
+    if (!repo) continue;
+    const acc = byRepo.get(repo.id) ?? { repoId: repo.id, owner: repo.owner, repo: repo.repo, totalTokens: 0, costMc: 0, requests: 0 };
+    addTotals(acc, totalsOf(r));
+    byRepo.set(repo.id, acc);
+  }
+  const perRepo = topByCost([...byRepo.values()]);
 
   return {
     totals: {
@@ -277,8 +332,8 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
         .from(agentHosts)
         .where(and(eq(agentHosts.tenantId, tenantId), eq(agentHosts.status, 'active'))),
 
-      // Token usage today
-      db
+      // Token usage today — read where the ledger is written (operational in production).
+      resolveUsageDatabase(c.env as Env, db)
         .select({ total: sum(llmUsageLog.totalTokens) })
         .from(llmUsageLog)
         .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, todayStart))),
@@ -354,8 +409,8 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
 
     const payload = await getOrSetCached(
       c.env as Env,
-      `dashboard-usage:v4:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
-      () => buildUsageBreakdown(db, tenantId, windowStart),
+      `dashboard-usage:v5:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
+      () => buildUsageBreakdown(db, resolveUsageDatabase(c.env as Env, db), tenantId, windowStart),
       { kvTtlSeconds: 60, l1TtlMs: 30_000 },
     );
 

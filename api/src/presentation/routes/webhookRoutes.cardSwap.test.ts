@@ -35,7 +35,8 @@ vi.mock('../../application/tenant/discountCodeService', () => ({
 vi.mock('../../application/sales/recordReferralConversion', () => ({
   recordReferralConversion: mocks.recordReferralConversion,
 }));
-vi.mock('../../infrastructure/database/connection', () => ({
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: vi.fn(() => ({})),
 }));
 

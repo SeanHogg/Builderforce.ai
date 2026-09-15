@@ -12,7 +12,13 @@ vi.mock('@/lib/templates/api', () => ({
   templatesApi: { list: () => Promise.resolve({ templates: [], categories: [] }) },
 }));
 
-vi.mock('next-intl', () => ({
+// Partial mock: the catalog's static build path (`courseLms.ts`) calls the
+// real `createTranslator` at module load to derive its English fallback text,
+// so a full mock that dropped it crashed the whole import graph before a
+// single test could run. Only `useTranslations` is stubbed for the picker
+// itself; everything else next-intl exports passes through untouched.
+vi.mock('next-intl', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next-intl')>()),
   useTranslations: () => Object.assign(
     (key: string) => ({ tabLabel: 'Choose a starting point', heading: 'What should we create?' })[key] ?? key,
     { raw: () => [

@@ -18,7 +18,7 @@
  * they are the same question from two directions — is this run still alive, and
  * is it still allowed to be — and every op asks one or both.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, lt, or } from 'drizzle-orm';
 import { loadCapabilityContext } from '../../artifact/capabilityContext';
 import { resolveArtifacts } from '../../artifact/resolveArtifacts';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
@@ -177,14 +177,30 @@ export async function isExecutionCancelled(db: Db, executionId: number): Promise
 }
 
 /**
+ * Minimum spacing between liveness writes. A third of the reaper's shortest silence
+ * deadline (`CLOUD_RUNNING_DEADLINE_MS`, 90s in `staleExecutionReaper.ts`), so two
+ * beats can be lost before a live run looks dead. Not imported from there: the reaper's
+ * import graph reaches the runtime modules this one serves.
+ */
+export const HEARTBEAT_MIN_INTERVAL_MS = 30_000;
+
+/**
  * Bump `executions.updated_at` — the cloud-run liveness heartbeat the orphan reaper
  * measures "last activity" from. A container can spend minutes inside a single
  * `run_command` (a build/test step) with no LLM round-trip, so it pings this on a
  * timer independent of LLM steps; without that the reaper would kill a healthy,
  * busy container mid-build. ONE writer, so the `llm` op and the dedicated
  * `heartbeat` op agree. Best-effort — a missed beat is covered by the next one.
+ *
+ * Throttled to one write per {@link HEARTBEAT_MIN_INTERVAL_MS}: callers beat on every
+ * LLM step and container op (the Durable Object alarm re-arms immediately), which was
+ * a write per few seconds per run — and each one used to fire the lifecycle trigger.
  */
 export async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
-  await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId))
+  await db.update(executions).set({ updatedAt: new Date() })
+    .where(and(
+      eq(executions.id, executionId),
+      or(isNull(executions.updatedAt), lt(executions.updatedAt, new Date(Date.now() - HEARTBEAT_MIN_INTERVAL_MS))),
+    ))
     .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/runContext.ts", operation: "heartbeatExecution", context: { logMessage: '[cloud-container] execution heartbeat failed', details: { executionId, error } } }));
 }

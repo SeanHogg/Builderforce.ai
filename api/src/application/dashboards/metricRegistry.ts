@@ -23,6 +23,7 @@ import { computeWorkforceHealth, UNDER_UTILISED_PCT } from './workforceHealth';
 import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } from '../../infrastructure/database/schema';
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
 import { currentPeriodMonth } from '../../domain/shared/period';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 /** Millicents → USD (llm_usage_log.cost_usd_millicents is 1e-5 USD units). */
 const MILLICENTS_PER_USD = 100_000;
@@ -73,7 +74,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     },
     // Daily LLM spend (USD) over the window — the trend behind the MTD scalar.
     async series(db, tenantId, days) {
-      const points = await dailySumSeries(db, llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.costUsdMillicents, tenantId, days);
+      const points = await dailySumSeries(usageDatabaseOf(db), llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.costUsdMillicents, tenantId, days);
       return points.map((p) => ({ day: p.day, value: p.value / MILLICENTS_PER_USD }));
     },
   },
@@ -297,10 +298,10 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     unit: '',
     description: 'Total LLM tokens consumed per day over the window.',
     async compute(db, tenantId, days) {
-      return seriesTotal(await dailySumSeries(db, llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.totalTokens, tenantId, days));
+      return seriesTotal(await dailySumSeries(usageDatabaseOf(db), llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.totalTokens, tenantId, days));
     },
     series(db, tenantId, days) {
-      return dailySumSeries(db, llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.totalTokens, tenantId, days);
+      return dailySumSeries(usageDatabaseOf(db), llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.totalTokens, tenantId, days);
     },
   },
   'alerts.fires': {

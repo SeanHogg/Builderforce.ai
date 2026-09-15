@@ -11,6 +11,7 @@
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { usageDatabaseOf } from '../llm/usageLedger';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { utcDayStart } from '../llm/tokenUsage';
@@ -103,8 +104,10 @@ export async function buildBuilderInsightsSnapshot(
   if (scope.projectId != null) filters.push(eq(llmUsageLog.projectId, scope.projectId));
   const where = and(...filters);
 
-  // Today's totals + the top model, in two bounded grouped scans.
-  const [totalsRow] = await db
+  // Today's totals + the top model, in two bounded grouped scans — on the ledger's
+  // own database (operational in production), not the core copy.
+  const usageDb = usageDatabaseOf(db);
+  const [totalsRow] = await usageDb
     .select({
       tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)`,
       costMc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)`,
@@ -112,7 +115,7 @@ export async function buildBuilderInsightsSnapshot(
     .from(llmUsageLog)
     .where(scopedToTenant(llmUsageLog, scope.tenantId, where));
 
-  const [topModelRow] = await db
+  const [topModelRow] = await usageDb
     .select({
       model: llmUsageLog.model,
       tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)`,

@@ -42,12 +42,20 @@
  * site produced THOSE leads. The attributed rows are what make "what did the
  * thing I built actually do for anyone" a query.
  *
+ * ── WHERE THE ROWS ARE READ ─────────────────────────────────────────────────
+ * The site tables live on the APPS database; `marketing_leads`, `objects` and
+ * `metric_facts` on the core one, and no statement can span the two. So each
+ * metric aggregates its site rows on the apps database first — to the finest grain
+ * any of its facts needs — and the facts select from those rows ({@link rowsTable}),
+ * UNIONed with core rows where the metric spans both.
+ *
  * See {@link ../metricRollup} for the engine, the honesty rule (no
  * zero-fill) and why an attributed row must carry its own dimension key.
  */
 
 import { sql } from 'drizzle-orm';
-import { fact, objectRef, type DomainRollup } from '../metricRollup';
+import type { Db } from '../../../infrastructure/database/connection';
+import { fact, objectRef, resultRows, rowsTable, type DomainRollup, type PresentTables, type RowsColumn } from '../metricRollup';
 
 /** How much history each pass recomputes. Long enough to repair a gap left by a
  *  failed sweep, short enough that the pass stays a bounded scan. */
@@ -55,40 +63,50 @@ const WINDOW_DAYS = 90;
 
 const since = sql`DATE_TRUNC('day', NOW()) - (${WINDOW_DAYS} * INTERVAL '1 day')`;
 
+/** Identified site submissions per (tenant, site, day) — read on the apps database. */
+const SITE_LEAD_COLUMNS: readonly RowsColumn[] = [
+  { name: 'tenant_id', type: 'int' },
+  { name: 'site_id', type: 'int' },
+  { name: 'subdomain', type: 'text' },
+  { name: 'bucket_at', type: 'timestamp' },
+  { name: 'n', type: 'bigint' },
+];
+
 /**
- * Identified submissions, from every source that captures one.
- *
- * A UNION rather than two metrics: a lead that arrived through a published
- * site's form and a lead typed into the CRM are the same fact about the funnel,
- * and two keys would make the headline a sum a reader has to know to compute.
+ * One grouped read serves both lead facts: the per-site grain is the attributed
+ * series, and the tenant total is its sum. The joins lose no record — every
+ * `site_records` row has a collection and every collection a site (both NOT NULL,
+ * cascading FKs) — so the total is the same count the un-joined scan gave.
  */
-function leadRows(present: ReadonlySet<string>) {
-  const parts = [sql`
-    SELECT r.tenant_id, DATE_TRUNC('day', r.created_at) AS bucket_at
+async function siteLeadRows(apps: Db) {
+  return resultRows(await apps.execute(sql`
+    SELECT r.tenant_id, s.id AS site_id, s.subdomain, DATE_TRUNC('day', r.created_at) AS bucket_at, COUNT(*) AS n
       FROM site_records r
+      JOIN site_collections c ON c.id = r.collection_id
+      JOIN project_sites s ON s.id = c.site_id
      WHERE r.tenant_id IS NOT NULL
        AND r.email IS NOT NULL
        AND r.created_at >= ${since}
-  `];
-  if (present.has('marketing_leads')) {
-    parts.push(sql`
-      SELECT l.tenant_id, DATE_TRUNC('day', l.created_at) AS bucket_at
-        FROM marketing_leads l
-       WHERE l.tenant_id IS NOT NULL
-         AND l.email IS NOT NULL
-         AND l.created_at >= ${since}
-    `);
-  }
-  return sql.join(parts, sql` UNION ALL `);
+     GROUP BY r.tenant_id, s.id, s.subdomain, DATE_TRUNC('day', r.created_at)
+  `));
 }
 
+/** Completed goals per (tenant, site, day, kind) — read on the apps database. */
+const CONVERSION_COLUMNS: readonly RowsColumn[] = [
+  { name: 'tenant_id', type: 'int' },
+  { name: 'site_id', type: 'int' },
+  { name: 'subdomain', type: 'text' },
+  { name: 'bucket_at', type: 'timestamp' },
+  { name: 'kind', type: 'text' },
+  { name: 'n', type: 'bigint' },
+];
+
 /**
- * Completed goals, from the two the platform observes first-hand.
- *
- * `site_id` rides along so the same subquery serves the tenant total and the
- * per-site attribution without the rows being read twice.
+ * Completed goals, from the two the platform observes first-hand, aggregated to the
+ * grain every conversion fact reads from — so the rows are read once for the total,
+ * the kind split and the per-site attribution alike.
  */
-function conversionRows(present: ReadonlySet<string>) {
+async function conversionRows(apps: Db, present: PresentTables) {
   const parts = [];
   if (present.has('site_users')) {
     parts.push(sql`
@@ -109,7 +127,16 @@ function conversionRows(present: ReadonlySet<string>) {
          AND s.created_at >= ${since}
     `);
   }
-  return parts.length ? sql.join(parts, sql` UNION ALL `) : null;
+  if (!parts.length) return null;
+  const site = present.has('project_sites')
+    ? { column: sql`s.subdomain`, join: sql`LEFT JOIN project_sites s ON s.id = x.site_id` }
+    : { column: sql`NULL::text`, join: sql`` };
+  return resultRows(await apps.execute(sql`
+    SELECT x.tenant_id, x.site_id, ${site.column} AS subdomain, x.bucket_at, x.kind, COUNT(*) AS n
+      FROM (${sql.join(parts, sql` UNION ALL `)}) AS x
+      ${site.join}
+     GROUP BY x.tenant_id, x.site_id, ${site.column}, x.bucket_at, x.kind
+  `));
 }
 
 export const GROWTH_ROLLUP: DomainRollup = {
@@ -118,8 +145,18 @@ export const GROWTH_ROLLUP: DomainRollup = {
     {
       key: 'growth.leads',
       requires: ['site_records'],
-      build: (present) => {
-        const rows = leadRows(present);
+      build: async (present, { apps }) => {
+        const sites = rowsTable('v', SITE_LEAD_COLUMNS, await siteLeadRows(apps));
+        // A lead from a published site's form and one typed into the CRM are the same
+        // fact about the funnel, so the headline is ONE series over both sources.
+        const crm = present.has('marketing_leads')
+          ? sql` UNION ALL
+              SELECT m.tenant_id, DATE_TRUNC('day', m.created_at) AS bucket_at, 1::bigint AS n
+                FROM marketing_leads m
+               WHERE m.tenant_id IS NOT NULL
+                 AND m.email IS NOT NULL
+                 AND m.created_at >= ${since}`
+          : sql``;
         return [
           fact({
             metric: 'growth.leads',
@@ -127,31 +164,23 @@ export const GROWTH_ROLLUP: DomainRollup = {
             unit: 'leads',
             tenant: sql`l.tenant_id`,
             bucketAt: sql`l.bucket_at`,
-            value: sql`COUNT(*)`,
-            tail: sql`FROM (${rows}) AS l GROUP BY l.tenant_id, l.bucket_at`,
+            value: sql`SUM(l.n)`,
+            tail: sql`FROM (SELECT v.tenant_id, v.bucket_at, v.n FROM ${sites}${crm}) AS l GROUP BY l.tenant_id, l.bucket_at`,
           }),
-          // The attributed half. Only `site_records` can be attributed — a CRM
-          // lead has no artifact behind it — so this reads the site path alone
-          // rather than the union.
+          // The attributed half. Only a site submission can be attributed — a CRM
+          // lead has no artifact behind it — so this reads the site rows alone. Each
+          // row is already one (tenant, site, day) point.
           fact({
             metric: 'growth.leads',
             bucket: 'day',
             unit: 'leads',
-            tenant: sql`r.tenant_id`,
-            bucketAt: sql`DATE_TRUNC('day', r.created_at)`,
-            value: sql`COUNT(*)`,
-            dimension: sql`JSONB_BUILD_OBJECT('site', s.subdomain, 'site_id', s.id)`,
-            dimensionKey: sql`'site:' || s.id`,
-            objectId: objectRef('site', sql`r.tenant_id`, sql`s.id::text`),
-            tail: sql`
-                FROM site_records r
-                JOIN site_collections c ON c.id = r.collection_id
-                JOIN project_sites s ON s.id = c.site_id
-               WHERE r.tenant_id IS NOT NULL
-                 AND r.email IS NOT NULL
-                 AND r.created_at >= ${since}
-               GROUP BY r.tenant_id, s.id, s.subdomain, DATE_TRUNC('day', r.created_at)
-            `,
+            tenant: sql`v.tenant_id`,
+            bucketAt: sql`v.bucket_at`,
+            value: sql`v.n`,
+            dimension: sql`JSONB_BUILD_OBJECT('site', v.subdomain, 'site_id', v.site_id)`,
+            dimensionKey: sql`'site:' || v.site_id`,
+            objectId: objectRef('site', sql`v.tenant_id`, sql`v.site_id::text`),
+            tail: sql`FROM ${sites}`,
           }),
         ];
       },
@@ -162,9 +191,10 @@ export const GROWTH_ROLLUP: DomainRollup = {
       // demanding both would silence the metric on a site with accounts and no
       // billing — which is most of them on day one.
       requires: [],
-      build: (present) => {
-        const rows = conversionRows(present);
+      build: async (present, { apps }) => {
+        const rows = await conversionRows(apps, present);
         if (!rows) return null;
+        const c = rowsTable('c', CONVERSION_COLUMNS, rows);
         return [
           fact({
             metric: 'growth.conversions',
@@ -172,8 +202,8 @@ export const GROWTH_ROLLUP: DomainRollup = {
             unit: 'conversions',
             tenant: sql`c.tenant_id`,
             bucketAt: sql`c.bucket_at`,
-            value: sql`COUNT(*)`,
-            tail: sql`FROM (${rows}) AS c GROUP BY c.tenant_id, c.bucket_at`,
+            value: sql`SUM(c.n)`,
+            tail: sql`FROM ${c} GROUP BY c.tenant_id, c.bucket_at`,
           }),
           fact({
             metric: 'growth.conversions',
@@ -181,10 +211,10 @@ export const GROWTH_ROLLUP: DomainRollup = {
             unit: 'conversions',
             tenant: sql`c.tenant_id`,
             bucketAt: sql`c.bucket_at`,
-            value: sql`COUNT(*)`,
+            value: sql`SUM(c.n)`,
             dimension: sql`JSONB_BUILD_OBJECT('kind', c.kind)`,
             dimensionKey: sql`'kind:' || c.kind`,
-            tail: sql`FROM (${rows}) AS c GROUP BY c.tenant_id, c.bucket_at, c.kind`,
+            tail: sql`FROM ${c} GROUP BY c.tenant_id, c.bucket_at, c.kind`,
           }),
           ...(present.has('project_sites')
             ? [fact({
@@ -193,14 +223,17 @@ export const GROWTH_ROLLUP: DomainRollup = {
                 unit: 'conversions',
                 tenant: sql`c.tenant_id`,
                 bucketAt: sql`c.bucket_at`,
-                value: sql`COUNT(*)`,
-                dimension: sql`JSONB_BUILD_OBJECT('site', s.subdomain, 'site_id', s.id)`,
-                dimensionKey: sql`'site:' || s.id`,
-                objectId: objectRef('site', sql`c.tenant_id`, sql`s.id::text`),
+                value: sql`SUM(c.n)`,
+                dimension: sql`JSONB_BUILD_OBJECT('site', c.subdomain, 'site_id', c.site_id)`,
+                dimensionKey: sql`'site:' || c.site_id`,
+                objectId: objectRef('site', sql`c.tenant_id`, sql`c.site_id::text`),
+                // `subdomain IS NOT NULL` is the inner join the single-database query
+                // made: a conversion whose site row is gone is counted in the total but
+                // cannot be attributed to an artifact that no longer exists.
                 tail: sql`
-                    FROM (${rows}) AS c
-                    JOIN project_sites s ON s.id = c.site_id
-                   GROUP BY c.tenant_id, s.id, s.subdomain, c.bucket_at
+                    FROM ${c}
+                   WHERE c.subdomain IS NOT NULL
+                   GROUP BY c.tenant_id, c.site_id, c.subdomain, c.bucket_at
                 `,
               })]
             : []),

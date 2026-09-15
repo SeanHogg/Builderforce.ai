@@ -11,7 +11,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 const probeResults: Array<Date | null> = [];
 
-vi.mock('../../infrastructure/database/connection', () => ({
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: () => ({
     select: () => {
       const min = probeResults.shift() ?? null;

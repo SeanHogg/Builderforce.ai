@@ -42,7 +42,7 @@ const CLOUD_RUN_ROLE: ModelRole = 'code';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { lexicalEval } from '../eval/semanticEval';
-import { resolveUsageDatabase } from '../llm/usageLedger';
+import { resolveUsageDatabase, usageDatabaseOf } from '../llm/usageLedger';
 import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
@@ -257,7 +257,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
  *  locked onto (the truth of what ran). Empty when the run produced no LLM calls. */
 async function resolveRunModel(db: Db, executionId: number): Promise<{ model: string; steps: number; costMc: number }> {
   try {
-    const rows = await db
+    const rows = await usageDatabaseOf(db)
       .select({
         model: llmUsageLog.model,
         n: sql<number>`count(*)::int`,

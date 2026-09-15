@@ -23,6 +23,7 @@
 import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { analyzeDependencies } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
+import { usageDatabaseOf } from '../llm/usageLedger';
 import {
   deploymentEvents,
   initiatives,
@@ -494,7 +495,7 @@ export async function computePortfolioRollup(
 
   // ── spend (per-project LLM cost, grouped so byInitiative can reuse it) ──────
   const llmByProject = projectIds.length
-    ? await db
+    ? await usageDatabaseOf(db)
         .select({
           projectId: llmUsageLog.projectId,
           millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,

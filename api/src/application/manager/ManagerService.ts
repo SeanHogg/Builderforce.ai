@@ -1574,8 +1574,12 @@ export async function runManagerForProject(
     // reserved slice was gone before the stage started — a genuinely overrun pass, not
     // the routine starvation the reserve exists to prevent.
     budget.shed('triage');
-    await recordManagerAction(db, {
+    // A STATE while it persists: an overrun board repeats this every pass. Journalled
+    // when it starts (a normal triage row in between re-arms it), not on every tick.
+    await recordManagerActionOnChange(db, {
       tenantId, projectId, runTaskId, actionType: 'triage',
+      stateKey: 'triage-skipped',
+      fingerprint: stateFingerprint(['triage-skipped']),
       summary: `Stall triage skipped this pass — the whole ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget, including the ${Math.round(MANAGER_TRIAGE_RESERVE_MS / 1000)}s reserved for triage, was already spent when it was reached. The stages that overran it yield their turn on the next pass.`,
       detail: {
         budgetMs: MANAGER_PASS_BUDGET_MS, reserveMs: MANAGER_TRIAGE_RESERVE_MS,

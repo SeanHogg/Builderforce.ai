@@ -101,6 +101,8 @@ describe('execution lifecycle outbox', () => {
       targetId: '42',
     });
     expect(updateSets.at(-1)).toMatchObject({ status: 'done', lastError: null });
+    // One conditional settle — no separate `processing` claim write.
+    expect(updateSets).toHaveLength(1);
   });
 
   it('records a projection exception and schedules an idempotent retry', async () => {

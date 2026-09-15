@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
 import { BuilderForcePanel } from "./builderforcePanel";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
+import { authLabels } from "./authLabels";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
 
 /** Inbound messages unique to the Project 360 panel (shared cases live in the base). */
@@ -99,7 +100,7 @@ export class Project360Panel extends WebviewPanelBase<Project360Inbound> {
       hasWorkspace: !!vscode.workspace.workspaceFolders?.[0],
       project: { id: this.projectId, name: this.projectName },
       tools: [],
-      labels: buildProject360Labels(),
+      labels: { ...authLabels(), ...buildProject360Labels() },
     });
   }
 

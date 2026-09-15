@@ -18,6 +18,7 @@ import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { projectSites } from '../../infrastructure/database/schema';
 import type { ProjectStoragePurge } from '../project/ProjectService';
+import { appsDatabaseOf } from './appsDatabase';
 import { invalidateCustomDomain, invalidateSite } from './siteHosting';
 import { workspacePrefix } from './workspaceStore';
 
@@ -65,7 +66,7 @@ export function r2ProjectStoragePurge(env: Env & { UPLOADS?: R2Bucket }): Projec
   return {
     async plan(projectId) {
       const prefixes = [workspacePrefix(projectId)];
-      const [site] = await buildDatabase(env)
+      const [site] = await appsDatabaseOf(buildDatabase(env))
         .select({
           r2Prefix: projectSites.r2Prefix,
           subdomain: projectSites.subdomain,

@@ -27,6 +27,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
+import { deleteAppsForProjects } from '../../infrastructure/database/appsCascade';
 import type { Env } from '../../env';
 import { hasPendingInvite, invite } from '../kernel/InvitationService';
 import type {
@@ -306,7 +307,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     },
 
     async rollbackImport(runId, tenantId) {
-      return db.transaction(async (tx) => {
+      const { removed, projectIds } = await db.transaction(async (tx) => {
         const removedTasks = await tx.delete(tasks)
           .where(scopedToTenant(tasks, tenantId, eq(tasks.importRunId, runId)))
           .returning({ id: tasks.id });
@@ -326,8 +327,12 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
         const [run] = await tx.select({ summary: importRuns.summary }).from(importRuns).where(and(eq(importRuns.id, runId), eq(importRuns.tenantId, tenantId))).limit(1);
         await tx.update(importRuns).set({ status: 'rolled_back', summary: { ...((run?.summary as Record<string, number> | null) ?? {}), ...removed }, errorMessage: null, updatedAt: new Date() })
           .where(and(eq(importRuns.id, runId), eq(importRuns.tenantId, tenantId)));
-        return removed;
+        return { removed, projectIds: removedProjects.map((p) => p.id) };
       });
+      // After the commit: the apps database cannot take part in this transaction, and a
+      // rollback that failed must not have taken the projects' sites with it.
+      await deleteAppsForProjects(db, projectIds);
+      return removed;
     },
   };
 }

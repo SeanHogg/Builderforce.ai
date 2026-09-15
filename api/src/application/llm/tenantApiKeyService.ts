@@ -6,6 +6,7 @@
  */
 import { and, desc, eq, gte, isNull, sql, sum } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { usageDatabaseOf } from './usageLedger';
 import type { Env } from '../../env';
 import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
@@ -480,7 +481,9 @@ export async function queryTenantApiKeyUsage(
     return { summary: { total: 0, totalTokens: 0, modelCount: 0 }, rows: [], days, page, limit };
   }
 
-  const rowsRaw = await db
+  // The key row is core; its usage is on the ledger's database (operational in prod).
+  const usageDb = usageDatabaseOf(db);
+  const rowsRaw = await usageDb
     .select({
       id:               llmUsageLog.id,
       createdAt:        llmUsageLog.createdAt,
@@ -507,7 +510,7 @@ export async function queryTenantApiKeyUsage(
 
   // Single GROUP BY for total + token sum + distinct-model count. Cheaper
   // than three separate queries and keeps the cards consistent with rows.
-  const [summary] = await db
+  const [summary] = await usageDb
     .select({
       total:       sql<number>`COUNT(*)::int`,
       totalTokens: sum(llmUsageLog.totalTokens),

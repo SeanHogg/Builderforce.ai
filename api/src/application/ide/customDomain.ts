@@ -30,6 +30,7 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { appsDatabaseOf } from './appsDatabase';
 import { projectSites } from '../../infrastructure/database/schema';
 import { isUniqueViolation as isUniqueConstraintViolation } from '../../infrastructure/database/uniqueViolation';
 import {
@@ -265,7 +266,8 @@ export async function getCustomDomain(
   tenantId: number,
   projectId: number,
 ): Promise<DomainOpResult> {
-  const [row] = await db
+  const apps = appsDatabaseOf(db);
+  const [row] = await apps
     .select(SITE_DOMAIN_COLUMNS)
     .from(projectSites)
     .where(and(eq(projectSites.projectId, projectId), eq(projectSites.tenantId, tenantId)))
@@ -293,7 +295,8 @@ export async function claimCustomDomain(
     return { ok: false, status: 400, error: 'Enter a domain you own, like example.com.' };
   }
 
-  const [site] = await db
+  const apps = appsDatabaseOf(db);
+  const [site] = await apps
     .select({ id: projectSites.id, customDomain: projectSites.customDomain })
     .from(projectSites)
     .where(and(eq(projectSites.projectId, projectId), eq(projectSites.tenantId, tenantId)))
@@ -302,7 +305,7 @@ export async function claimCustomDomain(
 
   // Same tenant, different project — answerable without a cross-tenant read, and
   // the only collision we can describe usefully ("you already use it over there").
-  const [mine] = await db
+  const [mine] = await apps
     .select({ projectId: projectSites.projectId })
     .from(projectSites)
     .where(and(
@@ -322,7 +325,7 @@ export async function claimCustomDomain(
   // across tenants would let anyone probe which domains other customers own. The
   // platform-wide unique index (0412) is the arbiter instead, and its violation is
   // translated here — the database is the only component entitled to see both rows.
-  const claimUpdate = () => db
+  const claimUpdate = () => apps
     .update(projectSites)
     .set({
       customDomain: hostname,
@@ -367,7 +370,8 @@ export async function verifyCustomDomain(
   projectId: number,
   deps: DomainOpDeps = {},
 ): Promise<DomainOpResult> {
-  const [row] = await db
+  const apps = appsDatabaseOf(db);
+  const [row] = await apps
     .select(SITE_DOMAIN_COLUMNS)
     .from(projectSites)
     .where(and(eq(projectSites.projectId, projectId), eq(projectSites.tenantId, tenantId)))
@@ -383,7 +387,7 @@ export async function verifyCustomDomain(
     const detail = proof.found.length
       ? `Found ${proof.found.length} TXT record(s) at ${proof.recordName}, none matching the token.`
       : `No TXT record found at ${proof.recordName} yet. DNS changes can take a few minutes.`;
-    const [updated] = await db
+    const [updated] = await apps
       .update(projectSites)
       .set({ customDomainStatus: 'pending_dns', customDomainError: detail, updatedAt: sql`NOW()` })
       .where(and(eq(projectSites.projectId, projectId), eq(projectSites.tenantId, tenantId)))
@@ -414,7 +418,7 @@ export async function verifyCustomDomain(
     }
   }
 
-  const [updated] = await db
+  const [updated] = await apps
     .update(projectSites)
     .set({
       customDomainStatus: status,
@@ -440,7 +444,8 @@ export async function releaseCustomDomain(
   projectId: number,
   deps: DomainOpDeps = {},
 ): Promise<DomainOpResult> {
-  const [row] = await db
+  const apps = appsDatabaseOf(db);
+  const [row] = await apps
     .select(SITE_DOMAIN_COLUMNS)
     .from(projectSites)
     .where(and(eq(projectSites.projectId, projectId), eq(projectSites.tenantId, tenantId)))
@@ -450,7 +455,7 @@ export async function releaseCustomDomain(
   const client = deps.hostnameClient !== undefined ? deps.hostnameClient : cloudflareHostnameClient(env);
   if (client && row.customDomainHostnameId) await client.remove(row.customDomainHostnameId);
 
-  const [updated] = await db
+  const [updated] = await apps
     .update(projectSites)
     .set({
       customDomain: null,
@@ -484,7 +489,7 @@ export async function runCustomDomainSweep(
   db: Db,
   opts: { maxDomains?: number } = {},
 ): Promise<{ checked: number; activated: number }> {
-  const pending = await db
+  const pending = await appsDatabaseOf(db)
     .select({
       projectId: projectSites.projectId,
       tenantId: projectSites.tenantId,

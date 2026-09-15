@@ -29,6 +29,7 @@ import { projectSites, siteTrafficDaily } from '../../infrastructure/database/sc
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
 import { excluded } from '../../infrastructure/database/upsert';
+import { appsDatabaseOf } from './appsDatabase';
 
 /** One site's pending counts for one UTC day. */
 export interface TrafficDelta {
@@ -211,7 +212,8 @@ export function sharedTrafficBuffer(): SiteTrafficBuffer {
  */
 export async function flushTrafficDeltas(db: Db, deltas: TrafficDelta[]): Promise<number> {
   if (deltas.length === 0) return 0;
-  await db
+  // site tables live on the apps database
+  await appsDatabaseOf(db)
     .insert(siteTrafficDaily)
     .values(
       deltas.map((d) => ({
@@ -283,7 +285,7 @@ export async function getSiteTraffic(
     trafficCacheKey(projectId, days),
     async () => {
       const since = utcDay(Date.now() - days * 86_400_000);
-      const rows = await db
+      const rows = await appsDatabaseOf(db)
         .select({
           day: siteTrafficDaily.day,
           pageViews: siteTrafficDaily.pageViews,
@@ -339,7 +341,7 @@ export async function siteForProject(
   tenantId: number,
   projectId: number,
 ): Promise<{ siteId: number; subdomain: string; customDomain: string | null } | null> {
-  const [row] = await db
+  const [row] = await appsDatabaseOf(db)
     .select({
       siteId: projectSites.id,
       subdomain: projectSites.subdomain,

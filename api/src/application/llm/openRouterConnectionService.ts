@@ -35,6 +35,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { resolveUsageDatabase } from './usageLedger';
 import { tenantOpenRouterConnections } from '../../infrastructure/database/schema';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { credentialSecret } from '../integrations/credentialCrypto';
@@ -267,7 +268,8 @@ type ModelUsageRow = { requests: number; tokens: number; costMillicents: number;
 async function openRouterModelUsage(env: Env, tenantId: number): Promise<Record<string, ModelUsageRow>> {
   return getOrSetCached(env, usageCacheKey(tenantId), async () => {
     try {
-      const db = buildDatabase(env);
+      // The ledger's own database (operational in production), not the core copy.
+      const db = resolveUsageDatabase(env, buildDatabase(env));
       const result = await db.execute(sql`
         SELECT model,
                COUNT(*)::int                          AS requests,

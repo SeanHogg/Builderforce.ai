@@ -20,6 +20,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { projectSites, qaTargets } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { appsDatabaseOf } from './appsDatabase';
 import {
   SITES_PREFIX,
   HOSTING_APEX,
@@ -91,7 +92,8 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
     return { ok: false, status: 400, error: 'No assets uploaded. Build the project first.' };
   }
 
-  const [current] = await db
+  const apps = appsDatabaseOf(db);
+  const [current] = await apps
     .select({ subdomain: projectSites.subdomain, landingObjectId: projectSites.landingObjectId })
     .from(projectSites)
     .where(scopedToTenant(projectSites, tenantId, eq(projectSites.projectId, projectId)))
@@ -178,7 +180,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
     });
   }
 
-  const [siteRow] = await db
+  const [siteRow] = await apps
     .insert(projectSites)
     .values({
       projectId,

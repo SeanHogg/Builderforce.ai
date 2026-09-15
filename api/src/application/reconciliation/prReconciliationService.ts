@@ -1,5 +1,5 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -322,6 +322,21 @@ export interface ReconciliationRunResult {
   errors: number;
 }
 
+/** The identity of a canonical PR row the handoff needs — what both the stored and
+ *  the freshly inserted rows carry. */
+interface CanonicalPr {
+  id: string;
+  number: number | null;
+  taskId: number | null;
+  updatedAt: Date | null;
+}
+
+/** Whether a stored row already holds every value in `next` (null and undefined equal). */
+function storedValuesMatch(stored: Record<string, unknown> | undefined, next: Record<string, unknown>): boolean {
+  if (!stored) return false;
+  return Object.entries(next).every(([key, value]) => (stored[key] ?? null) === (value ?? null));
+}
+
 export async function runPrTicketReconciliation(
   env: Env,
   db: Db,
@@ -373,6 +388,10 @@ export async function runPrTicketReconciliation(
     const internalRows = await db.select({
       id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
       updatedAt: pullRequests.updatedAt,
+      // The columns the refresh below writes, so an unchanged PR is not rewritten.
+      url: pullRequests.url, branchName: pullRequests.branchName, baseBranch: pullRequests.baseBranch,
+      status: pullRequests.status, externalTicketRef: pullRequests.externalTicketRef,
+      buildStatus: pullRequests.buildStatus, buildError: pullRequests.buildError,
     }).from(pullRequests).where(and(
       eq(pullRequests.repoId, repo.id), eq(pullRequests.tenantId, args.tenantId),
     )).orderBy(desc(pullRequests.updatedAt), desc(pullRequests.id));
@@ -443,7 +462,7 @@ export async function runPrTicketReconciliation(
     // Reconciliation is the inventory boundary; the manager is the policy boundary.
     // Persist EVERY GitHub PR. The manager merge query requires a valid task link, so
     // unlinked rows are visible/auditable without becoming an orphan merge back door.
-    const canonicalByNumber = new Map(internalByNumber);
+    const canonicalByNumber = new Map<number, CanonicalPr>(internalByNumber);
     if (mode === 'apply') {
       const missing = decisions.filter((item) => !internalByNumber.has(item.pr.number));
       if (missing.length > 0) {
@@ -469,17 +488,24 @@ export async function runPrTicketReconciliation(
       // provider-open row (including a concurrent insert ignored above) in bounded
       // parallel batches; this is intentionally before item persistence so a
       // failed handoff is visible as a failed run, never a misleading "queued" item.
+      //
+      // A row already carrying every value is skipped. The reconciler runs every few
+      // minutes per repo, and rewriting each open PR unconditionally was ~1.4M writes
+      // on 790 rows — and bumped `updatedAt`, the cache version token for
+      // `getPullRequestDetail`, so every run also discarded that cache.
       for (let offset = 0; offset < decisions.length; offset += 25) {
         await Promise.all(decisions.slice(offset, offset + 25).map(({ pr, taskId, decision }) => {
           const build = canonicalBuildState(decision);
-          return db.update(pullRequests).set({
+          const next = {
             taskId, url: pr.url, branchName: pr.headBranch, baseBranch: pr.baseBranch,
             status: pr.isDraft ? 'draft' : 'open',
             externalTicketRef: taskId == null
               ? (isDependencyBot(pr.author) ? 'dependency-review-unlinked' : 'reconciliation-unlinked')
               : null,
-            buildStatus: build.buildStatus, buildError: build.buildError, updatedAt: new Date(),
-          }).where(and(
+            buildStatus: build.buildStatus, buildError: build.buildError,
+          };
+          if (storedValuesMatch(internalByNumber.get(pr.number), next)) return null;
+          return db.update(pullRequests).set({ ...next, updatedAt: new Date() }).where(and(
             eq(pullRequests.tenantId, args.tenantId), eq(pullRequests.repoId, repo.id),
             eq(pullRequests.number, pr.number),
           ));
@@ -516,14 +542,21 @@ export async function runPrTicketReconciliation(
         const queueAction = mode === 'apply'
           ? reconciliationQueueAction(decision, taskId != null && ticket != null)
           : null;
+        // The manager handoff is decided here, so it is written with the item rather
+        // than by a second UPDATE per PR after the journal (that doubled every run's
+        // item writes). Same rule the handoff loop below applies: non-close decisions
+        // whose canonical PR row exists.
+        const handoff = mode === 'apply' && decision.recommendedAction !== 'close' && canonicalByNumber.has(pr.number)
+          ? (queueAction ?? 'queue_investigate')
+          : null;
         return ({
         runId, tenantId: args.tenantId, repoId: repo.id, prNumber: pr.number, prUrl: pr.url,
         title: pr.title, headBranch: pr.headBranch, taskId, taskStatus: ticket?.status ?? null,
         classification: decision.classification, recommendedAction: decision.recommendedAction,
         confidence: decision.confidence, reasonCodes: decision.reasonCodes,
         checkSummary: decision.checkSummary,
-        appliedAction: null,
-        appliedAt: null,
+        appliedAction: handoff,
+        appliedAt: handoff ? new Date() : null,
         evidence: {
           headOid: pr.headOid, author: pr.author, createdAt: pr.createdAt, updatedAt: pr.updatedAt,
           changedFiles: pr.changedFiles, additions: pr.additions, deletions: pr.deletions,
@@ -553,7 +586,11 @@ export async function runPrTicketReconciliation(
           status: TaskStatus.IN_REVIEW,
           completedAt: null,
           updatedAt: new Date(),
-        }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.projectId, repo.projectId), inArray(tasks.id, reviewTaskIds))).returning({ id: tasks.id });
+        // Only tickets not already in review: the same green PRs are seen every run.
+        }).where(scopedToTenant(
+          tasks, args.tenantId, eq(tasks.projectId, repo.projectId), inArray(tasks.id, reviewTaskIds),
+          ne(tasks.status, TaskStatus.IN_REVIEW),
+        )).returning({ id: tasks.id });
         reviewTicketsQueued = moved.length;
       }
 
@@ -571,13 +608,18 @@ export async function runPrTicketReconciliation(
         const description = ticket && 'description' in ticket && typeof ticket.description === 'string'
           ? ticket.description
           : '';
-        const [activated] = await db.update(tasks).set({
-          status: TaskStatus.IN_PROGRESS,
-          completedAt: null,
-          description: description.includes(marker) ? description : `${description}\n\n${repairNote}`.trim(),
-          updatedAt: new Date(),
-        }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, repairHead.taskId))).returning({ id: tasks.id });
-        repairTicketsReopened = activated ? 1 : 0;
+        // The repair head stays the same until its PR lands, so on most runs the ticket
+        // is already active with its note — nothing to write.
+        const alreadyActive = ticket?.status === TaskStatus.IN_PROGRESS && description.includes(marker);
+        if (!alreadyActive) {
+          const [activated] = await db.update(tasks).set({
+            status: TaskStatus.IN_PROGRESS,
+            completedAt: null,
+            description: description.includes(marker) ? description : `${description}\n\n${repairNote}`.trim(),
+            updatedAt: new Date(),
+          }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, repairHead.taskId))).returning({ id: tasks.id });
+          repairTicketsReopened = activated ? 1 : 0;
+        }
       }
 
       for (const item of decisions.filter(({ decision }) => decision.recommendedAction !== 'close')) {
@@ -607,12 +649,6 @@ export async function runPrTicketReconciliation(
         });
         queued++;
         if (wrote) journaled++;
-        await db.update(prReconciliationItems).set({
-          appliedAction: handoff, appliedAt: new Date(),
-        }).where(and(
-          eq(prReconciliationItems.tenantId, args.tenantId),
-          eq(prReconciliationItems.runId, runId), eq(prReconciliationItems.prNumber, item.pr.number),
-        ));
       }
 
       const approvedSet = new Set(resolvedApproved);

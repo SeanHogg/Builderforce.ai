@@ -48,9 +48,14 @@ export class UnauthorizedError extends DomainError {
 
 /** Thrown when a required platform dependency cannot safely complete an operation. */
 export class ServiceUnavailableError extends DomainError {
-  constructor(message = 'Service temporarily unavailable') {
+  /** Machine-readable name of the outage (`database_unavailable`). Unlike the message,
+   *  it reaches the caller even on this 5xx — a slug the API chose, never a diagnostic. */
+  readonly code?: string;
+  constructor(message = 'Service temporarily unavailable', options?: { code?: string; cause?: unknown }) {
     super(message);
     this.name = 'ServiceUnavailableError';
+    if (options?.code) this.code = options.code;
+    if (options && 'cause' in options) this.cause = options.cause;
   }
 }
 

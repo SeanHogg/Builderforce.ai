@@ -6,7 +6,10 @@ import { fakeDb } from '../../../test/fakeDb';
 import type { Env } from '../../env';
 
 // The lookups build their own connection, so the driver is the seam to stub.
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: vi.fn() }));
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
+  buildDatabase: vi.fn(),
+}));
 
 describe('siteHosting apex', () => {
   it('hosts on the single-label apex (free Universal SSL wildcard)', () => {

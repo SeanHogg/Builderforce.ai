@@ -127,6 +127,39 @@ export function setSelectedWorkspace(tenantId: number | undefined): void {
   workspaceCache = undefined;
 }
 
+/**
+ * Fired with the refused key when the gateway REJECTS the stored editor key (revoked,
+ * deleted, or a key with no user behind it). Distinct from "unreachable": a rejection is
+ * a verdict on the key, so the editor must stop presenting itself as signed in — see
+ * `editorKeyGuard.ts`.
+ */
+const editorKeyRejected = new vscode.EventEmitter<string>();
+export const onEditorKeyRejected = editorKeyRejected.event;
+
+type KeyExchange =
+  | { ok: true; jwt: { token: string; exp: number; tenantId: number } }
+  | { ok: false; rejected: boolean };
+
+/** One `tenant-api-key-token` round trip, classified — no caching, no side effects. */
+async function requestBaseJwt(key: string): Promise<KeyExchange> {
+  try {
+    const res = await fetch(`${getBaseUrl()}/api/auth/tenant-api-key-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ apiKey: key }),
+    });
+    // 401 = invalid/revoked key; 400 = a key with no user (the route says "use device
+    // sign-in"). Anything else non-OK is the gateway, not the key.
+    if (res.status === 401 || res.status === 400) return { ok: false, rejected: true };
+    if (!res.ok) return { ok: false, rejected: false };
+    const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number };
+    if (!body.token || typeof body.tenantId !== "number") return { ok: false, rejected: false };
+    return { ok: true, jwt: { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: body.tenantId } };
+  } catch {
+    return { ok: false, rejected: false };
+  }
+}
+
 /** Exchange the stored editor key for its OWN tenant JWT (the key's bound workspace). */
 async function exchangeBaseJwt(
   secrets: vscode.SecretStorage,
@@ -135,20 +168,31 @@ async function exchangeBaseJwt(
   if (!force && baseJwt && Date.now() < baseJwt.exp - 60_000) return baseJwt;
   const key = await getApiKey(secrets);
   if (!key) return undefined;
-  try {
-    const res = await fetch(`${getBaseUrl()}/api/auth/tenant-api-key-token`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ apiKey: key }),
-    });
-    if (!res.ok) return undefined;
-    const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number };
-    if (!body.token || typeof body.tenantId !== "number") return undefined;
-    baseJwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: body.tenantId };
-    return baseJwt;
-  } catch {
+  const result = await requestBaseJwt(key);
+  if (!result.ok) {
+    if (result.rejected) editorKeyRejected.fire(key);
     return undefined;
   }
+  baseJwt = result.jwt;
+  return baseJwt;
+}
+
+/**
+ * Does the stored editor key still work? `none` = no key; `rejected` = the gateway
+ * refused it; `unreachable` = no verdict (offline / gateway error). Does NOT fire
+ * {@link onEditorKeyRejected} — the sign-in flow probes and handles the answer itself.
+ */
+export async function probeEditorKey(
+  secrets: vscode.SecretStorage,
+): Promise<"ok" | "rejected" | "unreachable" | "none"> {
+  const key = await getApiKey(secrets);
+  if (!key) return "none";
+  const result = await requestBaseJwt(key);
+  if (result.ok) {
+    baseJwt = result.jwt;
+    return "ok";
+  }
+  return result.rejected ? "rejected" : "unreachable";
 }
 
 async function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promise<string | undefined> {

@@ -34,6 +34,7 @@ import {
 import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from './defaultCloudAgent';
 import { recordAutoRunSkip, clearAutoRunSkip } from './autoRunSkipLedger';
 import { enforceCloudRunCap, type CloudRunCapResult } from './cloudRunLedger';
+import { agentExecutionEnabledCached } from './agentExecutionGate';
 import { assessRerunBackoff, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { resolveProjectInferenceModel } from '../llm/projectEvermind';
 import { authorizeManagedTaskExecution } from '../kanban/managedExecutionGuard';
@@ -155,10 +156,11 @@ export type SubmittedExecution = { id: number; status: string; toPlain(): unknow
  */
 export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found' | 'dispatch_error';
 
-/** The refusals a person directing a run may NOT override: they are billing entitlements,
- *  not backpressure, so a human click cannot clear them either. */
+/** The refusals a person directing a run may NOT override: billing entitlements, and the
+ *  workspace's own execution switch — none of them is backpressure, so a human click
+ *  cannot clear them either. */
 export const ENTITLEMENT_REFUSALS: ReadonlySet<CloudDispatchRefusalReason> = new Set<CloudDispatchRefusalReason>([
-  'cloud_run_limit', 'tenant_token_limit',
+  'cloud_run_limit', 'tenant_token_limit', 'execution_disabled',
 ]);
 
 export interface CloudDispatchRefusal {
@@ -235,6 +237,14 @@ export async function dispatchCloudRunForTask(
     .where(and(eq(tasks.id, params.taskId), eq(projects.tenantId, params.tenantId)))
     .limit(1);
   if (!taskRow) return refuse('task_not_found');
+
+  // The workspace switch — a REFUSAL, not the exception `RuntimeService.submit` would
+  // throw further in. Every dispatch path comes through here (lane entry, the manager's
+  // role runs, sign-off drives, Run now), and each of them used to get as far as submit,
+  // throw, and be logged as a dispatcher failure: thirteen per cron tick in production
+  // for one workspace that had simply been switched off. Submit still enforces it
+  // authoritatively; this is the cheap cached pre-check (see agentExecutionGate.ts).
+  if (!(await agentExecutionEnabledCached(env, db, params.tenantId))) return refuse('execution_disabled');
 
   const submittedBy = params.submittedBy ?? 'system:autofix';
 

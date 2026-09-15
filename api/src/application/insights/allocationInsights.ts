@@ -21,6 +21,7 @@
 
 import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { usageDatabaseOf } from '../llm/usageLedger';
 import {
   agentHosts,
   llmUsageLog,
@@ -507,7 +508,7 @@ export async function computeAllocationInsights(
   const taskIds = scoped.map((r) => r.taskId);
   const costByTask = new Map<number, number>();
   if (taskIds.length) {
-    const costRows = await db
+    const costRows = await usageDatabaseOf(db)
       .select({ taskId: llmUsageLog.taskId, cost: llmUsageLog.costUsdMillicents })
       .from(llmUsageLog)
       .where(and(
@@ -782,7 +783,7 @@ export async function computeAllocationHistory(
     // the column is `timestamp` WITHOUT time zone, which Drizzle parses by
     // appending `+0000`, so both sides are looking at UTC. Do not "fix" one of
     // them to local time on its own.
-    const costRows = await db
+    const costRows = await usageDatabaseOf(db)
       .select({
         taskId: llmUsageLog.taskId,
         month: sql<string>`to_char(${llmUsageLog.createdAt}, 'YYYY-MM')`,

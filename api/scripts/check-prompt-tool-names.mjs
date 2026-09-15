@@ -49,6 +49,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { MIGRATION_TRACKS } from './lib/migrationTracks.mjs';
 
 /**
  * Every path below is anchored HERE rather than at `process.cwd()`.
@@ -259,7 +260,7 @@ for (const filePath of files) {
 // 0376 did. Hence the stricter rule here: name no tool at all.
 // ---------------------------------------------------------------------------
 
-const MIGRATION_DIRS = ['migrations', 'transactional-migrations'];
+const MIGRATION_DIRS = MIGRATION_TRACKS.map((t) => t.dir);
 const ADVERTISED = new Map([...CATALOG].map((id) => [advertisedName(id), id]));
 
 /** Every single-quoted SQL literal with its offset, `''` escapes folded to `'`. */

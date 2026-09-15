@@ -17,6 +17,7 @@
 import { useTranslations } from 'next-intl';
 import type { ApiErrorEvent } from './apiErrorEvent';
 import { TRANSPORT_FAILURE_STATUS, type TransportFailureReason } from './transportFailure';
+import { isServiceOutage } from './serviceOutage';
 
 const TRANSPORT_REASONS: readonly TransportFailureReason[] = ['offline', 'aborted', 'unreachable'];
 
@@ -40,11 +41,15 @@ export interface ApiErrorText {
 export function useApiErrorText(): ApiErrorText {
   const t = useTranslations('globalError');
   return {
-    title: (event) =>
-      isTransportFailure(event)
-        ? t('transport.title')
-        : `${event.status}${event.code ? ` ${event.code}` : ''}`,
-    message: (event) =>
-      isTransportFailure(event) ? t(`transport.${reasonOf(event)}`) : event.message,
+    title: (event) => {
+      if (isTransportFailure(event)) return t('transport.title');
+      if (isServiceOutage(event)) return t('outage.title');
+      return `${event.status}${event.code ? ` ${event.code}` : ''}`;
+    },
+    message: (event) => {
+      if (isTransportFailure(event)) return t(`transport.${reasonOf(event)}`);
+      if (isServiceOutage(event)) return t('outage.message');
+      return event.message;
+    },
   };
 }

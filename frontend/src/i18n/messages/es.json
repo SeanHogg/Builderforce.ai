@@ -3352,7 +3352,8 @@
         "lane_requirement_gate": "El carril exige una aprobación de rol que sigue pendiente, así que la puerta de requisitos lanzó a ese revisor y suspendió al agente habitual del carril hasta que se resuelva la revisión.",
         "same_lane_reentry": "La ejecución que acaba de terminar ya atendió este carril, así que la protección de bucle impidió relanzarla de inmediato. No hay nada en ejecución.",
         "tenant_token_limit": "El espacio de trabajo agotó su cuota de tokens, así que la autonomía está en pausa para todos sus tickets hasta que la cuota se reinicie o se mejore el plan.",
-        "cloud_run_limit": "El espacio de trabajo agotó su cuota mensual de ejecuciones en la nube. Reintentar no lo resuelve: mejora el plan o espera al reinicio. Las ejecuciones on-premise y de VS Code siguen sin límite."
+        "cloud_run_limit": "El espacio de trabajo agotó su cuota mensual de ejecuciones en la nube. Reintentar no lo resuelve: mejora el plan o espera al reinicio. Las ejecuciones on-premise y de VS Code siguen sin límite.",
+        "execution_disabled": "La ejecución de agentes está desactivada en este espacio de trabajo, así que no se ejecuta nada —ni siquiera «Ejecutar ahora»— hasta que un responsable la vuelva a activar en Configuración."
       }
     },
     "chatModes": {
@@ -11500,7 +11501,8 @@
         "pending_approval": "Solicitud externa: a la espera de aprobación",
         "lane_requirement_gate": "Esperando la aprobación del rol",
         "same_lane_reentry": "Acaba de terminar esta etapa",
-        "tenant_token_limit": "Espacio sin tokens: mejora el plan o espera al reinicio"
+        "tenant_token_limit": "Espacio sin tokens: mejora el plan o espera al reinicio",
+        "execution_disabled": "Ejecución de agentes desactivada en este espacio"
       }
     },
     "businessValue": {
@@ -18022,6 +18024,10 @@
       "offline": "Tu dispositivo está sin conexión, así que la solicitud nunca salió del navegador. Volverá a funcionar cuando se restablezca la conexión.",
       "aborted": "La solicitud se canceló antes de recibir una respuesta.",
       "unreachable": "No se pudo contactar con BuilderForce. La solicitud no llegó o fue respondida por algo distinto de la API: no es un problema de la configuración de tu navegador y ya se ha notificado automáticamente."
+    },
+    "outage": {
+      "title": "No disponible temporalmente",
+      "message": "BuilderForce no está disponible temporalmente, así que esto no se pudo cargar. No es un problema de tu parte: vuelve a intentarlo en unos minutos."
     },
     "ticket": {
       "heading": "Ticket de soporte — Error de API",

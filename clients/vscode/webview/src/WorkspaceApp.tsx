@@ -23,7 +23,7 @@
  * routing unchanged.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IntlProvider } from 'use-intl';
 import catalogs from 'virtual:bf-canvas-messages';
 import { BrainProvider, type BrainConfig, type BrainPersistenceAdapter, type BrainTransport } from '@seanhogg/builderforce-brain-embedded';
@@ -71,20 +71,59 @@ export function WorkspaceApp() {
     return () => { offInit(); offToken(); };
   }, []);
 
+  // Host said we are signed in but the tenant JWT has not landed yet (post-login
+  // init race, or a refresh mid-flight). Ask for a mint instead of showing the
+  // sign-in wall — that wall contradicted the host's "BuilderForce: signed in."
+  // toast and left Evermind looking logged out until a manual reload. A mint that
+  // comes back empty is a gateway we cannot reach (a REFUSED key signs the host out,
+  // which arrives as a new init) — say so and offer Retry, never spin forever.
+  const [tokenFailed, setTokenFailed] = useState(false);
+  const mintToken = useCallback(async () => {
+    setTokenFailed(false);
+    await refreshToken();
+    if (!getToken()) setTokenFailed(true);
+  }, []);
+  useEffect(() => {
+    if (!init?.signedIn || init.localRoute) return;
+    if (init.token || getToken()) {
+      setTokenFailed(false);
+      return;
+    }
+    void mintToken();
+  }, [init, mintToken]);
+
   if (!init) return <div className="bf-center">Connecting…</div>;
 
   const t = makeT(init.labels);
+  // Token presence: prefer the init frame (React state) and fall back to the live
+  // module token (updated by `token` / `token.refresh` without a new init).
+  const hasToken = !!(init.token || getToken());
   // An on-device route needs no account — refusing to render would be gating the user
   // out of their own hardware. The chat then runs on a session-local store (see
   // `createInMemoryPersistence`), because the run loop persists the user turn BEFORE
   // it streams: left on the gateway adapter, that write 401s and the model is never
   // reached. Other gateway-backed extras degrade on their own.
-  if ((!init.signedIn || !getToken()) && !init.localRoute) {
+  //
+  // Only `!signedIn` is the sign-in wall. `signedIn && !hasToken` is a transient
+  // (Connecting… + refreshToken above), NOT another prompt to sign in — conflating
+  // them was the Evermind "Sign in" / status "signed in" mismatch.
+  if (!init.signedIn && !init.localRoute) {
     return (
       <div className="bf-center">
         <p>{t('app.signInPrompt', 'Sign in to BuilderForce to start.')}</p>
         <button className="bf-btn bf-btn--primary" onClick={() => post('signin')}>
           {t('app.signIn', 'Sign in')}
+        </button>
+      </div>
+    );
+  }
+  if (init.signedIn && !hasToken && !init.localRoute) {
+    if (!tokenFailed) return <div className="bf-center">{t('app.connecting', 'Connecting…')}</div>;
+    return (
+      <div className="bf-center">
+        <p>{t('app.connectFailed', "Couldn't reach BuilderForce. Check your connection and try again.")}</p>
+        <button className="bf-btn bf-btn--primary" onClick={() => void mintToken()}>
+          {t('app.retry', 'Retry')}
         </button>
       </div>
     );
@@ -208,7 +247,7 @@ function ChatRuntimeProvider({ init, children }: { init: InitData; children: Rea
   // nowhere durable to go. Hold ONE session store for the life of the panel so
   // re-rendering — a token re-mint, a grounding refresh — does not silently start a
   // new empty chat under the user.
-  const signedOut = !init.signedIn || !getToken();
+  const signedOut = !init.signedIn || !(init.token || getToken());
   const memoryRef = useRef<BrainPersistenceAdapter | null>(null);
   const memoryStore = (t: (key: string, fallback: string) => string): BrainPersistenceAdapter => {
     memoryRef.current ??= createInMemoryPersistence({

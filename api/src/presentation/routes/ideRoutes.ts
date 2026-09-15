@@ -14,7 +14,6 @@ import {
   ideDatasets,
   ideTrainingJobs,
   ideTrainingLogs,
-  projectSites,
   projects,
 } from '../../infrastructure/database/schema';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -69,7 +68,7 @@ import {
   restoreWorkspaceVersion,
 } from '../../application/ide/workspaceStore';
 import { onCanvasWrite } from '../../application/backend';
-import { HOSTING_APEX } from '../../application/ide/siteHosting';
+import { HOSTING_APEX, publishedSiteRecord } from '../../application/ide/siteHosting';
 import { listSiteReleases, restoreSiteRelease } from '../../application/ide/siteReleases';
 import { APP_PACKAGE_TARGETS, isAppPackageTarget, packageAppTarget } from '../../application/ide/packageApp';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
@@ -711,39 +710,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const [row] = await db
-      .select({
-        subdomain: projectSites.subdomain,
-        mode: projectSites.mode,
-        status: projectSites.status,
-        version_token: projectSites.versionToken,
-        asset_count: projectSites.assetCount,
-        // Read as TEXT because Drizzle's bigint mapper is the thing that would
-        // truncate; the value is then coerced ONCE below, so what leaves this
-        // route is a JSON number matching `SiteInfo.totalBytes`. It used to leave
-        // as a string against a client type that said `number`, so every consumer
-        // was doing arithmetic on a string and the next `totalBytes + x` would
-        // have concatenated. Same call `siteReleases.listReleases` already makes.
-        total_bytes: sql<string>`${projectSites.totalBytes}::text`,
-        published_at: projectSites.publishedAt,
-      })
-      .from(projectSites)
-      .where(and(eq(projectSites.projectId, projectId), eq(projectSites.tenantId, tenantId)))
-      .limit(1);
-    if (!row) return c.json({ site: null });
-    return c.json({
-      site: {
-        subdomain: row.subdomain,
-        mode: row.mode,
-        status: row.status,
-        versionToken: row.version_token,
-        assetCount: row.asset_count,
-        totalBytes: Number(row.total_bytes ?? 0),
-        publishedAt: row.published_at,
-        url: `https://${row.subdomain}.${HOSTING_APEX}`,
-        pathUrl: `/api/sites/${row.subdomain}/`,
-      },
-    });
+    return c.json({ site: await publishedSiteRecord(db, tenantId, projectId) });
   });
 
   // POST /projects/:projectId/publish — deploy built static assets to a subdomain.

@@ -21,11 +21,12 @@
  * a new labeled run re-materializes the dataset (the scorer bumps the token).
  */
 
-import { and, eq, gte, isNotNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { runModelOutcomes, llmUsageLog, llmTraces } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, outcomesVersionKey } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import { resolveUsageDatabase } from '../llm/usageLedger';
 
 /** One labeled trace row as read from the ledger join (before text extraction). */
 export interface LabeledTrace {
@@ -243,24 +244,30 @@ function clampLimit(n: number | undefined, dflt: number): number {
   return Math.min(HARD_CAP, Math.max(1, n ?? dflt));
 }
 
-/** Read labeled traces for a tenant (positive-side query for SFT). */
+/**
+ * Read labeled traces for a tenant (positive-side query for SFT).
+ *
+ * The labels (`run_model_outcomes`) live in the core `db`; the traces and the usage rows
+ * that key them to an execution (`llm_usage_log`, `llm_traces`) live in `usageDb` — the
+ * operational database in production, a separate Neon account. They are read in two
+ * steps and matched by execution id; the single join this replaced ran against the core
+ * database, whose copy of the ledger stopped receiving rows at the split.
+ */
 async function readLabeledTraces(
   db: Db,
+  usageDb: Db,
   tenantId: number,
   where: { actionType?: string; minScore: number; limit: number },
 ): Promise<LabeledTrace[]> {
   const conds = [
     eq(runModelOutcomes.tenantId, tenantId),
     isNotNull(runModelOutcomes.executionId),
-    eq(llmTraces.success, true),
     gte(runModelOutcomes.score, where.minScore),
   ];
   if (where.actionType) conds.push(eq(runModelOutcomes.actionType, where.actionType));
-  const rows = await db
+  const outcomes = await db
     .select({
-      traceId: llmTraces.traceId,
-      requestBody: llmTraces.requestBody,
-      responseBody: llmTraces.responseBody,
+      executionId: runModelOutcomes.executionId,
       model: runModelOutcomes.resolvedModel,
       actionType: runModelOutcomes.actionType,
       score: runModelOutcomes.score,
@@ -270,11 +277,33 @@ async function readLabeledTraces(
       terminalStatus: runModelOutcomes.terminalStatus,
     })
     .from(runModelOutcomes)
-    .innerJoin(llmUsageLog, eq(llmUsageLog.executionId, runModelOutcomes.executionId))
-    .innerJoin(llmTraces, eq(llmTraces.traceId, llmUsageLog.traceId))
     .where(and(...conds))
     .limit(where.limit);
-  return rows as LabeledTrace[];
+  const outcomeByExecution = new Map(outcomes.flatMap((o) => (o.executionId == null ? [] : [[o.executionId, o] as const])));
+  if (outcomeByExecution.size === 0) return [];
+
+  const traces = await usageDb
+    .select({
+      executionId: llmUsageLog.executionId,
+      traceId: llmTraces.traceId,
+      requestBody: llmTraces.requestBody,
+      responseBody: llmTraces.responseBody,
+    })
+    .from(llmUsageLog)
+    .innerJoin(llmTraces, eq(llmTraces.traceId, llmUsageLog.traceId))
+    .where(and(
+      eq(llmUsageLog.tenantId, tenantId),
+      inArray(llmUsageLog.executionId, [...outcomeByExecution.keys()]),
+      eq(llmTraces.success, true),
+    ))
+    .limit(where.limit);
+
+  return traces.flatMap((t) => {
+    const outcome = t.executionId == null ? undefined : outcomeByExecution.get(t.executionId);
+    if (!outcome) return [];
+    const { executionId: _executionId, ...label } = outcome;
+    return [{ traceId: t.traceId, requestBody: t.requestBody, responseBody: t.responseBody, ...label }];
+  }) as LabeledTrace[];
 }
 
 /** SFT dataset for a tenant — cached, folded on the outcomes version token. */
@@ -284,7 +313,7 @@ export async function buildSftDataset(env: Env, db: Db, tenantId: number, filter
   const ver = await getCacheVersion(env, outcomesVersionKey(tenantId));
   const key = `dataset:sft:${tenantId}:${filter.actionType ?? '*'}:${minScore}:${filter.requireMerged ? 'm' : ''}${filter.requireCiGreen ? 'c' : ''}:${limit}:${ver}`;
   return getOrSetCached(env, key, async () => {
-    const rows = await readLabeledTraces(db, tenantId, { actionType: filter.actionType, minScore, limit });
+    const rows = await readLabeledTraces(db, resolveUsageDatabase(env, db), tenantId, { actionType: filter.actionType, minScore, limit });
     return toSftRecords(rows, filter);
   });
 }
@@ -296,7 +325,7 @@ export async function buildDpoDataset(env: Env, db: Db, tenantId: number, filter
   const key = `dataset:dpo:${tenantId}:${filter.actionType ?? '*'}:${filter.minMargin ?? 0.3}:${scanLimit}:${ver}`;
   return getOrSetCached(env, key, async () => {
     // DPO needs both high AND low scored traces (minScore 0 → the whole window).
-    const rows = await readLabeledTraces(db, tenantId, { actionType: filter.actionType, minScore: 0, limit: scanLimit });
+    const rows = await readLabeledTraces(db, resolveUsageDatabase(env, db), tenantId, { actionType: filter.actionType, minScore: 0, limit: scanLimit });
     return toDpoRecords(rows, filter);
   });
 }

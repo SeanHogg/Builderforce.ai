@@ -1,3 +1,89 @@
+## ✅ RESOLVED 2026-09-15 — The deploy paths didn't know about the apps database, and CI would have migrated the old primary
+
+Found during the core cutover. Two paths carried their own hand-kept list of database secrets:
+
+- `deploy-api` in `.github/workflows/release.yml` passed only `NEON_DATABASE_URL` and `NEON_TRANSACTIONAL_DATABASE_URL` to `db:migrate`. After the move, its apps track would have been skipped forever. Its primary track would also have kept migrating the old `builderforce-primary` until the GitHub secret was changed.
+- `api/scripts/set-secrets-from-env.mjs` had no `NEON_APPS_DATABASE_URL`, so `npm run secrets:from-env` would silently never set it.
+
+Fix:
+- `set-secrets-from-env.mjs` now derives its database keys from the track registry (`MIGRATION_TRACKS.map((t) => t.env)`).
+- The workflow passes `NEON_APPS_DATABASE_URL`.
+- The GitHub secrets `NEON_DATABASE_URL` (now core) and `NEON_APPS_DATABASE_URL` were set on 2026-09-15.
+- `check-prompt-tool-names.mjs` now imports `MIGRATION_TRACKS`. It was reading the registry without importing it.
+
+## ✅ RESOLVED 2026-09-14 — A workspace with agent execution switched off was still dispatched to every tick
+
+Found in the 2026-09-14 production tail. For one workspace whose manager had switched agent execution off, every cron tick produced:
+- 13 `[role-run] dispatcher threw` errors;
+- lane-entry `auto_run_error`s, all "Agent execution is disabled for this workspace".
+
+The auto-run evaluator did not model the switch. So lane entry answered `will_run` and raised the cron work signal, keeping the gate open for work that could never start. Every dispatch path (lane entry, the manager's role runs, sign-off drives) then got as far as `RuntimeService.submit` and threw.
+
+Now:
+- **One module owns the switch** (`application/runtime/agentExecutionGate.ts`), with two readers:
+  - `RuntimeService.submit` keeps the AUTHORITATIVE uncached read, so an emergency stop cannot be undone by a cache.
+  - The evaluator and the dispatcher use a cached pre-check. The `PUT /execution-control` write invalidates it.
+- **The evaluator returns a new `execution_disabled` reason**, so nothing signals or dispatches.
+- **The dispatcher refuses** instead of throwing. The refusal is listed with the entitlement refusals a human Run now cannot override.
+- **The board triage chip and the autonomy lens say so**, localized in all five catalogs.
+
+## ✅ RESOLVED 2026-09-14 — The mailbox-automation sweep failed every tick, and was built to keep the database awake permanently
+
+The same tail showed `[cron:mailbox-automation] failed — relation "mailbox_automation_replies" does not exist` on every tick. The production primary has `mailbox_automation_rules` but not the replies table that 0455 also declares, so no inbox rule has ever run there. `migrations/1172_mailbox_automation_replies_restore.sql` creates it with `IF NOT EXISTS` (a no-op wherever 0455 already did).
+
+Restoring the table alone would have made things worse. The sweep called `signalPendingWork` on every pass whenever an enabled rule EXISTED, which holds the cron gate open permanently and keeps the core database awake around the clock.
+
+Two changes replace that:
+- **Mail arrival wakes the sweep.** The push drain (`mailboxWatch`) now signals when fresh mail lands.
+- **The sweep keeps the tick hot only when it took work.** More may be waiting past its 25-per-inbox cap.
+
+A mailbox with no push subscription is now polled at the gate's floor, up to 30 minutes, instead of every 5.
+
+## ✅ RESOLVED 2026-09-14 — Usage, spend and caps read a frozen copy of `llm_usage_log`, and three writers still wrote to it
+
+Production writes `llm_usage_log` to the operational database (`resolveUsageDatabase`, which uses `NEON_TRANSACTIONAL_DATABASE_URL`), but about 25 readers still queried the core database's copy, which stopped receiving rows at the split. Every figure they produced was frozen:
+- dashboards: usage breakdown, ROI, finance lens, chat-mode split, AI impact, allocation capex/opex, portfolio and planning spend, builder snapshot, metric registry and alerts, interaction calendar, platform rollup;
+- the `/v1/usage` gateway report and per-key usage;
+- task and run cost, and the file-change model attribution;
+- training-dataset traces;
+- the gates: per-seat spend caps, the text-token day/month meter, the cloud-run allowance, and a cloud run's declared spend limit. Read from the frozen copy, those gates saw spend stuck at the split, so they undercounted and could not trip on new usage.
+
+Three writers (`AnalysisRunnerDO.meterUsage`, voice-clone synthesis and the demo seed) still inserted into the core copy, where no meter reads.
+
+**The fix:**
+- `buildDatabase` now records the env each handle came from (`envOfDatabase`, `connection.ts`), and `usageDatabaseOf(db)` (`usageLedger.ts`) resolves the ledger's database from a core handle alone. That way the lenses several calls deep with no `env` (finance alone has eleven callers) route correctly without threading `env` through every signature. It is idempotent on a handle that is already operational, and a no-op on test doubles.
+- Queries that joined the ledger to core tables are now two queries: aggregate on the usage DB, then name from core with a tenant-scoped `inArray`. That covers `financeInsights` per-project and per-initiative spend, the `chatModeInsights` per-chat spend, `/v1/usage` `byCredential` (key names from `tenant_api_keys`), `trainingDataset.readLabeledTraces`, and the `runtimeRoutes` file-change `modelUsage` (a correlated subquery replaced by one bounded read, `executionModelUsage.ts`). `dashboardRoutes` `buildUsageBreakdown` and `roiRoutes` `computeRollup` were rewritten the same way.
+- The Drizzle `llmUsageLog` no longer declares the FKs that `transactional-migrations/0001` dropped.
+
+The same outage pass also shipped the Neon 402 handling: it now answers `503 { code: 'database_unavailable' }` (`neonAvailability.ts`), and the web app shows "temporarily unavailable" without auto-reporting it.
+
+## ✅ RESOLVED 2026-09-14 — The execution lifecycle outbox was drained by two frequent sweeps, one against a database without the table
+
+`cronSweeps.ts` registered two sweeps for the same drain. `execution-lifecycle-outbox` correctly uses the cron `db` (primary, where the outbox lives, written by the `executions` trigger in 0374). `exec-events` called `runExecutionLifecycleOutboxSweep`, which drained through `buildTransactionalDatabase(env)`. Production binds `NEON_TRANSACTIONAL_DATABASE_URL`, and that operational database has no `execution_lifecycle_outbox` table, so the second sweep presumably failed on every frequent tick. On a single-database deploy the two raced for the same claims. The `exec-events` registration and its only caller, `runExecutionLifecycleOutboxSweep`, are deleted (no other references in api or frontend). Found by the ledger-join audit during the Neon compute-quota outage work.
+
+## ✅ RESOLVED 2026-09-14 — VSIX "BuilderForce: signed in." but Evermind stayed on "Sign in" and every sidebar panel loaded empty
+
+Two causes, both fixed in `clients/vscode` (VSIX 2026.9.69):
+
+1. **Post-login refresh races.** Evermind is revealed by `when: builderforce.signedIn`, but sign-in flipped that
+   context fire-and-forget and then refreshed a view that did not exist yet; the webview message listener was
+   attached AFTER `html` (dropping the bundle's `ready`); and `WorkspaceApp` showed the sign-in wall whenever the
+   JWT was late (`!signedIn || !getToken()`). Now: the context flip is awaited, `onDidChangeSessions` re-pushes
+   every surface (`refreshAuthBoundSurfaces`), listeners attach before `html`, Evermind pushes init on resolve,
+   and a signed-in-but-tokenless panel mints (`refreshToken`) and offers **Retry** instead of the wall or an
+   endless "Connecting…".
+2. **A stored key the gateway refuses was treated as signed in.** Signed-in truth was "a key is in
+   SecretStorage", so a revoked / deleted / user-less `bfk_` key kept every view revealed while
+   `tenant-api-key-token` 401/400'd silently — and Sign in handed back the same dead session without opening the
+   browser. `bfApi.requestBaseJwt` now classifies the exchange; a rejection fires `onEditorKeyRejected`, and
+   `editorKeyGuard.ts` signs the editor out (only if that key is still the stored one) with a "Sign in again"
+   prompt. `signIn` probes first (`probeEditorKey`) and drops a refused key before `getSession`, and toasts what
+   is true (signed in / signed in but gateway unreachable).
+
+The sign-in/connecting strings were duplicated in two label builders and absent from Evermind, Project 360 and
+the project pages (English-only wall there); one `authLabels()` now feeds all four, localized in all five l10n
+bundles. Source guards: `src/authPanelSync.test.ts`.
+
 ## ✅ RESOLVED 2026-09-13 — Grok (`xai-oauth`) turns could arrive with no tool calls while xAI had returned one, and no report could tell the model from the adapter
 
 Chat #104 ("add a collapse chevron to the Room roster") ended `xai-oauth/grok-4.6: 12 turn(s) · 0 tool call(s) ·

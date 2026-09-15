@@ -23,6 +23,7 @@ import { buildConsumptionSnapshot } from '../consumption/meters';
 import { buildTenantDriftReport } from '../eval/driftReport';
 import { millicentsToUsd } from '../../domain/shared/money';
 import { HOUR_MS } from '../../domain/shared/time';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 /** The full set of metric keys a rule may target (kept in lockstep with the
  *  migration's CHECK-list and the schema AlertMetric type). */
@@ -49,7 +50,7 @@ export interface EvaluateMetricArgs {
 async function tokenSpendUsd(db: Db, tenantId: number, since: Date, projectId?: number | null): Promise<number> {
   const conds = [eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since)];
   if (projectId != null) conds.push(eq(llmUsageLog.projectId, projectId));
-  const [row] = await db
+  const [row] = await usageDatabaseOf(db)
     .select({ mc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
     .from(llmUsageLog)
     .where(and(...conds));

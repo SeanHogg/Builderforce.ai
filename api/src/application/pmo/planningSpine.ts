@@ -19,6 +19,7 @@
 
 import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { usageDatabaseOf } from '../llm/usageLedger';
 import {
   initiatives,
   llmUsageLog,
@@ -576,7 +577,7 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
     : and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds));
   const [llmRows, rateRows, loggedMin, depRows, verdictRows] = await Promise.all([
     taskIds.length
-      ? db.select({ taskId: llmUsageLog.taskId, millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
+      ? usageDatabaseOf(db).select({ taskId: llmUsageLog.taskId, millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
           .from(llmUsageLog).where(llmWhere).groupBy(llmUsageLog.taskId)
       : Promise.resolve([] as Array<{ taskId: number | null; millicents: string }>),
     db.select({ memberRef: memberProfiles.memberRef, costRateUsdCents: memberProfiles.costRateUsdCents })

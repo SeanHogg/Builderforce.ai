@@ -29,7 +29,10 @@ const getManagerEmails = vi.fn(async () => ['owner@example.com', 'manager@exampl
 
 vi.mock('../email/sendEmail', () => ({ sendTransactionalEmail: (...a: unknown[]) => sendTransactionalEmail(...(a as [])) }));
 vi.mock('../approval/approvalNotifier', () => ({ getManagerEmails: (...a: unknown[]) => getManagerEmails(...(a as [])) }));
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: () => ({}) }));
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
+  buildDatabase: () => ({}),
+}));
 vi.mock('../../infrastructure/email/EmailService', () => ({ sendByoCredentialAlertEmail: async () => undefined }));
 
 const { raiseProviderAuthAlert, raiseProviderAuthAlertsFromFailovers } = await import('./byoCredentialAlerting');

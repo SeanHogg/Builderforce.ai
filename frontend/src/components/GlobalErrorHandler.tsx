@@ -8,6 +8,7 @@ import {
 } from '@/lib/errors/apiErrorEvent';
 import { requestReportError } from '@/lib/reportError';
 import { useApiErrorText } from '@/lib/errors/useApiErrorText';
+import { isServiceOutage } from '@/lib/errors/serviceOutage';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -248,19 +249,22 @@ function Toast({
         >
           {expanded ? <IconChevronUp /> : <IconChevronDown />}
         </button>
-        {/* Add user context to this error in BuilderForce.ai's product Quality feed. */}
-        <button
-          onClick={() => requestReportError({
-            title: text.title(ev),
-            message: text.message(ev),
-            url: ev.url,
-          })}
-          title={t('report')}
-          aria-label={t('report')}
-          style={iconBtnStyle}
-        >
-          <IconFlag />
-        </button>
+        {/* Add user context to this error in BuilderForce.ai's product Quality feed —
+            except during an outage, which would refuse the report as well. */}
+        {!isServiceOutage(ev) && (
+          <button
+            onClick={() => requestReportError({
+              title: text.title(ev),
+              message: text.message(ev),
+              url: ev.url,
+            })}
+            title={t('report')}
+            aria-label={t('report')}
+            style={iconBtnStyle}
+          >
+            <IconFlag />
+          </button>
+        )}
         <button
           onClick={() => onCopy(entry)}
           title={t('copyTicket')}

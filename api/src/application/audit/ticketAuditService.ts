@@ -9,7 +9,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * agent's ticket-coverage diagnostic. The verdict is denormalised onto the task so
  * the board renders a flag chip cheaply.
  */
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import {
   boards,
   swimlaneRequirements,
@@ -34,6 +34,11 @@ import { publishSignoffToPr } from '../validation/publishReviewToPr';
 import { authoredPrdRoleSections, findTaskPrimarySpec } from '../prd/taskPrd';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
+
+/** How long an unchanged verdict may go without its `computed_at` being refreshed. The
+ *  manager pass re-audits the same tickets every few minutes; rewriting an identical
+ *  row each time was ~1.45M writes on 953 rows. A day keeps "last audited" meaningful. */
+const AUDIT_REFRESH_MS = 24 * 60 * 60_000;
 
 export interface TicketAuditResult extends CoverageResult {
   taskId: number;
@@ -184,41 +189,66 @@ export class TicketAuditService {
     // Prior verdict, read BEFORE the upsert overwrites it — the flag journal below
     // is change-driven, not pass-driven.
     const [previous] = await this.db
-      .select({ status: ticketAudits.status, missing: ticketAudits.missing })
+      .select({
+        status: ticketAudits.status, missing: ticketAudits.missing, coverage: ticketAudits.coverage,
+        requiredCount: ticketAudits.requiredCount, satisfiedCount: ticketAudits.satisfiedCount,
+        boardId: ticketAudits.boardId, computedAt: ticketAudits.computedAt,
+      })
       .from(ticketAudits)
       .where(and(eq(ticketAudits.tenantId, tenantId), eq(ticketAudits.taskId, taskId)))
       .limit(1);
 
     const now = new Date();
-    await this.db
-      .insert(ticketAudits)
-      .values({
-        taskId,
-        tenantId,
-        boardId: board?.id ?? null,
-        status: coverage.status,
-        coverage: coverage.coverage,
-        requiredCount: coverage.requiredCount,
-        satisfiedCount: coverage.satisfiedCount,
-        missing: JSON.stringify(coverage.missing),
-        computedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: ticketAudits.taskId,
-        set: {
+    const boardId = board?.id ?? null;
+    const missingJson = JSON.stringify(coverage.missing);
+    // Compare BEFORE writing: an identical verdict is the common case, and the stored row
+    // (and the denormalised task columns below) already say it.
+    const rowChanged = !previous
+      || previous.status !== coverage.status
+      || Number(previous.coverage) !== Number(coverage.coverage)
+      || previous.requiredCount !== coverage.requiredCount
+      || previous.satisfiedCount !== coverage.satisfiedCount
+      || previous.missing !== missingJson
+      || (previous.boardId ?? null) !== boardId
+      || !previous.computedAt
+      || now.getTime() - new Date(previous.computedAt).getTime() > AUDIT_REFRESH_MS;
+
+    if (rowChanged) {
+      await this.db
+        .insert(ticketAudits)
+        .values({
+          taskId,
+          tenantId,
+          boardId,
           status: coverage.status,
           coverage: coverage.coverage,
           requiredCount: coverage.requiredCount,
           satisfiedCount: coverage.satisfiedCount,
-          missing: JSON.stringify(coverage.missing),
+          missing: missingJson,
           computedAt: now,
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: ticketAudits.taskId,
+          set: {
+            boardId,
+            status: coverage.status,
+            coverage: coverage.coverage,
+            requiredCount: coverage.requiredCount,
+            satisfiedCount: coverage.satisfiedCount,
+            missing: missingJson,
+            computedAt: now,
+          },
+        });
+    }
 
+    // Written only when the ticket's denormalised verdict actually differs.
     await this.db
       .update(tasks)
       .set({ auditStatus: coverage.status, auditFlagCount: coverage.missing.length })
-      .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)));
+      .where(scopedToTenant(
+        tasks, tenantId, eq(tasks.id, taskId),
+        sql`(${tasks.auditStatus} IS DISTINCT FROM ${coverage.status} OR ${tasks.auditFlagCount} IS DISTINCT FROM ${coverage.missing.length})`,
+      ));
 
     // Journal the flag only when the verdict actually changed (newly flagged, or the
     // set of unmet checks moved). An unchanged verdict is already visible on the
@@ -238,8 +268,8 @@ export class TicketAuditService {
       });
     }
 
-    await invalidateCached(env, flaggedKey(tenantId));
-    return { ...coverage, taskId, boardId: board?.id ?? null };
+    if (rowChanged) await invalidateCached(env, flaggedKey(tenantId));
+    return { ...coverage, taskId, boardId };
   }
 
   /** Read the stored audit for a ticket (missing parsed). */

@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { canManageActiveWorkspace, getTenantJwt, invalidateProjectEvermind } from "./bfApi";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
+import { authLabels } from "./authLabels";
 import { getSelectedProject } from "./projectState";
 import { renderWebviewHtml } from "./webviewShared";
 import { handleSharedHostMessage, respondToWebview } from "./webviewHostBridge";
@@ -33,11 +34,18 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.ctx.extensionUri, "media")],
     };
-    view.webview.html = renderWebviewHtml(view.webview, this.ctx, { title: "Project Evermind" });
+    // Listener BEFORE html: the bundled app posts `ready` at module load. Setting
+    // html first races that message and drops it — after sign-in the view often
+    // resolves for the first time exactly then, and a lost `ready` left Evermind
+    // stuck on the sign-in wall while the host toast already said "signed in".
     view.webview.onDidReceiveMessage((m) => void this.onMessage(m as { type?: string; id?: string }));
+    view.webview.html = renderWebviewHtml(view.webview, this.ctx, { title: "Project Evermind" });
     // Re-pull when the view regains visibility (a token may have refreshed while hidden).
     view.onDidChangeVisibility(() => { if (view.visible) void this.sendInit(); });
     view.onDidDispose(() => { if (this.view === view) this.view = undefined; });
+    // Don't rely solely on `ready`: push init as soon as the host has a webview, so a
+    // post-login reveal still auths even if the webview's ready frame was delayed.
+    void this.sendInit();
   }
 
   /** Re-push init (token / project / manager gate) to the live view — on project
@@ -181,7 +189,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       project: getSelectedProject(),
       canManage,
       tools: [],
-      labels: buildEvermindLabels(),
+      labels: { ...authLabels(), ...buildEvermindLabels() },
     });
   }
 }

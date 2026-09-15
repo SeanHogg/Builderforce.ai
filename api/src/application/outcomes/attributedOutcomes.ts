@@ -29,6 +29,7 @@
 import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { metricFacts, projectSites, siteCollections } from '../../infrastructure/database/schema';
+import { appsDatabaseOf } from '../ide/appsDatabase';
 
 /** Default lookback. Matches the 90-day window the rollups themselves write. */
 export const ATTRIBUTED_WINDOW_DAYS = 90;
@@ -70,7 +71,8 @@ export interface AttributedOutcomes {
 
 /** A site whose collections trace back to this session. */
 async function sitesForSession(db: Db, tenantId: number, sessionId: string) {
-  const rows = await db
+  // Both tables here are site tables — this join stays on the apps database.
+  const rows = await appsDatabaseOf(db)
     .selectDistinct({ id: projectSites.id, subdomain: projectSites.subdomain })
     .from(siteCollections)
     .innerJoin(projectSites, eq(projectSites.id, siteCollections.siteId))

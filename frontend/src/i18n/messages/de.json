@@ -3352,7 +3352,8 @@
         "lane_requirement_gate": "Die Spalte verlangt eine noch ausstehende Rollen-Freigabe, daher hat das Anforderungs-Gate diesen Prüfer gestartet und den regulären Agenten der Spalte bis zum Abschluss der Prüfung ausgesetzt.",
         "same_lane_reentry": "Der gerade beendete Lauf hat diese Spalte bereits bedient, daher hat die Schleifensicherung ein sofortiges erneutes Starten verhindert. Es läuft nichts.",
         "tenant_token_limit": "Der Workspace hat sein Token-Kontingent aufgebraucht, daher ist die Autonomie für ALLE seine Tickets pausiert, bis das Kontingent zurückgesetzt oder der Tarif erhöht wird.",
-        "cloud_run_limit": "Der Workspace hat sein monatliches Cloud-Lauf-Kontingent aufgebraucht. Ein erneuter Versuch ändert daran nichts — Tarif erhöhen oder auf die Zurücksetzung warten. On-Prem- und VS-Code-Läufe bleiben unbegrenzt."
+        "cloud_run_limit": "Der Workspace hat sein monatliches Cloud-Lauf-Kontingent aufgebraucht. Ein erneuter Versuch ändert daran nichts — Tarif erhöhen oder auf die Zurücksetzung warten. On-Prem- und VS-Code-Läufe bleiben unbegrenzt.",
+        "execution_disabled": "Die Agentenausführung ist für diesen Workspace ausgeschaltet — nichts läuft, auch „Jetzt ausführen“ nicht, bis ein Manager sie in den Einstellungen wieder aktiviert."
       }
     },
     "chatModes": {
@@ -11500,7 +11501,8 @@
         "pending_approval": "Externe Anfrage – wartet auf Genehmigung",
         "lane_requirement_gate": "Wartet auf Rollen-Freigabe",
         "same_lane_reentry": "Hat diese Phase gerade beendet",
-        "tenant_token_limit": "Workspace ohne Token — Upgrade oder auf Zurücksetzung warten"
+        "tenant_token_limit": "Workspace ohne Token — Upgrade oder auf Zurücksetzung warten",
+        "execution_disabled": "Agentenausführung für diesen Workspace ausgeschaltet"
       }
     },
     "businessValue": {
@@ -18022,6 +18024,10 @@
       "offline": "Ihr Gerät ist offline, die Anfrage hat den Browser nie verlassen. Sobald die Verbindung zurück ist, funktioniert es wieder.",
       "aborted": "Die Anfrage wurde abgebrochen, bevor eine Antwort eintraf.",
       "unreachable": "BuilderForce war nicht erreichbar. Die Anfrage kam entweder nicht an oder wurde von etwas anderem als der API beantwortet — das liegt nicht an Ihren Browsereinstellungen und wurde automatisch gemeldet."
+    },
+    "outage": {
+      "title": "Vorübergehend nicht verfügbar",
+      "message": "BuilderForce ist vorübergehend nicht verfügbar, daher konnte dies nicht geladen werden. Das liegt nicht an Ihnen — bitte versuchen Sie es in ein paar Minuten erneut."
     },
     "ticket": {
       "heading": "Support-Ticket — API-Fehler",

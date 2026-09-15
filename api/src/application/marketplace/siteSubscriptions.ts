@@ -57,6 +57,7 @@ import {
 import { hostedListingStatus, type HostedListingStatus } from './creationListings.hosted';
 import { resolveTakeRateBps } from './listingCommerce';
 import { USD_CENTS } from '../kernel/denominations';
+import { appsDatabaseOf } from '../ide/appsDatabase';
 
 
 /**
@@ -127,7 +128,7 @@ export async function siteSubscriptionState(
   siteId: number,
   siteUserId: number,
 ): Promise<{ state: SiteSubscriptionState; subscription: SiteSubscriptionView | null }> {
-  const [row] = await db
+  const [row] = await appsDatabaseOf(db)
     .select({
       id: siteSubscriptions.id,
       status: siteSubscriptions.status,
@@ -221,7 +222,7 @@ export async function startSiteSubscriptionCheckout(
     throw new ListingError('You are already subscribed', 400);
   }
 
-  const [user] = await db
+  const [user] = await appsDatabaseOf(db)
     .select({ email: siteUsers.email })
     .from(siteUsers)
     .where(scopedToTenant(
@@ -371,7 +372,7 @@ export async function completeSiteSubscription(
     commissionCents,
   });
 
-  const [row] = await db
+  const [row] = await appsDatabaseOf(db)
     .insert(siteSubscriptions)
     .values({
       siteId: input.siteId,
@@ -463,7 +464,7 @@ export async function cancelSiteSubscription(
   siteId: number,
   siteUserId: number,
 ): Promise<{ ok: boolean }> {
-  const [row] = await db
+  const [row] = await appsDatabaseOf(db)
     .update(siteSubscriptions)
     .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
     .where(scopedToTenant(
@@ -536,7 +537,7 @@ export async function suspendSubscriptionsForListing(
   tenantId: number,
   listingId: string,
 ): Promise<{ suspended: number }> {
-  const rows = await db
+  const rows = await appsDatabaseOf(db)
     .update(siteSubscriptions)
     .set({ status: 'suspended', updatedAt: new Date() })
     // Scoped to the SELLER's tenant, which is where both the listing and every
@@ -629,28 +630,24 @@ export async function subscriberStanding(
  * because that shape is serialised to the site user and an internal join key is not
  * theirs to receive.
  *
- * The listing is joined by the SUBSCRIBER's own `catalogItemId` rather than looked
+ * The listing is found by the SUBSCRIBER's own `catalogItemId` rather than looked
  * up fresh from the project — `completeSiteSubscription` pins it at subscribe time
  * and a re-publish never replaces the row, only bumps `body.snapshotId`, so this is
  * the direct path to "what does this subscriber's seller currently sell" with no
  * second lookup of the site's project.
+ *
+ * Read by id rather than joined: the subscription lives on the apps database and the
+ * listing on the core one. The listing and the subscription state are then read
+ * together, so the split costs no extra sequential round trip.
  */
 async function standingWithListing(
   db: Db,
   env: Env,
   input: { tenantId: number; siteId: number; siteUserId: number },
 ): Promise<{ standing: SubscriberStanding; listingId: string | null }> {
-  const [row] = await db
-    .select({
-      catalogItemId: siteSubscriptions.catalogItemId,
-      heldSnapshotId: siteSubscriptions.snapshotId,
-      latestBody: catalogItems.body,
-    })
+  const [row] = await appsDatabaseOf(db)
+    .select({ catalogItemId: siteSubscriptions.catalogItemId })
     .from(siteSubscriptions)
-    .leftJoin(catalogItems, and(
-      eq(catalogItems.id, siteSubscriptions.catalogItemId),
-      eq(catalogItems.tenantId, input.tenantId),
-    ))
     .where(scopedToTenant(
       siteSubscriptions,
       input.tenantId,
@@ -659,10 +656,17 @@ async function standingWithListing(
     ))
     .limit(1);
   const listingId = row?.catalogItemId ?? null;
-  const { subscription } = await siteSubscriptionState(
-    db, input.tenantId, input.siteId, input.siteUserId,
-  );
-  const latestSnapshotId = (row?.latestBody as { snapshotId?: string } | null)?.snapshotId ?? null;
+  const [[listing], { subscription }] = await Promise.all([
+    listingId
+      ? db
+          .select({ body: catalogItems.body })
+          .from(catalogItems)
+          .where(and(eq(catalogItems.id, listingId), eq(catalogItems.tenantId, input.tenantId)))
+          .limit(1)
+      : Promise.resolve([] as Array<{ body: unknown }>),
+    siteSubscriptionState(db, input.tenantId, input.siteId, input.siteUserId),
+  ]);
+  const latestSnapshotId = (listing?.body as { snapshotId?: string } | null)?.snapshotId ?? null;
   return {
     standing: {
       subscription,
@@ -697,7 +701,7 @@ export async function acceptSiteSubscriptionUpdate(
   if (!offer?.updateAvailable || !offer.latestSnapshotId) {
     throw new ListingError('You are already on the latest version', 400);
   }
-  const [row] = await db
+  const [row] = await appsDatabaseOf(db)
     .update(siteSubscriptions)
     .set({ snapshotId: offer.latestSnapshotId, updatedAt: new Date() })
     .where(scopedToTenant(

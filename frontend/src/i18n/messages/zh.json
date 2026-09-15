@@ -3352,7 +3352,8 @@
         "lane_requirement_gate": "该泳道要求的角色签核尚未完成，因此需求关卡改为派发该评审者，并在评审通过前暂停泳道的常规代理。",
         "same_lane_reentry": "刚结束的运行已经服务于该泳道，因此循环保护阻止了立即重新派发。当前没有任何运行在执行。",
         "tenant_token_limit": "工作区已用完令牌额度，因此其所有工单的自主执行都已暂停，直到额度重置或升级套餐。",
-        "cloud_run_limit": "工作区已用完本月云端运行额度。重试无法解除——请升级套餐或等待重置。本地和 VS Code 运行不受限制。"
+        "cloud_run_limit": "工作区已用完本月云端运行额度。重试无法解除——请升级套餐或等待重置。本地和 VS Code 运行不受限制。",
+        "execution_disabled": "此工作区的智能体执行已被关闭，在经理于设置中重新启用之前不会进行任何运行——包括“立即运行”。"
       }
     },
     "chatModes": {
@@ -11500,7 +11501,8 @@
         "pending_approval": "外部请求——等待人工批准",
         "lane_requirement_gate": "等待角色签核",
         "same_lane_reentry": "刚完成此阶段",
-        "tenant_token_limit": "工作区令牌已用尽 — 请升级或等待重置"
+        "tenant_token_limit": "工作区令牌已用尽 — 请升级或等待重置",
+        "execution_disabled": "此工作区已关闭智能体执行"
       }
     },
     "businessValue": {
@@ -18022,6 +18024,10 @@
       "offline": "您的设备已离线，请求未能发出。网络恢复后即可正常使用。",
       "aborted": "请求在收到响应前已被取消。",
       "unreachable": "无法连接到 BuilderForce。请求要么未送达，要么由 API 以外的服务作出了响应——这不是浏览器设置的问题，系统已自动上报。"
+    },
+    "outage": {
+      "title": "暂时不可用",
+      "message": "BuilderForce 暂时不可用，因此无法加载此内容。这不是您这边的问题——请几分钟后重试。"
     },
     "ticket": {
       "heading": "支持工单 — API 错误",

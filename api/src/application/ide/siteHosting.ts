@@ -12,15 +12,64 @@
  * the hot path (every asset request resolves it), so it's served through the
  * canonical read-through cache and invalidated on publish via `version_token`.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { projectSites } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { appsDatabaseOf } from './appsDatabase';
 
 /** R2 key prefix all hosted sites live under. */
 export const SITES_PREFIX = 'sites/';
+
+/** A project's published site, as its owner sees it. */
+export interface PublishedSiteRecord {
+  subdomain: string;
+  mode: string;
+  status: string;
+  versionToken: string;
+  assetCount: number;
+  totalBytes: number;
+  publishedAt: Date | null;
+  url: string;
+  pathUrl: string;
+}
+
+/**
+ * The published-site record for a project — or null when it has none.
+ *
+ * Tenant-scoped on the site row itself, so a project id from another workspace reads
+ * as "no site" rather than as their site. Read from the apps database, where
+ * `project_sites` lives.
+ */
+export async function publishedSiteRecord(db: Db, tenantId: number, projectId: number): Promise<PublishedSiteRecord | null> {
+  const [row] = await appsDatabaseOf(db)
+    .select({
+      subdomain: projectSites.subdomain,
+      mode: projectSites.mode,
+      status: projectSites.status,
+      versionToken: projectSites.versionToken,
+      assetCount: projectSites.assetCount,
+      // Read as TEXT because Drizzle's bigint mapper is the thing that would
+      // truncate; the value is then coerced ONCE below, so what leaves here is a
+      // JSON number matching `SiteInfo.totalBytes`. It used to leave as a string
+      // against a client type that said `number`, so every consumer was doing
+      // arithmetic on a string. Same call `siteReleases.listReleases` makes.
+      totalBytes: sql<string>`${projectSites.totalBytes}::text`,
+      publishedAt: projectSites.publishedAt,
+    })
+    .from(projectSites)
+    .where(and(eq(projectSites.projectId, projectId), eq(projectSites.tenantId, tenantId)))
+    .limit(1);
+  if (!row) return null;
+  return {
+    ...row,
+    totalBytes: Number(row.totalBytes ?? 0),
+    url: `https://${row.subdomain}.${HOSTING_APEX}`,
+    pathUrl: `/api/sites/${row.subdomain}/`,
+  };
+}
 
 /**
  * Apex the wildcard hosting domain hangs off. `<sub>.builderforce.ai`.
@@ -179,7 +228,8 @@ export async function lookupSite(env: Env, subdomain: string): Promise<SiteRecor
     env,
     siteCacheKey(subdomain),
     async () => {
-      const [row] = await buildDatabase(env)
+      // site tables live on the apps database
+      const [row] = await appsDatabaseOf(buildDatabase(env))
         .select(SITE_LOOKUP_COLUMNS)
         .from(projectSites)
         .where(eq(projectSites.subdomain, subdomain))
@@ -203,7 +253,7 @@ export async function lookupSiteByCustomDomain(env: Env, hostname: string): Prom
     env,
     customDomainCacheKey(host),
     async () => {
-      const [row] = await buildDatabase(env)
+      const [row] = await appsDatabaseOf(buildDatabase(env))
         .select(SITE_LOOKUP_COLUMNS)
         .from(projectSites)
         .where(and(eq(projectSites.customDomain, host), eq(projectSites.customDomainStatus, 'active')))
@@ -276,7 +326,11 @@ export async function checkSubdomainAvailability(
   // DELIBERATELY cross-tenant: a subdomain is unique across the whole hosting
   // apex, so scoping this to the asker's tenant would report a label as available
   // while another tenant is already serving on it.
-  const [owner] = await db
+  //
+  // `db` here is a narrowed view of whatever handle the caller holds; it is the
+  // SAME object `appsDatabaseOf` keys its sibling lookup off, so this keeps
+  // resolving to the apps database when the caller's underlying handle is core.
+  const [owner] = await appsDatabaseOf(db as unknown as Db)
     .select({ projectId: projectSites.projectId })
     .from(projectSites)
     .where(acrossTenants(projectSites, 'global_uniqueness', eq(projectSites.subdomain, label)))

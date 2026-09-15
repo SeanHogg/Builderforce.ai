@@ -12,7 +12,7 @@
 
 import { eq } from 'drizzle-orm';
 import { tenants } from '../../infrastructure/database/schema';
-import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
+import { siblingDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveAllFeatureEntitlements, type FeatureEntitlementSet } from '../tenant/featureEntitlements';
@@ -186,7 +186,7 @@ export async function buildConsumptionSnapshot(
    *  member of sees the unlimited allowance the gate actually grants them. */
   acting?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
 ): Promise<ConsumptionSnapshot> {
-  const ingestionDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+  const ingestionDb = siblingDatabase(env, db, 'operational');
   const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, stageSandboxRunsDaily, feedbackSubmissionsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
     dailyTenantIngestionBytes(ingestionDb, tenantId, monthStart),

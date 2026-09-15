@@ -48,7 +48,8 @@ function renderQuery(query: unknown): string {
     .trim();
 }
 
-vi.mock('../../infrastructure/database/connection', () => ({
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: () => stubDb('primary'),
   buildTransactionalDatabase: () => stubDb('transactional'),
 }));

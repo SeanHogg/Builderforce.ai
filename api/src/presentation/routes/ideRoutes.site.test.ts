@@ -28,7 +28,8 @@ vi.mock('../middleware/authMiddleware', () => ({
 
 const db = vi.hoisted(() => ({ answers: [] as unknown[][] }));
 
-vi.mock('../../infrastructure/database/connection', () => ({
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: () => ({
     // Every read on this path is the same `select().from().where().limit()`
     // chain, so the fake answers them in call order: the tenant gate first, the
@@ -43,14 +44,17 @@ vi.mock('../../infrastructure/database/connection', () => ({
 
 const { createIdeRoutes } = await import('./ideRoutes');
 
+// `publishedSiteRecord` selects with camelCase aliases (it reads from the apps
+// database now, via `appsDatabaseOf`) — this fixture is the row shape THAT
+// select produces, not the underlying snake_case column names.
 const siteRow = (totalBytes: string | null) => ({
   subdomain: 'sunday-rsvp',
   mode: 'static',
   status: 'active',
-  version_token: 'v7',
-  asset_count: 12,
-  total_bytes: totalBytes,
-  published_at: null,
+  versionToken: 'v7',
+  assetCount: 12,
+  totalBytes,
+  publishedAt: null,
 });
 
 async function readSite(row: Record<string, unknown> | null) {

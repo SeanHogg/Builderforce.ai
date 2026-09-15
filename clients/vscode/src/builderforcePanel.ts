@@ -19,6 +19,7 @@ import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
 import { canvasLabels, captureFromEditor, isLightTheme, navigateFromCanvas, openCapturedFile } from "./canvasHostActions";
+import { authLabels } from "./authLabels";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
 
 /** Inbound messages unique to the Brain panel (the shared cases live in the base). */
@@ -187,9 +188,7 @@ function buildLabels(): Record<string, string> {
     "tl.activityResumed": t("{agent} resumed work on {kind} #{ref}"),
     "tl.activityCancelled": t("{agent}'s run on {kind} #{ref} was cancelled"),
     "tl.activityDispatched": t("{agent} was assigned to {kind} #{ref}"),
-    // Composer + chrome
-    "app.signInPrompt": t("Sign in to BuilderForce to start."),
-    "app.signIn": t("Sign in"),
+    // Composer + chrome (the sign-in / connecting states come from `authLabels`)
     "app.summarizeNeedsAccount": t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
     "app.beta": t("beta"),
     "app.newChat": t("New chat"),
@@ -1015,7 +1014,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       personalityBlock,
       // BOTH label sets: one panel renders the chat surface AND the board, so both
       // have to be present whichever surface it opens at.
-      labels: { ...buildLabels(), ...canvasLabels() },
+      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels() },
       // The model rows' copy, shared verbatim with the host's `Change model` QuickPick.
       modelLabels: modelChoiceLabels(),
       // The board this panel is working in, and which of its surfaces the entry asked

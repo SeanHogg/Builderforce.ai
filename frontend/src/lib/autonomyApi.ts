@@ -41,7 +41,7 @@ export type AutonomyStallReason =
   | 'managed_no_role'
   | 'capability_mismatch' | 'already_running' | 'same_lane_reentry' | 'run_cap_exhausted'
   | 'cooldown_active' | 'cloud_run_limit' | 'tenant_token_limit' | 'lane_requirement_gate'
-  | 'not_executable' | 'pending_approval' | 'unrecorded';
+  | 'not_executable' | 'pending_approval' | 'execution_disabled' | 'unrecorded';
 
 /** One origin bucket's autonomy funnel. Field-for-field the server's shape. */
 export interface AutonomyOriginStats {

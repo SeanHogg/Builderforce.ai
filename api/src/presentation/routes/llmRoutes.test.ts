@@ -33,7 +33,8 @@ vi.mock('../../infrastructure/auth/JwtService', () => ({
   verifyJwt: mocks.verifyJwt,
   signJwt: mocks.signJwt,
 }));
-vi.mock('../../infrastructure/database/connection', () => ({
+vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: mocks.buildDatabase,
   buildTransactionalDatabase: (...args: unknown[]) => mocks.buildDatabase(...args),
 }));

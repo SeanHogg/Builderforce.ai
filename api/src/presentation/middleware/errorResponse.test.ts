@@ -69,6 +69,15 @@ describe('errorResponseBody', () => {
     expect(errorResponseBody({ status: 502, message: 'upstream said so' })).toEqual({ status: 502, body: { error: GENERIC_SERVER_ERROR } });
   });
 
+  it('carries a ServiceUnavailableError code on its 503, never its message or cause', () => {
+    const outage = new ServiceUnavailableError('The database is temporarily unavailable', {
+      code: 'database_unavailable',
+      cause: new Error('Server error (HTTP status 402): quota'),
+    });
+    expect(errorResponseBody(outage)).toEqual({ status: 503, body: { error: GENERIC_SERVER_ERROR, code: 'database_unavailable' } });
+    expect(errorResponseBody(new ServiceUnavailableError())).toEqual({ status: 503, body: { error: GENERIC_SERVER_ERROR } });
+  });
+
   it('answers an InternalError with its authored message, never its cause', () => {
     const error = new InternalError('Failed to create template', { cause: new Error('relation "x" does not exist') });
     expect(statusOf(error)).toBe(500);

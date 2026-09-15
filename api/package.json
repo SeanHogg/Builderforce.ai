@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "db:bootstrap": "node scripts/bootstrap-db.mjs && node scripts/migrate.mjs --transactional",
-    "db:migrate": "node scripts/migrate.mjs && node scripts/migrate.mjs --transactional",
+    "db:migrate": "node scripts/migrate.mjs && node scripts/migrate.mjs --transactional && node scripts/migrate.mjs --apps",
     "deploy": "npm run db:migrate && npm run deploy:worker",
     "deploy:worker": "wrangler deploy",
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
