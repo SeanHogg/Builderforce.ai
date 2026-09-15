@@ -4,7 +4,7 @@ import { UnauthorizedError } from '../../domain/shared/errors';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
-import { assertActiveToken, findActiveToken, lastSeenWrites } from '../../application/auth/sessionRevocation';
+import { assertActiveToken, findActiveTokenCached, resolveActiveToken } from '../../application/auth/sessionRevocation';
 import { background } from './background';
 
 /**
@@ -57,8 +57,8 @@ export const webAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => 
     // Same revocation contract as authMiddleware, from the one shared
     // implementation: a single LEFT JOIN read plus throttled, off-critical-path
     // last-seen refreshes.
-    const active = assertActiveToken(await findActiveToken(db, payload.sub, payload.jti));
-    background(c, lastSeenWrites(db, active));
+    const { writes } = await resolveActiveToken(c.env, db, payload.sub, payload.jti);
+    background(c, writes);
     c.set('tokenJti', payload.jti);
   }
 
@@ -111,7 +111,7 @@ export async function optionalWebUserId(c: Context<HonoEnv>): Promise<string | n
   }
   if (payload.jti) {
     try {
-      assertActiveToken(await findActiveToken(buildDatabase(c.env), payload.sub, payload.jti));
+      assertActiveToken(await findActiveTokenCached(c.env, buildDatabase(c.env), payload.sub, payload.jti));
     } catch (err) {
       if (err instanceof UnauthorizedError) return null;
       throw err;

@@ -1,3 +1,68 @@
+## ✅ RESOLVED 2026-09-15 — An open editor kept the core database awake: every request and poll read Postgres (VSIX 2026.9.70)
+
+Neon bills awake time at the 0.25 CU floor, and core only fits the Free plan if it autosuspends (5 minutes idle). An open VS Code window never let it:
+
+- **Every authenticated request made two uncached reads:** `findActiveToken` (`auth_tokens ⋈ auth_user_sessions`) and `users.session_version`.
+- **The polls on top of that:**
+  - `/runtime/attention` every 8–30 seconds: 4–6 queries, uncached by design.
+  - The Evermind console every 20 seconds: `contributions` plus `targets`, each with an uncached ownership read.
+  - The activity flush every 20 seconds.
+  - The connection heartbeat every 5 minutes, exactly the autosuspend window.
+
+**API: the polled paths are served from the read-through cache and invalidated on write.**
+- **Token and session version.** A live token's row is cached under its jti (`findActiveTokenCached` / `resolveActiveToken` in `application/auth/sessionRevocation.ts`). `revokeSessionTokens`, the only revoke writer, drops it alongside the worker's introspection key. `users.session_version` is cached per user (`sessionVersionOf`), and the admin force-logout invalidates it. Only live verdicts are cached, so a miss always reads the database. Revocation latency is bounded by the 30-second L1 plus KV propagation.
+- **Attention.** The query moved out of the route into `application/runtime/attentionSnapshot.ts` and is served under a per-tenant version token (`bumpAttention`). The token is bumped at three places:
+  - the lifecycle-outbox drain, which runs inline for every `RuntimeService` transition;
+  - a run pausing on a question;
+  - that question being answered, through the resume routes, the approval PATCH or MCP `approvals.decide`.
+
+  Everything else the snapshot reads is bounded by its 60-second TTL: unread counts, chat–ticket links, the Manager's cadence, and the status writers that bypass `RuntimeService` (`agentHostRoutes` callback, the DO/container pause, the reaper, self-heal, the GitHub Actions reconcile). `?fresh=1` skips the cache for callers that know state moved.
+- **Project ownership.** One cached gate, `projectInTenantCached` (`application/project/projectOwnership.ts`), replaced both local `ownsProject` copies (Evermind routes, 22 call sites; facts routes, 5). Only `true` is cached, because a project never changes tenant.
+
+**Clients: fewer calls.**
+- **VSIX attention poller:** 10 seconds while something is live, 60 seconds idle, 5 minutes when the window is unfocused or `WindowState.active` is false. Timer ticks read the cache; an explicit refresh, or coming back to the window (at most every 30 seconds), asks for a fresh snapshot.
+- **VSIX timers:** the activity flush moved from 20 seconds to 5 minutes (same signals, batched). The connection heartbeat and assigned-work poll moved from 5 to 15 minutes, and focus re-checks assigned work when the last check is over 5 minutes old.
+- **Evermind console:** the VSIX sidebar refreshes every 60 seconds instead of 20. The shared `EvermindConsole` now pauses while hidden and reloads on becoming visible, on web too.
+- **Web `useAttention`:** its realtime-push refresh asks for a fresh snapshot, so the cache never delays a pushed change.
+
+## ✅ RESOLVED 2026-09-15 — Production runs on three databases: core, apps and operational
+
+**The outage (2026-09-14, from about 22:47Z).**
+- The primary's Free project had used 110 of its 100 CU-hrs, so Neon answered every query with `HTTP 402 "exceeded the compute time quota"`.
+- Every DB-backed route returned 500, including `/api/guest/messages` and `/api/quality-ingest/product-report`. The reporter writes to the same database, so it could not record the outage. `/health` stayed 200.
+- The console showed compute pinned at 0.25 CU all day, never suspending.
+- The usage stats blamed the platform's own background work, not visitors: `tasks` 2.77M writes on 1,233 rows, `pr_reconciliation_items` 4.27M, `ticket_audits` 1.45M, `pull_requests` 1.44M, `manager_actions` 1.12M.
+- The operator upgraded the primary to Launch temporarily so it could be dumped.
+
+**Decisions.**
+- **Three databases.** Core holds accounts plus product; they stay together because about 460 FKs reference tenants/users. Apps holds `project_sites` and the `site_*` tables, so visitor traffic wakes apps and not core. Operational is the existing `NEON_TRANSACTIONAL_DATABASE_URL`.
+- **The churn ledgers stay in core.** The operator's condition was "move them if they aren't joined", and every candidate is joined:
+  - `pr_reconciliation_*`: `runPrReconciliationSweep.ts:27-57`
+  - `manager_actions`: `ManagerService.ts:244`, `prMergeSweep.ts:293-329`, `managerRoutes.ts:339-386`
+  - `ticket_audits`: `ticketAuditService.ts:278`, `toolDataProviders.ts:319`
+  - `execution_lifecycle_outbox` and `tool_audit_events`: triggers 0374 and 0438
+
+  Moving them would not help anyway. Neon bills awake time, and those passes read core in the same tick. The churn was removed at its source instead (DONE 2026-09-14).
+
+**The apps-split code.**
+- Every site-table statement goes through `appsDatabaseOf(db)`. Cross-database reads are two-step: `appForSession`, `standingWithListing`, the growth rollups via `rowsTable`, and the registry projection.
+- Deletes cascade to apps after the core commit (`appsCascade.ts`).
+- The schema has its own migration track (`apps-migrations/`, registered in `scripts/lib/migrationTracks.mjs`).
+
+**The cutover:**
+
+- **Core.** `builderforce-core` is a new Free project, restored from a fresh `pg_dump -Fc` of `builderforce-primary` (0 errors, 738 tables). The Worker's `NEON_DATABASE_URL` was switched at 01:31:51Z.
+- **The churn fixes and the apps-split code.** Deployed by release run 34920248631 (`Fixes`). `db:migrate` applied 1170–1172 to core, which restored `mailbox_automation_replies`.
+- **Apps.** `builderforce-apps` runs the site tables. The Worker's `NEON_APPS_DATABASE_URL` was set at 02:24:34Z, after confirming that core and apps held the same `project_sites` rows.
+- **Verified live.** `/api/sites/rumbledating/` and `rumbledating.builderforce.ai` both return 200. The apps database's `project_sites` scan counters rose with the requests, so site traffic now wakes apps and not core.
+
+Two deploy runs failed first, both on guards and not on the change itself:
+- A test file was committed mid-edit.
+- The tenant-scope ratchet flagged `executionLifecycleOutbox` and `dashboardRoutes`, whose statements now name their tenant through `scopedToTenant`.
+- The root-closure ratchet needed `lib/errors/serviceOutage.ts`; the raise is argued in the guard's header.
+
+What is left is on the ROADMAP outage entry: the switch-window rows, the console watch of core's compute, and decommissioning the old primary.
+
 ## ✅ RESOLVED 2026-09-15 — The deploy paths didn't know about the apps database, and CI would have migrated the old primary
 
 Found during the core cutover. Two paths carried their own hand-kept list of database secrets:

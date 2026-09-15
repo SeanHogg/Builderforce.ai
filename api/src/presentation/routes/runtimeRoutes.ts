@@ -54,7 +54,7 @@ import { assessRerunBackoff, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '..
 import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
 import { revertRun } from '../../application/runtime/runRollback';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
-import { unreadCountsForUser } from '../../application/brain/chatReadState';
+import { readAttention } from '../../application/runtime/attentionSnapshot';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { parseBody, parseOptionalBody, z, zNonEmptyString, zNumberLike, zPositiveInt } from './requestBody';
@@ -66,7 +66,7 @@ import { requireFeature } from '../middleware/featureGate';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
+import { approvals } from '../../infrastructure/database/schema';
 import { agentPurchases, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { readDispatchFileChanges } from '../../application/task/taskFileChangeFeed';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -829,139 +829,18 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json(await cancelTenantExecutions(c, db, runtimeService, false));
   });
 
-  // GET /api/runtime/attention  — the ONE cross-surface "what's live / what needs me"
-  // aggregator. Every surface (web Brain chat list + FloatingBrain badge, the board,
-  // the VS Code sessions/tasks trees, any modality) reads this SAME signal so a
-  // session's status follows it everywhere the user multitasks — switching chats on
-  // the web never changes whether the agent keeps executing in the background.
-  //
-  // Two derived states per work item, most-severe wins:
-  //   'awaiting_input' — an execution is PAUSED on ask_human (a pending question/feedback
-  //                      approval): a person must answer before it resumes.  [amber flag]
-  //   'running'        — an execution is pending/submitted/running: actively executing. [blue/pulse]
-  // (idle items are omitted entirely to keep the payload bounded.)
-  //
-  // Attribution: directly to the task via executions.task_id, and to a Brain chat via
-  // chat_ticket_links (chat → task/epic/gap). Intentionally uncached — a live operational
-  // surface that must reflect state this instant, same rationale as /active; it is three
-  // indexed, bounded queries with no N+1, and every consumer polls it adaptively.
+  // GET /api/runtime/attention — the ONE cross-surface "what's live / what needs me"
+  // snapshot. The reads, the fold and the cache live in application/runtime/attentionSnapshot.ts;
+  // `fresh=1` (a realtime push, a platform write, regaining focus) skips the cache.
   router.get('/attention', async (c) => {
-    const tenantId = c.get('tenantId') as number;
     const projectIdRaw = c.req.query('projectId');
     const projectId = projectIdRaw ? Number(projectIdRaw) : undefined;
-    const LIMIT = 500;
-
-    // 1) Every non-terminal execution for the tenant (optionally one project), with its task.
-    const execWhere = [eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running', 'paused']), liveExecution()];
-    if (projectId != null && Number.isFinite(projectId)) execWhere.push(eq(tasks.projectId, projectId));
-    const execRows = await db
-      .select({ id: executions.id, taskId: executions.taskId, status: executions.status })
-      .from(executions)
-      .innerJoin(tasks, eq(tasks.id, executions.taskId))
-      .where(and(...execWhere))
-      .orderBy(desc(executions.createdAt))
-      .limit(LIMIT);
-
-    // 2) Pending human questions (ask_human) — the authoritative "needs an answer" rows.
-    const approvalRows = await db
-      .select({ id: approvals.id, executionId: approvals.executionId })
-      .from(approvals)
-      .where(and(
-        eq(approvals.tenantId, tenantId),
-        eq(approvals.status, 'pending'),
-        inArray(approvals.kind, ['question', 'feedback']),
-      ))
-      .limit(LIMIT);
-
-    // execId → taskId (only executions we actually surfaced above, so already project-scoped).
-    const execTask = new Map<number, number>();
-    for (const e of execRows) if (e.taskId != null) execTask.set(e.id, e.taskId);
-    const approvalByExec = new Map<number, string>();
-    for (const a of approvalRows) if (a.executionId != null) approvalByExec.set(a.executionId, a.id);
-
-    // 3) Fold into per-task state (awaiting_input wins over running).
-    type Item = { state: 'running' | 'awaiting_input'; executionId?: number; approvalId?: string };
-    const taskState = new Map<number, Item>();
-    const setState = (taskId: number, next: Item) => {
-      const cur = taskState.get(taskId);
-      if (!cur || (next.state === 'awaiting_input' && cur.state !== 'awaiting_input')) taskState.set(taskId, next);
-      else if (cur.state === next.state && !cur.approvalId && next.approvalId) taskState.set(taskId, next);
-    };
-    for (const e of execRows) {
-      if (e.taskId == null) continue;
-      const approvalId = approvalByExec.get(e.id);
-      // A paused run, or any run carrying a pending question, is awaiting a person.
-      if (e.status === 'paused' || approvalId) setState(e.taskId, { state: 'awaiting_input', executionId: e.id, approvalId });
-      else setState(e.taskId, { state: 'running', executionId: e.id });
-    }
-
-    // 4) Propagate task state onto the Brain chats linked to those tasks (chat_ticket_links).
-    const taskIds = [...taskState.keys()];
-    const chatState: Record<number, Item & { taskId: number }> = {};
-    if (taskIds.length > 0) {
-      const linkRows = await db
-        .select({ chatId: chatTicketLinks.chatId, ticketRef: chatTicketLinks.ticketRef })
-        .from(chatTicketLinks)
-        .where(and(
-          eq(chatTicketLinks.tenantId, tenantId),
-          inArray(chatTicketLinks.ticketKind, ['task', 'epic', 'gap']),
-          inArray(chatTicketLinks.ticketRef, taskIds.map(String)),
-        ))
-        .limit(LIMIT);
-      for (const l of linkRows) {
-        const taskId = Number(l.ticketRef);
-        const item = taskState.get(taskId);
-        if (!item) continue;
-        const cur = chatState[l.chatId];
-        if (!cur || (item.state === 'awaiting_input' && cur.state !== 'awaiting_input')) {
-          chatState[l.chatId] = { ...item, taskId };
-        }
-      }
-    }
-
-    const tasksOut: Record<number, Item> = {};
-    for (const [taskId, item] of taskState) tasksOut[taskId] = item;
-
-    // 4b) Unread Brain chats for the caller — new messages (execution milestones,
-    // a teammate/agent turn) in a chat the user has read before but isn't viewing.
-    // Bounded, indexed grouped read via the shared read-state rule; global (not
-    // project-scoped) because unread is inherently cross-project. Only for a real
-    // user JWT (an agentHost runtime token has no userId, so it just sees {}).
-    const userId = c.get('userId') as string | undefined;
-    const chatUnread = userId
-      ? await unreadCountsForUser(db, tenantId, userId).catch(() => ({} as Record<number, number>))
-      : {};
-    const unreadTotal = Object.values(chatUnread).reduce((a, b) => a + b, 0);
-
-    // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's
-    // scope, so a human on ANY screen sees an ambient "Manager active" pulse when a
-    // pass just ran (cron or manual). A manager can be scoped to one project OR the
-    // whole tenant, so: project-scoped attention reads that project's stamp; the
-    // tenant-wide view reads MAX(last_run_at) across all the tenant's managed
-    // projects. One bounded aggregate — consistent with this endpoint's other reads.
-    const mgrWhere = projectId != null && Number.isFinite(projectId)
-      ? and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId))
-      : eq(projectManagerConfigs.tenantId, tenantId);
-    const [mgrRow] = await db
-      .select({ lastRunAt: sql<Date | null>`max(${projectManagerConfigs.lastRunAt})` })
-      .from(projectManagerConfigs)
-      .where(mgrWhere);
-    const lastRunAt = mgrRow?.lastRunAt ? new Date(mgrRow.lastRunAt) : null;
-    // "Active" = a pass landed within the last 3 min (the cron cadence is 5 min, a
-    // pass is seconds long, so this reads as "the manager is working on schedule").
-    const recentlyActive = lastRunAt != null && Date.now() - lastRunAt.getTime() < 3 * 60_000;
-
-    return c.json({
-      tasks: tasksOut,
-      chats: chatState,
-      chatUnread,
-      counts: {
-        running: [...taskState.values()].filter((i) => i.state === 'running').length,
-        awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
-        unread: unreadTotal,
-      },
-      manager: { lastRunAt: lastRunAt ? lastRunAt.toISOString() : null, recentlyActive },
-    });
+    return c.json(await readAttention(c.env as Env, db, {
+      tenantId: c.get('tenantId') as number,
+      projectId: projectId != null && Number.isFinite(projectId) ? projectId : undefined,
+      userId: c.get('userId') as string | undefined,
+      fresh: c.req.query('fresh') === '1',
+    }));
   });
 
   // GET /api/runtime/hired-agents
@@ -1457,7 +1336,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     // Close the outstanding question the same way answering it would, so the
     // human-requests queue does not keep asking for something already handled.
-    await answerOpenExecutionQuestions(db, { tenantId, executionId: id, answer, userId: c.get('userId') });
+    await answerOpenExecutionQuestions(c.env as Env, db, { tenantId, executionId: id, answer, userId: c.get('userId') });
 
     await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer, runtimeService });
     const updated = await runtimeService.getExecution(id).catch(() => null);
@@ -1553,7 +1432,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       // message IS the answer, so it closes the open question and resumes the run on
       // whichever surface parked it. `resumePausedExecution` owns the enqueue, the
       // stream echo, the lane restore and the wake, so nothing here duplicates it.
-      await answerOpenExecutionQuestions(db, { tenantId, executionId: id, answer: text, userId: c.get('userId') });
+      await answerOpenExecutionQuestions(c.env as Env, db, { tenantId, executionId: id, answer: text, userId: c.get('userId') });
       await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer: text, runtimeService });
 
       if (taskRow) {

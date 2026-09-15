@@ -315,6 +315,10 @@ export function EvermindScreen({ init }: { init: InitData }) {
           // The inline `↻` moved to the VS Code view title bar; drive reloads from there.
           showHeaderRefresh={false}
           refreshSignal={refreshSignal}
+          // A sidebar view sits open all day. Once a minute keeps pending/recent current
+          // while learning happens (the title-bar refresh is immediate); the console also
+          // pauses entirely while the view is hidden.
+          refreshMs={60_000}
         />
       )}
     </div>

@@ -162,11 +162,21 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   }, [adapter, canManage]);
 
   // Light poll so pending/recent stay live while learning happens. The read endpoint
-  // is server-cached, so this is cheap; paused while an action is in flight.
+  // is server-cached, so this is cheap; paused while an action is in flight, and
+  // while the console is HIDDEN (a background tab, a collapsed or unfocused VS Code
+  // view) — nobody is reading it, and every tick is a request that has to be served.
+  // Becoming visible again reloads at once, so a returning reader never sees stale
+  // numbers for a whole interval.
   useEffect(() => {
     if (!refreshMs) return;
-    const id = setInterval(() => { if (!busy) void reload(); }, refreshMs);
-    return () => clearInterval(id);
+    const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    const id = setInterval(() => { if (!busy && !hidden()) void reload(); }, refreshMs);
+    const onVisibility = () => { if (!busy && !hidden()) void reload(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(id);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [refreshMs, busy, reload]);
 
   // Host-driven refresh: when a host bumps `refreshSignal` (e.g. a VS Code title-bar

@@ -51,8 +51,11 @@ export function initActivity(secrets: vscode.SecretStorage): vscode.Disposable {
     }),
   );
 
-  // Flush on a timer.
-  const flushTimer = setInterval(() => { void flushVsix(); }, 20_000);
+  // Flush on a timer. Every signal carries its own `occurredAt`/`durationSeconds`, so
+  // batching five minutes of heartbeats into one POST records exactly the same time —
+  // it only stops a focused editor from writing to the platform every 20 seconds.
+  // A full queue (25) and disposal still flush immediately.
+  const flushTimer = setInterval(() => { void flushVsix(); }, 5 * 60_000);
 
   return new vscode.Disposable(() => {
     clearInterval(heartbeat);

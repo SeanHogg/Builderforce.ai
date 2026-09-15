@@ -4479,10 +4479,18 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   }, [adapter, canManage]);
   useEffect10(() => {
     if (!refreshMs) return;
+    const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
-      if (!busy) void reload();
+      if (!busy && !hidden()) void reload();
     }, refreshMs);
-    return () => clearInterval(id);
+    const onVisibility = () => {
+      if (!busy && !hidden()) void reload();
+    };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(id);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [refreshMs, busy, reload]);
   const lastRefreshSignal = useRef6(refreshSignal);
   useEffect10(() => {

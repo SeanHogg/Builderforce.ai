@@ -66,7 +66,7 @@ import {
   reseedProjectEvermind,
   generateDefaultEvermindBase,
 } from '../../application/llm/projectEvermind';
-import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { projectInTenantCached } from '../../application/project/projectOwnership';
 import { MAX_DELTA_B64_CHARS, parseDeltaLearnRequest } from '../../application/llm/evermindDeltaLearn';
 import { dispatchProjectEvermindLearn } from '../../application/llm/evermindDeltaDispatch';
 import { codingEvalFromReports, evermindQualifiesForCoding } from '../../application/llm/evermindCodingGate';
@@ -91,13 +91,6 @@ const ProbeBody = z.object({
 });
 const CleanupBody = z.object({ pending: z.unknown().optional(), qaCache: z.unknown().optional() });
 const AnalyzeBody = z.object({ apply: z.unknown().optional(), limit: z.unknown().optional(), findings: z.unknown().optional() });
-
-/** Verify the project exists AND belongs to this tenant (IDOR guard). */
-async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
-  if (!Number.isInteger(projectId) || projectId <= 0) return false;
-  const row = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
-  return !!row;
-}
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -143,7 +136,7 @@ async function refuseInheritedWrite(
 // ── Shared core handlers (auth-agnostic) ──────────────────────────────────────
 
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   // An IDE build without its own Evermind inherits its container project's.
   const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
   const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
@@ -158,7 +151,7 @@ async function headCore(env: Env, db: Db, tenantId: number, projectId: number): 
  * version so a fan-out is legible. Cached via the resolver.
  */
 async function targetsCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const heads = await resolveEvermindTargets(env, db, tenantId, projectId);
   return json({
     targets: heads.map((h) => ({
@@ -175,7 +168,7 @@ async function targetsCore(env: Env, db: Db, tenantId: number, projectId: number
 
 /** Read the inspection console payload: head summary + queued depth + recent-learned ring. */
 async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   // Same inheritance as headCore — the console must not report "Not set up" for an
   // IDE build whose container project has a live Evermind.
   const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
@@ -215,7 +208,7 @@ async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: 
  * contribution was actually enqueued.
  */
 async function contributionStatusCore(env: Env, db: Db, tenantId: number, projectId: number, contributionId: number): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   if (!Number.isInteger(contributionId) || contributionId <= 0) return json({ error: 'contributionId must be a positive integer' }, 400);
   const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
   return json(await getProjectEvermindContributionStatus(env, tenantId, effectiveId, contributionId));
@@ -227,7 +220,7 @@ async function contributionStatusCore(env: Env, db: Db, tenantId: number, projec
  * result is cached behind the head version token + a prompt hash.
  */
 async function validateCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const body = await parseOptionalBody(c, PromptBody);
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
   if (!prompt.trim()) return json({ error: 'prompt is required' }, 400);
@@ -243,7 +236,7 @@ async function validateCore(env: Env, db: Db, tenantId: number, projectId: numbe
  * query yields an empty (non-error) result so the loop just skips the memory steps.
  */
 async function recallCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const body = await parseOptionalBody(c, RecallBody);
   const query = typeof body.query === 'string' ? body.query : '';
   // The ASKING conversation. Optional: a global chat, or a caller that tracks none,
@@ -258,7 +251,7 @@ async function recallCore(env: Env, db: Db, tenantId: number, projectId: number,
 }
 
 async function artifactCore(env: Env, db: Db, tenantId: number, projectId: number, versionQ: string | undefined, file: 'model.evermind' | 'tokenizer.json'): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   if (!env.UPLOADS) return json({ error: 'R2 artifact storage not configured' }, 503);
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
   const qv = Number(versionQ);
@@ -294,7 +287,7 @@ const DELTA_ENVELOPE_BYTES = 64 * 1024;
  * different weights.
  */
 async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
   if (inheritedBlock) return inheritedBlock;
   const declared = Number(c.req.header('content-length') ?? 0);
@@ -321,7 +314,7 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
  * the explicit "Teach a task" UI (JWT front door) targets the ONE Evermind in the URL.
  */
 async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, fanOut = false): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
   if (inheritedBlock) return inheritedBlock;
   const body = await parseOptionalBody(c, LearnTextBody);
@@ -346,7 +339,7 @@ async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: numb
  * then compact the absorbed entries to stubs. Manager-gated (a training write).
  */
 async function extractMemoriesCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
   if (inheritedBlock) return inheritedBlock;
   const body = await parseOptionalBody(c, ExtractMemoriesBody);
@@ -406,7 +399,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/seed', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     if (!c.env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
 
     const body = await parseOptionalBody(c, SeedBody);
@@ -450,7 +443,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/seed-from-model', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const env = c.env as Env;
 
     const body = await parseOptionalBody(c, SlugNameBody);
@@ -473,7 +466,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:projectId/evermind/mode', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const body = await parseOptionalBody(c, ModeBody);
@@ -493,7 +486,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     const env = c.env as Env;
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const body = await parseOptionalBody(c, InferenceBody);
@@ -537,7 +530,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     const env = c.env as Env;
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     // `codingEvalFromReports` owns the report contract; the route only refuses a non-object.
@@ -561,7 +554,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:projectId/evermind/teacher', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const body = await parseOptionalBody(c, TeacherBody);
@@ -608,7 +601,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     const env = c.env as Env;
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const store = env.UPLOADS as ArtifactStore | undefined;
     if (!store) return c.json({ error: 'R2 artifact storage not configured' }, 503);
     // Reads inherit (an IDE build probes the head it actually serves from).
@@ -668,7 +661,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     const env = c.env as Env;
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     if (!env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
@@ -700,7 +693,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/reindex', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const result = await reindexProjectEvermindRecall(c.env as Env, tenantId, projectId);
@@ -717,7 +710,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     const env = c.env as Env;
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const body = await parseOptionalBody(c, CleanupBody);
@@ -751,7 +744,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = t(c);
     const projectId = pid(c);
     const env = c.env as Env;
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const gate = await requireFrontierAccess(c);
@@ -785,7 +778,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/flush', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
-    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    if (!(await projectInTenantCached(c.env as Env, db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
     const result = await flushProjectEvermind(c.env as Env, tenantId, projectId);

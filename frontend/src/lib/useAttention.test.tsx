@@ -48,6 +48,8 @@ describe('useAttention workspace authentication', () => {
     const { result } = renderHook(() => useAttention(42));
     await waitFor(() => expect(result.current.counts.running).toBe(1));
 
-    expect(mocks.attention).toHaveBeenCalledWith(42);
+    // Timer ticks read the server's cached snapshot (fresh=false); only an
+    // explicit refresh() skips it — see useAttention's `load`/`refresh` split.
+    expect(mocks.attention).toHaveBeenCalledWith(42, false);
   });
 });

@@ -71,7 +71,7 @@ export function useAttention(projectId?: number, enabled = true): AttentionRespo
   const pidRef = useRef(projectId);
   pidRef.current = projectId;
 
-  const load = useCallback(async (): Promise<boolean> => {
+  const load = useCallback(async (fresh = false): Promise<boolean> => {
     // This endpoint is workspace-scoped. A person may be signed in with only a
     // web token while onboarding / choosing a workspace; do not turn that valid
     // intermediate state into an unauthenticated API request (and a global
@@ -82,7 +82,7 @@ export function useAttention(projectId?: number, enabled = true): AttentionRespo
       return false;
     }
     try {
-      const res = await runtimeApi.attention(pidRef.current);
+      const res = await runtimeApi.attention(pidRef.current, fresh);
       setData(res);
       return res.counts.running + res.counts.awaiting > 0;
     } catch {
@@ -91,7 +91,9 @@ export function useAttention(projectId?: number, enabled = true): AttentionRespo
     }
   }, []);
 
-  const refresh = useCallback(() => { void load(); }, [load]);
+  // An explicit refresh (the room push below, a caller after a write) KNOWS state moved,
+  // so it skips the server cache; the timer ticks read the cached snapshot.
+  const refresh = useCallback(() => { void load(true); }, [load]);
 
   useEffect(() => {
     if (!enabled) { setData(EMPTY); return; }

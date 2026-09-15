@@ -72,7 +72,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
-import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
+import { invalidateSessionVersion, revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import { screenshotConfigured } from '../../application/web/webScreenshot';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
@@ -3534,6 +3534,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const targetId = c.req.param('id');
     // Increment session_version (JWT-level invalidation for future tokens carrying sv)
     await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, targetId));
+    // authMiddleware reads the counter through the cache — drop it with the increment.
+    await invalidateSessionVersion(c.env, targetId);
     // Revoke every active token and session — and the worker's cached verdicts.
     await revokeSessionTokens(db, c.env, { userId: targetId });
     await writeAudit(db, 'USER_SESSIONS_REVOKED', actorId, {

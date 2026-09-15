@@ -3117,8 +3117,15 @@ export const runtimeApi = {
   /** The ONE cross-surface "what's live / what needs me" signal: per-task and
    *  per-Brain-chat attention state (running / awaiting_input). Poll this and
    *  render an indicator wherever sessions or tickets are listed. */
-  attention: (projectId?: number): Promise<AttentionResponse> =>
-    request<AttentionResponse>(`/api/runtime/attention${projectId != null ? `?projectId=${projectId}` : ''}`),
+  attention: (projectId?: number, fresh = false): Promise<AttentionResponse> => {
+    // `fresh` skips the server's cached snapshot — only for a caller that KNOWS state just
+    // moved (a realtime push); the poll's own ticks read the cache.
+    const params = new URLSearchParams();
+    if (projectId != null) params.set('projectId', String(projectId));
+    if (fresh) params.set('fresh', '1');
+    const q = params.toString();
+    return request<AttentionResponse>(`/api/runtime/attention${q ? `?${q}` : ''}`);
+  },
 
   get: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}`),

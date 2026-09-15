@@ -5,10 +5,8 @@ import { UnauthorizedError, ForbiddenError } from '../../domain/shared/errors';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { users } from '../../infrastructure/database/schema';
-import { eq } from 'drizzle-orm';
 import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
-import { assertActiveToken, findActiveToken, lastSeenWrites } from '../../application/auth/sessionRevocation';
+import { resolveActiveToken, sessionVersionOf } from '../../application/auth/sessionRevocation';
 import { background } from './background';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import type { TransitionActorInput } from '../../application/task/taskLifecycle';
@@ -78,30 +76,25 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   const checksRevocation = !!payload.jti && !isMachineToken;
 
   // Both reads are independent — issue them together rather than one after the other.
-  const [userRows, activeTokenRow] = await Promise.all([
-    checksSessionVersion
-      ? db
-          .select({ sessionVersion: users.sessionVersion })
-          .from(users)
-          .where(eq(users.id, payload.sub))
-          .limit(1)
-      : Promise.resolve([]),
-    checksRevocation ? findActiveToken(db, payload.sub, payload.jti!) : Promise.resolve(null),
+  // Both are served from the read-through cache (see `application/auth/sessionRevocation`),
+  // so a polling client no longer wakes Postgres on every request.
+  const [sessionVersion, activeToken] = await Promise.all([
+    checksSessionVersion ? sessionVersionOf(c.env, db, payload.sub) : Promise.resolve(null),
+    // Served from the cached live-token verdict — see `resolveActiveToken`.
+    checksRevocation ? resolveActiveToken(c.env, db, payload.sub, payload.jti!) : Promise.resolve(null),
   ]);
 
   // session_version check — if the JWT carries an `sv` claim, verify it matches
   // the current value in the DB. Force-logout increments this counter, instantly
   // invalidating all existing tokens for the user without needing a blocklist.
   if (checksSessionVersion) {
-    const userRow = userRows[0];
-    if (!userRow || userRow.sessionVersion > (payload.sv as number)) {
+    if (sessionVersion == null || sessionVersion > (payload.sv as number)) {
       throw new UnauthorizedError('Session has been invalidated — please log in again');
     }
   }
 
-  if (checksRevocation) {
-    const active = assertActiveToken(activeTokenRow);
-    background(c, lastSeenWrites(db, active));
+  if (activeToken) {
+    background(c, activeToken.writes);
     c.set('tokenJti', payload.jti!);
   }
 

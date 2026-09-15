@@ -1014,9 +1014,14 @@ const EMPTY_ATTENTION: BfAttention = { tasks: {}, chats: {}, counts: { running: 
 export async function getAttention(
   secrets: vscode.SecretStorage,
   projectId?: number,
+  /** Skip the server's cached snapshot — only when the caller knows state just moved. */
+  fresh = false,
 ): Promise<BfAttention | null> {
   try {
-    const q = projectId != null ? `?projectId=${projectId}` : "";
+    const params = new URLSearchParams();
+    if (projectId != null) params.set("projectId", String(projectId));
+    if (fresh) params.set("fresh", "1");
+    const q = params.size > 0 ? `?${params.toString()}` : "";
     const r = await authed<BfAttention>(secrets, `/api/runtime/attention${q}`);
     return r ?? EMPTY_ATTENTION;
   } catch {

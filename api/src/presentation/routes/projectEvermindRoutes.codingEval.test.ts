@@ -17,7 +17,7 @@ vi.mock('../middleware/authMiddleware', () => ({
 }));
 vi.mock('../middleware/featureGate', () => ({ requireFrontierAccess: vi.fn(async () => null) }));
 vi.mock('../../infrastructure/auth/agentHostAuth', () => ({ resolveHostAuth: vi.fn() }));
-vi.mock('../../application/project/projectOwnership', () => ({ loadProjectInTenant: mocks.owned }));
+vi.mock('../../application/project/projectOwnership', () => ({ projectInTenantCached: mocks.owned }));
 vi.mock('../../application/llm/evermindCodingEvalStore', () => ({ recordProjectEvermindCodingEval: mocks.record }));
 vi.mock('../../application/llm/projectEvermind', () => ({ resolveEffectiveEvermindProjectId: mocks.effectiveId }));
 vi.mock('../../application/llm/evermindRecipes', () => ({}));
@@ -34,7 +34,7 @@ const BODY = { version: 12, evermind: report(0.72), baseline: report(0.8), basel
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.owned.mockResolvedValue({ id: 42 });
+  mocks.owned.mockResolvedValue(true);
   mocks.effectiveId.mockImplementation(async (_e: unknown, _d: unknown, _t: number, projectId: number) => projectId);
   mocks.record.mockResolvedValue({ ok: true, gate: { qualified: true, reason: 'qualified', bar: 0.9, ratio: 0.9, headVersion: 12, evaluatedVersion: 12 } });
 });

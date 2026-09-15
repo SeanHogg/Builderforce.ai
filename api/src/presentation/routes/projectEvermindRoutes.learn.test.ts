@@ -25,7 +25,7 @@ vi.mock('../middleware/authMiddleware', () => ({
 }));
 vi.mock('../middleware/featureGate', () => ({ requireFrontierAccess: vi.fn(async () => null) }));
 vi.mock('../../infrastructure/auth/agentHostAuth', () => ({ resolveHostAuth: mocks.hostAuth }));
-vi.mock('../../application/project/projectOwnership', () => ({ loadProjectInTenant: mocks.owned }));
+vi.mock('../../application/project/projectOwnership', () => ({ projectInTenantCached: mocks.owned }));
 vi.mock('../../application/llm/evermindDeltaDispatch', () => ({ dispatchProjectEvermindLearn: mocks.dispatch }));
 vi.mock('../../application/llm/projectEvermind', () => ({
   resolveEffectiveEvermindProjectId: mocks.effectiveId,
@@ -44,7 +44,7 @@ const DELTA = { diff: 'AAAA', baseVersion: 7, weight: 0.7, label: 'ticket 12' };
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.hostAuth.mockResolvedValue({ tenantId: TENANT });
-  mocks.owned.mockResolvedValue({ id: 42 });
+  mocks.owned.mockResolvedValue(true);
   mocks.effectiveId.mockImplementation(async (_env: unknown, _db: unknown, _t: number, projectId: number) => projectId);
   mocks.dispatch.mockResolvedValue({ ok: true, status: 200, body: { ok: true, queued: 1, contributionId: 11, baseVersion: 7 } });
 });

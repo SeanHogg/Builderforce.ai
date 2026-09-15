@@ -142,10 +142,18 @@ export class AttentionPoller implements vscode.Disposable {
   /** Current wait after a failed fetch; 0 while the gateway answers. */
   private errorMs = 0;
 
-  private static readonly FAST_MS = 8_000;
-  private static readonly IDLE_MS = 30_000;
-  /** The window is not focused: nobody is reading the trees, so they can wait. */
-  private static readonly BACKGROUND_MS = 120_000;
+  // Every tick is a request the platform has to serve. Timer ticks read the server's
+  // CACHED snapshot; only an explicit refresh (a platform write, sign-in, coming back to
+  // the window) asks for a fresh one — so an editor left open no longer keeps the
+  // database awake. The cadences below are what "live enough" costs, not a guess.
+  private static readonly FAST_MS = 10_000;
+  private static readonly IDLE_MS = 60_000;
+  /** Not focused, or focused but nobody has touched it lately (`WindowState.active`):
+   *  nobody is reading the trees, so they can wait. */
+  private static readonly BACKGROUND_MS = 5 * 60_000;
+  /** A focus/activity change refreshes at most this often — `active` flips a lot. */
+  private static readonly REFRESH_MIN_GAP_MS = 30_000;
+  private lastFetchAt = 0;
   /** After a failed fetch: the first retry, and the ceiling the wait doubles up to
    *  — the same ladder `insights.ts` climbs down when its stream drops. */
   private static readonly ERROR_MIN_MS = 15_000;
@@ -157,20 +165,24 @@ export class AttentionPoller implements vscode.Disposable {
     // Regaining focus is the moment a stale tree gets noticed — refetch right then,
     // and let the unfocused cadence take over again when the window is left.
     this.focusSub = vscode.window.onDidChangeWindowState((state) => {
-      if (state.focused) this.refresh();
+      if (state.focused && state.active && Date.now() - this.lastFetchAt >= AttentionPoller.REFRESH_MIN_GAP_MS) {
+        this.refresh();
+      }
     });
-    void this.tick();
+    void this.tick(false);
   }
 
-  /** Force an immediate refetch (e.g. after a platform write or sign-in). */
+  /** Force an immediate FRESH refetch (e.g. after a platform write or sign-in) —
+   *  the one read that skips the server cache, because the caller knows state moved. */
   refresh(): void {
-    void this.tick();
+    void this.tick(true);
   }
 
-  private async tick(): Promise<void> {
+  private async tick(fresh = false): Promise<void> {
     if (this.disposed) return;
     const project = getSelectedProject();
-    const next = await getAttention(this.secrets, project?.id);
+    this.lastFetchAt = Date.now();
+    const next = await getAttention(this.secrets, project?.id, fresh);
     if (this.disposed) return;
 
     if (!next) {
@@ -199,9 +211,10 @@ export class AttentionPoller implements vscode.Disposable {
       this._onDidChange.fire();
     }
 
-    const active = next.counts.running + next.counts.awaiting > 0;
-    const focused = vscode.window.state.focused;
-    this.schedule(!focused ? AttentionPoller.BACKGROUND_MS : active ? AttentionPoller.FAST_MS : AttentionPoller.IDLE_MS);
+    const live = next.counts.running + next.counts.awaiting > 0;
+    const { focused, active } = vscode.window.state;
+    const attended = focused && active;
+    this.schedule(!attended ? AttentionPoller.BACKGROUND_MS : live ? AttentionPoller.FAST_MS : AttentionPoller.IDLE_MS);
   }
 
   private schedule(ms: number): void {

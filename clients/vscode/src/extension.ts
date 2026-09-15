@@ -564,13 +564,27 @@ export function activate(context: vscode.ExtensionContext): void {
   // Track this VS Code coder-agent connection (human-in-the-loop) via heartbeat, and
   // on the same cadence poll for newly-assigned work so a ticket assigned on the web
   // board is delivered to the editor (tracked HITL). One timer for both (DRY).
+  //
+  // Fifteen minutes, not five: five is exactly the database's autosuspend window, so an
+  // editor merely left open kept it awake around the clock. Nothing reads
+  // `vscode_connections.last_seen_at` against a staleness threshold (it orders the
+  // connections list and feeds engagement), and coming back to the window re-checks
+  // assigned work at once, so a returning person still sees a new assignment promptly.
+  const CONNECTION_BEAT_MS = 15 * 60_000;
+  let lastAssignedPoll = Date.now();
   void heartbeat(context);
   void pollAssignedTasks(context, projects);
   const hb = setInterval(() => {
+    lastAssignedPoll = Date.now();
     void heartbeat(context);
     void pollAssignedTasks(context, projects);
-  }, 5 * 60_000);
+  }, CONNECTION_BEAT_MS);
   context.subscriptions.push({ dispose: () => clearInterval(hb) });
+  context.subscriptions.push(vscode.window.onDidChangeWindowState((state) => {
+    if (!state.focused || Date.now() - lastAssignedPoll < 5 * 60_000) return;
+    lastAssignedPoll = Date.now();
+    void pollAssignedTasks(context, projects);
+  }));
 }
 
 async function heartbeat(context: vscode.ExtensionContext): Promise<void> {

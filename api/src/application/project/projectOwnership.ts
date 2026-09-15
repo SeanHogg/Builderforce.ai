@@ -18,6 +18,8 @@ import { and, eq } from 'drizzle-orm';
 import type { PgColumn, SelectedFields } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects } from '../../infrastructure/database/schema';
+import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env } from '../../env';
 
 /** The row shape a `columns` selection produces: nullable columns read as `T | null`. */
 type Selected<T extends Record<string, PgColumn>> = {
@@ -55,4 +57,29 @@ export async function loadProjectInTenant<T extends Record<string, PgColumn>>(
 /** True when `projectId` names a real project belonging to `tenantId`. */
 export async function projectInTenant(db: Db, tenantId: number, projectId: number): Promise<boolean> {
   return (await loadProjectInTenant(db, tenantId, projectId, { id: projects.id })) != null;
+}
+
+/**
+ * {@link projectInTenant} through the read-through cache — for the gates that run on
+ * every poll (the Evermind console's head/contributions/targets, the project facts
+ * tier), where an uncached ownership read alone kept the core database awake.
+ *
+ * Only `true` is cached. A project never changes tenant, so a positive answer can only
+ * go stale by the project being DELETED — and everything the gated handler would read
+ * is hung off the project and cascades with it, so a stale `true` exposes nothing and
+ * ages out with the TTL. A `false` is never cached: ids are serial, so an id that is
+ * nobody's today is somebody's project tomorrow.
+ */
+export async function projectInTenantCached(
+  env: Env | undefined,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<boolean> {
+  if (!Number.isInteger(projectId) || projectId < 1) return false;
+  const key = `project:in-tenant:${tenantId}:${projectId}`;
+  if (await peekCached<boolean>(env, key)) return true;
+  const owned = await projectInTenant(db, tenantId, projectId);
+  if (owned) await setCached(env, key, true, { kvTtlSeconds: 60 * 60 });
+  return owned;
 }

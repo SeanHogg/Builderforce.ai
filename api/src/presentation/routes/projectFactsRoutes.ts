@@ -21,7 +21,7 @@ import type { Env, HonoEnv } from '../../env';
 import { deleteProjectFact, recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
 import { evermindGenerate, type ArtifactStore } from '../../application/llm/evermindRuntime';
-import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { projectInTenantCached } from '../../application/project/projectOwnership';
 import { parseOptionalBody, z } from './requestBody';
 
 /** Every field is type-guarded by the handler, which answers its own
@@ -37,20 +37,13 @@ const CacheAnswerBody = z.object({
   answer: z.unknown().optional(),
 });
 
-/** Verify the project exists AND belongs to this tenant (IDOR guard). */
-async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
-  if (!Number.isInteger(projectId) || projectId <= 0) return false;
-  const row = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
-  return !!row;
-}
-
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const pid = (c: Context): number => Number(c.req.param('projectId'));
 
 async function recallCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const query = c.req.query('query') ?? undefined;
   const limitQ = Number(c.req.query('limit'));
   const facts = await recallProjectFacts(env, db, tenantId, projectId, {
@@ -61,7 +54,7 @@ async function recallCore(env: Env, db: Db, tenantId: number, projectId: number,
 }
 
 async function rememberCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const body = await parseOptionalBody(c, RememberFactBody);
   const key = typeof body.key === 'string' ? body.key : '';
   const content = typeof body.content === 'string' ? body.content : '';
@@ -72,7 +65,7 @@ async function rememberCore(env: Env, db: Db, tenantId: number, projectId: numbe
 
 /** Retire one fact by key. `ok` says whether a fact was removed (absent is not an error). */
 async function forgetCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const key = decodeURIComponent(c.req.param('key') ?? '');
   if (!key.trim()) return json({ error: 'key is required' }, 400);
   const removed = await deleteProjectFact(env, db, tenantId, projectId, key);
@@ -93,7 +86,7 @@ async function forgetCore(env: Env, db: Db, tenantId: number, projectId: number,
  * that could fetch the real answer). Absent/anything else = tools available = cache only.
  */
 async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const question = c.req.query('query') ?? '';
   if (!question.trim()) return json({ error: 'query is required' }, 400);
   const store = env.UPLOADS as ArtifactStore | undefined;
@@ -118,7 +111,7 @@ async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: 
 /** Write-through a (question → answer) pair to the Q&A cache so the next exact repeat
  *  short-circuits (no LLM). Best-effort — never fails the caller's reply. */
 async function cacheAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
-  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const body = await parseOptionalBody(c, CacheAnswerBody);
   const question = typeof body.question === 'string' ? body.question : '';
   const answer = typeof body.answer === 'string' ? body.answer : '';

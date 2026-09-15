@@ -28,9 +28,9 @@ import { and, eq, gt, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { sessionIntrospectCacheKey } from '@builderforce/session-introspection';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
+import { authTokens, authUserSessions, users } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
-import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { UnauthorizedError } from '../../domain/shared/errors';
 
 /**
@@ -141,6 +141,128 @@ export function lastSeenWrites(db: Db, row: ActiveTokenRow, now = Date.now()): P
 }
 
 /**
+ * THE CACHED VERDICT — why an authenticated request does not have to wake Postgres.
+ *
+ * {@link findActiveToken} ran on EVERY authenticated request, so an open VS Code
+ * window (polling every 30–60s) kept the core database awake all day on its own —
+ * at Neon's 0.25 CU floor that is the difference between fitting the Free plan and
+ * not (ROADMAP, 2026-09-15). A LIVE token's row is therefore cached under its jti,
+ * and {@link revokeSessionTokens} — the one writer that can make it not-live —
+ * deletes that key in the same call that flips the row.
+ *
+ * Only a live verdict is cached. A miss (unknown, revoked, expired, dead session)
+ * always reads the database, so nothing is ever held "rejected" and a token minted a
+ * moment ago is never refused from cache.
+ *
+ * The cost is revocation latency, and it is bounded: the KV delete is global, but an
+ * isolate that already holds the verdict in L1 keeps honouring it for up to
+ * {@link ACTIVE_TOKEN_CACHE}.l1TtlMs, and KV itself propagates a delete to other
+ * locations within about a minute. `users.session_version` (force-logout) is checked
+ * separately and has the same bound. Signature and `exp` are still verified on every
+ * request, so an expired token is refused regardless of this cache.
+ */
+export const activeTokenCacheKey = (jti: string): string => `auth:active:${jti}`;
+
+const ACTIVE_TOKEN_CACHE = { kvTtlSeconds: 5 * 60, l1TtlMs: 30_000 };
+
+/** {@link ActiveTokenRow} as it survives JSON: KV would hand `Date`s back as strings. */
+interface CachedActiveToken {
+  /** The holder, checked on read — a jti is only ever honoured for the user it names. */
+  userId: string;
+  jti: string;
+  sessionId: string | null;
+  sessionRowId: string | null;
+  tokenLastSeenAt: number | null;
+  sessionLastSeenAt: number | null;
+}
+
+function toCached(userId: string, row: ActiveTokenRow): CachedActiveToken {
+  return {
+    userId,
+    jti: row.jti,
+    sessionId: row.sessionId,
+    sessionRowId: row.sessionRowId,
+    tokenLastSeenAt: row.tokenLastSeenAt ? new Date(row.tokenLastSeenAt).getTime() : null,
+    sessionLastSeenAt: row.sessionLastSeenAt ? new Date(row.sessionLastSeenAt).getTime() : null,
+  };
+}
+
+function fromCached(cached: CachedActiveToken): ActiveTokenRow {
+  return {
+    jti: cached.jti,
+    sessionId: cached.sessionId,
+    sessionRowId: cached.sessionRowId,
+    tokenLastSeenAt: cached.tokenLastSeenAt == null ? null : new Date(cached.tokenLastSeenAt),
+    sessionLastSeenAt: cached.sessionLastSeenAt == null ? null : new Date(cached.sessionLastSeenAt),
+  };
+}
+
+/** {@link findActiveToken} through the cache — a live verdict is served from KV/L1. */
+export async function findActiveTokenCached(
+  env: Env | undefined,
+  db: Db,
+  userId: string,
+  jti: string,
+): Promise<ActiveTokenRow | null> {
+  const key = activeTokenCacheKey(jti);
+  const hit = await peekCached<CachedActiveToken>(env, key);
+  if (hit && hit.userId === userId) return fromCached(hit);
+
+  const row = await findActiveToken(db, userId, jti);
+  const live = row != null && !(row.sessionId && !row.sessionRowId);
+  if (live) await setCached(env, key, toCached(userId, row), ACTIVE_TOKEN_CACHE);
+  return row;
+}
+
+/**
+ * THE per-request token check both middlewares run: the cached verdict, asserted
+ * live, plus the `last_seen_at` writes that are due (run them off the critical path).
+ *
+ * When writes are due, the cached copy is refreshed with the new timestamps in the
+ * same batch — the throttle compares against the CACHED values, so without that every
+ * request after the window would re-issue both writes.
+ */
+export async function resolveActiveToken(
+  env: Env | undefined,
+  db: Db,
+  userId: string,
+  jti: string,
+): Promise<{ active: ActiveTokenRow; writes: Promise<unknown>[] }> {
+  const active = assertActiveToken(await findActiveTokenCached(env, db, userId, jti));
+  const now = Date.now();
+  const writes = lastSeenWrites(db, active, now);
+  if (writes.length > 0) {
+    const touched = { ...active, tokenLastSeenAt: new Date(now), sessionLastSeenAt: active.sessionRowId ? new Date(now) : null };
+    writes.push(setCached(env, activeTokenCacheKey(jti), toCached(userId, touched), ACTIVE_TOKEN_CACHE));
+  }
+  return { active, writes };
+}
+
+/**
+ * `users.session_version` through the cache — the force-logout counter `authMiddleware`
+ * compares a token's `sv` claim against on every request, which was the SECOND
+ * uncached read each authenticated request made. Its one writer is the admin
+ * force-logout route, which calls {@link invalidateSessionVersion} in the same request
+ * as the increment; the lag bound is the one {@link activeTokenCacheKey} documents.
+ */
+export const sessionVersionCacheKey = (userId: string): string => `auth:session-version:${userId}`;
+
+export async function sessionVersionOf(env: Env | undefined, db: Db, userId: string): Promise<number | null> {
+  return getOrSetCached(env, sessionVersionCacheKey(userId), async () => {
+    const [row] = await db
+      .select({ sessionVersion: users.sessionVersion })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return row ? row.sessionVersion : null;
+  }, ACTIVE_TOKEN_CACHE);
+}
+
+export async function invalidateSessionVersion(env: Env | undefined, userId: string): Promise<void> {
+  await invalidateCached(env, sessionVersionCacheKey(userId));
+}
+
+/**
  * Which tokens (and sessions) a revoke names.
  *
  *   - `{ userId, sessionId }`       one session and every token minted under it;
@@ -233,6 +355,11 @@ export async function revokeSessionTokens(
     .returning({ jti: authTokens.jti });
 
   const revokedJtis = rows.map((row) => row.jti);
-  await Promise.all(revokedJtis.map((jti) => invalidateCached(env, sessionIntrospectCacheKey(jti))));
+  // Both cached verdicts for each revoked jti: the worker's introspection answer and
+  // this API's own live-token row ({@link findActiveTokenCached}).
+  await Promise.all(revokedJtis.flatMap((jti) => [
+    invalidateCached(env, sessionIntrospectCacheKey(jti)),
+    invalidateCached(env, activeTokenCacheKey(jti)),
+  ]));
   return { revokedJtis };
 }
