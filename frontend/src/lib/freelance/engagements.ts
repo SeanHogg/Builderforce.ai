@@ -10,6 +10,7 @@
  */
 import { getStoredWebToken } from '@/lib/auth';
 import { apiRequestStream, jsonOrThrow } from './transport';
+import { AMBIENT_REQUEST_ERRORS } from '@/lib/errors/transportFailure';
 
 export interface EngagementBoard {
   engagementId: string;
@@ -105,7 +106,7 @@ export async function sendActivitySignals(signals: ActivitySignalInput[]): Promi
     keepalive: true,
     // Capture is best-effort and fires on unload — a failure here must not raise
     // the global error toast, so every status is "expected".
-    expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+    expectedErrors: AMBIENT_REQUEST_ERRORS,
   }).catch(() => { /* activity capture is best-effort */ });
 }
 

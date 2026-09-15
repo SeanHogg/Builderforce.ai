@@ -28,6 +28,10 @@ describe('classifyTransportFailure', () => {
     expect(classifyTransportFailure({ name: 'AbortError' })).toBe('aborted');
   });
 
+  it('reads a caller-set deadline (AbortSignal.timeout) as ours, not as an outage', () => {
+    expect(classifyTransportFailure(new DOMException('signal timed out', 'TimeoutError'))).toBe('aborted');
+  });
+
   it('trusts navigator.onLine only in the negative', () => {
     vi.stubGlobal('navigator', { onLine: false });
     expect(classifyTransportFailure(opaqueFetchRejection())).toBe('offline');

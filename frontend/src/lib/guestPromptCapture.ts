@@ -23,6 +23,7 @@
  */
 
 import { apiRequestStream } from './apiClient';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId, getFirstTouch } from './visitor';
 import { getVisitId } from './visitorJourney';
 import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
@@ -71,8 +72,9 @@ export async function recordGuestPrompt(input: RecordGuestPromptInput): Promise<
         touch: getFirstTouch(),
       }),
       // A visitor over the daily ceiling still gets into the product; the refusal
-      // is telemetry, not a fault worth reporting.
-      expectedErrors: [400, 401, 403, 404, 429],
+      // — like any failure of this fire-and-forget capture — is telemetry, not a
+      // fault worth reporting.
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     });
     return res.ok;
   } catch {

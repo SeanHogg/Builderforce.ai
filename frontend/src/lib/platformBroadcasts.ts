@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiSocketUrl } from './apiSocket';
 import { apiRequestStream } from './apiClient';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId } from './visitor';
 
 export type BroadcastTone = 'info' | 'success' | 'warning' | 'critical';
@@ -72,7 +73,7 @@ export async function fetchPlatformBroadcasts(): Promise<PlatformBroadcast[]> {
   try {
     const res = await apiRequestStream(`/api/guest/messages?visitorId=${encodeURIComponent(visitorId)}`, {
       auth: 'none',
-      expectedErrors: [400, 401, 403, 404, 429],
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     });
     if (!res.ok) return [];
     const data = (await res.json()) as { messages?: PlatformBroadcast[] };
@@ -93,7 +94,7 @@ export async function reportBroadcastEvent(id: number, kind: BroadcastEventKind)
       auth: 'none',
       keepalive: true,
       body: JSON.stringify({ visitorId, kind }),
-      expectedErrors: [400, 401, 403, 404, 429],
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     });
   } catch { /* engagement is never worth failing a click over */ }
 }

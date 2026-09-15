@@ -29,6 +29,27 @@ import { dispatchApiError } from './apiErrorEvent';
 export const TRANSPORT_FAILURE_STATUS = 0;
 
 /**
+ * `expectedErrors` for an AMBIENT request — one whose failure is the caller's
+ * business and never a person's: a version probe, attribution, telemetry, a
+ * best-effort beacon, the error reporter itself.
+ *
+ * Every such caller used to hand-copy `[400, 401, 403, 404, 429, 500, 502, 503]`.
+ * That list silenced the HTTP failures and forgot the one that matters most:
+ * {@link TRANSPORT_FAILURE_STATUS}, the request that got no response at all. So
+ * the homepage footer's `/health` probe — ambient by design — raised the
+ * "BuilderForce could not be reached" toast and filed a support ticket for every
+ * visitor whose probe was slow or blocked, while the API itself was up.
+ *
+ * Status 0 plus every 4xx/5xx: nothing an ambient request does can reach a toast.
+ * It lives here rather than in its own module because every caller is already in
+ * the shell's first-paint closure through this file.
+ */
+export const AMBIENT_REQUEST_ERRORS: number[] = [
+  TRANSPORT_FAILURE_STATUS,
+  ...Array.from({ length: 200 }, (_, index) => 400 + index),
+];
+
+/**
  * What we can actually tell apart. Deliberately coarse — claiming more precision
  * than the browser gives us is how this failure got mis-diagnosed the first time.
  */
@@ -51,11 +72,14 @@ export class ApiTransportError extends Error {
 /**
  * `navigator.onLine` is the ONE extra signal the platform gives us, and it is only
  * trustworthy in the negative: false genuinely means no network, true means very
- * little. An abort is ours (a cancelled request, a navigation), never an incident.
+ * little. An abort is ours (a cancelled request, a navigation), never an incident —
+ * and so is a `TimeoutError`, which is what `AbortSignal.timeout()` rejects with:
+ * that deadline is one the CALLER set and handles, not proof the API is down.
  */
+const CANCELLATION_NAMES = new Set(['AbortError', 'TimeoutError']);
+
 export function classifyTransportFailure(error: unknown): TransportFailureReason {
-  if (error instanceof DOMException && error.name === 'AbortError') return 'aborted';
-  if (typeof error === 'object' && error !== null && (error as { name?: string }).name === 'AbortError') return 'aborted';
+  if (typeof error === 'object' && error !== null && CANCELLATION_NAMES.has((error as { name?: string }).name ?? '')) return 'aborted';
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'offline';
   return 'unreachable';
 }

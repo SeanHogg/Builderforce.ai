@@ -9,6 +9,7 @@
 
 import { AUTH_API_URL, getStoredTenantToken, getStoredWebToken } from './auth';
 import { apiRequestStream } from './apiClient';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getExistingVisitorId, getVisitorId, getFirstTouch } from './visitor';
 import type { ToolResult } from './tools';
 
@@ -41,7 +42,7 @@ export function trackToolRun(toolId: string, input: Record<string, number>, resu
     auth: 'none',
     keepalive: true,
     // Ambient attribution — never a toast.
-    expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+    expectedErrors: AMBIENT_REQUEST_ERRORS,
     body: JSON.stringify({
       visitorId,
       toolId,
@@ -65,7 +66,7 @@ export async function getMarketingSession(): Promise<MarketingSessionView | null
     const res = await apiRequestStream(`/api/marketing/session/${encodeURIComponent(visitorId)}`, {
       auth: 'none',
       // Attribution lookup is ambient — a miss is normal, never a toast.
-      expectedErrors: [400, 401, 403, 404, 429, 500],
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     });
     if (!res.ok) return null;
     return (await res.json()) as MarketingSessionView;
@@ -90,6 +91,6 @@ export function convertVisitor(): void {
     headers: { Authorization: `Bearer ${token}` },
     keepalive: true,
     body: JSON.stringify({ visitorId }),
-    expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+    expectedErrors: AMBIENT_REQUEST_ERRORS,
   }).catch(() => { /* best-effort */ });
 }

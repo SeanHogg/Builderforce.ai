@@ -2,7 +2,7 @@ import { apiRequest } from './apiClient';
 import { AUTH_API_URL } from './auth';
 import { getExistingVisitorId } from './visitor';
 import { getVisitId } from './visitorJourney';
-import { TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 
 /**
  * The ONE Product Quality ingest origin every reporter on the web app posts to.
@@ -153,23 +153,12 @@ async function sendProductError(
     }),
     // The panel renders ingest failures itself; do not create another global
     // API-error toast (and another automatic product report) for this request.
-    expectedErrors: PRODUCT_REPORT_ERROR_STATUSES,
+    // The ambient list includes status 0 — the case it matters for most: when the
+    // API is unreachable EVERY call fails, this one too, and without 0 the
+    // reporter's own failure would raise another report, which would fail, forever.
+    expectedErrors: AMBIENT_REQUEST_ERRORS,
   });
 
   if (result.accepted !== 1) throw new Error('Could not record the report');
   return { accepted: result.accepted };
 }
-
-/**
- * Prevent a failed reporting request from recursively reporting itself.
- *
- * Includes {@link TRANSPORT_FAILURE_STATUS} (0), which is the status a request
- * that never reached a server reports under. That is the case this list exists
- * for most of all: when the API is unreachable, EVERY call on the page fails,
- * including this one — so without 0 here the reporter's own failure would raise
- * another report, which would fail, forever.
- */
-export const PRODUCT_REPORT_ERROR_STATUSES = [
-  TRANSPORT_FAILURE_STATUS,
-  ...Array.from({ length: 200 }, (_, index) => 400 + index),
-];

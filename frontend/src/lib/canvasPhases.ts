@@ -70,13 +70,20 @@ export const DEFAULT_CANVAS_PHASE: CanvasPhase = 'idea';
  * before the second person arrives. Gating a MEETING by which stage of the method a
  * board says it is in would also be the wrong shape of rule — two people wanting to
  * talk about an idea is the case for the room, not an argument against it.
+ *
+ * `ideas` — the idea scratchpad — is offered from Idea onward, i.e. in EVERY phase.
+ * It IS the Idea phase's surface, so the first phase must offer it; and by the
+ * additive rule above it never disappears later — a founder in Run still has new
+ * ideas to jot, and the list of what was tested is part of what Measure reads. It
+ * shipped missing from this map, which is why it registered as a surface and never
+ * appeared in the header: the switcher offers only what this map allows.
  */
 const PHASE_SURFACES: Readonly<Record<CanvasPhase, readonly CanvasSurfaceId[]>> = {
-  idea: ['chat', 'graph', 'room', 'app'],
-  make: ['chat', 'graph', 'room', 'app'],
-  run: ['chat', 'graph', 'room', 'app'],
-  measure: ['chat', 'graph', 'room', 'app', 'insights'],
-  reach: ['chat', 'graph', 'room', 'app', 'insights'],
+  idea: ['chat', 'graph', 'ideas', 'room', 'app'],
+  make: ['chat', 'graph', 'ideas', 'room', 'app'],
+  run: ['chat', 'graph', 'ideas', 'room', 'app'],
+  measure: ['chat', 'graph', 'ideas', 'room', 'app', 'insights'],
+  reach: ['chat', 'graph', 'ideas', 'room', 'app', 'insights'],
 };
 
 export function surfacesForPhase(phase: CanvasPhase): readonly CanvasSurfaceId[] {

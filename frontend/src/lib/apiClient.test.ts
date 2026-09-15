@@ -19,11 +19,11 @@ import { readGuestWall, resetGuestWall } from '@/domains/guest/application/guest
 import { getStoredTenantToken } from './auth';
 import { onTermsGate } from './errors/termsGateEvent';
 import {
+  AMBIENT_REQUEST_ERRORS,
   ApiTransportError,
   TRANSPORT_FAILURE_STATUS,
   resetTransportFailureWindow,
 } from './errors/transportFailure';
-import { PRODUCT_REPORT_ERROR_STATUSES } from './reportError';
 
 /** What every auth middleware answers a request that sent no bearer token. */
 function missingAuthHeaderResponse(): Response {
@@ -281,8 +281,24 @@ describe('a request that never reached a server', () => {
 
     await expect(apiRequest('/product-report', {
       method: 'POST',
-      expectedErrors: PRODUCT_REPORT_ERROR_STATUSES,
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     })).rejects.toBeInstanceOf(ApiTransportError);
+
+    expect(onGlobalError).not.toHaveBeenCalled();
+    window.removeEventListener(API_ERROR_EVENT, onGlobalError);
+  });
+
+  /**
+   * The homepage footer's /health probe carries its own deadline. A slow API
+   * used to trip it, and the TimeoutError read as "BuilderForce could not be
+   * reached" — a toast and a support ticket for a visitor whose API was up.
+   */
+  it('stays silent when the caller\'s own AbortSignal.timeout fires', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new DOMException('signal timed out', 'TimeoutError'));
+    const onGlobalError: EventListener = vi.fn();
+    window.addEventListener(API_ERROR_EVENT, onGlobalError);
+
+    await expect(apiRequest('/health', { auth: 'none' })).rejects.toBeInstanceOf(ApiTransportError);
 
     expect(onGlobalError).not.toHaveBeenCalled();
     window.removeEventListener(API_ERROR_EVENT, onGlobalError);

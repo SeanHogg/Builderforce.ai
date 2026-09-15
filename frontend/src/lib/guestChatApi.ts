@@ -13,6 +13,7 @@
 
 
 import { apiRequestStream } from './apiClient';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId, getFirstTouch } from './visitor';
 
 const GUEST_TOKEN_KEY = 'bf_guest_token';
@@ -105,7 +106,8 @@ export async function getGuestUsage(): Promise<GuestUsage | null> {
   try {
     const res = await apiRequestStream(`/api/guest/usage/${encodeURIComponent(visitorId)}`, {
       auth: 'none',
-      expectedErrors: [400, 401, 403, 404, 429],
+      // The composer's "N left" counter is ambient: null on any failure, never a toast.
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { remaining: number; limit: number; enabled: boolean; roomsEnabled?: boolean };

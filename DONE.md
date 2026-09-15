@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-09-15 — Visitors on the homepage got a "BuilderForce could not be reached" toast (and an auto-filed support ticket) for `GET /health` while the API was up (`lib/errors/transportFailure.ts`)
+
+The footer's version probe (`appVersions.fetchApiVersion` → `/health`) is ambient by design, but its `expectedErrors` was the hand-copied `[400, 401, 403, 404, 429, 500, 502, 503]` — which silences HTTP failures and NOT status 0, the request that got no response. Two paths reached the toast: a real blip/blocked request, and — the common one — the probe's OWN `AbortSignal.timeout` deadline, which rejects with a `TimeoutError` that `classifyTransportFailure` read as `unreachable`. Live `/health` answered 200 in 0.23 s at the time of the fix.
+
+- **One ambient list.** `AMBIENT_REQUEST_ERRORS` (status 0 + every 4xx/5xx) replaces the seven hand-copied lists (version probe, pending prompt, marketing track/session/convert, QA telemetry, activity signals, visitor journey) plus the four guest-surface ambient calls (broadcast fetch + event, guest prompt capture, guest usage counter). `reportError`'s `PRODUCT_REPORT_ERROR_STATUSES` — the same list under another name — is deleted in favour of it.
+- **A caller-set deadline is a cancellation.** `TimeoutError` now classifies as `aborted` alongside `AbortError`, so no request's own timeout can ever claim the API is down.
+- Tests: `transportFailure.test.ts` (TimeoutError → aborted), `apiClient.test.ts` (a timed-out `/health` raises no global error).
+
 ## ✅ RESOLVED 2026-09-15 — The VSIX release died on one dropped connection to Microsoft's update service (release workflow · `clients/vscode/test-integration/runTests.ts`)
 
 "Publish VS Code extension" failed at `Verify the extension activates in a real VS Code` with `connect ETIMEDOUT 150.171.109.183:443` right after `Resolving version...` — before any test ran. `@vscode/test-electron` asks `update.code.visualstudio.com` which stable version satisfies `engines.vscode`; that lookup has a 15 s timeout, is NOT retried (only the archive download is), and falls back only to an already-cached install — which a fresh runner never has.
@@ -21,6 +29,13 @@ BurnRateOS's founder loop — create the company, list it, be found by investors
 - **Content parity for all nine domain explainers**: features expanded from 3 to the BurnRateOS catalog's owned features per domain, funding-stage use cases (PM, BI, Investor) and FAQs, in five locales — with retired capabilities (VoIP, voice agent, web push, affiliates) and fabricated percentages removed under the Claim-to-Proof gate. Full route-by-route assessment in PRD 19 §10.3.
 - Release notes (`new`) by migration 1175; marketing in `content/blog/list-your-startup-and-meet-investors.md`.
 - **Operator step before deploy:** apply migrations 1173 and 1175.
+
+## ✅ RESOLVED 2026-09-15 — The Ideas scratchpad shipped but never appeared in the canvas header (frontend 2026.9.33)
+
+2026.9.32 registered `ideas` as a board surface, but the header switcher (`PhaseModalitySelector`) offers only what `surfacesForPhase()` allows. `PHASE_SURFACES` in `lib/canvasPhases.ts` had no `ideas` entry for any phase, so every phase showed Chat · Board · Room · App and the scratchpad was unreachable on desktop. Only the phone's switcher, which is unfiltered, could open it.
+
+- **The fix.** `ideas` is now offered in every phase, straight after Board. It is the Idea phase's surface, and phases only ever add surfaces, never take one away. The rule is written beside the map.
+- **The guard.** `lib/canvasPhases.test.ts` fails if any registered board surface is offered by no phase, if Ideas is missing from any phase, or if a later phase drops a surface an earlier one offered. This is the check that would have caught the defect before it shipped.
 
 ## ✅ RESOLVED 2026-09-15 — The frontend deploy was red on three guards, and the typecheck on seven `MoneyValue` call sites
 

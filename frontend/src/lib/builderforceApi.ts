@@ -11,6 +11,7 @@ import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
@@ -8434,7 +8435,7 @@ export const pendingPromptsApi = {
       method: 'POST',
       auth: 'none',
       body: JSON.stringify({ anonId, prompt: prompt.trim(), path }),
-      expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     }).catch(() => {});
   },
 

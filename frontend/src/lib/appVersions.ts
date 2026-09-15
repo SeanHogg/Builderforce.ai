@@ -20,6 +20,7 @@
 
 import { API_VERSION_PROBE_TIMEOUT_MS, fetchApiVersionVia } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequest } from './apiClient';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
@@ -52,8 +53,8 @@ export function fetchApiVersion(): Promise<string | null> {
     ...(typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
       ? { signal: AbortSignal.timeout(API_VERSION_PROBE_TIMEOUT_MS) }
       : {}),
-    // A version probe must never toast: it is ambient and its failure is
-    // already handled by resolving null.
-    expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+    // A version probe must never toast — not even when /health gives no response
+    // at all: it is ambient and its failure is already handled by resolving null.
+    expectedErrors: AMBIENT_REQUEST_ERRORS,
   }).catch(() => null));
 }

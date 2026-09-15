@@ -17,6 +17,7 @@
  */
 
 import { apiRequestStream } from './apiClient';
+import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId } from './visitor';
 
 /** The kinds with structural meaning to the flow graph. Mirrors
@@ -158,7 +159,7 @@ async function sendVisitorEvents(events: VisitorEventInput[]): Promise<void> {
       // Fires on unload, and on marketing pages with no session. A failure here
       // must never raise the global error toast — which would itself file an
       // error report, which would be a report about failing to file reports.
-      expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+      expectedErrors: AMBIENT_REQUEST_ERRORS,
     });
   } catch {
     /* best-effort: telemetry never costs the visitor anything */

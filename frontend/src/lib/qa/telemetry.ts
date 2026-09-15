@@ -17,6 +17,7 @@
  */
 
 import { getApiBaseUrl, getAuthHeaders, apiRequestStream } from '../apiClient';
+import { AMBIENT_REQUEST_ERRORS } from '../errors/transportFailure';
 
 export type QaEventType = 'pageview' | 'click' | 'input' | 'submit' | 'nav';
 
@@ -258,7 +259,7 @@ class QaCapture {
         body: payload,
         keepalive: true,
         // Telemetry flush — best-effort, and fires on unload.
-        expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+        expectedErrors: AMBIENT_REQUEST_ERRORS,
       }).catch(() => {});
     } catch {
       /* ignore */
