@@ -244,6 +244,7 @@
     "lib/embed/embedErrorReporter.ts",
     "lib/embed/useRealtimeRoom.ts",
     "lib/errors/apiErrorEvent.ts",
+    "lib/errors/serviceOutage.ts",
     "lib/errors/termsGateEvent.ts",
     "lib/errors/transportFailure.ts",
     "lib/errors/useApiErrorText.ts",

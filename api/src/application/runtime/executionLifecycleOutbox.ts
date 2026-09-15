@@ -1,6 +1,7 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { activityLog, executionLifecycleOutbox } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -97,9 +98,10 @@ export async function drainExecutionLifecycleOutbox(
   // row two drains both see is simply projected twice with one effect; the settle below
   // is conditional on the row still being open, which makes it the claim and the
   // acknowledgement in one write (three writes per event became one).
-  const stillOpen = (row: { id: number; tenantId: number }) => and(
-    eq(executionLifecycleOutbox.id, row.id),
-    eq(executionLifecycleOutbox.tenantId, row.tenantId),
+  const stillOpen = (id: number, tenantId: number) => scopedToTenant(
+    executionLifecycleOutbox,
+    tenantId,
+    eq(executionLifecycleOutbox.id, id),
     inArray(executionLifecycleOutbox.status, ['pending', 'retry']),
   );
 
@@ -140,7 +142,7 @@ export async function drainExecutionLifecycleOutbox(
 
       const [settled] = await db.update(executionLifecycleOutbox)
         .set({ status: 'done', processedAt: new Date(), lastError: null, updatedAt: new Date() })
-        .where(stillOpen(row))
+        .where(stillOpen(row.id, row.tenantId))
         .returning({ id: executionLifecycleOutbox.id });
       if (!settled) continue; // a concurrent drain settled it first
       result.claimed += 1;
@@ -167,7 +169,7 @@ export async function drainExecutionLifecycleOutbox(
           lastError: message,
           updatedAt: new Date(),
         })
-        .where(stillOpen(row))
+        .where(stillOpen(row.id, row.tenantId))
         .returning({ id: executionLifecycleOutbox.id });
       if (!failed) continue; // settled by a concurrent drain
       result.claimed += 1;

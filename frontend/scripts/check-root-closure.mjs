@@ -45,6 +45,14 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   328 → 329 files (2026-09-15, database outage) — `lib/errors/serviceOutage.ts`
+ *   (15 lines, one type-only import) is the ONE reading of the API's
+ *   `503 database_unavailable`. `GlobalErrorHandler` and `QualityErrorReporter` are the
+ *   root-level hosts that must NOT auto-report while the platform's database is out:
+ *   the report is refused by the same outage, and every page's failures were being
+ *   filed against it. That decision is made on the throw path of the first paint, so
+ *   an `import()` would defer the very check that stops the reporting loop.
+ *   `useApiErrorText` reads it too, instead of its own copy of the status+code test.
  *   326 → 328 files (2026-09-12, team board presence + role vocabulary) — two small,
  *   pure additions reached through components already in the closure, neither
  *   deferrable: `lib/canvas/boardAgents.ts` (92 lines) is read by `TeamBar`, which

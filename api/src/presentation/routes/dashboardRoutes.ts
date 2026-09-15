@@ -26,6 +26,7 @@ import {
   workflows,
 } from '../../infrastructure/database/schema';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantRole } from '../../domain/shared/types';
 import { effectivePlanOf, loadTenantPlanRow } from '../../application/tenant/tenantPlanSnapshot';
@@ -160,10 +161,10 @@ async function buildUsageBreakdown(db: Db, usageDb: Db, tenantId: number, window
   const [segmentRows, repoRows] = await Promise.all([
     segmentIds.length === 0 ? [] : db
       .select({ id: segments.id, name: segments.displayName })
-      .from(segments).where(inArray(segments.id, segmentIds)),
+      .from(segments).where(scopedToTenant(segments, tenantId, inArray(segments.id, segmentIds))),
     repoIds.length === 0 ? [] : db
       .select({ id: projectRepositories.id, owner: projectRepositories.owner, repo: projectRepositories.repo })
-      .from(projectRepositories).where(inArray(projectRepositories.id, repoIds)),
+      .from(projectRepositories).where(scopedToTenant(projectRepositories, tenantId, inArray(projectRepositories.id, repoIds))),
   ]);
 
   const projectById = new Map(projectRows.map((p) => [p.id, p]));
