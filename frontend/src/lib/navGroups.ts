@@ -298,7 +298,21 @@ export const NAV_GROUPS: NavGroup[] = [
   // Finance, which the CFO owns" reads correctly; "you are going to CFO" does
   // not. The `seat` nav group that used to sit here — a door labelled *door* —
   // is deleted; these rows and the footer chips are how you reach a seat now.
-  { id: 'finance', labelKey: 'group.finance', icon: '💰', href: '/seat/finance', match: ['/seat/finance'], seat: 'CFO', stage: 'run' },
+  {
+    // The CFO's destination (PRD 19 B1): runway and cashflow — BurnRateOS's Runway
+    // Tracker and Cashflow Visualizer — over the finance facts the rollup writes
+    // and the numbers the founder declared, each labelled with its provenance.
+    // `/seat/finance` stays in `match` so the row still lights on the generic entity
+    // view of the same domain, exactly as `investor` keeps `/seat/investor`.
+    id: 'finance', labelKey: 'group.finance', icon: '💰', href: '/finance',
+    seat: 'CFO', stage: 'run',
+    match: ['/finance', '/seat/finance'],
+    tabKind: 'query', basePath: '/finance',
+    tabs: [
+      { id: '', labelKey: 'tab.runway', icon: 'clock' },
+      { id: 'cashflow', labelKey: 'tab.cashflow', icon: 'insights' },
+    ],
+  },
   { id: 'revenue', labelKey: 'group.revenue', icon: '📈', href: '/seat/revenue', match: ['/seat/revenue'], seat: 'CRO', stage: 'run' },
   { id: 'people', labelKey: 'group.people', icon: '🧑‍🤝‍🧑', href: '/seat/people', match: ['/seat/people'], seat: 'HR', stage: 'run' },
   // Learning keeps `/learning` rather than resolving to a generic domain view, for
@@ -350,6 +364,13 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'query', basePath: '/investor',
     tabs: [
       { id: '', labelKey: 'tab.companies', icon: 'workspace' },
+      // B2. The company's face in the marketplace — BurnRateOS's business directory,
+      // merged onto `companies` as a facet. The wizard on this tab is how a founder
+      // who registered to list a startup creates their first company.
+      { id: 'listing', labelKey: 'tab.listing', icon: 'megaphone' },
+      // Investors who pressed "express interest" on that card — deal-flow rows
+      // narrowed to this company, triaged with the CRO's own statuses.
+      { id: 'inquiries', labelKey: 'tab.inquiries', icon: 'mail' },
       // The raise itself — the `investment_opportunities` row, its ask and its stage.
       { id: 'round', labelKey: 'tab.round', icon: 'target' },
       // IN-2. Invited to the COMPANY, so one NDA, one watermark identity, one expiry

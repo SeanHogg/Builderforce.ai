@@ -13,7 +13,7 @@
  */
 export const ARCHITECTURE_DIAGNOSTIC_ID = 'architecture-analysis';
 
-export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality' | 'career';
+export type ToolCategory = 'delivery' | 'finops' | 'finance' | 'governance' | 'quality' | 'career';
 export type ToolKind = 'calculator' | 'questionnaire' | 'quiz' | 'analyzer';
 
 export interface ToolSummary {

@@ -24,6 +24,13 @@
  *   GET    /companies/:id/pack                  packs built for this company viewer
  *   POST   /companies/:id/pack                  build one (IN-4)            MANAGER
  *
+ *   GET    /companies/:id/listing               the startup listing facet    viewer
+ *   PUT    /companies/:id/listing               the public profile (B2)      MANAGER
+ *   PUT    /companies/:id/listing/finance       declared cash/burn/revenue   MANAGER
+ *   POST   /companies/:id/listing/visibility    list or withdraw             MANAGER
+ *   GET    /companies/:id/inquiries             investors who expressed interest viewer
+ *   POST   /companies/:id/inquiries/:inquiryId/status   triage one          MANAGER
+ *
  * MANAGER on every write that leaves the workspace, the same bar
  * `dataRoomRoutes` sets on `POST /:id/share`: inviting an investor sends an NDA
  * and mints a credential, and building a pack composes a document addressed
@@ -62,6 +69,19 @@ import {
   revokeCompanyInvestor,
 } from '../../application/investor/companyInvestorAccess';
 import { buildFundraisingPack, listCompanyPacks } from '../../application/investor/fundraisingPack';
+import {
+  declareFinance,
+  readStartupListing,
+  setListingVisibility,
+  updateStartupListing,
+} from '../../application/investor/startupListing';
+import {
+  INVESTOR_INQUIRY_SOURCE,
+  RevenueIntelError,
+  dealFlowQueue,
+  isDealFlowStatus,
+  triageDealFlow,
+} from '../../application/sales/revenueIntelligence';
 import { DataRoomError, readDataRoomDocument } from '../../application/investor/dataRoomSharing';
 import type { RfpGenerateDeps } from '../../application/rfp/rfpService';
 import type { TaskService } from '../../application/task/TaskService';
@@ -72,7 +92,43 @@ import { TemplateError } from '../../application/legal/documentTemplates';
 import { WatermarkError } from '../../application/security/documentWatermark';
 // Each handler type-guards every field it reads, so the body is any JSON object; an
 // absent body stays `{}` (the service answers "name is required" etc. itself).
-import { parseOptionalBody, zJsonObject } from './requestBody';
+import { parseBody, parseOptionalBody, z, zJsonObject } from './requestBody';
+
+/** The startup listing's profile patch — every field optional, every value bounded.
+ *  Vocabulary membership (stage, sector, seeking…) is the application's rule. */
+const zListingPatch = z.object({
+  name: z.string().trim().min(1).max(255).optional(),
+  website: z.string().trim().max(255).nullish(),
+  tagline: z.string().trim().max(160).nullish(),
+  description: z.string().trim().max(4000).nullish(),
+  logoUrl: z.string().trim().max(500).nullish(),
+  stage: z.string().trim().max(48).nullish(),
+  businessStage: z.string().trim().max(24).nullish(),
+  sector: z.string().trim().max(120).nullish(),
+  city: z.string().trim().max(120).nullish(),
+  region: z.string().trim().max(120).nullish(),
+  country: z.string().trim().max(2).nullish(),
+  foundedYear: z.number().int().nullish(),
+  headcount: z.number().int().nullish(),
+  foundersCount: z.number().int().nullish(),
+  seeking: z.array(z.string().trim().max(32)).max(12).optional(),
+  fundingGoal: z.number().nullish(),
+  totalFundingRaised: z.number().nullish(),
+  isSeekingInvestment: z.boolean().optional(),
+  allowInvestorInquiries: z.boolean().optional(),
+  investorContactName: z.string().trim().max(160).nullish(),
+  investorContactEmail: z.string().trim().max(320).nullish(),
+});
+
+const zDeclaredFinance = z.object({
+  cashOnHand: z.number().nullable(),
+  monthlyBudget: z.number().nullable(),
+  monthlyRevenue: z.number().nullable(),
+  teamCost: z.number().nullable(),
+});
+
+const zVisibility = z.object({ listed: z.boolean() });
+const zTriage = z.object({ status: z.string().trim().max(16) });
 
 /** One failure translation for the whole group, so the mapping from a rejected
  *  input to a status code exists once rather than in each handler — and an
@@ -88,6 +144,7 @@ const handle = async (run: () => Promise<Response>): Promise<Response> => {
       || error instanceof SignatureError
       || error instanceof TemplateError
       || error instanceof WatermarkError
+      || error instanceof RevenueIntelError
     ) {
       return Response.json({ error: error.message }, { status: error.status });
     }
@@ -259,7 +316,92 @@ export function createInvestorRoutes(
     return Response.json(pack, { status: 201 });
   }));
 
+  // ── the startup listing (B2) ──────────────────────────────────────────────
+  // Three writers over the one `companies` row, because they are three kinds of
+  // fact: the profile, the declared money and the publish transition. MANAGER on
+  // all three — listing a company puts it in front of strangers, and declared
+  // numbers are what an investor reads — while the founder's own team may read.
+
+  router.get('/companies/:id/listing', (c) => handle(async () =>
+    Response.json({ listing: await readStartupListing(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) })));
+
+  router.put('/companies/:id/listing', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+    const patch = await parseBody(c, zListingPatch);
+    const listing = await updateStartupListing(db, c.env as Env, c.get('tenantId') as number, {
+      companyId: companyIdFrom(c.req.param('id')),
+      patch,
+      actor: await resolveActorFromContext(c.env as Env, db, c),
+    });
+    return Response.json({ listing });
+  }));
+
+  router.put('/companies/:id/listing/finance', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+    const body = await parseBody(c, zDeclaredFinance);
+    const listing = await declareFinance(db, c.env as Env, c.get('tenantId') as number, {
+      companyId: companyIdFrom(c.req.param('id')),
+      ...body,
+      actor: await resolveActorFromContext(c.env as Env, db, c),
+    });
+    return Response.json({ listing });
+  }));
+
+  router.post('/companies/:id/listing/visibility', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+    const body = await parseBody(c, zVisibility);
+    const listing = await setListingVisibility(db, c.env as Env, c.get('tenantId') as number, {
+      companyId: companyIdFrom(c.req.param('id')),
+      listed: body.listed,
+      actor: await resolveActorFromContext(c.env as Env, db, c),
+    });
+    return Response.json({ listing });
+  }));
+
+  // ── investor interest ─────────────────────────────────────────────────────
+  // The same `deal_flow_opportunities` rows the CRO's queue triages, narrowed to
+  // this company and to the `investor_inquiry` source. One table, two views.
+
+  router.get('/companies/:id/inquiries', (c) => handle(async () => {
+    const companyId = companyIdFrom(c.req.param('id'));
+    const rows = await dealFlowQueue(db, c.get('tenantId') as number, undefined, {
+      source: INVESTOR_INQUIRY_SOURCE,
+      subjectCompanyId: companyId,
+    });
+    return Response.json({ inquiries: rows.map(toInquiry) });
+  }));
+
+  router.post('/companies/:id/inquiries/:inquiryId/status', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+    const body = await parseBody(c, zTriage);
+    if (!isDealFlowStatus(body.status)) return Response.json({ error: 'That is not a triage status.' }, { status: 400 });
+    const inquiryId = Number(c.req.param('inquiryId'));
+    if (!Number.isFinite(inquiryId) || inquiryId <= 0) return Response.json({ error: 'That is not an inquiry id.' }, { status: 400 });
+    const row = await triageDealFlow(
+      db,
+      c.env as Env,
+      c.get('tenantId') as number,
+      await resolveActorFromContext(c.env as Env, db, c),
+      Math.floor(inquiryId),
+      body.status,
+    );
+    return Response.json({ inquiry: toInquiry(row) });
+  }));
+
   return router;
+}
+
+/** The wire shape of one inquiry. `details` is the form's optional answers, as written. */
+function toInquiry(row: Awaited<ReturnType<typeof dealFlowQueue>>[number]) {
+  return {
+    id: row.id,
+    investorName: row.contactName,
+    investorEmail: row.contactEmail,
+    investorCompany: row.companyName,
+    message: row.summary,
+    interestedAmount: row.estimatedValue === null ? null : Number(row.estimatedValue),
+    currency: row.currency,
+    status: row.status,
+    details: row.details ?? {},
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 /**

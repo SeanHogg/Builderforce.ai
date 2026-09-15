@@ -42,6 +42,7 @@ import {
   ACCOUNT_RELATIONSHIPS,
   CONVERTIBLE_KINDS,
   EQUITY_INSTRUMENTS,
+  IDEA_STAGES,
   VESTING_FREQUENCIES,
   daysToCliff,
   nextOpenObligation,
@@ -65,6 +66,7 @@ import {
   type SpecObjectSpec,
 } from './specObjects';
 import { specVerdict, type SpecVerdict, type SpecVerdictResult } from './specVerdict';
+import { ideaTestedBy } from './ideaLog';
 
 /** i18n namespace for every founder label, status, field, column and verdict. Named
  *  because `boardRefField` resolves its sentences here even when a legal or hiring kind
@@ -606,6 +608,55 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'objections', render: 'rows', label: 'objections', columns: ['objection', 'response', 'evidence'], hint: 'One row per likely objection: {objection, response, evidence}. `evidence` must be something that exists.' },
       { name: 'switchOffer', render: 'text', label: 'switchOffer', hint: 'The concrete offer that lowers the cost of switching — migration help, overlap credit, a pilot.' },
       { name: 'doNotSay', render: 'chips', label: 'doNotSay', hint: 'Claims that are untrue, unprovable, or legally risky. A battlecard without this list gets someone in trouble.' },
+      SUMMARY_FIELD,
+      SOURCES_FIELD,
+    ],
+  },
+  // ── The idea, before the evidence ─────────────────────────────────────────────
+  {
+    // Written in seconds and tracked for months. Everything below `stage` is optional on
+    // purpose: a scratchpad that demands a problem statement before it will take a note
+    // is a form, and the note is lost. What the kind DOES insist on is honesty about
+    // evidence — `evidence` is computed from the interviews and experiments the idea
+    // names, so a card cannot claim to be tested by a conversation nobody had.
+    kind: 'idea',
+    icon: '✎',
+    group: 'Insights',
+    defaultStatus: 'captured',
+    actions: ['explore', 'test'],
+    fields: [
+      {
+        name: 'stage', render: 'stat', label: 'stage', bookkeeping: true,
+        hint: `Where the idea is: ${IDEA_STAGES.join(' | ')}. Move it forward only on evidence — \`validated\` means a linked interview or experiment said yes, not that the idea feels good. \`parked\` is "not now", \`dropped\` is "the evidence said no", \`promoted\` is "it became something" (name what in \`promotedTo\`).`,
+      },
+      { name: 'scratch', render: 'text', label: 'scratch', hint: 'The idea as it was first written down, in the person\'s own words — half-formed is correct. APPEND new thoughts below rather than rewriting it: the scratch is the record of how the idea started, and the tidied version belongs in `problem` and `summary`.' },
+      { name: 'problem', render: 'verdict', label: 'problem', hint: 'The problem this solves, as "who is hurting, and how" — specific enough that you could go and find that person this week. An idea with no problem is a feature looking for a customer.' },
+      { name: 'segment', render: 'stat', label: 'segment', hint: 'Title of the customerSegment this idea is for, verbatim, where one is on the board.' },
+      { name: 'riskiestAssumptions', render: 'chips', label: 'riskiestAssumptions', hint: 'What must be true for this to work, riskiest first. Each one should be something a customer interview or an experiment could prove wrong.' },
+      { name: 'nextStep', render: 'stat', label: 'nextStep', hint: 'The ONE cheapest thing that would teach the most next, e.g. "Interview 5 ops directors about scheduling". Never "build an MVP" — building is what the evidence earns.' },
+      { name: 'testedBy', render: 'chips', label: 'testedBy', hint: 'Titles of the `customerInterview` and `experiment` objects on this board that tested this idea, verbatim. This is what `evidence` counts — an interview not named here does not count for this idea.' },
+      {
+        name: 'evidence', render: 'verdict', label: 'evidence',
+        hint: 'COMPUTED. How many of the `testedBy` refs resolve to a `customerInterview` or `experiment` on this board, and which do not. "Untested" is a real and common answer — it is the reason to plan an interview, not a reason to invent one.',
+        derive: (data, board) => {
+          const refs = ideaTestedBy(data);
+          if (!refs.length) return specVerdict('idea.untested');
+          let interviews = 0;
+          let experiments = 0;
+          const missing: string[] = [];
+          for (const ref of refs) {
+            if (board.byRef('customerInterview', ref)) interviews += 1;
+            else if (board.byRef('experiment', ref)) experiments += 1;
+            else missing.push(ref);
+          }
+          const parts: SpecVerdict[] = [];
+          if (interviews + experiments > 0) parts.push(specVerdict('idea.tested', { interviews, experiments }));
+          if (missing.length) parts.push(specVerdict('idea.missing', { refs: missing }));
+          return parts.length === 1 ? parts[0] : parts;
+        },
+      },
+      { name: 'promotedTo', render: 'stat', label: 'promotedTo', hint: 'What the idea became once `stage` is `promoted` — the title of the project, company or proof it turned into. Empty until then.' },
+      { name: 'capturedAt', render: 'stat', label: 'capturedAt', bookkeeping: true, hint: 'ISO date-time the idea was first written down. Set by the canvas when it is captured; never backdate it.' },
       SUMMARY_FIELD,
       SOURCES_FIELD,
     ],

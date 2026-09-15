@@ -764,7 +764,11 @@
       "senders": "Direcciones de envío",
       "brand": "Activos de marca",
       "campaigns": "Campañas",
-      "import": "Importar"
+      "import": "Importar",
+      "listing": "Ficha",
+      "inquiries": "Interés",
+      "runway": "Runway",
+      "cashflow": "Flujo de caja"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -1631,7 +1635,8 @@
       "finops": "Costes y FinOps",
       "governance": "Gobernanza",
       "quality": "Calidad",
-      "career": "Carrera y currículum"
+      "career": "Carrera y currículum",
+      "finance": "Finanzas para startups"
     },
     "kind": {
       "calculator": "Calculadora",
@@ -6366,6 +6371,56 @@
             "toolkit": {
               "title": "Kit de marketing",
               "desc": "Usa presentaciones, one-pagers, plantillas y guías de campaña actualizados."
+            }
+          }
+        },
+        "startup": {
+          "eyebrow": "Publica tu startup",
+          "heading": "Deja que te encuentren los inversores que te buscan",
+          "intro": "Crea tu empresa, declara tus números y publícala en el Mercado. Los inversores exploran por etapa y sector y expresan su interés directamente a tu espacio de trabajo.",
+          "quote": "Una empresa que se puede encontrar es una empresa que puede levantar capital. Tu runway, tus condiciones, tu bandeja de entrada.",
+          "stats": {
+            "directory": {
+              "value": "Una ficha",
+              "label": "Encontrada por etapa y sector"
+            },
+            "runway": {
+              "value": "En vivo",
+              "label": "Runway mientras escribes"
+            },
+            "investors": {
+              "value": "Directo",
+              "label": "El interés llega a tu espacio de trabajo"
+            },
+            "free": {
+              "value": "Gratis",
+              "label": "Para publicar y para que te contacten"
+            }
+          },
+          "bullets": {
+            "profile": {
+              "title": "Un perfil público en tres pasos",
+              "desc": "La empresa, los números y lo que buscas. Cualquier campo se puede cambiar más adelante."
+            },
+            "runway": {
+              "title": "Un runway que indica su origen",
+              "desc": "Números declarados junto a los observados, para que tú y el inversor leáis la misma cifra."
+            },
+            "investors": {
+              "title": "Los inversores vienen a ti",
+              "desc": "Exploran por etapa y sector; con pulsar Expresar interés llegan a tu equipo."
+            },
+            "inquiries": {
+              "title": "Clasificación en un solo lugar",
+              "desc": "Cada consulta se sitúa junto al resto de tu inbound, con los estados propios del CRO."
+            },
+            "pack": {
+              "title": "Data rooms y el dosier",
+              "desc": "Cuando un inversor se pone serio, invítalo a la empresa: un NDA, todas las salas."
+            },
+            "canvas": {
+              "title": "El lienzo debajo",
+              "desc": "Tu empresa se asienta sobre el tablero donde se está construyendo el producto."
             }
           }
         }
@@ -12817,9 +12872,9 @@
       "talent": "Talento",
       "company": "Empresas",
       "companySoon": {
-        "soonTitle": "El directorio de empresas abre con el grafo de empresas",
-        "soonBody": "Reclamar un negocio escribe un registro de propiedad verificado, sienta al CEO y activa Finanzas, Ingresos, Crecimiento, Personas, Contratación, Inversores y Gobernanza para él. La superficie de publicación llega con ese registro; hasta entonces esta familia se muestra visible e inactiva en lugar de oculta, para que veas lo que viene.",
-        "soonAction": "Ver qué desbloquea una empresa"
+        "soonTitle": "Los escaparates llegarán con los sitios publicados",
+        "soonBody": "Un escaparate es el sitio publicado de una empresa, navegable desde el Mercado. Los sitios ya se publican desde el lienzo; publicarlos aquí llegará junto con el tipo escaparate. Hasta entonces, esta etiqueta permanece visible pero inactiva, en lugar de oculta, para que puedas ver lo que viene.",
+        "soonAction": "Descubre lo que desbloquea una empresa"
       },
       "agent": "Agentes",
       "asset": "Recursos",
@@ -12844,7 +12899,7 @@
       },
       "note": {
         "talent": "Personas y encargos. Para una sesión, una persona y un agente son el mismo tipo de participante, pero no el mismo tipo de anuncio: una tiene disponibilidad y tarifa; el otro, precio y puesto.",
-        "company": "Reclama el negocio que diriges y toda la operación se ajusta a él. El directorio de empresas que no son tuyas llega con el grafo de empresas.",
+        "company": "Startups publicadas por los fundadores que las dirigen: etapa, sector, tracción y si están levantando capital. Pulsa Expresar interés para contactar con una; publica la tuya desde Inversores → Ficha.",
         "agent": "No hay una página de Agentes aparte: un agente es un anuncio cuya compra escribe una fila en tu equipo, así que catálogo y equipo nunca se separan.",
         "asset": "Lo que crean los constructores y pueden vender. Cada recurso se instala en la superficie que lo posee —una habilidad en Conocimiento, una plantilla en Proyectos— nunca en una nueva."
       }
@@ -20833,7 +20888,8 @@
       "calendar": "Calendario",
       "component": "Componente",
       "flowStep": "Paso",
-      "room": "Diseño de sala"
+      "room": "Diseño de sala",
+      "idea": "Idea"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",
@@ -22124,7 +22180,6 @@
         "forecast": "Previsión",
         "fundingRound": "Ronda de financiación",
         "gtmPlan": "Plan de salida al mercado",
-        "interview": "Entrevista con cliente",
         "investorUpdate": "Informe a inversores",
         "invoice": "Factura emitida",
         "liveMetric": "Métrica en vivo",
@@ -22133,7 +22188,10 @@
         "trigger": "Disparador",
         "equityGrant": "Concesión de acciones",
         "convertible": "SAFE / pagaré",
-        "payRun": "Nómina"
+        "payRun": "Nómina",
+        "idea": "Idea",
+        "customerInterview": "Entrevista con cliente",
+        "risk": "Riesgo"
       },
       "field": {
         "actualTotal": "total real",
@@ -22353,7 +22411,14 @@
         "abTestKey": "Clave del test A/B",
         "trafficAllocation": "Reparto de tráfico",
         "evidence": "Evidencia",
-        "daysToCliff": "Días hasta el cliff"
+        "daysToCliff": "Días hasta el cliff",
+        "scratch": "Notas en borrador",
+        "problem": "Problema",
+        "riskiestAssumptions": "Supuestos más arriesgados",
+        "nextStep": "Siguiente paso",
+        "testedBy": "Probada con",
+        "capturedAt": "Anotada",
+        "promotedTo": "Se convirtió en"
       },
       "column": {
         "actual": "Real",
@@ -22508,6 +22573,11 @@
           "open": "Aún no se ha emitido nada para: {names}.",
           "orphans": "{count, plural, one {# documento nombra este contrato y no coincide} other {# documentos nombran este contrato y no coinciden}} con ninguna de sus obligaciones: {names}.",
           "unreferenced": "{count, plural, one {# obligación no tiene `reference`, así que nunca podrá demostrarse que se ha cumplido.} other {# obligaciones no tienen `reference`, así que nunca podrá demostrarse que se han cumplido.}}"
+        },
+        "idea": {
+          "untested": "Sin probar: todavía no hay ninguna entrevista con clientes ni ningún experimento vinculado. Habla con alguien antes de construir.",
+          "tested": "Probada con {interviews, plural, =0 {ninguna entrevista} one {# entrevista} other {# entrevistas}} y {experiments, plural, =0 {ningún experimento} one {# experimento} other {# experimentos}}.",
+          "missing": "Aún no están en este tablero: {refs}."
         }
       }
     },
@@ -24320,6 +24390,52 @@
         "enter": "Abrir el calendario",
         "active": "Estás en el calendario",
         "open": "Abrir el calendario"
+      },
+      "ideas": {
+        "label": "Ideas",
+        "enter": "Anota y sigue tus ideas",
+        "active": "Estás en Ideas",
+        "regionLabel": "El bloc de ideas de este lienzo",
+        "heading": "Bloc de ideas",
+        "lede": "Anota las ideas en cuanto se te ocurran y sigue cada una desde el primer pensamiento hasta algo probado. Cada idea es una tarjeta del tablero, así que Brain puede investigarla y las entrevistas con clientes pueden ponerla a prueba.",
+        "capture": {
+          "label": "Nueva idea",
+          "placeholder": "Anota una idea: basta con una frase. La primera línea será su título.",
+          "submit": "Anotar",
+          "hint": "Ctrl+Intro para anotar. Se guarda la nota completa.",
+          "readOnly": "Puedes leer estas ideas, pero solo los editores pueden añadir contenido a este lienzo."
+        },
+        "filterLabel": "Mostrar ideas por etapa",
+        "filterAll": "Todas las ideas",
+        "stageLabel": "Etapa de «{idea}»",
+        "stage": {
+          "captured": "Anotada",
+          "exploring": "Explorando",
+          "validating": "Validando",
+          "validated": "Validada",
+          "parked": "Aparcada",
+          "dropped": "Descartada",
+          "promoted": "Promovida"
+        },
+        "count": "{count, plural, =0 {Ninguna idea} one {# idea} other {# ideas}}",
+        "empty": {
+          "title": "Todavía no hay ideas",
+          "body": "Anota la próxima idea que tengas; no importa que esté a medias. Cada una aparece en el tablero como una tarjeta que puedes investigar, probar con entrevistas a clientes y convertir en algo real."
+        },
+        "filteredEmpty": "No hay ideas en esta etapa.",
+        "row": {
+          "untitled": "Idea sin título",
+          "captured": "Anotada {when}",
+          "nextStep": "Siguiente: {step}",
+          "planInterview": "Planificar una entrevista",
+          "openOnBoard": "Abrir en el tablero",
+          "interviewTitle": "Entrevista: {idea}"
+        },
+        "bar": {
+          "label": "Ideas por etapa",
+          "untested": "{count, plural, =0 {Todas las ideas abiertas tienen una entrevista o un experimento.} one {# idea abierta aún no se ha probado con un cliente.} other {# ideas abiertas aún no se han probado con un cliente.}}",
+          "segment": "{stage}: {count}"
+        }
       }
     },
     "scene": {
@@ -24643,7 +24759,8 @@
       "stopwatch": "Mide cuánto dura algo de verdad. Todos ven el mismo reloj.",
       "transclusion": "Muestra aquí otro documento de conocimiento, en vivo, no una copia.",
       "flowStep": "Un paso ejecutable —una llamada a un modelo, una integración, una decisión— conectado a los pasos que lo rodean.",
-      "room": "La sala donde se reúne esta sesión — una sala de juntas, una cocina de oficina, una planta abierta —, dispuesta pieza a pieza y recorrible en 3D."
+      "room": "La sala donde se reúne esta sesión — una sala de juntas, una cocina de oficina, una planta abierta —, dispuesta pieza a pieza y recorrible en 3D.",
+      "idea": "Una idea anotada en el bloc, seguida desde el primer pensamiento hasta que está probada y es real."
     },
     "previewWidth": "Ancho de vista previa",
     "viewportName": {
@@ -26965,7 +27082,10 @@
       "authenticatedEyebrow": "Tu espacio operativo",
       "featureHeading": "Capacidades incluidas",
       "publicClosing": "Sustituye herramientas aisladas por un sistema operativo donde cada decisión llega a las personas y agentes que la ejecutan.",
-      "authenticatedClosing": "Continúa en Builderforce con el contexto de tu empresa, equipo, agentes y gobierno ya conectados."
+      "authenticatedClosing": "Continúa en Builderforce con el contexto de tu empresa, equipo, agentes y gobierno ya conectados.",
+      "useCasesHeading": "Para cada etapa de financiación",
+      "useCasesSub": "Cómo se aplica el dominio en cada etapa de la empresa.",
+      "faqHeading": "Preguntas frecuentes"
     },
     "index": {
       "eyebrow": "El sistema operativo para startups",
@@ -26984,15 +27104,95 @@
         "features": [
           {
             "title": "Descubrimiento de producto",
-            "description": "Captura y puntúa oportunidades con evidencia de clientes y mercado."
+            "description": "Ideación impulsada por IA, validación de mercado y puntuación de oportunidades. Convierte ideas en bruto en conceptos priorizados antes de escribir una sola línea de código."
           },
           {
-            "title": "Definición del MVP",
-            "description": "Convierte una idea en alcance, supuestos y controles verificables."
+            "title": "Motor de estructuración de MVP",
+            "description": "Planificación de MVP impulsada por IA con generación de escenarios, análisis de punto de equilibrio y optimización de cronogramas. Deja de adivinar qué lanzar."
           },
           {
-            "title": "Hoja de ruta y backlog",
-            "description": "Prioriza lanzamientos por valor, adopción, esfuerzo y estrategia."
+            "title": "Generación de roadmap con IA",
+            "description": "Crea roadmaps listos para inversores a partir de tu backlog, tu runway y tu configuración de valor de negocio. La IA secuencia las funcionalidades para maximizar el ROI por cada dólar de runway."
+          },
+          {
+            "title": "Laboratorio de validación",
+            "description": "Ejecuta experimentos estructurados para validar hipótesis antes de comprometer ingeniería. Lanza lo correcto a la primera."
+          },
+          {
+            "title": "Gestión estratégica del backlog",
+            "description": "Prioriza funcionalidades por valor de negocio, impacto en ingresos y métricas de supervivencia. Nunca vuelvas a construir lo equivocado."
+          },
+          {
+            "title": "Modelos personalizados de valor de negocio",
+            "description": "Define tus propios modelos de puntuación para priorizar funcionalidades. Alinea el desarrollo con los KPI de los inversores y las métricas de crecimiento."
+          },
+          {
+            "title": "Cartera de ROI por funcionalidad",
+            "description": "Análisis de ROI a nivel de cartera con evaluación de riesgos y recomendaciones estratégicas para todas las inversiones de desarrollo."
+          },
+          {
+            "title": "Lienzo de ideas",
+            "description": "Formula un negocio ANTES de comprometerte con él. Haz una lluvia de ideas con el Brain, invita a otras personas a co-escribir y a debatirlo en vivo, y luego convierte la idea en una empresa."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Pre-Seed to Series A",
+            "description": "Enfoque en el MVP con priorización orientada a la supervivencia.",
+            "outcomes": [
+              "MVP más rápido",
+              "Enfoque de funcionalidades más nítido",
+              "Evidencia de product-market fit"
+            ]
+          },
+          {
+            "title": "Series A growth",
+            "description": "Escala el desarrollo de producto frente a los KPI de los inversores.",
+            "outcomes": [
+              "Velocidad de crecimiento",
+              "Alineación de KPI",
+              "Menos desarrollo desperdiciado"
+            ]
+          },
+          {
+            "title": "Series B revenue focus",
+            "description": "Desarrollo de funcionalidades orientado a ingresos.",
+            "outcomes": [
+              "Impacto en ingresos por funcionalidad",
+              "Un ROI defendible",
+              "Entrega más rápida"
+            ]
+          },
+          {
+            "title": "Series C market expansion",
+            "description": "Gestión de producto de nivel empresarial a gran escala.",
+            "outcomes": [
+              "Coordinación multiproducto",
+              "Alineación de equipos globales",
+              "Flujos de trabajo empresariales"
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿Qué es el descubrimiento de producto en Builderforce?",
+            "answer": "El descubrimiento de producto te ayuda a validar ideas antes de invertir tiempo de ingeniería. Utiliza investigación asistida por IA para analizar señales de mercado, el posicionamiento de la competencia y los puntos de dolor de los clientes. Los resultados del descubrimiento alimentan directamente la herramienta de estructuración de MVP, de modo que las ideas validadas pasan a ejecución sin perder contexto."
+          },
+          {
+            "question": "¿Cómo acelera la estructuración de MVP los lanzamientos?",
+            "answer": "La estructuración de MVP genera un conjunto de funcionalidades con alcance fijado, un desglose de historias de usuario y un plan de sprint a partir de un único brief de producto. La IA recomienda la superficie mínima de funcionalidades necesaria para probar tu hipótesis, estima el esfuerzo y crea elementos de backlog que puedes arrastrar directamente a tu tablero Kanban."
+          },
+          {
+            "question": "¿Qué diferencia al Roadmap con IA de un diagrama de Gantt?",
+            "answer": "El Roadmap con IA está orientado a resultados, no a fechas. Clasifica las iniciativas por impacto en ingresos, coste de runway y alineación estratégica utilizando tus datos de negocio en vivo. Cuando las prioridades cambian —se cierra un gran acuerdo, el runway se acorta—, el roadmap se reordena automáticamente para que siempre trabajes en el elemento de mayor apalancamiento."
+          },
+          {
+            "question": "¿Cómo funciona el Laboratorio de validación?",
+            "answer": "Diseña experimentos ligeros (pruebas A/B, pruebas de puerta falsa, MVP de conserjería) y sigue los resultados dentro de Builderforce. Cada experimento se vincula a una hipótesis, una métrica de éxito y una regla de decisión. Cuando llegan los resultados, el laboratorio puntúa la confianza estadística y recomienda si continuar, pivotar o descartar la idea."
+          },
+          {
+            "question": "¿Qué es el Backlog estratégico?",
+            "answer": "El Backlog estratégico va más allá de una simple lista de tareas. Cada elemento lleva una puntuación de valor de negocio calculada a partir del impacto en ingresos, las señales de demanda de los clientes y la alineación estratégica. Los elementos se ordenan automáticamente por prioridad, y el CPO puede anularla con pesos manuales. Se integra con el Kanban ágil para la planificación de sprints."
           }
         ]
       },
@@ -27003,16 +27203,95 @@
         "description": "Modela caja, ingresos, retención, gastos y escenarios junto al trabajo que produce esos números.",
         "features": [
           {
-            "title": "Runway y burn rate",
-            "description": "Sigue caja, gasto mensual, equilibrio y runway en tiempo real."
+            "title": "Panel del CFO",
+            "description": "La vista financiera unificada para fundadores y CFO. Cada métrica que un consejo podría preguntar —runway, burn, margen bruto, unit economics— en un solo lugar."
           },
           {
-            "title": "Escenarios de previsión",
-            "description": "Compara supuestos, sensibilidad y planes hipotéticos."
+            "title": "Seguimiento de runway y supervivencia",
+            "description": "Los meses de efectivo restantes, el burn neto que los produjo y la fecha en que el efectivo llega a cero — a partir del gasto observado donde lo tienes, y de los números declarados donde no, sin mezclarlos nunca."
           },
           {
-            "title": "Economía unitaria",
-            "description": "Mide ARR, retención, CAC, LTV, recuperación y precios."
+            "title": "Visualizador de flujo de caja",
+            "description": "Entradas, salidas y saldo final mes a mes — los meses que la plataforma observó y la proyección según tu burn declarado, cada uno etiquetado."
+          },
+          {
+            "title": "Análisis de burn rate",
+            "description": "Análisis de tendencias y detección de anomalías en tu burn mensual. Detecta picos de gasto antes de que se coman un mes de runway."
+          },
+          {
+            "title": "Análisis de punto de equilibrio",
+            "description": "Modela el camino hacia la rentabilidad en distintos escenarios de precio, cliente y coste. ¿Cuándo se igualan los ingresos y los costes?"
+          },
+          {
+            "title": "Simulador de precios",
+            "description": "Prueba cambios de precios frente al CAC, el LTV, el churn y el runway antes de implementarlos. Cubre modelos SaaS, freemium y por transacción."
+          },
+          {
+            "title": "Analítica de ingresos",
+            "description": "Tendencias de ingresos, rendimiento por cohortes y calidad de los ingresos. Sabe no solo cuánto estás generando, sino si está creciendo de forma compuesta."
+          },
+          {
+            "title": "Planificación de negocio con IA",
+            "description": "El Brain del puesto de CFO lee tus datos de runway, burn, precios y flujo de caja, y produce narrativas para inversores, presentaciones para el consejo y planes de escenarios basados en tus números reales."
+          },
+          {
+            "title": "Analizador de contratos con IA",
+            "description": "Sube cualquier contrato y obtén términos clave, obligaciones financieras, fechas de renovación y cláusulas de riesgo extraídas automáticamente. Los compromisos financieros alimentan los modelos de runway y flujo de caja."
+          },
+          {
+            "title": "Categorizador de gastos con IA",
+            "description": "Clasifica automáticamente recibos, transacciones bancarias y suscripciones SaaS en categorías contables. Todo fluye hacia el análisis de burn rate, sin categorización manual."
+          },
+          {
+            "title": "Analítica predictiva",
+            "description": "Previsión impulsada por IA de runway, ingresos y gasto. Ramas de escenarios con intervalos de confianza — el panel de CFO integrado en cada dashboard."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Pre-Seed validation",
+            "description": "Valida el modelo de negocio con números declarados, un runway en vivo y análisis de precios.",
+            "outcomes": [
+              "Runway mientras escribes",
+              "Punto de equilibrio por escenario",
+              "Números listos para inversores"
+            ]
+          },
+          {
+            "title": "Series A preparation",
+            "description": "Modelos de precios listos para escalar y un flujo de caja que puedes mostrar a un consejo.",
+            "outcomes": [
+              "Observado junto a declarado",
+              "Flujo de caja mensual",
+              "Comparación de escenarios"
+            ]
+          },
+          {
+            "title": "Product-market fit",
+            "description": "Optimiza el precio por segmento y comprueba si los ingresos crecen de forma compuesta.",
+            "outcomes": [
+              "Ingresos por cohorte",
+              "Unit economics",
+              "Simulación de precios"
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿De dónde proviene el número de runway?",
+            "answer": "De dos lugares, nunca mezclados. Observado: gastos aprobados, nóminas procesadas y contabilidad conectada, recalculado a diario. Declarado: el efectivo, el gasto y los ingresos que introdujiste, con la fecha en que lo hiciste. Finanzas → Runway muestra ambas columnas y nombra cada una."
+          },
+          {
+            "question": "¿La calculadora de runway de esta página es la misma que la del producto?",
+            "answer": "Sí — la misma fórmula, efectivo dividido entre burn neto. Lo que escribas aquí es exactamente lo que muestra el puesto de CFO para los mismos datos, y el botón lleva tus números a un espacio de trabajo."
+          },
+          {
+            "question": "¿Qué muestra la vista de flujo de caja?",
+            "answer": "Entradas, salidas, neto y saldo final mes a mes, en forma de gráfico y de tabla. Alterna entre los meses que la plataforma observó y la proyección según tu burn declarado."
+          },
+          {
+            "question": "¿Puedo modelar escenarios?",
+            "answer": "Los escenarios llevan supuestos declarados, calculan el punto de equilibrio y ejecutan rangos Monte Carlo, con una línea base que tú elijes. Cada resultado indica su procedencia como declarado."
           }
         ]
       },
@@ -27023,16 +27302,50 @@
         "description": "Combina planificación, retrospectivas, Kanban, capacidad y riesgo con el impacto financiero de cada sprint.",
         "features": [
           {
-            "title": "Planificación enfocada en supervivencia",
-            "description": "Estima con capacidad y runway visibles antes del compromiso."
+            "title": "Tableros Kanban ágiles",
+            "description": "Gestión visual del flujo de trabajo con métricas centradas en startups. Sigue la velocidad de desarrollo frente al runway y los objetivos de financiación."
           },
           {
-            "title": "Kanban consciente del gasto",
-            "description": "Ve flujo, cuellos de botella, riesgo e impacto financiero."
+            "title": "Sesiones de Planning Poker",
+            "description": "Estimación de historias con conciencia de coste y previsión basada en velocidad. Cada estimación tiene en cuenta el burn rate, para que los debates de ingeniería sean honestos sobre el coste en runway de cada decisión."
           },
           {
-            "title": "Retrospectivas y velocidad",
-            "description": "Convierte señales de entrega en mejoras para el próximo sprint."
+            "title": "Retrospectivas de equipo",
+            "description": "Plantillas de retro estructuradas, anónimas o con nombre, con elementos de acción resumidos por IA que fluyen hacia el backlog del kanban."
+          },
+          {
+            "title": "Previsión de sprints",
+            "description": "Planificación de sprints con historial de velocidad y límites de capacidad conscientes del runway. Sabe a qué puedes comprometerte sin descarrilar el presupuesto del mes."
+          },
+          {
+            "title": "Seguimiento de velocidad",
+            "description": "Tendencia de velocidad continua a lo largo de los sprints, con gráficos de burn-down y analítica de compromiso frente a lo entregado. Detecta desviaciones antes de que se acumulen."
+          },
+          {
+            "title": "Puntuación de funcionalidades y capacidad",
+            "description": "Puntuación de funcionalidades basada en RICE con superposición de capacidad del equipo. Prioriza lo que construir según las horas de ingeniería que realmente tienes disponibles."
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿Cómo funcionan las sesiones de Planning Poker en Builderforce?",
+            "answer": "Crea una sesión, invita a tu equipo mediante un enlace y añade historias para estimar. Cada participante elige un valor de carta (escala Fibonacci por defecto) simultáneamente, y luego todas las cartas se revelan a la vez para evitar el sesgo de anclaje. Discute los valores atípicos, vuelve a votar si es necesario y bloquea la estimación. Builderforce registra la velocidad histórica para que las estimaciones futuras mejoren con el tiempo. Planning Poker es gratis en todos los planes."
+          },
+          {
+            "question": "¿Qué formatos de retrospectiva admite Builderforce?",
+            "answer": "Builderforce admite múltiples formatos de retro, incluyendo Start-Stop-Continue, Mad-Sad-Glad, las 4Ls (Liked, Learned, Lacked, Longed For) y plantillas personalizadas. Cada retro incluye envío anónimo de tarjetas, votación, agrupación y seguimiento de elementos de acción. El análisis de sentimiento resalta temas recurrentes entre sprints, y los elementos de acción se arrastran hasta completarse para que nada se pierda."
+          },
+          {
+            "question": "¿Cómo se compara el tablero Kanban de Builderforce con Jira?",
+            "answer": "El tablero está diseñado específicamente para startups. Cada tarjeta puede mostrar su coste frente a tu runway, junto con los límites de WIP, swimlanes y columnas que esperarías. La migración desde Jira se realiza a través de los conectores de importación."
+          },
+          {
+            "question": "¿Cómo se relaciona el seguimiento de velocidad con el runway?",
+            "answer": "El seguimiento de velocidad en Builderforce mide los puntos de historia completados por sprint y superpone esos datos con tu burn rate. Puedes ver cómo se correlacionan las tendencias de productividad con el gasto — por ejemplo, si añadir un contratista aumentó la velocidad lo suficiente para justificar el coste. El persona de AI CTO utiliza los datos de velocidad para prever fechas de entrega y señalar los sprints en los que el burn supera la producción."
+          },
+          {
+            "question": "¿Qué son los sprints con conciencia de coste?",
+            "answer": "Los sprints con conciencia de coste asignan un coste en dólares a cada historia según los miembros del equipo asignados y la duración del sprint. Durante la planificación, ves un total acumulado del coste del sprint junto con la capacidad en puntos de historia. Esto te permite equilibrar la entrega de funcionalidades con las restricciones presupuestarias — especialmente crítico para startups con runway limitado. Las revisiones de sprint incluyen una métrica de coste por punto para que puedas optimizar con el tiempo."
           }
         ]
       },
@@ -27043,16 +27356,62 @@
         "description": "Conecta cuentas objetivo, contactos, secuencias, oportunidades, conversión y previsiones.",
         "features": [
           {
-            "title": "ICP y prospección",
-            "description": "Define clientes ideales, enriquece prospectos y conserva la procedencia."
+            "title": "Gestión del pipeline de negociaciones",
+            "description": "Pipeline de negociaciones estilo Kanban con etapas personalizables, puntuación de probabilidad de cierre por IA y detección de estancamiento. Aquí vive el coach del persona de CRO."
           },
           {
-            "title": "Secuencias y campañas",
-            "description": "Coordina contacto, respuestas, seguimiento y conversión."
+            "title": "Constructor de ICP",
+            "description": "Define tu perfil de cliente ideal (ICP) — datos firmográficos, disparadores de dolor, señales de compra — para impulsar la puntuación de prospectos y la personalización de secuencias."
           },
           {
-            "title": "Oportunidades y embudo",
-            "description": "Gestiona etapas, cuotas y cambios de previsión."
+            "title": "Panel de prospectos",
+            "description": "Prospectos puntuados por IA con datos firmográficos enriquecidos, % de ajuste al ICP y las próximas acciones recomendadas."
+          },
+          {
+            "title": "Secuencias de prospección",
+            "description": "Prospección multitoque en email, LinkedIn y cadencia de llamadas. Plantillas personalizadas por ICP con reescritura por IA."
+          },
+          {
+            "title": "Embudo de conversión",
+            "description": "Embudo de extremo a extremo, desde el primer contacto hasta el cierre ganado. Tasas de abandono por etapa con correcciones sugeridas por IA."
+          },
+          {
+            "title": "IDS semanal de RevOps",
+            "description": "Reunión recurrente de Identificar-Discutir-Resolver para el equipo de ingresos. Recoge problemas del pipeline, las secuencias y las señales del embudo."
+          },
+          {
+            "title": "Monitor de campañas",
+            "description": "Salud de las campañas outbound en todas las secuencias y canales. Tasa de respuesta, tasa de reuniones agendadas, pipeline generado."
+          },
+          {
+            "title": "Clasificador de correo con IA",
+            "description": "Categoriza automáticamente el correo entrante como lead, soporte, proveedor o spam. Los mensajes etiquetados como lead fluyen directamente al pipeline de negociaciones con puntuación de IA del persona de CRO."
+          },
+          {
+            "title": "Mercado de talento",
+            "description": "Encuentra y contrata a freelancers, agentes y proveedores de servicios publicados en el Mercado de Builderforce — el mismo escaparate en el que está publicada tu startup."
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿En qué se diferencia Ventas e Ingresos de Interacción con clientes?",
+            "answer": "Ventas e Ingresos es el movimiento previo al cierre: definición de ICP, puntuación de prospectos, secuencias de prospección, pipeline de negociaciones, embudo de conversión, cadencia de RevOps. Interacción con clientes es el movimiento posterior al cierre: tickets de soporte, predicción de churn, salud del cliente, retención. Ambos comparten el mismo registro de cliente, pero hablan de contextos de compra distintos (el movimiento de ventas del CRO frente al movimiento de retención del CRO/CCO)."
+          },
+          {
+            "question": "¿Qué es el Constructor de ICP y cómo impulsa otras herramientas?",
+            "answer": "El Constructor de ICP define los atributos firmográficos, tecnográficos y de comportamiento de tu cliente ideal. Cada prospecto que entra en el sistema se puntúa automáticamente frente al ICP. Las secuencias personalizan los mensajes por segmento de ICP. El embudo de conversión te permite medir el abandono por etapa según cada cohorte de ICP. Una sola definición de ICP, usada en todas partes."
+          },
+          {
+            "question": "¿Las secuencias de prospección admiten email + LinkedIn + llamadas?",
+            "answer": "Sí. Cadencia multicanal con detección de respuesta en los tres canales. Las plantillas se personalizan automáticamente por segmento de ICP mediante reescritura por IA. Cuando un prospecto responde en cualquier canal, toda la secuencia se pausa y el registro de la negociación se actualiza. La atribución de rendimiento vuelve al monitor de campañas y al embudo de conversión."
+          },
+          {
+            "question": "¿Cómo alimenta el Embudo de conversión la previsión del CFO?",
+            "answer": "Las tasas de abandono por etapa del embudo se convierten en entradas para los escenarios de previsión de ingresos del CFO — las proyecciones de mejor caso / caso base / peor caso se recalculan cuando cambian las cohortes del embudo. El mismo número que muestra la salud del pipeline aquí impulsa las proyecciones de runway allí."
+          },
+          {
+            "question": "¿Qué es el IDS semanal de RevOps?",
+            "answer": "Identificar-Discutir-Resolver — una plantilla de reunión semanal recurrente. Extraemos automáticamente las negociaciones más estancadas, las secuencias en riesgo y las etapas del embudo con peor conversión, para que la reunión fija del equipo de ingresos esté basada en datos. Los elementos de acción se conectan con la Cadencia operativa para que no se pierdan."
           }
         ]
       },
@@ -27063,16 +27422,38 @@
         "description": "Unifica feedback, soporte, onboarding, sentimiento, retención, churn y salud de cuenta.",
         "features": [
           {
-            "title": "Feedback del cliente",
-            "description": "Recoge feedback y llévalo a decisiones de producto y entrega."
+            "title": "Generador e incrustación de formularios de leads",
+            "description": "Constructor de formularios de arrastrar y soltar con fragmentos incrustables. Cada envío llega al pipeline de negociaciones con atribución UTM completa y puntuación de lead."
           },
           {
-            "title": "Salud y retención",
-            "description": "Combina uso, NPS, sentimiento y riesgo de abandono."
+            "title": "Predicción de churn y retención",
+            "description": "Puntuación de riesgo de churn por cliente basada en ML, con disparadores automatizados de campañas de recuperación. Detecta señales de churn antes de la llamada de renovación."
           },
           {
-            "title": "Soporte y onboarding",
-            "description": "Coordina tickets, conocimiento, incorporación y seguimiento."
+            "title": "Análisis de sentimiento y cohortes",
+            "description": "Puntuación de sentimiento por IA en tickets de soporte, NPS y feedback. Curvas de retención por cohorte para ver qué segmentos se quedan."
+          },
+          {
+            "title": "Widget de feedback de clientes",
+            "description": "Widget de feedback incrustable que captura la voz del cliente y alimenta directamente la priorización del backlog en Gestión de producto."
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿Cómo funciona el pipeline de CRM en Builderforce?",
+            "answer": "El pipeline de negociaciones sigue a cada lead desde el primer contacto hasta el cierre ganado. Arrastra negociaciones entre etapas, adjunta notas y grabaciones de llamadas, y observa las previsiones de ingresos actualizarse en tiempo real. Los datos del pipeline alimentan directamente tu modelo de runway, de modo que el panel del CFO siempre refleja las reservas esperadas."
+          },
+          {
+            "question": "¿Puedo crear formularios de captación de leads sin código?",
+            "answer": "Sí. El constructor de formularios de leads te permite diseñar formularios de varios pasos con lógica condicional, incrustarlos en cualquier sitio con una sola etiqueta de script y enrutar los envíos directamente a tu pipeline de negociaciones. Cada envío es puntuado por el clasificador de correo con IA, para que tu equipo se centre primero en los leads de mayor intención."
+          },
+          {
+            "question": "¿Qué tan precisa es la predicción de churn por IA?",
+            "answer": "El modelo de churn analiza la frecuencia de uso, el sentimiento de los tickets de soporte, los patrones de facturación y las puntuaciones de engagement. Los primeros usuarios reportan detectar cuentas en riesgo entre 2 y 4 semanas antes de la cancelación. Las predicciones mejoran con el tiempo a medida que el modelo se entrena con las señales específicas de tu cuenta."
+          },
+          {
+            "question": "¿Qué hace el clasificador de correo con IA?",
+            "answer": "El clasificador escanea los correos entrantes y los envíos de formularios, etiquetando cada uno con categorías de intención como solicitud de soporte, consulta de ventas, señal de churn o solicitud de funcionalidad. Los elementos de alta prioridad aparecen en el panel de CRM con las próximas acciones sugeridas, para que nada se pierda."
           }
         ]
       },
@@ -27083,16 +27464,103 @@
         "description": "Crea pitch decks, informes, data rooms, diligencia, historial de rondas y vistas de cartera.",
         "features": [
           {
-            "title": "Pitch decks y analítica",
-            "description": "Versiona, comparte y mide decks por diapositiva."
+            "title": "Panel de inversores",
+            "description": "Una vista unificada orientada a inversores del runway, el burn, los hitos y los KPI, que se comparte invitando a un inversor a la EMPRESA — un NDA, acceso a todos los data rooms."
           },
           {
-            "title": "Informes y data rooms",
-            "description": "Prepara comunicaciones aprobadas y materiales de diligencia."
+            "title": "IA para pitch decks",
+            "description": "Crea un deck listo para inversores a partir de tus datos de negocio en vivo en el lienzo, o sube uno para recibir feedback diapositiva por diapositiva; versiónalo, compártelo y mide su rendimiento."
           },
           {
-            "title": "Inteligencia de cartera",
-            "description": "Sigue financiación, hitos, salud y flujo de operaciones."
+            "title": "Paquetes para el consejo",
+            "description": "Genera paquetes listos para reuniones del consejo con runway, KPI, contrataciones y riesgos, basados en los proyectos que se están construyendo y en los números que declaraste."
+          },
+          {
+            "title": "Comparaciones de mercado",
+            "description": "Registra el TAM/SAM/SOM y los múltiplos de valoración de empresas comparables (ingresos, EBITDA, crecimiento). Impulsa diapositivas defendibles de mercado y competencia en la IA para pitch decks."
+          },
+          {
+            "title": "Análisis de variación",
+            "description": "Compara los datos reales frente a los proyectados para cada métrica prometida a los inversores. Explica las desviaciones con informes de variación anotados."
+          },
+          {
+            "title": "Analítica de inversión",
+            "description": "Modelado de la tabla de capitalización, escenarios de dilución, cronología de relaciones con inversores y referencias de velocidad de captación de fondos."
+          },
+          {
+            "title": "Monitorización de cartera",
+            "description": "Para cuentas de business angels, VC o aceleradoras — sigue cada inversión con puntuaciones de salud, alertas de variación y KPI de cartera agregados automáticamente."
+          },
+          {
+            "title": "Puntuación avanzada de salud",
+            "description": "Puntuación de salud multidimensional para cada empresa de la cartera, según señales financieras, de crecimiento, de engagement y de velocidad del equipo. Alertas generadas por IA cuando una puntuación cruza un umbral. Impulsa la intervención proactiva antes de que una empresa de la cartera llegue a rojo."
+          },
+          {
+            "title": "Centro de comunicación con inversores",
+            "description": "Bandeja de entrada unificada para relaciones con inversores: hilos con los fundadores de la cartera, seguimiento del tiempo de respuesta, estado de leído/respondido, adjuntos. Sustituye el caos de los hilos de correo por un CRM estructurado para las relaciones con inversores."
+          },
+          {
+            "title": "Informes e inteligencia automatizados",
+            "description": "Generación programada de resúmenes mensuales por cada empresa de la cartera — extraídos de métricas reales, formateados para LP, miembros del consejo e inversores. Comentario de variación resumido por IA. Envío con un clic."
+          },
+          {
+            "title": "Seguimiento de la trayectoria de valoración",
+            "description": "Historial de valoración por cada empresa de la cartera, con anotaciones de rondas de financiación, superposición de múltiplos comparables y escenarios de proyección. Observa cómo evoluciona el NAV de tu fondo en tiempo real."
+          },
+          {
+            "title": "Panel de inteligencia de ingresos y CAC",
+            "description": "Vista transversal de la cartera de ingresos, CAC, periodo de recuperación y tasas de crecimiento. Compara cada empresa de la cartera con sus comparables y cohortes históricas. El centro de mando de ingresos del inversor."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "First raise",
+            "description": "Publica la empresa, declara los números y deja que los inversores te encuentren.",
+            "outcomes": [
+              "Ficha pública",
+              "Expresar interés",
+              "Consultas en una sola cola"
+            ]
+          },
+          {
+            "title": "In diligence",
+            "description": "Un solo permiso de inversor llega a todos los data rooms; cada brecha señala el puesto que la cierra.",
+            "outcomes": [
+              "Un NDA por inversor",
+              "Preparación para la diligencia debida",
+              "Paquete de captación de fondos"
+            ]
+          },
+          {
+            "title": "Portfolio",
+            "description": "Para business angels, fondos y aceleradoras: puntuaciones de salud, variación y valoración en todas las empresas.",
+            "outcomes": [
+              "Puntuación de salud",
+              "Informes de variación",
+              "Trayectoria de valoración"
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿Cómo acceden los inversores al Portal de inversores?",
+            "answer": "Los fundadores invitan a un inversor a la EMPRESA desde Inversores → Inversores. Una invitación lleva un NDA y da acceso a todos los data rooms que la empresa tiene y tendrá; el inversor lo abre desde un enlace, sin necesidad de cuenta para leerlo. Cualquiera puede además encontrar una empresa publicada en el Mercado y expresar interés antes de que exista una invitación."
+          },
+          {
+            "question": "¿Puede Builderforce generar pitch decks automáticamente?",
+            "answer": "Sí. El Generador de pitch decks con IA extrae tus datos financieros en vivo, tu análisis de mercado y tus métricas de crecimiento para producir diapositivas listas para inversores. Elige entre plantillas diseñadas para Pre-Seed, Seed, Series A y etapas posteriores. La IA escribe el texto narrativo, rellena los gráficos y da formato a las proyecciones. Exporta a PDF o PowerPoint, y personalízalo aún más en tu herramienta preferida."
+          },
+          {
+            "question": "¿Qué son los paquetes para el consejo y cómo se crean?",
+            "answer": "Los paquetes para el consejo son informes mensuales o trimestrales automatizados que compilan métricas clave —runway, ingresos, burn rate, OKR, actualizaciones del equipo y alertas de riesgo— en un documento estructurado. Builderforce los genera a partir de datos en vivo con un clic. Puedes personalizar las secciones, añadir comentarios narrativos y distribuirlos a los miembros del consejo por correo o mediante un enlace compartido con controles de acceso."
+          },
+          {
+            "question": "¿Cómo funciona la monitorización de cartera para los inversores?",
+            "answer": "Los inversores con una cuenta de Builderforce ven un panel unificado de todas las empresas de la cartera que les han concedido acceso. Cada tarjeta de empresa muestra una puntuación de salud compuesta (0-100), la cuenta atrás del runway, la tendencia del burn rate y los hitos recientes. Las alertas automatizadas te avisan cuando la puntuación de salud de una empresa de la cartera cae, el runway baja de un umbral o una métrica clave cambia de forma significativa."
+          },
+          {
+            "question": "¿Qué controles de compartición de datos tienen los fundadores?",
+            "answer": "Los fundadores decidan qué ve un desconocido: la ficha muestra etapa, sector, tracción y si estás levantando capital, nunca el efectivo ni el burn. Un lector con sesión iniciada ve el runway en meses y tu contacto para inversores. Los data rooms se abren solo a inversores invitados, por empresa, con un NDA y una marca de agua, y el acceso puede revocarse en cualquier momento."
           }
         ]
       },
@@ -27103,16 +27571,54 @@
         "description": "Conecta objetivos, plantilla, rendimiento, 1:1, check-ins, notas y decisiones.",
         "features": [
           {
-            "title": "Metas y scorecards",
-            "description": "Vincula objetivos, resultados, hitos y métricas."
+            "title": "Plantilla corporativa",
+            "description": "Directorio de equipo con roles, fechas de incorporación, equity, bandas salariales y visualización del organigrama. La única fuente de verdad del CHRO."
           },
           {
-            "title": "Operaciones de personas",
-            "description": "Coordina plantilla, evaluaciones, check-ins y 1:1."
+            "title": "Programación de 1 a 1",
+            "description": "Cadencia recurrente de reuniones 1 a 1 con agenda compartida, elementos de acción y seguimiento. Los managers no pierden el ritmo con sus reportes directos."
           },
           {
-            "title": "Reuniones y decisiones",
-            "description": "Captura agendas, transcripciones, responsables y seguimiento."
+            "title": "Evaluaciones de desempeño",
+            "description": "Ciclos de evaluación trimestrales con feedback 360, autoevaluación y calibración. El feedback resumido por IA reduce el sesgo."
+          },
+          {
+            "title": "Gestión de objetivos (OKR)",
+            "description": "Seguimiento de OKR a nivel de empresa → equipo → individuo. El progreso se consolida automáticamente; los objetivos desalineados se marcan."
+          },
+          {
+            "title": "Inteligencia de reuniones",
+            "description": "Notas de reunión, elementos de acción y resúmenes generados por IA a partir del calendario conectado y las propias transcripciones de la sala."
+          },
+          {
+            "title": "Automatización de flujos de trabajo",
+            "description": "Flujos de trabajo de disparador-acción para incorporación, vacaciones, promociones y salidas. Reduce el trabajo manual de las operaciones de RR. HH."
+          },
+          {
+            "title": "Suite de RR. HH.",
+            "description": "El sistema de registro de RR. HH.: expedientes de personal, horarios y ausencias, ciclos de desempeño, compensación y beneficios, documentos y analítica de RR. HH. — incrustable en cualquier sitio anfitrión."
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿Cómo funciona la gestión de OKR en Builderforce?",
+            "answer": "Define objetivos de empresa, equipo e individuales con resultados clave medibles. Los OKR se despliegan en cascada desde los objetivos del CEO hasta cada equipo. El progreso se sigue automáticamente mediante tareas y resultados de sprint vinculados, y el Brain señala los objetivos desalineados o estancados antes de que termine el trimestre."
+          },
+          {
+            "question": "¿Puedo programar 1 a 1 recurrentes con mi equipo?",
+            "answer": "Sí. Define una cadencia (semanal, quincenal o mensual) para cada reporte directo y Builderforce genera los eventos de calendario automáticamente. Cada 1 a 1 tiene una agenda compartida, notas privadas y un seguimiento de elementos de acción que arrastra los pendientes hacia adelante para que nada se pierda entre sesiones."
+          },
+          {
+            "question": "¿Cómo es el ciclo de evaluación de desempeño?",
+            "answer": "Los administradores configuran los periodos de evaluación (trimestral, semestral o anual). Los evaluadores envían feedback estructurado con calificaciones de competencias, comentarios de texto libre y valoraciones de objetivos. Los managers ven una vista consolidada con las aportaciones de evaluación de pares y autoevaluación. Los resultados se enlazan con los planes de desarrollo guardados en el perfil de cada miembro del equipo."
+          },
+          {
+            "question": "¿Cómo captura la inteligencia de reuniones las decisiones y los elementos de acción?",
+            "answer": "La inteligencia de reuniones registra la asistencia desde el calendario conectado, lee la transcripción de la sala y extrae automáticamente decisiones y elementos de acción. Los resúmenes aparecen en el registro de la reunión, y los elementos de acción se convierten en tareas de tu tablero con un clic."
+          },
+          {
+            "question": "¿Qué tipo de flujos de trabajo puedo automatizar?",
+            "answer": "El motor de automatización de flujos de trabajo admite reglas basadas en disparadores como «cuando se cierra un sprint, crear una retro», «cuando un OKR cae por debajo del 30 % de progreso, notificar al responsable» o «cuando se pierde un 1 a 1 dos veces, avisar al manager». Los disparadores personalizados y las acciones de Slack/webhook están disponibles en los planes Pro y Enterprise."
           }
         ]
       },
@@ -27123,16 +27629,62 @@
         "description": "Opera controles SOC, evidencia, incidentes, proveedores, privacidad, aprobaciones y auditoría.",
         "features": [
           {
-            "title": "Controles y evidencia",
-            "description": "Gestiona controles SOC, evidencia, formación y eventos."
+            "title": "Rastreador de controles SOC 2",
+            "description": "Sigue las evidencias de los Criterios Comunes de SOC 2 (CC1–CC9) en un solo lugar. Inicializa una línea base de 30 controles, adjunta evidencias por control y exporta un JSON listo para el auditor."
           },
           {
-            "title": "Riesgo de seguridad y proveedores",
-            "description": "Sigue incidentes, proveedores, DPA, PII y remediación."
+            "title": "Registro de proveedores / subencargados",
+            "description": "Sigue a cada proveedor SaaS y subencargado del tratamiento — estado del DPA, fechas de renovación, regiones, clases de datos. Cumple con la divulgación del Art. 28 del RGPD."
           },
           {
-            "title": "Privacidad y aprobaciones",
-            "description": "Gestiona solicitudes, consentimiento, versiones y firmas."
+            "title": "Registro de incidentes de seguridad",
+            "description": "Registra y clasifica los incidentes de seguridad, distintos de los incidentes operativos. Seguimiento de severidad, enlace al postmortem, reloj de notificación regulatoria."
+          },
+          {
+            "title": "Inventario de PII y datos",
+            "description": "Registros de actividades de tratamiento conforme al Art. 30 del RGPD. Clasificación de datos, calendarios de retención, base legal, equipos responsables."
+          },
+          {
+            "title": "Gestión de DPA",
+            "description": "Acuerdos de Tratamiento de Datos (DPA) con proveedores y clientes. Ciclo de vida de la firma, seguimiento de renovaciones, registro de la versión de las SCC."
+          },
+          {
+            "title": "Rastreador de formación en seguridad",
+            "description": "Sigue la finalización de la formación en seguridad del equipo — phishing, concienciación SOC 2, RGPD, higiene de contraseñas. Detección de retrasos."
+          },
+          {
+            "title": "Calendario de cumplimiento",
+            "description": "Rastreador de plazos para eventos de SOC 2 / RGPD / CCPA / HIPAA. Hitos recurrentes, alertas de renovación, marcado automático de retrasos."
+          },
+          {
+            "title": "Solicitudes de titulares de datos",
+            "description": "Cola de DSR de RGPD / CCPA para el grafo de contactos global de la plataforma. Envío público con verificación por enlace mágico; el procesamiento del administrador borra los registros compartidos en una sola transacción y propaga entradas de supresión por toda la plataforma."
+          },
+          {
+            "title": "Lista de supresión",
+            "description": "Identificadores que nunca deben volver a obtenerse. Se rellena automáticamente con los DSR de borrado; los administradores de la plataforma pueden editarla manualmente para los rebotes definitivos y las bajas conocidas. Se comprueba en cada búsqueda de obtención de datos."
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿Cómo ayuda Builderforce con el cumplimiento de SOC 2?",
+            "answer": "El Rastreador de controles SOC 2 inicializa una línea base de 30 controles que cubre los Criterios Comunes CC1 a CC9. Adjuntas evidencias a cada control, sigues el porcentaje de preparación por categoría y exportas un JSON listo para el auditor cuando lo solicite. Combinado con el Calendario de cumplimiento para el seguimiento de plazos y el Rastreador de formación en seguridad para la concienciación de los empleados, cuentas con la base operativa para superar una auditoría SOC 2 Tipo I o Tipo II."
+          },
+          {
+            "question": "¿Cómo apoya el Registro de proveedores la gestión de subencargados?",
+            "answer": "El Registro de proveedores / subencargados sigue a cada proveedor SaaS del que depende tu empresa — estado del DPA, fechas de renovación, regiones de datos y clases de datos tratados. Los proveedores marcados como subencargados aparecen en tu página pública /trust para la divulgación del Art. 28 del RGPD. Las alertas de renovación garantizan que nunca dejes caducar un DPA, y el etiquetado por clase de datos alimenta el Inventario de PII y datos para un registro de tratamiento completo."
+          },
+          {
+            "question": "¿Builderforce es compatible con el cumplimiento del RGPD?",
+            "answer": "Sí. El Inventario de PII y datos implementa los registros de actividades de tratamiento del Art. 30 del RGPD con clasificación de datos (público, interno, confidencial, restringido), calendarios de retención, captura de base legal (Art. 6) y atribución al equipo responsable. La Gestión de DPA sigue los acuerdos con proveedores y clientes a lo largo de todo el ciclo de vida, desde el borrador hasta la firma y la caducidad, incluido el seguimiento de la versión de las Cláusulas Contractuales Tipo."
+          },
+          {
+            "question": "¿Cómo se rastrean los incidentes de seguridad?",
+            "answer": "El Registro de incidentes de seguridad registra y clasifica incidentes específicos de seguridad — distintos de los incidentes operativos. Cada incidente sigue la severidad, el flujo de estado, el tiempo medio de resolución, la fuente de detección y los enlaces al postmortem. Un reloj de notificación regulatoria te ayuda a cumplir los plazos de notificación de brechas exigidos por el RGPD (72 horas) u otros marcos."
+          },
+          {
+            "question": "¿Qué hace el Calendario de cumplimiento?",
+            "answer": "El Calendario de cumplimiento es un rastreador de plazos para los hitos de SOC 2, RGPD, CCPA y HIPAA. Admite cadencias recurrentes (auditorías anuales, revisiones de acceso trimestrales), marcado automático de retrasos, asignación por evento y etiquetado por marco. Ves todos los plazos de cumplimiento de todos los marcos en una sola línea de tiempo, para que nada se escape."
           }
         ]
       },
@@ -27143,16 +27695,82 @@
         "description": "Crea landing pages, campañas, nutrición, experimentos, contenido, SEO y analítica.",
         "features": [
           {
-            "title": "Campañas y nutrición",
-            "description": "Coordina audiencias, mensajes, altas, entrega y seguimiento."
+            "title": "Mapas de calor y analítica de sesiones",
+            "description": "Ve dónde hacen clic los usuarios, hasta dónde se desplazan y dónde hacen rage-click en tus páginas de marketing. Instala el fragmento de seguimiento una sola vez y obtén mapas de calor de densidad de clics y profundidad de scroll en cada página rastreada."
           },
           {
-            "title": "Web y conversión",
-            "description": "Crea páginas, formularios, experimentos y heatmaps."
+            "title": "Monitor de competencia con IA",
+            "description": "Inteligencia competitiva impulsada por IA: sigue los precios de la competencia, los lanzamientos de funcionalidades, las señales de contratación y los movimientos de financiación. Genera resúmenes semanales y battlecards de ventas realmente utilizables."
           },
           {
-            "title": "Contenido y distribución",
-            "description": "Planifica contenido, SEO, social, referidos, email y push."
+            "title": "Constructor de landing pages",
+            "description": "Landing pages de arrastrar y soltar con formularios conscientes de UTM y pruebas A/B integradas. Lanza la landing page de una campaña en 20 minutos, no en dos sprints."
+          },
+          {
+            "title": "Diseñador de sitios web",
+            "description": "Edita tu sitio de marketing dentro de la app. Actualiza el texto principal, cambia secciones, publica entradas de blog — sin necesidad de ingeniería."
+          },
+          {
+            "title": "Gestor de SEO",
+            "description": "Editor de metadatos por página, etiquetas Open Graph, seguimiento del ranking de palabras clave y notas de brechas de contenido. Se combina con el generador dinámico de sitemap."
+          },
+          {
+            "title": "Rastreador de ranking SEO",
+            "description": "Sigue la posición de las palabras clave a lo largo del tiempo, monitoriza los dominios de la competencia y deja que el CMO con IA convierta los datos en una estrategia de brechas de contenido. Cada actualización de ranking queda registrada como snapshot, para que la tendencia sea real."
+          },
+          {
+            "title": "Calendario de contenido",
+            "description": "Calendario editorial para blog, casos de éxito, notas de versión y redes sociales. El contenido redactado por IA se mantiene fiel a la marca gracias a la integración con el Brand Kit."
+          },
+          {
+            "title": "Brand Kit",
+            "description": "Nombre de marca, posicionamiento, tono de voz, términos preferidos/evitados, identidad visual. Conectado directamente al puesto de CMO — cada texto generado por IA usa automáticamente la voz de tu marca."
+          },
+          {
+            "title": "Panel del CMO",
+            "description": "Centro de mando unificado para Marketing y Crecimiento: mapas de calor, pipeline de contenido, estado de SEO y configuración del Brand Kit de un vistazo."
+          },
+          {
+            "title": "Gestor de campañas",
+            "description": "Planifica y sigue campañas multicanal con constructor de UTM y atribución de ciclo cerrado. Cada campaña vincula el gasto y los touchpoints de vuelta al pipeline y a los ingresos."
+          },
+          {
+            "title": "Constructor de campañas de email",
+            "description": "Redacta, previsualiza y envía campañas de email masivo a segmentos construidos a partir del grafo de contactos compartido. La redacción consciente del Brand Kit mantiene cada envío fiel a la voz de marca."
+          },
+          {
+            "title": "Flujos de nutrición",
+            "description": "Secuencias de goteo multicanal y multietapa en email y SMS. Inscribe contactos ante un disparador, espera, ramifica y convierte — nutrición del ciclo de vida totalmente automatizada."
+          },
+          {
+            "title": "Programador de redes sociales",
+            "description": "Conecta X/Twitter y LinkedIn, redacta publicaciones con texto de IA fiel a la marca, prográmalas y sigue impresiones y clics — cada publicación vinculada de vuelta al pipeline."
+          },
+          {
+            "title": "Pruebas A/B y experimentos",
+            "description": "Ejecuta experimentos controlados en páginas de precios, CTA y flujos de conversión. Divide el tráfico entre variantes, sigue la tasa de conversión y la mejora frente al control, y concluye con un ganador respaldado por datos reales."
+          }
+        ],
+        "faq": [
+          {
+            "question": "¿Cómo funcionan los mapas de calor en Builderforce?",
+            "answer": "Instala un fragmento de seguimiento ligero en tu sitio una sola vez, y Builderforce captura cada clic, scroll y rage-click en cada página rastreada. El panel renderiza mapas de calor de densidad de clics y superposiciones de profundidad de scroll, para que veas exactamente dónde interactúan los visitantes y dónde abandonan — sin muestreo, sin límites de sesión."
+          },
+          {
+            "question": "¿Qué rastrea el Monitor de competencia con IA?",
+            "answer": "El Monitor de competencia con IA vigila las páginas de precios de la competencia, los registros de cambios de funcionalidades, las ofertas de empleo y los anuncios de financiación. Produce un resumen competitivo semanal y genera automáticamente battlecards de ventas que puedes compartir con el equipo. Cada señal se puntúa por relevancia estratégica, para que te centres en los cambios que realmente importan."
+          },
+          {
+            "question": "¿Cómo ayuda el Gestor de SEO a mejorar el ranking?",
+            "answer": "El Gestor de SEO te permite editar los títulos meta por página, las descripciones, las etiquetas Open Graph y las URL canónicas desde un solo panel. Sigue el ranking de tu palabra clave principal a lo largo del tiempo, señala brechas de contenido y registra las fechas de última revisión, para que las páginas obsoletas no arrastren hacia abajo la autoridad de tu dominio. Se combina con el generador dinámico de sitemap para una cobertura completa."
+          },
+          {
+            "question": "¿Cómo se integra el Brand Kit con el Brain?",
+            "answer": "El Brand Kit almacena el nombre de tu marca, el posicionamiento, el tono de voz, los términos preferidos y los términos evitados. Cuando el Brain opera en modo persona de CMO, inyecta automáticamente tus directrices de marca en cada prompt — de modo que las entradas de blog, el texto de landing pages y las campañas de email generados por IA suenan como tú, no como un chatbot genérico."
+          },
+          {
+            "question": "¿Qué puedo hacer con el Calendario de contenido?",
+            "answer": "El Calendario de contenido gestiona tu pipeline editorial desde la idea hasta la publicación. Etiqueta el contenido por canal (blog, redes sociales, caso de éxito, notas de versión), asigna responsables y sigue el estado a lo largo de un flujo de cinco etapas. La redacción por IA se nutre del Brand Kit, de modo que los primeros borradores ya son fieles a la marca. Los elementos programados alimentan al Gestor de SEO para la alineación de palabras clave."
           }
         ]
       },
@@ -27215,6 +27833,20 @@
             "description": "Usa un grafo en ventas, finanzas, producto y gobierno."
           }
         ]
+      }
+    },
+    "extras": {
+      "calculator": {
+        "moreTools": "Calculadoras de burn, punto de equilibrio, abandono y precios",
+        "heading": "¿Cuánto dura tu efectivo?",
+        "sub": "Introduce el efectivo disponible, el gasto mensual y los ingresos. El runway y la fecha de agotamiento de caja se actualizan mientras escribes, en tu navegador, antes de iniciar sesión.",
+        "keepNumbers": "Guarda estos números en un espacio de trabajo",
+        "openFinance": "Abrir Finanzas",
+        "note": "La misma fórmula que usa el puesto de CFO: efectivo dividido entre burn neto."
+      },
+      "directory": {
+        "heading": "Startups que están levantando capital ahora mismo",
+        "sub": "Empresas publicadas por sus fundadores en el Mercado: etapa, sector, tracción y si están levantando capital."
       }
     }
   },
@@ -30432,6 +31064,110 @@
       "pdf": "PDF",
       "empty": "Aún no se ha generado ningún dosier para esta empresa.",
       "generatedOn": "Generado {date}"
+    },
+    "listing": {
+      "title": "Ficha pública",
+      "blurb": "La cara de la empresa en el Mercado: lo que ven inversores y socios, y si pueden contactarte.",
+      "edit": "Editar ficha",
+      "loading": "Cargando…",
+      "live": "Publicada",
+      "draft": "No publicada",
+      "raisingChip": "Levantando capital",
+      "completeness": "Perfil completo",
+      "missing": "Aún falta antes de publicar: {fields}.",
+      "fields": {
+        "name": "nombre",
+        "tagline": "eslogan",
+        "description": "descripción",
+        "stage": "etapa de financiación",
+        "sector": "sector",
+        "country": "país"
+      },
+      "viewPublic": "Ver el perfil público",
+      "withdraw": "Retirar del Mercado",
+      "listNow": "Publicar en el Mercado",
+      "openDirectory": "Abrir el directorio",
+      "liveNotice": "Publicada. Los inversores pueden encontrar esta empresa y expresar interés; el efectivo y el burn siguen siendo privados.",
+      "draftNotice": "No publicada. Solo tu espacio de trabajo puede ver este perfil hasta que lo publiques.",
+      "pickCompany": "Elige una empresa para ver su ficha.",
+      "error": {
+        "load": "No se pudo cargar la ficha.",
+        "visibility": "No se pudo cambiar la ficha.",
+        "save": "No se pudo guardar la ficha."
+      },
+      "stepsLabel": "Pasos de publicación",
+      "steps": {
+        "basics": "La empresa",
+        "finance": "Los números",
+        "visibility": "Que te encuentren"
+      },
+      "cancel": "Cancelar",
+      "back": "Atrás",
+      "saving": "Guardando…",
+      "saveContinue": "Guardar y continuar",
+      "saveOnly": "Guardar",
+      "saveListed": "Guardar cambios",
+      "basics": {
+        "title": "Cuéntanos sobre la empresa",
+        "blurb": "Este es el perfil público y lo que los puestos de CEO, CFO y CMO leen como contexto. Cualquier campo se puede cambiar más adelante.",
+        "name": "Nombre de la empresa",
+        "website": "Sitio web",
+        "tagline": "Eslogan",
+        "taglinePlaceholder": "Una frase que diga a qué te dedicas.",
+        "taglineHint": "Hasta {max} caracteres. Es la segunda línea de tu tarjeta.",
+        "description": "Descripción",
+        "descriptionPlaceholder": "El producto, para quién es y qué problema resuelve.",
+        "descriptionHint": "Dos o tres párrafos. Las líneas en blanco inician un nuevo párrafo.",
+        "sector": "Sector",
+        "stage": "Etapa de financiación",
+        "businessStage": "Etapa del negocio",
+        "pick": "Elige…",
+        "city": "Ciudad",
+        "country": "País",
+        "countryPlaceholder": "Dos letras",
+        "countryHint": "Código de país de dos letras.",
+        "foundedYear": "Fundación",
+        "headcount": "Tamaño del equipo",
+        "founders": "Fundadores",
+        "logo": "URL del logo"
+      },
+      "finance": {
+        "title": "Tus números",
+        "blurb": "Efectivo, gasto e ingresos. El runway se actualiza mientras escribes, y estos números alimentan Finanzas → Runway.",
+        "privacy": "El efectivo y el burn nunca se muestran públicamente. La tarjeta solo muestra la franja de salud del runway; los lectores con sesión iniciada ven los meses."
+      },
+      "visibility": {
+        "title": "Que te encuentren",
+        "blurb": "Qué estás buscando, si estás levantando capital y cómo pueden contactarte los inversores.",
+        "seeking": "Estamos buscando",
+        "raising": "Estamos levantando capital ahora",
+        "raisingHint": "Muestra la insignia Levantando capital y el botón Expresar interés en tu tarjeta.",
+        "goal": "Objetivo de financiación (USD)",
+        "raised": "Total captado hasta ahora (USD)",
+        "raisedHint": "Se muestra en tu tarjeta como financiación total.",
+        "inquiries": "Aceptar consultas de inversores",
+        "inquiriesHint": "Los inversores pueden enviar un mensaje desde tu tarjeta. Desactívalo para publicar sin el botón.",
+        "contactName": "Nombre de contacto para inversores",
+        "contactEmail": "Correo de contacto para inversores",
+        "contactHint": "Se muestra solo a lectores con sesión iniciada. Las consultas siempre llegan también a tu espacio de trabajo."
+      }
+    },
+    "inquiries": {
+      "title": "Interés de inversores — {name}",
+      "blurb": "Inversores que pulsaron Expresar interés en tu tarjeta. Clasifícalos aquí; el informe de ingresos cuenta lo que conviertes.",
+      "openCount": "{count, plural, one {# abierta} other {# abiertas}}",
+      "loading": "Cargando…",
+      "empty": "Aún no hay consultas. Publicar la empresa en el Mercado y marcarla como levantando capital es lo que las atrae.",
+      "pickCompany": "Elige una empresa para ver quién ha mostrado interés.",
+      "anonymous": "Inversor sin nombre",
+      "triage": "Estado",
+      "amount": "Tiene {amount} en mente",
+      "accredited": "Acreditado",
+      "received": "Recibida el {date}",
+      "error": {
+        "load": "No se pudieron cargar las consultas.",
+        "triage": "No se pudo actualizar esa consulta."
+      }
     }
   },
   "investorGrant": {
@@ -30889,5 +31625,280 @@
     "connecting": "Conectando con tu IDE…",
     "connected": "Conectado. Puedes cerrar esta pestaña si la vista previa aparece en tu IDE.",
     "failed": "La conexión falló: {error}"
+  },
+  "startups": {
+    "vocab": {
+      "stage": {
+        "bootstrapped": "Autofinanciada",
+        "pre_seed": "Pre-Seed",
+        "seed": "Seed",
+        "series_a": "Series A",
+        "series_b": "Series B",
+        "series_c": "Series C",
+        "series_d_plus": "Series D+",
+        "ipo_ready": "Lista para IPO"
+      },
+      "businessStage": {
+        "idea": "Idea",
+        "mvp": "MVP",
+        "early_revenue": "Ingresos iniciales",
+        "growth": "Crecimiento",
+        "scale": "Escalado"
+      },
+      "sector": {
+        "fintech": "FinTech",
+        "healthtech": "HealthTech",
+        "edtech": "EdTech",
+        "ecommerce": "Comercio electrónico",
+        "saas": "SaaS",
+        "marketplace": "Mercado",
+        "consumer_apps": "Aplicaciones de consumo",
+        "enterprise_software": "Software empresarial",
+        "ai_ml": "AI / ML",
+        "blockchain": "Blockchain",
+        "gaming": "Videojuegos",
+        "media_entertainment": "Medios y entretenimiento",
+        "real_estate": "Bienes raíces",
+        "logistics": "Logística",
+        "sustainability": "Sostenibilidad",
+        "other": "Otro"
+      },
+      "seeking": {
+        "funding": "Financiación",
+        "cofounders": "Cofundadores",
+        "advisors": "Asesores",
+        "customers": "Primeros clientes",
+        "partners": "Socios",
+        "hiring": "Contratación",
+        "mentorship": "Mentoría"
+      },
+      "investmentType": {
+        "equity": "Capital",
+        "convertible_note": "Nota convertible",
+        "safe": "SAFE",
+        "revenue_share": "Reparto de ingresos",
+        "debt": "Deuda"
+      },
+      "timeframe": {
+        "immediate": "Ahora (1–3 meses)",
+        "short_term": "Pronto (3–6 meses)",
+        "medium_term": "Este año (6–12 meses)",
+        "long_term": "Más adelante (12+ meses)"
+      },
+      "expertise": {
+        "product": "Producto",
+        "marketing": "Marketing y ventas",
+        "operations": "Operaciones",
+        "finance": "Finanzas",
+        "legal": "Legal y cumplimiento",
+        "people": "Personas",
+        "technology": "Tecnología",
+        "business_development": "Desarrollo de negocio",
+        "fundraising": "Captación de fondos",
+        "international": "Expansión internacional"
+      },
+      "sort": {
+        "newest": "Más recientes",
+        "funding": "Mayor financiación captada",
+        "alphabetical": "De la A a la Z",
+        "runway": "Runway más largo"
+      },
+      "health": {
+        "critical": "Crítico",
+        "watch": "En observación",
+        "healthy": "Saludable",
+        "profitable": "Rentable"
+      },
+      "inquiryStatus": {
+        "new": "Nuevo",
+        "qualifying": "En conversación",
+        "converted": "Invirtiendo",
+        "rejected": "Descartado"
+      }
+    },
+    "card": {
+      "raising": "Levantando capital",
+      "runwayHealth": "Runway: {health}",
+      "totalFunding": "Financiación total",
+      "mrr": "Ingresos mensuales",
+      "team": "Equipo",
+      "people": "{count, plural, one {# persona} other {# personas}}",
+      "runway": "Runway",
+      "months": "{count, plural, one {# mes} other {# meses}}",
+      "noLocation": "Ubicación no compartida",
+      "founded": "Fundada en {year}",
+      "interested": "{count, plural, one {# inversor ha mostrado interés} other {# inversores han mostrado interés}}",
+      "expressInterest": "Expresar interés"
+    },
+    "filters": {
+      "stageGroup": "Etapa de financiación",
+      "raising": "Levantando capital ahora",
+      "sector": "Sector",
+      "anySector": "Cualquier sector",
+      "businessStage": "Etapa del negocio",
+      "anyBusinessStage": "Cualquier etapa del negocio",
+      "sort": "Ordenar",
+      "clear": "Borrar filtros"
+    },
+    "directory": {
+      "heading": "Startups",
+      "blurb": "Empresas publicadas por los fundadores que las dirigen: etapa, sector, tracción y si están levantando capital.",
+      "count": "{count, plural, one {# publicada} other {# publicadas}}",
+      "empty": "Aún no hay startups que coincidan con estos filtros.",
+      "listYours": "Publica tu startup",
+      "forInvestors": "Para inversores",
+      "investorsTitle": "Encuentra empresas que están levantando capital",
+      "investorsBody": "Explora la tracción declarada, filtra por etapa y sector, y expresa tu interés directamente al fundador.",
+      "browseRaising": "Explorar empresas que levantan capital",
+      "forStartups": "Para startups",
+      "startupsTitle": "Que te encuentren los inversores adecuados",
+      "startupsBody": "Publica tu empresa, declara tus números y di qué estás buscando. Las consultas llegan a tu espacio de trabajo junto con todo lo demás.",
+      "createProfile": "Crea tu perfil",
+      "browseAll": "Explorar todas las startups publicadas"
+    },
+    "inquiry": {
+      "title": "Expresar interés",
+      "intro": "Cuéntales a los fundadores de {name} quién eres y por qué te interesa. Lo leerán en su espacio de trabajo y te responderán desde ahí.",
+      "you": "Sobre ti",
+      "name": "Nombre completo",
+      "email": "Correo electrónico",
+      "firm": "Firma",
+      "role": "Cargo",
+      "phone": "Teléfono",
+      "investment": "La inversión",
+      "amount": "Importe que tienes en mente (USD)",
+      "instrument": "Instrumento",
+      "timeframe": "Plazo",
+      "pick": "Elige…",
+      "expertise": "Qué aportas más allá del capital",
+      "accredited": "Soy un inversor acreditado",
+      "accreditedHint": "Algunas rondas están abiertas solo a inversores acreditados.",
+      "message": "Mensaje",
+      "messagePlaceholder": "Por qué esta empresa y qué podrías aportar más allá del cheque.",
+      "history": "Historial de inversiones (opcional)",
+      "historyPlaceholder": "Una o dos líneas sobre lo que has respaldado antes.",
+      "cancel": "Cancelar",
+      "sending": "Enviando…",
+      "send": "Enviar a los fundadores",
+      "privacy": "Tu mensaje solo llega al equipo de esta empresa. Nada de esto se publica.",
+      "sentTitle": "Enviado.",
+      "sentBody": "Los fundadores de {name} tienen tu mensaje en su espacio de trabajo y te responderán por correo electrónico.",
+      "done": "Listo"
+    },
+    "runway": {
+      "title": "Runway",
+      "notDeclared": "Aún no se han declarado números. Introduce el efectivo disponible y el gasto mensual para ver el runway.",
+      "unlimited": "Sin consumo de caja",
+      "months": "{count, plural, one {# mes} other {# meses}}",
+      "netBurn": "Burn neto de {amount} al mes",
+      "zeroCash": "El efectivo llega a cero hacia {date}",
+      "declaredNotice": "Calculado a partir de números declarados, no de la contabilidad conectada.",
+      "observedNotice": "Calculado a partir del gasto, los ingresos y el efectivo observados."
+    },
+    "calculator": {
+      "cash": "Efectivo disponible",
+      "cashHint": "Efectivo total en el banco hoy.",
+      "budget": "Gasto mensual",
+      "budgetHint": "Todo lo que sale de la cuenta en un mes, incluida la nómina.",
+      "revenue": "Ingresos mensuales",
+      "revenueHint": "Lo que entra cada mes. Cero es una respuesta válida.",
+      "teamCost": "De los cuales, coste del equipo",
+      "teamCostHint": "Salarios y beneficios — parte del gasto mensual, señalados para que el CFO pueda ver la partida más grande."
+    },
+    "profile": {
+      "seoTitle": "{name} — Perfil de startup | Builderforce.ai",
+      "seoFallback": "{name}, una startup publicada en Builderforce.ai.",
+      "notListed": "No publicada",
+      "eyebrow": "Directorio de startups",
+      "founded": "Fundada en {year}",
+      "raising": "Levantando capital",
+      "website": "Sitio web",
+      "backToDirectory": "Todas las startups",
+      "about": "Sobre {name}",
+      "keyFacts": "Datos clave",
+      "fact": {
+        "stage": "Etapa de financiación",
+        "businessStage": "Etapa del negocio",
+        "sector": "Sector",
+        "team": "Equipo",
+        "founders": "Fundadores",
+        "totalFunding": "Financiación total captada",
+        "mrr": "Ingresos mensuales",
+        "runway": "Runway",
+        "goal": "Objetivo de financiación",
+        "interest": "Interés de inversores"
+      },
+      "people": "{count, plural, one {# persona} other {# personas}}",
+      "runwayPrivate": "No compartido",
+      "declaredNotice": "Todas las cifras de esta página fueron declaradas por la empresa. Nada se lee de su contabilidad conectada.",
+      "raise": "La ronda",
+      "interested": "{count, plural, =0 {Aún no hay consultas} one {# inversor ha mostrado interés} other {# inversores han mostrado interés}}"
+    }
+  },
+  "financeHub": {
+    "title": "Finanzas",
+    "subtitle": "Runway y flujo de caja de la empresa que diriges: lo que la plataforma ha observado y lo que declaraste, cada uno etiquetado.",
+    "company": "Empresa",
+    "loading": "Cargando…",
+    "error": {
+      "load": "No se pudo cargar el informe financiero."
+    },
+    "runway": {
+      "observed": "Observado",
+      "asOf": "A fecha de {date}",
+      "observedEmpty": "Aún no hay nada observado. Los gastos aprobados, la nómina procesada y la contabilidad conectada aparecerán aquí en cuanto existan.",
+      "cash": "Efectivo",
+      "netBurn": "Burn neto / mes",
+      "mrr": "MRR",
+      "runwayMonths": "Runway",
+      "months": "{count, plural, one {# mes} other {# meses}}",
+      "observedHint": "Calculado a diario a partir del gasto aprobado, la nómina procesada y los libros contables sincronizados.",
+      "connectBooks": "Conecta tu contabilidad",
+      "declared": "Declarado",
+      "noCompany": "Aún no hay ninguna empresa.",
+      "addCompany": "Añade una desde el asistente de publicación",
+      "declaredHint": "Lo que nos contaste sobre {name}. Edita y guarda — la ficha y esta página leen los mismos números.",
+      "saving": "Guardando…",
+      "save": "Guardar números declarados",
+      "monthly": "Mes a mes",
+      "monthlyNote": "Solo meses observados. La proyección declarada está en la pestaña Flujo de caja.",
+      "col": {
+        "month": "Mes",
+        "revenue": "Ingresos",
+        "expenses": "Gasto",
+        "netBurn": "Burn neto",
+        "cash": "Efectivo a fin de mes"
+      },
+      "error": {
+        "save": "No se pudieron guardar los números."
+      }
+    },
+    "cashflow": {
+      "title": "Flujo de caja",
+      "blurb": "Entradas, salidas y el saldo final, mes a mes.",
+      "source": "Serie",
+      "observed": "Observado",
+      "declared": "Proyección declarada",
+      "observedEmpty": "Aún no hay meses observados. Conecta tu contabilidad o aprueba gastos para ver el dinero que realmente se movió.",
+      "declaredEmpty": "Aún no hay números declarados. Introdúcelos en la pestaña Runway para ver una proyección.",
+      "inflows": "Entradas",
+      "outflows": "Salidas",
+      "net": "Neto",
+      "ending": "Saldo final",
+      "chart": "Flujo de caja a lo largo del tiempo",
+      "observedCaption": "Dinero que se movió",
+      "declaredCaption": "Al burn declarado",
+      "col": {
+        "month": "Mes",
+        "status": "Estado"
+      },
+      "status": {
+        "out": "Sin efectivo",
+        "positive": "Positivo",
+        "burning": "Consumiendo caja"
+      },
+      "observedNote": "Observado a partir del gasto aprobado, la nómina procesada y los libros contables sincronizados.",
+      "declaredNote": "Una proyección con el efectivo, el gasto y los ingresos declarados — igual todos los meses. No es una previsión."
+    }
   }
 }

@@ -11,7 +11,13 @@
 import { contentKey, type CopyReader } from './copy';
 import { faqItems, type FaqItem, type FaqSet } from './faq';
 
-export type AuthPanelId = 'login' | 'standard' | 'freelancer' | 'sales';
+/**
+ * `startup` is not an account type — it is an INTENT a standard account arrives
+ * with (`/register?intent=startup`, from "list your startup"). The panel sells
+ * the directory, the runway and the investor door; the account created is
+ * still `standard`, and the landing is the listing wizard.
+ */
+export type AuthPanelId = 'login' | 'standard' | 'freelancer' | 'sales' | 'startup';
 
 interface AuthPanelSpec {
   /** Four headline metrics, rendered as stat cards. */
@@ -55,6 +61,18 @@ export const AUTH_PANELS: Record<AuthPanelId, AuthPanelSpec> = {
       { id: 'meetings', icon: '📅' },
       { id: 'momentum', icon: '📈' },
       { id: 'toolkit', icon: '🧠' },
+    ],
+    faq: 'register',
+  },
+  startup: {
+    stats: ['directory', 'runway', 'investors', 'free'],
+    bullets: [
+      { id: 'profile', icon: '🏢' },
+      { id: 'runway', icon: '📉' },
+      { id: 'investors', icon: '🤝' },
+      { id: 'inquiries', icon: '📬' },
+      { id: 'pack', icon: '📄' },
+      { id: 'canvas', icon: '✦' },
     ],
     faq: 'register',
   },

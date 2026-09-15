@@ -30,6 +30,8 @@ import { runAgentBenchmarkSweep } from './application/eval/agentBenchmarkSweep';
 import { projectRegistry } from './application/kernel/registryProjection';
 import { METRIC_ROLLUPS } from './application/kernel/rollupRegistry';
 import { runRollups } from './application/kernel/metricRollup';
+import { FINANCE_ROLLUP_VERSION_KEY } from './application/finance/runwayCache';
+import { bumpCacheVersion } from './infrastructure/cache/readThroughCache';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
@@ -137,6 +139,10 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'and that, for fourteen of the seventeen domains, nothing populated.',
     run: async ({ env, db }) => {
       const results = await runRollups(db, METRIC_ROLLUPS);
+      // The CFO's runway report folds this token into its cache key, so a pass
+      // that rewrote `finance.*` facts is what orphans yesterday's report — not a
+      // TTL guessed to be shorter than the sweep.
+      await bumpCacheVersion(env, FINANCE_ROLLUP_VERSION_KEY);
       const facts = results.reduce((sum, r) => sum + r.facts, 0);
       const skipped = results.reduce((sum, r) => sum + r.skipped.length, 0);
       const extra = results.flatMap((r) => Object.entries(r.extra)).filter(([, n]) => n > 0);

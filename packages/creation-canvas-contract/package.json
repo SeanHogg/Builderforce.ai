@@ -9,5 +9,11 @@
     "./objectKinds": "./src/objectKinds.ts",
     "./creativeCapabilities": "./src/creativeCapabilities.ts"
   },
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
 }

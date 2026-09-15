@@ -53,6 +53,7 @@ import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contrac
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
 import MarketplaceGigsSection from './MarketplaceGigsSection';
+import { StartupDirectory } from '@/components/startups/StartupDirectory';
 import { signInHref } from '@/lib/auth';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { faultMessage } from '@/lib/apiClient';
@@ -935,14 +936,18 @@ export default function MarketplacePageClient() {
             <Pagination compact page={talentPage} pageCount={talentPages} onChange={setTalentPage} />
           </>
         )
+      ) : category === 'company' && kind === 'business' ? (
+        // The startup directory (PRD 19 B2) — listed companies, their stage and
+        // sector, whether they are raising, and "express interest". Startup
+        // listings are PART of the marketplace (operator, 2026-09-15), so this is a
+        // section of the storefront reading the storefront's own search box.
+        <StartupDirectory search={search} />
       ) : category === 'company' ? (
-        // Visible and inert, never hidden (PRD 21 §2.6 rule 7). Claiming a
-        // business writes a verified ownership record against the company graph
-        // PRD 19 B0 brings; the listing surface lands with that record. Showing
-        // the family dimmed says "not yet"; hiding it would say "this product
-        // cannot do that", which is the more expensive lie.
+        // Storefronts — a tenant's published sites — are not yet a browsable kind.
+        // Visible and inert, never hidden (PRD 21 §2.6 rule 7): the chip says "not
+        // yet" rather than "this product cannot do that".
         <div className="mp-soon">
-          <p className="ui-eyebrow">{tf('company')}</p>
+          <p className="ui-eyebrow">{tf('kind.storefront')}</p>
           <h2>{tf('companySoon.soonTitle')}</h2>
           <p>{tf('companySoon.soonBody')}</p>
           <Link href="/features" className="mp-soon__action">{tf('companySoon.soonAction')} →</Link>

@@ -20,6 +20,8 @@ import { useTranslations } from 'next-intl';
 import {
   referenceAnchorId, ReferenceCard, ReferenceCta, ReferenceGrid, ReferenceHero, ReferencePage, ReferenceSection,
 } from '@/components/reference/ReferencePage';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
+import { DOMAIN_EXTRAS } from '@/components/marketing/domainExtras';
 import { useAuth } from '@/lib/AuthContext';
 import type {
   ReferenceDestination
@@ -33,6 +35,11 @@ export interface BurnrateDomainCopy {
   description: string;
   hero: string;
   features: Array<{ title: string; description: string }>;
+  /** BurnRateOS's "for every funding stage" band — how the domain reads at each
+   *  stage, with the outcomes it names. Optional: not every domain has a stage story. */
+  useCases?: Array<{ title: string; description: string; outcomes: string[] }>;
+  /** The domain's own objections, answered. Optional for the same reason. */
+  faq?: Array<{ question: string; answer: string }>;
 }
 
 export interface BurnrateSharedCopy {
@@ -43,6 +50,9 @@ export interface BurnrateSharedCopy {
   authenticatedCta: string;
   authenticatedEyebrow: string;
   featureHeading: string;
+  useCasesHeading: string;
+  useCasesSub: string;
+  faqHeading: string;
   publicClosing: string;
   authenticatedClosing: string;
 }
@@ -60,6 +70,12 @@ export default function BurnrateDomainPage({
   const { isAuthenticated } = useAuth();
   const primaryHref = isAuthenticated ? domain.appHref : '/register';
   const featuresId = referenceAnchorId(shared.featureHeading);
+  const useCasesId = referenceAnchorId(shared.useCasesHeading);
+  const faqId = referenceAnchorId(shared.faqHeading);
+  // The live section this domain carries, if any — registered by copyId, so the
+  // page never asks "which domain am I".
+  const extra = domain.copyId ? DOMAIN_EXTRAS[domain.copyId] : undefined;
+  const tExtras = useTranslations('burnrateMarketing.extras');
 
   return (
     // The page carries its owner's hue from the one declaration (§11.10.1), so
@@ -70,7 +86,10 @@ export default function BurnrateDomainPage({
       <ReferencePage
         title={copy.title}
         sections={[
+          ...(extra ? [{ id: extra.id, label: tExtras(`${extra.copyKey}.heading`) }] : []),
           { id: featuresId, label: shared.featureHeading },
+          ...(copy.useCases?.length ? [{ id: useCasesId, label: shared.useCasesHeading }] : []),
+          ...(copy.faq?.length ? [{ id: faqId, label: shared.faqHeading }] : []),
           { id: 'ref-start', label: t('start') },
         ]}
       >
@@ -86,6 +105,12 @@ export default function BurnrateDomainPage({
           ]}
         />
 
+        {extra && (
+          <ReferenceSection id={extra.id} title={tExtras(`${extra.copyKey}.heading`)} sub={tExtras(`${extra.copyKey}.sub`)}>
+            <extra.Component />
+          </ReferenceSection>
+        )}
+
         <ReferenceSection id={featuresId} title={shared.featureHeading} sub={isAuthenticated ? shared.authenticatedEyebrow : copy.tagline}>
           <ReferenceGrid wide>
             {copy.features.map((feature, index) => (
@@ -95,6 +120,29 @@ export default function BurnrateDomainPage({
             ))}
           </ReferenceGrid>
         </ReferenceSection>
+
+        {!!copy.useCases?.length && (
+          <ReferenceSection id={useCasesId} title={shared.useCasesHeading} sub={shared.useCasesSub} tint>
+            <ReferenceGrid wide>
+              {copy.useCases.map((useCase) => (
+                <ReferenceCard key={useCase.title} title={useCase.title}>
+                  {useCase.description}
+                  <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {useCase.outcomes.map((outcome) => (
+                      <li key={outcome} className="ui-badge ui-badge--success">{outcome}</li>
+                    ))}
+                  </ul>
+                </ReferenceCard>
+              ))}
+            </ReferenceGrid>
+          </ReferenceSection>
+        )}
+
+        {!!copy.faq?.length && (
+          <ReferenceSection id={faqId} title={shared.faqHeading}>
+            <MarketingFaq items={copy.faq} />
+          </ReferenceSection>
+        )}
 
         <div id="ref-start">
           <ReferenceCta

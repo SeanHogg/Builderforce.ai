@@ -1,0 +1,128 @@
+/*
+ * The Ideas scratchpad's own styles. Positioning (the absolute box inside the canvas
+ * chrome) is the shared `.ideasSurface` rule in `CreationCanvas.module.css`, beside the
+ * app and insights surfaces it matches; everything INSIDE the box lives here, so the
+ * canvas stylesheet does not grow a section per surface.
+ *
+ * Every colour is a `--canvas-*` / `--tone-*` token the canvas defines for BOTH themes —
+ * the canvas owns its palette, and nothing here reads a shell token or a literal.
+ */
+
+.body {
+  min-height: 0; flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 16px;
+  width: 100%; max-width: 1080px; margin-inline: auto; box-sizing: border-box;
+  padding: 20px 16px;
+}
+
+.head { display: flex; flex-direction: column; gap: 4px; }
+.heading { margin: 0; color: var(--canvas-ink); font-size: 16px; font-weight: 700; }
+.lede { max-width: 64ch; margin: 0; color: var(--canvas-muted); font-size: 12px; line-height: 1.6; }
+
+/* ── Capture ─────────────────────────────────────────────────────────────────── */
+.capture {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; border: 1px solid var(--canvas-line); border-radius: var(--radius-md, 10px);
+  background: var(--canvas-panel);
+}
+.captureLabel { color: var(--canvas-ink); font-size: 12px; font-weight: 650; }
+.captureInput {
+  width: 100%; min-height: 72px; box-sizing: border-box; resize: vertical;
+  padding: 10px 12px; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm, 8px);
+  background: var(--canvas-board-background); color: var(--canvas-ink);
+  font: 400 13px/1.5 var(--font-sans);
+}
+.captureInput::placeholder { color: var(--canvas-muted); }
+.captureInput:focus-visible { border-color: var(--canvas-accent); outline: 2px solid var(--canvas-accent); outline-offset: 1px; }
+.captureInput:disabled { opacity: .6; cursor: not-allowed; }
+.captureFoot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.captureHint { color: var(--canvas-muted); font-size: 11px; }
+.captureButton {
+  min-height: 36px; padding: 8px 16px; border: 0; border-radius: var(--radius-full, 999px);
+  background: var(--canvas-accent); color: var(--canvas-on-accent, #fff);
+  font: 650 12px var(--font-sans); cursor: pointer;
+}
+.captureButton:disabled { opacity: .45; cursor: not-allowed; }
+.captureButton:not(:disabled):hover, .captureButton:focus-visible { filter: brightness(1.08); outline: 2px solid var(--canvas-accent); outline-offset: 2px; }
+
+/* ── Layout: stages beside the list on a wide screen, above it on a phone ───── */
+.columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 900px) {
+  .columns { grid-template-columns: 240px minmax(0, 1fr); }
+  .stages { position: sticky; top: 0; }
+}
+
+/* ── Stage distribution (also the filter) ───────────────────────────────────── */
+.stages {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; border: 1px solid var(--canvas-line); border-radius: var(--radius-md, 10px);
+  background: var(--canvas-panel);
+}
+.untested, .allTested {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 10px;
+  border-radius: var(--radius-sm, 8px); font-size: 12px; line-height: 1.5;
+}
+.untested { background: var(--tone-warning-bg); color: var(--tone-warning-ink); }
+.allTested { background: var(--tone-success-bg); color: var(--tone-success-ink); }
+.untestedMark {
+  display: grid; place-items: center; flex: none; width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid currentColor; font-size: 10px; font-weight: 800; line-height: 1;
+}
+.stageList { display: flex; flex-direction: column; gap: 2px; }
+.stageRow {
+  display: grid; grid-template-columns: minmax(72px, auto) minmax(0, 1fr) 2.5ch; align-items: center; gap: 8px;
+  min-height: 32px; padding: 4px 8px; border: 1px solid transparent; border-radius: var(--radius-sm, 8px);
+  background: transparent; color: var(--canvas-ink); font: 500 12px var(--font-sans); text-align: left; cursor: pointer;
+}
+/* "All" has no bar: its count sits at the far end of the same grid. */
+.stageRow > .stageName:first-child + .stageCount:last-child { grid-column: 3; }
+.stageRow:hover, .stageRow:focus-visible { background: var(--canvas-hover); outline: none; }
+.stageRow:focus-visible { border-color: var(--canvas-accent); }
+.stageRow[aria-pressed='true'] { border-color: var(--canvas-accent); background: var(--canvas-hover); font-weight: 650; }
+.stageName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stageTrack { height: 8px; border-radius: 4px; background: var(--canvas-line); overflow: hidden; }
+.stageFill { display: block; height: 100%; min-width: 4px; border-radius: 4px; background: var(--canvas-accent); }
+.stageCount { color: var(--canvas-muted); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* ── The list ───────────────────────────────────────────────────────────────── */
+.list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.count { margin: 0; color: var(--canvas-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.row {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px; border: 1px solid var(--canvas-line); border-radius: var(--radius-md, 10px);
+  background: var(--canvas-panel);
+}
+.row[data-stage='dropped'], .row[data-stage='parked'] { opacity: .78; }
+.rowHead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.rowTitle { min-width: 0; flex: 1 1 16ch; margin: 0; color: var(--canvas-ink); font-size: 14px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
+.stageSelect select {
+  min-height: 32px; padding: 4px 8px; border: 1px solid var(--canvas-line); border-radius: var(--radius-sm, 8px);
+  background: var(--canvas-panel); color: var(--canvas-ink); font: 500 12px var(--font-sans); cursor: pointer;
+}
+/* A native option list renders with the OS's colours unless told otherwise, which in
+   dark mode is dark text on a dark menu. */
+.stageSelect option { background: var(--canvas-panel); color: var(--canvas-ink); }
+.stageSelect select:disabled { opacity: .6; cursor: not-allowed; }
+.stageSelect select:focus-visible { outline: 2px solid var(--canvas-accent); outline-offset: 1px; }
+.rowBody {
+  margin: 0; color: var(--canvas-ink); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rowMeta { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; color: var(--canvas-muted); font-size: 11.5px; line-height: 1.5; }
+.evidence { color: var(--tone-success-ink); }
+.evidenceMissing { color: var(--tone-warning-ink); }
+.rowActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rowAction {
+  min-height: 32px; padding: 6px 12px; border: 1px solid var(--canvas-line); border-radius: var(--radius-full, 999px);
+  background: var(--canvas-panel); color: var(--canvas-ink); font: 650 11px var(--font-sans); cursor: pointer;
+}
+.rowAction:hover:not(:disabled), .rowAction:focus-visible { border-color: var(--canvas-accent); background: var(--canvas-hover); outline: none; }
+.rowAction:disabled { opacity: .5; cursor: not-allowed; }
+
+.empty, .filteredEmpty { margin: 0; color: var(--canvas-muted); font-size: 12px; text-align: center; }
+.empty { display: grid; justify-items: center; gap: 6px; padding: 32px 16px; }
+.empty strong { color: var(--canvas-ink); font-size: 13px; }
+.empty p { max-width: 52ch; margin: 0; line-height: 1.6; }
+.filteredEmpty { padding: 24px 0; }
+
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

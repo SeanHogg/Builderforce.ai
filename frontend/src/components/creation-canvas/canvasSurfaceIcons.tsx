@@ -42,6 +42,7 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = {
   chat: ChatSurfaceIcon,
   graph: GraphSurfaceIcon,
+  ideas: IdeasSurfaceIcon,
   scene3d: ThreeDIcon,
   app: AppSurfaceIcon,
   insights: InsightsSurfaceIcon,
@@ -54,6 +55,17 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   world: WorldSurfaceIcon,
   facilitate: FacilitateSurfaceIcon,
 };
+
+/** A scratchpad: a page with a folded corner and two jotted lines, one of them short —
+ *  the half-formed note an idea starts as, which is the surface's whole subject. */
+export function IdeasSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3.2 1.9h6.6l3 3v9.2H3.2z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M9.6 2.1v3h3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+    <path d="M5.4 8.2h5.2M5.4 10.8h2.8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    <circle cx="11.2" cy="10.8" r="1" fill="currentColor" />
+  </svg>;
+}
 
 /** What the session is worth, read back — two bars, one rising. The same reading
  *  every widget card gives, small enough for a 16px tab. */

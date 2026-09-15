@@ -45,8 +45,11 @@ export default function RegisterPageClient() {
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
-  // Right-hand marketing panel follows the Build/Hired chooser.
-  const marketing = resolveAuthPanel(tRoot, accountType);
+  // Right-hand marketing panel follows the Build/Hired chooser — unless the person
+  // arrived to LIST A STARTUP (`?intent=startup`, from the marketplace door or the
+  // runway calculator), in which case a standard account gets the founder's panel.
+  const startupIntent = searchParams.get('intent') === 'startup' && accountType === 'standard';
+  const marketing = resolveAuthPanel(tRoot, startupIntent ? 'startup' : accountType);
 
   // Freelancers land on their for-hire profile (the restricted gig shell); standard
   // accounts go to the builder dashboard.

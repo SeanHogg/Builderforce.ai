@@ -26,7 +26,7 @@ import {
   referenceByHref,
   referenceBySlug
 } from './publicDestinations';
-import { FAMILIES, FAMILY_IDS, resolveFamily } from './marketplaceFamilies';
+import { FAMILIES, FAMILY_IDS, publishActionFor, resolveFamily } from './marketplaceFamilies';
 import { SEATS, isSeat, seatHueVar } from './seats';
 import { classifyShell, isReferenceSurface, rendersAppShell } from './shellRouting';
 import { classifyRoute, panelWidth } from './workbenchPolicy';
@@ -308,11 +308,15 @@ describe('marketplace families — one derivation for label, CTA and flow', () =
     expect(new Set(ctas).size).toBe(FAMILY_IDS.length);
   });
 
-  it('runs the CLAIM flow for companies, not a listing form', () => {
-    // A company you do not own is not yours to list, so the CTA's flow differs
-    // from every other family's — which is why `flow` is a field, not a guess.
-    expect(FAMILIES.company.flow).toBe('claim');
+  it('lists companies from the company the founder runs, never from a storefront form', () => {
+    // Since 2026-09-15 a startup is LISTED (PRD 19 B2) — but from the investor
+    // panel's Listing tab, where the company row lives, not from a form on the
+    // storefront. The publish action routes there and requires a session.
+    expect(FAMILIES.company.flow).toBe('listing');
     expect(FAMILIES.talent.flow).toBe('listing');
+    expect(publishActionFor('company', 'business')).toEqual({ via: 'route', href: '/investor?tab=listing&start=1', requiresAuth: true });
+    // Storefronts are not yet a browsable kind, so their CTA stays inert.
+    expect(publishActionFor('company', 'storefront')).toEqual({ via: 'disabled' });
   });
 
   it('keeps every legacy ?category= link working', () => {

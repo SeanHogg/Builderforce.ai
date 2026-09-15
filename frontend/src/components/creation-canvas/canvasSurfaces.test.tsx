@@ -79,7 +79,9 @@ describe('canvas surface registry', () => {
     // `room` IS here, in the slot "3D space" used to hold, because it absorbed it: the
     // session is a thing placed IN the room and opened from there, so the rail offers
     // one spatial surface rather than two readings of the same board.
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'room', 'app', 'insights']);
+    // `ideas` sits straight after the board: it is the Idea stage of the arc, the list a
+    // founder writes into before there is anything to meet about, run or measure.
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'room', 'app', 'insights']);
   });
 
   /**

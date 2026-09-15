@@ -114,3 +114,8 @@ export * from './objectKinds';
 // What each creative kind can be exported as, who produces each format, and where a
 // finished artifact can be published. See creativeCapabilities.ts.
 export * from './creativeCapabilities';
+// The startup listing vocabulary and the runway arithmetic (PRD 19 B1/B2) —
+// one declaration for the API's directory, the founder's onboarding and the
+// browser-side calculator, so a stage picked in one IS the stage filtered by
+// in the other.
+export * from './startupListing';

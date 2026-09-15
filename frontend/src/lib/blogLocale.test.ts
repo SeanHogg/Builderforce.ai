@@ -121,7 +121,7 @@ describe('catalog copy', () => {
   });
 
   it('localizes a post, and keeps the English copy for one with no entry', () => {
-    const post = BLOG_POSTS[0];
+    const post = translatedPosts[0];
     const zhPost = localizePost(post, blogText('zh'));
     expect(zhPost.title).toBe(blogText('zh')(blogPostKey(post.slug, 'title')));
     expect(zhPost.tags).toEqual(post.tags);

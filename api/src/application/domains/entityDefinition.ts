@@ -155,6 +155,15 @@ export type EntitySpec = {
   title?: string;
   /** Deterministic ordering for composite-key tables with no timestamp. */
   order?: string;
+  /**
+   * Physical columns that stay READABLE but are never writable through the generic
+   * path, because a named TRANSITION owns them. `companies.is_publicly_listed` is
+   * the case that forced it: the publish transition refuses an incomplete profile
+   * and stamps `listed_at` in the same statement, and a generic PUT that could
+   * flip the flag would make the gate a suggestion. `NEVER_WRITABLE` is the
+   * platform-wide version of the same idea; this is the per-entity one.
+   */
+  guarded?: string[];
 };
 
 export type EntityDef = {
@@ -201,8 +210,8 @@ export function entity(table: PgTable, opts: Omit<EntitySpec, 'table'> = {}): En
   return { table, ...opts };
 }
 
-function describe(column: Column, physical: string): EntityColumn {
-  const writable = !NEVER_WRITABLE.has(physical) && !column.primary;
+function describe(column: Column, physical: string, guarded: ReadonlySet<string>): EntityColumn {
+  const writable = !NEVER_WRITABLE.has(physical) && !guarded.has(physical) && !column.primary;
   return {
     key: '',
     name: physical,
@@ -236,6 +245,7 @@ export function defineDomainEntities(
     let primaryKey: string | null = null;
     let tenantKey: string | null = null;
     const byPhysical = new Map<string, string>();
+    const guarded = new Set(spec.guarded ?? []);
 
     for (const [key, column] of Object.entries(cols)) {
       const physical = column.name;
@@ -246,7 +256,7 @@ export function defineDomainEntities(
         redacted.push(physical);
         continue;
       }
-      columns.push({ ...describe(column, physical), key });
+      columns.push({ ...describe(column, physical, guarded), key });
     }
 
     const pick = (candidates: readonly string[]) => {

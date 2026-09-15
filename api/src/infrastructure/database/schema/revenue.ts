@@ -134,10 +134,23 @@ export const dealFlowOpportunities = pgTable('deal_flow_opportunities', {
   /** 'new' | 'qualifying' | 'converted' | 'rejected'. */
   status:      varchar('status', { length: 16 }).notNull().default('new'),
   convertedDealId: integer('converted_deal_id'),
+  /**
+   * Which of the tenant's OWN companies this inbound is about — an id into the
+   * investor domain's `companies`, never an import of it (migration 1173). An
+   * investor expressing interest in a listed startup lands here with
+   * `source = 'investor_inquiry'`, so the founder triages it in the same queue
+   * as every other inbound and the CRO's by-source report sees it.
+   */
+  subjectCompanyId: integer('subject_company_id'),
+  contactName: varchar('contact_name', { length: 160 }),
+  /** The optional answers of an inbound form (amount, instrument, timeframe,
+   *  expertise, accreditation). None is filtered on; the writer documents the shape. */
+  details:     jsonb('details').$type<Record<string, unknown>>(),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_deal_flow_opportunities_status').on(t.tenantId, t.status, t.createdAt),
+  index('idx_deal_flow_subject_company').on(t.tenantId, t.subjectCompanyId, t.status, t.createdAt),
 ]);
 
 // ---------------------------------------------------------------------------

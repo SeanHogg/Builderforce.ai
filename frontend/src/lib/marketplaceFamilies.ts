@@ -135,6 +135,10 @@ const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
   // (`users.available_for_hire`) lives on their own profile. The skill form's
   // slug/version/repo fields describe nothing about a person.
   'talent:person': { href: '/freelancer/profile', requiresAuth: true },
+  // A startup is listed from the founder's own company — the Listing tab of the
+  // investor panel, opened straight into its wizard. Not a form on the storefront,
+  // because the listing is a FACET of a company the workspace owns.
+  'company:business': { href: '/investor?tab=listing&start=1', requiresAuth: true },
   // A gig is published FROM A TICKET (`POST /api/marketplace/publish` derives the
   // title, description and requirements from the work item), so there is no "post
   // a gig" form to point at and never was. The honest CTA is a board picker, and
@@ -149,7 +153,10 @@ const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
 
 /** Chips nobody can publish into. The provider catalogue owns the model list;
  *  a person does not add a row to it, and a button saying they can is a lie. */
-const PUBLISH_CLOSED = new Set(['asset:model']);
+// Storefronts are the tenant's published SITES (`webSurface.ts`) and are not yet
+// browsable as a marketplace kind — the chip stays visible and inert (PRD 21 §2.6
+// rule 7), so the family says "not yet" rather than hiding what is coming.
+const PUBLISH_CLOSED = new Set(['asset:model', 'company:storefront']);
 
 export function publishActionFor(family: FamilyId, kind: string): PublishAction {
   if (FAMILIES[family].flow === 'claim') return { via: 'disabled' };
@@ -175,8 +182,12 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     id: 'company',
     labelKey: 'company',
     publishKey: 'publishCompany',
-    flow: 'claim',
-    hueVar: '--seat-cmo',
+    // `listing`, not `claim`, since 2026-09-15: a founder LISTS the company they
+    // run from the investor panel's Listing tab (PRD 19 B2). Claiming a company
+    // somebody else registered remains the company graph's work and is not a
+    // marketplace verb.
+    flow: 'listing',
+    hueVar: '--seat-ceo',
     kinds: ['business', 'storefront'],
     noteKey: 'note.company',
   },

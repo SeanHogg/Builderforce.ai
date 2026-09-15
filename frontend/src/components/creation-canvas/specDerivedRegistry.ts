@@ -126,7 +126,7 @@ function lower({ specs, labels, statuses }: SpecVocabulary): readonly SpecRegist
  */
 const FOUNDER_LABELS: Record<FounderObjectKind, string> = {
   company: 'Company', competitor: 'Competitor', customerSegment: 'Customer segment',
-  gtmPlan: 'GTM plan', battlecard: 'Battlecard', customerInterview: 'Customer interview',
+  gtmPlan: 'GTM plan', battlecard: 'Battlecard', idea: 'Idea', customerInterview: 'Customer interview',
   experiment: 'Experiment', decision: 'Decision', risk: 'Risk', objective: 'Objective',
   liveMetric: 'Live metric', trigger: 'Trigger', pricing: 'Pricing',
   capTable: 'Cap table', fundingRound: 'Funding round', investorUpdate: 'Investor update',
@@ -139,6 +139,10 @@ const FOUNDER_LABELS: Record<FounderObjectKind, string> = {
 
 const FOUNDER_STATUSES: Record<string, string> = {
   describeBusiness: 'Describe your business', researching: 'Researching', sizing: 'Sizing',
+  // An idea starts `captured` — written down and nothing more. Its real position in the
+  // funnel is its `stage` field; this is only what a blank card says before anyone
+  // moves it.
+  captured: 'Captured',
   draft: 'Draft', scheduled: 'Scheduled', designing: 'Designing', open: 'Open',
   bindMetric: 'Bind a metric', armed: 'Armed', planning: 'Planning', assembling: 'Assembling',
   // A budget's default is `drafting`, never `approved`: the whole value of a budget is

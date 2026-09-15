@@ -2515,7 +2515,7 @@
    separate piece of chrome, always floating at its own `bottom:14px`. Without this
    `max()` this surface's content ran the full height of the shell in that placement,
    with the command bar painted straight across whatever sat at the bottom of it. */
-.objectSurface,.appSurface,.insightsSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
+.objectSurface,.appSurface,.insightsSurface,.ideasSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .objectSurfaceHeader { display:flex; flex:none; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
 .objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }
 .objectSurfaceTitle { min-width:0; flex:1; display:flex; flex-direction:column; }

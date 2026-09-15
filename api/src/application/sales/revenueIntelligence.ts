@@ -47,12 +47,15 @@ import {
   riIds,
   riProspects,
 } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 
 /** `ri_prospects.status`. */
 export const PROSPECT_STATUSES = ['new', 'enriched', 'sequenced', 'engaged', 'converted', 'disqualified'] as const;
 export type ProspectStatus = (typeof PROSPECT_STATUSES)[number];
+
+/** `deal_flow_opportunities.source` for an investor expressing interest in a listed startup. */
+export const INVESTOR_INQUIRY_SOURCE = 'investor_inquiry';
 
 /** `deal_flow_opportunities.status`. */
 export const DEAL_FLOW_STATUSES = ['new', 'qualifying', 'converted', 'rejected'] as const;
@@ -390,7 +393,21 @@ export async function recordDealFlow(
   env: Env,
   tenantId: number,
   actor: ActorIdentity,
-  input: { source: string; companyName?: string | null; contactEmail?: string | null; summary?: string | null; estimatedValue?: number | null; currency?: string; score?: number | null },
+  input: {
+    source: string;
+    companyName?: string | null;
+    contactEmail?: string | null;
+    summary?: string | null;
+    estimatedValue?: number | null;
+    currency?: string;
+    score?: number | null;
+    /** Which of the tenant's OWN companies the inbound is about (an investor
+     *  inquiry names a listed startup). An id, never a join — see the column. */
+    subjectCompanyId?: number | null;
+    contactName?: string | null;
+    /** The form's optional answers, kept whole so triage can read what was said. */
+    details?: Record<string, unknown> | null;
+  },
 ) {
   const source = input.source.trim();
   if (!source) throw new RevenueIntelError('source is required — deal flow with no origin cannot be attributed');
@@ -407,6 +424,9 @@ export async function recordDealFlow(
       currency: input.currency ?? 'USD',
       score: dec(input.score),
       status: 'new',
+      subjectCompanyId: input.subjectCompanyId ?? null,
+      contactName: input.contactName?.trim().slice(0, 160) || null,
+      details: input.details ?? null,
     })
     .returning();
   if (!row) throw new RevenueIntelError('could not record the opportunity');
@@ -419,15 +439,56 @@ export async function recordDealFlow(
   return row;
 }
 
-export async function dealFlowQueue(db: Db, tenantId: number, status?: DealFlowStatus) {
+/**
+ * The inbound queue. `narrow` is how a company-scoped surface (the founder's
+ * investor-interest tab) reads ITS slice of the same rows the CRO's queue
+ * shows — one table, one reader, two views, rather than an inquiry table beside
+ * the deal-flow one.
+ */
+export async function dealFlowQueue(
+  db: Db,
+  tenantId: number,
+  status?: DealFlowStatus,
+  narrow: { source?: string; subjectCompanyId?: number } = {},
+) {
   if (status !== undefined && !isDealFlowStatus(status)) {
     throw new RevenueIntelError(`status must be one of: ${DEAL_FLOW_STATUSES.join(', ')}`);
   }
   return db
     .select()
     .from(dealFlowOpportunities)
-    .where(scopedToTenant(dealFlowOpportunities, tenantId, status ? eq(dealFlowOpportunities.status, status) : undefined))
+    .where(scopedToTenant(
+      dealFlowOpportunities,
+      tenantId,
+      status ? eq(dealFlowOpportunities.status, status) : undefined,
+      narrow.source ? eq(dealFlowOpportunities.source, narrow.source) : undefined,
+      narrow.subjectCompanyId !== undefined ? eq(dealFlowOpportunities.subjectCompanyId, narrow.subjectCompanyId) : undefined,
+    ))
     .orderBy(desc(dealFlowOpportunities.score), desc(dealFlowOpportunities.createdAt));
+}
+
+/**
+ * How many inquiries each LISTED company has received — the directory card's
+ * social proof ("3 investors have asked").
+ *
+ * A cross-tenant read by design: the directory spans every tenant's listed
+ * companies, and a count per company id leaks nothing an inquiry contains. The
+ * access predicate is the fixed source plus the caller's id list, so it cannot
+ * be reused to read the queue itself.
+ */
+export async function publicInquiryCounts(db: Db, subjectCompanyIds: readonly number[]): Promise<Map<number, number>> {
+  if (subjectCompanyIds.length === 0) return new Map();
+  const rows = await db
+    .select({ subjectCompanyId: dealFlowOpportunities.subjectCompanyId, count: sql<number>`count(*)::int` })
+    .from(dealFlowOpportunities)
+    .where(acrossTenants(
+      dealFlowOpportunities,
+      'public_catalogue',
+      eq(dealFlowOpportunities.source, INVESTOR_INQUIRY_SOURCE),
+      inArray(dealFlowOpportunities.subjectCompanyId, [...subjectCompanyIds]),
+    ))
+    .groupBy(dealFlowOpportunities.subjectCompanyId);
+  return new Map(rows.filter((r) => r.subjectCompanyId != null).map((r) => [r.subjectCompanyId as number, r.count]));
 }
 
 export async function triageDealFlow(

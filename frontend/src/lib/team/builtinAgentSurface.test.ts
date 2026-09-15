@@ -9,7 +9,9 @@ describe('builtinAgentSurfaceHref', () => {
 
   it('uses each other built-in seat native registered destination', () => {
     expect(builtinAgentSurfaceHref('growth', 'CMO', 'execute')).toBe('/growth');
-    expect(builtinAgentSurfaceHref('finance', 'CFO', 'execute')).toBe('/seat/finance');
+    // The CFO's destination is Finance (runway and cashflow) since 2026-09-15; the
+    // generic entity view stays reachable under `/seat/finance` but is no longer the door.
+    expect(builtinAgentSurfaceHref('finance', 'CFO', 'execute')).toBe('/finance');
     expect(builtinAgentSurfaceHref('support', 'Support', 'diagnostics')).toBe('/seat/support');
   });
 

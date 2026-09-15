@@ -47,6 +47,8 @@ import {
   type PackSummary,
 } from '@/lib/investorApi';
 import { CompaniesView } from './CompaniesView';
+import { ListingView } from './ListingView';
+import { InquiriesView } from './InquiriesView';
 import { RoundView } from './RoundView';
 import { InvestorsView } from './InvestorsView';
 import { DataRoomView } from './DataRoomView';
@@ -79,6 +81,9 @@ export default function InvestorClient() {
   const params = useSearchParams();
   const tab = params.get('tab') ?? '';
   const companyFromUrl = params.get('company');
+  // `?start=1` — a founder arriving from "list your startup" (the marketplace door
+  // or `/register?intent=startup`) lands with the wizard already open.
+  const startListing = params.get('start') === '1';
 
   const [companies, setCompanies] = useState<CompanySummary[]>([]);
   const [companyId, setCompanyId] = useState<number | null>(companyFromUrl ? Number(companyFromUrl) : null);
@@ -221,6 +226,16 @@ export default function InvestorClient() {
             onDetailChanged={changed}
           />
         )}
+        {tab === 'listing' && (
+          <ListingView
+            companies={companies}
+            companyId={companyId}
+            startEditing={startListing}
+            onCompanyCreated={(id) => { setCompanyId(id); changed(); }}
+            onChanged={changed}
+          />
+        )}
+        {tab === 'inquiries' && <InquiriesView detail={detail} />}
         {tab === 'round' && <RoundView detail={detail} investors={investors} />}
         {tab === 'investors' && (
           <InvestorsView detail={detail} investors={investors} analytics={analytics} onChanged={changed} />
@@ -232,10 +247,11 @@ export default function InvestorClient() {
         {/* Named for the reader rather than assumed: a workspace with no company
             yet lands on Companies whatever tab the URL asked for, because every
             other sub-view is about a company that does not exist. */}
-        {companies.length === 0 && !loading && tab !== '' && (
+        {/* The Listing tab is exempt: its wizard CREATES the first company. */}
+        {companies.length === 0 && !loading && tab !== '' && tab !== 'listing' && (
           <p style={mutedStyle}>{t('common.noCompanies')}</p>
         )}
-        {selected == null && companies.length > 0 && tab !== '' && (
+        {selected == null && companies.length > 0 && tab !== '' && tab !== 'listing' && (
           <p style={mutedStyle}>{t('common.pickCompany')}</p>
         )}
       </div>

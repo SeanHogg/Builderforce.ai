@@ -1,3 +1,37 @@
+## ✅ RESOLVED 2026-09-15 — Founders can list their startup in the Marketplace, investors can express interest, and Finance shows runway and cashflow with their provenance named (api 2026.9.35 · frontend 2026.9.32 · PRD 19 §10)
+
+BurnRateOS's founder loop — create the company, list it, be found by investors, watch the runway — had no owner in Builderforce: `companies` existed as a table and a raise, but nothing put a company in front of a stranger, nothing let the stranger say "I'm interested", and the CFO seat had a burn tile with no destination behind it. Operator call mid-pass: startup listings are PART of the marketplace.
+
+- **The listing is a facet of `companies`** (migration 1173: 23 columns, partial unique `slug WHERE is_publicly_listed`, `stage_lookup` seeded from the contract vocabulary). Zero new tables. Three writers in `application/investor/startupListing.ts`: the profile, the declared money (stamped), and the publish TRANSITION, which refuses an incomplete profile from the same `LISTING_REQUIRED_FIELDS` the completeness meter reads.
+- **The public directory** is the `company · business` kind of the storefront: `components/startups/StartupDirectory.tsx` over `GET /api/public/startups` (`acrossTenants(companies, 'public_catalogue', is_publicly_listed)`), cached under ONE version token every listing write bumps. Profile page `/marketplace/company/[slug]` on `PublicDetailLayout`, Organization JSON-LD, in the sitemap.
+- **Express interest is deal flow.** `POST /api/public/startups/:slug/inquiries` → `recordDealFlow` with `source='investor_inquiry'` and `subject_company_id`; owners and managers notified in-app; the founder triages on **Investors → Interest** with the CRO's own statuses. One `ExpressInterestPanel` (BurnRateOS had a drawer AND a modal).
+- **The tier rule is one function.** `toPublicProfile`: a visitor sees stage, sector, traction and runway HEALTH; a signed-in reader adds months and the investor contact; cash and burn never leave the workspace.
+- **Onboarding** is the three-step `StartupListingWizard` on the new **Investors → Listing** tab (steps are data; each step saves; `/register?intent=startup` carries the intent through sign-up and picks the founder's marketing panel). Publish refusals land on the step that holds the missing field.
+- **Finance is a destination** (`/finance`, tabs Runway · Cashflow): `GET /api/bi/runway` returns OBSERVED (`finance.*` metric facts, 12 months) beside DECLARED (`companies` money columns), each labelled; cached on two tokens — the tenant's declared write and the finance rollup pass (`cronSweeps.ts` bumps `finance-rollup` after `runRollups`). Cashflow shows the observed series and the declared projection as chart and table.
+- **One runway formula.** `computeRunway` / `projectCashflow` in `packages/creation-canvas-contract/src/startupListing.ts` — cash ÷ NET burn — imported by the API, the web, the founder's step and the marketing calculator; tested once (dividing by gross spend understates a company with revenue fivefold).
+- **Free calculators** ported into the tools registry as the `finance` category (`application/tools/startupFinanceTools.ts`: runway, burn rate, break-even, churn, pricing simulator), localized through the tool catalogs; the BI explainer carries the live runway calculator (`domainExtras.tsx` registry) and the CEO explainer the newest listed startups plus the two doors.
+- **Content parity for all nine domain explainers**: features expanded from 3 to the BurnRateOS catalog's owned features per domain, funding-stage use cases (PM, BI, Investor) and FAQs, in five locales — with retired capabilities (VoIP, voice agent, web push, affiliates) and fabricated percentages removed under the Claim-to-Proof gate. Full route-by-route assessment in PRD 19 §10.3.
+- Release notes (`new`) by migration 1174; marketing in `content/blog/list-your-startup-and-meet-investors.md`.
+- **Operator step before deploy:** apply migrations 1173 and 1174.
+
+## ✅ RESOLVED 2026-09-15 — The canvas had nowhere to write an idea down, or to track which ideas were ever tested (frontend 2026.9.32 · release note mig 1174)
+
+BurnRateOS's Ideas Scratch Pad (`/ideas`) is where a founder jots and works an idea. It is a multi-page doc with an AI co-founder, meetings, a notetaker, and "apply to company". The canvas could hold a researched segment, a battlecard, a customer interview and a scored experiment, but not the half-formed idea that started them. The concept was ported as canvas DATA, not as a second document editor:
+
+- **`idea` founder kind.** `FOUNDER_OBJECT_KINDS` plus `IDEA_STAGES` / `isIdeaStage` in the contract, and one spec entry in `founderObjects.ts`.
+  - Stages run `captured → exploring → validating → validated`, and end in `parked` / `dropped` / `promoted`.
+  - `scratch` holds the note verbatim. `testedBy` names customerInterview / experiment cards, and a board-derived `evidence` verdict counts them, calling out any ref that resolves to nothing.
+  - `stage` and `capturedAt` are bookkeeping, so a title plus a stage is still an empty shell.
+- **`ideas` board surface.** Order 2, straight after Board; it persists.
+  - `CanvasIdeasSurface`, `IdeaCaptureForm`, `IdeaStageBar` and `IdeaLogRow` do the work, and `lib/ideaLog.ts` holds the pure logic.
+  - Capture turns a typed line into an `idea` card on the board through the new `appendAtCenter`, which is `addAtCenter` without select or inspector.
+  - The stage distribution doubles as the filter, and it flags open ideas that nobody has tested.
+  - "Plan an interview" adds a linked `customerInterview` and moves the idea to `validating`.
+  - Localized in all five catalogs.
+- **Found and fixed on the way: customer interview and risk cards were created with no localized title.** Spec kinds title new cards from `creationCanvas.founder.label.<kind>`. The catalogs held a stale `label.interview`, left over from the `interview → customerInterview` rename, and had no `risk` key at all. `label.interview` was renamed to `label.customerInterview`, reusing each locale's translation, and `label.risk` was added.
+- **Marketing.** Blog post `ideas-scratchpad-on-the-canvas`, listed in RELATED_ARTICLES for `creation-canvas`, and a `new` release note.
+- **Tests.** `ideaLog.test.ts` and `canvasIdeasSurface.test.tsx` are new; idea evidence tests were added to `founderObjects.test.ts`; `canvasSurfaces.test.tsx` has the new board surface list.
+
 ## ✅ RESOLVED 2026-09-14 — A site's Preview and Edit readings drew two different pages
 
 On the `site` surface, **Edit** (the React `WebsiteBody`) showed a hero band with accent artwork and a "Learn More" button. **Preview** (the framed `renderWebsiteDocument`, the same page the publisher serves) showed a plain white page with no artwork and no buttons. The editor also dropped eyebrows ("WHY CHOOSE US") on every section but the hero, and painted itself from its own fallback colours rather than the site's palette.

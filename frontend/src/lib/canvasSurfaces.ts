@@ -36,7 +36,7 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'insights' | 'room' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'insights' | 'room' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
 
 /**
  * What a surface is ABOUT.
@@ -97,6 +97,18 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // arriving from any other assistant already knows how to use.
   { id: 'chat', scope: 'board', order: 0, showsBoard: false, showsObjects: false, brainIsSurface: true, persist: true },
   { id: 'graph', scope: 'board', order: 1, showsBoard: true, showsObjects: true, brainIsSurface: false, persist: true },
+  // THE SCRATCHPAD — every idea on this board, as a list you write into and track.
+  //
+  // Board-scoped for the reason `insights` is: "all my ideas" is about the whole session,
+  // so there is no card to enter it from. It sits straight after the board because it is
+  // the Idea stage of the arc — the thing a founder does BEFORE there is anything to meet
+  // about, run or measure. It does not draw the board or its objects: it is a reading of
+  // the `idea` cards (newest first, grouped by stage, the untested ones called out), and a
+  // floating "Align · Frame" toolbar over a list would be chrome for something not there.
+  //
+  // It PERSISTS, unlike the room: a scratchpad is a place somebody chose to keep writing
+  // in, and coming back tomorrow to the list you left is the point of writing it down.
+  { id: 'ideas', scope: 'board', order: 2, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
   // THE ROOM — the people AND the work, in one space.
   //
   // It took the slot "3D space" used to hold, because it absorbed it. The 3D space
@@ -124,7 +136,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // A reload should put you back on the board where the work is: landing tomorrow
   // inside a room whose standup ended last night is the same wrong answer
   // `facilitate` gives for a poll that closed.
-  { id: 'room', scope: 'board', order: 2, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'room', scope: 'board', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // The first surface that reads MANY objects as ONE artifact.
   //
   // Everything below this line is `scope: 'object'` — a medium whose own axis will not
@@ -136,32 +148,32 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   //
   // It persists because it is a place somebody chose to work in — a builder iterating on
   // a running app is not taking a temporary reading of the board, the way 3D is.
-  { id: 'app', scope: 'board', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
+  { id: 'app', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
   // What the session is worth, read back. Board-scoped for the same reason `app` is:
   // graded-proof rate, active builders and the rest are about the WHOLE session, not
   // one card, so there is no card to enter it from. Unlike `app` it draws no objects
   // of its own — it reads the pinned/registry widgets the rest of the product already
   // shares (`WidgetCard`, `ReorderableWidgetGrid`) rather than inventing a second
   // metrics surface — so `showsObjects` stays false the way `chat`'s does.
-  { id: 'insights', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
+  { id: 'insights', scope: 'board', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
   // with no room for a second track. None of them persists, because a surface bound to one
   // object cannot be restored without it.
-  { id: 'page', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'play', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'page', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'play', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A site is pages AND a width. It is not the `page` surface with more room: that one
   // draws ONE sheet at a reading measure, and a website is a set of pages you move
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
-  { id: 'site', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'timeline', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'site', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A `world` object is a place with its own camera and props, not a page — it does
   // not fit the sheet/build/track shapes above any more than they fit each other. It
   // does not persist as the active surface for the same reason they don't: a surface
   // bound to one object snaps back to the board on reload, not into an editor whose
   // target it has to re-find.
-  { id: 'world', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'world', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // THE AI SCENE — a `scene` object's generation panel (prompt, model, Generate).
   //
   // This id used to be the rail's "3D space", which forked on whether a `scene`
@@ -170,7 +182,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // was underneath — the surface of ONE object, entered from its card, meaningless
   // without it — and it is declared as exactly that. The id stays: the object registry
   // and the generation panel both name it, and nothing about an id says "rail".
-  { id: 'scene3d', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'scene3d', scope: 'object', order: 11, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // THE ROOM. A live poll's own axis is the people answering it — a join address on the
   // wall, a count that moves, and two controls (open/close voting, show/hide the count)
   // that are pressed while a room watches. A ~340px card can preview a question; it
@@ -179,7 +191,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   //
   // It does not persist, for the reason every object-scoped surface does not: coming
   // back tomorrow should land on the board, not inside a poll that closed last night.
-  { id: 'facilitate', scope: 'object', order: 11, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'facilitate', scope: 'object', order: 12, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // THE MONTH — and the one entry on this list that used to be somewhere else.
   //
   // ── WHY IT STOPPED BEING A BOARD SURFACE ─────────────────────────────────────
@@ -200,7 +212,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // It does not persist, like every object-scoped surface: it cannot be restored without
   // knowing WHICH calendar, and a reload should land on the board rather than inside a
   // month whose card the reader may since have deleted.
-  { id: 'calendar', scope: 'object', order: 12, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'calendar', scope: 'object', order: 13, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

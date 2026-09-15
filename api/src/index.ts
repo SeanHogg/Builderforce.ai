@@ -169,6 +169,7 @@ import { createSignatureRoutes, createPublicSignatureRoutes } from './presentati
 import { createConsentRoutes, createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
 import { createInvestorRoutes, createPublicInvestorRoutes } from './presentation/routes/investorRoutes';
+import { createPublicStartupRoutes } from './presentation/routes/publicStartupRoutes';
 import { createWebSurfaceRoutes, createPublicWebSurfaceRoutes } from './presentation/routes/webSurfaceRoutes';
 import { createDeliveryFlowRoutes } from './presentation/routes/deliveryFlowRoutes';
 import { createScenarioRoutes } from './presentation/routes/scenarioRoutes';
@@ -1029,6 +1030,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // (IN-2). Every rule is enforced in `companyInvestorAccess.ts` and, under it, in
   // the same `dataRoomSharing.ts` resolve the room's own link flows through.
   app.route('/api/public/investor', createPublicInvestorRoutes(db));
+  // The startup DIRECTORY (PRD 19 B2) — listed companies and "express interest".
+  // Not a token shape: a directory is read by anyone, so the access predicate is
+  // the row's own `is_publicly_listed`, declared with `acrossTenants`.
+  app.route('/api/public/startups', createPublicStartupRoutes(db));
   // PRD 19 §9 — the tenant's web surface. The public half carries the tenant in the
   // path because the visitor a landing page exists to convert has no session.
   app.route('/api/public/web', createPublicWebSurfaceRoutes(db));

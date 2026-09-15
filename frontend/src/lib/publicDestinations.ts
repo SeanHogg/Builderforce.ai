@@ -114,11 +114,11 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'ref.productManagement', copyId: 'productManagement', seat: 'CPO', icon: '📦', marketingHref: '/product-management', appHref: '/projects?tab=pm', kind: 'domain', placement: 'make', panel: true, groupId: 'projects' },
   { id: 'ref.agileSurvival', copyId: 'agileSurvival', seat: 'CTO', icon: '⚡', marketingHref: '/survival-focused-agile', appHref: '/projects?tab=ceremonies', kind: 'domain', placement: 'make', panel: true },
   // ── Product ▾ · RUN — one row per business seat ──────────────────────────
-  { id: 'ref.businessIntelligence', copyId: 'businessIntelligence', seat: 'CFO', icon: '📊', marketingHref: '/business-intelligence', appHref: '/seat/finance', kind: 'domain', placement: 'run', panel: true, groupId: 'finance' },
+  { id: 'ref.businessIntelligence', copyId: 'businessIntelligence', seat: 'CFO', icon: '📊', marketingHref: '/business-intelligence', appHref: '/finance', kind: 'domain', placement: 'run', panel: true, groupId: 'finance' },
   { id: 'ref.salesRevenue', copyId: 'salesRevenue', seat: 'CRO', icon: '📈', marketingHref: '/sales-revenue', appHref: '/seat/revenue', kind: 'domain', placement: 'run', panel: true, groupId: 'revenue' },
   { id: 'ref.marketingGrowth', copyId: 'marketingGrowth', seat: 'CMO', icon: '📣', marketingHref: '/marketing-growth', appHref: '/growth', kind: 'domain', placement: 'run', panel: true, groupId: 'growth' },
   { id: 'ref.operationalCadence', copyId: 'operationalCadence', seat: 'HR', icon: '🎯', marketingHref: '/operational-cadence', appHref: '/seat/people', kind: 'domain', placement: 'run', panel: true, groupId: 'people' },
-  { id: 'ref.investorIntelligence', copyId: 'investorIntelligence', seat: 'CEO', icon: '💼', marketingHref: '/investor-intelligence', appHref: '/seat/investor', kind: 'domain', placement: 'run', panel: true, groupId: 'investor' },
+  { id: 'ref.investorIntelligence', copyId: 'investorIntelligence', seat: 'CEO', icon: '💼', marketingHref: '/investor-intelligence', appHref: '/investor', kind: 'domain', placement: 'run', panel: true, groupId: 'investor' },
   { id: 'ref.governanceSecurity', copyId: 'governanceSecurity', seat: 'Security', icon: '🛡', marketingHref: '/governance-security', appHref: '/seat/governance', kind: 'domain', placement: 'run', panel: true, groupId: 'governance' },
   { id: 'ref.customerEngagement', copyId: 'customerEngagement', seat: 'Support', icon: '💬', marketingHref: '/customer-engagement', appHref: '/seat/support', kind: 'domain', placement: 'run', panel: true, groupId: 'support' },
   { id: 'ref.companiesContacts', copyId: 'companiesContacts', seat: 'CMO', icon: '🏢', marketingHref: '/companies-contacts', appHref: '/seat/revenue', kind: 'foundation', placement: 'run', panel: true },

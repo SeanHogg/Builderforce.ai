@@ -83,6 +83,16 @@ export const FOUNDER_OBJECT_KINDS = [
   // on `competitor`: the analysis of a rival and the plan to take their customers have
   // different authors, different review cycles, and different lifetimes.
   'battlecard',
+  // THE IDEA, BEFORE ANY OF IT. The thing a founder has in the shower, jots on a
+  // scratchpad, and — on every other tool — loses. The board could hold a researched
+  // segment, a battlecard and a run experiment, and not the half-formed thought that
+  // started them. An `idea` is written in seconds (a line is enough), carries a `stage`
+  // from `IDEA_STAGES` so a pile of them can be TRACKED rather than merely kept, and
+  // names the `customerInterview` / `experiment` objects that tested it, so "have we
+  // talked to anybody about this?" is a fact on the card rather than a feeling. Ported
+  // from BurnRateOS's Ideas Scratch Pad as a KIND, not a second document editor: the
+  // canvas already has pages, and what it lacked was the idea as a thing you can count.
+  'idea',
   // THE EVIDENCE UNDER ALL OF IT. A customer conversation and a run experiment are the
   // two things that turn an assumption into a fact, and the canvas had neither.
   //
@@ -204,6 +214,29 @@ const FOUNDER_KIND_SET: ReadonlySet<string> = new Set<string>(FOUNDER_OBJECT_KIN
 /** True for the founder objects declared above — the set `founderObjects.ts` specs. */
 export function isFounderObjectKind(value: unknown): value is FounderObjectKind {
   return typeof value === 'string' && FOUNDER_KIND_SET.has(value);
+}
+
+/**
+ * Where an `idea` is in its life — THE one vocabulary the card, the Ideas surface and the
+ * model all read, so "how many ideas are still untested" is one question with one answer.
+ *
+ * Ordered as the funnel is walked: `captured` (written down, nothing more), `exploring`
+ * (being researched), `validating` (an interview or experiment is under way),
+ * `validated` (the evidence came back yes). The last three are EXITS, and each is its own
+ * value because they mean different things a month later: `parked` is "not now" and
+ * worth revisiting, `dropped` is "the evidence said no", and `promoted` is "it became
+ * something" — a project, a company, a proof. Folding them into one "closed" would erase
+ * the difference between an idea that was disproven and one that was merely shelved.
+ */
+export const IDEA_STAGES = ['captured', 'exploring', 'validating', 'validated', 'parked', 'dropped', 'promoted'] as const;
+
+export type IdeaStage = typeof IDEA_STAGES[number];
+
+const IDEA_STAGE_SET: ReadonlySet<string> = new Set<string>(IDEA_STAGES);
+
+/** True for a value in {@link IDEA_STAGES}. */
+export function isIdeaStage(value: unknown): value is IdeaStage {
+  return typeof value === 'string' && IDEA_STAGE_SET.has(value);
 }
 
 /**

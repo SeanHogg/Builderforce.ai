@@ -27,7 +27,7 @@ export const APP_ROUTE_SEGMENTS: readonly string[] = [
   'career', 'cofounder', 'compare', 'compile', 'content-manager', 'contributors', 'create',
   'companies', 'creation-canvas', 'crm', 'dashboard', 'dashboards', 'data-rooms', 'deal', 'debug',
   'demo', 'developers', 'diagnostics', 'disputes', 'docs', 'embed', 'embedded', 'evermind', 'f',
-  'facts', 'features', 'finops', 'freelancer', 'growth', 'hires', 'hiring', 'import', 'inbox',
+  'facts', 'features', 'finance', 'finops', 'freelancer', 'growth', 'hires', 'hiring', 'import', 'inbox',
   'incidents', 'insights', 'integrations', 'investor', 'invoice', 'kanban-templates', 'knowledge',
   'learning', 'legal', 'legal-documents', 'login', 'logs', 'lti', 'marketplace', 'media', 'meetings',
   'method', 'models', 'monitoring', 'p', 'personas', 'pmo', 'pricing', 'product', 'projects', 'prompts',

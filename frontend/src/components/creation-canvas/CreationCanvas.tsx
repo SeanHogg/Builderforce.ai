@@ -58,6 +58,7 @@ import { CanvasCalendarSurface } from './CanvasCalendarSurface';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { PhaseModalitySelector } from './PhaseModalitySelector';
 import { CanvasInsightsSurface } from './CanvasInsightsSurface';
+import { CanvasIdeasSurface } from './CanvasIdeasSurface';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { CanvasMenuSheet } from './CanvasMenuSheet';
 import { CanvasSessionPill } from './CanvasSessionPill';
@@ -3696,8 +3697,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** Place a new object at the middle of the viewport. `data` lets a caller that
    *  already HAS the object's content (an editor capture) seed it in one step
    *  rather than adding an empty object and patching it afterwards. */
-  const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>, size?: { width: number; height: number }) => {
-    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+  /**
+   * Create one object at the centre of the viewport and append it to the board — and
+   * nothing else. The half of `addAtCenter` a SURFACE needs: the Ideas scratchpad adds a
+   * card per captured line and must not select it or open its inspector, because the
+   * reader is still typing into the list. Callers gate on edit rights themselves.
+   */
+  const appendAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>, size?: { width: number; height: number }) => {
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
     const node = newNode(kind, position);
     if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
@@ -3709,14 +3715,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // there is not a second place a card's width lives.
     if (size) node.style = { ...node.style, width: size.width, height: size.height };
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
+    return node;
+  }, [localizedTourDefaults, sessionId, setNodes, timeline]);
+
+  const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>, size?: { width: number; height: number }) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const node = appendAtCenter(kind, data, size);
     setSelectedId(node.id); setSelectedIds([node.id]);
     // A deliberate "add a Project/Task/Website" from the palette is a request to
     // configure it, not a glance at an existing card — so the panel opens WIDE here,
     // where a click on an existing card opens the short one.
     if (node.data.kind !== 'chat') openNodeInspector(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
-    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [canEdit, localizedTourDefaults, openNodeInspector, sessionId, setNodes, t, timeline]);
+  }, [appendAtCenter, canEdit, openNodeInspector, t]);
 
   /**
    * What choosing an object in the picker DOES.
@@ -13029,6 +13041,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
             insights: <CanvasInsightsSurface onExit={() => setSurface('graph')} />,
+            // The idea scratchpad — board-scoped like `insights`. It reads the `idea` cards
+            // straight off `nodes` and writes back through the SAME two board mutations every
+            // other surface uses, so a captured line is a card on this board and nowhere else.
+            // A viewer who cannot edit gets the list with capture disabled, not a missing input.
+            ideas: <CanvasIdeasSurface
+              nodes={nodes}
+              onOpenObject={revealObject}
+              onExit={() => setSurface('graph')}
+              {...(cardsEditable ? {
+                onCreate: (kind: 'idea' | 'customerInterview', data: Partial<CreationNodeData>) => { appendAtCenter(kind, data); },
+                onUpdate: updateNodeData,
+              } : {})}
+            />,
             // THE ROOM, with the session in it — board-scoped like `app` and `insights`.
             // It is handed the roster and live presence the host already holds (no second
             // answer to "who is here") and the projection's input, drawn small on the table

@@ -15,7 +15,7 @@
 import type { ToolCopy } from './analyzerCopy';
 import { DEFAULT_TOOL_LOCALE, resultCopy, type ResultCopy } from './resultCopy';
 
-export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality' | 'career';
+export type ToolCategory = 'delivery' | 'finops' | 'finance' | 'governance' | 'quality' | 'career';
 export type ToolKind = 'calculator' | 'questionnaire' | 'quiz' | 'analyzer';
 
 // ── Shared result shape (rendered by one generic ToolResultView) ──────────────

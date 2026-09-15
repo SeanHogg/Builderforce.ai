@@ -764,7 +764,11 @@
       "senders": "From addresses",
       "brand": "Brand assets",
       "campaigns": "Campaigns",
-      "import": "Import"
+      "import": "Import",
+      "listing": "Listing",
+      "inquiries": "Interest",
+      "runway": "Runway",
+      "cashflow": "Cashflow"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -1631,7 +1635,8 @@
       "finops": "Cost & FinOps",
       "governance": "Governance",
       "quality": "Quality",
-      "career": "Career & résumé"
+      "career": "Career & résumé",
+      "finance": "Startup finance"
     },
     "kind": {
       "calculator": "Calculator",
@@ -6366,6 +6371,56 @@
             "toolkit": {
               "title": "Marketing toolkit",
               "desc": "Use current decks, one-pagers, templates, and campaign guidance."
+            }
+          }
+        },
+        "startup": {
+          "eyebrow": "List your startup",
+          "heading": "Be Found by the Investors Looking for You",
+          "intro": "Create your company, declare your numbers, and list it in the Marketplace. Investors browse by stage and sector and express interest straight to your workspace.",
+          "quote": "A company that can be found is a company that can raise. Your runway, your terms, your inbox.",
+          "stats": {
+            "directory": {
+              "value": "One listing",
+              "label": "Found by stage and sector"
+            },
+            "runway": {
+              "value": "Live",
+              "label": "Runway as you type"
+            },
+            "investors": {
+              "value": "Direct",
+              "label": "Interest lands in your workspace"
+            },
+            "free": {
+              "value": "Free",
+              "label": "To list and to be contacted"
+            }
+          },
+          "bullets": {
+            "profile": {
+              "title": "A public profile in three steps",
+              "desc": "The company, the numbers, and what you are looking for. Every field can change later."
+            },
+            "runway": {
+              "title": "Runway that names its source",
+              "desc": "Declared numbers beside observed ones, so an investor and you read the same figure."
+            },
+            "investors": {
+              "title": "Investors come to you",
+              "desc": "Browse by stage and sector; a press of Express interest reaches your team."
+            },
+            "inquiries": {
+              "title": "Triage in one place",
+              "desc": "Every inquiry sits beside your other inbound, with the CRO's own statuses."
+            },
+            "pack": {
+              "title": "Data rooms and the pack",
+              "desc": "When an investor gets serious, invite them to the company: one NDA, every room."
+            },
+            "canvas": {
+              "title": "The canvas underneath",
+              "desc": "Your company sits over the board where the product is being built."
             }
           }
         }
@@ -12817,8 +12872,8 @@
       "talent": "Talent",
       "company": "Companies",
       "companySoon": {
-        "soonTitle": "The company directory opens with the company graph",
-        "soonBody": "Claiming a business writes a verified ownership record, seats the CEO and activates Finance, Revenue, Growth, People, Hiring, Investors and Governance for it. The listing surface lands with that record; until then this family is visible and inert rather than hidden, so you can see what is coming.",
+        "soonTitle": "Storefronts arrive with published sites",
+        "soonBody": "A storefront is a company's published site, browsable from the marketplace. Sites publish today from the canvas; listing them here lands with the storefront kind. Until then this chip is visible and inert rather than hidden, so you can see what is coming.",
         "soonAction": "See what a company unlocks"
       },
       "agent": "Agents",
@@ -12844,7 +12899,7 @@
       },
       "note": {
         "talent": "People and gigs. A person and an agent are the same kind of participant to a session, but not the same kind of listing — one has availability and a rate, the other a price and a seat.",
-        "company": "Claim the business you run and the whole operating stack scopes to it. The directory of companies you do not own arrives with the company graph.",
+        "company": "Startups listed by the founders who run them — stage, sector, traction and whether they are raising. Press Express interest to reach one; list your own from Investors → Listing.",
         "agent": "There is no separate Agents page — an agent is a listing whose purchase writes a roster row, so the catalogue and your team can never drift apart.",
         "asset": "What builders made and can sell. Each installs into the surface that owns it — a skill into Knowledge, a template into Projects — never into a new one."
       }
@@ -20833,7 +20888,8 @@
       "calendar": "Calendar",
       "component": "Component",
       "flowStep": "Step",
-      "room": "Room design"
+      "room": "Room design",
+      "idea": "Idea"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -22124,7 +22180,6 @@
         "forecast": "Forecast",
         "fundingRound": "Funding round",
         "gtmPlan": "GTM plan",
-        "interview": "Customer interview",
         "investorUpdate": "Investor update",
         "invoice": "Invoice",
         "liveMetric": "Live metric",
@@ -22133,7 +22188,10 @@
         "trigger": "Trigger",
         "equityGrant": "Equity grant",
         "convertible": "SAFE / note",
-        "payRun": "Pay run"
+        "payRun": "Pay run",
+        "idea": "Idea",
+        "customerInterview": "Customer interview",
+        "risk": "Risk"
       },
       "field": {
         "actualTotal": "actual total",
@@ -22353,7 +22411,14 @@
         "abTestKey": "A/B test key",
         "trafficAllocation": "Traffic split",
         "evidence": "Evidence",
-        "daysToCliff": "Days to cliff"
+        "daysToCliff": "Days to cliff",
+        "scratch": "Scratch notes",
+        "problem": "Problem",
+        "riskiestAssumptions": "Riskiest assumptions",
+        "nextStep": "Next step",
+        "testedBy": "Tested by",
+        "capturedAt": "Captured",
+        "promotedTo": "Became"
       },
       "column": {
         "actual": "Actual",
@@ -22508,6 +22573,11 @@
           "open": "Nothing raised yet for: {names}.",
           "orphans": "{count, plural, one {# document names this contract and matches no obligation on it} other {# documents name this contract and match no obligation on it}} — {names}.",
           "unreferenced": "{count, plural, one {# obligation carries no `reference`, so nothing can ever be shown to discharge it.} other {# obligations carry no `reference`, so nothing can ever be shown to discharge them.}}"
+        },
+        "idea": {
+          "untested": "Untested — no customer interview or experiment is linked yet. Talk to someone before you build.",
+          "tested": "Tested by {interviews, plural, =0 {no interviews} one {# interview} other {# interviews}} and {experiments, plural, =0 {no experiments} one {# experiment} other {# experiments}}.",
+          "missing": "Not on this board yet: {refs}."
         }
       }
     },
@@ -24320,6 +24390,52 @@
         "enter": "Open the calendar",
         "active": "You are in the calendar",
         "open": "Open the calendar"
+      },
+      "ideas": {
+        "label": "Ideas",
+        "enter": "Jot down and track your ideas",
+        "active": "You are in Ideas",
+        "regionLabel": "This canvas’s idea scratchpad",
+        "heading": "Idea scratchpad",
+        "lede": "Write ideas down the moment you have them, then track each one from a first thought to something tested. Every idea is a card on the board, so Brain can research it and customer interviews can test it.",
+        "capture": {
+          "label": "New idea",
+          "placeholder": "Jot an idea — a sentence is enough. The first line becomes its title.",
+          "submit": "Capture",
+          "hint": "Ctrl+Enter to capture. The whole note is kept.",
+          "readOnly": "You can read these ideas, but only editors can add to this canvas."
+        },
+        "filterLabel": "Show ideas by stage",
+        "filterAll": "All ideas",
+        "stageLabel": "Stage of “{idea}”",
+        "stage": {
+          "captured": "Captured",
+          "exploring": "Exploring",
+          "validating": "Validating",
+          "validated": "Validated",
+          "parked": "Parked",
+          "dropped": "Dropped",
+          "promoted": "Promoted"
+        },
+        "count": "{count, plural, =0 {No ideas} one {# idea} other {# ideas}}",
+        "empty": {
+          "title": "No ideas yet",
+          "body": "Write down the next idea you have — half-formed is fine. Each one lands on the board as a card you can research, test with customer interviews, and turn into something real."
+        },
+        "filteredEmpty": "No ideas at this stage.",
+        "row": {
+          "untitled": "Untitled idea",
+          "captured": "Captured {when}",
+          "nextStep": "Next: {step}",
+          "planInterview": "Plan an interview",
+          "openOnBoard": "Open on board",
+          "interviewTitle": "Interview: {idea}"
+        },
+        "bar": {
+          "label": "Ideas by stage",
+          "untested": "{count, plural, =0 {Every open idea names an interview or experiment.} one {# open idea has not been tested with a customer yet.} other {# open ideas have not been tested with a customer yet.}}",
+          "segment": "{stage}: {count}"
+        }
       }
     },
     "scene": {
@@ -24643,7 +24759,8 @@
       "stopwatch": "Time how long something actually takes. Everyone watching sees the same clock.",
       "transclusion": "Show another knowledge document here, live — not a copy of it.",
       "flowStep": "One executable step — a model call, an integration, a decision — wired to the steps around it.",
-      "room": "The room this session meets in — a boardroom, an office kitchen, an open floor plan — laid out piece by piece and walked in 3D."
+      "room": "The room this session meets in — a boardroom, an office kitchen, an open floor plan — laid out piece by piece and walked in 3D.",
+      "idea": "An idea jotted on the scratchpad, tracked from first thought to tested and real."
     },
     "previewWidth": "Preview width",
     "viewportName": {
@@ -26965,7 +27082,10 @@
       "authenticatedEyebrow": "Your operating workspace",
       "featureHeading": "Included capabilities",
       "publicClosing": "Replace disconnected point tools with one operating system where every decision can reach the people and agents who execute it.",
-      "authenticatedClosing": "Continue in the live Builderforce workspace with your company context, teammates, agents, and governance already connected."
+      "authenticatedClosing": "Continue in the live Builderforce workspace with your company context, teammates, agents, and governance already connected.",
+      "useCasesHeading": "For every funding stage",
+      "useCasesSub": "How the domain reads at each stage of the company.",
+      "faqHeading": "Common questions"
     },
     "index": {
       "eyebrow": "The startup operating system",
@@ -26983,16 +27103,96 @@
         "description": "Shape ideas, scaffold an MVP, validate demand, prioritize a strategic backlog, and connect product bets to delivery.",
         "features": [
           {
-            "title": "Product discovery",
-            "description": "Capture and score opportunities with customer, market, and competitive evidence."
+            "title": "Product Discovery",
+            "description": "AI-powered ideation, market validation, and opportunity scoring. Turn raw ideas into prioritized concepts before you write a line of code."
           },
           {
-            "title": "MVP scaffolding",
-            "description": "Turn a promising idea into testable scope, assumptions, and approval gates."
+            "title": "MVP Scaffolding Engine",
+            "description": "AI-powered MVP planning with scenario generation, break-even analysis, and timeline optimization. Stop guessing what to ship."
           },
           {
-            "title": "Roadmap and backlog",
-            "description": "Prioritize releases by business value, adoption, effort, and strategic fit."
+            "title": "AI Roadmap Generation",
+            "description": "Build investor-ready roadmaps from your backlog, runway, and business value config. AI sequences features for maximum ROI per runway dollar."
+          },
+          {
+            "title": "Validation Lab",
+            "description": "Run structured experiments to validate assumptions before committing engineering. Ship the right thing on the first try."
+          },
+          {
+            "title": "Strategic Backlog Management",
+            "description": "Prioritize features by business value, revenue impact, and survival metrics. Never build the wrong thing again."
+          },
+          {
+            "title": "Custom Business Value Models",
+            "description": "Define your own scoring models for feature prioritization. Align development with investor KPIs and growth metrics."
+          },
+          {
+            "title": "Feature ROI Portfolio",
+            "description": "Portfolio-level ROI analysis with risk assessment and strategic recommendations across all development investments."
+          },
+          {
+            "title": "Ideas canvas",
+            "description": "Formulate a business BEFORE you commit to one. Brainstorm with the Brain, invite people to co-write and talk it through live, then turn the idea into a company."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Pre-Seed to Series A",
+            "description": "MVP focus with survival-driven prioritisation.",
+            "outcomes": [
+              "Faster MVP",
+              "Sharper feature focus",
+              "Evidence for product-market fit"
+            ]
+          },
+          {
+            "title": "Series A growth",
+            "description": "Scale product development against investor KPIs.",
+            "outcomes": [
+              "Growth velocity",
+              "KPI alignment",
+              "Less wasted build"
+            ]
+          },
+          {
+            "title": "Series B revenue focus",
+            "description": "Revenue-driven feature development.",
+            "outcomes": [
+              "Revenue impact per feature",
+              "ROI you can defend",
+              "Faster delivery"
+            ]
+          },
+          {
+            "title": "Series C market expansion",
+            "description": "Enterprise-grade product management at scale.",
+            "outcomes": [
+              "Multi-product coordination",
+              "Global team alignment",
+              "Enterprise workflows"
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "What is product discovery in Builderforce?",
+            "answer": "Product discovery helps you validate ideas before investing engineering time. Use AI-assisted research to analyze market signals, competitor positioning, and customer pain points. Discovery outputs feed directly into the MVP Scaffolding tool so validated ideas move to execution without context loss."
+          },
+          {
+            "question": "How does MVP Scaffolding accelerate launches?",
+            "answer": "MVP Scaffolding generates a scope-locked feature set, user-story breakdown, and sprint plan from a single product brief. The AI recommends the minimum feature surface needed to test your hypothesis, estimates effort, and creates backlog items you can drag straight onto your Kanban board."
+          },
+          {
+            "question": "What makes the AI Roadmap different from a Gantt chart?",
+            "answer": "The AI Roadmap is outcome-driven, not date-driven. It ranks initiatives by revenue impact, runway cost, and strategic alignment using your live business data. When priorities shift — a big deal closes, runway shortens — the roadmap re-ranks automatically so you always work on the highest-leverage item."
+          },
+          {
+            "question": "How does the Validation Lab work?",
+            "answer": "Design lightweight experiments (A/B tests, fake-door tests, concierge MVPs) and track results inside Builderforce. Each experiment links to a hypothesis, success metric, and decision rule. When results come in, the lab scores statistical confidence and recommends whether to pursue, pivot, or kill the idea."
+          },
+          {
+            "question": "What is the Strategic Backlog?",
+            "answer": "The Strategic Backlog goes beyond a simple issue list. Every item carries a business value score computed from revenue impact, customer demand signals, and strategic alignment. Items are stack-ranked automatically, and the CPO can override with manual weights. It integrates with the Agile Kanban for sprint planning."
           }
         ]
       },
@@ -27003,16 +27203,95 @@
         "description": "Model cash, revenue, retention, expenses, and scenarios in the same system that coordinates the work behind those numbers.",
         "features": [
           {
-            "title": "Runway and burn",
-            "description": "Track cash position, monthly burn, break-even, and runway in real time."
+            "title": "CFO Dashboard",
+            "description": "The single-pane-of-glass finance view for founders and CFOs. Every metric a board would ask about — runway, burn, gross margin, unit economics — in one place."
           },
           {
-            "title": "Forecast scenarios",
-            "description": "Compare assumptions, sensitivity, Monte Carlo ranges, and what-if plans."
+            "title": "Runway & Survival Tracking",
+            "description": "Months of cash left, the net burn that produced it and the date cash reaches zero — from observed spend where you have it and declared numbers where you do not, never blended."
           },
           {
-            "title": "Unit economics",
-            "description": "Measure ARR, retention, CAC, LTV, payback, and pricing performance."
+            "title": "Cashflow Visualizer",
+            "description": "Inflows, outflows and the ending balance month by month — the months the platform observed and the projection at your declared burn, each labelled."
+          },
+          {
+            "title": "Burn Rate Analysis",
+            "description": "Trend analysis and anomaly detection across your monthly burn. Catches spending spikes before they eat a month of runway."
+          },
+          {
+            "title": "Break-Even Analysis",
+            "description": "Model the path to profitability across pricing, customer, and cost scenarios. When does revenue meet cost?"
+          },
+          {
+            "title": "Pricing Simulator",
+            "description": "Test pricing changes against CAC, LTV, churn, and runway before you ship them. Covers SaaS, freemium, and per-transaction models."
+          },
+          {
+            "title": "Revenue Analytics",
+            "description": "Revenue trends, cohort performance, and revenue quality. Know not just how much you're making but whether it's compounding."
+          },
+          {
+            "title": "AI Business Planning",
+            "description": "The CFO seat’s Brain reads your runway, burn, pricing, and cashflow data and produces investor narrative, board decks, and scenario plans built on your actual numbers."
+          },
+          {
+            "title": "AI Contract Analyzer",
+            "description": "Upload any contract and get extracted key terms, financial obligations, renewal dates, and risk clauses. Financial commitments feed the runway and cashflow models."
+          },
+          {
+            "title": "AI Expense Categorizer",
+            "description": "Auto-classify receipts, bank transactions, and SaaS subscriptions into accounting categories. Everything flows into burn rate analysis — no manual categorization."
+          },
+          {
+            "title": "Predictive Analytics",
+            "description": "AI-powered forecasting across runway, revenue, and spending. Scenario branches with confidence intervals — the CFO drawer built into every dashboard."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Pre-Seed validation",
+            "description": "Validate the business model with declared numbers, a live runway and pricing analysis.",
+            "outcomes": [
+              "Runway as you type",
+              "Break-even by scenario",
+              "Investor-ready numbers"
+            ]
+          },
+          {
+            "title": "Series A preparation",
+            "description": "Scale-ready pricing models and a cashflow you can show a board.",
+            "outcomes": [
+              "Observed beside declared",
+              "Cashflow by month",
+              "Scenario comparison"
+            ]
+          },
+          {
+            "title": "Product-market fit",
+            "description": "Optimise pricing per segment and read whether revenue is compounding.",
+            "outcomes": [
+              "Cohort revenue",
+              "Unit economics",
+              "Pricing simulation"
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Where does the runway number come from?",
+            "answer": "Two places, never blended. Observed: approved expenses, processed payroll and connected books, recomputed daily. Declared: the cash, spend and revenue you entered, stamped with when. Finance → Runway shows both columns and names each one."
+          },
+          {
+            "question": "Is the runway calculator on this page the same as the product’s?",
+            "answer": "Yes — the same formula, cash divided by net burn (spend minus revenue). Whatever you type here is what the CFO seat prints for the same inputs, and the button carries your numbers into a workspace."
+          },
+          {
+            "question": "What does the Cashflow view show?",
+            "answer": "Inflows, outflows, net and the ending balance month by month, as a chart and a table. Toggle between the months the platform observed and the projection at your declared burn."
+          },
+          {
+            "question": "Can I model scenarios?",
+            "answer": "Scenarios carry declared assumptions, compute break-even and run Monte Carlo ranges, with a baseline you choose. Every result names its provenance as declared."
           }
         ]
       },
@@ -27023,16 +27302,50 @@
         "description": "Combine planning, retrospectives, Kanban, capacity, and delivery risk with the financial impact of every sprint.",
         "features": [
           {
-            "title": "Survival-focused planning",
-            "description": "Estimate work with capacity and runway visible before the commitment is made."
+            "title": "Agile Kanban Boards",
+            "description": "Visual workflow management with startup-focused metrics. Track development velocity against runway and funding goals."
           },
           {
-            "title": "Burn-aware Kanban",
-            "description": "See flow, bottlenecks, risk, and the financial impact of delayed work."
+            "title": "Planning Poker Sessions",
+            "description": "Cost-aware story pointing with velocity-based forecasting. Every estimate factors in burn rate so engineering debates stay honest about the runway cost of the decision."
           },
           {
-            "title": "Retrospectives and velocity",
-            "description": "Turn delivery signals into actions that improve the next sprint."
+            "title": "Team Retrospectives",
+            "description": "Structured retro templates, anonymous or named, with AI-summarized action items that flow into the kanban backlog."
+          },
+          {
+            "title": "Sprint Forecasting",
+            "description": "Sprint planning with velocity history + runway-aware capacity caps. Know what you can commit to without blowing the month."
+          },
+          {
+            "title": "Velocity Tracking",
+            "description": "Rolling velocity trend across sprints with burn-down charts and commitment-vs-delivered analytics. Spot drift before it compounds."
+          },
+          {
+            "title": "Feature Scoring & Capacity",
+            "description": "RICE-based feature scoring with team capacity overlay. Prioritize what to build against what you actually have the engineering hours to ship."
+          }
+        ],
+        "faq": [
+          {
+            "question": "How do Planning Poker sessions work in Builderforce?",
+            "answer": "Create a session, invite your team via link, and add stories to estimate. Each participant selects a card value (Fibonacci scale by default) simultaneously, then all cards are revealed at once to avoid anchoring bias. Discuss outliers, re-vote if needed, and lock the estimate. Builderforce tracks historical velocity so future estimates improve over time. Planning Poker is free on all plans."
+          },
+          {
+            "question": "What retrospective formats does Builderforce support?",
+            "answer": "Builderforce supports multiple retro formats including Start-Stop-Continue, Mad-Sad-Glad, 4Ls (Liked, Learned, Lacked, Longed For), and custom templates. Each retro includes anonymous card submission, voting, grouping, and action-item tracking. Sentiment analysis highlights recurring themes across sprints, and action items carry forward until completed so nothing falls through the cracks."
+          },
+          {
+            "question": "How does the Builderforce Kanban board compare to Jira?",
+            "answer": "The board is purpose-built for startups. Every card can show its cost against your runway, alongside the WIP limits, swimlanes and columns you expect. Migration from Jira runs through the import connectors."
+          },
+          {
+            "question": "How does velocity tracking tie into runway?",
+            "answer": "Velocity tracking in Builderforce measures story points completed per sprint and overlays that data with your burn rate. You can see how productivity trends correlate with spending — for example, whether adding a contractor increased velocity enough to justify the cost. The AI CTO persona uses velocity data to forecast delivery dates and flag sprints where burn outpaces output."
+          },
+          {
+            "question": "What are cost-aware sprints?",
+            "answer": "Cost-aware sprints attach a dollar cost to every story based on the team members assigned and the sprint duration. During planning, you see a running total of sprint cost alongside story point capacity. This lets you balance feature delivery against budget constraints — especially critical for startups with limited runway. Sprint reviews include a cost-per-point metric so you can optimize over time."
           }
         ]
       },
@@ -27043,16 +27356,62 @@
         "description": "Connect target accounts, contacts, sequences, deals, conversion signals, and forecasts in one operating flow.",
         "features": [
           {
-            "title": "ICP and prospecting",
-            "description": "Define ideal customers, enrich prospects, and preserve source provenance."
+            "title": "Deal Pipeline Management",
+            "description": "Kanban-style deal pipeline with customizable stages, AI win-probability scoring, and stall detection. The CRO persona coach lives here."
           },
           {
-            "title": "Sequences and campaigns",
-            "description": "Coordinate outreach, replies, follow-ups, and conversion signals."
+            "title": "ICP Builder",
+            "description": "Define your Ideal Customer Profile — firmographics, pain triggers, buying signals — to drive prospect scoring and sequence personalization."
           },
           {
-            "title": "Deals and revenue funnel",
-            "description": "Manage pipeline stages, quota attainment, and forecast movement."
+            "title": "Prospect Dashboard",
+            "description": "AI-scored prospects with enriched firmographic data, ICP fit %, and recommended next actions."
+          },
+          {
+            "title": "Outreach Sequences",
+            "description": "Multi-touch outreach across email, LinkedIn, and call cadence. ICP-personalized templates with AI rewriting."
+          },
+          {
+            "title": "Conversion Funnel",
+            "description": "End-to-end funnel from first touch through closed-won. Stage drop-off rates with AI-suggested fixes."
+          },
+          {
+            "title": "Weekly RevOps IDS",
+            "description": "Identify-Discuss-Solve recurring meeting for the revenue team. Captures issues from pipeline, sequences, and funnel signals."
+          },
+          {
+            "title": "Campaign Monitor",
+            "description": "Outbound campaign health across all sequences and channels. Reply rate, meeting-booked rate, pipeline generated."
+          },
+          {
+            "title": "AI Email Classifier",
+            "description": "Auto-categorizes inbound email as leads, support, vendor, or spam. Lead-tagged messages flow straight into the deal pipeline with CRO-persona AI scoring."
+          },
+          {
+            "title": "Talent marketplace",
+            "description": "Find and engage the freelancers, agents and service providers listed in the Builderforce Marketplace — the same storefront your startup is listed in."
+          }
+        ],
+        "faq": [
+          {
+            "question": "How does Sales & Revenue differ from Customer Engagement?",
+            "answer": "Sales & Revenue is the pre-close motion: ICP definition, prospect scoring, outreach sequences, deal pipeline, conversion funnel, RevOps cadence. Customer Engagement is the post-close motion: support tickets, churn prediction, customer health, retention. They share the same Customer record but speak to different buying contexts (CRO sales motion vs CRO/CCO retention motion)."
+          },
+          {
+            "question": "What's the ICP Builder and how does it drive other tools?",
+            "answer": "The ICP Builder defines firmographic, technographic, and behavioral attributes of your ideal customer. Every prospect entering the system gets scored against the ICP automatically. Sequences personalize messaging by ICP segment. The conversion funnel lets you measure stage drop-off per ICP cohort. One ICP definition, used everywhere."
+          },
+          {
+            "question": "Do outreach sequences support email + LinkedIn + calls?",
+            "answer": "Yes. Multi-channel cadence with reply detection across all three. Templates auto-personalize per ICP segment via AI rewriting. When a prospect replies on any channel, the entire sequence pauses and the deal record gets updated. Performance attribution flows back to the campaign monitor and the conversion funnel."
+          },
+          {
+            "question": "How does the Conversion Funnel feed CFO forecasting?",
+            "answer": "Stage drop-off rates from the funnel become inputs to the CFO's revenue forecast scenarios — best-case / base-case / worst-case projections recompute when funnel cohorts shift. The same number that shows pipeline health here drives runway projections there."
+          },
+          {
+            "question": "What's the Weekly RevOps IDS?",
+            "answer": "Identify-Discuss-Solve — a recurring weekly meeting template. We auto-pull the top stalled deals, at-risk sequences, and worst-converting funnel stages so the revenue team's standing meeting is data-driven. Action items wire into Operational Cadence so they don't get lost."
           }
         ]
       },
@@ -27063,16 +27422,38 @@
         "description": "Unify feedback, support, onboarding, sentiment, retention, churn, and account health with the work needed to respond.",
         "features": [
           {
-            "title": "Customer feedback",
-            "description": "Collect feedback and route it directly into product and delivery decisions."
+            "title": "Lead Form Generator & Embed",
+            "description": "Drag-and-drop form builder with embeddable snippets. Every submission lands in the deal pipeline with full UTM attribution and lead scoring."
           },
           {
-            "title": "Health and retention",
-            "description": "Combine engagement, NPS, sentiment, and churn indicators into clear risk."
+            "title": "Churn Prediction & Retention",
+            "description": "ML-based churn risk scoring per customer with automated win-back campaign triggers. Catch churn signals before the renewal call."
           },
           {
-            "title": "Support and onboarding",
-            "description": "Coordinate tickets, knowledge, onboarding flows, and follow-up actions."
+            "title": "Sentiment & Cohort Analysis",
+            "description": "AI sentiment scoring across support tickets, NPS, and feedback. Cohort retention curves to see which segments stick."
+          },
+          {
+            "title": "Customer Feedback Widget",
+            "description": "Embeddable feedback widget that captures customer voice and feeds directly into Product Management backlog prioritization."
+          }
+        ],
+        "faq": [
+          {
+            "question": "How does the CRM pipeline work in Builderforce?",
+            "answer": "The deal pipeline tracks every lead from first touch to closed-won. Drag deals between stages, attach notes and call recordings, and see revenue forecasts update in real time. Pipeline data feeds directly into your runway model so the CFO dashboard always reflects expected bookings."
+          },
+          {
+            "question": "Can I build lead capture forms without code?",
+            "answer": "Yes. The Lead Forms builder lets you design multi-step forms with conditional logic, embed them on any site with a single script tag, and route submissions straight into your deal pipeline. Every submission is scored by the AI email classifier so your team focuses on high-intent leads first."
+          },
+          {
+            "question": "How accurate is the AI churn prediction?",
+            "answer": "The churn model analyzes usage frequency, support ticket sentiment, billing patterns, and engagement scores. Early adopters report catching at-risk accounts 2-4 weeks before cancellation. Predictions improve over time as the model trains on your account-specific signals."
+          },
+          {
+            "question": "What does the AI email classifier do?",
+            "answer": "The classifier scans inbound emails and form submissions, tagging each with intent categories like support request, sales inquiry, churn signal, or feature request. High-priority items surface in the CRM dashboard with suggested next actions so nothing falls through the cracks."
           }
         ]
       },
@@ -27083,16 +27464,103 @@
         "description": "Create pitch decks, investor updates, data rooms, diligence workflows, funding histories, and portfolio views grounded in current operating data.",
         "features": [
           {
-            "title": "Pitch decks and analytics",
-            "description": "Version, share, and measure decks with per-slide engagement."
+            "title": "Investor Dashboard",
+            "description": "A unified investor-facing view of runway, burn, milestones and KPIs, shared by inviting an investor to the COMPANY — one NDA, every data room."
           },
           {
-            "title": "Updates and data rooms",
-            "description": "Prepare approved investor communications and diligence materials."
+            "title": "Pitch Deck AI",
+            "description": "Build an investor-ready deck from your live business data on the canvas, or upload one for slide-by-slide feedback; version, share and measure it."
           },
           {
-            "title": "Portfolio intelligence",
-            "description": "Track funding, milestones, health scores, and investor deal flow."
+            "title": "Board Packages",
+            "description": "Generate board-meeting-ready packs with runway, KPIs, hiring and risks, grounded in the projects being built and the numbers you declared."
+          },
+          {
+            "title": "Market Comparisons",
+            "description": "Capture TAM/SAM/SOM and peer valuation multiples (revenue, EBITDA, growth). Powers defensible market and competitor slides in the Pitch Deck AI."
+          },
+          {
+            "title": "Variance Analysis",
+            "description": "Track actuals vs projected for every investor-promised metric. Explain-away drift with annotated variance reports."
+          },
+          {
+            "title": "Investment Analytics",
+            "description": "Cap table modeling, dilution scenarios, investor relations timeline, and fundraising velocity benchmarks."
+          },
+          {
+            "title": "Portfolio Monitoring",
+            "description": "For angel / VC / accelerator accounts — track every investment with health scores, variance alerts, and auto-aggregated portfolio KPIs."
+          },
+          {
+            "title": "Advanced Health Scoring",
+            "description": "Multi-dimensional health score per portfolio company across financial, growth, engagement, and team-velocity signals. AI-derived alerts when a score crosses a threshold. Drives proactive intervention before a portfolio company hits red."
+          },
+          {
+            "title": "Investor Communication Hub",
+            "description": "Unified inbox for investor relations: threads with portfolio founders, response time tracking, unread/reply state, attachments. Replaces email-thread chaos with a structured CRM for investor relationships."
+          },
+          {
+            "title": "Automated Reporting & Intelligence",
+            "description": "Scheduled monthly digest generation per portfolio company — pulled from real metrics, formatted for LPs, board members, and investors. AI-summarized variance commentary. One click to send."
+          },
+          {
+            "title": "Valuation Trajectory Tracking",
+            "description": "Per-portfolio-company valuation history with funding-round annotations, peer-multiple overlay, and projection scenarios. See your fund's NAV evolve in real time."
+          },
+          {
+            "title": "Revenue & CAC Intelligence Dashboard",
+            "description": "Cross-portfolio view of revenue, CAC, payback period, and growth rates. Benchmarks each portfolio company against peers and historical cohorts. Investor's revenue command center."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "First raise",
+            "description": "List the company, declare the numbers, and let investors find you.",
+            "outcomes": [
+              "Public listing",
+              "Express interest",
+              "Inquiries in one queue"
+            ]
+          },
+          {
+            "title": "In diligence",
+            "description": "One investor grant reaches every data room; every gap names the seat that closes it.",
+            "outcomes": [
+              "One NDA per investor",
+              "Diligence readiness",
+              "Fundraising pack"
+            ]
+          },
+          {
+            "title": "Portfolio",
+            "description": "For angels, funds and accelerators: health scores, variance and valuation across every company.",
+            "outcomes": [
+              "Health scoring",
+              "Variance reports",
+              "Valuation trajectory"
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "How do investors access the Investor Portal?",
+            "answer": "Founders invite an investor to the COMPANY from Investors → Investors. One invitation carries one NDA and reaches every data room the company has and will have; the investor opens it from a link, with no account required to read. Anyone can also find a listed company in the Marketplace and express interest before an invitation exists."
+          },
+          {
+            "question": "Can Builderforce generate pitch decks automatically?",
+            "answer": "Yes. The AI Pitch Deck Generator pulls your live financial data, market analysis, and growth metrics to produce investor-ready slides. Choose from templates designed for Pre-Seed, Seed, Series A, and later stages. The AI writes narrative copy, populates charts, and formats projections. Export to PDF or PowerPoint, then customize further in your preferred tool."
+          },
+          {
+            "question": "What are board packages and how are they created?",
+            "answer": "Board packages are automated monthly or quarterly reports that compile key metrics — runway, revenue, burn rate, OKRs, team updates, and risk alerts — into a structured document. Builderforce generates them from live data with one click. You can customize sections, add narrative commentary, and distribute to board members via email or shared link with access controls."
+          },
+          {
+            "question": "How does portfolio monitoring work for investors?",
+            "answer": "Investors with a Builderforce account see a unified dashboard of all portfolio companies that have granted them access. Each company card shows a composite health score (0-100), runway countdown, burn rate trend, and recent milestones. Automated alerts notify you when a portfolio company's health score drops, runway falls below a threshold, or a key metric changes significantly."
+          },
+          {
+            "question": "What data sharing controls do founders have?",
+            "answer": "Founders decide what a stranger sees: the listing shows stage, sector, traction and whether you are raising, never cash or burn. A signed-in reader sees the runway in months and your investor contact. Data rooms open only to invited investors, per company, with an NDA and a watermark, and access can be revoked at any time."
           }
         ]
       },
@@ -27103,16 +27571,54 @@
         "description": "Connect goals, headcount, performance, 1:1s, check-ins, recurring operating rhythms, notes, and decisions.",
         "features": [
           {
-            "title": "Goals and scorecards",
-            "description": "Link objectives, outcomes, milestones, and operating metrics."
+            "title": "Corporate Roster",
+            "description": "Team directory with roles, start dates, equity, compensation bands, and org-chart visualization. The CHRO's single source of truth."
           },
           {
-            "title": "People operations",
-            "description": "Coordinate headcount, performance reviews, check-ins, and 1:1s."
+            "title": "1-on-1 Scheduling",
+            "description": "Recurring 1-on-1 cadence with shared agenda, action items, and follow-up tracking. Managers don't drop the ball on their reports."
           },
           {
-            "title": "Meetings and decisions",
-            "description": "Capture agendas, transcripts, notes, owners, and follow-through."
+            "title": "Performance Reviews",
+            "description": "Quarterly review cycles with 360 feedback, self-assessment, and calibration. AI-summarized feedback reduces bias."
+          },
+          {
+            "title": "Goal Management (OKRs)",
+            "description": "OKR tracking across company → team → individual levels. Progress auto-rolls up; misaligned goals get flagged."
+          },
+          {
+            "title": "Meeting Intelligence",
+            "description": "AI-generated meeting notes, action items and summaries from the connected calendar and the room’s own transcripts."
+          },
+          {
+            "title": "Workflow Automation",
+            "description": "Trigger-action workflows for onboarding, PTO, promotions, and off-boarding. Reduce manual HR ops toil."
+          },
+          {
+            "title": "HR Suite",
+            "description": "The HR system of record: personnel files, time and leave, performance cycles, compensation and benefits, documents and HR analytics — embeddable into any host site."
+          }
+        ],
+        "faq": [
+          {
+            "question": "How does OKR management work in Builderforce?",
+            "answer": "Define company, team, and individual objectives with measurable key results. OKRs cascade from the CEO's goals down through every team. Progress is tracked automatically via linked tasks and sprint outcomes, and the Brain flags misaligned or stalled objectives before the quarter ends."
+          },
+          {
+            "question": "Can I schedule recurring 1-on-1s with my team?",
+            "answer": "Yes. Set a cadence (weekly, bi-weekly, or monthly) for each direct report and Builderforce generates calendar events automatically. Each 1-on-1 has a shared agenda, private notes, and an action-item tracker that carries unfinished items forward so nothing gets lost between sessions."
+          },
+          {
+            "question": "What does the performance review cycle look like?",
+            "answer": "Admins configure review periods (quarterly, semi-annual, or annual). Reviewers submit structured feedback with competency ratings, free-text comments, and goal assessments. Managers see a consolidated view with peer and self-review inputs. Results link to development plans stored in each team member's profile."
+          },
+          {
+            "question": "How does meeting intelligence capture decisions and action items?",
+            "answer": "Meeting intelligence records attendance from the connected calendar, reads the room’s transcript, and extracts decisions and action items automatically. Summaries appear in the meeting record, and action items convert to tasks on your board with one click."
+          },
+          {
+            "question": "What kinds of workflows can I automate?",
+            "answer": "The workflow automation engine supports trigger-based rules such as 'when a sprint closes, create a retro,' 'when an OKR drops below 30% progress, notify the owner,' or 'when a 1-on-1 is missed twice, alert the manager.' Custom triggers and Slack/webhook actions are available on Pro and Enterprise."
           }
         ]
       },
@@ -27123,16 +27629,62 @@
         "description": "Operate SOC controls, evidence, incidents, vendors, privacy assets, approvals, audit trails, and policy agreements beside execution.",
         "features": [
           {
-            "title": "Controls and evidence",
-            "description": "Manage SOC controls, evidence collection, training, and compliance events."
+            "title": "SOC 2 Control Tracker",
+            "description": "Track SOC 2 Common Criteria (CC1–CC9) evidence in one place. Seed a 30-control baseline, attach evidence per control, export auditor-ready JSON."
           },
           {
-            "title": "Security and vendor risk",
-            "description": "Track incidents, vendors, DPAs, PII assets, and remediation."
+            "title": "Vendor / Subprocessor Register",
+            "description": "Track every SaaS vendor and subprocessor — DPA status, renewal dates, regions, data classes. Satisfies GDPR Art. 28 disclosure."
           },
           {
-            "title": "Privacy and approvals",
-            "description": "Handle data requests, consent, versions, sign-offs, and audit history."
+            "title": "Security Incident Register",
+            "description": "Log and triage security incidents, distinct from ops incidents. Severity tracking, postmortem URL, regulatory notification clock."
+          },
+          {
+            "title": "PII & Data Inventory",
+            "description": "GDPR Art. 30 records of processing activities. Data classification, retention schedules, legal basis, owner teams."
+          },
+          {
+            "title": "DPA Management",
+            "description": "Data Processing Agreements with vendors and customers. Signature lifecycle, renewal tracking, SCC version capture."
+          },
+          {
+            "title": "Security Training Tracker",
+            "description": "Track team security training completion — phishing, SOC 2 awareness, GDPR, password hygiene. Overdue detection."
+          },
+          {
+            "title": "Compliance Calendar",
+            "description": "Deadline tracker for SOC 2 / GDPR / CCPA / HIPAA events. Recurring milestones, renewal alerts, auto-overdue flagging."
+          },
+          {
+            "title": "Data Subject Requests",
+            "description": "GDPR / CCPA DSR queue for the platform-global contact graph. Public submission with magic-link verification; admin processing erases shared rows in one transaction and fans out suppression entries across the platform."
+          },
+          {
+            "title": "Suppression List",
+            "description": "Identifiers that must never be re-sourced. Auto-populated by erasure DSRs; manually editable by platform admins for hard bounces and known opt-outs. Checked on every sourcing lookup."
+          }
+        ],
+        "faq": [
+          {
+            "question": "How does Builderforce help with SOC 2 compliance?",
+            "answer": "The SOC 2 Control Tracker seeds a 30-control baseline covering Common Criteria CC1 through CC9. You attach evidence to each control, track readiness percentage by category, and export auditor-ready JSON when your auditor asks for it. Combined with the Compliance Calendar for deadline tracking and the Security Training Tracker for employee awareness, you have the operational backbone to pass a SOC 2 Type I or Type II audit."
+          },
+          {
+            "question": "How does the Vendor Register support subprocessor management?",
+            "answer": "The Vendor / Subprocessor Register tracks every SaaS vendor your company relies on — DPA status, renewal dates, data regions, and data classes processed. Vendors flagged as subprocessors appear on your public /trust page for GDPR Art. 28 disclosure. Renewal alerts ensure you never let a DPA lapse, and data-class tagging feeds the PII & Data Inventory for a complete processing record."
+          },
+          {
+            "question": "Does Builderforce support GDPR compliance?",
+            "answer": "Yes. The PII & Data Inventory implements GDPR Art. 30 records of processing activities with data classification (public, internal, confidential, restricted), retention schedules, legal basis capture (Art. 6), and owner-team attribution. DPA Management tracks agreements with vendors and customers through the full draft-to-signed-to-expired lifecycle, including Standard Contractual Clauses version tracking."
+          },
+          {
+            "question": "How are security incidents tracked?",
+            "answer": "The Security Incident Register logs and triages security-specific incidents — distinct from operational incidents. Each incident tracks severity, status workflow, mean-time-to-resolve, detection source, and postmortem links. A regulatory notification clock helps you meet breach-notification deadlines under GDPR (72 hours) or other frameworks."
+          },
+          {
+            "question": "What does the Compliance Calendar do?",
+            "answer": "The Compliance Calendar is a deadline tracker for SOC 2, GDPR, CCPA, and HIPAA milestones. It supports recurring cadences (annual audits, quarterly access reviews), auto-overdue flagging, per-event assignment, and framework tagging. You see every compliance deadline across all frameworks in one timeline so nothing slips through the cracks."
           }
         ]
       },
@@ -27143,16 +27695,82 @@
         "description": "Build landing pages, campaigns, nurture flows, experiments, content, SEO, referrals, and conversion analytics in one loop.",
         "features": [
           {
-            "title": "Campaigns and nurture",
-            "description": "Coordinate audiences, messages, enrollment, delivery, and follow-up."
+            "title": "Heatmaps & Session Analytics",
+            "description": "See where users click, how far they scroll, and where they rage-click on your marketing pages. Install the tracking snippet once, get click-density and scroll-depth heatmaps across every tracked page."
           },
           {
-            "title": "Web and conversion",
-            "description": "Build pages, forms, experiments, heatmaps, and conversion journeys."
+            "title": "AI Competitor Monitor",
+            "description": "AI-powered competitive intelligence: tracks competitor pricing, feature launches, hiring signals, and funding moves. Generates weekly digests and sales battlecards you can actually use."
           },
           {
-            "title": "Content and distribution",
-            "description": "Plan content, SEO, social, referrals, email, and push campaigns."
+            "title": "Landing Page Builder",
+            "description": "Drag-and-drop landing pages with UTM-aware forms and built-in A/B testing. Ship a campaign landing page in 20 minutes, not two sprints."
+          },
+          {
+            "title": "Website Designer",
+            "description": "Edit your marketing site in-app. Update hero copy, swap sections, publish blog posts — no engineering required."
+          },
+          {
+            "title": "SEO Manager",
+            "description": "Per-page metadata editor, Open Graph tags, keyword rank tracking, and content-gap notes. Pairs with the dynamic sitemap generator."
+          },
+          {
+            "title": "SEO Rank Tracker",
+            "description": "Track keyword positions over time, monitor competitor domains, and let the AI CMO turn the data into a content-gap strategy. Every rank update is snapshotted so the trend is real."
+          },
+          {
+            "title": "Content Calendar",
+            "description": "Editorial calendar for blog, case studies, release notes, and social. AI-drafted content stays on-brand via the Brand Kit integration."
+          },
+          {
+            "title": "Brand Kit",
+            "description": "Brand name, positioning, tone of voice, preferred/avoided terms, visual identity. Wired directly into the CMO seat — every AI-generated piece of copy uses your brand voice automatically."
+          },
+          {
+            "title": "CMO Dashboard",
+            "description": "Unified command center for Marketing & Growth: heatmaps, content pipeline, SEO status, and brand kit configuration at a glance."
+          },
+          {
+            "title": "Campaign Manager",
+            "description": "Plan and track multi-channel campaigns with UTM builder and closed-loop attribution. Every campaign ties spend and touches back to pipeline and revenue."
+          },
+          {
+            "title": "Email Campaign Builder",
+            "description": "Compose, preview, and send marketing email blasts to segments built from the shared contact graph. Brand-Kit-aware drafting keeps every send on-voice."
+          },
+          {
+            "title": "Nurture Flows",
+            "description": "Multi-step, multi-channel drip sequences across email and SMS. Enroll contacts on a trigger, wait, branch, and convert — fully automated lifecycle nurture."
+          },
+          {
+            "title": "Social Scheduler",
+            "description": "Connect X/Twitter and LinkedIn, draft posts with on-brand AI copy, schedule them, and track impressions and clicks — every post tied back to pipeline."
+          },
+          {
+            "title": "A/B Testing & Experiments",
+            "description": "Run controlled experiments on pricing pages, CTAs, and conversion flows. Split traffic across variants, track conversion rate and lift vs control, and conclude on a winner backed by real data."
+          }
+        ],
+        "faq": [
+          {
+            "question": "How do Heatmaps work in Builderforce?",
+            "answer": "Install a lightweight tracking snippet on your site once, and Builderforce captures every click, scroll, and rage-click across every tracked page. The dashboard renders click-density heatmaps and scroll-depth overlays so you can see exactly where visitors engage and where they drop off — no sampling, no session limits."
+          },
+          {
+            "question": "What does the AI Competitor Monitor track?",
+            "answer": "The AI Competitor Monitor watches competitor pricing pages, feature changelogs, job postings, and funding announcements. It produces a weekly competitive digest and auto-generates sales battlecards you can share with the team. Every signal is scored for strategic relevance so you focus on changes that actually matter."
+          },
+          {
+            "question": "How does the SEO Manager help improve rankings?",
+            "answer": "The SEO Manager lets you edit per-page meta titles, descriptions, Open Graph tags, and canonical URLs from one dashboard. It tracks your primary keyword rank over time, flags content gaps, and logs last-reviewed dates so stale pages don't drag your domain authority down. It pairs with the dynamic sitemap generator for full coverage."
+          },
+          {
+            "question": "How does the Brand Kit integrate with the Brain?",
+            "answer": "The Brand Kit stores your brand name, positioning, tone of voice, preferred terms, and avoided terms. When the Brain operates in CMO persona mode, it automatically injects your brand guidelines into every prompt — so AI-generated blog posts, landing page copy, and email campaigns sound like you, not a generic chatbot."
+          },
+          {
+            "question": "What can I do with the Content Calendar?",
+            "answer": "The Content Calendar manages your editorial pipeline from idea through published. Tag content by channel (blog, social, case study, release notes), assign owners, and track status across a five-stage workflow. AI drafting pulls from the Brand Kit so first drafts are already on-brand. Scheduled items feed the SEO Manager for keyword alignment."
           }
         ]
       },
@@ -27215,6 +27833,20 @@
             "description": "Use one business graph across sales, finance, product, support, and governance."
           }
         ]
+      }
+    },
+    "extras": {
+      "calculator": {
+        "heading": "How long does your cash last?",
+        "sub": "Enter cash on hand, monthly spend and revenue. The runway and the cash-out date update as you type — in your browser, before you sign in.",
+        "keepNumbers": "Keep these numbers in a workspace",
+        "openFinance": "Open Finance",
+        "note": "The same formula the CFO seat uses: cash divided by net burn.",
+        "moreTools": "Burn, break-even, churn and pricing calculators"
+      },
+      "directory": {
+        "heading": "Startups raising right now",
+        "sub": "Companies listed by their founders in the Marketplace — stage, sector, traction and whether they are raising."
       }
     }
   },
@@ -30432,6 +31064,110 @@
       "pdf": "PDF",
       "empty": "No pack has been built for this company yet.",
       "generatedOn": "Generated {date}"
+    },
+    "listing": {
+      "title": "Public listing",
+      "blurb": "The company's face in the Marketplace: what investors and partners see, and whether they can reach you.",
+      "edit": "Edit listing",
+      "loading": "Loading…",
+      "live": "Listed",
+      "draft": "Not listed",
+      "raisingChip": "Raising",
+      "completeness": "Profile complete",
+      "missing": "Still needed before listing: {fields}.",
+      "fields": {
+        "name": "name",
+        "tagline": "tagline",
+        "description": "description",
+        "stage": "funding stage",
+        "sector": "sector",
+        "country": "country"
+      },
+      "viewPublic": "View the public profile",
+      "withdraw": "Withdraw from the marketplace",
+      "listNow": "List in the marketplace",
+      "openDirectory": "Open the directory",
+      "liveNotice": "Listed. Investors can find this company and express interest; cash and burn stay private.",
+      "draftNotice": "Not listed. Only your workspace can see this profile until you list it.",
+      "pickCompany": "Pick a company to see its listing.",
+      "error": {
+        "load": "The listing could not be loaded.",
+        "visibility": "The listing could not be changed.",
+        "save": "The listing could not be saved."
+      },
+      "stepsLabel": "Listing steps",
+      "steps": {
+        "basics": "The company",
+        "finance": "The numbers",
+        "visibility": "Be found"
+      },
+      "cancel": "Cancel",
+      "back": "Back",
+      "saving": "Saving…",
+      "saveContinue": "Save and continue",
+      "saveOnly": "Save",
+      "saveListed": "Save changes",
+      "basics": {
+        "title": "Tell us about the company",
+        "blurb": "This is the public profile and what the CEO, CFO and CMO seats read for context. Every field can change later.",
+        "name": "Company name",
+        "website": "Website",
+        "tagline": "Tagline",
+        "taglinePlaceholder": "One sentence that says what you do.",
+        "taglineHint": "Up to {max} characters. It is the second line of your card.",
+        "description": "Description",
+        "descriptionPlaceholder": "The product, who it is for, and the problem it solves.",
+        "descriptionHint": "Two or three paragraphs. Blank lines start a new paragraph.",
+        "sector": "Sector",
+        "stage": "Funding stage",
+        "businessStage": "Business stage",
+        "pick": "Choose…",
+        "city": "City",
+        "country": "Country",
+        "countryPlaceholder": "Two letters",
+        "countryHint": "Two-letter country code.",
+        "foundedYear": "Founded",
+        "headcount": "Team size",
+        "founders": "Founders",
+        "logo": "Logo URL"
+      },
+      "finance": {
+        "title": "Your numbers",
+        "blurb": "Cash, spend and revenue. The runway updates as you type, and these numbers drive Finance → Runway.",
+        "privacy": "Cash and burn are never shown publicly. The card shows only the runway's health band; signed-in readers see the months."
+      },
+      "visibility": {
+        "title": "Be found",
+        "blurb": "What you are looking for, whether you are raising, and how investors reach you.",
+        "seeking": "We are looking for",
+        "raising": "We are raising now",
+        "raisingHint": "Shows the Raising badge and the Express interest button on your card.",
+        "goal": "Funding goal (USD)",
+        "raised": "Total raised so far (USD)",
+        "raisedHint": "Shown on your card as total funding.",
+        "inquiries": "Accept investor inquiries",
+        "inquiriesHint": "Investors can send a message from your card. Turn off to list without the button.",
+        "contactName": "Investor contact name",
+        "contactEmail": "Investor contact email",
+        "contactHint": "Shown only to signed-in readers. Inquiries always arrive in your workspace too."
+      }
+    },
+    "inquiries": {
+      "title": "Investor interest — {name}",
+      "blurb": "Investors who pressed Express interest on your card. Triage them here; the revenue report counts what you convert.",
+      "openCount": "{count, plural, one {# open} other {# open}}",
+      "loading": "Loading…",
+      "empty": "No inquiries yet. Listing the company in the Marketplace and marking it as raising is what brings them.",
+      "pickCompany": "Pick a company to see who has expressed interest.",
+      "anonymous": "Unnamed investor",
+      "triage": "Status",
+      "amount": "Has {amount} in mind",
+      "accredited": "Accredited",
+      "received": "Received {date}",
+      "error": {
+        "load": "The inquiries could not be loaded.",
+        "triage": "That inquiry could not be updated."
+      }
     }
   },
   "investorGrant": {
@@ -30889,5 +31625,280 @@
     "connecting": "Connecting to your IDE…",
     "connected": "Connected. You can close this tab if the preview is showing in your IDE.",
     "failed": "Connection failed: {error}"
+  },
+  "startups": {
+    "vocab": {
+      "stage": {
+        "bootstrapped": "Bootstrapped",
+        "pre_seed": "Pre-Seed",
+        "seed": "Seed",
+        "series_a": "Series A",
+        "series_b": "Series B",
+        "series_c": "Series C",
+        "series_d_plus": "Series D+",
+        "ipo_ready": "IPO ready"
+      },
+      "businessStage": {
+        "idea": "Idea",
+        "mvp": "MVP",
+        "early_revenue": "Early revenue",
+        "growth": "Growth",
+        "scale": "Scale"
+      },
+      "sector": {
+        "fintech": "FinTech",
+        "healthtech": "HealthTech",
+        "edtech": "EdTech",
+        "ecommerce": "E-commerce",
+        "saas": "SaaS",
+        "marketplace": "Marketplace",
+        "consumer_apps": "Consumer apps",
+        "enterprise_software": "Enterprise software",
+        "ai_ml": "AI / ML",
+        "blockchain": "Blockchain",
+        "gaming": "Gaming",
+        "media_entertainment": "Media & entertainment",
+        "real_estate": "Real estate",
+        "logistics": "Logistics",
+        "sustainability": "Sustainability",
+        "other": "Other"
+      },
+      "seeking": {
+        "funding": "Funding",
+        "cofounders": "Co-founders",
+        "advisors": "Advisors",
+        "customers": "Early customers",
+        "partners": "Partners",
+        "hiring": "Hiring",
+        "mentorship": "Mentorship"
+      },
+      "investmentType": {
+        "equity": "Equity",
+        "convertible_note": "Convertible note",
+        "safe": "SAFE",
+        "revenue_share": "Revenue share",
+        "debt": "Debt"
+      },
+      "timeframe": {
+        "immediate": "Now (1–3 months)",
+        "short_term": "Soon (3–6 months)",
+        "medium_term": "This year (6–12 months)",
+        "long_term": "Later (12+ months)"
+      },
+      "expertise": {
+        "product": "Product",
+        "marketing": "Marketing & sales",
+        "operations": "Operations",
+        "finance": "Finance",
+        "legal": "Legal & compliance",
+        "people": "People",
+        "technology": "Technology",
+        "business_development": "Business development",
+        "fundraising": "Fundraising",
+        "international": "International expansion"
+      },
+      "sort": {
+        "newest": "Newest",
+        "funding": "Most funding raised",
+        "alphabetical": "A to Z",
+        "runway": "Longest runway"
+      },
+      "health": {
+        "critical": "Critical",
+        "watch": "Watch",
+        "healthy": "Healthy",
+        "profitable": "Profitable"
+      },
+      "inquiryStatus": {
+        "new": "New",
+        "qualifying": "In conversation",
+        "converted": "Investing",
+        "rejected": "Passed"
+      }
+    },
+    "card": {
+      "raising": "Raising",
+      "runwayHealth": "Runway: {health}",
+      "totalFunding": "Total funding",
+      "mrr": "Monthly revenue",
+      "team": "Team",
+      "people": "{count, plural, one {# person} other {# people}}",
+      "runway": "Runway",
+      "months": "{count, plural, one {# month} other {# months}}",
+      "noLocation": "Location not shared",
+      "founded": "Founded {year}",
+      "interested": "{count, plural, one {# investor has expressed interest} other {# investors have expressed interest}}",
+      "expressInterest": "Express interest"
+    },
+    "filters": {
+      "stageGroup": "Funding stage",
+      "raising": "Raising now",
+      "sector": "Sector",
+      "anySector": "Any sector",
+      "businessStage": "Business stage",
+      "anyBusinessStage": "Any business stage",
+      "sort": "Sort",
+      "clear": "Clear filters"
+    },
+    "directory": {
+      "heading": "Startups",
+      "blurb": "Companies listed by the founders who run them — stage, sector, traction and whether they are raising.",
+      "count": "{count, plural, one {# listed} other {# listed}}",
+      "empty": "No startups match these filters yet.",
+      "listYours": "List your startup",
+      "forInvestors": "For investors",
+      "investorsTitle": "Find companies that are raising",
+      "investorsBody": "Browse declared traction, filter by stage and sector, and express interest directly to the founder.",
+      "browseRaising": "Browse companies raising",
+      "forStartups": "For startups",
+      "startupsTitle": "Be found by the right investors",
+      "startupsBody": "List your company, declare your numbers and say what you are looking for. Inquiries land in your workspace beside everything else.",
+      "createProfile": "Create your profile",
+      "browseAll": "Browse every listed startup"
+    },
+    "inquiry": {
+      "title": "Express interest",
+      "intro": "Tell the founders of {name} who you are and why you are interested. They read this in their workspace and reply from there.",
+      "you": "About you",
+      "name": "Full name",
+      "email": "Email",
+      "firm": "Firm",
+      "role": "Role",
+      "phone": "Phone",
+      "investment": "The investment",
+      "amount": "Amount you have in mind (USD)",
+      "instrument": "Instrument",
+      "timeframe": "Timeframe",
+      "pick": "Choose…",
+      "expertise": "What you bring beyond capital",
+      "accredited": "I am an accredited investor",
+      "accreditedHint": "Some rounds are open to accredited investors only.",
+      "message": "Message",
+      "messagePlaceholder": "Why this company, and what you could add beyond the cheque.",
+      "history": "Investment history (optional)",
+      "historyPlaceholder": "A line or two on what you have backed before.",
+      "cancel": "Cancel",
+      "sending": "Sending…",
+      "send": "Send to the founders",
+      "privacy": "Your message goes only to this company's team. Nothing here is published.",
+      "sentTitle": "Sent.",
+      "sentBody": "The founders of {name} have your message in their workspace and will reply by email.",
+      "done": "Done"
+    },
+    "runway": {
+      "title": "Runway",
+      "notDeclared": "No numbers declared yet. Enter cash on hand and monthly spend to see the runway.",
+      "unlimited": "Not burning",
+      "months": "{count, plural, one {# month} other {# months}}",
+      "netBurn": "Net burn {amount} a month",
+      "zeroCash": "Cash reaches zero around {date}",
+      "declaredNotice": "Computed from declared numbers, not from connected books.",
+      "observedNotice": "Computed from observed spend, revenue and cash."
+    },
+    "calculator": {
+      "cash": "Cash on hand",
+      "cashHint": "Total cash in the bank today.",
+      "budget": "Monthly spend",
+      "budgetHint": "Everything that leaves the account in a month, including payroll.",
+      "revenue": "Monthly revenue",
+      "revenueHint": "What comes in each month. Zero is a real answer.",
+      "teamCost": "Of which team cost",
+      "teamCostHint": "Salaries and benefits — part of monthly spend, named so the CFO can see the largest line."
+    },
+    "profile": {
+      "seoTitle": "{name} — Startup profile | Builderforce.ai",
+      "seoFallback": "{name}, a startup listed on Builderforce.ai.",
+      "notListed": "Not listed",
+      "eyebrow": "Startup directory",
+      "founded": "Founded {year}",
+      "raising": "Raising",
+      "website": "Website",
+      "backToDirectory": "All startups",
+      "about": "About {name}",
+      "keyFacts": "Key facts",
+      "fact": {
+        "stage": "Funding stage",
+        "businessStage": "Business stage",
+        "sector": "Sector",
+        "team": "Team",
+        "founders": "Founders",
+        "totalFunding": "Total funding raised",
+        "mrr": "Monthly revenue",
+        "runway": "Runway",
+        "goal": "Raising",
+        "interest": "Investor interest"
+      },
+      "people": "{count, plural, one {# person} other {# people}}",
+      "runwayPrivate": "Not shared",
+      "declaredNotice": "Every figure on this page was declared by the company. Nothing is read from its connected books.",
+      "raise": "The raise",
+      "interested": "{count, plural, =0 {No inquiries yet} one {# investor has expressed interest} other {# investors have expressed interest}}"
+    }
+  },
+  "financeHub": {
+    "title": "Finance",
+    "subtitle": "Runway and cashflow for the company you run — what the platform has observed, and what you declared, each labelled.",
+    "company": "Company",
+    "loading": "Loading…",
+    "error": {
+      "load": "The finance report could not be loaded."
+    },
+    "runway": {
+      "observed": "Observed",
+      "asOf": "As of {date}",
+      "observedEmpty": "Nothing observed yet. Approved expenses, processed payroll and connected books appear here once there are any.",
+      "cash": "Cash",
+      "netBurn": "Net burn / month",
+      "mrr": "MRR",
+      "runwayMonths": "Runway",
+      "months": "{count, plural, one {# month} other {# months}}",
+      "observedHint": "Computed daily from approved spend, processed payroll and synced ledgers.",
+      "connectBooks": "Connect your books",
+      "declared": "Declared",
+      "noCompany": "No company yet.",
+      "addCompany": "Add one from the listing wizard",
+      "declaredHint": "What you told us about {name}. Edit and save — the listing and this page read the same numbers.",
+      "saving": "Saving…",
+      "save": "Save declared numbers",
+      "monthly": "Month by month",
+      "monthlyNote": "Observed months only. The declared projection is on the Cashflow tab.",
+      "col": {
+        "month": "Month",
+        "revenue": "Revenue",
+        "expenses": "Spend",
+        "netBurn": "Net burn",
+        "cash": "Cash at month end"
+      },
+      "error": {
+        "save": "The numbers could not be saved."
+      }
+    },
+    "cashflow": {
+      "title": "Cashflow",
+      "blurb": "Inflows, outflows and the ending balance, month by month.",
+      "source": "Series",
+      "observed": "Observed",
+      "declared": "Declared projection",
+      "observedEmpty": "No observed months yet. Connect your books or approve expenses to see money that actually moved.",
+      "declaredEmpty": "No declared numbers yet. Enter them on the Runway tab to see a projection.",
+      "inflows": "Inflows",
+      "outflows": "Outflows",
+      "net": "Net",
+      "ending": "Ending balance",
+      "chart": "Cashflow over time",
+      "observedCaption": "Money that moved",
+      "declaredCaption": "At the declared burn",
+      "col": {
+        "month": "Month",
+        "status": "Status"
+      },
+      "status": {
+        "out": "Out of cash",
+        "positive": "Positive",
+        "burning": "Burning"
+      },
+      "observedNote": "Observed from approved spend, processed payroll and synced ledgers.",
+      "declaredNote": "A projection at the declared cash, spend and revenue — the same every month. Not a forecast."
+    }
   }
 }

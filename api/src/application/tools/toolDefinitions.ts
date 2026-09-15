@@ -14,6 +14,8 @@ import {
   scoreQuiz,
 } from './toolTypes';
 import { CAREER_TOOLS } from './careerTools';
+import { money } from './toolFormat';
+import { STARTUP_FINANCE_TOOLS } from './startupFinanceTools';
 
 const TIER_NAME = ['Low', 'Low', 'Medium', 'High', 'Elite'];
 /**
@@ -38,8 +40,7 @@ export const tierName = (t: number): string => TIER_NAME[Math.max(1, Math.min(5,
  * platform bills in); only the grouping and the symbol placement follow the
  * reader.
  */
-export const money = (n: number, locale = 'en-US'): string =>
-  n.toLocaleString(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.abs(n) >= 100 ? 0 : 2 });
+export { money } from './toolFormat';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DORA Quick-Check (calculator)
@@ -978,6 +979,10 @@ export const TOOLS: Tool[] = [
   // The career analyzers ported from hired.video. Adapters only — every reading
   // is an `application/career` function the recruiter/hr agents already call.
   ...CAREER_TOOLS,
+  // The founder's free finance calculators ported from BurnRateOS (PRD 19 B1):
+  // runway, burn, break-even, churn and pricing. The runway one runs the same
+  // contract formula the Finance seat prints.
+  ...STARTUP_FINANCE_TOOLS,
 ];
 
 export function getTool(id: string): Tool | undefined {

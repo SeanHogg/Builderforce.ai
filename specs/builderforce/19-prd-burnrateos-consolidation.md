@@ -1046,3 +1046,72 @@ node scripts/check-burnrate-parity.mjs --update    # regenerates them after a ga
 
 The checker is the meter for this section: as each of the 64 items gains a feature path, the
 `build` count falls, and it must never rise silently.
+
+## 10 · Idea → REAL for founders: listing, investors, runway — shipped 2026-09-15
+
+**Operator ask (2026-09-15):** "help founders go from idea to real by promoting their business —
+create the company, list it, find investors; provide runway, cashflow and the product-management
+content; assess all pages/content/materials within burnrateos.com and add them." Clarified
+mid-pass: **startup listings are part of the marketplace.**
+
+### 10.1 What shipped, and where it landed
+
+| BurnRateOS | Builderforce owner | Landed as |
+|---|---|---|
+| `/businesses` directory · `BusinessDirectoryGrid` · `FundingStageShowcase` · filters | Marketplace, `company` family, `business` kind | `components/startups/StartupDirectory.tsx` over `GET /api/public/startups` (`application/investor/startupDirectory.ts`). Stage chips, sector / business-stage / sort, server paging, cached under one version token. |
+| `/businesses/:slug` public profile (948 lines Mantine) | `PublicDetailLayout` | `/marketplace/company/[slug]` — edge-rendered, indexable, Organization JSON-LD, listed in `sitemap.ts`. |
+| `InvestorInquiryDrawer` + `InvestorInquiryModal` ("Express Interest") | `deal_flow_opportunities` (revenue owner) | ONE `ExpressInterestPanel` (slide-out). `POST /api/public/startups/:slug/inquiries` → `recordDealFlow` with `source='investor_inquiry'` + `subject_company_id`; owners/managers notified in-app. |
+| Onboarding `BusinessProfileStep` · `BusinessContextStep` · `VisibilityPreferencesStep` (7-step stepper, 871 lines) | `companies` (CEO root) | Three-step `StartupListingWizard` on the new **Investors → Listing** tab; steps are data (`listingSteps.ts`); each step SAVES (create/patch company · declare finance · visibility). `/register?intent=startup` carries the intent and lands on it. |
+| `Company.isPubliclyListed / isSeekingInvestment / allowInvestorInquiries / tagline / …` | `companies` columns | Migration 1173 — the listing FACET (23 columns), partial unique index on `slug WHERE is_publicly_listed`, `stage_lookup` seeded from the ONE vocabulary. Zero new tables. |
+| `investor_inquiries` (+ the CRM `deals` row BurnRateOS wrote beside it) | `deal_flow_opportunities` | `subject_company_id`, `contact_name`, `details` columns (1173). Founder triage on **Investors → Interest** with the CRO's own statuses; `publicInquiryCounts` is the card's social proof. |
+| `RunwayTrackerPage` · `financialService.getRunwayMetrics` | Finance (CFO) | New destination `/finance` (`components/finance/*`), `GET /api/bi/runway` (`application/finance/runwayReport.ts`): OBSERVED (`finance.*` metric facts, 12 months) beside DECLARED (`companies.cash_on_hand / monthly_budget / monthly_revenue / team_cost`, stamped), each labelled. Cached on two version tokens (tenant declared write · finance rollup pass). |
+| `CashflowVisualizerPage` | Finance (CFO) | `/finance?tab=cashflow` — observed series and the declared projection (`projectCashflow`), chart + table, toggle names the series. |
+| `businessCalculations.ts` (`calculateRunway`) ×3 copies | `packages/creation-canvas-contract/src/startupListing.ts` | ONE `computeRunway` (cash ÷ NET burn) + `projectCashflow`, imported by API, web and the marketing calculator. Tested once. |
+| `/tools/runway` free tool | BI explainer | `RunwayCalculatorSection` registered in `domainExtras.tsx` for `businessIntelligence`; the CTA carries the numbers into `/register?intent=startup` or `/finance`. |
+| `/tools/burn-rate` · `/tools/churn` · `/break-even-calculator` · `/pricing-simulator` | Tools registry (`/tools`) | `application/tools/startupFinanceTools.ts` — five `CalculatorTool`s under the new `finance` category, localized through the tool catalogs. |
+| "Discover startups" home band · "Ready to connect? For Investors / For Startups" | Investor Intelligence explainer + marketplace | `StartupDirectoryTeaser` (newest six + the two doors) registered for `investorIntelligence`; `StartupDoors` under the marketplace grid. |
+| `/product-management` (8 owned features, funding-stage use cases, 5 FAQs) and the other eight domain explainers | `burnrateMarketing.domains.*` | Feature copy expanded from 3 to the catalog's owned features per domain (8 · 11 · 6 · 9 · 4 · 12 · 7 · 9 · 14), `useCases` for PM / BI / Investor, `faq` for all nine — rendered by `BurnrateDomainPage` (`useCases`, `faq` optional in the copy type). Five locales. |
+| `constants.ts` funding rounds / business stages / seeking types / investor types | contract package | `FUNDING_STAGES`, `BUSINESS_STAGES`, `STARTUP_SECTORS`, `SEEKING_TYPES`, `INVESTMENT_TYPES`, `INQUIRY_TIMEFRAMES`, `EXPERTISE_AREAS` — one declaration; labels in `startups.vocab.*`. |
+
+Release notes (category `new`) ship by migration 1174. Marketing: `content/blog/list-your-startup-and-meet-investors.md`.
+
+### 10.2 What a stranger may see — the tier rule
+
+`toPublicProfile(row, viewer, inquiryCount)` is the ONE redaction. `public`: profile, stage, sector, raising, total raised, MRR, headcount, runway **health**. `member` (any signed-in reader): + runway in months + the investor contact the founder chose. **Never** cash on hand, burn or team cost. BurnRateOS's third "investor" tier is the platform's company GRANT (`companyInvestorAccess.ts`) — it opens a data room, not a paragraph.
+
+### 10.3 Content assessment — every public BurnRateOS route
+
+348 real routes were measured in §9.1; the PUBLIC ones (the marketing shell) resolve as follows. Everything marked *merged* renders today in five locales; nothing here is described as migrated data.
+
+| BurnRateOS public route(s) | Builderforce | Status |
+|---|---|---|
+| `/` (landing: hero, Ask your AI C-Suite, discover startups, Ready to connect) | `/` (canvas-first home) · `/marketplace?family=company` · `/investor-intelligence` teaser | merged — the C-suite is the roster; startups are a marketplace family |
+| `/features`, `/features/<tool>` (ai-coach, ai-email-classifier, ai-contract-analyzer, ai-competitor-monitor, ai-expense-categorizer, ai-pitch-deck-feedback, ai-productivity) | `/features`, `/features/[burnrateFeature]`, `/features/ai-coach` | merged (registry projection); `ai-voice-agent` and `business-phone` retired by policy |
+| `/product-management` · `/business-intelligence` · `/survival-focused-agile` · `/sales-revenue` · `/customer-engagement` · `/investor-intelligence` · `/operational-cadence` · `/governance-security` · `/marketing-growth` | same slugs via `[burnrateDomain]` | merged — full feature catalog, use cases, FAQ (this pass) |
+| `/ideas` (Ideas scratch pad marketing) | `/create` (the canvas IS the front door) | merged — the Ideas canvas feature card points at it |
+| `/businesses`, `/businesses/:slug` | `/marketplace?family=company&kind=business`, `/marketplace/company/:slug` | **merged (this pass)** |
+| `/register` (founder / investor role) | `/register?intent=startup` | merged — intent, not a fourth account type |
+| `/tools`, `/tools/runway`, `/tools/burn-rate`, `/tools/churn`, `/break-even-calculator`, `/pricing-simulator` | `/business-intelligence` calculator · `/tools` finance category | **merged (this pass)** |
+| `/pricing`, `/pricing-simulator` (plans) | `/pricing` | pricing is `transform_existing` — Builderforce plans are canonical (§9.3) |
+| `/competitors`, `/competitors/<domain>` (8 hubs) | `/compare/[competitor]` | merged earlier — one comparison surface |
+| `/blog`, `/blog/:slug`, `/changelog`, `/case-studies`, `/wall-of-love` | `/blog`, `/blog/[slug]`, product updates panel, `/media` | merged — `blogContent → transform_existing` |
+| `/docs/**` (agile-poker docs, API docs) | `/docs`, `/developers` | merged — the developer portal is the API docs owner |
+| `/about`, `/contact`, `/trust`, `/privacy`, `/terms` | `/about`, `/book-demo`, `/soc2`, `/legal/*` | merged |
+| `/integrations`, `/integrations-marketplace` | `/integrations`, `/settings/integrations` | merged |
+| `/affiliate-program`, `/affiliate-dashboard`, `/affiliate/*` | — | **retired** (`affiliates → retire_export`) |
+| `/features/business-phone`, `/features/ai-voice-agent`, VoIP marketing | Twilio connector (workflow calls) | **retired** (`phoneVoip → retire_port_out`) |
+| `/email/preferences`, `/email/unsubscribe` | `/settings` email preferences · unsubscribe links | merged |
+| `/d/:token`, `/deck/:token`, `/data-room/:token`, `/investor-portal/*` | `/data-rooms/shared/[token]`, `/investor/shared/[token]` | merged (IN-2) |
+| `/book/:handle` | `/book` | merged (bookings owner) |
+| `/consultant/onboarding`, `/consultant/dashboard`, `/marketplace` (CxO experts) | `/marketplace?family=talent` · `/freelancer/*` | merged — experts are the talent family |
+| `/community`, `/analytics-hub`, `/enterprise/admin` | `/insights`, `/admin` | merged |
+
+Everything else on the 348 is an authenticated product route already mapped by §9.2 (76 modules at full parity, 18 partial only in `transform`/`retire` targets).
+
+### 10.4 Decisions worth carrying forward
+
+1. **The listing is a FACET, not a profile table.** BurnRateOS's own end state had collapsed `BusinessProfile` into `Company`; a `startup_profiles` sibling would have re-split it. Columns, a partial unique index, `newTablesAllowed: false` intact.
+2. **Runway is never stored.** Every surface derives it from the declared inputs by one function; a stored figure is one that can disagree with its inputs.
+3. **An inquiry is deal flow.** Not a notification, not a second inbox: the CRO's queue and the founder's Interest tab read the same rows, narrowed by `subject_company_id`.
+4. **Publishing is a transition with a gate.** `setListingVisibility` refuses an incomplete profile and stamps `listed_at`; `LISTING_REQUIRED_FIELDS` is read by the gate AND the completeness meter.
+5. **Marketing copy is bound by the Claim-to-Proof gate.** The catalog's fabricated percentages ("40% faster MVP") were replaced with qualitative outcomes; retired capabilities are not advertised.

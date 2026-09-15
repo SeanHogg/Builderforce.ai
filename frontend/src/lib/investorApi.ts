@@ -12,6 +12,7 @@
  * locale header, the 401 redirect and the typed 402 all live in it.
  */
 
+import type { DeclaredFinance, InquiryStatus, RunwayVerdict } from '@builderforce/creation-canvas-contract';
 import { apiRequest, getApiBaseUrl } from './apiClient';
 
 // ---------------------------------------------------------------------------
@@ -187,6 +188,89 @@ export interface PackSummary {
 }
 
 // ---------------------------------------------------------------------------
+// The startup listing (B2) — the company's public face in the marketplace
+// ---------------------------------------------------------------------------
+
+/** The founder's own view of the listing facet. Mirrors the server's
+ *  `StartupListingFacet`; runway and completeness arrive DERIVED. */
+export interface StartupListing {
+  companyId: number;
+  name: string;
+  slug: string | null;
+  website: string | null;
+  tagline: string | null;
+  description: string | null;
+  logoUrl: string | null;
+  stage: string | null;
+  businessStage: string | null;
+  sector: string | null;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  foundedAt: string | null;
+  headcount: number | null;
+  foundersCount: number | null;
+  seeking: string[];
+  fundingGoal: number | null;
+  totalFundingRaised: number | null;
+  finance: DeclaredFinance;
+  runway: RunwayVerdict;
+  isPubliclyListed: boolean;
+  isSeekingInvestment: boolean;
+  allowInvestorInquiries: boolean;
+  investorContactName: string | null;
+  investorContactEmail: string | null;
+  listedAt: string | null;
+  completeness: { percent: number; missing: string[] };
+}
+
+export interface StartupListingPatch {
+  name?: string;
+  website?: string | null;
+  tagline?: string | null;
+  description?: string | null;
+  logoUrl?: string | null;
+  stage?: string | null;
+  businessStage?: string | null;
+  sector?: string | null;
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  foundedYear?: number | null;
+  headcount?: number | null;
+  foundersCount?: number | null;
+  seeking?: string[];
+  fundingGoal?: number | null;
+  totalFundingRaised?: number | null;
+  isSeekingInvestment?: boolean;
+  allowInvestorInquiries?: boolean;
+  investorContactName?: string | null;
+  investorContactEmail?: string | null;
+}
+
+export interface DeclaredFinanceBody {
+  cashOnHand: number | null;
+  monthlyBudget: number | null;
+  monthlyRevenue: number | null;
+  teamCost: number | null;
+}
+
+/** An investor who expressed interest — a deal-flow row, narrowed to this company. */
+export interface InvestorInquiry {
+  id: number;
+  investorName: string | null;
+  investorEmail: string | null;
+  investorCompany: string | null;
+  message: string | null;
+  interestedAmount: number | null;
+  currency: string;
+  status: InquiryStatus;
+  details: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
 
 const post = <T>(path: string, payload?: unknown): Promise<T> =>
   apiRequest<T>(path, { method: 'POST', ...(payload === undefined ? {} : { body: JSON.stringify(payload) }) });
@@ -231,6 +315,27 @@ export const investorApi = {
       post(`/api/investor/companies/${companyId}/investors/${encodeURIComponent(grantId)}/revoke`),
     analytics: (companyId: number): Promise<CompanyInvestorAnalytics> =>
       apiRequest<{ analytics: CompanyInvestorAnalytics }>(`/api/investor/companies/${companyId}/investors/analytics`).then((r) => r.analytics),
+  },
+
+  /** B2 — the listing. Three writers over the one company row: the profile, the
+   *  declared money and the publish transition. */
+  listing: {
+    get: (companyId: number): Promise<StartupListing> =>
+      apiRequest<{ listing: StartupListing }>(`/api/investor/companies/${companyId}/listing`).then((r) => r.listing),
+    update: (companyId: number, patch: StartupListingPatch): Promise<StartupListing> =>
+      apiRequest<{ listing: StartupListing }>(`/api/investor/companies/${companyId}/listing`, { method: 'PUT', body: JSON.stringify(patch) }).then((r) => r.listing),
+    declareFinance: (companyId: number, body: DeclaredFinanceBody): Promise<StartupListing> =>
+      apiRequest<{ listing: StartupListing }>(`/api/investor/companies/${companyId}/listing/finance`, { method: 'PUT', body: JSON.stringify(body) }).then((r) => r.listing),
+    setVisibility: (companyId: number, listed: boolean): Promise<StartupListing> =>
+      post<{ listing: StartupListing }>(`/api/investor/companies/${companyId}/listing/visibility`, { listed }).then((r) => r.listing),
+  },
+
+  /** B2 — investors who expressed interest, and the founder's triage of each. */
+  inquiries: {
+    list: (companyId: number): Promise<InvestorInquiry[]> =>
+      apiRequest<{ inquiries: InvestorInquiry[] }>(`/api/investor/companies/${companyId}/inquiries`).then((r) => r.inquiries),
+    triage: (companyId: number, inquiryId: number, status: InquiryStatus): Promise<InvestorInquiry> =>
+      post<{ inquiry: InvestorInquiry }>(`/api/investor/companies/${companyId}/inquiries/${inquiryId}/status`, { status }).then((r) => r.inquiry),
   },
 
   /** IN-4 — the pack. `rfpService` company-scoped, not a second generator, so the

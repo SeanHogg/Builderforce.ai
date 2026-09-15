@@ -3,6 +3,8 @@ import { BLOG_POSTS } from '@/lib/blogData';
 import { COMPETITOR_SEO } from '@/lib/content/compare';
 import { SEO_INTEGRATIONS } from '@/lib/content/seo';
 import { publicApiGet } from '@/lib/publicApi';
+import { startupProfilePath } from '@builderforce/creation-canvas-contract';
+import { listPublicStartupSlugs } from '@/lib/startupDirectory';
 import {
   builtinPersonaSlugs,
   builtinSkillSlugs,
@@ -215,6 +217,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   // Public freelancer profiles — indexable Person pages. Best-effort.
+  // Listed startups — a founder's public profile is what the directory exists to
+  // put in front of search, so every listed slug is submitted (PRD 19 B2).
+  const startupPages: MetadataRoute.Sitemap = (await listPublicStartupSlugs()).map((slug) => ({
+    url: `${BASE}${startupProfilePath(slug)}`,
+    lastModified: now,
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
+
   const talentPages: MetadataRoute.Sitemap = (await listPublicFreelancerIds()).map((id) => ({
     url: `${BASE}/talent/${id}`,
     lastModified: now,
@@ -247,6 +258,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...staticPages, ...teaserPages, ...catalogIndexPages, ...blogPages, ...comparePages,
     ...integrationPages, ...marketplacePages, ...catalogPages, ...talentPages,
-    ...salaryPages,
+    ...startupPages, ...salaryPages,
   ];
 }

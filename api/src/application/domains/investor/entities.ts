@@ -23,7 +23,13 @@ import {
 import { defineDomainEntities, entity } from '../entityDefinition';
 
 export const INVESTOR_ENTITIES = defineDomainEntities('investor', [
-  entity(companies, { kind: 'company', registers: true }),
+  /**
+   * The listing decision and the two provenance stamps are written by named
+   * transitions in `application/investor/startupListing.ts` (PRD 19 B2) — the
+   * publish gate refuses an incomplete profile, and a stamp is only meaningful
+   * if the thing it stamps happened. Readable here; writable only there.
+   */
+  entity(companies, { kind: 'company', registers: true, guarded: ['is_publicly_listed', 'listed_at', 'finance_declared_at'] }),
   entity(products, { kind: 'product', registers: true }),
   entity(dataRooms, { kind: 'data_room', registers: true }),
   /**

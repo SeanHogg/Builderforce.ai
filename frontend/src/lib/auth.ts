@@ -202,9 +202,16 @@ export function signInHref(next?: string): string {
  * local-draft index precisely so a dropped `next` is never data loss — but landing back
  * on the board you were keeping is the difference between "kept" and "kept somewhere".
  */
-export function registerHref(next?: string): string {
+export function registerHref(next?: string, intent?: string): string {
   const target = next ?? (isBrowser() ? window.location.pathname + window.location.search : '');
-  return target ? `/register?next=${encodeURIComponent(target)}` : '/register';
+  const params = new URLSearchParams();
+  if (target) params.set('next', target);
+  // What the person came to DO — `startup` lists a company. The register page
+  // reads it to pick its marketing panel and its landing, so a CTA carries its
+  // intent through sign-up instead of dropping the person on a dashboard.
+  if (intent) params.set('intent', intent);
+  const query = params.toString();
+  return query ? `/register?${query}` : '/register';
 }
 
 // ---------------------------------------------------------------------------

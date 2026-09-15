@@ -80,9 +80,11 @@ import creationCanvasFunctionalityGuide from '@/content/blog/creation-canvas-fun
 // 2026-08-16 and 2026-08-22, written so a reader searching for the capability
 // (not for us) has something to land on. Each one names where it sits in the
 // arc, because the method is what makes the set a corpus rather than a pile.
+import listYourStartup from '@/content/blog/list-your-startup-and-meet-investors.md';
 import salesProgrammeForEveryone from '@/content/blog/every-account-gets-a-sales-programme.md';
 import sendTheLink from '@/content/blog/send-the-link-join-without-an-account.md';
 import gradeTheProof from '@/content/blog/grade-the-proof-and-close-the-loop.md';
+import ideasScratchpad from '@/content/blog/ideas-scratchpad-on-the-canvas.md';
 import runYourAppOnTheCanvas from '@/content/blog/run-your-app-on-the-canvas.md';
 import standUpInsideYourBoard from '@/content/blog/stand-up-inside-your-board.md';
 import designTheRoomYouMeetIn from '@/content/blog/design-the-room-you-meet-in.md';
@@ -255,6 +257,7 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('list-your-startup-and-meet-investors', listYourStartup),
   buildPost('choose-who-answers-not-just-who-you-ask', chooseWhoAnswers),
   buildPost('sign-measure-and-plug-in-inside-the-room', signMeasurePlugIn),
   buildPost('every-account-gets-a-sales-programme', salesProgrammeForEveryone),
@@ -264,6 +267,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('grade-the-proof-and-close-the-loop', gradeTheProof),
   buildPost('import-your-records', importYourRecords),
   buildPost('delegate-the-search-not-the-decision', delegateTheSearch),
+  buildPost('ideas-scratchpad-on-the-canvas', ideasScratchpad),
   buildPost('run-your-app-on-the-canvas', runYourAppOnTheCanvas),
   buildPost('stand-up-inside-your-board', standUpInsideYourBoard),
   buildPost('design-the-room-you-meet-in', designTheRoomYouMeetIn),

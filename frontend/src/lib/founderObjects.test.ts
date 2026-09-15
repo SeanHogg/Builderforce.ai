@@ -483,6 +483,42 @@ describe('contract obligations', () => {
   });
 });
 
+describe('the idea — written in seconds, honest about its evidence', () => {
+  const evidenceOf = (idea: Record<string, unknown>, others: Record<string, unknown>[] = []) => {
+    const field = specObjectSpec('idea')!.fields.find((entry) => entry.name === 'evidence')!;
+    const data = { kind: 'idea', title: 'Dog walking for towers', ...idea };
+    return english(specFieldValue(field, data, makeSpecDeriveBoard([data, ...others])));
+  };
+
+  it('says an idea nobody has tested is untested, rather than drawing nothing', () => {
+    expect(evidenceOf({})).toContain('Untested');
+  });
+
+  it('counts the interviews and experiments the idea names that exist on the board', () => {
+    const text = evidenceOf(
+      { testedBy: ['Interview: Acme ops', 'Concierge smoke test'] },
+      [{ kind: 'customerInterview', title: 'Interview: Acme ops' }, { kind: 'experiment', title: 'Concierge smoke test' }],
+    );
+    expect(text).toBe('Tested by 1 interview and 1 experiment.');
+  });
+
+  it('names a ref that resolves to nothing instead of counting it', () => {
+    const text = evidenceOf({ testedBy: ['Interview: Acme ops', 'A call nobody wrote up'] }, [{ kind: 'customerInterview', title: 'Interview: Acme ops' }]);
+    expect(text).toContain('Tested by 1 interview and no experiments.');
+    expect(text).toContain('Not on this board yet: A call nobody wrote up.');
+  });
+
+  it('keeps the stage and capture time out of the empty-shell check — a title alone is still a shell', () => {
+    expect(emptyShellProblem('idea', { title: 'x', stage: 'exploring', capturedAt: '2026-09-15T00:00:00Z' })).toBeTruthy();
+    expect(emptyShellProblem('idea', { title: 'x', scratch: 'A thought worth keeping' })).toBeNull();
+  });
+
+  it('never lets the model author the evidence it is judged by', () => {
+    expect(founderMutableFields('idea')).toContain('testedBy');
+    expect(founderMutableFields('idea')).not.toContain('evidence');
+  });
+});
+
 describe('founder localisation', () => {
   it('has a real translation for every founder field and column in all five catalogs', () => {
     for (const [locale, catalog] of Object.entries(CATALOGS)) {

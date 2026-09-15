@@ -38,6 +38,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { objects } from './kernel';
 
 /** A company in the portfolio, or the tenant's own. The root entity. */
@@ -64,11 +65,52 @@ export const companies = pgTable('companies', {
   currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
   isPortfolio: boolean('is_portfolio').notNull().default(false),
   attrs:       jsonb('attrs'),
+  /**
+   * The STARTUP LISTING facet (migration 1173, PRD 19 B2) — BurnRateOS's public
+   * business directory, which its own final schema had already collapsed onto
+   * `Company`. Columns rather than a `business_profiles` sibling, the same
+   * flattening the CRM facet above made: one company, one row, and "the business
+   * I run" and "a business in the directory" are the same noun.
+   *
+   * The public profile.
+   */
+  tagline:        varchar('tagline', { length: 160 }),
+  description:    text('description'),
+  logoUrl:        varchar('logo_url', { length: 500 }),
+  /** `BUSINESS_STAGES` in the contract package — how far the product is. */
+  businessStage:  varchar('business_stage', { length: 24 }),
+  city:           varchar('city', { length: 120 }),
+  region:         varchar('region', { length: 120 }),
+  foundersCount:  integer('founders_count'),
+  /** `SeekingType[]` — what the company is looking for. */
+  seeking:        jsonb('seeking').$type<string[]>(),
+  fundingGoal:    numeric('funding_goal', { precision: 18, scale: 2 }),
+  totalFundingRaised: numeric('total_funding_raised', { precision: 18, scale: 2 }),
+  /**
+   * DECLARED finance — what the founder typed, stamped with when. Runway is
+   * never a column: it is cash ÷ net burn, computed by `computeRunway` in the
+   * contract package, so it cannot disagree with the inputs that produced it.
+   */
+  cashOnHand:     numeric('cash_on_hand', { precision: 18, scale: 2 }),
+  monthlyBudget:  numeric('monthly_budget', { precision: 18, scale: 2 }),
+  monthlyRevenue: numeric('monthly_revenue', { precision: 18, scale: 2 }),
+  teamCost:       numeric('team_cost', { precision: 18, scale: 2 }),
+  financeDeclaredAt: timestamp('finance_declared_at'),
+  /** The listing decision. `listedAt` is written by the publish transition only. */
+  isPubliclyListed:       boolean('is_publicly_listed').notNull().default(false),
+  isSeekingInvestment:    boolean('is_seeking_investment').notNull().default(false),
+  allowInvestorInquiries: boolean('allow_investor_inquiries').notNull().default(true),
+  investorContactName:    varchar('investor_contact_name', { length: 160 }),
+  investorContactEmail:   varchar('investor_contact_email', { length: 320 }),
+  listedAt:               timestamp('listed_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_companies_name').on(t.tenantId, t.name),
   index('idx_companies_portfolio').on(t.tenantId, t.isPortfolio, t.stage),
+  /** A public URL needs the slug unique among LISTED companies only. */
+  uniqueIndex('uq_companies_public_slug').on(t.slug).where(sql`${t.isPubliclyListed} = true`),
+  index('idx_companies_directory').on(t.isPubliclyListed, t.isSeekingInvestment, t.stage, t.sector, t.listedAt),
 ]);
 
 /** A product a company sells. */
