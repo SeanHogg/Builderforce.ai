@@ -30,7 +30,7 @@ describe('siblingDatabase / siblingDatabaseOf', () => {
   it('an unbound sibling URL resolves to the core handle', () => {
     const core = buildDatabase(BASE_ENV);
     expect(siblingDatabase(BASE_ENV, core, 'apps')).toBe(core);
-    expect(siblingDatabaseOf(core)).toBe(core); // same, through the env-lookup form
+    expect(siblingDatabaseOf(core, 'apps')).toBe(core); // same, through the env-lookup form
   });
 
   it('a bound sibling URL gives its own client, memoised across repeat calls', () => {
