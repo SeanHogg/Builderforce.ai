@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-09-15 — The VSIX release died on one dropped connection to Microsoft's update service (release workflow · `clients/vscode/test-integration/runTests.ts`)
+
+"Publish VS Code extension" failed at `Verify the extension activates in a real VS Code` with `connect ETIMEDOUT 150.171.109.183:443` right after `Resolving version...` — before any test ran. `@vscode/test-electron` asks `update.code.visualstudio.com` which stable version satisfies `engines.vscode`; that lookup has a 15 s timeout, is NOT retried (only the archive download is), and falls back only to an already-cached install — which a fresh runner never has.
+
+- **Retry the lookup.** `resolveVSCode` calls `downloadAndUnzipVSCode` with a 60 s idle timeout and retries 4 times in total (10 s / 30 s / 60 s backoff), then hands the path to `runTests` as `vscodeExecutablePath`. The library clears a failed lookup rather than caching it, so a retry really re-asks.
+- **Cache the install.** `actions/cache@v6` on `.vscode-test/vscode-*` only (never `user-data/`/`extensions/`), weekly key with a prefix restore-key, so the library's own offline fallback has something to fall back to.
+- **Bound the cache.** `pruneStaleInstalls` deletes every `vscode-<platform>-<x.y.z>` folder except the one about to run, so neither the local `.vscode-test/` nor the CI cache grows ~320 MB per VS Code release.
+
 ## ✅ RESOLVED 2026-09-15 — Founders can list their startup in the Marketplace, investors can express interest, and Finance shows runway and cashflow with their provenance named (api 2026.9.35 · frontend 2026.9.32 · PRD 19 §10)
 
 BurnRateOS's founder loop — create the company, list it, be found by investors, watch the runway — had no owner in Builderforce: `companies` existed as a table and a raise, but nothing put a company in front of a stranger, nothing let the stranger say "I'm interested", and the CFO seat had a burn tile with no destination behind it. Operator call mid-pass: startup listings are PART of the marketplace.
