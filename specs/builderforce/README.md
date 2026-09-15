@@ -178,6 +178,11 @@
     ratchets and falsifiable acceptance criteria. **Where work executes, who owns it, and how the
     implementation stays understandable and fast.**
 
+26. **[26 — PRD: Advisor Platform](./26-prd-advisor-platform.md)**
+    SCORE-class advising composed from marketplace talent, public booking, meetings, and minutes→tasks.
+    Advisors and new/solo entrepreneurs; dogfood via marketplace listings (Meeting Notes agent,
+    Minutes-to-board skill). **Not a SCORE clone.**
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own
