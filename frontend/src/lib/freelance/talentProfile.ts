@@ -30,6 +30,8 @@ export interface FreelancerProfile {
   discipline: string | null;
   skills: string[];
   hourlyRateCents: number | null;
+  /** Session price in cents — 0 = volunteer / pro-bono; null = not set. #2528 */
+  sessionPriceCents: number | null;
   currency: string;
   visibility: 'public' | 'private';
   availability: 'open' | 'limited' | 'unavailable';
