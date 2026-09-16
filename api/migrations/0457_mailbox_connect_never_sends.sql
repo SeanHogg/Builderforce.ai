@@ -1,0 +1,46 @@
+-- 0457_mailbox_connect_never_sends.sql
+--
+-- Connect success never sends or spends.
+--
+-- `mailbox_connections.allow_sending` shipped in 0414 with DEFAULT TRUE. Because
+-- `saveMailboxConnection` never named the column on insert, completing the OAuth
+-- callback — an act of LINKING a mailbox — silently produced a row that the
+-- campaign engine and the mailbox composer both accept as a sending identity.
+-- The only gate on blasting a freshly connected mailbox was that nobody had yet
+-- asked it to. That is a spend authority acquired as a side effect of connecting,
+-- which is exactly what Connect must never do.
+--
+-- Connecting is a DEVELOPER-level act (it grants access to your own mailbox).
+-- Turning that mailbox into something that can email strangers is MANAGER-gated
+-- and lives in a separate, deliberate call — `PATCH /api/mailbox/connections/:id`
+-- with `{ allowSending: true }`. This migration makes the column's default agree
+-- with that division instead of quietly contradicting it.
+--
+-- Reconnecting a revoked grant deliberately does NOT touch this column: the
+-- upsert in `saveMailboxConnection` omits it from the `SET` clause, so recovering
+-- a mailbox restores READ access without re-arming sending, and a mailbox an
+-- operator deliberately opted in stays opted in across a reconnect.
+
+ALTER TABLE mailbox_connections
+  ALTER COLUMN allow_sending SET DEFAULT FALSE;
+
+-- Existing rows are deliberately LEFT ALONE.
+--
+-- A tenant already sending live campaigns from a connected mailbox must not have
+-- that mailbox silently muted by a deploy — going dark mid-campaign is its own
+-- incident, and this change is about what CONNECTING grants, not about revoking
+-- authority an operator already exercised. Rows created before this migration
+-- cannot be distinguished from rows an operator explicitly opted in, so flipping
+-- them would be a guess in the destructive direction.
+--
+-- Operators who want the strict posture on historical rows can audit and mute
+-- deliberately:
+--
+--   SELECT id, tenant_id, account_email, allow_sending
+--     FROM mailbox_connections
+--    WHERE allow_sending
+--    ORDER BY tenant_id, account_email;
+--
+--   -- then, per reviewed row:
+--   -- UPDATE mailbox_connections SET allow_sending = FALSE, updated_at = NOW()
+--   --  WHERE id = $1;
