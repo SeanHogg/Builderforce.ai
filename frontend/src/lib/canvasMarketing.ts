@@ -110,3 +110,126 @@ export function brandViolationsIn(
 ): readonly string[] {
   return forbiddenClaimsIn(body, brandForNode(node, nodes));
 }
+
+/**
+ * The GUIDED CAMPAIGN RUN as the canvas board sees it.
+ *
+ * sendReadiness remains the operational Growth gate (audience, consent,
+ * suppression, forbidden claims). The journey checklist is the founder walk:
+ * brand (voice + doNotSay), consenting audience, sender for the chosen
+ * channel, offer, copy. Connect success never implies send. Anonymous boards
+ * (`local`) and cloud agents stay draft-only.
+ *
+ * Campaign ROI is spend and/or pipeline/revenue attributed to THIS run.
+ * Opens, clicks, and workspace `/api/roi/rollup` are ignored on purpose.
+ */
+
+const CHANNEL_ACCOUNT_KEYS: Record<GuidedCampaignChannel, readonly string[]> = {
+  email: ['mailboxConnected', 'sendgridConnected', 'platformSenderReady', 'emailAccountReady'],
+  sms: ['twilioConnected', 'smsAccountReady'],
+  social: ['socialConnected', 'socialAccountReady'],
+  ads: ['adsConnected', 'adsAccountReady'],
+};
+
+function asChannel(value: unknown): GuidedCampaignChannel | null {
+  return (GUIDED_CAMPAIGN_CHANNELS as readonly string[]).includes(String(value))
+    ? (value as GuidedCampaignChannel)
+    : null;
+}
+
+function channelsOn(data: Record<string, unknown>): GuidedCampaignChannel[] {
+  const raw = data.channels ?? data.channel;
+  const list = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+  const seen = new Set<GuidedCampaignChannel>();
+  for (const item of list) {
+    const channel = asChannel(item);
+    if (channel) seen.add(channel);
+  }
+  return [...seen];
+}
+
+function accountFlag(data: Record<string, unknown>, keys: readonly string[]): boolean {
+  return keys.some((key) => data[key] === true);
+}
+
+/** Sender / account flags the board already stores for Growth / Canvas connect. */
+export function channelAccountsOnBoard(
+  campaign: Pick<MarketingBoardNode, 'data'>,
+  nodes: readonly MarketingBoardNode[],
+): ChannelAccounts {
+  const data = { ...campaign.data };
+  for (const node of nodes) {
+    Object.assign(data, node.data);
+  }
+  return {
+    email: accountFlag(data, CHANNEL_ACCOUNT_KEYS.email),
+    sms: accountFlag(data, CHANNEL_ACCOUNT_KEYS.sms),
+    social: accountFlag(data, CHANNEL_ACCOUNT_KEYS.social),
+    ads: accountFlag(data, CHANNEL_ACCOUNT_KEYS.ads),
+  };
+}
+
+function campaignCopyBody(data: Record<string, unknown>): string {
+  return [data.subject, data.bodyHtml, data.content, data.body, data.smsBody, data.primaryText]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join('\n');
+}
+
+function intakeFrom(data: Record<string, unknown>): GuidedCampaignIntake {
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
+  return {
+    business: text(data.business ?? data.businessName),
+    vertical: text(data.vertical),
+    icp: text(data.icp ?? data.icpId),
+    offer: text(data.offer ?? data.cta),
+    goal: text(data.goal ?? data.campaignGoal),
+    channels: channelsOn(data),
+  };
+}
+
+/**
+ * Compose the guided campaign run from the board. Persistence is the
+ * anonymous vs signed-in split (`local` never sends). Cloud agents pass
+ * `agentDraftOnly: true`.
+ */
+export function campaignJourney(
+  campaign: Pick<MarketingBoardNode, 'data'>,
+  nodes: readonly MarketingBoardNode[],
+  opts: {
+    persistence: 'local' | 'server';
+    humanConfirmed?: boolean;
+    agentDraftOnly?: boolean;
+    launched?: boolean;
+    workspaceRoi?: unknown;
+  },
+): GuidedCampaignRun {
+  const audience = audienceForCampaign(campaign, nodes);
+  const brand = brandForNode(campaign, nodes) ?? null;
+  const data = campaign.data;
+  const copyBody = campaignCopyBody(data);
+  return guidedCampaignRun({
+    brand,
+    audienceName: String(data.audienceName ?? audience?.data.title ?? '').trim() || null,
+    audienceConsent: (audience?.data.consentBasis as string | undefined) ?? null,
+    audienceId: data.audienceId ?? audience?.data.audienceId,
+    size: audience?.data.size,
+    suppressedCount: audience?.data.suppressedCount,
+    accounts: channelAccountsOnBoard(campaign, nodes),
+    intake: intakeFrom(data),
+    copySubject: typeof data.subject === 'string' ? data.subject : null,
+    copyBody,
+    persistence: opts.persistence,
+    humanConfirmed: opts.humanConfirmed,
+    agentDraftOnly: opts.agentDraftOnly,
+    launched: opts.launched === true || data.status === 'sent' || data.status === 'published',
+    spendCents: typeof data.spendCents === 'number' ? data.spendCents : undefined,
+    attributedRevenueCents: typeof data.attributedRevenueCents === 'number' ? data.attributedRevenueCents : undefined,
+    attributedPipelineCents: typeof data.attributedPipelineCents === 'number' ? data.attributedPipelineCents : undefined,
+    engagement: {
+      sent: typeof data.sent === 'number' ? data.sent : undefined,
+      opened: typeof data.opened === 'number' ? data.opened : undefined,
+      clicked: typeof data.clicked === 'number' ? data.clicked : undefined,
+    },
+    workspaceRoi: opts.workspaceRoi,
+  });
+}
