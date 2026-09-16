@@ -200,6 +200,38 @@ export function peerBrainRuns(live: LivePresenceMap, currentUserId: string | nul
 }
 
 /**
+ * Collectible ids every OTHER walker in `space` has picked up. Local play keeps
+ * its own set; this is the slice that folds into one tally on the HUD.
+ */
+export function peerPlayCollected(
+  live: LivePresenceMap,
+  selfId: string | null | undefined,
+  space: string,
+): string[] {
+  const ids = new Set<string>();
+  for (const [userId, entry] of Object.entries(live)) {
+    if (userId === selfId) continue;
+    if ((entry.spatial?.space ?? undefined) !== space) continue;
+    for (const id of entry.play?.collected ?? []) ids.add(id);
+  }
+  return [...ids].sort();
+}
+
+/** True when another walker in `space` has already reached the goal. */
+export function peerPlayWon(
+  live: LivePresenceMap,
+  selfId: string | null | undefined,
+  space: string,
+): boolean {
+  for (const [userId, entry] of Object.entries(live)) {
+    if (userId === selfId) continue;
+    if ((entry.spatial?.space ?? undefined) !== space) continue;
+    if (entry.play?.won) return true;
+  }
+  return false;
+}
+
+/**
  * The smallest interval between outbound pointer frames.
  *
  * 20 frames a second reads as continuous motion and leaves the server's 30/s

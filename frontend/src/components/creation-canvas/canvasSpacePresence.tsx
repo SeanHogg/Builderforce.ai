@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
-import { spatialPeers, type LivePresenceMap } from '@/lib/canvas/livePresence';
+import type { CanvasPresencePlay, CanvasPresenceState } from '@builderforce/creation-canvas-contract';
+import { peerPlayCollected, peerPlayWon, spatialPeers, type LivePresenceMap } from '@/lib/canvas/livePresence';
 import { ROOM_PALETTES, bodyColor } from '@/lib/canvas/roomSeating';
 import { useTheme } from '@/lib/useTheme';
 import { useBodyAnnouncer } from './room/useBodyAnnouncer';
@@ -52,6 +52,12 @@ export interface SpacePresence {
   selfAvatarUrl: string | null;
   /** The walker moved: announce it, throttled, in this space. */
   onMove: (position: [number, number, number], yaw: number) => void;
+  /** Local pickups / win, or null to retract when leaving play. */
+  announcePlay: (play: CanvasPresencePlay | null) => void;
+  /** Collectible ids every other walker in this space has picked up. */
+  peerCollected: readonly string[];
+  /** Another walker in this space already reached the goal. */
+  peerWon: boolean;
 }
 
 const noop = () => {};
@@ -85,10 +91,29 @@ export function useSpacePresence(space: string | undefined): SpacePresence | nul
     if (space) announce({ position, yaw, space });
   }, [announce, space]);
 
+  const announcePlay = useCallback((play: CanvasPresencePlay | null) => {
+    value?.send({ play });
+  }, [value]);
+
+  useEffect(() => {
+    if (!active || !value) return undefined;
+    return () => { value.send({ play: null }); };
+  }, [active, value]);
+
+  const peerCollected = useMemo(
+    () => (value && space ? peerPlayCollected(value.live, value.selfId, space) : []),
+    [space, value],
+  );
+
+  const peerWon = useMemo(
+    () => (value && space ? peerPlayWon(value.live, value.selfId, space) : false),
+    [space, value],
+  );
+
   const selfAvatarUrl = useMemo(
     () => value?.members.find((member) => member.userId === value.selfId)?.avatarUrl || null,
     [value],
   );
 
-  return active ? { peers, selfAvatarUrl, onMove } : null;
+  return active ? { peers, selfAvatarUrl, onMove, announcePlay, peerCollected, peerWon } : null;
 }

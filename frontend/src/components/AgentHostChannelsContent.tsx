@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { channelsApi, type AgentHostChannel, type ChannelPlatform } from '@/lib/builderforceApi';
+import { CHANNEL_PLATFORMS, type ChannelPlatform } from '@builderforce/creation-canvas-contract';
+import { channelsApi, type AgentHostChannel } from '@/lib/builderforceApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
@@ -55,9 +56,7 @@ const PLATFORM_LABELS: Record<ChannelPlatform, string> = {
   webhook: 'Webhook',
 };
 
-const ALL_PLATFORMS: ChannelPlatform[] = [
-  'slack', 'discord', 'telegram', 'whatsapp', 'teams', 'google_chat', 'signal', 'webhook',
-];
+const ALL_PLATFORMS: readonly ChannelPlatform[] = CHANNEL_PLATFORMS;
 
 export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsContentProps) {
   const errorMessage = useErrorMessage();

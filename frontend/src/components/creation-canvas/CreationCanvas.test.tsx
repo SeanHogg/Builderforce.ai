@@ -78,6 +78,35 @@ vi.mock('@xyflow/react', async () => {
 });
 
 /**
+ * jsdom has no WebGL, so the real room falls through to a Three.js diorama that
+ * never settles. The 3D hand-off tests still need the session to mount, so this
+ * stub keeps `renderSession` — the real `Canvas3DView` — and skips the room.
+ */
+vi.mock('./CanvasRoomSurface', async () => {
+  const React = await import('react');
+  return {
+    CanvasRoomSurface: ({
+      renderSession,
+    }: {
+      renderSession: (props: { onMinimize: () => void; exitLabel: string }) => React.ReactNode;
+    }) => {
+      const [open, setOpen] = React.useState(false);
+      return React.createElement(
+        'div',
+        { 'data-testid': 'canvas-room-surface', 'data-session': open ? 'open' : 'placed' },
+        open
+          ? React.createElement(
+              'div',
+              { 'data-testid': 'room-session-frame' },
+              renderSession({ onMinimize: () => setOpen(false), exitLabel: 'Back to the room' }),
+            )
+          : React.createElement('button', { type: 'button', onClick: () => setOpen(true) }, 'Open the session'),
+      );
+    },
+  };
+});
+
+/**
  * THIS FILE IS PRICED ABOVE THE PROJECT CEILING, AND SAYS SO.
  *
  * A 15s cap used to live here as a mitigation for the render loop in the next-intl

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { canvasPresenceFrame, CANVAS_PRESENCE_FRAME } from '@builderforce/creation-canvas-contract';
 import {
   applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence,
-  peerBrainRuns, retireSocket, spatialPeers, BRAIN_RUN_HEARTBEAT_MS, LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
+  peerBrainRuns, peerPlayCollected, peerPlayWon, retireSocket, spatialPeers, BRAIN_RUN_HEARTBEAT_MS, LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
 } from './livePresence';
 
 const frame = (over: Record<string, unknown> = {}) => ({ type: CANVAS_PRESENCE_FRAME, ...over } as never);
@@ -200,6 +200,54 @@ describe('brain-run presence (a collaborator is waiting on Brain)', () => {
 
   it('heartbeats well inside the TTL, so a still requester is not expired mid-run', () => {
     expect(BRAIN_RUN_HEARTBEAT_MS * 2).toBeLessThan(LIVE_PRESENCE_TTL_MS);
+  });
+});
+
+/**
+ * A walker's score in a played level. Local arithmetic stays in `useWorldPlay`;
+ * this frame is only the slice two people walking the same object have to share.
+ */
+describe('play presence (a collaborator is walking the same level)', () => {
+  const spaceBody = { position: [1, 0, 2] as [number, number, number], yaw: 0.5, space: 'level-1' };
+
+  it('keeps collected ids and a win, and drops everything else', () => {
+    expect(canvasPresenceFrame({ play: { collected: ['coin-1', 'coin-1', '<script>'], won: true, extra: 1 } }))
+      .toEqual({ play: { collected: ['coin-1'], won: true } });
+    expect(canvasPresenceFrame({ play: { collected: ['coin-1'], won: false } }))
+      .toEqual({ play: { collected: ['coin-1'] } });
+  });
+
+  it('preserves a leave as null, and reads a malformed score as left', () => {
+    expect(canvasPresenceFrame({ play: null })).toEqual({ play: null });
+    expect(canvasPresenceFrame({ play: { collected: 'nope' } })).toEqual({ play: null });
+    expect(canvasPresenceFrame({ play: { collected: [] } })).toEqual({ play: { collected: [] } });
+  });
+
+  it('unions collected ids in the named space, never the reader own pickups', () => {
+    let live: LivePresenceMap = {};
+    live = applyPresenceFrame(live, frame({ userId: 'u1', spatial: spaceBody, play: { collected: ['a', 'b'] } }), 0);
+    live = applyPresenceFrame(live, frame({ userId: 'u2', spatial: spaceBody, play: { collected: ['b', 'c'] } }), 0);
+    live = applyPresenceFrame(live, frame({ userId: 'me', spatial: spaceBody, play: { collected: ['mine'] } }), 0);
+    live = applyPresenceFrame(live, frame({
+      userId: 'u3',
+      spatial: { ...spaceBody, space: 'other' },
+      play: { collected: ['other'] },
+    }), 0);
+    expect(peerPlayCollected(live, 'me', 'level-1')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('reports a win if anyone in the space reached the goal', () => {
+    const live = applyPresenceFrame({}, frame({ userId: 'u1', spatial: spaceBody, play: { collected: ['a'], won: true } }), 0);
+    expect(peerPlayWon(live, 'me', 'level-1')).toBe(true);
+    expect(peerPlayWon(live, 'me', 'other')).toBe(false);
+  });
+
+  it('survives a cursor frame and ends on the leave frame', () => {
+    const scoring = applyPresenceFrame({}, frame({ userId: 'u1', spatial: spaceBody, play: { collected: ['a'] } }), 0);
+    const moved = applyPresenceFrame(scoring, frame({ userId: 'u1', cursor: { x: 4, y: 4 } }), 50);
+    expect(peerPlayCollected(moved, 'me', 'level-1')).toEqual(['a']);
+    const left = applyPresenceFrame(moved, frame({ userId: 'u1', play: null }), 100);
+    expect(peerPlayCollected(left, 'me', 'level-1')).toEqual([]);
   });
 });
 

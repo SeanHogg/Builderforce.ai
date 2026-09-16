@@ -124,4 +124,13 @@ describe('playing a level', () => {
     expect(result.current.state.collected).toEqual([]);
     expect(result.current.scene.props).toHaveLength(3);
   });
+
+  it('hides a coin a collaborator already picked up, and counts it toward the goal', () => {
+    const { scene, coin, goal } = level();
+    const { result } = renderHook(() => useWorldPlay(scene, true, [coin.id]));
+    expect(result.current.scene.props.some((prop) => prop.id === coin.id)).toBe(false);
+    expect(result.current.state.collected).toEqual([]);
+    act(() => result.current.onPlayerEnter(goal));
+    expect(result.current.state.won).toBe(true);
+  });
 });

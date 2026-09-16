@@ -118,4 +118,8 @@ export * from './creativeCapabilities';
 // one declaration for the API's directory, the founder's onboarding and the
 // browser-side calculator, so a stage picked in one IS the stage filtered by
 // in the other.
+// WHERE AN AGENT HOST SPEAKS — the platforms a channel can be pointed at.
+// Shared because the Worker route, the typed client and the panel must offer
+// the same set; see channelPlatforms.ts.
+export * from './channelPlatforms';
 export * from './startupListing';

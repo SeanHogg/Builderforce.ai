@@ -72,6 +72,18 @@ export interface CanvasPresenceBrainRun {
   startedAt: number;
 }
 
+/**
+ * A walker's score in a played level — collectibles they picked up, and whether
+ * they reached the goal. Local arithmetic stays in `useWorldPlay`; this is only
+ * the slice that has to cross the relay so two people walking the same object
+ * share one tally rather than two private ones. Ids are prop ids, the same
+ * characters an object id is made of, so the relay cannot carry arbitrary text.
+ */
+export interface CanvasPresencePlay {
+  collected: string[];
+  won?: boolean;
+}
+
 /** What one peer is doing right now. Every field is optional and short-lived. */
 export interface CanvasPresenceState {
   /** Pointer position, or null when the pointer left the board. */
@@ -84,6 +96,8 @@ export interface CanvasPresenceState {
   spatial?: CanvasPresenceSpatial | null;
   /** A Brain turn in flight, or null when it settled. */
   brainRun?: CanvasPresenceBrainRun | null;
+  /** Score in a walked level, or null when they left play. */
+  play?: CanvasPresencePlay | null;
 }
 
 /**
@@ -156,6 +170,26 @@ function brainRun(value: unknown): CanvasPresenceBrainRun | null {
   return startedAt !== null && startedAt > 0 ? { startedAt } : null;
 }
 
+/** A space is an object id: short, and only the characters an id is made of. */
+const PLAY_ID = /^[A-Za-z0-9_:.-]{1,80}$/;
+/** A level is not a thousand coins; anything past this is noise or an attack. */
+const PLAY_COLLECTED_LIMIT = 64;
+
+function play(value: unknown): CanvasPresencePlay | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  if (!Array.isArray(raw.collected)) return null;
+  const collected: string[] = [];
+  const seen = new Set<string>();
+  for (const id of raw.collected) {
+    if (typeof id !== 'string' || !PLAY_ID.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    collected.push(id);
+    if (collected.length >= PLAY_COLLECTED_LIMIT) break;
+  }
+  return { collected, ...(raw.won === true ? { won: true } : {}) };
+}
+
 /**
  * Narrow anything a client sent to the presence state this relay carries, or null
  * when there is nothing worth relaying.
@@ -192,6 +226,10 @@ export function canvasPresenceFrame(input: unknown): CanvasPresenceState | null 
   // Same rule again: a settled run is announced as `null`, and an unparseable one
   // reads as settled, so nobody is left watching a Brain that stopped long ago.
   if ('brainRun' in raw) state.brainRun = brainRun(raw.brainRun);
+
+  // Leaving play is `null`, same as leaving a surface. An unparseable score
+  // retracts a stale tally instead of freezing it on everyone else's HUD.
+  if ('play' in raw) state.play = play(raw.play);
 
   return Object.keys(state).length ? state : null;
 }

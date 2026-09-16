@@ -25,6 +25,7 @@
  */
 
 import { and, asc, eq } from 'drizzle-orm';
+import { CHANNEL_PLATFORMS, isChannelPlatform, type ChannelPlatform } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { agentHostChannels } from '../../infrastructure/database/schema';
@@ -35,26 +36,11 @@ import { credentialSecret, encryptCredentials } from '../integrations/credential
 /**
  * Every platform a host can be pointed at.
  *
- * Declared once, here, because three things have to agree about it: what the
- * panel offers, what the route accepts, and what the host knows how to run. A
- * fourth copy is how a user configures a channel that silently never connects.
+ * Declared once, in `@builderforce/creation-canvas-contract`, because the
+ * panel, this route and the host have to agree. Re-exported so callers of
+ * this module keep importing from the application that owns the table.
  */
-export const CHANNEL_PLATFORMS = [
-  'slack',
-  'discord',
-  'telegram',
-  'whatsapp',
-  'teams',
-  'google_chat',
-  'signal',
-  'webhook',
-] as const;
-
-export type ChannelPlatform = (typeof CHANNEL_PLATFORMS)[number];
-
-export function isChannelPlatform(value: unknown): value is ChannelPlatform {
-  return typeof value === 'string' && (CHANNEL_PLATFORMS as readonly string[]).includes(value);
-}
+export { CHANNEL_PLATFORMS, isChannelPlatform, type ChannelPlatform };
 
 /** What a caller may see. Note what is absent: the config, and its ciphertext. */
 export interface AgentHostChannelView {

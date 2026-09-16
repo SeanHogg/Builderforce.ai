@@ -33,7 +33,8 @@ import { WalkerTouchControls } from './WalkerTouchControls';
  * Pass `spaceId` (the object being walked) and the walker is announced in that
  * space and everyone else walking it is drawn — through `useSpacePresence`, which
  * reads the canvas's own presence channel. Two people playing one level see each
- * other; a level played in the room and the same level on its own surface are the
+ * other AND share one tally (collectibles fold through the same presence frames);
+ * a level played in the room and the same level on its own surface are the
  * same space, because they are the same object.
  *
  * ── WHY FULL SCREEN IS NOT HERE ───────────────────────────────────────────
@@ -80,8 +81,10 @@ export function WorldViewport({
   const viewportRef = useRef<HTMLDivElement>(null);
   const walking = mode === 'walk';
 
-  const play = useWorldPlay(scene, walking);
   const presence = useSpacePresence(walking ? spaceId : undefined);
+  const play = useWorldPlay(scene, walking, presence?.peerCollected);
+  const announcePlayRef = useRef(presence?.announcePlay);
+  announcePlayRef.current = presence?.announcePlay;
   // A finger turns the head — the mouse is pointer-locked here, so only touch.
   useDragLook(viewportRef, { buttons: 'touch', enabled: walking });
 
@@ -102,7 +105,20 @@ export function WorldViewport({
     play.restart();
   };
 
+  useEffect(() => {
+    if (!walking) {
+      announcePlayRef.current?.(null);
+      return;
+    }
+    announcePlayRef.current?.({
+      collected: [...play.state.collected],
+      ...(play.state.won ? { won: true } : {}),
+    });
+  }, [walking, play.state.collected, play.state.won]);
+
   const { state } = play;
+  const collectedCount = new Set([...state.collected, ...(presence?.peerCollected ?? [])]).size;
+  const won = state.won || !!presence?.peerWon;
   const scoreboard = walking && state.playable;
 
   return (
@@ -149,9 +165,9 @@ export function WorldViewport({
           in first-person the player is looking at where it was, not at a number
           in the corner. */}
       {scoreboard && <div className={styles.worldScore} role="status" aria-live="polite">
-        {state.total > 0 && <span>{t('play.score', { collected: state.collected.length, total: state.total })}</span>}
+        {state.total > 0 && <span>{t('play.score', { collected: collectedCount, total: state.total })}</span>}
         {state.hits > 0 && <span>{t('play.hits', { count: state.hits })}</span>}
-        {state.won && <strong>{t('play.won')}</strong>}
+        {won && <strong>{t('play.won')}</strong>}
       </div>}
     </div>
   );

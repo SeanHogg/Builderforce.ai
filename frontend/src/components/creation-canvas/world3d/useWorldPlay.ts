@@ -52,6 +52,7 @@ export interface WorldPlay {
 }
 
 const EMPTY: WorldPlayState = { collected: [], total: 0, hits: 0, won: false, playable: false };
+const NONE: readonly string[] = [];
 
 /**
  * How long a hazard stays spent after it bites, in milliseconds.
@@ -75,7 +76,14 @@ function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-export function useWorldPlay(scene: CanvasWorldScene, active: boolean): WorldPlay {
+/**
+ * `sharedCollected` is what everyone ELSE walking this space has already
+ * picked up. Local `collected` stays what THIS walker touched, so announcing
+ * it on the presence channel cannot echo a peer's coins as our own. The scene
+ * and the goal fold both together: a coin either of us took is gone, and
+ * reaching the goal with the union collected is a win.
+ */
+export function useWorldPlay(scene: CanvasWorldScene, active: boolean, sharedCollected: readonly string[] = NONE): WorldPlay {
   const total = useMemo(() => scene.props.filter((prop) => prop.kind === 'collectible').length, [scene.props]);
   const hasGoal = useMemo(() => scene.props.some((prop) => prop.kind === 'goal'), [scene.props]);
 
@@ -109,10 +117,12 @@ export function useWorldPlay(scene: CanvasWorldScene, active: boolean): WorldPla
   // re-armed on the very bump it existed to suppress and only ever deduped within one
   // render generation. One stable callback plus a wall-clock cooldown breaks both halves.
   const collectedRef = useRef<Set<string>>(new Set());
+  const sharedRef = useRef(sharedCollected);
   const hazardAtRef = useRef(Number.NEGATIVE_INFINITY);
   const activeRef = useRef(active);
   const totalRef = useRef(total);
   useEffect(() => { collectedRef.current = new Set(collected); }, [collected]);
+  useEffect(() => { sharedRef.current = sharedCollected; }, [sharedCollected]);
   useEffect(() => { activeRef.current = active; }, [active]);
   useEffect(() => { totalRef.current = total; }, [total]);
 
@@ -145,14 +155,25 @@ export function useWorldPlay(scene: CanvasWorldScene, active: boolean): WorldPla
       setRespawnNonce((value) => value + 1);
       return;
     }
-    if (prop.kind === 'goal' && collectedRef.current.size >= totalRef.current) setWon(true);
+    if (prop.kind === 'goal') {
+      const union = new Set(collectedRef.current);
+      for (const id of sharedRef.current) union.add(id);
+      if (union.size >= totalRef.current) setWon(true);
+    }
   }, []);
 
+  const gone = useMemo(() => {
+    if (!active) return null;
+    const ids = new Set(collected);
+    for (const id of sharedCollected) ids.add(id);
+    return ids.size === 0 ? null : ids;
+  }, [active, collected, sharedCollected]);
+
   const playScene = useMemo<CanvasWorldScene>(
-    () => (!active || collected.length === 0
+    () => (!gone
       ? scene
-      : { ...scene, props: scene.props.filter((prop) => !collected.includes(prop.id)) }),
-    [active, scene, collected],
+      : { ...scene, props: scene.props.filter((prop) => !gone.has(prop.id)) }),
+    [scene, gone],
   );
 
   return {

@@ -29,11 +29,12 @@ import { PeerRelay, type RelayPeer } from './peerRelay';
  *     `relayToRoom` after `requireSession`, and the client's own copy of the header
  *     is stripped. A socket cannot move somebody else's cursor.
  *  2. **One frame type, one shape.** Only `canvas.presence` relays, and what goes
- *     out is `canvasPresenceFrame`'s OUTPUT — cursor, viewport, typing and the
- *     spatial body a room surface draws — not the client's input. A pointer and
- *     a walker are one question ("where is this person"), so they share one
- *     channel rather than each growing an allow-list entry that could disagree
- *     about whether somebody is still connected. A field that is not in the
+ *     out is `canvasPresenceFrame`'s OUTPUT — cursor, viewport, typing, the
+ *     spatial body a room surface draws, a brain-run heartbeat, and the play
+ *     score two walkers share on one level — not the client's input. A pointer and a walker are one
+ *     question ("where is this person"), so they share one channel rather than
+ *     each growing an allow-list entry that could disagree about whether
+ *     somebody is still connected. A field that is not in the
  *     contract cannot cross, so the
  *     "nothing here could leak across segments" property is enforced by shape
  *     rather than by trust.
