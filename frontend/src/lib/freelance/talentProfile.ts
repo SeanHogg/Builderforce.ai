@@ -88,6 +88,27 @@ export interface FreelancerProfile {
   bookable?: boolean;
 }
 
+/**
+ * Is this listing's session unpaid — the ONE definition of pro-bono (#2584).
+ *
+ * Strict `=== 0` against the JSON number, and deliberately nothing else. Every
+ * other input is a hide:
+ *
+ *   `null` / `undefined` / absent  — unknown, not free
+ *   any positive or negative int   — priced (a negative is a stale row; still hide)
+ *   `NaN`, `""`, `"0"`, `"free"`   — not the number 0
+ *
+ * The asymmetry is the point: showing "Pro bono" on an advisor who charges is a
+ * broken promise a seeker acts on, whereas omitting it on a genuine volunteer is
+ * merely a missed signal. So the predicate fails CLOSED — no coercion, no `??`,
+ * no `Number(...)`, no truthiness. A single exported function rather than an
+ * inline check at each call site, so all card surfaces provably agree and this
+ * rule can be tested once.
+ */
+export function isProBonoSession(sessionPriceCents: number | null | undefined): boolean {
+  return sessionPriceCents === 0;
+}
+
 /** Reputation numbers shown on a for-hire profile (server-computed + cached). */
 export interface FreelancerStats {
   /** AI/agent-driven activity signals in the trailing 90 days. */
