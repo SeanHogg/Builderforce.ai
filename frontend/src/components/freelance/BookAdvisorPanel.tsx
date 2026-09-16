@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { faultMessage } from '@/lib/apiClient';
+import { useFormat } from '@/i18n/useFormat';
 import { reserveTalentSession, type TalentBookingService } from '@/lib/freelance/booking';
 
 function defaultLocal(): string {
