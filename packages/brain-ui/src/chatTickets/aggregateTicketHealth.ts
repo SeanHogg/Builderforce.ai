@@ -24,8 +24,17 @@
  * of them empty. Deleted tickets (`total: 0`, `progressPct: 0`) have the same
  * shape. Counting them as one item keeps the header honest against the rings.
  *
+ * Cancelled is a terminal lane (`TASK_TERMINAL_SET`) but not done-class, so a
+ * cancelled task reports `progressPct: 0`. Averaging that 0% in made
+ * "3 done + 1 cancelled" read as 75%. Skip cancelled tickets — they are off
+ * the board, not remaining work. US `canceled` is accepted so a synced tracker
+ * cannot sneak back into the ring. An all-cancelled list is 100% (nothing left
+ * owed); an empty list stays 0%.
+ *
  * `done`/`total` are still returned so the caller can show the item counter
- * alongside — "4 of 6 complete" is separately true, and useful.
+ * alongside — "4 of 6 complete" is separately true, and useful. Keep in lockstep
+ * with `rollupChatTicketHealth` in `api/src/application/brain/ChatTicketService.ts`
+ * — that copy drives `ticketProgressPct` on the chat picker / Sessions tree.
  */
 export interface TicketHealthInput {
   /** Authoritative progress for this ticket, 0–100. */
@@ -34,6 +43,8 @@ export interface TicketHealthInput {
   done: number;
   /** Total sub-items (a leaf task is 1). */
   total: number;
+  /** Lane key. Cancelled work is skipped — it is off the board, not remaining. */
+  status?: string | null;
 }
 
 export interface AggregateTicketHealth {
@@ -45,12 +56,20 @@ export interface AggregateTicketHealth {
   total: number;
 }
 
+/** True when this lane must not sit in the chat-health denominator. */
+export function isExcludedFromChatHealth(status?: string | null): boolean {
+  const s = (status ?? '').trim().toLowerCase();
+  return s === 'cancelled' || s === 'canceled';
+}
+
 export function aggregateTicketHealth(tickets: readonly TicketHealthInput[]): AggregateTicketHealth {
   let done = 0;
   let total = 0;
   let weightedPct = 0;
+  let counted = 0;
 
   for (const tk of tickets) {
+    if (isExcludedFromChatHealth(tk.status)) continue;
     const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
     // Weight 1 when the server omitted a denominator (legacy spec/roadmap/retro
     // `total: 0`, deleted items) so a 0% ring still pulls the headline down.
@@ -58,9 +77,10 @@ export function aggregateTicketHealth(tickets: readonly TicketHealthInput[]): Ag
     done += Number.isFinite(tk.done) ? tk.done : 0;
     total += weight;
     weightedPct += pct * weight;
+    counted++;
   }
 
-  const pct = tickets.length ? Math.round(weightedPct / total) : 0;
+  if (counted === 0) return { pct: tickets.length ? 100 : 0, done: 0, total: 0 };
 
-  return { pct, done, total };
+  return { pct: Math.round(weightedPct / total), done, total };
 }

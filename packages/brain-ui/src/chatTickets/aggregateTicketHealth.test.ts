@@ -73,4 +73,28 @@ describe('aggregateTicketHealth', () => {
     expect(result.done).toBe(0);
     expect(result.total).toBe(0);
   });
+
+  it('excludes cancelled so 3 done + 1 cancelled is 100% (VSIX header bug)', () => {
+    // Screenshot: 3×100% done + 1×0% cancelled → header read 75% · 3/4.
+    const result = aggregateTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'done' },
+      { progressPct: 100, done: 1, total: 1, status: 'done' },
+      { progressPct: 100, done: 1, total: 1, status: 'done' },
+      { progressPct: 0, done: 0, total: 1, status: 'cancelled' },
+    ]);
+    expect(result).toEqual({ pct: 100, done: 3, total: 3 });
+  });
+
+  it('treats an all-cancelled list as 100% (nothing left owed)', () => {
+    expect(aggregateTicketHealth([
+      { progressPct: 0, done: 0, total: 1, status: 'cancelled' },
+    ])).toEqual({ pct: 100, done: 0, total: 0 });
+  });
+
+  it('accepts US spelling canceled', () => {
+    expect(aggregateTicketHealth([
+      { progressPct: 50, done: 0, total: 1, status: 'in_progress' },
+      { progressPct: 0, done: 0, total: 1, status: 'canceled' },
+    ])).toEqual({ pct: 50, done: 0, total: 1 });
+  });
 });

@@ -2402,19 +2402,26 @@ function resolveRunGate(adapter) {
 }
 
 // src/chatTickets/aggregateTicketHealth.ts
+function isExcludedFromChatHealth(status) {
+  const s = (status ?? "").trim().toLowerCase();
+  return s === "cancelled" || s === "canceled";
+}
 function aggregateTicketHealth(tickets) {
   let done = 0;
   let total = 0;
   let weightedPct = 0;
+  let counted = 0;
   for (const tk of tickets) {
-    const pct2 = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
+    if (isExcludedFromChatHealth(tk.status)) continue;
+    const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
     done += Number.isFinite(tk.done) ? tk.done : 0;
     total += weight;
-    weightedPct += pct2 * weight;
+    weightedPct += pct * weight;
+    counted++;
   }
-  const pct = tickets.length ? Math.round(weightedPct / total) : 0;
-  return { pct, done, total };
+  if (counted === 0) return { pct: tickets.length ? 100 : 0, done: 0, total: 0 };
+  return { pct: Math.round(weightedPct / total), done, total };
 }
 
 // src/chatTickets/chatSwitcherLabel.ts

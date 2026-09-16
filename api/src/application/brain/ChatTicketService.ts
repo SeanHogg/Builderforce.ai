@@ -1145,20 +1145,27 @@ function missing(kind: TicketKind, ref: string): TicketHealth {
  * Chat-level rollup of linked ticket health. Mirrors
  * `packages/brain-ui/src/chatTickets/aggregateTicketHealth.ts` — keep them in
  * lockstep: a ticket with `total: 0` still counts as weight 1 so a 0% ring
- * cannot vanish from the conversation's overall %.
+ * cannot vanish from the conversation's overall %. Cancelled tickets are
+ * skipped (terminal but not done-class — averaging their 0% made
+ * "3 done + 1 cancelled" read as 75%). All-cancelled → 100%; empty → 0%.
  */
 export function rollupChatTicketHealth(
-  tickets: ReadonlyArray<{ progressPct: number; done: number; total: number }>,
+  tickets: ReadonlyArray<{ progressPct: number; done: number; total: number; status?: string | null }>,
 ): { pct: number; done: number; total: number } {
   let done = 0;
   let total = 0;
   let weightedPct = 0;
+  let counted = 0;
   for (const tk of tickets) {
+    const lane = (tk.status ?? '').trim().toLowerCase();
+    if (lane === 'cancelled' || lane === 'canceled') continue;
     const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
     done += Number.isFinite(tk.done) ? tk.done : 0;
     total += weight;
     weightedPct += pct * weight;
+    counted++;
   }
-  return { pct: tickets.length ? Math.round(weightedPct / total) : 0, done, total };
+  if (counted === 0) return { pct: tickets.length ? 100 : 0, done: 0, total: 0 };
+  return { pct: Math.round(weightedPct / total), done, total };
 }
