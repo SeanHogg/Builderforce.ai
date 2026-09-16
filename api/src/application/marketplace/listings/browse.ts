@@ -75,6 +75,13 @@ export async function browseCreationListings(
     if (q) {
       where.push(sql`(${catalogItems.name} ILIKE ${`%${q}%`} OR ${catalogItems.summary} ILIKE ${`%${q}%`})`);
     }
+    // Seller scoping NARROWS the public predicate — it is pushed alongside
+    // `visibility = 'public'`, never in place of it, so asking for a seller's ref
+    // can only ever return the subset of the feed that was already visible. An
+    // unknown ref is not an error: it matches nothing and answers an empty page,
+    // which is the same thing the shop window says about a seller with no listings
+    // and avoids turning this endpoint into a probe for which user ids exist.
+    if (sellerRef) where.push(eq(catalogItems.publisherRef, sellerRef));
     // The shop window. Cross-tenant by definition — `visibility = 'public'` is the
     // access predicate, not the shopper's own workspace. The call is inlined at
     // both statements rather than hoisted into a local: `where` already carries
