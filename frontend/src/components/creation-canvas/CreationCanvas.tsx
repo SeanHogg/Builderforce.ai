@@ -51,6 +51,7 @@ import {
 } from '@/lib/canvasConnectionStyle';
 import { CanvasSurfaceRouter, type CanvasSurfaceNodes } from './CanvasSurfaceRouter';
 import { CanvasFacilitateSurface } from './CanvasFacilitateSurface';
+import { CanvasFormSurface } from './CanvasFormSurface';
 import { publishPoll, setPollState } from '@/lib/pollApi';
 import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import { CanvasCalendarSurface } from './CanvasCalendarSurface';
@@ -1276,8 +1277,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const closeActionsSheet = useCallback(() => setActionsOpen(false), []);
   /** The two phone decisions CSS cannot make: which host renders the board menu and the
    *  invite sheet (rendering, not hiding — see `usePhoneViewport`), and which verb the
-   *  composer arms while the Brain sheet is open. */
-  const phoneViewport = usePhoneViewport();
+   *  composer arms while the Brain sheet is open.
+   *
+   *  A third gate sits on top of the media query: an embedding host (`hostSurfaces`) is
+   *  a docked editor panel, routinely narrower than 767px, and must keep the desktop
+   *  chrome. The CSS half of the same question is `.canvasShell:not([data-host='editor'])`
+   *  around the 767px block — a 500px VS Code webview must not grow a phone app bar. */
+  const phoneViewport = usePhoneViewport() && !hostSurfaces;
   /** Whether the Make it real menu is open. Its own state and not `moreOpen`'s: the two
    *  sheets sit at opposite ends of the bar and each closes the other, which a shared
    *  flag could not express. */
@@ -2050,6 +2056,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   useEffect(() => { setBrainDock(readBrainDockPreferences()); }, []);
+  // BRAIN NEVER AUTO-COVERS A PHONE. The stored (and default) preference is a docked
+  // rail standing open, which is the desktop. At phone width that same preference is a
+  // sheet over the board, so the first paint that learns it is a phone closes it without
+  // writing — a reload must not cover the surface, and a desktop that last left Brain
+  // open must not find it shut when they come back. The launcher is how it opens.
+  useEffect(() => {
+    if (!phoneViewport) return;
+    setBrainDock((current) => (current.open ? { ...current, open: false } : current));
+  }, [phoneViewport]);
   /**
    * The surface the visitor last chose to work on, restored after hydration rather than
    * in the initial state — `localStorage` does not exist on the server, and a first
@@ -12475,6 +12490,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
       data-fullscreen={fullscreen ? 'true' : 'false'}
+      data-host={hostSurfaces ? 'editor' : undefined}
       style={{
         // The dock owns one edge of the board; every other floating panel is pushed in
         // by exactly its width so nothing can ever sit underneath it.
@@ -13045,6 +13061,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // a ~340px card can be. `objectId` goes down so the published question set
             // points back at the card it came from.
             facilitate: surfaceNode ? <CanvasFacilitateSurface
+              data={surfaceNode.data}
+              objectId={surfaceNode.id}
+              onExit={exitSurface}
+              {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
+            /> : null,
+            // THE FORM. Twin of facilitate: the card is the draft, this is the room
+            // the form is RUN from. Publish/collect/close go through CardActs so Brain
+            // and a person cannot disagree about what the card's `questions` mean.
+            form: surfaceNode ? <CanvasFormSurface
               data={surfaceNode.data}
               objectId={surfaceNode.id}
               onExit={exitSurface}

@@ -3301,7 +3301,11 @@
   .composerDock { right:calc(260px + var(--brain-dock-right, 0px)); left:calc(260px + var(--brain-dock-left, 0px)); max-width:520px; }
 }
 @media (max-width:767px) {
-  .canvasShell { flex:1; height:100%; min-height:0; }
+  /* Phone layout is a WEB canvas. An embedding host (VS Code) sets
+     `data-host="editor"` from the first paint — it is a prop, not a media query —
+     so a 500px editor panel keeps desktop chrome. Nested rules below are descendants
+     of that shell, not a second `.canvasShell` selector. */
+  .canvasShell:not([data-host='editor']) { flex:1; height:100%; min-height:0;
   .saved,.secondaryButton { display:none; }
   /* THE CANVAS APP BAR AND THE SURFACE STRIP, the phone's own chrome. Absolute at the
      top of the shell, opaque, and MEASURED — `--canvas-top-chrome-space` is taken off
@@ -3421,7 +3425,7 @@
   .mergePanel { inset:var(--canvas-top-chrome-space) 8px calc(var(--composer-space) + 8px); width:auto; box-sizing:border-box; }
   /* The phone session bar is 50px, not 54 — keep the board's height in step with
      it while the canvas owns the viewport. */
-  .canvasShell[data-fullscreen='true'] .flowWrap { height:calc(100% - 50px); }
+  &[data-fullscreen='true'] .flowWrap { height:calc(100% - 50px); }
   /* On a phone the panel is the width of the screen and sits under the top chrome; a
      560px wide reading has nowhere to go, so both readings share the same box and only
      the CONTENT changes between them. */
@@ -3545,6 +3549,11 @@
   .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
   .selectionToolbar { right:8px; left:8px; max-width:none; transform:none; overflow-x:auto; justify-content:flex-start; }
   .collaborators span:nth-child(2),.collaborators span:nth-child(3) { display:none; }
+  }
+  /* Capture actions in a narrow editor still scroll rather than pushing the title. */
+  .canvasShell[data-host='editor'] .hostActions { max-width:34vw; overflow-x:auto; scrollbar-width:none; }
+  .canvasShell[data-host='editor'] .hostActions::-webkit-scrollbar { display:none; }
+  .canvasShell[data-host='editor'] .hostActions .secondaryButton { display:grid; min-width:36px; }
 }
 .resizeLine { border-color:var(--canvas-accent) !important; }
 .resizeHandle { width:9px !important; height:9px !important; border-radius:var(--radius-sm) !important; border:2px solid white !important; background:var(--canvas-accent) !important; }

@@ -25,7 +25,7 @@ export const IDEA_KIND = 'idea';
 
 /** The kinds whose objects count as evidence for an idea, in the order a founder
  *  usually gathers them: talk to someone, then run something. */
-export const IDEA_EVIDENCE_KINDS = ['customerInterview', 'experiment'] as const;
+export const IDEA_EVIDENCE_KINDS = ['customerInterview', 'experiment', 'form'] as const;
 
 /** Stages in which an idea is still being worked on — the ones "untested" is about. An
  *  exit stage with no evidence is a decision someone already made, not a gap. */

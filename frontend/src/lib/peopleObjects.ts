@@ -441,7 +441,7 @@ export const PEOPLE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     icon: '▣',
     group: 'Collaborate',
     defaultStatus: 'draft',
-    actions: ['publish', 'collect'],
+    actions: ['publish', 'collect', 'close'],
     fields: [
       { name: 'purpose', render: 'text', label: 'purpose', hint: 'What this form is for, in the words the RESPONDENT will read. It is shown to them above the questions, and a form that does not say why it is asking gets answered badly or not at all.' },
       { name: 'audience', render: 'stat', label: 'audience', hint: 'anyoneWithLink | workspace | namedRecipients. Who may submit. `workspace` requires the responder to be signed in to this workspace; `namedRecipients` additionally requires them to be on `recipients`.' },

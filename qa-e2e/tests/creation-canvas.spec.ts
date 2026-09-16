@@ -60,3 +60,69 @@ test('the QA objects are in the object picker and land on the board', async ({ p
   await page.getByTestId('canvas-picker-testPlan').click();
   await expect(page.getByTestId('canvas-node-testPlan')).toBeVisible();
 });
+
+/**
+ * Phone chrome vs desktop chrome, in both themes.
+ *
+ * The homepage flow is the one that does not need a signed-in session. Theme is
+ * `html[data-theme]` + `bf-theme` in localStorage — NOT prefers-color-scheme
+ * (passing `colorScheme` alone would test dark twice).
+ */
+async function openLocalCanvas(page: import('@playwright/test').Page, prompt = 'Build a new website') {
+  await page.goto('/');
+  await page.getByRole('textbox', { name: /ai workforce|create|describe/i }).fill(prompt);
+  await page.getByRole('button', { name: /get started/i }).click();
+  await expect(page).toHaveURL(/\/create\/local-[a-f0-9-]+$/);
+  await expect(page.getByTestId('canvas-composer')).toBeVisible();
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`phone 390×844 ${theme}: app bar, no command bar`, async ({ browser, baseURL }) => {
+    const context = await browser.newContext({
+      baseURL,
+      viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    await page.addInitScript((mode) => {
+      localStorage.setItem('bf-theme', mode);
+      document.documentElement.dataset.theme = mode;
+    }, theme);
+    await openLocalCanvas(page);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await expect(page.getByTestId('canvas-app-bar')).toBeVisible();
+    await expect(page.getByTestId('canvas-surface-strip')).toBeVisible();
+    await expect(page.getByTestId('canvas-command-bar')).toHaveCount(0);
+    await expect(page.getByTestId('canvas-composer')).toBeVisible();
+    await context.close();
+  });
+
+  test(`desktop 1440 ${theme}: command bar, no app bar`, async ({ browser, baseURL }) => {
+    const context = await browser.newContext({
+      baseURL,
+      viewport: { width: 1440, height: 1000 },
+    });
+    const page = await context.newPage();
+    await page.addInitScript((mode) => {
+      localStorage.setItem('bf-theme', mode);
+      document.documentElement.dataset.theme = mode;
+    }, theme);
+    await openLocalCanvas(page);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await expect(page.getByTestId('canvas-command-bar')).toBeVisible();
+    await expect(page.getByTestId('canvas-app-bar')).toHaveCount(0);
+    await expect(page.getByTestId('canvas-composer')).toBeVisible();
+    await context.close();
+  });
+}
+
+test('phone 360 still draws the app bar', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: { width: 360, height: 800 },
+  });
+  const page = await context.newPage();
+  await openLocalCanvas(page, 'Floor-width canvas');
+  await expect(page.getByTestId('canvas-app-bar')).toBeVisible();
+  await expect(page.getByTestId('canvas-command-bar')).toHaveCount(0);
+  await context.close();
+});

@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installPhoneViewport } from '@/test/phoneViewport';
 import { CREATION_CANVAS_TOUR, CreationCanvas, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse } from './CreationCanvas';
 // The five pure rules that used to be asserted HERE — auto-apply, connected actions,
 // the object lock, Brain association and the duplicate-vs-update target — moved to
@@ -1772,5 +1773,82 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     await waitFor(() => expect(toasts.error).toHaveBeenCalled());
     expect(String(toasts.error.mock.calls[0]![0])).toContain('version probe exploded');
     expect(writeText).not.toHaveBeenCalled();
+  });
+
+  /**
+   * THE PHONE ARRANGEMENT. `usePhoneViewport` is false in jsdom until a shared
+   * `matchMedia` stub is installed (`@/test/phoneViewport`); without it this file
+   * can only ever see the desktop chrome, which is how the redesign's phone half
+   * shipped untested. Each case still mounts the whole canvas (~8s), so keep this
+   * list to the load-bearing forks: which chrome mounts, that an editor host does
+   * not, and that the Brain sheet is a sheet.
+   */
+  describe('at phone width', () => {
+    let restore: (() => void) | undefined;
+
+    beforeEach(() => {
+      restore = installPhoneViewport(390).restore;
+    });
+    afterEach(() => {
+      restore?.();
+      restore = undefined;
+    });
+
+    it('is an app screen: app bar, surface strip, no command bar, one board menu', async () => {
+      const onExitToLibrary = vi.fn();
+      render(
+        <CreationCanvas
+          sessionId="phone-chrome-test"
+          persistence="local"
+          onExitToLibrary={onExitToLibrary}
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('canvas-app-bar')).toBeInTheDocument());
+      expect(screen.getByTestId('canvas-app-bar-back')).toBeInTheDocument();
+      expect(screen.getByTestId('canvas-app-bar-stage')).toBeInTheDocument();
+      expect(screen.getByTestId('canvas-surface-strip')).toBeInTheDocument();
+      expect(screen.queryByTestId('canvas-command-bar')).toBeNull();
+      expect(screen.getAllByTestId('canvas-board-menu')).toHaveLength(1);
+
+      fireEvent.click(screen.getByTestId('canvas-app-bar-back'));
+      expect(onExitToLibrary).toHaveBeenCalledTimes(1);
+
+      // The command bar is unmounted, not hidden: a `display:none` bar would still
+      // publish `--canvas-command-bar-space` and push the composer up the screen.
+      const shell = document.querySelector('.app-full-height') as HTMLElement | null;
+      expect(shell).not.toBeNull();
+      expect(shell!.style.getPropertyValue('--canvas-command-bar-space')).not.toBe('66px');
+    });
+
+    it('keeps desktop chrome when an editor host owns a surface, even at 390px', async () => {
+      render(
+        <CreationCanvas
+          sessionId="editor-host-phone-test"
+          persistence="local"
+          hostSurfaces={{ chat: <div data-testid="host-chat" /> }}
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('canvas-command-bar')).toBeInTheDocument());
+      // The phone app bar stays in the tree (CSS first-paint) but the JS host gate
+      // keeps the command bar mounted and the board-menu on that bar, not on the app bar.
+      expect(screen.getAllByTestId('canvas-board-menu')).toHaveLength(1);
+      expect(document.querySelector('.app-full-height')).toHaveAttribute('data-host', 'editor');
+    });
+
+    it('opens Brain as a sheet under the app bar, and the unread count only while closed', async () => {
+      render(<CreationCanvas sessionId="phone-brain-sheet-test" persistence="local" />);
+
+      await waitFor(() => expect(screen.getByTestId('canvas-app-bar')).toBeInTheDocument());
+      const launcher = await screen.findByTestId('canvas-brain-launcher');
+      expect(launcher).toHaveAttribute('data-state', 'idle');
+
+      fireEvent.click(launcher);
+      expect(screen.getByTestId('canvas-brain-veil')).toBeInTheDocument();
+      expect(screen.getByTestId('canvas-brain-grabber')).toBeInTheDocument();
+      // Open is "you are reading it": the launcher (and its unread count) unmounts.
+      expect(screen.queryByTestId('canvas-brain-launcher')).toBeNull();
+    });
   });
 });

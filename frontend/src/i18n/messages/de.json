@@ -24093,6 +24093,14 @@
     "noticeInvestorUpdateSent": "Investoren-Update an {sent} Empfänger von {from} gesendet.",
     "noticeInvestorUpdatePartial": "Investoren-Update an {sent} Empfänger gesendet; {failed} fehlgeschlagen und im Zustellprotokoll vermerkt.",
     "noticeInvestorUpdateFailed": "Das Investoren-Update konnte nicht gesendet werden. Es ist nichts hinausgegangen.",
+    "noticeFormNeedsAccount": "Zum Veröffentlichen eines Formulars braucht es eine angemeldete, gespeicherte Leinwand — die Beitrittsadresse gehört zu diesem Arbeitsbereich.",
+    "noticeFormNoQuestions": "Dieses Formular hat keine Fragen. Füge sie hinzu, bevor du veröffentlichst.",
+    "noticeFormNoRecipients": "Dieses Formular hat keine Empfänger. Trage sie in die Empfängerzeilen ein — Adressen kommen nirgendwo sonst her.",
+    "noticeFormPublished": "Das Formular ist offen unter {url}.",
+    "noticeFormCollected": "{count, plural, =0 {Noch keine Antworten.} one {1 Antwort.} other {# Antworten.}}",
+    "noticeFormClosed": "Das Formular ist geschlossen. Es werden keine neuen Antworten mehr erfasst.",
+    "noticeFormUnpublished": "Veröffentliche das Formular, bevor du Antworten einsammelst oder es schließt.",
+    "noticeFormFailed": "Diese Formularaktion konnte nicht abgeschlossen werden.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -24427,6 +24435,11 @@
         "enter": "Kalender öffnen",
         "active": "Sie sind im Kalender",
         "open": "Kalender öffnen"
+      },
+      "form": {
+        "label": "Formular",
+        "enter": "Formular öffnen",
+        "active": "Sie sind im Formular"
       },
       "ideas": {
         "label": "Ideen",
@@ -30378,6 +30391,42 @@
     "votingClosed": "Die Abstimmung ist geschlossen",
     "votingOpen": "Die Abstimmung läuft",
     "wordPlaceholder": "Ein oder zwei Wörter"
+  },
+  "form": {
+    "regionLabel": "Formular",
+    "untitled": "Unbenanntes Formular",
+    "noticePublished": "Das Formular ist offen. Teile die Adresse mit den Menschen, von denen du hören willst.",
+    "publishFailed": "Das Formular konnte nicht veröffentlicht werden.",
+    "noticeClosed": "Das Formular ist geschlossen. Es werden keine neuen Antworten mehr erfasst.",
+    "closeFailed": "Das Formular konnte nicht geschlossen werden.",
+    "noticeCrmImported": "CRM-Kontakte: {added} hinzugefügt, {updated} aktualisiert, {rejected} abgelehnt.",
+    "crmFailed": "CRM-Kontakte konnten nicht importiert werden.",
+    "publish": "Veröffentlichen",
+    "close": "Schließen",
+    "exit": "Zurück zur Tafel",
+    "unpublishedHint": "Veröffentliche dieses Formular, um eine Adresse zu erhalten, unter der man vom Telefon aus antworten kann. Zum Antworten ist kein Konto nötig.",
+    "readOnlyHint": "Du hast nur Lesezugriff auf diese Tafel, daher kannst du dieses Formular nicht veröffentlichen oder schließen.",
+    "shareUrl": "Teilen",
+    "responseCount": "Antworten",
+    "invitedCount": "Eingeladen",
+    "respondedCount": "Geantwortet",
+    "audienceLegend": "Wer antworten kann",
+    "audience": "Zielgruppe",
+    "audienceOption": {
+      "anyoneWithLink": "Jeder mit dem Link",
+      "workspace": "Personen in diesem Arbeitsbereich",
+      "namedRecipients": "Namentliche Empfänger"
+    },
+    "recipients": "Empfänger",
+    "marketingAudience": "Marketing-Zielgruppe",
+    "newAudience": "Neue Zielgruppe",
+    "addFromCrm": "Meine CRM-Kontakte hinzufügen",
+    "required": "pflicht",
+    "status": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "closed": "Geschlossen"
+    }
   },
   "calendar": {
     "regionLabel": "Kalender",

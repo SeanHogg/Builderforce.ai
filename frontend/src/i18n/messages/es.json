@@ -24093,6 +24093,14 @@
     "noticeInvestorUpdateSent": "Actualización enviada a {sent} destinatarios desde {from}.",
     "noticeInvestorUpdatePartial": "Actualización enviada a {sent} destinatarios; {failed} fallaron y quedan registrados en el libro de entregas.",
     "noticeInvestorUpdateFailed": "No se pudo enviar la actualización. No salió nada.",
+    "noticeFormNeedsAccount": "Publicar un formulario necesita un lienzo guardado e iniciado — la dirección de unión pertenece a este espacio.",
+    "noticeFormNoQuestions": "Este formulario no tiene preguntas. Añádelas antes de publicar.",
+    "noticeFormNoRecipients": "Este formulario no tiene destinatarios. Añádelos a las filas de Destinatarios — las direcciones no se toman de ningún otro sitio.",
+    "noticeFormPublished": "El formulario está abierto en {url}.",
+    "noticeFormCollected": "{count, plural, =0 {Aún no hay respuestas.} one {1 respuesta.} other {# respuestas.}}",
+    "noticeFormClosed": "El formulario está cerrado. No se registrarán más respuestas.",
+    "noticeFormUnpublished": "Publica el formulario antes de recoger o cerrarlo.",
+    "noticeFormFailed": "No se pudo completar esa acción del formulario.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -24427,6 +24435,11 @@
         "enter": "Abrir el calendario",
         "active": "Estás en el calendario",
         "open": "Abrir el calendario"
+      },
+      "form": {
+        "label": "Formulario",
+        "enter": "Abrir el formulario",
+        "active": "Estás en el formulario"
       },
       "ideas": {
         "label": "Ideas",
@@ -30378,6 +30391,42 @@
     "votingClosed": "La votación está cerrada",
     "votingOpen": "La votación está abierta",
     "wordPlaceholder": "Una o dos palabras"
+  },
+  "form": {
+    "regionLabel": "Formulario",
+    "untitled": "Formulario sin título",
+    "noticePublished": "El formulario está abierto. Comparte la dirección con las personas de las que quieres oír.",
+    "publishFailed": "No se pudo publicar el formulario.",
+    "noticeClosed": "El formulario está cerrado. No se registrarán más respuestas.",
+    "closeFailed": "No se pudo cerrar el formulario.",
+    "noticeCrmImported": "Contactos CRM: {added} añadidos, {updated} actualizados, {rejected} rechazados.",
+    "crmFailed": "No se pudieron importar los contactos CRM.",
+    "publish": "Publicar",
+    "close": "Cerrar",
+    "exit": "Volver al tablero",
+    "unpublishedHint": "Publica este formulario para obtener una dirección desde la que se puede responder con el teléfono. No hace falta cuenta para responder.",
+    "readOnlyHint": "Tienes acceso de solo lectura a este tablero, así que no puedes publicar ni cerrar este formulario.",
+    "shareUrl": "Compartir",
+    "responseCount": "Respuestas",
+    "invitedCount": "Invitados",
+    "respondedCount": "Respondieron",
+    "audienceLegend": "Quién puede responder",
+    "audience": "Audiencia",
+    "audienceOption": {
+      "anyoneWithLink": "Cualquiera con el enlace",
+      "workspace": "Personas de este espacio",
+      "namedRecipients": "Destinatarios concretos"
+    },
+    "recipients": "Destinatarios",
+    "marketingAudience": "Audiencia de marketing",
+    "newAudience": "Nueva audiencia",
+    "addFromCrm": "Añadir mis contactos CRM",
+    "required": "obligatorio",
+    "status": {
+      "draft": "Borrador",
+      "open": "Abierto",
+      "closed": "Cerrado"
+    }
   },
   "calendar": {
     "regionLabel": "Calendario",

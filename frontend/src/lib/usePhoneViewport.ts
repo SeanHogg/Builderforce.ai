@@ -22,6 +22,11 @@ import { useMediaQuery } from './useMediaQuery';
  * honest answer for a test that has no viewport, and the reason the desktop
  * arrangement is the one a test sees.
  *
+ * HOST is a different question, asked by `CreationCanvas` (and the matching CSS
+ * `:not([data-host='editor'])` wrapper), not here. A 500px VS Code panel matches
+ * 767px and must still keep desktop chrome; the hook reports the viewport, the
+ * canvas decides whether that viewport is a phone.
+ *
  * No `'use client'`: every caller sits inside a client boundary already, the same
  * reason `useChromeSpace` gives in its own header.
  */

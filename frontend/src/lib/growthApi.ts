@@ -248,6 +248,12 @@ export const growthApi = {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ members }),
     }),
 
+  /** Copy this workspace's CRM contacts onto an audience (`source: crm`). B4 owns the route. */
+  addMembersFromCrm: (
+    audienceId: number,
+  ): Promise<{ added: number; updated: number; rejected: number; members: Array<{ email: string; name?: string }> }> =>
+    apiRequest(`${GROWTH}/audiences/${audienceId}/members/from-crm`, { method: 'POST' }),
+
   listSenders: (): Promise<{ senders: SenderIdentity[] }> => apiRequest(`${GROWTH}/senders`),
 
   createSender: (body: { fromEmail: string; fromName?: string; replyTo?: string }): Promise<SenderIdentity> =>

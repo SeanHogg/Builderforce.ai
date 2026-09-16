@@ -148,6 +148,24 @@ Each was a real fork in the road, each was decided defensibly, and each deserves
    a phone. **Open call for the operator:** a `category=improvement` row (not a marketing push) via
    `ReleaseNotesPanel` → `POST /api/release-notes`. No blog post either way.
 
+### Recorded verdicts (2026-09-16)
+
+1. **Ratified.** Phone ••• stays in the app bar. `CanvasBoardMenuBody` remains one body, two hosts,
+   only one mounts. Covered by the phone-width CreationCanvas test (exactly one `canvas-board-menu`).
+2. **Ratified.** Command bar is not rendered below 767px. The phone-width test asserts
+   `canvas-command-bar` is absent from the document and `--canvas-command-bar-space` is not the
+   desktop 66px default.
+3. **Ratified.** No `canvasBarGroupCaption()` extract. The actions sheet already renders
+   `CanvasBarGroup`.
+4. **Ratified as no row.** UX repair, not a new capability. No `POST /api/release-notes` and no
+   blog. An operator who later wants an in-app improvement chip can add one without reversing
+   this PRD.
+
+**Host vs viewport (closes the §3 open question):** `usePhoneViewport()` still reports the media
+query. `CreationCanvas` ANDs it with `!hostSurfaces`, and the 767px stylesheet block is nested
+under `.canvasShell:not([data-host='editor'])`. A 500px VS Code webview therefore keeps desktop
+chrome. Extension bumped to **2026.9.73**.
+
 ---
 
 ## 5. Out of scope, deliberately

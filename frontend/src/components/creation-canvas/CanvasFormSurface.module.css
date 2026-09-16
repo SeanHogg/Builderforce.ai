@@ -1,0 +1,161 @@
+.surface {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  height: 100%;
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.identity {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  margin: 0.15rem 0 0;
+  font-size: var(--font-size-sm);
+  opacity: 0.75;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.primary,
+.secondary,
+.danger,
+.ghost {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: inherit;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--coral-bright);
+  border-color: transparent;
+  color: #fff;
+}
+
+.danger {
+  border-color: var(--coral-bright);
+}
+
+.body {
+  overflow: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.hint,
+.notice,
+.share {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.share a {
+  margin-left: 0.5rem;
+  color: inherit;
+}
+
+.tally {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.tally dt {
+  font-size: var(--font-size-sm);
+  opacity: 0.7;
+}
+
+.tally dd {
+  margin: 0.15rem 0 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.audience {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.audience label,
+.crm label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: var(--font-size-sm);
+}
+
+.audience select,
+.audience textarea,
+.crm select {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: inherit;
+}
+
+.crm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.questions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.questions li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.questions span {
+  font-size: var(--font-size-sm);
+  opacity: 0.7;
+}

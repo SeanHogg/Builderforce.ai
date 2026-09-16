@@ -2153,6 +2153,12 @@ export interface ManagerConfig {
   autoSchedule: boolean;
   /** Autonomous completion/merge requires unanimous role sign-off (0362). */
   requireSignoffToComplete: boolean;
+  /**
+   * Is ticket COORDINATION reserved to managers? Project-only and NOT NULL (the
+   * workspace has no tier for it). When true, a developer/agent's coordinate /
+   * participants / materialize calls are refused `403 manager role required`.
+   */
+  coordinationRequiresManager: boolean;
   /** Whether the manager may merge this project's PRs unattended (0363) — SEPARATE from
    *  `prMergePolicy`, which only says HOW a permitted merge happens. `null` = inherit the
    *  workspace default (see `ManagerTenantDefaults`). */

@@ -48,6 +48,7 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   insights: InsightsSurfaceIcon,
   room: RoomSurfaceIcon,
   calendar: CalendarSurfaceIcon,
+  form: FormSurfaceIcon,
   page: PageSurfaceIcon,
   play: PlaySurfaceIcon,
   site: SiteSurfaceIcon,
@@ -86,6 +87,14 @@ export function CalendarSurfaceIcon() {
     <path d="M1.7 6.4h12.6M5.1 1.9v2.2M10.9 1.9v2.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
     <rect x="4.3" y="8.4" width="2.2" height="2.1" rx=".5" fill="currentColor" />
     <rect x="9.5" y="8.4" width="2.2" height="2.1" rx=".5" fill="currentColor" />
+  </svg>;
+}
+
+/** A clipboard with lines — the form's axis is the questions people answer. */
+export function FormSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="3" y="2.2" width="10" height="12" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M5.4 5.6h5.2M5.4 8.2h5.2M5.4 10.8h3.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
   </svg>;
 }
 

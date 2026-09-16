@@ -71,6 +71,8 @@ export const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readon
   // surface's buttons use. Nothing here is advertised without an adapter — the failure
   // this list exists to prevent.
   poll: ['publish', 'open', 'close', 'reveal'],
+  form: ['publish', 'collect', 'close'],
+  idea: ['explore', 'test', 'reveal'],
   image: ['generate', 'preview', 'export', 'convert-to-diagram'], drawing: ['convert-to-diagram'], diagram: ['convert-to-diagram'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export', 'convert-to-diagram'], model3d: ['generate', 'preview', 'export'],
   resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],

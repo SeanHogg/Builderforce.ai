@@ -24093,6 +24093,14 @@
     "noticeInvestorUpdateSent": "投资人更新已从 {from} 发送给 {sent} 位收件人。",
     "noticeInvestorUpdatePartial": "投资人更新已发送给 {sent} 位收件人；{failed} 封失败，已记录在投递台账中。",
     "noticeInvestorUpdateFailed": "投资人更新发送失败，没有任何邮件发出。",
+    "noticeFormNeedsAccount": "发布表单需要已登录并已保存的画布 — 加入地址属于此工作区。",
+    "noticeFormNoQuestions": "此表单没有问题。发布前请先添加。",
+    "noticeFormNoRecipients": "此表单没有收件人。请添加到「收件人」行 — 地址不会从别处读取。",
+    "noticeFormPublished": "表单已开放：{url}。",
+    "noticeFormCollected": "{count, plural, =0 {还没有回复。} one {1 条回复。} other {# 条回复。}}",
+    "noticeFormClosed": "表单已关闭。不会再记录新回复。",
+    "noticeFormUnpublished": "请先发布表单，再收集或关闭。",
+    "noticeFormFailed": "该表单操作未能完成。",
     "surface": {
       "chat": {
         "label": "对话",
@@ -24427,6 +24435,11 @@
         "enter": "打开日历",
         "active": "您正在日历中",
         "open": "打开日历"
+      },
+      "form": {
+        "label": "表单",
+        "enter": "打开表单",
+        "active": "您正在表单中"
       },
       "ideas": {
         "label": "想法",
@@ -30378,6 +30391,42 @@
     "votingClosed": "投票已结束",
     "votingOpen": "投票进行中",
     "wordPlaceholder": "一两个词"
+  },
+  "form": {
+    "regionLabel": "表单",
+    "untitled": "未命名表单",
+    "noticePublished": "表单已开放。把地址分享给你想听到的人。",
+    "publishFailed": "表单无法发布。",
+    "noticeClosed": "表单已关闭。不会再记录新回复。",
+    "closeFailed": "表单无法关闭。",
+    "noticeCrmImported": "CRM 联系人：新增 {added}，更新 {updated}，拒绝 {rejected}。",
+    "crmFailed": "无法导入 CRM 联系人。",
+    "publish": "发布",
+    "close": "关闭",
+    "exit": "返回看板",
+    "unpublishedHint": "发布此表单即可获得一个手机也能作答的地址。作答无需账号。",
+    "readOnlyHint": "你对此看板只有只读权限，因此无法发布或关闭此表单。",
+    "shareUrl": "分享",
+    "responseCount": "回复",
+    "invitedCount": "已邀请",
+    "respondedCount": "已回复",
+    "audienceLegend": "谁可以作答",
+    "audience": "受众",
+    "audienceOption": {
+      "anyoneWithLink": "任何有链接的人",
+      "workspace": "此工作区的人",
+      "namedRecipients": "指定收件人"
+    },
+    "recipients": "收件人",
+    "marketingAudience": "营销受众",
+    "newAudience": "新建受众",
+    "addFromCrm": "添加我的 CRM 联系人",
+    "required": "必填",
+    "status": {
+      "draft": "草稿",
+      "open": "开放",
+      "closed": "已关闭"
+    }
   },
   "calendar": {
     "regionLabel": "日历",

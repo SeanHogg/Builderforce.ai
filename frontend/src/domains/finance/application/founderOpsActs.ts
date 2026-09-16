@@ -18,16 +18,21 @@
 
 import {
   chaseInvoice,
+  closeForm,
   draftInvoice,
   issueInvoice,
   listPayRuns,
   payRunLines,
   recordInvoicePayment,
+  publishForm,
   sendInvestorUpdate,
+  summarizeForm,
   syncPayRuns,
 } from '@/lib/founderOpsApi';
 import { payRunFieldsFrom } from '@/lib/canvasFounderOpsTools';
 import { cardRows, cardText, type CardAct, type CardActOutcome } from '@/domains/canvas/application/CardAct';
+import { formJoinUrl, formPublishBody, readFormQuestions } from '@/lib/formObject';
+import { ideaActs } from './ideaActs';
 
 /**
  * `investorUpdate.send`, with a delivery behind it.
@@ -209,4 +214,61 @@ export const payRunSyncAct: CardAct = {
   },
 };
 
-export const FOUNDER_OPS_CARD_ACTS: readonly CardAct[] = [sendInvestorUpdateAct, invoiceAct, payRunSyncAct];
+/**
+ * `form.publish` / `form.collect` / `form.close` — the same three acts the
+ * form surface's buttons use, so Brain's `canvas_invoke_object_action` and a
+ * person pressing the row cannot disagree about what the card's `questions`
+ * mean. Recipients come from the card's own `recipients` rows; a named-recipient
+ * form with none says so and sends nothing.
+ */
+export const formActs: CardAct = {
+  kind: 'form' as CardAct['kind'],
+  actions: ['publish', 'collect', 'close'],
+  accountRequired: 'noticeFormNeedsAccount',
+  failureNotice: 'noticeFormFailed',
+  async run({ object, action, t }): Promise<CardActOutcome> {
+    const data = object.data as Record<string, unknown>;
+    const questionSetId = typeof data.questionSetId === 'string' ? data.questionSetId : '';
+
+    if (action === 'publish') {
+      if (readFormQuestions(data.questions).length === 0) return { notice: t('noticeFormNoQuestions') };
+      const audience = typeof data.audience === 'string' ? data.audience : '';
+      if (audience === 'namedRecipients' && cardRows(data, 'recipients').length === 0) {
+        return { notice: t('noticeFormNoRecipients') };
+      }
+      const result = await publishForm(formPublishBody(data, object.id));
+      const url = formJoinUrl(result.slug);
+      return {
+        patch: {
+          questionSetId: result.questionSetId,
+          shareUrl: url,
+          joinUrl: url,
+          status: result.status,
+        },
+        notice: t('noticeFormPublished', { url }),
+      };
+    }
+
+    if (!questionSetId) return { notice: t('noticeFormUnpublished') };
+
+    if (action === 'collect') {
+      const { summary } = await summarizeForm(questionSetId);
+      if (!summary) return { notice: t('noticeFormUnpublished') };
+      const url = formJoinUrl(summary.slug);
+      return {
+        patch: {
+          responseCount: summary.submissionCount,
+          status: summary.status,
+          shareUrl: url,
+          joinUrl: url,
+        },
+        notice: t('noticeFormCollected', { count: summary.submissionCount }),
+      };
+    }
+
+    await closeForm(questionSetId);
+    return { patch: { status: 'closed' }, notice: t('noticeFormClosed') };
+  },
+};
+
+export const FOUNDER_OPS_CARD_ACTS: readonly CardAct[] = [sendInvestorUpdateAct, invoiceAct, payRunSyncAct, ideaActs, formActs];

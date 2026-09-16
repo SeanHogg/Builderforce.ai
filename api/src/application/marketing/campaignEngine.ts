@@ -40,6 +40,7 @@
 
 export {
   addAudienceMembers,
+  addAudienceMembersFromCrm,
   createAudience,
   listAudiences,
   refreshAudienceCount,

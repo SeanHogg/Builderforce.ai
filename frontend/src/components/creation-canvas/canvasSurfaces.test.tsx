@@ -71,7 +71,7 @@ describe('canvas surface registry', () => {
     // into the room, and what was left — the AI scene's generation panel — is the
     // surface of ONE object, entered from its card.
     // The properties BELOW are what this test is actually for; the list is the roll call.
-    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'scene3d', 'facilitate', 'calendar']);
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'scene3d', 'facilitate', 'calendar', 'form']);
     // None persists: a page cannot be reopened without knowing which page.
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.
@@ -167,6 +167,7 @@ describe('canvas surface registry', () => {
     // A month with an hour grid and a detail panel does not fit a ~340px card, so the
     // card previews it and this opens it. Same promotion as the four above.
     expect(creationObjectSurface('calendar')).toBe('calendar');
+    expect(creationObjectSurface('form')).toBe('form');
     expect(creationObjectSurface('prototype')).toBe('site');
     expect(creationObjectSurface('document')).toBe('page');
     // A card IS the whole object for most kinds, and should stay that way.

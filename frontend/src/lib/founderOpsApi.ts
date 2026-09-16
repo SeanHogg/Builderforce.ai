@@ -52,6 +52,22 @@ export const publishForm = (body: PublishFormBody) =>
 export const closeForm = (questionSetId: string) =>
   apiRequest<{ ok: true }>(`/api/forms/${questionSetId}/close`, { method: 'POST' });
 
+/** The publisher's tally — same shape the surface writes back onto the card. */
+export interface FormSummary {
+  questionSetId: string;
+  slug: string;
+  title: string;
+  status: FormStatus;
+  anonymous: boolean;
+  audience: FormAudience;
+  submissionCount: number;
+  invitedCount: number;
+  respondedCount: number;
+}
+
+export const summarizeForm = (questionSetId: string) =>
+  apiRequest<{ summary: FormSummary | null }>(`/api/forms/${questionSetId}/summary`);
+
 export interface PublicFormView {
   form: PublishedForm;
   recipient: { name: string | null; email: string; answered: boolean } | null;

@@ -24093,6 +24093,14 @@
     "noticeInvestorUpdateSent": "Investor update sent to {sent} recipients from {from}.",
     "noticeInvestorUpdatePartial": "Investor update sent to {sent} recipients; {failed} failed and are recorded on the delivery ledger.",
     "noticeInvestorUpdateFailed": "The investor update could not be sent. Nothing left the building.",
+    "noticeFormNeedsAccount": "Publishing a form needs a signed-in, saved canvas — the join address belongs to this workspace.",
+    "noticeFormNoQuestions": "This form has no questions. Add them before publishing.",
+    "noticeFormNoRecipients": "This form has no recipients. Add them to the Recipients rows — addresses are never taken from anywhere else.",
+    "noticeFormPublished": "The form is open at {url}.",
+    "noticeFormCollected": "{count, plural, =0 {No responses yet.} one {1 response.} other {# responses.}}",
+    "noticeFormClosed": "The form is closed. No new responses will be recorded.",
+    "noticeFormUnpublished": "Publish the form before collecting or closing it.",
+    "noticeFormFailed": "That form action could not be completed.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -24427,6 +24435,11 @@
         "enter": "Open the calendar",
         "active": "You are in the calendar",
         "open": "Open the calendar"
+      },
+      "form": {
+        "label": "Form",
+        "enter": "Open the form",
+        "active": "You are in the form"
       },
       "ideas": {
         "label": "Ideas",
@@ -30378,6 +30391,42 @@
     "votingClosed": "Voting has closed",
     "votingOpen": "Voting is open",
     "wordPlaceholder": "One or two words"
+  },
+  "form": {
+    "regionLabel": "Form",
+    "untitled": "Untitled form",
+    "noticePublished": "The form is open. Share the address with the people you want to hear from.",
+    "publishFailed": "The form could not be published.",
+    "noticeClosed": "The form is closed. No new responses will be recorded.",
+    "closeFailed": "The form could not be closed.",
+    "noticeCrmImported": "CRM contacts: {added} added, {updated} updated, {rejected} rejected.",
+    "crmFailed": "CRM contacts could not be imported.",
+    "publish": "Publish",
+    "close": "Close",
+    "exit": "Back to the board",
+    "unpublishedHint": "Publish this form to get an address people can answer from a phone. No account is needed to answer.",
+    "readOnlyHint": "You have read-only access to this board, so you cannot publish or close this form.",
+    "shareUrl": "Share",
+    "responseCount": "Responses",
+    "invitedCount": "Invited",
+    "respondedCount": "Responded",
+    "audienceLegend": "Who can answer",
+    "audience": "Audience",
+    "audienceOption": {
+      "anyoneWithLink": "Anyone with the link",
+      "workspace": "People in this workspace",
+      "namedRecipients": "Named recipients"
+    },
+    "recipients": "Recipients",
+    "marketingAudience": "Marketing audience",
+    "newAudience": "New audience",
+    "addFromCrm": "Add my CRM contacts",
+    "required": "required",
+    "status": {
+      "draft": "Draft",
+      "open": "Open",
+      "closed": "Closed"
+    }
   },
   "calendar": {
     "regionLabel": "Calendar",

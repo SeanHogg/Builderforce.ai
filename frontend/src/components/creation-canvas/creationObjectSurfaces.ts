@@ -55,6 +55,7 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   // calendar beside a send calendar beside the team's leave — and a rail entry is a mode
   // you can only be in one of. The card previews the month; this opens it at full size.
   calendar: 'calendar',
+  form: 'form',
 };
 
 /**

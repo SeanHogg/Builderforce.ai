@@ -24093,6 +24093,14 @@
     "noticeInvestorUpdateSent": "Mise à jour envoyée à {sent} destinataires depuis {from}.",
     "noticeInvestorUpdatePartial": "Mise à jour envoyée à {sent} destinataires ; {failed} ont échoué et sont consignés dans le journal des envois.",
     "noticeInvestorUpdateFailed": "La mise à jour n’a pas pu être envoyée. Rien n’est parti.",
+    "noticeFormNeedsAccount": "Publier un formulaire demande un canevas enregistré et connecté — l’adresse d’accès appartient à cet espace.",
+    "noticeFormNoQuestions": "Ce formulaire n’a pas de questions. Ajoutez-les avant de publier.",
+    "noticeFormNoRecipients": "Ce formulaire n’a pas de destinataires. Ajoutez-les aux lignes Destinataires — les adresses ne viennent nulle part ailleurs.",
+    "noticeFormPublished": "Le formulaire est ouvert à {url}.",
+    "noticeFormCollected": "{count, plural, =0 {Aucune réponse pour l’instant.} one {1 réponse.} other {# réponses.}}",
+    "noticeFormClosed": "Le formulaire est fermé. Aucune nouvelle réponse ne sera enregistrée.",
+    "noticeFormUnpublished": "Publiez le formulaire avant de collecter ou de le fermer.",
+    "noticeFormFailed": "Cette action du formulaire n’a pas pu aboutir.",
     "surface": {
       "chat": {
         "label": "Discussion",
@@ -24427,6 +24435,11 @@
         "enter": "Ouvrir le calendrier",
         "active": "Vous êtes dans le calendrier",
         "open": "Ouvrir le calendrier"
+      },
+      "form": {
+        "label": "Formulaire",
+        "enter": "Ouvrir le formulaire",
+        "active": "Vous êtes dans le formulaire"
       },
       "ideas": {
         "label": "Idées",
@@ -30378,6 +30391,42 @@
     "votingClosed": "Le vote est clos",
     "votingOpen": "Le vote est ouvert",
     "wordPlaceholder": "Un ou deux mots"
+  },
+  "form": {
+    "regionLabel": "Formulaire",
+    "untitled": "Formulaire sans titre",
+    "noticePublished": "Le formulaire est ouvert. Partagez l’adresse avec les personnes dont vous voulez entendre.",
+    "publishFailed": "Le formulaire n’a pas pu être publié.",
+    "noticeClosed": "Le formulaire est fermé. Aucune nouvelle réponse ne sera enregistrée.",
+    "closeFailed": "Le formulaire n’a pas pu être fermé.",
+    "noticeCrmImported": "Contacts CRM : {added} ajoutés, {updated} mis à jour, {rejected} rejetés.",
+    "crmFailed": "Les contacts CRM n’ont pas pu être importés.",
+    "publish": "Publier",
+    "close": "Fermer",
+    "exit": "Retour au tableau",
+    "unpublishedHint": "Publiez ce formulaire pour obtenir une adresse depuis laquelle on peut répondre au téléphone. Aucun compte n’est requis pour répondre.",
+    "readOnlyHint": "Vous n’avez qu’un accès en lecture à ce tableau, vous ne pouvez donc ni publier ni fermer ce formulaire.",
+    "shareUrl": "Partager",
+    "responseCount": "Réponses",
+    "invitedCount": "Invités",
+    "respondedCount": "Ont répondu",
+    "audienceLegend": "Qui peut répondre",
+    "audience": "Audience",
+    "audienceOption": {
+      "anyoneWithLink": "Toute personne avec le lien",
+      "workspace": "Les personnes de cet espace",
+      "namedRecipients": "Destinataires nommés"
+    },
+    "recipients": "Destinataires",
+    "marketingAudience": "Audience marketing",
+    "newAudience": "Nouvelle audience",
+    "addFromCrm": "Ajouter mes contacts CRM",
+    "required": "obligatoire",
+    "status": {
+      "draft": "Brouillon",
+      "open": "Ouvert",
+      "closed": "Fermé"
+    }
   },
   "calendar": {
     "regionLabel": "Calendrier",

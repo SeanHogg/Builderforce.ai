@@ -19,6 +19,7 @@
 import { signJwt, signOpaqueJwt } from '../../infrastructure/auth/JwtService';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { TenantRole } from '../../domain/shared/types';
+import { loadReplayApp } from '../../presentation/appCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { ProjectService } from '../project/ProjectService';
@@ -101,12 +102,12 @@ export async function replayRoute(
   opts?: { rawText?: string },
 ): Promise<unknown> {
   if (!ctx.env) throw new Error('route replay unavailable in this context');
-  // Dynamic import avoids a static import cycle (index → routes → this module).
-  const { resolveApp } = await import('../../index');
-  // The isolate-cached app, NOT a fresh buildApp(): an LLM turn replays many
-  // routes, and rebuilding the whole composition root per tool call was the
-  // single largest avoidable CPU cost in the worker. See presentation/appCache.
-  const app = resolveApp(ctx.env);
+  // Isolated in presentation/appCache so a unit test can stub the app without
+  // loading index.ts (cycle: index → routes → this module). The isolate-cached
+  // app, NOT a fresh buildApp(): an LLM turn replays many routes, and rebuilding
+  // the whole composition root per tool call was the single largest avoidable
+  // CPU cost in the worker.
+  const app = await loadReplayApp(ctx.env);
   const auth = resolveReplayAuth({
     authToken: ctx.authToken,
     agentRef: ctx.agentRef,

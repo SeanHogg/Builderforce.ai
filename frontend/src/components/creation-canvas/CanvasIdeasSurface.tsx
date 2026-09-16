@@ -18,7 +18,7 @@ import styles from './CanvasIdeasSurface.module.css';
 
 /** The two kinds this surface ever creates: the idea itself, and the interview that
  *  tests it. Narrow on purpose — a scratchpad is not a second object palette. */
-export type IdeaSurfaceCreatableKind = typeof IDEA_KIND | 'customerInterview';
+export type IdeaSurfaceCreatableKind = typeof IDEA_KIND | 'customerInterview' | 'form';
 
 export interface CanvasIdeasSurfaceProps {
   nodes: ReadonlyArray<{ id: string; data: CreationNodeData }>;

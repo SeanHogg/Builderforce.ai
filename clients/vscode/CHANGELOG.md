@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.73] — A 500px editor panel is not a phone
+
+- **The canvas phone app bar stays on the web.** A VS Code panel is routinely narrower than 767px; treating that width as a phone would replace the command bar with a 52px app bar that has nowhere to go back to. The canvas now tags an embedding host (`data-host="editor"`) and keeps desktop chrome at every width. The web phone layout is unchanged.
+
+## [2026.9.73] — A cancelled ticket no longer pulls the conversation down to 75%
+
+- **Cancelled work is off the board, not remaining work.** Three done tickets plus one cancelled used to average to 75% on the linked-ticket header, the chat picker, and the Sessions tree. Cancelled tickets are skipped, so that conversation reads 100%. An all-cancelled list is 100% (nothing left owed); an empty list is still 0%. The cancelled chip itself stays at 0% — it is not done.
+
 ## [2026.9.72] — Linked-ticket 0% chips count in the overall %, and the chat picker shows that %
 
 - **A 0% spec or roadmap no longer disappears from the overall ring.** Incomplete spec/roadmap/retro used to report `total: 0`, so the header could read "6 tickets 100% · 4/4" while two chips sat empty at 0%. They now count as one item each, so the headline matches the rings.

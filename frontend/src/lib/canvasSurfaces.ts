@@ -38,7 +38,7 @@
 
 import type { CanvasComposerIntentId } from './canvasComposerIntents';
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'insights' | 'room' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'insights' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
 
 /**
  * What a surface is ABOUT.
@@ -237,6 +237,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // knowing WHICH calendar, and a reload should land on the board rather than inside a
   // month whose card the reader may since have deleted.
   { id: 'calendar', scope: 'object', order: 13, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'form', scope: 'object', order: 14, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
 ];
 
 /**

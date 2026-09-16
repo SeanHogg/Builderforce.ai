@@ -1,7 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { statusOf } from '../../domain/shared/errors';
 import { TenantRole } from '../../domain/shared/types';
-import { replayRoute, ReplayRouteError } from './builtinToolContext';
 
 /**
  * A replayed route's status must reach the caller AS ITSELF.
@@ -15,19 +14,24 @@ import { replayRoute, ReplayRouteError } from './builtinToolContext';
  *
  * The MESSAGE text is deliberately unchanged, so the string the model reads (and the
  * assertions elsewhere that match on it) are the same as before.
+ *
+ * The Worker app is stubbed at `loadReplayApp` with `vi.doMock` and a dynamic import
+ * of the helper afterwards. A hoisted `vi.mock` of `appCache` / `index` does not
+ * intercept under this package's Vitest 4 + threads pool, and the real composition
+ * root then hangs the suite.
  */
 
-const mocks = vi.hoisted(() => ({
-  request: vi.fn(),
-}));
+const request = vi.fn();
 
-vi.mock('../../index', () => ({
-  resolveApp: () => ({ request: mocks.request }),
+vi.doMock('../../presentation/appCache', () => ({
+  loadReplayApp: async () => ({ request }),
 }));
-vi.mock('../../infrastructure/auth/JwtService', () => ({
+vi.doMock('../../infrastructure/auth/JwtService', () => ({
   signJwt: vi.fn(async () => 'signed.jwt.token'),
   signOpaqueJwt: vi.fn(async () => 'signed.opaque.token'),
 }));
+
+const { replayRoute, ReplayRouteError } = await import('./builtinToolContext');
 
 function ctx() {
   return {
@@ -40,9 +44,13 @@ function ctx() {
   };
 }
 
+beforeEach(() => {
+  request.mockReset();
+});
+
 describe('replayRoute failure', () => {
   it('throws a ReplayRouteError carrying the route\'s own status and body', async () => {
-    mocks.request.mockResolvedValue(
+    request.mockResolvedValue(
       new Response(JSON.stringify({ error: 'manager role required' }), { status: 403 }),
     );
 
@@ -58,7 +66,7 @@ describe('replayRoute failure', () => {
   });
 
   it('keeps the message text verbatim so the model reads the route\'s own words', async () => {
-    mocks.request.mockResolvedValue(
+    request.mockResolvedValue(
       new Response(JSON.stringify({ error: 'manager role required' }), { status: 403 }),
     );
 
@@ -67,7 +75,7 @@ describe('replayRoute failure', () => {
   });
 
   it('still reports 500 for a genuine server failure, as before', async () => {
-    mocks.request.mockResolvedValue(new Response('boom', { status: 500 }));
+    request.mockResolvedValue(new Response('boom', { status: 500 }));
 
     const err = await replayRoute(ctx(), 'GET', '/api/kanban/tasks/1')
       .then(() => null, (e: unknown) => e);
@@ -76,7 +84,7 @@ describe('replayRoute failure', () => {
   });
 
   it('returns the parsed body on success', async () => {
-    mocks.request.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    request.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
 
     await expect(replayRoute(ctx(), 'GET', '/api/kanban/tasks/1')).resolves.toEqual({ ok: true });
   });
