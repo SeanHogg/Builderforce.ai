@@ -35,7 +35,7 @@ describe('the talent listing Book CTA', () => {
   it('shows Book for a bound listing even when the visitor cannot hire', () => {
     expect(detail).toContain('canHire || bound');
     expect(detail).toContain('{bound && (');
-    expect(detail).toContain("{!isOwner && bookingOpen && !booked && services.length > 0 && (");
+    expect(detail).toContain("{!isOwner && bookingOpen && !booked && listingServices.length > 0 && (");
   });
 
   it('keeps Message for an unbound listing that can hire', () => {
