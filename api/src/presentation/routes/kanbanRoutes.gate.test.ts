@@ -123,7 +123,7 @@ describe('ticket coordination gate', () => {
       error: 'manager role required',
       projectId: TASK_PROJECT_ID,
       remedy: `coordination_requires_manager is on for project ${TASK_PROJECT_ID} — a manager can turn it off with `
-        + `manager.configure { projectId: ${TASK_PROJECT_ID}, coordinationRequiresManager: false }`,
+        + `builtin_manager_configure { projectId: ${TASK_PROJECT_ID}, coordinationRequiresManager: false }`,
     });
   });
 

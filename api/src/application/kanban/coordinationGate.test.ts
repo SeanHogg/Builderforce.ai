@@ -86,7 +86,7 @@ describe('coordinationGate', () => {
     expect(verdict).toEqual({
       ok: false, status: 403, error: 'manager role required', projectId: PROJECT_ID,
       remedy: `coordination_requires_manager is on for project ${PROJECT_ID} — a manager can turn it off with `
-        + `manager.configure { projectId: ${PROJECT_ID}, coordinationRequiresManager: false }`,
+        + `builtin_manager_configure { projectId: ${PROJECT_ID}, coordinationRequiresManager: false }`,
     });
   });
 

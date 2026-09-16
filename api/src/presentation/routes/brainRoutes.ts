@@ -462,7 +462,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const limit = limitParam(c.req.query('limit'), 1, 25);
     const token = await getCacheVersion(c.env as Env, diagnosticsVersionKey(id));
     const key = `brain-diagnostics:chat:${id}:v:${token}:l:${limit}`;
-    const diagnostics = await getOrSetCached(c.env as Env, key, () => latestChatDiagnostics(db, id, limit));
+    const diagnostics = await getOrSetCached(c.env as Env, key, () => latestChatDiagnostics(db, id, tenantId, limit));
     return c.json({ diagnostics });
   });
 

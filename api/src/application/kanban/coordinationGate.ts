@@ -38,6 +38,7 @@ import type { Env } from '../../env';
 import { TenantRole, hasMinRole, type TenantRoleName } from '../../domain/shared/types';
 import { tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { advertisedName } from '../llm/toolNaming';
 import { getEffectiveManagerPolicy } from '../manager/managerPolicyStore';
 
 /**
@@ -113,7 +114,7 @@ export async function coordinationGate(
 
   return refuse(
     `coordination_requires_manager is on for project ${scope.projectId} — a manager can turn it off with `
-    + `manager.configure { projectId: ${scope.projectId}, coordinationRequiresManager: false }`,
+    + `${advertisedName('manager.configure')} { projectId: ${scope.projectId}, coordinationRequiresManager: false }`,
     scope.projectId,
   );
 }

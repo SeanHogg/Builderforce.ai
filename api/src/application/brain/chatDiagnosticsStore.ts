@@ -32,9 +32,10 @@
  * about how much of this is worth keeping, and splitting them across two places is how
  * they come to disagree.
  */
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { desc, eq, lt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { brainChatDiagnostics } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { DomainError, ValidationError } from '../../domain/shared/errors';
 
 /** Serialized ceiling for one stored report. Roughly a very long run's worth of detail. */
@@ -163,7 +164,7 @@ export async function saveChatDiagnostics(
     })
     .returning({ id: brainChatDiagnostics.id });
 
-  await pruneChatDiagnostics(db, args.chatId);
+  await pruneChatDiagnostics(db, args.chatId, args.tenantId);
   return { id: row!.id };
 }
 
@@ -172,13 +173,13 @@ export async function saveChatDiagnostics(
  *
  * Ordered by `id`, not `capturedAt`: the id is the arrival order, and two captures taken
  * in the same millisecond (a retry loop does exactly that) would otherwise have no stable
- * order to retain on.
+ * order to retain on. Tenant-scoped: a chat id is not a tenancy boundary on its own.
  */
-async function pruneChatDiagnostics(db: Db, chatId: number): Promise<void> {
+async function pruneChatDiagnostics(db: Db, chatId: number, tenantId: number): Promise<void> {
   const keep = await db
     .select({ id: brainChatDiagnostics.id })
     .from(brainChatDiagnostics)
-    .where(eq(brainChatDiagnostics.chatId, chatId))
+    .where(scopedToTenant(brainChatDiagnostics, tenantId, eq(brainChatDiagnostics.chatId, chatId)))
     .orderBy(desc(brainChatDiagnostics.id))
     .limit(MAX_REPORTS_PER_CHAT);
   if (keep.length < MAX_REPORTS_PER_CHAT) return;
@@ -186,7 +187,12 @@ async function pruneChatDiagnostics(db: Db, chatId: number): Promise<void> {
   const oldestKept = keep[keep.length - 1]!.id;
   await db
     .delete(brainChatDiagnostics)
-    .where(and(eq(brainChatDiagnostics.chatId, chatId), lt(brainChatDiagnostics.id, oldestKept)));
+    .where(scopedToTenant(
+      brainChatDiagnostics,
+      tenantId,
+      eq(brainChatDiagnostics.chatId, chatId),
+      lt(brainChatDiagnostics.id, oldestKept),
+    ));
 }
 
 /**
@@ -199,6 +205,7 @@ async function pruneChatDiagnostics(db: Db, chatId: number): Promise<void> {
 export async function latestChatDiagnostics(
   db: Db,
   chatId: number,
+  tenantId: number,
   limit = 1,
 ): Promise<StoredChatDiagnostics[]> {
   const bounded = Math.max(1, Math.min(Math.trunc(limit) || 1, MAX_REPORTS_PER_CHAT));
@@ -214,7 +221,7 @@ export async function latestChatDiagnostics(
       report: brainChatDiagnostics.report,
     })
     .from(brainChatDiagnostics)
-    .where(eq(brainChatDiagnostics.chatId, chatId))
+    .where(scopedToTenant(brainChatDiagnostics, tenantId, eq(brainChatDiagnostics.chatId, chatId)))
     .orderBy(desc(brainChatDiagnostics.id))
     .limit(bounded);
 }

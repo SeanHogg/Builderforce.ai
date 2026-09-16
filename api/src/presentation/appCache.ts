@@ -46,17 +46,3 @@ export function cachedApp(env: Env, build: (env: Env) => Hono<HonoEnv>): Hono<Ho
 export function resetAppCacheForTests(): void {
   apps = new WeakMap();
 }
-
-/**
- * The Worker app used to replay an `/api/*` route in-process.
- *
- * A thin dynamic import of `resolveApp` so the replay helper does not statically
- * import `index.ts` (cycle: index → routes → builtinToolContext). Isolated here
- * so a unit test can stub THIS module without loading the composition root —
- * `vi.mock('../../index')` does not intercept the dynamic import under the API
- * package's Vitest 4, and the real `buildApp` then hangs the suite.
- */
-export async function loadReplayApp(env: Env): Promise<Hono<HonoEnv>> {
-  const { resolveApp } = await import('../index');
-  return resolveApp(env);
-}

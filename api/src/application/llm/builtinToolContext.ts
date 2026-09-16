@@ -19,7 +19,7 @@
 import { signJwt, signOpaqueJwt } from '../../infrastructure/auth/JwtService';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { TenantRole } from '../../domain/shared/types';
-import { loadReplayApp } from '../../presentation/appCache';
+import { loadReplayApp } from './replayApp';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { ProjectService } from '../project/ProjectService';

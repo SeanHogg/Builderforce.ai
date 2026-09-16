@@ -162,17 +162,17 @@ describe('retention', () => {
 
 describe('latestChatDiagnostics', () => {
   it('defaults to the single most recent capture', async () => {
-    await latestChatDiagnostics(makeDb(), 113);
+    await latestChatDiagnostics(makeDb(), 113, 5);
     expect(captured.selectLimit).toBe(1);
   });
 
   it('never returns more than a chat can hold, whatever the caller asks for', async () => {
-    await latestChatDiagnostics(makeDb(), 113, 9999);
+    await latestChatDiagnostics(makeDb(), 113, 5, 9999);
     expect(captured.selectLimit).toBe(MAX_REPORTS_PER_CHAT);
   });
 
   it('treats a junk limit as one rather than as none', async () => {
-    await latestChatDiagnostics(makeDb(), 113, 0);
+    await latestChatDiagnostics(makeDb(), 113, 5, 0);
     expect(captured.selectLimit).toBe(1);
   });
 });

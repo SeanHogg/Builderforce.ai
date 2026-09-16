@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { statusOf } from '../../domain/shared/errors';
 import { TenantRole } from '../../domain/shared/types';
-import * as appCache from '../../presentation/appCache';
 import { replayRoute, ReplayRouteError } from './builtinToolContext';
+import * as replayApp from './replayApp';
 
 /**
  * A replayed route's status must reach the caller AS ITSELF.
@@ -18,7 +18,7 @@ import { replayRoute, ReplayRouteError } from './builtinToolContext';
  * assertions elsewhere that match on it) are the same as before.
  *
  * The Worker app is stubbed by spying `loadReplayApp`. A hoisted `vi.mock` of
- * `appCache` / `index` does not intercept under this package's Vitest 4 + threads
+ * `replayApp` / `index` does not intercept under this package's Vitest 4 + threads
  * pool, and the real composition root then hangs the suite.
  */
 
@@ -37,7 +37,7 @@ function ctx() {
 
 beforeEach(() => {
   request.mockReset();
-  vi.spyOn(appCache, 'loadReplayApp').mockResolvedValue({ request } as never);
+  vi.spyOn(replayApp, 'loadReplayApp').mockResolvedValue({ request } as never);
 });
 
 afterEach(() => {
