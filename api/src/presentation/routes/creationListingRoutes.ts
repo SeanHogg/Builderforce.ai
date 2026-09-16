@@ -335,12 +335,23 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
 export function createPublicListingRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
+  /**
+   * The shop window, optionally scoped to one seller.
+   *
+   * `sellerRef` is the same identifier this endpoint already PUBLISHES on every
+   * card, so a profile surface filters by the value it read back rather than by a
+   * second identifier it would have to resolve first. It narrows the public
+   * predicate and never relaxes it — a withdrawn or unpublished listing stays
+   * invisible whoever is asked for — and an unknown ref answers an empty page
+   * rather than an error, so this cannot be used to probe which user ids exist.
+   */
   router.get('/', async (c) => {
     const result = await browseCreationListings(db, c.env, {
       q: c.req.query('q') ?? '',
       kind: c.req.query('kind') ?? '',
       page: Number.parseInt(c.req.query('page') ?? '1', 10),
       limit: Number.parseInt(c.req.query('limit') ?? '24', 10),
+      sellerRef: c.req.query('sellerRef') ?? '',
     });
     return c.json(result);
   });
