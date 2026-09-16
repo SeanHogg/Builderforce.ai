@@ -77,6 +77,13 @@ export default function TalentDetailClient() {
   const canHire = !!auth?.hasTenant && !isOwner;
   const listingServices = profile.bookable ? services : [];
   const bound = talentPrimaryAction(Boolean(profile.bookable) || listingServices.length > 0) === 'book';
+  // Visitor chat (#2581): an ENTRY POINT into the existing employer↔freelancer
+  // thread, not a second messenger. It is the one control on this page a stranger
+  // can use to start a real conversation, so its visibility is deliberately wider
+  // than `canHire` — but only on an advisor-mode listing (`bound`), which keeps
+  // non-advisor talent profiles on exactly today's `canHire` Message rule.
+  // `bound` is false until P0 advisor mode lands, so this stays dark until then.
+  const showChatCta = !isOwner && bound;
   const hirePrimary = {
     padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: 'none',
     background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
