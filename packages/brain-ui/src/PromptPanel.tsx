@@ -3,8 +3,20 @@ import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 export interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   /** Text entry for the prompt. Always occupies the first, full-width row. */
   input: ReactNode;
-  /** Context, mode, model, voice and send controls for the second row. */
+  /** Context, mode, model and voice controls for the second row. They wrap. */
   actions: ReactNode;
+  /**
+   * The ONE primary control for the composer — Send, Stop, or Queue.
+   *
+   * It lives in its own trailing region rather than at the end of `actions`
+   * because "the thing that sends the message sits at the far right edge" is a
+   * property of the composer, not of each host: the web composer pinned it with
+   * an ad-hoc `marginLeft: 'auto'` on an unrelated chip, and the editor composer
+   * — which has no such chip — left Send/Stop floating in the middle of the row
+   * behind whatever chips happened to be rendered. Given here, neither host can
+   * place it differently again, and it never wraps onto a second line.
+   */
+  primaryAction?: ReactNode;
   /** Chips, queued turns, or other state shown above the text entry. */
   status?: ReactNode;
   /** Popovers such as the shared @-mention picker. */
@@ -23,6 +35,7 @@ export interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, '
 export function PromptPanel({
   input,
   actions,
+  primaryAction,
   status,
   overlay,
   active = false,
@@ -31,6 +44,7 @@ export function PromptPanel({
   style,
   ...rest
 }: PromptPanelProps) {
+  const actionGap = 'var(--prompt-panel-action-gap, var(--chat-ctl-gap, 6px))';
   const panelStyle: CSSProperties = {
     position: 'relative',
     display: 'flex',
@@ -61,9 +75,24 @@ export function PromptPanel({
       <div className="bf-prompt-panel__input" style={{ display: 'flex', width: '100%', minWidth: 0 }}>{input}</div>
       <div
         className="bf-prompt-panel__actions"
-        style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--prompt-panel-action-gap, var(--chat-ctl-gap, 6px))', minWidth: 0 }}
+        style={{ display: 'flex', alignItems: 'center', gap: actionGap, minWidth: 0 }}
       >
-        {actions}
+        {/* The chips. They wrap; the primary action below never does, so a narrow
+            panel grows taller instead of pushing Send off the edge. */}
+        <div
+          className="bf-prompt-panel__actions-lead"
+          style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: actionGap, minWidth: 0, flex: '1 1 auto' }}
+        >
+          {actions}
+        </div>
+        {primaryAction ? (
+          <div
+            className="bf-prompt-panel__actions-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: actionGap, flex: '0 0 auto', marginLeft: 'auto' }}
+          >
+            {primaryAction}
+          </div>
+        ) : null}
       </div>
     </div>
   );

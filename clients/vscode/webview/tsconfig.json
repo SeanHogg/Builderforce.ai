@@ -24,7 +24,13 @@
     // No `baseUrl`: TypeScript 6 removed it (TS5102), and without one a `paths`
     // target resolves relative to THIS file — which is what these already are.
     "paths": {
-      "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"]
+      "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
+      // How a BuilderForce JWT names its workspace is one fact, and the canvas reads
+      // it too, so the one copy lives in `frontend/src/lib`. Mapped MODULE BY MODULE
+      // rather than as `@/*`: the wildcard would hand this project the frontend's
+      // whole import closure to type-check under the editor's stricter options,
+      // which is exactly what `exclude` below exists to prevent.
+      "@/lib/tokenClaims": ["../../../frontend/src/lib/tokenClaims.ts"]
     }
   },
   // The editor's OWN code, checked strictly. Everything that compiles FRONTEND

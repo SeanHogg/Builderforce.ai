@@ -9,10 +9,10 @@
  * have no readable workspace of their own. Deriving that per component is how
  * two surfaces end up disagreeing about whether the numbers on screen are real.
  *
- * `signedIn` was already being spelled out as `isAuthenticated && hasTenant` in
- * more than one module. That expression now lives here, once, and its negation
- * is the sample-workspace condition — so the banner cannot appear over real rows
- * and cannot fail to appear over fixtures.
+ * `signedIn` was already being spelled out per module. It now reads the ONE
+ * viewer-session accessor (`useViewerSession`), and its negation is the
+ * sample-workspace condition — so the banner cannot appear over real rows and
+ * cannot fail to appear over fixtures.
  *
  * ── WHY IT WAITS FOR `authReady` ─────────────────────────────────────────────
  * The session is read off the device, so `isAuthenticated` is false on the
@@ -46,7 +46,7 @@
  */
 
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { isLocalFirstAppRoute } from '@/lib/shellRouting';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 
@@ -70,12 +70,17 @@ function isCanvasSurface(pathname: string): boolean {
 }
 
 export function useSampleWorkspace(): SampleWorkspaceState {
-  const { authReady, isAuthenticated, hasTenant } = useAuth();
+  // Through `useViewerSession` rather than `useAuth`, because the gates this feeds
+  // are compiled into the canvas, and the canvas renders in surfaces with no
+  // AuthProvider above them — the VS Code panel most of all, where `useAuth()`
+  // throws and takes the board down. It also asks the honest question there: a
+  // workspace session is what an embedded host hands over, and `isAuthenticated`
+  // (a person-level WEB token) is one the editor never holds and does not need.
+  const { ready, hasTenant } = useViewerSession();
   const pathname = usePathname() || '';
-  const signedIn = isAuthenticated && hasTenant;
   return {
-    ready: authReady,
-    signedIn,
-    isSample: authReady && !signedIn && !isCanvasSurface(pathname),
+    ready,
+    signedIn: hasTenant,
+    isSample: ready && !hasTenant && !isCanvasSurface(pathname),
   };
 }

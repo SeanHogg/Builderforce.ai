@@ -9,8 +9,12 @@ import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSampleWorkspace } from './useSampleWorkspace';
 
-const auth = { authReady: true, isAuthenticated: false, hasTenant: false };
-vi.mock('@/lib/AuthContext', () => ({ useAuth: () => auth }));
+// The viewer session, not the auth context: this hook reads the ONE accessor that
+// answers "is there a readable workspace" with or without an `AuthProvider` above
+// it, because it is compiled into the canvas and the canvas renders where there
+// is none.
+const viewer = { ready: true, hasTenant: false, tenantId: null as string | null };
+vi.mock('@/lib/viewerSession', () => ({ useViewerSession: () => viewer }));
 
 const { pathname } = vi.hoisted(() => ({ pathname: { current: '/insights' } }));
 vi.mock('next/navigation', async (importOriginal) => ({
@@ -19,9 +23,9 @@ vi.mock('next/navigation', async (importOriginal) => ({
 }));
 
 beforeEach(() => {
-  auth.authReady = true;
-  auth.isAuthenticated = false;
-  auth.hasTenant = false;
+  viewer.ready = true;
+  viewer.hasTenant = false;
+  viewer.tenantId = null;
   pathname.current = '/insights';
 });
 
@@ -43,16 +47,16 @@ describe('useSampleWorkspace', () => {
   });
 
   it('reports neither to somebody with a real workspace', () => {
-    auth.isAuthenticated = true;
-    auth.hasTenant = true;
+    viewer.hasTenant = true;
+    viewer.tenantId = '7';
     expect(read()).toEqual({ ready: true, signedIn: true, isSample: false });
   });
 
   it('claims nothing until the session has been read off the device', () => {
-    // `isAuthenticated` is false on the server render and the first hydrated
-    // frame FOR EVERYONE, so acting on it would flash "this is not your data"
-    // at a signed-in person on every hard load.
-    auth.authReady = false;
+    // The session is read off the device, so it is invisible on the server render
+    // and the first hydrated frame FOR EVERYONE — acting on it would flash "this
+    // is not your data" at a signed-in person on every hard load.
+    viewer.ready = false;
     expect(read()).toEqual({ ready: false, signedIn: false, isSample: false });
   });
 
@@ -69,8 +73,9 @@ describe('useSampleWorkspace', () => {
   });
 
   it('reports no workspace for a signed-in user who has not picked one', () => {
-    auth.isAuthenticated = true;
-    auth.hasTenant = false;
+    // A person-level session with no workspace behind it is not a readable
+    // workspace: every gate stays shut and the preview stays sample.
+    viewer.hasTenant = false;
     const state = read();
     expect(state.signedIn).toBe(false);
     expect(state.isSample).toBe(true);

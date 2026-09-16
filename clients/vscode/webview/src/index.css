@@ -421,6 +421,10 @@ select option {
   --prompt-panel-active-border: var(--bf-accent);
   --prompt-panel-active-ring: 0 0 0 1px var(--bf-accent);
   --prompt-panel-shadow: none;
+  /* The editor's chips carry their own padding, so they need a wider gap than the
+     shell's 6px default. Set here (not in a second `.bf-composer__actions` rule)
+     because the shared PromptPanel owns the row's layout. */
+  --prompt-panel-action-gap: 8px;
 }
 
 .bf-composer--drag {
@@ -580,14 +584,6 @@ select option {
   font-size: 10px;
   color: var(--bf-text-muted, rgba(255, 255, 255, 0.55));
   margin-top: 3px;
-}
-
-.bf-composer__actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  width: 100%;
 }
 
 /* Square icon button used across the composer toolbar (+, /, mic, send). */

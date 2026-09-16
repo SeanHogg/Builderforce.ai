@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { SearchPicker, type SearchPickerSection } from '@/components/ui/SearchPicker';
 import type { CreationObjectGroup, CreationObjectKind } from './types';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { creationPaletteGroupsFor } from './creationObjectRegistry';
 import { STENCIL_PACKS, stencilChoice, type PaletteChoice } from '@/lib/canvasStencils';
@@ -103,14 +103,18 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onDragSt
   const tWorkflow = useTranslations('workflowBuilder');
   // The picker decides its own contents rather than being handed a boolean: a signed-out
   // board has no access control, so it does not advertise the restricted-by-default
-  // kinds. `authReady` guards the first hydrated frame, where `isAuthenticated` is
-  // unavoidably false for everyone and would briefly hide those kinds from a member.
-  const { isAuthenticated, authReady, tenant } = useAuth();
-  const signedIn = !authReady || isAuthenticated;
+  // kinds. `ready` guards the first hydrated frame, where a stored session is
+  // unavoidably invisible and would briefly hide those kinds from a member.
+  //
+  // Through `useViewerSession` and not `useAuth`, because this board also renders in
+  // the VS Code panel, which compiles this component but not the web root layout —
+  // `useAuth()` threw there and took the whole canvas down with it.
+  const viewer = useViewerSession();
+  const signedIn = !viewer.ready || viewer.hasTenant;
   // ENTITLEMENT, resolved by the server. The picker asks the same question the palette
   // does through the same accessor, so the two cannot advertise different catalogues —
   // and neither offers a card the API would refuse to let this workspace place.
-  const capabilities = useCanvasCapabilities(tenant?.id ?? null);
+  const capabilities = useCanvasCapabilities(viewer.tenantId);
 
   const sections = useMemo<SearchPickerSection<PaletteChoice>[]>(
     () => [

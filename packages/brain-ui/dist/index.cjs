@@ -1528,6 +1528,7 @@ var import_jsx_runtime9 = require("react/jsx-runtime");
 function PromptPanel({
   input,
   actions,
+  primaryAction,
   status,
   overlay,
   active = false,
@@ -1536,6 +1537,7 @@ function PromptPanel({
   style,
   ...rest
 }) {
+  const actionGap = "var(--prompt-panel-action-gap, var(--chat-ctl-gap, 6px))";
   const panelStyle = {
     position: "relative",
     display: "flex",
@@ -1562,12 +1564,29 @@ function PromptPanel({
         overlay,
         status ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "bf-prompt-panel__status", children: status }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "bf-prompt-panel__input", style: { display: "flex", width: "100%", minWidth: 0 }, children: input }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
           "div",
           {
             className: "bf-prompt-panel__actions",
-            style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: "var(--prompt-panel-action-gap, var(--chat-ctl-gap, 6px))", minWidth: 0 },
-            children: actions
+            style: { display: "flex", alignItems: "center", gap: actionGap, minWidth: 0 },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                "div",
+                {
+                  className: "bf-prompt-panel__actions-lead",
+                  style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: actionGap, minWidth: 0, flex: "1 1 auto" },
+                  children: actions
+                }
+              ),
+              primaryAction ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                "div",
+                {
+                  className: "bf-prompt-panel__actions-primary",
+                  style: { display: "flex", alignItems: "center", gap: actionGap, flex: "0 0 auto", marginLeft: "auto" },
+                  children: primaryAction
+                }
+              ) : null
+            ]
           }
         )
       ]

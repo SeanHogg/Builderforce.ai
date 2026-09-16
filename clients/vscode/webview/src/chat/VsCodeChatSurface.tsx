@@ -105,7 +105,7 @@ import { buildTranscript, hasTranscriptContent } from '../transcript';
 import { readStored, writeStored } from '../storage';
 import { autoApprovePersistence } from '../autoApprove';
 import { EFFORT_KEY, MEMORY_KEY, THINKING_KEY } from './chatPreferences';
-import { decodeTokenClaims } from './tokenClaims';
+import { decodeTokenClaims } from '@/lib/tokenClaims';
 import {
   effortDesc, makeT, personaModalityOptions, personaPickerLabels, promptMenuLabels, recipientPickerLabels, timelineLabels,
 } from './chatLabels';
@@ -1458,7 +1458,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             </button>
           )}
         </div>}
-        actions={<div className="bf-composer__actions">
+        actions={<>
           <input
             ref={fileInputRef}
             type="file"
@@ -1582,46 +1582,50 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             <span>{t('app.autoMode', 'Auto')}</span>
           </button>
 
-          {/* While a run is in flight the primary action becomes Stop — it aborts
-              the streaming LLM request and unwinds the agent loop (conv.stop). The
-              user can still compose: with text typed, a Queue button (and Enter) adds
-              the message to the drain queue instead of dropping it. Icon-only, like
-              Send — the title/aria-label still name the action. */}
-          {conv.sending ? (
-            <>
-              {input.trim() && (
-                <button
-                  type="button"
-                  className="bf-iconbtn bf-iconbtn--send"
-                  onClick={submit}
-                  title={t('app.queueSend', 'Queue message — sends when the current run finishes')}
-                  aria-label={t('app.queueSend', 'Queue message — sends when the current run finishes')}
-                >
-                  <IconSend />
-                </button>
-              )}
+        </>}
+        // While a run is in flight the primary action becomes Stop — it aborts the
+        // streaming LLM request and unwinds the agent loop (conv.stop). The user can
+        // still compose: with text typed, a Queue button (and Enter) adds the message
+        // to the drain queue instead of dropping it. Icon-only, like Send — the
+        // title/aria-label still name the action.
+        //
+        // It goes through `primaryAction` rather than the end of `actions` so the
+        // shared shell pins it to the far right edge of the row; trailing it after the
+        // chips left it wherever the chips happened to end.
+        primaryAction={conv.sending ? (
+          <>
+            {input.trim() && (
               <button
                 type="button"
-                className="bf-iconbtn bf-iconbtn--stop"
-                onClick={conv.stop}
-                title={t('app.stop', 'Stop')}
-                aria-label={t('app.stop', 'Stop')}
+                className="bf-iconbtn bf-iconbtn--send"
+                onClick={submit}
+                title={t('app.queueSend', 'Queue message — sends when the current run finishes')}
+                aria-label={t('app.queueSend', 'Queue message — sends when the current run finishes')}
               >
-                <IconStop />
+                <IconSend />
               </button>
-            </>
-          ) : (
+            )}
             <button
-              className="bf-iconbtn bf-iconbtn--send"
-              onClick={submit}
-              disabled={!input.trim()}
-              title={t('app.send', 'Send')}
-              aria-label={t('app.send', 'Send')}
+              type="button"
+              className="bf-iconbtn bf-iconbtn--stop"
+              onClick={conv.stop}
+              title={t('app.stop', 'Stop')}
+              aria-label={t('app.stop', 'Stop')}
             >
-              <IconSend />
+              <IconStop />
             </button>
-          )}
-        </div>}
+          </>
+        ) : (
+          <button
+            className="bf-iconbtn bf-iconbtn--send"
+            onClick={submit}
+            disabled={!input.trim()}
+            title={t('app.send', 'Send')}
+            aria-label={t('app.send', 'Send')}
+          >
+            <IconSend />
+          </button>
+        )}
       />
     </div>
   );

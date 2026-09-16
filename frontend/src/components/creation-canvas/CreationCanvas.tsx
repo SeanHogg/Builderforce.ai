@@ -240,6 +240,7 @@ import { useRouter } from 'next/navigation';
 import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_CORPUS_ACCOUNT_GATE, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_REALIZE_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { createCanvasRealization, listRealizationTargets, primaryRealizationDoc, rankRealizationIdea, type RealizationView } from '@/lib/canvasRealize';
 import { getStoredTenantToken } from '@/lib/auth';
+import { useViewerSession } from '@/lib/viewerSession';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPdf, exportPptx, exportXlsx } from '@/lib/exportApi';
@@ -1837,15 +1838,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a SAVED SESSION to point at (durable object actions, branches, comparisons); this
   // answers only "will a tenant request from this browser authenticate?".
   //
-  // Read from the token store rather than from `useAuth`, for two reasons: it is the
-  // exact value `apiRequest` authorizes with (so it cannot disagree with the call it is
-  // predicting), and the canvas mounts in surfaces that have no AuthProvider above them
-  // — the VS Code webview, the embed, and the component tests.
-  const [hasAccount, setHasAccount] = useState(false);
+  // Answered by `useViewerSession`, which falls back to the token store rather than
+  // requiring `useAuth`, for two reasons: it is the exact value `apiRequest`
+  // authorizes with (so it cannot disagree with the call it is predicting), and the
+  // canvas mounts in surfaces that have no AuthProvider above them — the VS Code
+  // webview, the embed, and the component tests, where `useAuth()` throws.
+  const hasAccount = useViewerSession().hasTenant;
   const [claimingDraft, setClaimingDraft] = useState(false);
-  useEffect(() => {
-    setHasAccount(!!getStoredTenantToken());
-  }, []);
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
     trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });

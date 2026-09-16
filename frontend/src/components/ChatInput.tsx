@@ -712,7 +712,12 @@ export function ChatInput({
             <Icon name="mic" size={20} />
           </button>
             )}
-            {running && onStop && !canSubmit ? (
+          </>
+        )}
+        // Send/Stop is handed to the shell's trailing slot, which pins it to the far
+        // right edge — the same placement the editor composer now gets from the same
+        // prop, instead of each surface anchoring it by hand.
+        primaryAction={running && onStop && !canSubmit ? (
           // Streaming with an empty composer → the button interrupts the run.
           // When the composer HAS submittable text (e.g. the queue-while-thinking
           // path where the host keeps the input editable), the Send button below
@@ -726,7 +731,7 @@ export function ChatInput({
           >
             <Icon name="stop" size={14} />
           </button>
-            ) : (
+        ) : (
           <button
             type="submit"
             disabled={!canSubmit}
@@ -737,8 +742,6 @@ export function ChatInput({
                 stroke it needs to read there rather than the set's 1.8. */}
             <Icon name="arrow-up" size={18} strokeWidth={2.5} />
           </button>
-            )}
-          </>
         )}
       />
       {/* Turns held behind the running one. The receipt for a composer that never

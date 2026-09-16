@@ -30,6 +30,7 @@ import {
   getStoredTenantToken,
   getStoredWebToken,
 } from './auth';
+import { tenantIdFromToken } from './tokenClaims';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { dispatchApiError } from './errors/apiErrorEvent';
 import { fetchWithTransportReport, TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
@@ -97,15 +98,7 @@ export function clearEmulationToken(): void {
  * server verifies the token it is sent.
  */
 export function emulatedTenantId(): string | null {
-  if (!_emulationToken) return null;
-  try {
-    const payload = _emulationToken.split('.')[1] ?? '';
-    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))) as { tid?: unknown };
-    return claims.tid == null ? null : String(claims.tid);
-  } catch {
-    return null;
-  }
+  return tenantIdFromToken(_emulationToken);
 }
 
 /**

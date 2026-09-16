@@ -529,8 +529,20 @@ declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgr
 interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
     /** Text entry for the prompt. Always occupies the first, full-width row. */
     input: ReactNode;
-    /** Context, mode, model, voice and send controls for the second row. */
+    /** Context, mode, model and voice controls for the second row. They wrap. */
     actions: ReactNode;
+    /**
+     * The ONE primary control for the composer — Send, Stop, or Queue.
+     *
+     * It lives in its own trailing region rather than at the end of `actions`
+     * because "the thing that sends the message sits at the far right edge" is a
+     * property of the composer, not of each host: the web composer pinned it with
+     * an ad-hoc `marginLeft: 'auto'` on an unrelated chip, and the editor composer
+     * — which has no such chip — left Send/Stop floating in the middle of the row
+     * behind whatever chips happened to be rendered. Given here, neither host can
+     * place it differently again, and it never wraps onto a second line.
+     */
+    primaryAction?: ReactNode;
     /** Chips, queued turns, or other state shown above the text entry. */
     status?: ReactNode;
     /** Popovers such as the shared @-mention picker. */
@@ -545,7 +557,7 @@ interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'childre
  * focus treatment, spacing, and panel shape live here so web, Canvas, marketing,
  * and editor integrations cannot grow different composer markup again.
  */
-declare function PromptPanel({ input, actions, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
+declare function PromptPanel({ input, actions, primaryAction, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
 
 /**
  * The contract for the composer's `/` control — the ONE place a prompt panel
