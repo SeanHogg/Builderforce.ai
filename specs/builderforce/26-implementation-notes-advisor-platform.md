@@ -6,7 +6,20 @@
 **Date:** 2026-09-16  
 **Principle:** Compose existing primitives. Do not clone SCORE.
 
-This document is the composition contract for P0–P3. Production code for the kill condition ships on the child tickets, not on this epic branch, so those PRs do not fork pipelines or race each other.
+This file is the epic composition contract. Downstream P0/P1 agents must read **this path on `main`**, not chat or project memory. Production code for the kill condition ships on the child tickets, not on epic #2522.
+
+## Cite this (do not re-derive)
+
+| Rule | Contract |
+| --- | --- |
+| Talent filter | `category=advisors` is a **talent-catalog filter** over opted-in talent. Not a separate advisor entity, not a booking product type, not `advisor` in `MARKETPLACE_LISTING_KINDS`, not `advisory` in `PEOPLE_OBJECT_KINDS`, not `/advisors`. |
+| A0 bind | `booking_hosts.host_ref = talent userId`. No display-name, email, or parallel advisor-id mapping. Do not store `booking_service_id` on `freelancer_profiles`. |
+| P0/P1 ship | Behavior ships on **#2527**, **#2532**, and **#2538**. Those issues consume this contract; they do not redefine it. |
+| Epic boundary | Epic **#2522** owns composition and this notes spec. It does not absorb talent, booking, or minutes implementation source. |
+
+#2588 (environment bind for the #2527 checkout) is out of scope for this file and for epic #2522.
+
+Product intent lives in [26-prd-advisor-platform.md](./26-prd-advisor-platform.md). Bind and ship-vehicle rules live here.
 
 ---
 
