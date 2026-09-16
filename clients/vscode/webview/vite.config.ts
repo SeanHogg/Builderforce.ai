@@ -157,7 +157,23 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', '@xyflow/react'],
   },
   css: {
-    postcss: path.join(HERE, 'postcss.canvas.config.js'),
+    // THE webview's PostCSS config — there is only one, and this is its name.
+    //
+    // This pointed at `postcss.canvas.config.js` until the chat and canvas bundles
+    // merged. That merge left one config on disk (`postcss.config.js`, whose own
+    // header records that the chat panel's narrower config was a strict subset and
+    // so was deleted rather than merged) and this path still naming the file that
+    // went with it. Vite does not fall back when `css.postcss` is an explicit path:
+    // a missing one is an ENOENT that fails `build:webview` outright, so the
+    // production webview build could not run at all.
+    //
+    // Naming the surviving file restores the Tailwind + autoprefixer pipeline the
+    // board's styles depend on. Leaving it unset would have been worse than wrong:
+    // Vite would then search upward and could silently find a different config,
+    // purging every utility class in the compiled frontend components and shipping
+    // an unstyled board — the same class of invisible failure `webviewAssets.test.ts`
+    // exists to catch.
+    postcss: path.join(HERE, 'postcss.config.js'),
   },
   build: {
     outDir: path.resolve(HERE, '../media/webview'),
