@@ -926,7 +926,7 @@ export default function MarketplacePageClient() {
                     <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--coral-bright)' }}>
                       {f.hourlyRateCents != null ? `${formatCents(f.hourlyRateCents, { currency: f.currency, maximumFractionDigits: 0 })}${tt('perHour')}` : ''}
                     </span>
-                    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tt('viewProfile')} →</span>
+                    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{f.bookable ? tt('book') : tt('viewProfile')} →</span>
                   </div>
                 </Link>
               ))}

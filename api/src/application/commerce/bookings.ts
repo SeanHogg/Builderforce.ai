@@ -43,7 +43,7 @@ import {
   bookingReservations,
   bookingServices,
 } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
 
@@ -92,6 +92,45 @@ export async function listServices(db: Db, tenantId: number) {
     .from(bookingServices)
     .where(scopedToTenant(bookingServices, tenantId))
     .orderBy(asc(bookingServices.name));
+}
+
+/**
+ * Marketplace bind: the talent listing is the person, and the person hosts
+ * services via `booking_hosts.host_ref` (their user id). The founder's tenant
+ * is the wrong calendar — this is acrossTenants on purpose, filtered by host
+ * rather than by the viewer.
+ *
+ * Tenant id is selected so the query is explicit about crossing tenants, and
+ * stripped before return so the listing does not leak the advisor's workspace.
+ */
+export async function listServicesForHost(db: Db, hostRef: string) {
+  const ref = hostRef.trim().slice(0, 64);
+  if (!ref) return [];
+  const rows = await db
+    .select({
+      id: bookingServices.id,
+      slug: bookingServices.slug,
+      name: bookingServices.name,
+      description: bookingServices.description,
+      durationMin: bookingServices.durationMin,
+      bufferMin: bookingServices.bufferMin,
+      priceCents: bookingServices.priceCents,
+      currency: bookingServices.currency,
+      mode: bookingServices.mode,
+      capacity: bookingServices.capacity,
+      tenantId: bookingServices.tenantId,
+    })
+    .from(bookingServices)
+    .innerJoin(bookingHosts, eq(bookingHosts.serviceId, bookingServices.id))
+    .where(acrossTenants(
+      bookingServices,
+      'public_catalogue',
+      eq(bookingHosts.hostRef, ref),
+      eq(bookingHosts.isActive, true),
+      eq(bookingServices.isActive, true),
+    ))
+    .orderBy(asc(bookingServices.name));
+  return rows.map(({ tenantId: _tenantId, ...service }) => service);
 }
 
 export async function createService(
@@ -273,6 +312,53 @@ export async function reserve(
     metadata: { service: service.name, startsAt: input.startsAt.toISOString(), hostRef: input.hostRef ?? null },
   });
   return row;
+}
+
+/**
+ * Marketplace Book: a founder reserves a published talent's service.
+ *
+ * The listing bind is `booking_hosts.host_ref` = the talent's user id. The
+ * reservation is written in the SERVICE's tenant (the advisor's workspace),
+ * not the booker's — otherwise overlap would be checked in the wrong calendar
+ * and {@link reserve}'s 409 would never fire for the person who actually hosts.
+ */
+export async function reserveForHost(
+  db: Db,
+  env: Env,
+  actor: ActorIdentity,
+  hostRef: string,
+  input: {
+    serviceId: number;
+    startsAt: Date;
+    bookerRef?: string | null;
+    bookerEmail?: string | null;
+    timezone?: string;
+  },
+) {
+  const ref = hostRef.trim().slice(0, 64);
+  if (!ref) throw new BookingError('host not found', 404);
+  const [hosted] = await db
+    .select({ tenantId: bookingServices.tenantId })
+    .from(bookingServices)
+    .innerJoin(bookingHosts, eq(bookingHosts.serviceId, bookingServices.id))
+    .where(acrossTenants(
+      bookingServices,
+      'public_catalogue',
+      eq(bookingServices.id, input.serviceId),
+      eq(bookingServices.isActive, true),
+      eq(bookingHosts.hostRef, ref),
+      eq(bookingHosts.isActive, true),
+    ))
+    .limit(1);
+  if (!hosted) throw new BookingError('That service is not offered by this person.', 404);
+  return reserve(db, env, hosted.tenantId, actor, {
+    serviceId: input.serviceId,
+    startsAt: input.startsAt,
+    hostRef: ref,
+    bookerRef: input.bookerRef ?? null,
+    bookerEmail: input.bookerEmail ?? null,
+    timezone: input.timezone,
+  });
 }
 
 /**

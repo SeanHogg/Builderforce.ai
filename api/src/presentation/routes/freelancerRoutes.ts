@@ -82,6 +82,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { refusalResponse } from '../middleware/errorResponse';
 import { ESCROW_REFUSAL_STATUS } from './disputeRoutes';
+import { BookingError, listServicesForHost, reserveForHost } from '../../application/commerce/bookings';
 import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 
 /** `freelancer_profiles.*` under the SNAKE_CASE keys every consumer below (and the
@@ -140,6 +141,18 @@ const reputationColumns = {
   awarded: sql<number>`(SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = ${freelancerProfiles}.user_id AND e.hired_at IS NOT NULL)::int`,
   activity_signals: sql<number>`(SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = ${freelancerProfiles}.user_id AND s.occurred_at >= now() - interval '90 days')::int`,
   earned_cents: sql<string>`(SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = ${freelancerProfiles}.user_id AND i.status = 'paid')::bigint`,
+} as const;
+
+/** Bound to an active booking_service the person hosts (`booking_hosts.host_ref`). */
+const bookableColumns = {
+  bookable: sql<boolean>`exists (
+    select 1 from booking_hosts h
+    inner join booking_services s on s.id = h.service_id
+    where h.host_ref = ${freelancerProfiles.userId}
+      and h.is_active = true
+      and s.is_active = true
+      and s.tenant_id is not null
+  )`,
 } as const;
 
 /** `freelancer_engagements.*` under the snake_case keys `mapEngagement` reads. */
@@ -376,6 +389,14 @@ const RaiseDisputeBody = z.object({ reason: zNonEmptyString, detail: zOptionalSt
 
 const DisputeStatementBody = z.object({ position: zNonEmptyString, evidence: z.unknown().optional() });
 
+/** POST /:id/reservations — a founder books a published talent's bound service. */
+const TalentReserveBody = z.object({
+  serviceId: z.union([z.number().int().positive(), z.string().min(1)]),
+  startsAt: zNonEmptyString,
+  timezone: zOptionalString,
+  bookerEmail: zOptionalString,
+});
+
 /** POST /:id/milestones — a deliverable. Always lands in `draft`. */
 const CreateMilestoneBody = z.object({
   title: zNonEmptyString,
@@ -513,6 +534,7 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
       return { jss, badge };
     })()),
     updatedAt: row.updated_at ?? null,
+    bookable: Boolean(row.bookable),
   };
 }
 
@@ -960,11 +982,11 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const viewer = await optionalWebUserId(c);
     const filters = parseTalentFilters(c.req.query());
     const version = await getCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
-    const key = `fl:browse:v:${version}:${viewer ? 'member' : 'public'}:${JSON.stringify(filters)}`;
+    const key = `fl:browse:bookable:v:${version}:${viewer ? 'member' : 'public'}:${JSON.stringify(filters)}`;
 
     const page = await getOrSetCached(c.env as Env, key, async () => {
       const rows = await (db
-        .select({ ...profileWithUserColumns, ...ratingColumns, ...reputationColumns, total: sql<number>`count(*) over()::int` })
+        .select({ ...profileWithUserColumns, ...ratingColumns, ...reputationColumns, ...bookableColumns, total: sql<number>`count(*) over()::int` })
         .from(freelancerProfiles)
         .innerJoin(users, eq(users.id, freelancerProfiles.userId))
         .where(and(
@@ -1049,7 +1071,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const id = c.req.param('id');
     const viewer = await optionalWebUserId(c);
-    const [row] = await db.select({ ...profileWithUserColumns, ...ratingColumns })
+    const [row] = await db.select({ ...profileWithUserColumns, ...ratingColumns, ...bookableColumns })
       .from(freelancerProfiles)
       .innerJoin(users, eq(users.id, freelancerProfiles.userId))
       .where(and(
@@ -1079,6 +1101,76 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       stats,
       reviews: reviews.map((r) => ({ rating: Number(r.rating), comment: r.comment ?? null, createdAt: r.created_at, reviewerName: r.reviewer_name ?? null })),
     });
+  });
+
+  // GET /:id/booking-services — active services this published talent hosts.
+  // The bind is host_ref, not the viewer's tenant. practice-ops stays authed.
+  router.get('/:id/booking-services', async (c) => {
+    const db = requestDb(c);
+    const id = c.req.param('id');
+    const viewer = await optionalWebUserId(c);
+    const [row] = await db.select({
+      userId: freelancerProfiles.userId,
+      visibility: freelancerProfiles.visibility,
+    })
+      .from(freelancerProfiles)
+      .where(and(
+        or(eq(freelancerProfiles.userId, id), sql`lower(${freelancerProfiles.slug}) = ${id.toLowerCase()}`),
+        eq(freelancerProfiles.published, true),
+      ));
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (row.visibility === 'private' && !viewer) {
+      return c.json({ error: 'This profile is only visible to signed-in members', code: 'AUTH_REQUIRED' }, 401);
+    }
+    const services = await listServicesForHost(db, row.userId);
+    return c.json({ services });
+  });
+
+  // POST /:id/reservations — founder Books into the advisor's tenant.
+  router.post('/:id/reservations', authMiddleware, async (c) => {
+    const db = requestDb(c);
+    const id = c.req.param('id');
+    const bookerRef = c.get('userId') as string;
+    const [row] = await db.select({
+      userId: freelancerProfiles.userId,
+    })
+      .from(freelancerProfiles)
+      .where(and(
+        or(eq(freelancerProfiles.userId, id), sql`lower(${freelancerProfiles.slug}) = ${id.toLowerCase()}`),
+        eq(freelancerProfiles.published, true),
+      ));
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (row.userId === bookerRef) return c.json({ error: 'You cannot book your own session' }, 400);
+    const b = await parseBody(c, TalentReserveBody);
+    const serviceId = typeof b.serviceId === 'number' ? b.serviceId : Number(b.serviceId);
+    if (!Number.isInteger(serviceId) || serviceId < 1) {
+      return c.json({ error: 'serviceId must be a positive integer' }, 400);
+    }
+    const startsAt = new Date(b.startsAt);
+    if (Number.isNaN(startsAt.getTime())) {
+      return c.json({ error: 'startsAt must be an ISO timestamp' }, 400);
+    }
+    try {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      const reserved = await reserveForHost(db, c.env as Env, actor, row.userId, {
+        serviceId,
+        startsAt,
+        bookerRef,
+        bookerEmail: b.bookerEmail ?? null,
+        timezone: b.timezone ?? undefined,
+      });
+      return c.json({
+        id: reserved.id,
+        serviceId: reserved.serviceId,
+        startsAt: reserved.startsAt,
+        endsAt: reserved.endsAt,
+        status: reserved.status,
+        timezone: reserved.timezone,
+      }, 201);
+    } catch (err) {
+      if (err instanceof BookingError) return c.json({ error: err.message }, err.status);
+      throw err;
+    }
   });
 
   return router;

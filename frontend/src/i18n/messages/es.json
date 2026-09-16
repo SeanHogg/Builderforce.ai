@@ -13052,6 +13052,18 @@
       "earnedSub": "histórico"
     },
     "message": "Mensaje",
+    "book": "Reservar",
+    "bookSession": "Reservar una sesión",
+    "bookService": "Sesión",
+    "bookWhen": "Cuándo",
+    "bookFree": "Gratis",
+    "bookMinutes": "{minutes} min",
+    "bookConfirm": "Confirmar reserva",
+    "bookCancel": "Cancelar",
+    "booking": "Reservando…",
+    "booked": "Reservado",
+    "bookOverlap": "Ese horario ya no está disponible. Elige otra hora.",
+    "bookError": "No se pudo reservar esta sesión.",
     "specialty": {
       "frontend": "Frontend",
       "backend": "Backend",

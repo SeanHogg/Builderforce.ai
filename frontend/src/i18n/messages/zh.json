@@ -13052,6 +13052,18 @@
       "earnedSub": "全部"
     },
     "message": "发消息",
+    "book": "预约",
+    "bookSession": "预约会话",
+    "bookService": "会话",
+    "bookWhen": "时间",
+    "bookFree": "免费",
+    "bookMinutes": "{minutes} 分钟",
+    "bookConfirm": "确认预约",
+    "bookCancel": "取消",
+    "booking": "预约中…",
+    "booked": "已预约",
+    "bookOverlap": "该时段已不可用，请另选时间。",
+    "bookError": "无法预约此会话。",
     "specialty": {
       "frontend": "前端",
       "backend": "后端",

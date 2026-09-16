@@ -13052,6 +13052,18 @@
       "earnedSub": "gesamt"
     },
     "message": "Nachricht",
+    "book": "Buchen",
+    "bookSession": "Sitzung buchen",
+    "bookService": "Sitzung",
+    "bookWhen": "Wann",
+    "bookFree": "Kostenlos",
+    "bookMinutes": "{minutes} Min.",
+    "bookConfirm": "Buchung bestätigen",
+    "bookCancel": "Abbrechen",
+    "booking": "Buchung…",
+    "booked": "Gebucht",
+    "bookOverlap": "Dieser Termin ist nicht mehr frei. Wähle eine andere Zeit.",
+    "bookError": "Diese Sitzung konnte nicht gebucht werden.",
     "specialty": {
       "frontend": "Frontend",
       "backend": "Backend",

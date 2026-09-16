@@ -13052,6 +13052,18 @@
       "earnedSub": "lifetime"
     },
     "message": "Message",
+    "book": "Book",
+    "bookSession": "Book a session",
+    "bookService": "Session",
+    "bookWhen": "When",
+    "bookFree": "Free",
+    "bookMinutes": "{minutes} min",
+    "bookConfirm": "Confirm booking",
+    "bookCancel": "Cancel",
+    "booking": "Booking…",
+    "booked": "Booked",
+    "bookOverlap": "That slot is no longer available. Pick another time.",
+    "bookError": "Could not book this session.",
     "specialty": {
       "frontend": "Frontend",
       "backend": "Backend",

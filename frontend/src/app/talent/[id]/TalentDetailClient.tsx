@@ -7,7 +7,9 @@ import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { useOptionalAuth } from '@/lib/AuthContext';
 import { TalentProfileView } from '@/components/freelance/TalentProfileView';
+import { BookAdvisorPanel } from '@/components/freelance/BookAdvisorPanel';
 import { hireFreelancer } from '@/lib/freelance/engagements';
+import { listTalentBookingServices, talentPrimaryAction, type TalentBookingService } from '@/lib/freelance/booking';
 import { getFreelancer, type FreelancerProfile } from '@/lib/freelance/talentProfile';
 import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { ShortlistToggle } from '@/components/talent/ShortlistToggle';
@@ -30,11 +32,26 @@ export default function TalentDetailClient() {
   const [error, setError] = useState<string | null>(null);
   const [hireState, setHireState] = useState<'idle' | 'busy' | 'hired' | 'invited'>('idle');
   const [hireError, setHireError] = useState<string | null>(null);
+  const [services, setServices] = useState<TalentBookingService[]>([]);
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [booked, setBooked] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     getFreelancer(id).then(setProfile).catch((e: unknown) => setError(errorMessage(e))).finally(() => setLoading(false));
   }, [id, errorMessage]);
+
+  useEffect(() => {
+    if (!profile?.bookable) {
+      setServices([]);
+      return;
+    }
+    let cancelled = false;
+    listTalentBookingServices(profile.userId)
+      .then((rows) => { if (!cancelled) setServices(rows); })
+      .catch(() => { if (!cancelled) setServices([]); });
+    return () => { cancelled = true; };
+  }, [profile?.bookable, profile?.userId]);
 
   const doHire = async (status: 'active' | 'interviewing') => {
     if (!profile) return;
@@ -60,28 +77,64 @@ export default function TalentDetailClient() {
 
   const isOwner = auth?.user?.id === profile.userId;
   const canHire = !!auth?.hasTenant && !isOwner;
+  const bound = talentPrimaryAction(Boolean(profile.bookable) || services.length > 0) === 'book';
+  const hirePrimary = {
+    padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: 'none',
+    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+    color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 'var(--font-size-small)',
+    cursor: hireState === 'busy' ? 'wait' : 'pointer',
+  } as const;
+  const hireSecondary = {
+    padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)',
+    background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600,
+    fontSize: 'var(--font-size-small)', cursor: hireState === 'busy' ? 'wait' : 'pointer',
+  } as const;
+  let hireLabel = t('hire');
+  if (hireState === 'busy') hireLabel = t('hiring');
+  else if (hireState === 'hired') hireLabel = t('hired');
 
-  const actions = isOwner ? (
-    <Link href="/freelancer/profile"
-      style={{ padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-small)', textDecoration: 'none' }}>
-      {t('editProfile')}
-    </Link>
-  ) : canHire ? (
-    <>
-      {/* Shortlisting comes BEFORE hiring in the real sequence: a client comparing five
-          people needs somewhere to put them that is not a browser tab. */}
-      <ShortlistToggle freelancerUserId={profile.userId} />
-      <MessagesButton side="employer" context={{ freelancerUserId: profile.userId, title: profile.displayName ?? undefined }} label={t('message')} />
-      <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}
-        style={{ padding: '9px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-small)', cursor: 'pointer' }}>
-        {t('interview')}
-      </button>
-      <button type="button" onClick={() => doHire('active')} disabled={hireState === 'busy' || hireState !== 'idle'}
-        style={{ padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontWeight: 700, fontSize: 'var(--font-size-small)', cursor: hireState === 'busy' ? 'wait' : 'pointer' }}>
-        {hireState === 'busy' ? t('hiring') : hireState === 'hired' ? t('hired') : t('hire')}
-      </button>
-    </>
-  ) : undefined;
+  // Book is the listing CTA for anyone who is not the advisor — including a
+  // visitor. Hire/Message still need a tenant. Unbound listings keep Message.
+  let actions: React.ReactNode;
+  if (isOwner) {
+    actions = (
+      <Link href="/freelancer/profile"
+        style={{ padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-small)', textDecoration: 'none' }}>
+        {t('editProfile')}
+      </Link>
+    );
+  } else if (canHire || bound) {
+    actions = (
+      <>
+        {/* Shortlisting comes BEFORE hiring in the real sequence: a client comparing five
+            people needs somewhere to put them that is not a browser tab. */}
+        {canHire && <ShortlistToggle freelancerUserId={profile.userId} />}
+        {bound && (
+          <button type="button" onClick={() => setBookingOpen((open) => !open)}
+            style={hirePrimary}>
+            {booked ? t('booked') : t('book')}
+          </button>
+        )}
+        {canHire && (
+          <MessagesButton side="employer" context={{ freelancerUserId: profile.userId, title: profile.displayName ?? undefined }} label={t('message')} />
+        )}
+        {canHire && (
+          <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}
+            style={{ padding: '9px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-small)', cursor: 'pointer' }}>
+            {t('interview')}
+          </button>
+        )}
+        {canHire && (
+          <button type="button" onClick={() => doHire('active')} disabled={hireState === 'busy' || hireState !== 'idle'}
+            style={bound ? hireSecondary : hirePrimary}>
+            {hireLabel}
+          </button>
+        )}
+      </>
+    );
+  } else {
+    actions = undefined;
+  }
 
   return (
     <PageContainer width="readable" style={{ padding: '32px 40px' }}>
@@ -91,6 +144,7 @@ export default function TalentDetailClient() {
 
       {hireState === 'hired' && <div style={{ ...card, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.4)', color: 'rgba(34,197,94,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('hired')}</div>}
       {hireState === 'invited' && <div style={{ ...card, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', color: 'rgba(59,130,246,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('invited')}</div>}
+      {booked && <div style={{ ...card, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.4)', color: 'rgba(34,197,94,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('booked')}</div>}
       {hireError && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{hireError}</div>}
 
       <TalentProfileView
@@ -98,6 +152,15 @@ export default function TalentDetailClient() {
         actions={actions}
         resumeEmptyNote={auth?.isAuthenticated ? t('noResume') : t('signInForResume')}
       />
+      {!isOwner && bookingOpen && !booked && services.length > 0 && (
+        <BookAdvisorPanel
+          talentId={profile.userId}
+          services={services}
+          timezone={profile.timezone}
+          onBooked={() => { setBooked(true); setBookingOpen(false); }}
+          onCancel={() => setBookingOpen(false)}
+        />
+      )}
     </PageContainer>
   );
 }

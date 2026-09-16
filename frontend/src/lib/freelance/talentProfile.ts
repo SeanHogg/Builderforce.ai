@@ -67,6 +67,8 @@ export interface FreelancerProfile {
   reviews?: FreelancerReview[];
   stats?: FreelancerStats;
   updatedAt?: string | null;
+  /** True when this person hosts an active booking_service (marketplace Book). */
+  bookable?: boolean;
 }
 
 /** Reputation numbers shown on a for-hire profile (server-computed + cached). */

@@ -118,6 +118,37 @@ describe('double booking is prevented by the write', () => {
   });
 });
 
+describe('a talent listing binds to booking_services by host_ref', () => {
+  const freelancerRoutes = read(resolve(__dirname, '..', '..', 'presentation', 'routes', 'freelancerRoutes.ts'));
+
+  it('lists the services a person hosts without using the viewer tenant', () => {
+    const body = fn(booking, 'listServicesForHost');
+    expect(body).toContain('acrossTenants');
+    expect(body).toContain('bookingHosts.hostRef');
+    expect(body).toContain('eq(bookingServices.isActive, true)');
+    expect(body).not.toContain('scopedToTenant');
+  });
+
+  it('reserves into the host service tenant so overlap still 409s in the right calendar', () => {
+    const body = fn(booking, 'reserveForHost');
+    expect(body).toContain('reserve(');
+    expect(body).toContain('hosted.tenantId');
+    expect(body).toContain('That service is not offered by this person.');
+  });
+
+  it('exposes Book on the talent listing rather than by un-authing practice-ops', () => {
+    expect(freelancerRoutes).toContain("router.get('/:id/booking-services'");
+    expect(freelancerRoutes).toContain("router.post('/:id/reservations', authMiddleware");
+    expect(routes).toContain("router.use('*', authMiddleware)");
+  });
+
+  it('projects bookable onto the public talent listing from host_ref, not a profile column', () => {
+    expect(freelancerRoutes).toContain('bookable: Boolean(row.bookable)');
+    expect(freelancerRoutes).toContain('h.host_ref = ${freelancerProfiles.userId}');
+    expect(freelancerRoutes).not.toContain('booking_service_id');
+  });
+});
+
 describe('a practice can see whether a client is worth it', () => {
   const body = fn(practice, 'clientEconomics');
 

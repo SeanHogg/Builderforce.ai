@@ -13052,6 +13052,18 @@
       "earnedSub": "cumul"
     },
     "message": "Message",
+    "book": "Réserver",
+    "bookSession": "Réserver une séance",
+    "bookService": "Séance",
+    "bookWhen": "Quand",
+    "bookFree": "Gratuit",
+    "bookMinutes": "{minutes} min",
+    "bookConfirm": "Confirmer la réservation",
+    "bookCancel": "Annuler",
+    "booking": "Réservation…",
+    "booked": "Réservé",
+    "bookOverlap": "Ce créneau n'est plus disponible. Choisissez un autre horaire.",
+    "bookError": "Impossible de réserver cette séance.",
     "specialty": {
       "frontend": "Frontend",
       "backend": "Backend",
