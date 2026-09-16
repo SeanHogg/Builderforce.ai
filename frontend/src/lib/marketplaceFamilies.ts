@@ -135,6 +135,10 @@ const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
   // (`users.available_for_hire`) lives on their own profile. The skill form's
   // slug/version/repo fields describe nothing about a person.
   'talent:person': { href: '/freelancer/profile', requiresAuth: true },
+  // An advisor is a bookable person, and becoming bookable is done on the same
+  // profile that owns the for-hire opt-in — there is no separate "publish an
+  // advisor" form, so the chip points at the profile rather than the skill form.
+  'talent:advisor': { href: '/freelancer/profile', requiresAuth: true },
   // A startup is listed from the founder's own company — the Listing tab of the
   // investor panel, opened straight into its wizard. Not a form on the storefront,
   // because the listing is a FACET of a company the workspace owns.
