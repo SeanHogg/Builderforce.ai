@@ -159,6 +159,21 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
         : vscode.l10n.t("Agent is working…");
       item.tooltip = new vscode.MarkdownString(`${chat.title}\n\n**${state}**`);
     }
+    if (ticketPct != null) {
+      // Tooltip is the only place extra wording ("ticket progress") appears.
+      const progressLine = ticketProgressTooltipLine(ticketPct);
+      if (item.tooltip instanceof vscode.MarkdownString) {
+        item.tooltip.appendMarkdown(`\n\n${progressLine}`);
+      } else {
+        const base = typeof item.tooltip === "string" && item.tooltip.length > 0
+          ? item.tooltip
+          : conversationTreeLabel(chat);
+        item.tooltip = `${base}\n${progressLine}`;
+      }
+    }
+    item.accessibilityInformation = {
+      label: conversationAccessibilityName(conversationTreeLabel(chat), time, ticketPct),
+    };
     item.description = description;
     item.contextValue = "builderforceSession";
     item.command = { command: "builderforce.openSession", title: vscode.l10n.t("Open Chat"), arguments: [chat.id] };
