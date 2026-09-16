@@ -20,6 +20,21 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 ));
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
+
+/**
+ * This suite asserts an ANONYMOUS session's account gate ("asks an anonymous
+ * session to create an account before provisioning a workspace"). `hasAccount`
+ * used to come from `CreationCanvas`'s own `useState`/`getStoredTenantToken()`
+ * pair, which the global `@/lib/AuthContext` mock in `src/test/setup.ts`
+ * (`hasTenant: true`, for the many RBAC-gated components that need a
+ * signed-in default) never touched. Now that it reads
+ * `useViewerSession().hasTenant`, that global mock reaches it too, and the
+ * gate this suite is named for would stop opening. Override it back to
+ * anonymous here, the same way `useSampleWorkspace.test.tsx` does.
+ */
+// An ANONYMOUS viewer — see the same mock in `CreationCanvas.test.tsx`. The global
+// signed-in owner from `src/test/setup.ts` would skip the account gate this file asserts.
+vi.mock('@/lib/viewerSession', () => ({ useViewerSession: () => ({ ready: true, hasTenant: false, tenantId: null }) }));
 const toasts = vi.hoisted(() => ({ show: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }));
 vi.mock('@/components/ToastProvider', () => ({ useToast: () => toasts }));
 

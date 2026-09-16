@@ -22,6 +22,24 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
 
+/**
+ * This whole file is written against an ANONYMOUS canvas — every account-gate
+ * dialog it asserts on ("Create an account to build/compare/stand up…", "Save
+ * this workflow" instead of a fabricated local run) only opens when there is no
+ * workspace behind the board. `CreationCanvas` used to answer that off its own
+ * `useState`/`getStoredTenantToken()` pair, which the global `@/lib/AuthContext`
+ * mock in `src/test/setup.ts` (`hasTenant: true`, for the many RBAC-gated
+ * components that need a signed-in default) never touched. Now that it reads
+ * `useViewerSession().hasTenant`, that global mock reaches it too — and every
+ * gate in this file would silently stop opening. Override it back to anonymous
+ * here, the same way `useSampleWorkspace.test.tsx` does.
+ */
+// AN ANONYMOUS VIEWER, deliberately: these tests assert the ACCOUNT GATES, and a gate
+// that never opens proves nothing. The global mock in `src/test/setup.ts` hands every
+// suite a signed-in owner (RBAC tests need one), and `useViewerSession` reads it — so
+// the board would believe it has a workspace and skip every gate below.
+vi.mock('@/lib/viewerSession', () => ({ useViewerSession: () => ({ ready: true, hasTenant: false, tenantId: null }) }));
+
 /** Stable across renders so a test can assert what the board actually TOLD the user —
  *  a fresh set of spies per `useToast()` call could only ever assert "nothing". */
 const toasts = vi.hoisted(() => ({ show: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }));

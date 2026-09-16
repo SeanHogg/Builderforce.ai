@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CardActBoard, CardActContext } from '@/domains/canvas/application/CardAct';
-import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
+import type { CanvasObject, CanvasObjectData } from '@/domains/canvas/domain/canvasObject';
 import { ideaActs } from './ideaActs';
 
 const t = ((key: string, values?: Record<string, unknown>) => {
@@ -12,12 +12,17 @@ const t = ((key: string, values?: Record<string, unknown>) => {
   return key;
 }) as CardActContext['t'];
 
-function idea(overrides: Record<string, unknown> = {}): CanvasObject {
+// `overrides` is typed as the object's OWN data rather than `Record<string, unknown>`:
+// spreading an index signature widened `title` to `unknown`, which left the literal with
+// no overlap against `CanvasObjectData` and made the cast a TS2352 error. Naming the type
+// also means a typo in an override is caught here instead of silently testing nothing.
+function idea(overrides: Partial<CanvasObjectData> = {}): CanvasObject {
   return {
     id: 'idea-1',
+    type: 'creation',
     position: { x: 10, y: 20 },
     data: { kind: 'idea', title: 'Scheduler', stage: 'captured', problem: 'Lost Fridays', ...overrides },
-  } as CanvasObject;
+  };
 }
 
 function boardWith(created: CanvasObject): CardActBoard {

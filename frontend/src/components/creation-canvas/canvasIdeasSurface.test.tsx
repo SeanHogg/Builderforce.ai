@@ -120,7 +120,11 @@ describe('the idea scratchpad', () => {
     // The copy names WHERE to write, because the surface no longer has a box to point
     // at — an empty state that says "write one down" beside nothing to write in is the
     // half of this defect a reader would hit first.
-    expect(screen.getByText(/in the prompt below/)).toBeTruthy();
+    //
+    // Matched on the EMPTY STATE's own opening words, not the bare phrase "in the prompt
+    // below": the surface's lede carries that phrase too and is rendered on an empty
+    // board as well, so the looser regex matched two paragraphs and threw.
+    expect(screen.getByText(/^Jot the next idea you have in the prompt below/)).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 });
