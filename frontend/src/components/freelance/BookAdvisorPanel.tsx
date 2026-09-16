@@ -101,9 +101,7 @@ export function BookAdvisorPanel(props: {
           >
             {props.services.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
-                {s.priceCents === 0 ? ` · ${t('bookFree')}` : ''}
-                {` · ${t('bookMinutes', { minutes: s.durationMin })}`}
+                {`${s.name} · ${describe(s)}`}
               </option>
             ))}
           </select>
