@@ -175,7 +175,13 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     publishKey: 'publishTalent',
     flow: 'listing',
     hueVar: '--seat-manager',
-    kinds: ['person', 'gig'],
+    // `advisor` is NOT a fifth family and NOT a `MARKETPLACE_LISTING_KINDS` id —
+    // it is a FILTER over the same person inventory: the subset of published
+    // talent who are bookable (an active `booking_hosts.host_ref`). It sits
+    // beside `person` rather than under it because a visitor looking to book an
+    // hour and a visitor looking to hire a contractor are asking different
+    // questions of the same rows, and one chip cannot answer both.
+    kinds: ['person', 'advisor', 'gig'],
     noteKey: 'note.talent',
   },
   company: {
