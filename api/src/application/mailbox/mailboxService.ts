@@ -130,6 +130,7 @@ export async function saveMailboxConnection(
       expiresAt: expiresAtMs ? new Date(expiresAtMs) : null,
       scope: input.scope ?? '',
       status: 'connected',
+      allowSending: false,
       lastError: null,
     })
     .onConflictDoUpdate({
