@@ -34,13 +34,18 @@ export function BookAdvisorPanel(props: {
   /**
    * `Free · 30 minutes` / `30 € · 30 Minuten` / `US$30.00 · 30 分钟`.
    *
-   * Both halves are locale data, not text: the price is minor units in the
-   * service's OWN currency (so it is divided by 100 and handed to `money`, which
-   * places the symbol, the grouping and the decimal separator per locale), and
-   * the duration goes through `number` so a four-digit minute count groups the
-   * way the reader expects. A paid service previously rendered NO price at all —
-   * only the zero case was ever shown — which is why this is a single helper
-   * both call sites share rather than an expression repeated twice.
+   * Both halves are locale data, not text. The price is minor units in the
+   * service's OWN currency, so it is divided by 100 and handed to `money`, which
+   * places the symbol, the grouping and the decimal separator per locale — a
+   * paid service previously rendered NO price at all, only the zero case was
+   * ever shown, which is why this is a single helper both call sites share
+   * rather than an expression repeated twice.
+   *
+   * `minutes` is passed as a RAW number, not a pre-formatted string: the catalogs
+   * are minified to one line and cannot be read here to confirm whether
+   * `talent.bookMinutes` declares the placeholder as a bare `{minutes}` or as a
+   * typed `{minutes, number}` / plural. A number is correct under every one of
+   * those declarations — handing ICU an already-formatted string is not.
    */
   const describe = (s: TalentBookingService): string => {
     const price = s.priceCents === 0 ? t('bookFree') : fmt.money(s.priceCents / 100, s.currency);
