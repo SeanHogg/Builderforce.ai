@@ -179,8 +179,8 @@ Likely touch (children confirm against tree; do not invent files that are not th
 
 ---
 
-## 10. What this epic PR contains
+## 10. What this change contains
 
-This file, plus `specs/tasks/task-2522.md` (epic working notes). No production source on `builderforce/task-2522`: #2527 already carries unmerged commits, and implementing talent / booking / minutes here would race the children and invent a second pipeline.
+This notes file (the epic composition contract) plus an optional one-line pointer from [26-prd-advisor-platform.md](./26-prd-advisor-platform.md). Epic working notes `specs/tasks/task-2522.md` stay on epic #2522 / PR #829 — they are not part of this change. No talent, booking, or minutes implementation source, and no #2588 env-bind.
 
 Implementers pick up at #2527 → #2532 → #2538 in that order.
