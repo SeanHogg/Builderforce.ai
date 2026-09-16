@@ -234,7 +234,7 @@ function isServerOnly(node) {
 }
 
 for (const promptFile of PROMPT_FILES) {
-  const rel = path.relative(repoRoot, promptFile).replaceAll('\', '/');
+  const rel = path.relative(repoRoot, promptFile).replace(/\\/g, '/');
   if (!fs.existsSync(promptFile)) {
     failures.push(`the canvas prompt is missing — expected ${rel}. This guard reads it; a moved file must move this path too.`);
     continue;
