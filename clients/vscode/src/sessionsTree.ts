@@ -113,12 +113,18 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     const item = new vscode.TreeItem(conversationTreeLabel(chat), vscode.TreeItemCollapsibleState.None);
     item.id = sessionsLibraryRowId(node.group, node.row);
     const time = relativeTime(chat.updatedAt);
+    // Linked-ticket complete percent lives AFTER the relative time in description
+    // (`2h · 85%`). Title stays title-only so VS Code ellipsizes the label, not
+    // the marker (#2442 / #2439). Absent/non-finite pct omits the suffix; a real
+    // 0% still shows.
+    const ticketPct = clampTicketProgressPct(chat.ticketProgressPct);
+    const timeAndPct = appendTicketProgress(time, ticketPct);
     // Filtered: the project is implied by the header, so just show the time. Unfiltered:
     // prefix the project name (or "No project") so a mixed history stays readable.
-    let description = time;
+    let description = timeAndPct;
     if (!this.filtered) {
       const project = projectLabel(this.projectNameById, chat.projectId);
-      description = project ? (time ? `${project} · ${time}` : project) : time;
+      description = project ? (timeAndPct ? `${project} · ${timeAndPct}` : project) : timeAndPct;
     }
     // Multi-party chat: show the participants as coloured initial avatars. The row
     // ICON becomes a composite avatar (up to two overlapping discs — a native
