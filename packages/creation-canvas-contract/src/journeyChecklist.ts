@@ -36,7 +36,8 @@
  */
 
 import {
-  AUDIENCE_CONSENT_BASES,
+  BRAND_BINDING_FIELD,
+  brandRefKey,
   isAffirmativeConsent,
   resolveBrandBinding,
   type BrandBoardObject,
