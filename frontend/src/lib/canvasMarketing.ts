@@ -15,8 +15,9 @@
  */
 
 import {
-  forbiddenClaimsIn, resolveBrandBinding, sendReadiness,
-  type BrandBinding, type BrandBoardObject, type SendReadiness,
+  forbiddenClaimsIn, guidedCampaignRun, GUIDED_CAMPAIGN_CHANNELS, resolveBrandBinding, sendReadiness,
+  type BrandBinding, type BrandBoardObject, type ChannelAccounts, type GuidedCampaignChannel,
+  type GuidedCampaignIntake, type GuidedCampaignRun, type SendReadiness,
 } from '@builderforce/creation-canvas-contract';
 
 /** A canvas node as this module needs to see it. Structural rather than an import of the
