@@ -25,7 +25,7 @@ import {
   forbiddenClaimsIn,
   isAffirmativeConsent,
   sendReadiness,
-  type BrandKit,
+  type BrandBinding,
   type SendReadiness,
 } from './marketing';
 
@@ -114,8 +114,9 @@ export interface GuidedCampaignRun {
 }
 
 export interface JourneyChecklistInput {
-  brand: BrandKit | null;
+  brand: BrandBinding | null;
   audienceName?: string | null;
+  /** Canvas `consentBasis` (`optIn` / `doubleOptIn` are the affirmative pair). */
   audienceConsent?: string | null;
   accounts: ChannelAccounts;
   intake: GuidedCampaignIntake;
@@ -123,12 +124,22 @@ export interface JourneyChecklistInput {
 }
 
 export interface GuidedCampaignRunInput extends JourneyChecklistInput {
+  audienceId?: unknown;
+  size?: unknown;
+  suppressedCount?: unknown;
+  /**
+   * Convenience for tests / adapters that only know "was the list retrieved".
+   * When true and `suppressedCount` is omitted, treated as a retrieved zero.
+   * When false/omitted, sendReadiness still raises `noSuppressionCheck`.
+   */
   suppressionRetrieved?: boolean;
   copySubject?: string | null;
   persistence: 'local' | 'server';
   humanConfirmed?: boolean;
   /** Cloud / autonomous agents stay draft-only. */
   agentDraftOnly?: boolean;
+  /** True after an existing send / publish / ads launch for this run. */
+  launched?: boolean;
   stage?: GuidedCampaignStage;
   engagement?: {
     sent?: number;
@@ -181,6 +192,17 @@ function senderReason(accounts: ChannelAccounts, channels: readonly GuidedCampai
   return `Connect ${missing.join(', ')} before send — drafting is allowed.`;
 }
 
+function brandReady(brand: BrandBinding | null): boolean {
+  return Boolean(brand)
+    && nonempty(brand?.voice)
+    && Array.isArray(brand?.doNotSay)
+    && brand!.doNotSay.length > 0;
+}
+
+function copyHaystack(subject: string | null | undefined, body: string | null | undefined): string {
+  return [subject, body].filter((part) => typeof part === 'string' && part.trim()).join('\n');
+}
+
 /**
  * True when the prompt is asking to RUN a campaign, not to list the
  * existing ones. Run wins over list when both could match ("show me how
@@ -189,8 +211,7 @@ function senderReason(accounts: ChannelAccounts, channels: readonly GuidedCampai
 export function isCampaignRunIntent(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
-  if (RUN_INTENT.test(trimmed) || CONNECT_AND_RUN.test(trimmed)) return true;
-  return false;
+  return RUN_INTENT.test(trimmed) || CONNECT_AND_RUN.test(trimmed);
 }
 
 /** True when the prompt is asking to list / inspect existing campaigns. */
@@ -203,12 +224,14 @@ export function isCampaignListIntent(text: string): boolean {
 
 /**
  * Copy is checklist-ready when a draft exists and no brand doNotSay phrase
- * appears in it. Voice is a generation constraint, not a second gate.
+ * appears in it. Voice is a generation constraint, not a second gate. A
+ * missing brand does not block drafting — the brand checklist item still
+ * refuses send.
  */
-export function copyPassesBrand(body: string | null | undefined, brand: BrandKit | null): boolean {
+export function copyPassesBrand(body: string | null | undefined, brand: BrandBinding | null): boolean {
   if (!nonempty(body)) return false;
   if (!brand) return true;
-  return forbiddenClaimsIn(body as string, brand).length === 0;
+  return forbiddenClaimsIn(body, brand).length === 0;
 }
 
 /**
@@ -218,8 +241,7 @@ export function copyPassesBrand(body: string | null | undefined, brand: BrandKit
  */
 export function journeyChecklist(input: JourneyChecklistInput): JourneyChecklist {
   const channels = channelsOf(input.intake);
-  const brandReady =
-    Boolean(input.brand) && nonempty(input.brand?.voice) && nonempty(input.brand?.doNotSay);
+  const kitReady = brandReady(input.brand);
   const audienceReady =
     nonempty(input.audienceName) && isAffirmativeConsent(input.audienceConsent);
   const senderIsReady = senderReady(input.accounts, channels);
@@ -229,8 +251,8 @@ export function journeyChecklist(input: JourneyChecklistInput): JourneyChecklist
   const items: JourneyItemState[] = [
     {
       item: 'brand',
-      ready: brandReady,
-      reason: brandReady
+      ready: kitReady,
+      reason: kitReady
         ? 'Brand kit has voice and doNotSay.'
         : 'Brand kit needs a voice and a doNotSay list before copy is checklist-ready.',
     },
@@ -239,7 +261,7 @@ export function journeyChecklist(input: JourneyChecklistInput): JourneyChecklist
       ready: audienceReady,
       reason: audienceReady
         ? 'Live audience with affirmative consent.'
-        : 'Name a live audience whose consent is opt-in, confirmed, or subscribed.',
+        : 'Name a live audience whose consent is optIn or doubleOptIn.',
     },
     {
       item: 'sender',
@@ -298,12 +320,10 @@ export function campaignRoi(input: {
 function defaultStage(input: {
   checklist: JourneyChecklist;
   copyReady: boolean;
-  humanConfirmed: boolean;
-  maySend: boolean;
+  launched: boolean;
   roi: CampaignRoi;
 }): GuidedCampaignStage {
-  if (input.roi.status === 'attributed' || input.maySend) return 'track';
-  if (input.humanConfirmed) return 'confirm';
+  if (input.launched || input.roi.status === 'attributed') return 'track';
   if (input.copyReady && input.checklist.ready) return 'confirm';
   if (input.copyReady) return 'copy';
   const sender = input.checklist.items.find((item) => item.item === 'sender');
@@ -312,13 +332,14 @@ function defaultStage(input: {
   if (offer && !offer.ready) return 'intake';
   if (sender && !sender.ready) return 'connect';
   if (brand && !brand.ready) return 'checklist';
-  return 'copy';
+  return 'checklist';
 }
 
 /**
  * Compose the guided run. Connect success never implies send. Empty ICP
  * never blocks. Human confirm from a signed-in, non-agent actor is the
- * only thing that flips `maySend`.
+ * only thing that flips `maySend`. `maySend` does not itself mean the
+ * campaign launched — that is `launched`.
  */
 export function guidedCampaignRun(input: GuidedCampaignRunInput): GuidedCampaignRun {
   const intake: GuidedCampaignIntake = {
@@ -334,14 +355,20 @@ export function guidedCampaignRun(input: GuidedCampaignRunInput): GuidedCampaign
     copyBody: input.copyBody,
   });
   const copyReady = copyPassesBrand(input.copyBody, input.brand);
+  const haystack = copyHaystack(input.copySubject, input.copyBody);
+  const suppressedCount =
+    input.suppressedCount !== undefined && input.suppressedCount !== null && input.suppressedCount !== ''
+      ? input.suppressedCount
+      : input.suppressionRetrieved === true
+        ? 0
+        : undefined;
   const operational = sendReadiness({
-    persistence: input.persistence,
+    audienceId: input.audienceId,
     audienceName: input.audienceName,
-    audienceConsent: input.audienceConsent,
-    suppressionRetrieved: input.suppressionRetrieved === true,
-    brand: input.brand,
-    subject: input.copySubject,
-    body: input.copyBody,
+    size: input.size,
+    suppressedCount,
+    consentBasis: input.audienceConsent,
+    forbiddenClaims: forbiddenClaimsIn(haystack, input.brand ?? undefined),
   });
   const humanConfirmed = input.humanConfirmed === true;
   const maySend =
@@ -359,9 +386,10 @@ export function guidedCampaignRun(input: GuidedCampaignRunInput): GuidedCampaign
     attributedRevenueCents: input.attributedRevenueCents,
     attributedPipelineCents: input.attributedPipelineCents,
   });
+  const launched = input.launched === true;
   const stage =
     input.stage ??
-    defaultStage({ checklist, copyReady, humanConfirmed, maySend, roi });
+    defaultStage({ checklist, copyReady, launched, roi });
 
   return {
     stage,
