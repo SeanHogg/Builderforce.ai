@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * /finance?tab=dashboard (PRD 25 A6) — render the tenant's saved vertical
  * dashboard, or prompt to install one from the Marketplace.
@@ -10,6 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { verticalForSector } from '@builderforce/creation-canvas-contract';
 import { WidgetCard } from '@/components/widgets/WidgetCard';
 import { getComponent } from '@/components/widgets/registry';
@@ -70,6 +69,7 @@ function pickDashboard(list: SavedDashboard[]): SavedDashboard | null {
 
 export function FinanceDashboardView() {
   const t = useTranslations('financeHub');
+  const errorMessage = useErrorMessage();
   const [list, setList] = useState<SavedDashboard[] | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);
   const [templateKey, setTemplateKey] = useState('vertical-dashboard-founder');
@@ -93,11 +93,11 @@ export function FinanceDashboardView() {
         const payload = await dashboardsApi.data(chosen.id);
         if (!cancelled) setData(payload);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'failed');
+        if (!cancelled) setError(errorMessage(err));
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [errorMessage]);
 
   const empty = useMemo(() => list !== null && list.length === 0, [list]);
 

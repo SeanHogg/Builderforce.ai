@@ -139,13 +139,18 @@ const VERTICAL_NAMES: Record<DashboardVertical, string> = {
   marketplace: 'Marketplace',
 };
 
+export type PresetKey = keyof typeof DASHBOARD_PRESETS | 'founder' | DashboardVertical;
+
 /**
  * Every preset a tenant can install: the curated Executive view, the founder
  * layer on its own (the fold target for a sector with no vertical of its own),
  * and one per vertical — derived from the contract's list so a vertical added
  * there cannot be forgotten here.
+ *
+ * Typed as `Record<PresetKey, …>` rather than `Record<string, …>` so indexing
+ * with a known key (and `.founder`) is `DashboardPreset`, not `| undefined`.
  */
-export const ALL_DASHBOARD_PRESETS: Record<string, DashboardPreset> = {
+export const ALL_DASHBOARD_PRESETS = {
   ...DASHBOARD_PRESETS,
   founder: { name: 'Founder', tiles: FOUNDER_TILES },
   ...Object.fromEntries(
@@ -154,9 +159,7 @@ export const ALL_DASHBOARD_PRESETS: Record<string, DashboardPreset> = {
       { name: `${VERTICAL_NAMES[vertical]} KPIs`, tiles: VERTICAL_TILES },
     ]),
   ),
-};
-
-export type PresetKey = keyof typeof DASHBOARD_PRESETS | 'founder' | DashboardVertical;
+} as Record<PresetKey, DashboardPreset>;
 
 /** The preset keys a client may ask for (drives the UI and the route's guard). */
 export function listPresetKeys(): PresetKey[] {

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Empty-state CTA on /finance?tab=dashboard when the tenant has no saved
  * dashboard yet (PRD 25 A6). Points at the matching vertical template so the

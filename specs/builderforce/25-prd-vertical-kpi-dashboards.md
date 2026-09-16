@@ -365,6 +365,22 @@ Add `industry_benchmarks` rows for the §5.3 metrics per vertical and size band,
 
 Ship rule for each slice: it is a new capability, so it carries a `release_notes` row (category `new`) and a methodology-framed blog post per the platform's feature-shipping rule.
 
+### Delivered
+
+**Slice A — shipped 2026-09-16** (frontend `2026.9.35`, api `2026.9.37`).
+
+| Step | What landed |
+|---|---|
+| A1 | `dashboard` output kind + materialiser (`application/templates/outputs/dashboardOutput.ts`); `DashboardOutput` in `templateManifest.ts` |
+| A2 | `DASHBOARD_VERTICALS` + `verticalForSector` fold in the canvas contract; sector ids use underscores, template keys hyphenate |
+| A3 | Metric registry keys `finance.runwayMonths`, `finance.cash`, `finance.netBurn`, `finance.cashZeroDate`, `equity.founderOwnership`, `equity.poolUnallocated`, `equity.cliffsDue90d` — each resolving from existing finance/equity services, `null` when not measured |
+| A4 | Founder widgets `founder.runway-projection`, `founder.ownership`, `bench.position` (`founderWidgets.tsx`, spread into `ALL_COMPONENTS`) |
+| A5 | Eleven built-in templates from `VERTICAL_DASHBOARD_TEMPLATES`, derived from `DASHBOARD_VERTICALS` + founder; one size-band question; registered in `BUILTIN_TEMPLATE_SOURCES` |
+| A6 | `/finance?tab=dashboard` — `FinanceDashboardView` + `DashboardInstallPrompt`, nav tab, i18n ×5 |
+| A7 | Release note migration `1179_release_note_vertical_kpi_dashboards.sql` (category `new`); blog post `install-your-verticals-kpi-dashboard` ×5 locales + OG cards |
+
+A metric with no producer renders as **not measured** — never `0`, never an invented trend line. Adding a twelfth vertical is a data change to `DASHBOARD_VERTICALS`, not a release.
+
 ---
 
 ## 8. Open items
