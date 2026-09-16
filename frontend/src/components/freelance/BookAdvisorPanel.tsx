@@ -109,9 +109,7 @@ export function BookAdvisorPanel(props: {
       )}
       {selected && props.services.length === 1 && (
         <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-          {selected.name}
-          {selected.priceCents === 0 ? ` · ${t('bookFree')}` : ''}
-          {` · ${t('bookMinutes', { minutes: selected.durationMin })}`}
+          {`${selected.name} · ${describe(selected)}`}
         </div>
       )}
       <label style={{ display: 'grid', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
