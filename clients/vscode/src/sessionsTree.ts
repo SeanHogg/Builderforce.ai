@@ -268,19 +268,6 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
   }
 }
 
-/**
- * Sessions-tree label for a conversation. Host `src/` cannot import brain-ui
- * (`sourcePackages.test` forbids it), so this is the same `pct% · title` shape
- * as `chatSwitcherLabel` without sharing the module.
- */
-function conversationTreeLabel(chat: BfBrainChat): string {
-  const title = chat.title || `Chat ${chat.id}`;
-  const count = chat.ticketCount ?? 0;
-  const pct = chat.ticketProgressPct;
-  if (count <= 0 || pct == null || !Number.isFinite(pct)) return title;
-  return `${Math.max(0, Math.min(100, Math.round(pct)))}% · ${title}`;
-}
-
 /** Up to two initials from a display name (e.g. "Bob Developer" → "BD"). */
 function initials(name: string): string {
   const words = name.trim().replace(/[()[\]{}]/g, " ").split(/\s+/).filter(Boolean);
