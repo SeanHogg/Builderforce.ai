@@ -5,6 +5,13 @@ import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
+import {
+  appendTicketProgress,
+  clampTicketProgressPct,
+  conversationAccessibilityName,
+  conversationTreeLabel,
+  ticketProgressTooltipLine,
+} from "./ticketProgressDisplay";
 
 /**
  * The sidebar list (Activity Bar → BuilderForce → Sessions): everything this
