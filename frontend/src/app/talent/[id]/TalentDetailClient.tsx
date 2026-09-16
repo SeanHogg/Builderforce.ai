@@ -42,10 +42,7 @@ export default function TalentDetailClient() {
   }, [id, errorMessage]);
 
   useEffect(() => {
-    if (!profile?.bookable) {
-      setServices([]);
-      return;
-    }
+    if (!profile?.bookable || !profile.userId) return;
     let cancelled = false;
     listTalentBookingServices(profile.userId)
       .then((rows) => { if (!cancelled) setServices(rows); })
@@ -77,7 +74,8 @@ export default function TalentDetailClient() {
 
   const isOwner = auth?.user?.id === profile.userId;
   const canHire = !!auth?.hasTenant && !isOwner;
-  const bound = talentPrimaryAction(Boolean(profile.bookable) || services.length > 0) === 'book';
+  const listingServices = profile.bookable ? services : [];
+  const bound = talentPrimaryAction(Boolean(profile.bookable) || listingServices.length > 0) === 'book';
   const hirePrimary = {
     padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: 'none',
     background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
@@ -142,9 +140,9 @@ export default function TalentDetailClient() {
         <Link href="/marketplace?category=talent" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', textDecoration: 'none' }}>← {t('back')}</Link>
       </div>
 
-      {hireState === 'hired' && <div style={{ ...card, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.4)', color: 'rgba(34,197,94,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('hired')}</div>}
-      {hireState === 'invited' && <div style={{ ...card, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', color: 'rgba(59,130,246,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('invited')}</div>}
-      {booked && <div style={{ ...card, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.4)', color: 'rgba(34,197,94,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('booked')}</div>}
+      {hireState === 'hired' && <div style={{ ...card, background: 'var(--success-bg)', border: '1px solid var(--success-border)', color: 'var(--success-text)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('hired')}</div>}
+      {hireState === 'invited' && <div style={{ ...card, background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--info-text)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('invited')}</div>}
+      {booked && <div style={{ ...card, background: 'var(--success-bg)', border: '1px solid var(--success-border)', color: 'var(--success-text)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('booked')}</div>}
       {hireError && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{hireError}</div>}
 
       <TalentProfileView
@@ -152,10 +150,10 @@ export default function TalentDetailClient() {
         actions={actions}
         resumeEmptyNote={auth?.isAuthenticated ? t('noResume') : t('signInForResume')}
       />
-      {!isOwner && bookingOpen && !booked && services.length > 0 && (
+      {!isOwner && bookingOpen && !booked && listingServices.length > 0 && (
         <BookAdvisorPanel
           talentId={profile.userId}
-          services={services}
+          services={listingServices}
           timezone={profile.timezone}
           onBooked={() => { setBooked(true); setBookingOpen(false); }}
           onCancel={() => setBookingOpen(false)}

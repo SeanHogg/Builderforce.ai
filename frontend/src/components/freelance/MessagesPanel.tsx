@@ -77,7 +77,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
       const r = await getConversationThread(side, id);
       setConversation(r.conversation);
       setMessages(r.messages);
-      await markConversationRead(side, id).catch(() => {});
+      await markConversationRead(side, id).catch(() => undefined);
       setItems((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
     } catch (e) { report(e); }
     finally { setLoading(false); }

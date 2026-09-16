@@ -113,8 +113,12 @@ const BASELINE = {
    * 168 -> 164 (2026-09-12) — commit 99f5576ca's status-tone pass: `AgentExecutionControl`
    * (2), `AgentHostSessionsContent` and `EvermindBuildPanel` stopped mixing `rgba()` status
    * colours by hand and read them through `lib/statusTone.ts`, which names the families.
+   *
+   * 164 -> 162 (2026-09-16) — TalentDetailClient hired/invited/booked banners named
+   * `--success-bg` / `--success-border` / `--success-text` and the info family instead
+   * of mixing `rgba(34,197,94,*)` / `rgba(59,130,246,*)` by hand.
    */
-  themeLockedColours: 164,
+  themeLockedColours: 162,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE FORM SURFACE — publish, collect, close, and read the tally.
  *
@@ -85,7 +83,7 @@ export function CanvasFormSurface({ data, objectId, onExit, onEdit }: CanvasForm
         setAudiences(list);
         if (list[0] && audienceId === '') setAudienceId(list[0].id);
       })
-      .catch(() => { /* picker stays empty; publish still works without CRM */ });
+      .catch(() => undefined);
   }, [onEdit]); // eslint-disable-line react-hooks/exhaustive-deps -- load once per edit session
 
   const publish = async () => {

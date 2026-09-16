@@ -1875,6 +1875,18 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
       expect(groups).toEqual(['idea', 'make', 'run', 'measure', 'reach', 'board']);
     });
 
+    it('closes the + sheet when one of its actions runs', async () => {
+      render(<CreationCanvas sessionId="phone-actions-close-test" persistence="local" />);
+      await waitFor(() => expect(screen.getByTestId('canvas-app-bar')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByTestId('canvas-actions-trigger'));
+      const sheet = screen.getByTestId('canvas-actions-sheet');
+      // A sheet that stays open over the panel it just opened is a sheet in the way:
+      // every session action is wrapped once so pressing one puts the sheet away.
+      fireEvent.click(within(sheet).getByRole('button', { name: /Add to the board/ }));
+      await waitFor(() => expect(screen.queryByTestId('canvas-actions-sheet')).toBeNull());
+    });
+
     it('arms Ask while the Brain sheet is open, and restores the surface default after', async () => {
       render(<CreationCanvas sessionId="phone-brain-ask-test" persistence="local" />);
       await waitFor(() => expect(screen.getByTestId('canvas-app-bar')).toBeInTheDocument());

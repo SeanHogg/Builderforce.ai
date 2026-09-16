@@ -30,6 +30,15 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   997 → 998 (`useClientFiles`, 2026-09-16) — `components/insights/widgets/founderWidgets.tsx`,
+ *   PRD 25 A4. The three founder tiles (runway, cash commitment, peer position) live
+ *   in the widget registry imported from `lib/components/allComponents.ts`, which is
+ *   not itself a client boundary. They hold `useSharedSource` / `useSourceState` /
+ *   `useFormat` at the root — the same shape as `financeWidgets.tsx`. The other
+ *   PRD 25/26 client modules (`FinanceDashboardView`, `DashboardInstallPrompt`,
+ *   `BookAdvisorPanel`) dropped their directives because they only mount under an
+ *   existing client parent (`FinanceClient` / `TalentDetailClient`).
+ *
  *   980 → 997 (`useClientFiles`, 2026-09-15) — the red deploy of 2026-09-15. The
  *   tree stood at 998: twenty-eight client files entered with no entry in this
  *   changelog, across two changes that landed unrecorded, and one directive left.
