@@ -241,6 +241,12 @@ export function isFamilyId(value: string): value is FamilyId {
 const LEGACY_CATEGORY: Record<string, { family: FamilyId; kind?: string }> = {
   all: { family: 'talent' },
   talent: { family: 'talent', kind: 'person' },
+  // The public advisors browse. `advisors` is an ALIAS onto the talent family's
+  // advisor chip, not a family of its own: the inventory is the same person
+  // rows narrowed to the bookable ones, and the profile behind every card is
+  // the same `/talent/{userId}`. Without this row the unknown category fell
+  // through `resolveFamily` to Agents, which is the wrong grid entirely.
+  advisors: { family: 'talent', kind: 'advisor' },
   gigs: { family: 'talent', kind: 'gig' },
   workforce: { family: 'agent', kind: 'community' },
   agents: { family: 'agent', kind: 'community' },
