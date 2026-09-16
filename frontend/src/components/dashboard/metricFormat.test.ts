@@ -30,6 +30,16 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue(en, undefined)).toBe('—');
     expect(formatMetricValue(en, NaN)).toBe('—');
   });
+
+  it('renders the founder units a raw number would misreport', () => {
+    // A metric value is always a number, so a date travels as a UTC day number.
+    // Without its branch this renders as "20,454" — which reads as an amount of
+    // money on a finance dashboard.
+    const day = Math.floor(Date.UTC(2026, 0, 15) / 86_400_000);
+    expect(formatMetricValue(en, day, 'date')).toBe(en.date(new Date(Date.UTC(2026, 0, 15))));
+    expect(formatMetricValue(en, day, 'date')).not.toMatch(/^\d[\d,]*$/);
+    expect(formatMetricValue(en, 7, 'months')).toBe('7mo');
+  });
 });
 
 describe('seriesDelta', () => {

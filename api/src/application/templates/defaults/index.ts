@@ -24,6 +24,7 @@ import {
 import { BUSINESS_TEMPLATES } from './business';
 import { MARKETING_TEMPLATES } from './marketing';
 import { MESSAGING_TEMPLATES } from './messaging';
+import { VERTICAL_DASHBOARD_TEMPLATES } from './verticalDashboards';
 import type { BuiltinTemplate } from './dsl';
 
 /** Every built-in, before validation. Declaration order is catalogue order. */
@@ -31,6 +32,7 @@ export const BUILTIN_TEMPLATE_SOURCES: readonly BuiltinTemplate[] = [
   ...MARKETING_TEMPLATES,
   ...MESSAGING_TEMPLATES,
   ...BUSINESS_TEMPLATES,
+  ...VERTICAL_DASHBOARD_TEMPLATES,
 ];
 
 /**

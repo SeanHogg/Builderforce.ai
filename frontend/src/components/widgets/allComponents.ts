@@ -7,6 +7,7 @@ import { DELIVERY_COMPONENTS } from '@/components/insights/widgets/deliveryWidge
 import { AUTONOMY_COMPONENTS } from '@/components/insights/widgets/autonomyWidgets';
 import { CHAT_MODE_COMPONENTS } from '@/components/insights/widgets/chatModeWidgets';
 import { FINANCE_COMPONENTS } from '@/components/insights/widgets/financeWidgets';
+import { FOUNDER_COMPONENTS } from '@/components/insights/widgets/founderWidgets';
 import { FORECAST_COMPONENTS } from '@/components/insights/widgets/forecastWidgets';
 import { CORE_COMPONENTS } from '@/components/widgets/registry-modules/coreWidgets';
 import { CATALOG_COMPONENTS } from '@/components/widgets/registry-modules/catalogWidgets';
@@ -50,6 +51,9 @@ export const ALL_COMPONENTS: ComponentDef[] = [
   ...AUTONOMY_COMPONENTS,
   ...CHAT_MODE_COMPONENTS,
   ...FINANCE_COMPONENTS,
+  // The founder layer every vertical KPI dashboard opens with — runway,
+  // ownership and peer position (PRD 25).
+  ...FOUNDER_COMPONENTS,
   ...FORECAST_COMPONENTS,
   // Paid media — the CMO's `measure` half, pinnable anywhere rather than only
   // inside the canvas panel that launches the spend.

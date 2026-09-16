@@ -40,21 +40,19 @@ const VERTICAL_ICON: Record<DashboardVertical, string> = {
   marketplace: '🛒',
 };
 
-const SIZE_BAND_SOURCE = {
-  kind: 'static' as const,
-  options: [
-    { value: 'small', label: 'Small (1–50)' },
-    { value: 'mid', label: 'Mid (51–500)' },
-    { value: 'large', label: 'Large (500+)' },
-  ],
-};
+const SIZE_BANDS = [
+  { value: 'small', label: 'Small (1–50)' },
+  { value: 'mid', label: 'Mid (51–500)' },
+  { value: 'large', label: 'Large (500+)' },
+] as const;
 
 function sizeBandStep() {
   return choose(
     'size_band',
     'How big is the company?',
     'Sets the peer cohort the dashboard compares you against. Mid is the default if you skip this.',
-    SIZE_BAND_SOURCE,
+    SIZE_BANDS,
+    'mid',
   );
 }
 
@@ -92,8 +90,17 @@ const FOUNDER: BuiltinTemplate = dashboardTemplate({
   preset: 'founder',
 });
 
+/**
+ * A template key may only carry `[a-z0-9-]`, but a sector id is snake_case
+ * (`climate_energy`). Hyphenate for the key and keep the sector verbatim in the
+ * output, so the catalogue validates while the dashboard still resolves the
+ * cohort by its real sector id.
+ */
+export const dashboardTemplateKeyFor = (sector: DashboardVertical | null): string =>
+  sector ? `vertical-dashboard-${sector.replace(/_/g, '-')}` : 'vertical-dashboard-founder';
+
 const VERTICALS: BuiltinTemplate[] = DASHBOARD_VERTICALS.map((sector) => dashboardTemplate({
-  key: `vertical-dashboard-${sector}`,
+  key: dashboardTemplateKeyFor(sector),
   name: `${VERTICAL_NAME[sector]} KPI dashboard`,
   summary: `The founder KPI set plus this vertical's peer-cohort tile. Installs onto /finance?tab=dashboard.`,
   icon: VERTICAL_ICON[sector],

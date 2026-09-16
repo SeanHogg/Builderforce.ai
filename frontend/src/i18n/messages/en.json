@@ -4971,7 +4971,8 @@
       "paidMedia": "Paid media",
       "appProduct": "Product",
       "appAgile": "Delivery",
-      "appGovernance": "Governance & Security"
+      "appGovernance": "Governance & Security",
+      "founder": "Founder"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -5154,7 +5155,10 @@
         "suppression": "Suppression List"
       },
       "finBurnRate": "Burn & runway",
-      "aiHubBenchmark": "Agent benchmark"
+      "aiHubBenchmark": "Agent benchmark",
+      "founderRunway": "Runway Projection",
+      "founderOwnership": "Cash Commitment",
+      "benchPosition": "Peer Position"
     },
     "loading": "Loading…",
     "overview": {
@@ -5402,7 +5406,18 @@
     "noMatches": "Nothing matches that search.",
     "locked": "You do not have access to this yet.",
     "use": "Use",
-    "inUse": "In use"
+    "inUse": "In use",
+    "founder": {
+      "runwayUndeclared": "No finances declared yet — add cash and burn to see your runway.",
+      "ownershipEmpty": "No equity recorded yet — add your cap table to see ownership.",
+      "noCohort": "No peer cohort seeded for your sector yet.",
+      "profitable": "Profitable",
+      "cash": "Cash",
+      "committed": "Committed",
+      "months": "{count} months",
+      "zeroOn": "Cash out {date}",
+      "percentile": "{value}th percentile"
+    }
   },
   "compile": {
     "title": "Define a need",

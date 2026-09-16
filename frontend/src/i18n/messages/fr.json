@@ -4971,7 +4971,8 @@
       "paidMedia": "Médias payants",
       "appProduct": "Produit",
       "appAgile": "Livraison",
-      "appGovernance": "Gouvernance et sécurité"
+      "appGovernance": "Gouvernance et sécurité",
+      "founder": "Fondateur"
     },
     "title": {
       "aiProductivity": "Score de productivité IA",
@@ -5154,7 +5155,10 @@
         "suppression": "Liste de suppression"
       },
       "finBurnRate": "Burn rate et runway",
-      "aiHubBenchmark": "Référentiel des agents"
+      "aiHubBenchmark": "Référentiel des agents",
+      "founderRunway": "Projection de trésorerie",
+      "founderOwnership": "Engagement de trésorerie",
+      "benchPosition": "Position comparative"
     },
     "loading": "Chargement…",
     "overview": {
@@ -5402,7 +5406,18 @@
     "noMatches": "Aucun résultat pour cette recherche.",
     "locked": "Vous n'avez pas encore accès à ceci.",
     "use": "Utiliser",
-    "inUse": "Utilisé"
+    "inUse": "Utilisé",
+    "founder": {
+      "runwayUndeclared": "Aucune donnée financière déclarée — ajoutez trésorerie et burn pour voir votre runway.",
+      "ownershipEmpty": "Aucun capital enregistré — ajoutez votre cap table pour voir la détention.",
+      "noCohort": "Aucune cohorte de pairs pour votre secteur pour le moment.",
+      "profitable": "Rentable",
+      "cash": "Trésorerie",
+      "committed": "Engagé",
+      "months": "{count} mois",
+      "zeroOn": "Trésorerie épuisée le {date}",
+      "percentile": "{value}e centile"
+    }
   },
   "compile": {
     "title": "Définissez un besoin",

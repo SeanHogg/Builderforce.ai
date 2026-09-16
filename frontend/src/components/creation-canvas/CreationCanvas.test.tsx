@@ -1052,7 +1052,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
     // The card is on the BOARD — the scratchpad and the board are two readings of one
     // set of objects, which is what makes the intent the same act the form performed.
-    expect(screen.getByText('Tool rental for renters')).toBeInTheDocument();
+    // The Ideas surface lists the same object as a row, so the title appears twice.
+    expect(screen.getAllByText('Tool rental for renters').length).toBeGreaterThanOrEqual(1);
     // …and the box clears, so the next thought can go straight in.
     expect((box as HTMLTextAreaElement).value).toBe('');
 
@@ -1807,6 +1808,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
       await waitFor(() => expect(screen.getByTestId('canvas-app-bar')).toBeInTheDocument());
       expect(screen.getByTestId('canvas-app-bar-back')).toBeInTheDocument();
       expect(screen.getByTestId('canvas-app-bar-stage')).toBeInTheDocument();
+      expect(screen.getByTestId('canvas-app-bar-roster')).toBeInTheDocument();
       expect(screen.getByTestId('canvas-surface-strip')).toBeInTheDocument();
       expect(screen.queryByTestId('canvas-command-bar')).toBeNull();
       expect(screen.getAllByTestId('canvas-board-menu')).toHaveLength(1);

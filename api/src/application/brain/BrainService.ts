@@ -17,6 +17,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { readTimelineTail } from '../../domain/shared/timelineTail';
+import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, newTraceId, type ChatCompletionRequest, type LlmProxyService, type ProxyResult } from '../llm/LlmProxyService';
 import { logTrace } from '../llm/traceLogger';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
@@ -163,7 +164,18 @@ export function accountabilityFraming(projectId: number, nameFor: (toolId: strin
 }
 
 export interface AppendMessagesDto {
-  messages: Array<{ role: string; content: string; metadata?: string }>;
+  messages: Array<{
+    role: string;
+    content: string;
+    metadata?: string;
+    /**
+     * Producer-chosen idempotency key, unique per chat (`uq_brain_chat_messages_event`).
+     * A caller that cannot tell whether its write landed — a dropped connection, a
+     * retried POST — sends the SAME key again and gets the original row back instead
+     * of a second copy of the turn. Optional: a message without one is always inserted.
+     */
+    eventKey?: string | null;
+  }>;
 }
 
 /** Which team chat to resolve. A project team chat (`projectId`), a named workforce
@@ -224,6 +236,16 @@ const messageColumns = {
   seq: brainChatMessages.seq,
   createdAt: brainChatMessages.createdAt,
 } as const;
+
+/** One row as every transcript read returns it — {@link messageColumns} materialized. */
+export interface BrainChatMessageRow {
+  id: number;
+  role: string;
+  content: string;
+  metadata: string | null;
+  seq: number;
+  createdAt: Date;
+}
 
 const traceColumns = {
   id: brainChatTrace.id,
@@ -960,7 +982,10 @@ export class BrainService {
   /** Append messages to a chat (seq-managed insert + touch), NO access check —
    *  callers must have already verified access. Shared by {@link appendMessages}
    *  and {@link agentReply} so the write path lives once. */
-  private async appendRaw(chatId: number, messages: Array<{ role: string; content: string; metadata?: string | null }>) {
+  private async appendRaw(
+    chatId: number,
+    messages: Array<{ role: string; content: string; metadata?: string | null; eventKey?: string | null }>,
+  ) {
     const valid = messages.filter((m) => m.role && typeof m.content === 'string');
     if (valid.length === 0) return [];
 
@@ -968,6 +993,12 @@ export class BrainService {
     // round-trips per turn in a loop, which is invisible on a 2-message append and
     // becomes 400 queries when a shared guest room's transcript is claimed into an
     // account in a single call.
+    //
+    // `onConflictDoNothing` on the chat's event-key index is what makes a RETRY safe.
+    // A caller whose POST died in transit cannot know whether the turn committed; the
+    // old answer was to drop the text rather than risk posting it twice. Re-sending
+    // the same `eventKey` now lands at most once, and {@link keyedRows} hands the
+    // caller the original row so a retry is indistinguishable from a first attempt.
     const rows = await this.db
       .insert(brainChatMessages)
       .values(valid.map((msg) => ({
@@ -975,8 +1006,10 @@ export class BrainService {
         role: msg.role,
         content: msg.content,
         metadata: msg.metadata ?? null,
+        eventKey: msg.eventKey ?? null,
       })))
-      .returning(messageColumns);
+      .onConflictDoNothing({ target: [brainChatMessages.chatId, brainChatMessages.eventKey] })
+      .returning({ ...messageColumns, eventKey: brainChatMessages.eventKey });
 
     // The generated PK is an atomic database append order. A read-then-write
     // MAX(seq)+1 races when agents and humans append concurrently — so seq simply
@@ -995,7 +1028,32 @@ export class BrainService {
       .set({ updatedAt: new Date() })
       .where(eq(brainChats.id, chatId));
 
-    return rows.map((row) => ({ ...row, seq: row.id }));
+    const written = rows.map((row) => ({ ...row, seq: row.id }));
+    // Nothing was skipped: every message is new, so the batch IS the answer.
+    if (written.length === valid.length) return written.map(({ eventKey: _k, ...row }) => row);
+    return this.keyedRows(chatId, valid, written);
+  }
+
+  /**
+   * Re-unite a partly-deduplicated batch with the rows it did not write.
+   *
+   * A conflicting insert returns nothing for the row it skipped, so a retried turn
+   * would come back short — and the caller, reading a missing row as a failed write,
+   * would be back to losing the text it was trying to save. Fetching the ORIGINAL by
+   * its event key closes that: a retry answers exactly what the first attempt did.
+   * The ordering rule itself is {@link reconcileKeyedBatch}; this only fetches.
+   */
+  private async keyedRows(
+    chatId: number,
+    requested: Array<{ eventKey?: string | null }>,
+    written: Array<BrainChatMessageRow & { eventKey: string | null }>,
+  ): Promise<BrainChatMessageRow[]> {
+    const missing = unwrittenKeys(requested, written);
+    const existing = missing.length === 0 ? [] : await this.db
+      .select({ ...messageColumns, eventKey: brainChatMessages.eventKey })
+      .from(brainChatMessages)
+      .where(and(eq(brainChatMessages.chatId, chatId), inArray(brainChatMessages.eventKey, missing)));
+    return reconcileKeyedBatch(requested, written, existing);
   }
 
   /**

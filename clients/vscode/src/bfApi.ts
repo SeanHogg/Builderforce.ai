@@ -340,7 +340,9 @@ async function authed<T>(
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`${path} → HTTP ${res.status} ${body.slice(0, 160)}`);
+    // Status rides ALONGSIDE the message (unchanged, so message-matching callers are
+    // unaffected) because "is this worth retrying?" cannot be answered from prose.
+    throw Object.assign(new Error(`${path} → HTTP ${res.status} ${body.slice(0, 160)}`), { status: res.status });
   }
   return (await res.json()) as T;
 }
@@ -944,19 +946,49 @@ export async function postBrainMessages(
   chatId: number,
   messages: Array<{ role: string; content: string; metadata?: string }>,
 ): Promise<BrainMessageWrite> {
-  try {
-    const r = await authed<{ messages?: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(
-      secrets,
-      `/api/brain/chats/${chatId}/messages`,
-      { method: "POST", body: JSON.stringify({ messages }) },
-    );
-    // `authed` answers undefined only when there is no usable token to send.
-    if (!r) return { ok: false, signedOut: true, reason: "not signed in" };
-    return { ok: true, messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
-  } catch (e) {
-    /* best-effort persistence — never blocks the chat turn */
-    return { ok: false, signedOut: false, reason: e instanceof Error ? e.message : String(e) };
+  // Minted ONCE, before the first attempt and outside the retry loop — the whole
+  // safety of retrying rests on the second attempt carrying the SAME keys as the
+  // first, so the server can recognise it (`uq_brain_chat_messages_event`) and hand
+  // back the original rows instead of writing the turn twice.
+  const keyed = messages.map((m) => ({ ...m, eventKey: `vsix:${crypto.randomUUID()}` }));
+
+  let last = "";
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, WRITE_BACKOFF_MS[attempt - 1]));
+    try {
+      const r = await authed<{ messages?: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(
+        secrets,
+        `/api/brain/chats/${chatId}/messages`,
+        { method: "POST", body: JSON.stringify({ messages: keyed }) },
+      );
+      // `authed` answers undefined only when there is no usable token to send. No
+      // amount of retrying mints a credential, so this one stops here.
+      if (!r) return { ok: false, signedOut: true, reason: "not signed in" };
+      return { ok: true, messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
+    } catch (e) {
+      last = e instanceof Error ? e.message : String(e);
+      if (!isRetriableWrite(e)) break;
+    }
   }
+  /* best-effort persistence — never blocks the chat turn */
+  return { ok: false, signedOut: false, reason: last };
+}
+
+/** Three tries over ~2.5s: long enough to outlast a hibernate-wake or a redeploy,
+ *  short enough that a turn never appears to hang on its own bookkeeping. */
+const WRITE_ATTEMPTS = 3;
+const WRITE_BACKOFF_MS = [500, 2000];
+
+/**
+ * Is this failure worth sending again?
+ *
+ * A transport failure (no `status` at all — the request never got an answer) and a
+ * 5xx are the two the server may well accept a moment later. A 4xx is the server
+ * having read the request and refused it; repeating it verbatim changes nothing.
+ */
+function isRetriableWrite(e: unknown): boolean {
+  const status = (e as { status?: unknown } | null)?.status;
+  return typeof status !== "number" || status >= 500;
 }
 
 /**

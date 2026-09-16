@@ -15,11 +15,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { DASHBOARD_VERTICALS } from '@builderforce/creation-canvas-contract';
 import {
   BUILTIN_TEMPLATE_LIST,
   BUILTIN_TEMPLATE_SOURCES,
+  isReservedTemplateKey,
   normalizeBuiltinTemplate,
 } from './defaults';
+import { dashboardTemplateKeyFor } from './defaults/verticalDashboards';
 import { outputKindSpec, registeredOutputKinds, uninstallableOutputError } from './outputKinds';
 import { listTemplatesForTenant } from './templateRegistry';
 import type { Db } from '../../infrastructure/database/connection';
@@ -30,6 +33,48 @@ import {
 } from '../../domain/template/templateManifest';
 import { referencedBindings } from '../../domain/guidedSetup/guidedPlan';
 import { validateDefinition } from '../../domain/workflowGraph';
+
+describe('vertical KPI dashboard catalogue (PRD 25 A5)', () => {
+  const dashboards = BUILTIN_TEMPLATE_LIST.filter((t) => t.key.startsWith('vertical-dashboard-'));
+
+  it('ships one installable dashboard per vertical plus the founder fallback', () => {
+    // 10 DASHBOARD_VERTICALS + founder. A vertical added to the contract without
+    // a template here is a sector whose founders get an empty marketplace.
+    expect(dashboards).toHaveLength(DASHBOARD_VERTICALS.length + 1);
+    expect(dashboards.map((t) => t.key)).toContain('vertical-dashboard-founder');
+    for (const sector of DASHBOARD_VERTICALS) {
+      expect(dashboards.map((t) => t.key)).toContain(dashboardTemplateKeyFor(sector));
+    }
+  });
+
+  it('reserves every dashboard key so a workspace cannot shadow one', () => {
+    for (const t of dashboards) expect(isReservedTemplateKey(t.key)).toBe(true);
+  });
+
+  it('binds the size band the wizard actually collects', () => {
+    // The output reads {{setup.size_band}}; if the step id ever drifts the
+    // install silently writes an empty cohort and the peer tile compares the
+    // company against nobody.
+    for (const t of dashboards) {
+      expect(t.steps.some((s) => s.id === 'size_band')).toBe(true);
+      const out = t.outputs[0];
+      expect(out?.kind).toBe('dashboard');
+      expect(out && 'sizeBand' in out ? out.sizeBand : null).toBe('{{setup.size_band}}');
+    }
+  });
+
+  it('carries the real snake_case sector even though the key is hyphenated', () => {
+    // The key grammar forbids "_", the cohort lookup requires it. Getting this
+    // backwards installs a dashboard that benchmarks against an unknown sector.
+    const climate = dashboards.find((t) => t.key === 'vertical-dashboard-climate-energy');
+    const out = climate?.outputs[0];
+    expect(out && 'sector' in out ? out.sector : null).toBe('climate_energy');
+  });
+
+  it('needs no connector, so it installs on an empty workspace', () => {
+    for (const t of dashboards) expect(t.requiredConnectors).toHaveLength(0);
+  });
+});
 
 describe('built-in template catalogue', () => {
   it('every built-in survives the validator a published template gets', () => {

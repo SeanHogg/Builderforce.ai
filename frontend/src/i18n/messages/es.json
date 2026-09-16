@@ -4971,7 +4971,8 @@
       "paidMedia": "Medios de pago",
       "appProduct": "Producto",
       "appAgile": "Entrega",
-      "appGovernance": "Gobernanza y seguridad"
+      "appGovernance": "Gobernanza y seguridad",
+      "founder": "Fundador"
     },
     "title": {
       "aiProductivity": "Puntuación de productividad de IA",
@@ -5154,7 +5155,10 @@
         "suppression": "Lista de supresión"
       },
       "finBurnRate": "Burn rate y runway",
-      "aiHubBenchmark": "Prueba de referencia de agentes"
+      "aiHubBenchmark": "Prueba de referencia de agentes",
+      "founderRunway": "Proyección de runway",
+      "founderOwnership": "Compromiso de caja",
+      "benchPosition": "Posición comparativa"
     },
     "loading": "Cargando…",
     "overview": {
@@ -5402,7 +5406,18 @@
     "noMatches": "No hay coincidencias para esa búsqueda.",
     "locked": "Todavía no tienes acceso a esto.",
     "use": "Usar",
-    "inUse": "En uso"
+    "inUse": "En uso",
+    "founder": {
+      "runwayUndeclared": "Aún no hay finanzas declaradas: añade caja y consumo para ver tu runway.",
+      "ownershipEmpty": "Aún no hay capital registrado: añade tu cap table para ver la propiedad.",
+      "noCohort": "Todavía no hay un grupo comparativo para tu sector.",
+      "profitable": "Rentable",
+      "cash": "Caja",
+      "committed": "Comprometido",
+      "months": "{count} meses",
+      "zeroOn": "Caja agotada el {date}",
+      "percentile": "Percentil {value}"
+    }
   },
   "compile": {
     "title": "Define una necesidad",

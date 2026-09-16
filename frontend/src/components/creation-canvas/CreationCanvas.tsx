@@ -12173,11 +12173,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     ceremonyEnabled: hasAccount, onError: setNotice, onAgentRound: startCanvasTurn,
   });
   const sessionActionHandlers: Record<CanvasSessionActionId, CanvasSessionActionHandler> = (() => {
-    // Every one of these can be pressed from the ••• sheet as well as from the bar, and a
-    // sheet that stays open over the panel it just opened is a sheet in the way. Wrapping
-    // once here is what keeps that true for an action added later.
+    // Every one of these can be pressed from the command bar, the phone's "+" sheet, or
+    // (for a few) the board menu, and a sheet that stays open over the panel it just
+    // opened is a sheet in the way. Wrapping once here is what keeps that true for an
+    // action added later.
     const act = (run: () => void, active?: boolean): CanvasSessionActionHandler =>
-      ({ run: () => { setMoreOpen(false); setRealOpen(false); run(); }, active });
+      ({ run: () => { setMoreOpen(false); setRealOpen(false); closeActionsSheet(); run(); }, active });
     return {
       undo: act(undo),
       redo: act(redo),

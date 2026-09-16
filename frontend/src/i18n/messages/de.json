@@ -4971,7 +4971,8 @@
       "paidMedia": "Bezahlte Medien",
       "appProduct": "Produkt",
       "appAgile": "Lieferung",
-      "appGovernance": "Governance & Sicherheit"
+      "appGovernance": "Governance & Sicherheit",
+      "founder": "Gründer"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -5154,7 +5155,10 @@
         "suppression": "Sperrliste"
       },
       "finBurnRate": "Burn-Rate & Runway",
-      "aiHubBenchmark": "Agenten-Benchmark"
+      "aiHubBenchmark": "Agenten-Benchmark",
+      "founderRunway": "Runway-Prognose",
+      "founderOwnership": "Mittelbindung",
+      "benchPosition": "Vergleichsposition"
     },
     "loading": "Laden…",
     "overview": {
@@ -5402,7 +5406,18 @@
     "noMatches": "Keine Treffer für diese Suche.",
     "locked": "Sie haben darauf noch keinen Zugriff.",
     "use": "Verwenden",
-    "inUse": "In Verwendung"
+    "inUse": "In Verwendung",
+    "founder": {
+      "runwayUndeclared": "Noch keine Finanzdaten erfasst — Barmittel und Burn hinzufügen, um den Runway zu sehen.",
+      "ownershipEmpty": "Noch kein Eigenkapital erfasst — Cap Table hinzufügen, um Eigentum zu sehen.",
+      "noCohort": "Für Ihre Branche ist noch keine Vergleichsgruppe hinterlegt.",
+      "profitable": "Profitabel",
+      "cash": "Barmittel",
+      "committed": "Gebunden",
+      "months": "{count} Monate",
+      "zeroOn": "Mittel erschöpft am {date}",
+      "percentile": "{value}. Perzentil"
+    }
   },
   "compile": {
     "title": "Definiere einen Bedarf",

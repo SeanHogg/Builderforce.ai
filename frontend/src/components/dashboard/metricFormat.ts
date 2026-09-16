@@ -30,6 +30,14 @@ export function formatMetricValue(fmt: Formatter, value: number | null | undefin
       return `${rounded}h`;
     case 'score':
       return `${rounded}`;
+    case 'months':
+      return `${rounded}mo`;
+    case 'date':
+      // A metric can only carry a NUMBER, so a date metric travels as a UTC day
+      // number (days since epoch) and is rendered back here. Without this branch
+      // `finance.cashZeroDate` renders as "20,412" — a number that looks like a
+      // plausible amount of money, which is the worst way to be wrong.
+      return fmt.date(new Date(Math.round(n) * 86_400_000));
     default:
       return fmt.number(rounded);
   }

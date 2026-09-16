@@ -109,7 +109,8 @@ for (const theme of ['light', 'dark'] as const) {
     await openLocalCanvas(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await expect(page.getByTestId('canvas-command-bar')).toBeVisible();
-    await expect(page.getByTestId('canvas-app-bar')).toHaveCount(0);
+    // The app bar stays in the tree for first-paint CSS; it is not shown above 767.
+    await expect(page.getByTestId('canvas-app-bar')).not.toBeVisible();
     await expect(page.getByTestId('canvas-composer')).toBeVisible();
     await context.close();
   });

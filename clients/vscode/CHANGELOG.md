@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.76] — A reply that could not be saved is now sent again, not dropped
+
+- **A turn survives a connection that drops while it is being saved.** If the write failed, the text was gone — the only copy lived in the run that produced it. Each message now carries a key the server recognises, so the same turn can be sent again and lands exactly once; a retry that arrives after the first attempt already committed gets the original back rather than posting a second copy.
+- **A run that fails says so where a reload can see it.** The reason a run ended lived only in the open window, so reopening the chat showed a dozen steps and then nothing. It is written down with the rest of the turn now, including when the assistant gives up after repeated failing tool calls.
+
 ## [2026.9.75] — Leaving a chat no longer loses the model's last reply
 
 - **A capped transcript now reads from the END of the conversation.** `GET /api/brain/chats/:id/messages` ordered by `seq` ascending and took the first 100 rows, so the window was the START of the chat. Every tool step is persisted as a message row, so a working chat crosses a hundred rows in a handful of turns; from then on, reopening it served the opening of the conversation and silently dropped the tail — the model's closing reply included. The reply was never missing from the database, only from the window. The same head-truncation is corrected on the trace timeline, the addressed-agent reply context, the chat summary, the ticket-review transcript and the creation-session seed.

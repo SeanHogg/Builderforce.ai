@@ -4971,7 +4971,8 @@
       "paidMedia": "付费投放",
       "appProduct": "产品",
       "appAgile": "交付",
-      "appGovernance": "治理与安全"
+      "appGovernance": "治理与安全",
+      "founder": "创始人"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -5154,7 +5155,10 @@
         "suppression": "屏蔽名单"
       },
       "finBurnRate": "烧钱率与跑道",
-      "aiHubBenchmark": "智能体基准"
+      "aiHubBenchmark": "智能体基准",
+      "founderRunway": "现金跑道预测",
+      "founderOwnership": "现金承诺",
+      "benchPosition": "同行对比"
     },
     "loading": "加载中…",
     "overview": {
@@ -5402,7 +5406,18 @@
     "noMatches": "没有匹配的搜索结果。",
     "locked": "你暂时无权访问此项。",
     "use": "使用",
-    "inUse": "使用中"
+    "inUse": "使用中",
+    "founder": {
+      "runwayUndeclared": "尚未填写财务数据 — 添加现金与消耗以查看跑道。",
+      "ownershipEmpty": "尚未记录股权 — 添加股权表以查看持股。",
+      "noCohort": "您所在行业尚无同行对比数据。",
+      "profitable": "已盈利",
+      "cash": "现金",
+      "committed": "已承诺",
+      "months": "{count} 个月",
+      "zeroOn": "现金将于 {date} 耗尽",
+      "percentile": "第 {value} 百分位"
+    }
   },
   "compile": {
     "title": "定义一个需求",
