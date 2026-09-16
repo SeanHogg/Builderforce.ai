@@ -20,6 +20,7 @@ export function BookAdvisorPanel(props: {
   onCancel: () => void;
 }) {
   const t = useTranslations('talent');
+  const fmt = useFormat();
   const [serviceId, setServiceId] = useState(String(props.services[0]?.id ?? ''));
   const [when, setWhen] = useState(defaultLocal);
   const [busy, setBusy] = useState(false);
@@ -29,6 +30,22 @@ export function BookAdvisorPanel(props: {
     () => props.services.find((s) => String(s.id) === serviceId) ?? props.services[0],
     [props.services, serviceId],
   );
+
+  /**
+   * `Free · 30 minutes` / `30 € · 30 Minuten` / `US$30.00 · 30 分钟`.
+   *
+   * Both halves are locale data, not text: the price is minor units in the
+   * service's OWN currency (so it is divided by 100 and handed to `money`, which
+   * places the symbol, the grouping and the decimal separator per locale), and
+   * the duration goes through `number` so a four-digit minute count groups the
+   * way the reader expects. A paid service previously rendered NO price at all —
+   * only the zero case was ever shown — which is why this is a single helper
+   * both call sites share rather than an expression repeated twice.
+   */
+  const describe = (s: TalentBookingService): string => {
+    const price = s.priceCents === 0 ? t('bookFree') : fmt.money(s.priceCents / 100, s.currency);
+    return `${price} · ${t('bookMinutes', { minutes: fmt.number(s.durationMin) })}`;
+  };
 
   const confirm = async () => {
     if (!selected) return;
