@@ -28,6 +28,8 @@ import { CREATIVE_CAPABILITIES, creativeOutputFormats, creativeOutputProfile } f
 import { advertisedName, BUILTIN_EXTENSION_ID } from './toolNaming';
 import { CAREER_TOOLS } from './careerToolCatalog';
 import { DELIVERY_TOOLS } from './deliveryToolCatalog';
+import { CHAT_DIAGNOSTICS_TOOLS } from './chatDiagnosticsToolCatalog';
+import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
 import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
 import { decideTicketPendingChanges } from '../task/ticketPendingChanges';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -139,7 +141,7 @@ type Json = Record<string, unknown>;
 // module so a domain can declare its own CATALOG rows without a cycle back to
 // this file. Re-exported here so every existing importer is unaffected.
 export type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
-export { replayRoute, resolveReplayAuth } from './builtinToolContext';
+export { replayRoute, resolveReplayAuth, ReplayRouteError } from './builtinToolContext';
 import { replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
@@ -3891,6 +3893,7 @@ const CATALOG: BuiltinTool[] = [
       + 'managerRef: who manages — "u:<userId>" for a person, "c:<agentRef>" for a cloud agent, "" for the system service. '
       + 'prMergePolicy: "immediate" | "on_green" | "queue". managerType: a manager type id (e.g. "general"). '
       + 'allowAutoMerge, allowUnattendedCeremonies, allowAgentReassignment, allowAutoStaffLanes, agentReassignIdleHours and agentReassignMaxPerSession also accept null = inherit the workspace default. '
+      + 'coordinationRequiresManager: whether kanban.coordinate / assess_resource / assign_participant / remove_participant / materialize_work_items need the manager role on this project (default false — any developer or agent may coordinate). '
       + 'Read the current values with manager.policy first.',
     parameters: obj({
       projectId: N,
@@ -3909,6 +3912,7 @@ const CATALOG: BuiltinTool[] = [
       agentReassignIdleHours: N,
       agentReassignMaxPerSession: N,
       allowAutoStaffLanes: B,
+      coordinationRequiresManager: B,
     }, ['projectId']),
     run: (ctx, a) => {
       const { projectId, ...patch } = a;
@@ -4065,6 +4069,15 @@ const CATALOG: BuiltinTool[] = [
   // have existed all along with no tool in front of them.
   ...CAREER_TOOLS,
   ...DELIVERY_TOOLS,
+  // ---- Why the LAST run did not finish (1178) -----------------------------
+  // The read side of the persisted chat diagnostics. Its own module for the same
+  // reason as the two above; the row replays the brain route so it inherits that
+  // route's access check rather than re-deciding who may read a chat.
+  ...CHAT_DIAGNOSTICS_TOOLS,
+  // ---- Who a teammate IS, for delegating AS them ---------------------------
+  // Pairs with `spawn_agent { as_agent }`: a model checks what an agent brings
+  // before handing it a slice, and a wrong name comes back with the right ones.
+  ...AGENT_PERSONA_TOOLS,
 ];
 
 

@@ -55,6 +55,7 @@ const policy: ManagerPolicy = {
   autoSchedule: false,
   managerType: 'general',
   requireSignoffToComplete: true,
+  coordinationRequiresManager: false,
   allowAutoMerge: false,
   allowUnattendedCeremonies: false,
   allowAutoStaffLanes: false,
@@ -150,7 +151,7 @@ const overview: ManagerOverview = {
   config: {
     managerRef: null, enabled: true, prMergePolicy: 'on_green',
     autoAssign: true, autoBusinessValue: true, autoPrioritize: true, autoSchedule: false,
-    requireSignoffToComplete: true, allowAutoMerge: null,
+    requireSignoffToComplete: true, coordinationRequiresManager: false, allowAutoMerge: null,
     allowUnattendedCeremonies: null, allowAgentReassignment: null, allowAutoStaffLanes: null,
     agentReassignIdleHours: null, agentReassignMaxPerSession: null,
     managerType: 'general', lastRunAt: iso(22 * MIN),

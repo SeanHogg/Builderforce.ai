@@ -52,10 +52,24 @@ export interface CanvasMenuSheetProps {
   onClose: () => void;
   /** `menu` where every child is a command; omitted where the sheet holds controls. */
   role?: 'menu';
+  /**
+   * Where this sheet SITS, published to the stylesheet as `data-placement`.
+   *
+   * `popover` (the default) is what the bar's sheets have always been: anchored above
+   * the button that opened them, 250px wide, in a positioned span of the caller's.
+   * `sheet` is the phone form — full width, from under the canvas app bar down to the
+   * composer, scrolling — for a sheet that is not opened from a bar because at that
+   * width there is no bar (`CanvasActionsSheet`, the canvas app bar's own menus).
+   *
+   * A declared value rather than a class the caller passes: a sheet is responsible for
+   * how it is dismissed (see above), and a sheet drawn from a corner that has no anchor
+   * in it is dismissible only in theory.
+   */
+  placement?: 'popover' | 'sheet';
   children: ReactNode;
 }
 
-export function CanvasMenuSheet({ title, testId, onClose, role, children }: CanvasMenuSheetProps) {
+export function CanvasMenuSheet({ title, testId, onClose, role, placement = 'popover', children }: CanvasMenuSheetProps) {
   const t = useTranslations('creationCanvas');
 
   useEffect(() => {
@@ -71,7 +85,7 @@ export function CanvasMenuSheet({ title, testId, onClose, role, children }: Canv
   }, [onClose]);
 
   return (
-    <div className={styles.moreMenu} data-testid={testId} aria-label={title} {...(role ? { role } : {})}>
+    <div className={styles.moreMenu} data-placement={placement} data-testid={testId} aria-label={title} {...(role ? { role } : {})}>
       <div className={styles.moreMenuSheetHeader}>
         <span className={styles.moreMenuSheetTitle}>{title}</span>
         <button

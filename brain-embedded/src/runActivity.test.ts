@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { activityTarget, visitTarget, shortenTarget, toolActivity, describeLiveStep, midRunNotice } from './runActivity';
+import { activityTarget, visitTarget, shortenTarget, toolActivity, describeLiveStep, midRunNotice, formatBytes } from './runActivity';
 
 describe('activityTarget', () => {
   it('names the file a read is aimed at', () => {
@@ -96,8 +96,25 @@ describe('describeLiveStep', () => {
     expect(describeLiveStep(step, 5_000)).toContain('PAUSED waiting for the user');
   });
 
+  it('says a long turn was COMPOSING a call, and how much of it had arrived', () => {
+    // Chat #113: 3m 23s of "streaming the reply" that was really a 21 KB write_file
+    // call. The report has to name the tool and the size, or the turn reads as a hang.
+    const step = { phase: 'composing' as const, label: 'write_file', bytes: 21_600, startedAt: 0, step: 16 };
+    const line = describeLiveStep(step, 203_000);
+    expect(line).toContain('composing a `write_file` call');
+    expect(line).toContain('21.1 KB of arguments so far');
+    expect(line).toContain('3m 23s so far');
+    expect(line).toContain('loop step 16');
+  });
+
+  it('names a composing call before its first fragment is measured', () => {
+    const line = describeLiveStep({ phase: 'composing', label: 'write_file', startedAt: 0, step: 1 }, 1_000);
+    expect(line).toContain('composing a `write_file` call');
+    expect(line).not.toContain('of arguments');
+  });
+
   it('has a distinct description for every phase', () => {
-    const phases = ['starting', 'thinking', 'writing', 'tool', 'awaiting', 'finishing'] as const;
+    const phases = ['starting', 'thinking', 'writing', 'composing', 'tool', 'awaiting', 'finishing'] as const;
     const lines = phases.map((phase) => describeLiveStep({ phase, label: 'x', startedAt: 0, step: 1 }, 1_000));
     expect(new Set(lines).size).toBe(phases.length);
   });
@@ -119,5 +136,26 @@ describe('midRunNotice', () => {
 
   it('is still honest when no step was recorded', () => {
     expect(midRunNotice(null, 0)).toContain('No in-flight step was recorded');
+  });
+
+  it('carries a composing capture, so a mid-run report explains the silence', () => {
+    const notice = midRunNotice({ phase: 'composing', label: 'write_file', bytes: 21_600, startedAt: 0, step: 16 }, 203_000);
+    expect(notice).toContain('CAPTURED MID-RUN');
+    expect(notice).toContain('composing a `write_file` call');
+    expect(notice).toContain('21.1 KB of arguments so far');
+  });
+});
+
+describe('formatBytes', () => {
+  it('reads as bytes below a kilobyte and as KB above it', () => {
+    expect(formatBytes(812)).toBe('812 B');
+    expect(formatBytes(12_698)).toBe('12.4 KB');
+    expect(formatBytes(21_600)).toBe('21.1 KB');
+  });
+
+  it('never renders a nonsense size', () => {
+    expect(formatBytes(0)).toBe('0 B');
+    expect(formatBytes(-5)).toBe('0 B');
+    expect(formatBytes(Number.NaN)).toBe('0 B');
   });
 });

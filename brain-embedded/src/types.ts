@@ -28,6 +28,14 @@ export interface BrainChat {
   mode?: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Linked-ticket rollup from GET /api/brain/chats. Present when the chat has
+   * at least one linked work item; used by the conversation picker so a chat
+   * that still has open tickets reads as `67% · title` instead of title-only.
+   * Absent on older servers.
+   */
+  ticketCount?: number;
+  ticketProgressPct?: number | null;
 }
 
 /**

@@ -23,6 +23,7 @@
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
 import { detectRepetitionLoop } from '@builderforce/agent-loop';
 import { brainRequestError } from './chatError';
+import { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 import type { ReasoningIntent } from './effort';
 
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
@@ -193,6 +194,13 @@ export interface StreamChatOptions {
    * byte-identical to a pre-feature request (same discipline as `reasoning`).
    */
   metadata?: CompletionMetadata;
+  /**
+   * Silence (zero bytes read) that ends this stream, defaulting to
+   * {@link STREAM_IDLE_MS}. A stalled upstream never settles its `read()`, so without
+   * this a dead turn hangs until the user presses Stop. Overridden only by tests,
+   * which cannot wait four minutes to prove it.
+   */
+  idleTimeoutMs?: number;
   signal?: AbortSignal;
   /** Auth + endpoint. Injected by BrainProvider; callers via the hook never set this directly. */
   transport: BrainTransport;
@@ -529,10 +537,17 @@ export async function streamChatCompletion(
   while (true) {
     let chunkRead: ReadableStreamReadResult<Uint8Array>;
     try {
-      chunkRead = await reader.read();
+      // Bounded by silence, not only by failure: a stalled upstream keeps the socket
+      // open and never settles this read, so the turn used to hang until the user
+      // pressed Stop. An idle trip is an interruption like any other — the run loop
+      // retries the turn once on another model.
+      chunkRead = await readWithIdleWatchdog(reader, { idleMs: opts.idleTimeoutMs ?? STREAM_IDLE_MS });
     } catch (e) {
       // A user Stop aborts the fetch — that is a cancellation, not an upstream failure.
       if (opts.signal?.aborted) throw e;
+      if (e instanceof StreamIdleError) {
+        throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1000)}s`, resolvedModel());
+      }
       throw new StreamInterruptedError(`the stream dropped mid-answer: ${e instanceof Error ? e.message : String(e)}`, resolvedModel());
     }
     const { done, value } = chunkRead;

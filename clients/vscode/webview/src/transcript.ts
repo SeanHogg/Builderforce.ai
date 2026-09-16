@@ -19,6 +19,7 @@ import {
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
+  formatChatDiagnosticsReportJson,
   formatAssistantTranscriptHeading,
   traceWithPersistedSteps,
   createPayloadBudget,
@@ -29,6 +30,7 @@ import type {
   BrainRunActivity,
   BrainTraceEvent,
   ChatDiagnosticsData,
+  ChatDiagnosticsReport,
   PayloadBudget,
 } from '@seanhogg/builderforce-brain-embedded';
 
@@ -48,6 +50,11 @@ export interface TranscriptInput {
    *  (plan + billing + month-to-date quota + model entitlement, project, tenant, Evermind
    *  head, learn-gate outcome, agents, linked tickets), not just the turns. */
   diagnostics?: ChatDiagnosticsData;
+  /**
+   * The SAME capture as one versioned JSON object — the copy that is also persisted with
+   * the chat. Appended at the very end of the report; see the note where it is written.
+   */
+  report?: ChatDiagnosticsReport;
   /**
    * True when the run was STILL EXECUTING at capture time. The trace cannot know
    * this, and it changes how every "and then nothing happened" signal must be read:
@@ -240,6 +247,14 @@ export function buildTranscript(input: TranscriptInput): string {
   // elision is never mistaken for missing data.
   const budgetNote = budget.note();
   if (budgetNote) lines.push(budgetNote, '');
+
+  // The machine-readable copy of the same facts, LAST and deliberately outside the
+  // payload budget above. That budget exists to keep the human-readable tail of a long
+  // report from being cut off by a paste target; trimming a JSON object does not shrink
+  // it, it BREAKS it — a half-elided block will not parse, which is the only thing this
+  // block is for. It is also small and bounded (counts and verdicts, not tool payloads),
+  // so it cannot be what crowds the report out.
+  if (input.report) lines.push('', ...formatChatDiagnosticsReportJson(input.report));
 
   return `${lines.join('\n').trim()}\n`;
 }

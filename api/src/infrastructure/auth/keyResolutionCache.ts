@@ -5,8 +5,10 @@
  * Worker). After the first call for any given key, every subsequent call for the
  * next year is a cache hit.
  *
- * Cache key format:  `auth:<keyType>:<sha256(rawKey)>` for `bfk`/`clk`;
- *                    `auth:jwt:<sha256(tenantId:userId)>` for the JWT path.
+ * Cache key format:  `auth:<keyType>:[v<n>:]<sha256(rawKey)>` for `bfk`/`clk`;
+ *                    `auth:jwt:<sha256(tenantId:userId)>` for the JWT path. The
+ *                    optional `v<n>` segment is the cached-VALUE schema version — see
+ *                    {@link KEY_CACHE_SCHEMA}.
  * Cached value:      the ResolvedKey envelope — a rejection is cached too, so a
  *                    stranger hammering a dead key costs one DB read, not one per
  *                    request.
@@ -63,9 +65,32 @@ export type ResolvedKey =
   | { ok: true;  payload: Record<string, unknown> }
   | { ok: false; reason: string };
 
-/** The ONE spelling of a key-resolution cache key. */
+/**
+ * Schema version of the CACHED VALUE shape, per key type. Bump one of these when the
+ * payload a loader writes gains a field the auth path now depends on — the version is
+ * part of the cache key, so every pre-bump entry is orphaned instead of being served.
+ *
+ * WHY this exists: `bfk` payloads gained `createdByUserId` in api 2026.9.23 (the key
+ * acts as the member who minted it). Entries written before that release carry no such
+ * field, and with the 365-day TTL above there is nothing to expire them — so
+ * `requireTenantAccess` read `creator` as null and fell to the anonymous DEVELOPER
+ * floor. The symptom is "403 manager role required" from your OWN workspace, as the
+ * owner, for up to a year, with no mutation to invalidate from (the key was never
+ * revoked or edited — only the code that reads it changed).
+ *
+ * Only versions > 1 emit a segment, so `clk`/`jwt` keys stay byte-identical to what is
+ * already in KV and keep their hits across this deploy.
+ */
+const KEY_CACHE_SCHEMA: Record<KeyCacheType, number> = { bfk: 2, clk: 1, jwt: 1 };
+
+/**
+ * The ONE spelling of a key-resolution cache key — read AND invalidated through this,
+ * so a version bump above reaches both halves without any caller changing.
+ */
 export function keyCacheKey(keyType: KeyCacheType, hash: string): string {
-  return `auth:${keyType}:${hash}`;
+  const version = KEY_CACHE_SCHEMA[keyType] ?? 1;
+  const versionSegment = version > 1 ? `v${version}:` : '';
+  return `auth:${keyType}:${versionSegment}${hash}`;
 }
 
 /**

@@ -3929,6 +3929,32 @@ select.input option {
      is why it works for the footer too. */
   .app-frame { padding-bottom: var(--mobile-nav-height); }
 
+  /* ── A STAGE ROUTE ON A PHONE IS AN APP SCREEN ─────────────────────────────
+     `/create/<id>` used to get the MARKETING HEADER over the board — a brand
+     lockup, a theme toggle, Sign in and a green "Keep your work" — 56px of a
+     640px screen belonging to the website rather than to the canvas, above a
+     persistent bottom nav, with the canvas's own chrome floating over what was
+     left. Three layers of chrome competing for the space around the work.
+
+     The canvas draws its own 52px app bar at this width (`CanvasPhoneAppBar`),
+     every pixel of it about THIS session: back to the library, the session's
+     name, its stage, who is in it and the board's errands. So the shell's header
+     stands down here rather than being drawn twice, and the topbar ROW collapses
+     with it — hiding the header while the grid still reserved its 56px would have
+     traded a useless header for a useless gap.
+
+     `AppShell` sets the attribute (`isStageRoute`); the breakpoint is the SAME
+     `767px` the bottom nav uses, which is also the one the canvas chrome uses
+     (`usePhoneViewport`, `CreationCanvas.module.css`) — one number, three files,
+     no band where a phone gets the nav and the desktop canvas.
+
+     The bottom nav STAYS. It is the navigation on a phone, and it is what makes
+     leaving a canvas one tap; the canvas reserves its height at `.app-frame`
+     above like every other surface. */
+  .shell[data-phone-chrome='stage'] { --shell-topbar-height: 0px; }
+  .shell[data-phone-chrome='stage'] > .mh,
+  .shell[data-phone-chrome='stage'] > .topbar { display: none; }
+
   /* Marketplace chip lives in the bottom bar / drawer on mobile */
   .topbar-center { display: none; }
 

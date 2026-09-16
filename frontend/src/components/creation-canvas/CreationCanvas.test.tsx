@@ -1018,6 +1018,50 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(starter.closest('[data-placement="top"]')).not.toBeNull();
   });
 
+  /**
+   * ONE COMPOSER, AND THE SCRATCHPAD'S VERB IN IT.
+   *
+   * The Ideas surface used to draw a second text field of its own — a textarea, a hint
+   * and a Capture button — eight hundred pixels above this one. Two boxes on one screen,
+   * both asking for a sentence, and nothing saying which one the Enter key you were
+   * about to press belonged to.
+   *
+   * The surface declares a composer INTENT now (`composerIntents: ['captureIdea','ask']`)
+   * and the host routes the submit to the same board mutation the form called. This is
+   * the end-to-end half of that: press Enter on the scratchpad and an `idea` card is on
+   * the board, with the whole note kept and its first line as the title.
+   */
+  it('captures a jotted line as an idea card from the one composer, and draws no second field', () => {
+    render(<CreationCanvas sessionId="composer-intent-capture-test" persistence="local" />);
+
+    const ideasTab = () => namedButtons('Ideas').find((button) => button.hasAttribute('aria-pressed'))!;
+    fireEvent.click(ideasTab());
+    expect(screen.getByTestId('canvas-ideas-surface')).toBeInTheDocument();
+
+    // ONE box, and it is the canvas's. The scratchpad contributes a VERB, not an input:
+    // it draws no field of its own at all.
+    expect(within(screen.getByTestId('canvas-ideas-surface')).queryByRole('textbox')).toBeNull();
+
+    // The verb is drawn, because this surface is the one that offers a choice — and it
+    // leads with capture, so a plain line is a card rather than a question.
+    expect(screen.getByTestId('canvas-composer-intent-captureIdea')).toHaveAttribute('aria-checked', 'true');
+    const box = within(screen.getByTestId('canvas-composer')).getByRole('textbox');
+    fireEvent.change(box, { target: { value: 'Tool rental for renters\nweekend projects' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+
+    // The card is on the BOARD — the scratchpad and the board are two readings of one
+    // set of objects, which is what makes the intent the same act the form performed.
+    expect(screen.getByText('Tool rental for renters')).toBeInTheDocument();
+    // …and the box clears, so the next thought can go straight in.
+    expect((box as HTMLTextAreaElement).value).toBe('');
+
+    // Arming Ask sends the next line to Brain instead, from the same box: the two
+    // meanings share one field and the segment is what says which is live.
+    fireEvent.click(screen.getByTestId('canvas-composer-intent-ask'));
+    expect(screen.getByTestId('canvas-composer-intent-ask')).toHaveAttribute('aria-checked', 'true');
+    expect(box).toHaveAttribute('placeholder', 'Ask Brain about this canvas');
+  });
+
   it('keeps the prompt open and centred when chat becomes the surface, regardless of the float/dock/closed preference', () => {
     render(<CreationCanvas sessionId="brain-chat-surface-prompt-test" persistence="local" />);
 

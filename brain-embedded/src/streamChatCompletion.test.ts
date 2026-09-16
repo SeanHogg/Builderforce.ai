@@ -314,6 +314,40 @@ describe('a model that breaks after the stream opened', () => {
     expect((err as StreamInterruptedError).model).toBe('direct/xai/grok-4.5');
   });
 
+  it('turns a stream that goes SILENT into StreamInterruptedError instead of hanging', async () => {
+    // A stalled upstream keeps the socket open and never settles the next read, so the
+    // turn used to wait forever (or until the user pressed Stop). One chunk, then
+    // nothing: the idle watchdog ends it and names the model to route around.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"model":"xai-oauth/grok-4.6","choices":[{"delta":{"content":"Writing"}}]}\n'));
+      },
+      // No `pull`: the stream never produces another byte and never closes.
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
+    const err = await streamChatCompletion({ messages: [], transport: baseTransport, idleTimeoutMs: 20 })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StreamInterruptedError);
+    expect((err as Error).message).toContain('went silent');
+    expect((err as StreamInterruptedError).model).toBe('xai-oauth/grok-4.6');
+  });
+
+  it('treats a user Stop as a cancellation, never as a silent stream', async () => {
+    const controllerAbort = new AbortController();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"model":"xai-oauth/grok-4.6","choices":[{"delta":{"content":"Hi"}}]}\n'));
+        controllerAbort.abort();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
+    const err = await streamChatCompletion({
+      messages: [], transport: baseTransport, idleTimeoutMs: 20, signal: controllerAbort.signal,
+    }).catch((e: unknown) => e);
+    // Whatever surfaced, it must NOT be dressed up as an upstream interruption.
+    if (err instanceof Error) expect(err.message).not.toContain('went silent');
+  });
+
   it('sends excludeModels so a retry routes around the model that broke', async () => {
     const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
     vi.stubGlobal('fetch', fetchMock);

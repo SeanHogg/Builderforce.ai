@@ -172,7 +172,9 @@ describe('computeBrainDiagnostics over a reopened chat', () => {
   });
 
   it('recovers the pre-trim payload size and truncation flag of a capped step', () => {
-    const messages = [stepRow({ resultBytes: 48_000, truncated: true })];
+    // A turn the output ceiling cut short rides along: trimming alone is the budget
+    // working, and only a CONSEQUENCE makes context pressure a verdict.
+    const messages = [llmRow({ prompt: 120_000, finishReason: 'length' }), stepRow({ resultBytes: 48_000, truncated: true })];
     const d = computeBrainDiagnostics(traceWithPersistedSteps(messages, []));
 
     expect(d.toolResultBytes).toBe(48_000);
@@ -180,6 +182,13 @@ describe('computeBrainDiagnostics over a reopened chat', () => {
     expect(d.largestToolResult?.bytes).toBe(48_000);
     // With the real numbers restored the verdict can finally be reached.
     expect(d.likelyCause).toBe('context-exhaustion');
+  });
+
+  it('does not reach that verdict on trimming alone — the budget working is not a failure', () => {
+    const d = computeBrainDiagnostics(traceWithPersistedSteps([stepRow({ resultBytes: 48_000, truncated: true })], []));
+    expect(d.truncatedToolResults).toBe(1);
+    expect(d.contextPressureOnly).toBe(true);
+    expect(d.likelyCause).not.toBe('context-exhaustion');
   });
 
   it('does not double-count an llm turn present live AND persisted', () => {

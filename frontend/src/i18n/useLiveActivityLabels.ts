@@ -28,6 +28,8 @@ export function useLiveActivityLabels(overrides?: Partial<LiveActivityLabels>): 
     starting: t('starting'),
     thinking: t('thinking'),
     writing: t('writing'),
+    composing: t('composing', { tool: '{tool}' }),
+    composed: t('composed', { bytes: '{bytes}' }),
     tool: t('tool', { tool: '{tool}' }),
     awaiting: t('awaiting', { tool: '{tool}' }),
     finishing: t('finishing'),

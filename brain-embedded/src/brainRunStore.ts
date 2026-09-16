@@ -53,6 +53,7 @@ import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcome
 import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
 import { toolActivity, visitTarget, type BrainRunActivity } from './runActivity';
+import { createComposingActivity, toolCallArgBytes } from './composingActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
 import { FailureTally, failureReason, repeatedFailureAdvisory } from './repeatedFailure';
 import { trimToolResult } from './toolResultBudget';
@@ -1591,7 +1592,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // capability separately — and a host that gains or loses the file tools stays
   // consistent with the post-run backstop, which reads the same set.
   const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere })}\n\n${turnOptimizationDirective()}`;
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent') })}\n\n${turnOptimizationDirective()}`;
   // A session that can commit AND push holds the only copy of its change — nobody else
   // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
   // Rides both modes: it only binds a turn that changes code.
@@ -2286,6 +2287,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // The completion is open and no token has arrived yet — the phase that used to
       // be indistinguishable from a hang. It flips to `writing` on the first delta.
       setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
+      // A turn that emits a tool call streams its ARGUMENTS, not text — 21 KB of them
+      // took 3m 23s on chat #113 while the indicator sat on "writing the reply". See
+      // `composingActivity.ts`; the run store only supplies the cell's three writes.
+      const composing = createComposingActivity(
+        { set: (a) => { c.activity = a; }, repaint: () => emit(c), coalescedRepaint: () => emitStreaming(c) },
+        { step: iter },
+      );
       const handlers: StreamHandlers = {
         onModel: liveTurnModel(c),
         onTextDelta: (d) => {
@@ -2301,6 +2309,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             return;
           }
           emitStreaming(c);
+        },
+        // The first argument fragment is this turn's first token too: a tool-only turn
+        // recorded no ttft at all, so "Thought for Xs" covered the whole turn.
+        onToolCallDelta: (index, partial) => {
+          if (firstTokenAt === undefined) firstTokenAt = nowMs();
+          composing.onDelta(index, partial);
         },
       };
       // A tool-less turn is conversation, not analysis or code.
@@ -2335,6 +2349,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const restartTurn = (): void => {
         c.streamingText = '';
         firstTokenAt = undefined;
+        composing.reset();
         emit(c);
       };
       try {
@@ -2436,6 +2451,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         result.toolCalls.length === 0
           ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n))
           : [];
+      // Bytes of tool-call arguments this turn emitted — taken from the ASSEMBLED calls,
+      // so a turn retried after a stream break reports what the surviving attempt sent.
+      const argBytes = toolCallArgBytes(result.toolCalls);
       // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
       // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
       // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
@@ -2459,6 +2477,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           // report shows which model planned and which one wrote the code.
           role: turnRole,
           toolCalls: result.toolCalls.length,
+          // How much the turn actually EMITTED. "1 tool call(s) · 202509ms" said
+          // nothing about a turn that spent three minutes streaming 21 KB of
+          // `write_file` arguments — which is what a long turn usually is.
+          ...(argBytes > 0 ? { argBytes } : {}),
           // Which account served the turn + any connected-BYO provider the gateway
           // could NOT resolve — so triage tells "ran on the shared pool despite a
           // connected Claude account (expired?)" apart from "nothing connected".

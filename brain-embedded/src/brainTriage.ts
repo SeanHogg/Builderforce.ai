@@ -15,17 +15,30 @@ import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
 import { formatModelScorecard, formatModelTurnLog, modelScorecard, modelTurnLog, type ModelScore, type ModelTurn } from './modelScorecard';
+import { formatStaffingSummary, staffingSummaryInTrace, workFiledNotStaffedVerdict, type StaffingSummary } from './staffingSummary';
 import { parseMessageProvenance } from './provenance';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
 import { isCodeChangeTool } from './localWorkspaceTools';
-import { READ_FILE_TOOL } from './toolResultBudget';
+import { MAX_TOOL_RESULT_CHARS, READ_FILE_TOOL } from './toolResultBudget';
+import { HISTORY_TOKEN_BUDGET } from './workingTranscript';
 
-/** A prompt at or past this many tokens is context PRESSURE (the loop's history budget
- *  is 24k). Pressure alone is evidence, not a diagnosis — see `contextEvidence`. */
-const CONTEXT_PROMPT_PEAK = 24_000;
+/**
+ * A prompt at or past this many tokens is context PRESSURE.
+ *
+ * DERIVED from the working transcript's own budget rather than guessed: the request is
+ * the system prompt + the tool catalog + the history, and the first two are ~15–30k on a
+ * coding turn, so a full prompt at the budget lands around 1.5×. A prompt below this is
+ * the design working, not a symptom.
+ *
+ * It was a hardcoded 24k, written when the history budget was 24k and never moved when
+ * the budget became 64k. Chat #113 therefore reported "Likely CONTEXT EXHAUSTION — the
+ * prompt peaked at 90,129 tokens" on a turn that had exhausted nothing: 90k is what a
+ * 64k-token transcript is SUPPOSED to cost.
+ */
+const CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
 /** A single LOSSY tool result at least this large is context pressure too. */
 const LARGE_LOSSY_RESULT_BYTES = 20_000;
-import { midRunNotice, type BrainRunActivity } from './runActivity';
+import { formatBytes, midRunNotice, type BrainRunActivity } from './runActivity';
 
 /** One step of the Brain agent loop, recorded as it runs. */
 export interface BrainTraceEvent {
@@ -144,6 +157,12 @@ const TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|
 /** Assistant prose that CLAIMS a ticket/gap/task was created, filed, or linked. */
 const TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
 
+/** Did this tool call FILE board work (create or link)? THE predicate — the honesty check
+ *  below and `staffingSummary.ts` both read it, so "what counts as filing work" is one list. */
+export function isTicketWriteTool(label: string): boolean {
+  return TICKET_WRITE_TOOL.test(label);
+}
+
 /**
  * Structural honesty check for the "it said it updated the file but didn't" failure:
  * an assistant message that CLAIMS a file/attachment write while NO file-write tool
@@ -171,7 +190,7 @@ export function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: Br
  */
 export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
   const filedOk = events.some(
-    (e) => e.category === 'tool' && TICKET_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result),
+    (e) => e.category === 'tool' && isTicketWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result),
   );
   if (filedOk) return false;
   return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && TICKET_CLAIM.test(m.content));
@@ -532,8 +551,9 @@ export interface BrainDiagnostics {
   lastPromptTokens: number;
   /** Total bytes of tool results returned this run (pre-trim). */
   toolResultBytes: number;
-  /** Count of tool results that were truncated before hitting the model — LOSSY cuts
-   *  only; a paged `read_file` window is counted in {@link pagedReadWindows}. */
+  /** Count of tool results trimmed to the per-result budget before hitting the model —
+   *  LOSSY cuts only; a paged `read_file` window is counted in {@link pagedReadWindows}.
+   *  A trim is the budget WORKING: it is evidence of pressure, never of a failure. */
   truncatedToolResults: number;
   /** `read_file` results handed over as one window of a larger file, with the offset
    *  that continues it. The budget working as designed, not lost context. */
@@ -611,6 +631,20 @@ export interface BrainDiagnostics {
    */
   progress: RunProgress;
   /**
+   * The run showed context PRESSURE (a big prompt, trimmed tool results) but nothing was
+   * cut short by it — no truncated turn, no downgrade, no exhausted loop, no failed
+   * completion. Reported as an advisory line so the numbers are still visible, while the
+   * verdict stays whatever the rest of the run says (usually `healthy`).
+   */
+  contextPressureOnly: boolean;
+  /**
+   * What this run FILED versus what it STAFFED — see `staffingSummary.ts`. The signal
+   * that separates "twelve tickets and a hundred green tool calls" from "somebody is
+   * actually working on it": every other field here can read clean on a run that left
+   * every ticket it created with nobody on it.
+   */
+  staffing: StaffingSummary;
+  /**
    * Best-effort verdict — the header a triager reads first. `healthy` is distinct
    * from `inconclusive`: the former means there is no failure to explain, the
    * latter that there IS one but the signals don't separate A from B. Collapsing
@@ -628,6 +662,10 @@ export interface BrainDiagnostics {
    * prompt peak and truncated tool results, so the context signals fire — but they are a
    * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
    * changes nothing. The loop has to be named first or it is never seen.
+   *
+   * `work-filed-not-staffed` sits LAST among the causes, above only `healthy`/`inconclusive`:
+   * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
+   * model fault or narrated-call failure explains the missing dispatch better and outranks it.
    */
   likelyCause:
     | 'memory-answered'
@@ -637,6 +675,7 @@ export interface BrainDiagnostics {
     | 'no-progress'
     | 'context-exhaustion'
     | 'model-degradation'
+    | 'work-filed-not-staffed'
     | 'inconclusive'
     | 'healthy';
 }
@@ -798,9 +837,25 @@ export function computeBrainDiagnostics(
   // Verdict. Context-exhaustion signals: big prompt tokens, truncated tool
   // results, or a model downgrade/length-finish. Degradation signals: an
   // Evermind model answered, tokens stayed low, and a turn was empty/failed.
-  const contextSignal =
+  // PRESSURE is what the numbers show; EXHAUSTION is pressure that cost the run
+  // something. Pressure alone used to be the verdict, and it named a cause on runs
+  // where nothing failed: chat #113's report opened "Likely CONTEXT EXHAUSTION (case
+  // A) — the prompt peaked at 90,129 tokens; 14 tool result(s) were cut" on a turn that
+  // completed, wrote the file it set out to write, and lost nothing — those 14 cuts
+  // being the tool-result budget doing its job.
+  const contextPressure =
     promptTokenPeak >= CONTEXT_PROMPT_PEAK || truncatedToolResults > 0 || downgradeEvents > 0 ||
     largestLossyResultBytes >= LARGE_LOSSY_RESULT_BYTES;
+  // The CONSEQUENCE: a turn cut short by the output ceiling or returned empty, a
+  // gateway downgrade to a smaller window, a loop that ran out of budget, or a
+  // completion that failed outright. Without one of these, nothing was exhausted.
+  const contextConsequence =
+    emptyOrLengthFinishes > 0 || downgradeEvents > 0 || loopExhausted ||
+    errors.some((e) => e.label === 'llm.complete');
+  const contextSignal = contextPressure && contextConsequence;
+  /** Pressure the reader should KNOW about, on a run it did not break. Reported as an
+   *  advisory line, never as a verdict. */
+  const contextPressureOnly = contextPressure && !contextConsequence;
   const degradationSignal =
     evermindUsed.length > 0 && emptyOrLengthFinishes > 0 &&
     (!tokensMeasured || promptTokenPeak < CONTEXT_PROMPT_PEAK) && truncatedToolResults === 0;
@@ -837,6 +892,9 @@ export function computeBrainDiagnostics(
   // "no effect" half: it has not declined to act, it is still acting.
   const progress = computeRunProgress(events, messages);
   const noProgress = progress.spinning || (progress.noEffect && !ctx.running);
+  // Filed versus staffed — the outcome question no other signal here asks.
+  const staffing = staffingSummaryInTrace(events);
+  const workFiledNotStaffed = staffing.verdict === 'filed-not-staffed' || staffing.verdict === 'staffing-refused';
   const healthy =
     errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
     && !announcedUnmadeToolCall && !noProgress && didWork;
@@ -848,8 +906,9 @@ export function computeBrainDiagnostics(
             : noProgress ? 'no-progress'
             : contextSignal && !degradationSignal ? 'context-exhaustion'
               : degradationSignal && !contextSignal ? 'model-degradation'
-                : healthy ? 'healthy'
-                  : 'inconclusive';
+                : workFiledNotStaffed ? 'work-filed-not-staffed'
+                  : healthy ? 'healthy'
+                    : 'inconclusive';
 
   return {
     turns: llm.length,
@@ -884,14 +943,14 @@ export function computeBrainDiagnostics(
     memoryAnswers,
     turnCoveragePartial,
     progress,
+    contextPressureOnly,
+    staffing,
     likelyCause,
   };
 }
 
-/** Human-readable KB. */
-function kb(bytes: number): string {
-  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
-}
+/** Human-readable KB. ONE formatter for the package — see `runActivity.ts`. */
+const kb = formatBytes;
 
 /**
  * WHAT tripped the context verdict, stated as the evidence it is. The old line claimed
@@ -902,10 +961,32 @@ function kb(bytes: number): string {
 function contextEvidence(d: BrainDiagnostics): string {
   const parts: string[] = [];
   if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString('en-US')} tokens`);
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were cut before the model saw them`);
+  // NOT "cut before the model saw them": a trim to the per-result budget is the budget
+  // working, and calling it a loss turned the most routine line in the report into the
+  // headline evidence for a failure that had not happened.
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were trimmed to the ${toolResultBudgetText()} tool-result budget (by design)`);
   if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
   if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
   return parts.length ? parts.join('; ') : 'context pressure without a single dominant signal';
+}
+
+/** The per-result cap, stated as a reader reads it. Derived, never typed twice. */
+function toolResultBudgetText(): string {
+  return `${Math.round(MAX_TOOL_RESULT_CHARS / 1000)} KB`;
+}
+
+/**
+ * The advisory that replaces a verdict when the run showed context pressure and nothing
+ * broke. It has to say the numbers (a reader who sees 90k tokens and is told nothing
+ * assumes the worst) AND why they are normal, in one line.
+ */
+function contextPressureLine(d: BrainDiagnostics): string | null {
+  if (!d.contextPressureOnly) return null;
+  const parts: string[] = [];
+  if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString('en-US')} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
+  if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return `Context: pressure noted (${parts.join('; ')}) — no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET.toLocaleString('en-US')}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
 }
 
 /**
@@ -930,6 +1011,8 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
             ? `Likely CONTEXT EXHAUSTION (case A) — ${contextEvidence(d)}.`
             : d.likelyCause === 'model-degradation'
               ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
+              : d.likelyCause === 'work-filed-not-staffed'
+                ? workFiledNotStaffedVerdict(d.staffing)
               : d.likelyCause === 'healthy'
                 ? 'No failure signal — no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.'
                 : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
@@ -953,12 +1036,20 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
     );
   }
   lines.push(
-    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} truncated before the model saw them` : ''}${d.pagedReadWindows ? ` · ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ''}`,
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} trimmed to the ${toolResultBudgetText()} per-result budget (by design)` : ''}${d.pagedReadWindows ? ` · ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ''}`,
   );
+  // Pressure without a consequence. Stated here, next to the numbers that produced it,
+  // so a reader meets the explanation in the same breath as the figure.
+  const pressure = contextPressureLine(d);
+  if (pressure) lines.push(pressure);
   // Repetition / reach / effect / timing. Placed directly under the tool-result
   // sizes because they answer the question those sizes raise: 102 KB of tool output
   // across 26 calls is either research or a loop, and only these lines say which.
   lines.push(...(d.progress ? formatRunProgress(d.progress) : []));
+  // Filed vs staffed. Sits beside progress because it answers the same class of question
+  // — "did anything actually come of this?" — for the half progress cannot see: work that
+  // was created perfectly and handed to nobody. See `staffingSummary.ts`.
+  lines.push(...(d.staffing ? formatStaffingSummary(d.staffing) : []));
   // WHICH steps failed. `Errors: 1` alone forced a reader to scroll the transcript
   // hunting for the failure; naming it is the difference between a number and a lead.
   if (d.errorSteps?.length) {

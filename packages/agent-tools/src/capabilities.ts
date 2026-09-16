@@ -292,6 +292,16 @@ export interface SubagentRequest {
    *  the child to whatever the parent happens to be running as. Defaults are applied
    *  by the tool itself from `readOnly` before this ever reaches the capability. */
   role?: ModelRole;
+  /**
+   * Run the child AS one of the WORKSPACE's agents — an agent id or its name ("Ada").
+   *
+   * A delegation without this is an anonymous helper with the surface's generic
+   * instructions. With it, the child adopts that agent's role, bio, skills and
+   * personality, so the slice is done by the teammate whose job it actually is. The
+   * surface resolves the ref; an unknown one comes back as `{ok:false}` for the parent's
+   * model to read, never as a silently anonymous child wearing the wrong name.
+   */
+  asAgent?: string;
 }
 
 export interface SubagentResult {
@@ -303,6 +313,10 @@ export interface SubagentResult {
   /** True when the child hit its step budget before answering: `output` is then its
    *  last word rather than a conclusion, and the parent should treat it as partial. */
   truncated?: boolean;
+  /** WHO the child ran as, echoed back when `asAgent` resolved. The parent asked for
+   *  "Ada" and this says which agent that turned out to be, so the answer can be
+   *  attributed to a real teammate rather than to the string the parent guessed. */
+  asAgent?: { ref: string; name: string };
   error?: string;
 }
 

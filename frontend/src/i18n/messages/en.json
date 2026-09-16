@@ -257,6 +257,7 @@
     "effort_thorough": "Thorough",
     "thinking": "Thinking",
     "accountSettings": "Account settings",
+    "status": "Status",
     "autoMode": "Auto mode",
     "autoModeHint": "Auto-approve actions without asking",
     "dictate": "Dictate",
@@ -3031,14 +3032,7 @@
       "sizeBand": "Team size",
       "tableTitle": "Your metrics vs cohort",
       "footnote": "Percentiles are interpolated against seeded industry cohort distributions (p10–p90). For metrics where lower is better (lead time, change failure rate, MTTR, cost), a smaller value ranks higher.",
-      "industries": {
-        "software_saas": "Software / SaaS",
-        "fintech": "Fintech / Financial services",
-        "ecommerce": "E-commerce / Retail",
-        "healthtech": "Healthtech / Life sciences",
-        "agency_services": "Agency / Professional services",
-        "enterprise_it": "Enterprise IT"
-      },
+      "noCohort": "No benchmark cohort exists for {industry} yet. Your values are shown without a ranking; the distribution lands with a seed migration, or pick a seeded cohort to compare against now.",
       "sizeBands": {
         "small": "Small (1–20)",
         "mid": "Mid (21–200)",
@@ -11154,6 +11148,8 @@
         "starting": "Starting…",
         "thinking": "Thinking…",
         "writing": "Writing the reply…",
+        "composing": "Composing a {tool} call…",
+        "composed": " — {bytes} so far",
         "tool": "Running {tool}",
         "awaiting": "Waiting for you to approve {tool}",
         "finishing": "Wrapping up…",
@@ -11221,6 +11217,7 @@
     "tickets": {
       "none": "No tickets linked yet.",
       "ringAria": "{label}: {pct}% done",
+      "inParent": "in {parent}",
       "spawned": "spawned here",
       "open": "Open",
       "run": "Run agent on ticket",
@@ -12176,6 +12173,10 @@
         "label": "Require sign-off before finishing",
         "help": "Off unless you turn it on. When on, a ticket only finishes — and its pull request only merges — once every required reviewer has signed off, and the manager keeps chasing the roles that still owe one. A ticket nobody was asked to review never qualifies."
       },
+      "coordinationGate": {
+        "label": "Require a manager to coordinate tickets",
+        "help": "Off unless you turn it on. When off, any developer or agent on the project can run the ticket coordinator, add required roles, assign participants and create work items. When on, only managers can — and an agent asked to coordinate is told to ask a manager to switch this off."
+      },
       "tri": {
         "on": "On",
         "off": "Off",
@@ -12192,6 +12193,8 @@
         "mergeWithheld": "Merges wait for a person",
         "signoffRequired": "Sign-off required to finish",
         "signoffOptional": "No sign-off required",
+        "coordinationGated": "Managers coordinate tickets",
+        "coordinationOpen": "Anyone on the project coordinates",
         "ceremoniesUnattended": "May run ceremonies unattended",
         "ceremoniesNeedPeople": "Ceremonies need a person",
         "reassignGranted": "May reassign work idle {hours}h+",
@@ -20574,6 +20577,8 @@
     "newSession": "New session",
     "add": "Add",
     "moreActions": "More session actions",
+    "actions": "Actions",
+    "closeActions": "Close actions",
     "createAndView": "Create and view",
     "sessionTools": "Session tools",
     "selectionActions": "Selection actions",
@@ -20595,6 +20600,19 @@
     "share": "Invite",
     "run": "Run",
     "askBrain": "Ask Brain about this canvas",
+    "composerIntent": {
+      "label": "What Enter does",
+      "ask": {
+        "label": "Ask Brain",
+        "placeholder": "Ask Brain about this canvas",
+        "submit": "Send to Brain"
+      },
+      "captureIdea": {
+        "label": "Idea",
+        "placeholder": "Jot an idea. Enter captures it as a card; Ask Brain sends it to Brain instead.",
+        "submit": "Capture"
+      }
+    },
     "sendBrain": "Send to Brain",
     "resizePrompt": "Resize prompt area",
     "dragHandle": "Drag to move this panel",
@@ -20963,7 +20981,14 @@
     "diagnosticsCopyFailed": "Diagnostics could not be copied — the clipboard was unavailable",
     "diagnosticsBuildFailed": "Diagnostics could not be assembled — {reason}",
     "brain": "Brain",
+    "brainLauncher": {
+      "unread": "{count, plural, one {# reply from Brain} other {# replies from Brain}}"
+    },
     "brainDock": "Brain chat",
+    "brainSheet": {
+      "veil": "Close the Brain sheet and return to the canvas",
+      "grabber": "Close the Brain sheet"
+    },
     "openBrainDock": "Show Brain chat",
     "openBrainDockBusy": "Brain is working — show Brain chat",
     "closeBrain": "Close Brain chat",
@@ -24397,14 +24422,7 @@
         "active": "You are in Ideas",
         "regionLabel": "This canvas’s idea scratchpad",
         "heading": "Idea scratchpad",
-        "lede": "Write ideas down the moment you have them, then track each one from a first thought to something tested. Every idea is a card on the board, so Brain can research it and customer interviews can test it.",
-        "capture": {
-          "label": "New idea",
-          "placeholder": "Jot an idea — a sentence is enough. The first line becomes its title.",
-          "submit": "Capture",
-          "hint": "Ctrl+Enter to capture. The whole note is kept.",
-          "readOnly": "You can read these ideas, but only editors can add to this canvas."
-        },
+        "lede": "Write ideas down the moment you have them — jot one in the prompt below and Enter keeps it as a card on the board. Track each one from a first thought to something tested, so Brain can research it and customer interviews can test it.",
         "filterLabel": "Show ideas by stage",
         "filterAll": "All ideas",
         "stageLabel": "Stage of “{idea}”",
@@ -24420,7 +24438,7 @@
         "count": "{count, plural, =0 {No ideas} one {# idea} other {# ideas}}",
         "empty": {
           "title": "No ideas yet",
-          "body": "Write down the next idea you have — half-formed is fine. Each one lands on the board as a card you can research, test with customer interviews, and turn into something real."
+          "body": "Jot the next idea you have in the prompt below — half-formed is fine. Each one lands on the board as a card you can research, test with customer interviews, and turn into something real."
         },
         "filteredEmpty": "No ideas at this stage.",
         "row": {
@@ -24571,7 +24589,10 @@
     "floatPrompt": "Float the prompt over the board",
     "hidePrompt": "Hide the prompt",
     "showPrompt": "Show the prompt",
-    "canvasPanelControls": "Canvas panels",
+    "backToLibrary": "Back to your canvases",
+    "sessionStage": "Session stage",
+    "rosterChip": "{count, plural, one {# person on this canvas} other {# people on this canvas}}",
+    "surfaceStrip": "Canvas surfaces",
     "promptName": "Ask Brain",
     "objectDescription": {
       "workflow": "An automated sequence of steps that runs your process end to end.",
@@ -31646,21 +31667,25 @@
         "scale": "Scale"
       },
       "sector": {
+        "ai_ml": "AI / ML",
+        "saas": "SaaS",
         "fintech": "FinTech",
         "healthtech": "HealthTech",
-        "edtech": "EdTech",
-        "ecommerce": "E-commerce",
-        "saas": "SaaS",
+        "medtech": "MedTech",
+        "biotech": "BioTech",
+        "climate_energy": "Climate & energy",
+        "hardware_robotics": "Hardware & robotics",
+        "cybersecurity": "Cybersecurity",
         "marketplace": "Marketplace",
+        "ecommerce": "E-commerce",
         "consumer_apps": "Consumer apps",
         "enterprise_software": "Enterprise software",
-        "ai_ml": "AI / ML",
+        "edtech": "EdTech",
         "blockchain": "Blockchain",
         "gaming": "Gaming",
         "media_entertainment": "Media & entertainment",
         "real_estate": "Real estate",
         "logistics": "Logistics",
-        "sustainability": "Sustainability",
         "other": "Other"
       },
       "seeking": {

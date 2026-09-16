@@ -94,6 +94,9 @@ function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): Manag
   if (patch.allowAutoMerge !== undefined) out.allowAutoMerge = patch.allowAutoMerge;
   if (typeof patch.enabled === 'boolean') out.enabled = patch.enabled;
   if (typeof patch.requireSignoffToComplete === 'boolean') out.requireSignoffToComplete = patch.requireSignoffToComplete;
+  // Project-only and NOT NULL, so it narrows to a boolean exactly like the 0265 columns
+  // above — there is no workspace tier for a `null` here to inherit from.
+  if (typeof patch.coordinationRequiresManager === 'boolean') out.coordinationRequiresManager = patch.coordinationRequiresManager;
   if (typeof patch.autoAssign === 'boolean') out.autoAssign = patch.autoAssign;
   if (typeof patch.autoBusinessValue === 'boolean') out.autoBusinessValue = patch.autoBusinessValue;
   if (typeof patch.autoPrioritize === 'boolean') out.autoPrioritize = patch.autoPrioritize;
@@ -381,6 +384,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     enabled: policy.enabled,
     allowAutoMerge: config ? config.allowAutoMerge : null,
     requireSignoffToComplete: policy.requireSignoffToComplete,
+    coordinationRequiresManager: policy.coordinationRequiresManager,
     prMergePolicy: policy.prMergePolicy,
     autoAssign: policy.autoAssign,
     autoBusinessValue: policy.autoBusinessValue,

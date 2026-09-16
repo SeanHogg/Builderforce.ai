@@ -74,6 +74,9 @@ export interface ChatDiagnosticsSources {
   chatTitle?: string | null;
   /** 'shared' | 'locked'. */
   chatVisibility?: string | null;
+  /** The chat's MODE ('chat' | 'work') — what the run was obliged to do, which is what
+   *  decides whether "planned it and stopped" is correct behaviour or a failed execution. */
+  mode?: string | null;
   /** The CHAT's own project — what the learn gate keys on. */
   projectId?: number | null;
   projectName?: string | null;
@@ -204,6 +207,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     chatId: src.chatId ?? null,
     chatTitle: src.chatTitle ?? null,
     chatVisibility: src.chatVisibility ?? null,
+    mode: src.mode ?? null,
     projectId: src.projectId ?? null,
     projectName: projectName ?? src.projectName ?? null,
     selectedProjectId: src.selectedProjectId ?? null,

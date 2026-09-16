@@ -2,6 +2,22 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.72] — Linked-ticket 0% chips count in the overall %, and the chat picker shows that %
+
+- **A 0% spec or roadmap no longer disappears from the overall ring.** Incomplete spec/roadmap/retro used to report `total: 0`, so the header could read "6 tickets 100% · 4/4" while two chips sat empty at 0%. They now count as one item each, so the headline matches the rings.
+- **The conversation dropdown shows ticket progress.** Each chat with linked tickets is labelled `67% · title` (live-run glyphs still come first), so you can see which conversation still needs a return without opening it. The Sessions tree shows the same percent.
+
+## [2026.9.72] — Composer chrome matches Claude: Auto, a stop icon, mic in the prompt, tabbed `/`
+
+- **The prompt bar is quieter.** Auto is labelled "Auto" (not "Auto mode"), Stop is an icon, and the microphone sits on the far right of the prompt because you type or speak — not both. Plan and Evermind chips no longer crowd the action row.
+- **The `/` menu is tabbed.** Mode, Effort, Model, and Status replace the one long scrolling list. Status shows the account, usage meters, Evermind posture, and a link to account settings.
+
+## [2026.9.71] — You can see the agent writing a file, and the ticket rail shows which epic each ticket belongs to
+
+- **A long file write no longer looks like a hang.** While the model is composing a tool call, the live row now names the tool and counts the bytes as they arrive ("Composing a write_file call — 12.4 KB so far"), so a three-minute PRD write reads as progress instead of a frozen "Writing the reply…". A stream that truly goes silent for four minutes is now retried on another model instead of waiting for you to press Stop.
+- **The copied diagnostics stop blaming context exhaustion for a healthy run.** A large prompt or a tool result trimmed to the budget is noted as pressure, not as the cause, unless a turn was actually cut short. Each turn in the turn log now shows how many bytes of arguments and completion tokens it produced, so a slow turn explains itself.
+- **Every ticket on the chat rail says which epic it belongs to.** Tasks and epics spawned under a parent show an "in …" line under their name on both the VSIX rail and the web app.
+
 ## [2026.9.70] — Leaving the editor open no longer costs the platform anything
 
 - **An editor you are not looking at goes quiet.** The live "running / needs you" markers on your sessions and tasks still update within seconds while a run is going, but when nothing is live they check once a minute. When the window is in the background or you have stepped away, they check every five minutes. Coming back to the window refreshes them at once.

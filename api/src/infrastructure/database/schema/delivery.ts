@@ -524,6 +524,15 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
    *  managed board, and the manager can fix that — but doing so turns an intake pile into
    *  auto-dispatching work, so it is a grant rather than a default. */
   allowAutoStaffLanes: boolean('allow_auto_staff_lanes'),
+  /** Does coordinating a ticket on this project need the MANAGER role (1177)? Covers
+   *  kanban coordinate / assess_resource / assign+remove participant / materialize.
+   *  FALSE by default: staffing the ticket you are about to work on is developer-tier
+   *  work, and demanding manager for it made the coordination tools refuse a workspace's
+   *  own owner. NOT NULL like `requireSignoffToComplete` and for the same reason — there
+   *  is deliberately NO workspace tier for this, so there is nothing to inherit and the
+   *  column always states the project's answer outright. See
+   *  application/kanban/coordinationGate.ts + managerPolicy.ts. */
+  coordinationRequiresManager: boolean('coordination_requires_manager').notNull().default(false),
   lastRunAt:         timestamp('last_run_at'),
   /**
    * WHAT THE LAST SCHEDULED SWEEP DECIDED about this project (migration 1083):

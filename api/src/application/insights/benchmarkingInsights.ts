@@ -16,6 +16,13 @@
  * a constant, so a cohort cannot be selected that has no distribution to rank
  * against — which is how the lens would produce a rating with nothing behind it.
  *
+ * VOCABULARY. Since migration 1176 the industry values ARE the startup sectors
+ * (`STARTUP_SECTORS` in the contract package, PRD 25 §6.4): a founder declaring
+ * `saas` on the listing is in the `saas` cohort, and the profile's default is the
+ * sector list's `saas`. A declared sector with no seeded cohort yet is reported as
+ * `cohortSeeded: false` rather than refused — the sector is the truth about the
+ * company; the distribution is a seed that has not landed.
+ *
  * {@link rankPercentile} is a pure helper (interpolated against the five seeded
  * percentile anchors, direction-aware via higherIsBetter) so it is unit-testable
  * without a DB.
@@ -29,7 +36,7 @@ import { computeDora } from '../metrics/workforceMetrics';
 import { computeEngineeringInsights } from './engineeringInsights';
 import { computeAiAdoption } from '../metrics/aiAdoption';
 
-export const DEFAULT_INDUSTRY = 'software_saas';
+export const DEFAULT_INDUSTRY = 'saas';
 export const DEFAULT_SIZE_BAND = 'mid';
 
 export type BenchmarkRating = 'elite' | 'high' | 'medium' | 'low';
@@ -59,6 +66,8 @@ export interface BenchmarkingResult {
   industry: string;
   sizeBand: string;
   windowDays: number;
+  /** False when the profile names a cohort with no seeded distribution (every percentile is null). */
+  cohortSeeded: boolean;
   metrics: BenchmarkMetric[];
 }
 
@@ -275,5 +284,5 @@ export async function computeBenchmarking(
 
   const metrics = BENCHMARK_METRICS.map((m) => buildMetric(m, liveValues[m] ?? null, byMetric.get(m)));
 
-  return { industry, sizeBand, windowDays: days, metrics };
+  return { industry, sizeBand, windowDays: days, cohortSeeded: benchRows.length > 0, metrics };
 }

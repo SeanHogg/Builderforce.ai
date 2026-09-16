@@ -35,7 +35,7 @@ const HISTORY_WINDOW = 80;
  * verbatim, while a full turn stays well inside the 128k window every coding-capable pool
  * model has. See {@link windowed} and {@link buildWorkingTranscript}.
  */
-const HISTORY_TOKEN_BUDGET = 64_000;
+export const HISTORY_TOKEN_BUDGET = 64_000;
 /**
  * How much of {@link HISTORY_TOKEN_BUDGET} the verbatim TAIL may keep when the older part
  * of the transcript is compacted. The rest is headroom new work fills before the next

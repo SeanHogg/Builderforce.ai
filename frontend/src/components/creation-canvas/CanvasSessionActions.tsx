@@ -23,7 +23,6 @@ import {
 import {
   canvasSessionActionsFor,
   canvasSessionClusters,
-  phoneOverflowActions,
   type CanvasSessionActionDef,
   type CanvasSessionActionId,
 } from '@/lib/canvasSessionActions';
@@ -45,10 +44,12 @@ import styles from './CreationCanvas.module.css';
  * ── THE FOUR CHROMES ─────────────────────────────────────────────────────────────
  * `bar`   — the desktop command bar: the surface's own status and controls, then the five
  *           captioned stage groups and the board group, in arc order.
- * `menu`  — the ••• sheet. It carries every action the phone bar does NOT, so a small
- *           screen loses placement and never loses the action. That used to be a blanket
- *           `display:none` on a class name, which quietly took undo, redo, diagnostics,
- *           the outcome scorecard AND every way to invite anybody off the phone.
+ * `tiles` — the PHONE's actions sheet, which is what the bar becomes at that width. The
+ *           same arc groups, the same captions, drawn as worded 44px tiles — and EVERY
+ *           action, including the doors and the roster's Share, because the sheet is the
+ *           whole command bar rather than an overflow from one. It replaces the `menu`
+ *           variant, whose job was "the complement of what the phone bar could fit";
+ *           there is no phone bar to be the complement of.
  * `doors` — the rows inside **Make it real**: the ways work LEAVES this canvas. It
  *           replaces the old `handoff` variant, which drew each of them as its own worded
  *           button on the bar and so put *Make it real* and *Publish* side by side,
@@ -134,7 +135,7 @@ export type CanvasBarGroupSlots = Partial<Record<CanvasBarGroupId, {
 
 export interface CanvasSessionActionsProps {
   handlers: Record<CanvasSessionActionId, CanvasSessionActionHandler>;
-  variant: 'bar' | 'menu' | 'doors' | 'roster';
+  variant: 'bar' | 'tiles' | 'doors' | 'roster';
   /**
    * The surface being read. The registry decides which actions mean anything on it —
    * an outcome scorecard over a conversation with no objects is a button whose only
@@ -148,7 +149,7 @@ export interface CanvasSessionActionsProps {
    * than a rule each consumer remembers differently.
    */
   collapsed?: boolean;
-  /** `bar` only: what the host contributes into each named group. */
+  /** `bar` and `tiles`: what the host contributes into each named group. */
   groupSlots?: CanvasBarGroupSlots;
 }
 
@@ -194,35 +195,26 @@ export function CanvasSessionActions({
     };
   };
 
-  /** A worded row — the shape both the ••• sheet and the Make it real menu use. */
+  /** A worded row — the shape the Make it real menu and the phone actions sheet share. */
   const wordedRow = (def: CanvasSessionActionDef) => {
     const { handler, active, label, title, ...aria } = describe(def);
     const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
     // No class of its own: chrome comes from the sheet's own `button` rule, so a session
     // action and a session tool are the same kind of row rather than two visitors' idea
-    // of one.
+    // of one. The one thing it does publish is which CHROME the registry filed it under,
+    // so a sheet can draw the doors out — the ways work LEAVES this canvas — at the
+    // weight the desktop bar gives the one worded button they hang under, rather than as
+    // two more grey rows among fifteen.
     return <button
       key={def.id}
       type="button"
+      data-chrome={def.chrome}
       disabled={handler?.disabled}
       title={title}
       onClick={() => handler?.run()}
       {...aria}
     ><span aria-hidden><Glyph /></span>{label}</button>;
   };
-
-  if (variant === 'menu') {
-    // Words, always. The sheet has room for them and a phone user pressing ••• is
-    // looking for a named thing, not scanning a second row of glyphs.
-    //
-    // THE DOORS ARE NOT REPEATED HERE. `door` actions already have a menu of their own
-    // that a phone keeps — *Make it real* is a worded button, not a `data-phone` glyph the
-    // breakpoint stands down — so listing Publish in this sheet as well would be one
-    // decision with two homes on the one screen size where that costs the most. The
-    // overflow's job is the actions the phone bar could not FIT, and these were never on
-    // it.
-    return <>{offered(phoneOverflowActions(surface).filter((def) => def.chrome !== 'door')).map(wordedRow)}</>;
-  }
 
   if (variant === 'doors') {
     // The ways work leaves this canvas, as rows under the one worded button on the bar.
@@ -256,9 +248,16 @@ export function CanvasSessionActions({
     </>;
   }
 
-  // The bar. One pass over the arc; the registry's clusters are looked up per stage
-  // rather than iterated, so a stage with nothing filed under it still draws whatever the
-  // host contributed to it.
+  // The bar, and the phone sheet that IS the bar at 767px and under. ONE pass over the
+  // arc; the registry's clusters are looked up per stage rather than iterated, so a stage
+  // with nothing filed under it still draws whatever the host contributed to it.
+  //
+  // The two chromes differ in exactly two ways, both stated below: the sheet words every
+  // control (it has the room, and a person reading a sheet is looking for a named thing,
+  // not scanning a second row of glyphs), and it carries every CHROME rather than icons
+  // alone — the doors out and the roster's Share are commands a phone must reach, and
+  // there is no second bar left for them to live on.
+  const tiles = variant === 'tiles';
   const byCluster = new Map(canvasSessionClusters(surface).map((c) => [c.cluster, c.actions]));
 
   return <>
@@ -276,7 +275,7 @@ export function CanvasSessionActions({
       // off this group's `trail`. Filtering by chrome rather than by id keeps that true
       // for a door added later.
       const actions = showsActions
-        ? offered((byCluster.get(group) ?? []).filter((def) => def.chrome === 'icon'))
+        ? offered((byCluster.get(group) ?? []).filter((def) => tiles || def.chrome === 'icon'))
         : [];
       const members = actions.length + (slots?.lead ? 1 : 0) + (slots?.trail ? 1 : 0);
       // A stage with nothing to draw draws nothing — not an empty captioned trough. This
@@ -285,16 +284,13 @@ export function CanvasSessionActions({
       if (!members) return null;
 
       const buttons = actions.map((def) => {
+        if (tiles) return wordedRow(def);
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
         return <button
           key={def.id}
           type="button"
           className={styles.sessionActionButton}
-          // Published so the phone breakpoint stands down exactly the actions the
-          // registry moved into the ••• sheet — one declaration, read by the stylesheet
-          // as well as by the sheet, rather than a second list in CSS.
-          data-phone={def.phone}
           disabled={handler?.disabled}
           aria-label={label}
           title={title}
@@ -303,10 +299,13 @@ export function CanvasSessionActions({
         ><Glyph /></button>;
       });
 
-      // ONE captioned group, whatever its size. A group of one gets no trough — a lone
-      // button in a segmented shell reads as a group with a member missing — but it keeps
-      // its NAME, drawn above it, which is what a lone unlabelled glyph needed most.
-      return <CanvasBarGroup key={group} group={group} shell={members < 2 ? 'bare' : 'trough'}>
+      // ONE captioned group, whatever its size, and the SAME component in both chromes —
+      // which is what keeps the sheet's captions and the bar's captions one string rather
+      // than two. A group of one gets no trough on the bar (a lone button in a segmented
+      // shell reads as a group with a member missing) but keeps its NAME. The sheet is
+      // never troughed: its tiles are worded rows in a two-column grid, and a segmented
+      // shell around worded rows is border a 360px screen has none to spare for.
+      return <CanvasBarGroup key={group} group={group} shell={tiles || members < 2 ? 'bare' : 'trough'}>
         {slots?.lead}
         {buttons}
         {slots?.trail}

@@ -41,6 +41,18 @@ export interface SubagentToolDeps {
    * disk with no way to ask them, which is the thing the gate exists to prevent.
    */
   confirmWrite?(req: { name: string; args: Record<string, unknown> }): Promise<ChildWriteDecision>;
+  /**
+   * Resolve one of the WORKSPACE's own agents (Ada, Kevin, Bob…) to the brief the child
+   * should run as. Absent ⇒ this host cannot name personas, and `as_agent` is refused
+   * rather than silently ignored.
+   *
+   * WHY: a Work-mode run that does a slice itself instead of dispatching it produces work
+   * nobody owns — no agent on the ticket, nothing in anyone's queue, and a user who
+   * cannot tell who did what. Running the slice AS the agent whose role fits it keeps the
+   * accountability the dispatch would have carried, in a session that already holds the
+   * workspace. `null` from this reader means "no such agent", not "reader failed".
+   */
+  personaBrief?(agent: string): Promise<{ ref: string; name: string; brief: string } | null>;
 }
 
 /**
@@ -92,9 +104,29 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
     execute: async (args, root) => {
       const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
       const task = str(args.task);
-      const label = str(args.label) || task.slice(0, 60);
+      let label = str(args.label) || task.slice(0, 60);
       if (!task) {
         return JSON.stringify({ ok: false, error: "task is required — the child sees none of your conversation" });
+      }
+      // WHO is doing this slice. An unresolvable name is REFUSED rather than run
+      // anonymously: a parent that believes Ada did the work will report that she did,
+      // and a silently persona-less run makes that report false.
+      const asAgentName = str(args.as_agent);
+      let persona: { name: string; brief: string } | undefined;
+      let asAgent: { ref: string; name: string } | undefined;
+      if (asAgentName) {
+        const resolved = await deps.personaBrief?.(asAgentName).catch(() => null);
+        if (!resolved) {
+          return JSON.stringify({
+            ok: false,
+            label,
+            error: `no agent named '${asAgentName}' in this workspace — use builtin_chats_list_agents or builtin_cloud_agents_list_mine and pass its exact name or id`,
+          });
+        }
+        persona = { name: resolved.name, brief: resolved.brief };
+        asAgent = { ref: resolved.ref, name: resolved.name };
+        // The timeline row says who, not just what — "as Ada: port the auth middleware".
+        label = `as ${resolved.name}: ${label}`;
       }
       // Writable only when the parent asked AND this host can reach a human. Both
       // halves are required: the first is the tool's contract, the second is the reason
@@ -116,6 +148,9 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
           task,
           readOnly: !writable,
           tools: specs,
+          // The kernel owns what a persona DOES to the child's system prompt
+          // (`subagentSystemPrompt`), so both surfaces get one answer; this only names who.
+          ...(persona ? { persona } : {}),
           complete: async ({ messages, tools }) => {
             const result = await stream({
               messages: messages as unknown as ChatCompletionMessage[],
@@ -159,6 +194,9 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
           steps: run.steps,
           maxSteps: SUBAGENT_MAX_STEPS,
           readOnly: !writable,
+          // Echoed back so the parent can SAY which agent did this slice — and so the
+          // staffing summary can count it as work somebody owns.
+          ...(asAgent ? { asAgent } : {}),
           ...(run.truncated ? { truncated: true, note: "The sub-agent ran out of turns — treat this as partial." } : {}),
           ...(declinedWrite ? { writeDeclined: declinedWrite } : {}),
           ...(run.ok ? {} : { error: run.cancelled ? "the run was stopped while this sub-agent was working" : "the sub-agent stopped without an answer" }),

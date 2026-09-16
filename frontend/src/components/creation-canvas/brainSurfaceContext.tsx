@@ -31,6 +31,16 @@ export interface BrainSurfaceCollaborator {
 export interface BrainSurfaceContextValue {
   /** False in present mode or when the user closed Brain — the Object shows its anchor. */
   open: boolean;
+  /**
+   * Assistant replies that landed while this surface was NOT on screen. Zero while it
+   * is open, because you are reading it.
+   *
+   * Published here as well as on the launcher pill so the inline Brain Object can say
+   * the same thing without counting again: a board whose Brain is a card rather than a
+   * dock has the same "did anything arrive" question, and two answers to it would drift
+   * the first time either changed. Computed once by `useBrainUnreadReplies`.
+   */
+  unreadReplies: number;
   /** False while presenting, where nothing can reveal Brain — so nothing offers to. */
   canOpen: boolean;
   mode: BrainDockMode;

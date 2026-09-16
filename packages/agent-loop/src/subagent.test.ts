@@ -144,3 +144,55 @@ describe("runSubagent", () => {
     expect(run.steps).toBe(SUBAGENT_MAX_STEPS);
   });
 });
+
+/**
+ * PERSONA (operator decision, 2026-09-15): when the Brain does the work itself instead of
+ * dispatching, the child should be one of the WORKSPACE's agents — Ada, Kevin, Bob — not
+ * an anonymous helper. What this package decides is only WHERE the persona goes, and that
+ * has to be decided once or the two surfaces would delegate to different Adas.
+ */
+describe("subagentSystemPrompt with a persona", () => {
+  const persona = { name: "Ada", brief: "You are the workspace's data engineer. You care about schema shape." };
+
+  it("names the agent the child is acting as", () => {
+    const prompt = subagentSystemPrompt(true, persona);
+    expect(prompt).toContain("You are acting as Ada, one of this workspace's agents.");
+    expect(prompt).toContain("You are the workspace's data engineer.");
+  });
+
+  it("puts the identity FIRST, so it frames the work rather than trailing it", () => {
+    const prompt = subagentSystemPrompt(true, persona);
+    expect(prompt.indexOf("acting as Ada")).toBeLessThan(prompt.indexOf("You are a sub-agent."));
+  });
+
+  it("changes the voice, never the procedure — the sub-agent rules all survive", () => {
+    const prompt = subagentSystemPrompt(true, persona);
+    expect(prompt).toContain("READ-ONLY");
+    expect(prompt).toContain("must stand alone");
+    expect(prompt).toContain("Never end with a promise to continue");
+  });
+
+  it("is the plain sub-agent prompt when no persona is given", () => {
+    expect(subagentSystemPrompt(true)).toBe(subagentSystemPrompt(true, undefined));
+    expect(subagentSystemPrompt(true)).not.toContain("acting as");
+  });
+});
+
+describe("runSubagent with a persona", () => {
+  it("puts the persona on the child's system row, above its brief", async () => {
+    const complete = vi.fn(async (_req: { messages: unknown[] }) => answer("schema looks fine"));
+    await runSubagent({
+      task: "check the migration",
+      readOnly: true,
+      tools: [],
+      complete,
+      dispatch: async () => ({ data: {} }),
+      persona: { name: "Ada", brief: "Data engineer." },
+    });
+
+    const sent = complete.mock.calls[0]![0].messages as Array<{ role: string; content: string }>;
+    expect(sent).toHaveLength(2); // still the standing instructions and the brief
+    expect(sent[0]!.content).toContain("acting as Ada");
+    expect(sent[1]).toMatchObject({ role: "user", content: "check the migration" });
+  });
+});

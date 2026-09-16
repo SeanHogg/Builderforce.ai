@@ -257,6 +257,7 @@
     "effort_thorough": "Exhaustivo",
     "thinking": "Razonamiento",
     "accountSettings": "Configuración de la cuenta",
+    "status": "Estado",
     "autoMode": "Modo automático",
     "autoModeHint": "Aprobar acciones automáticamente sin preguntar",
     "dictate": "Dictar",
@@ -3031,14 +3032,7 @@
       "sizeBand": "Tamaño de equipo",
       "tableTitle": "Tus métricas vs grupo",
       "footnote": "Los percentiles se interpolan frente a distribuciones de grupos del sector predefinidas (p10–p90). Para métricas donde menos es mejor (lead time, tasa de fallos de cambio, MTTR, coste), un valor menor se posiciona más alto.",
-      "industries": {
-        "software_saas": "Software / SaaS",
-        "fintech": "Fintech / Servicios financieros",
-        "ecommerce": "Comercio electrónico / Retail",
-        "healthtech": "Healthtech / Ciencias de la vida",
-        "agency_services": "Agencia / Servicios profesionales",
-        "enterprise_it": "TI empresarial"
-      },
+      "noCohort": "Todavía no existe una cohorte de referencia para {industry}. Tus valores se muestran sin clasificación; la distribución llegará con una migración de datos, o elige ahora una cohorte existente para comparar.",
       "sizeBands": {
         "small": "Pequeño (1–20)",
         "mid": "Mediano (21–200)",
@@ -11154,6 +11148,8 @@
         "starting": "Iniciando…",
         "thinking": "Pensando…",
         "writing": "Escribiendo la respuesta…",
+        "composing": "Componiendo una llamada a {tool}…",
+        "composed": " — {bytes} hasta ahora",
         "tool": "Ejecutando {tool}",
         "awaiting": "Esperando a que apruebes {tool}",
         "finishing": "Finalizando…",
@@ -11221,6 +11217,7 @@
     "tickets": {
       "none": "Aún no hay tickets vinculados.",
       "ringAria": "{label}: {pct}% completado",
+      "inParent": "en {parent}",
       "spawned": "creado aquí",
       "open": "Abrir",
       "run": "Ejecutar el agente en el ticket",
@@ -12176,6 +12173,10 @@
         "label": "Exigir aprobación antes de finalizar",
         "help": "Desactivado salvo que lo actives. Cuando está activado, un ticket solo se finaliza —y su pull request solo se fusiona— cuando todas las personas revisoras obligatorias han dado su aprobación, y el gestor sigue reclamándosela a los roles que aún la deben. Un ticket que nadie tenía que revisar nunca cumple la condición."
       },
+      "coordinationGate": {
+        "label": "Exigir un manager para coordinar los tickets",
+        "help": "Desactivado salvo que lo actives. Cuando está desactivado, cualquier desarrollador o agente del proyecto puede ejecutar el coordinador de tickets, añadir los roles necesarios, asignar participantes y crear elementos de trabajo. Cuando está activado, solo los managers pueden hacerlo, y a un agente al que se le pida coordinar se le indica que pida a un manager que lo desactive."
+      },
       "tri": {
         "on": "Activado",
         "off": "Desactivado",
@@ -12192,6 +12193,8 @@
         "mergeWithheld": "Las fusiones esperan a una persona",
         "signoffRequired": "Se exige aprobación para finalizar",
         "signoffOptional": "No se exige aprobación",
+        "coordinationGated": "Los managers coordinan los tickets",
+        "coordinationOpen": "Cualquiera del proyecto coordina",
         "ceremoniesUnattended": "Puede dirigir ceremonias sin nadie",
         "ceremoniesNeedPeople": "Las ceremonias necesitan una persona",
         "reassignGranted": "Puede reasignar trabajo inactivo {hours}h+",
@@ -20574,6 +20577,8 @@
     "newSession": "Nueva sesión",
     "add": "Añadir",
     "moreActions": "Más acciones de sesión",
+    "actions": "Acciones",
+    "closeActions": "Cerrar acciones",
     "createAndView": "Crear y ver",
     "sessionTools": "Herramientas de sesión",
     "selectionActions": "Acciones de selección",
@@ -20595,6 +20600,19 @@
     "share": "Invitar",
     "run": "Ejecutar",
     "askBrain": "Pregunta a Brain sobre este lienzo",
+    "composerIntent": {
+      "label": "Qué hace Intro",
+      "ask": {
+        "label": "Preguntar a Brain",
+        "placeholder": "Pregunta a Brain sobre este lienzo",
+        "submit": "Enviar a Brain"
+      },
+      "captureIdea": {
+        "label": "Idea",
+        "placeholder": "Anota una idea. Intro la guarda como tarjeta; «Preguntar a Brain» la envía a Brain.",
+        "submit": "Anotar"
+      }
+    },
     "sendBrain": "Enviar a Brain",
     "resizePrompt": "Cambiar el tamaño del área de indicaciones",
     "dragHandle": "Arrastrar para mover este panel",
@@ -20963,7 +20981,14 @@
     "diagnosticsCopyFailed": "No se pudieron copiar los diagnósticos: el portapapeles no estaba disponible",
     "diagnosticsBuildFailed": "No se pudieron generar los diagnósticos: {reason}",
     "brain": "Brain",
+    "brainLauncher": {
+      "unread": "{count, plural, one {# respuesta de Brain} other {# respuestas de Brain}}"
+    },
     "brainDock": "Chat de Brain",
+    "brainSheet": {
+      "veil": "Cerrar el panel de Brain y volver al lienzo",
+      "grabber": "Cerrar el panel de Brain"
+    },
     "openBrainDock": "Mostrar el chat de Brain",
     "openBrainDockBusy": "Brain está trabajando: mostrar el chat de Brain",
     "closeBrain": "Cerrar chat de Brain",
@@ -24397,14 +24422,7 @@
         "active": "Estás en Ideas",
         "regionLabel": "El bloc de ideas de este lienzo",
         "heading": "Bloc de ideas",
-        "lede": "Anota las ideas en cuanto se te ocurran y sigue cada una desde el primer pensamiento hasta algo probado. Cada idea es una tarjeta del tablero, así que Brain puede investigarla y las entrevistas con clientes pueden ponerla a prueba.",
-        "capture": {
-          "label": "Nueva idea",
-          "placeholder": "Anota una idea: basta con una frase. La primera línea será su título.",
-          "submit": "Anotar",
-          "hint": "Ctrl+Intro para anotar. Se guarda la nota completa.",
-          "readOnly": "Puedes leer estas ideas, pero solo los editores pueden añadir contenido a este lienzo."
-        },
+        "lede": "Anota las ideas en cuanto se te ocurran: escribe una en el campo de abajo e Intro la guarda como tarjeta del tablero. Sigue cada una desde el primer pensamiento hasta algo probado, así Brain puede investigarla y las entrevistas con clientes pueden ponerla a prueba.",
         "filterLabel": "Mostrar ideas por etapa",
         "filterAll": "Todas las ideas",
         "stageLabel": "Etapa de «{idea}»",
@@ -24420,7 +24438,7 @@
         "count": "{count, plural, =0 {Ninguna idea} one {# idea} other {# ideas}}",
         "empty": {
           "title": "Todavía no hay ideas",
-          "body": "Anota la próxima idea que tengas; no importa que esté a medias. Cada una aparece en el tablero como una tarjeta que puedes investigar, probar con entrevistas a clientes y convertir en algo real."
+          "body": "Anota en el campo de abajo la próxima idea que tengas; no importa que esté a medias. Cada una aparece en el tablero como una tarjeta que puedes investigar, probar con entrevistas a clientes y convertir en algo real."
         },
         "filteredEmpty": "No hay ideas en esta etapa.",
         "row": {
@@ -24571,7 +24589,10 @@
     "floatPrompt": "Flotar el prompt sobre el tablero",
     "hidePrompt": "Ocultar el prompt",
     "showPrompt": "Mostrar el prompt",
-    "canvasPanelControls": "Paneles del lienzo",
+    "backToLibrary": "Volver a tus lienzos",
+    "sessionStage": "Etapa de la sesión",
+    "rosterChip": "{count, plural, one {# persona en este lienzo} other {# personas en este lienzo}}",
+    "surfaceStrip": "Vistas del lienzo",
     "promptName": "Pregunta a Brain",
     "objectDescription": {
       "workflow": "Una secuencia automatizada de pasos que ejecuta tu proceso de principio a fin.",
@@ -31646,21 +31667,25 @@
         "scale": "Escalado"
       },
       "sector": {
+        "ai_ml": "IA / ML",
+        "saas": "SaaS",
         "fintech": "FinTech",
         "healthtech": "HealthTech",
-        "edtech": "EdTech",
-        "ecommerce": "Comercio electrónico",
-        "saas": "SaaS",
+        "medtech": "MedTech",
+        "biotech": "BioTech",
+        "climate_energy": "Clima y energía",
+        "hardware_robotics": "Hardware y robótica",
+        "cybersecurity": "Ciberseguridad",
         "marketplace": "Mercado",
+        "ecommerce": "Comercio electrónico",
         "consumer_apps": "Aplicaciones de consumo",
         "enterprise_software": "Software empresarial",
-        "ai_ml": "AI / ML",
+        "edtech": "EdTech",
         "blockchain": "Blockchain",
         "gaming": "Videojuegos",
         "media_entertainment": "Medios y entretenimiento",
         "real_estate": "Bienes raíces",
         "logistics": "Logística",
-        "sustainability": "Sostenibilidad",
         "other": "Otro"
       },
       "seeking": {

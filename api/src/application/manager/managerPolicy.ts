@@ -83,6 +83,8 @@ export interface ManagerPolicyOverride {
   allowAutoStaffLanes?: boolean | null;
   /** WORKSPACE-ONLY (1153) — a project tier that carries it is ignored by the fold. */
   managerMayCloseReviewedTickets?: boolean | null;
+  /** PROJECT-ONLY (1177) — there is no workspace tier for it; see the effective field. */
+  coordinationRequiresManager?: boolean | null;
 }
 
 /** The persisted config shape (a `project_manager_configs` row projection). */
@@ -112,6 +114,10 @@ export interface ManagerConfigRow {
   agentReassignIdleHours?: number | null;
   agentReassignMaxPerSession?: number | null;
   allowAutoStaffLanes?: boolean | null;
+  /** Does coordinating a ticket on THIS project need the manager role (1177)? NOT NULL
+   *  DEFAULT false in the DB, like `requireSignoffToComplete`. Optional here so a row
+   *  projected before the migration lands still type-checks (folded to `false`). */
+  coordinationRequiresManager?: boolean;
 }
 
 /**
@@ -283,6 +289,29 @@ export interface EffectiveManagerPolicy {
    * read-side policy lives in `reviewGateAuthority.ts`.
    */
   managerMayCloseReviewedTickets: boolean;
+
+  /**
+   * DOES COORDINATING A TICKET NEED THE MANAGER ROLE (migration 1177)?
+   *
+   * Coordination is the ticket-level staffing work: `kanban.coordinate`,
+   * `assess_resource`, `assign_participant`, `remove_participant`,
+   * `materialize_work_items`. Those five routes used to demand MANAGER outright, which
+   * made them unreachable for the ordinary case they exist to serve — a developer, or an
+   * agent acting for one, staffing the ticket it is about to work on. Operator decision:
+   * agent-driven coordination is DEVELOPER-tier by default.
+   *
+   *   • false (the default) — any caller at developer or above may coordinate. Who did it
+   *     is still recorded: the activity rows carry `authority: 'open'`.
+   *   • true — a project that wants staffing decisions concentrated in its manager opts
+   *     IN, and the five routes refuse below MANAGER with a remedy naming this setting.
+   *
+   * PROJECT-ONLY, and deliberately so: it describes how ONE board is run, not a
+   * workspace's posture, so `tenant_manager_defaults` has no column for it and the fold
+   * never consults the workspace tier. A tuning knob rather than an authority gate —
+   * below DEVELOPER nothing here admits anyone (see `application/kanban/coordinationGate`),
+   * so a project turning it on tightens its own board and can grant nothing.
+   */
+  coordinationRequiresManager: boolean;
 }
 
 /**
@@ -332,6 +361,11 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   // manager's review verdict closes a ticket on a human-gated review lane unless the
   // account admin turns it OFF, in which case a person signs every ticket there.
   managerMayCloseReviewedTickets: true,
+  // OFF by default (1177). Staffing the ticket you are about to work on is developer-tier
+  // work; demanding MANAGER for it made the coordination tools answer the workspace's own
+  // owner "403 manager role required" whenever the caller resolved below that. A project
+  // that wants the gate turns it on.
+  coordinationRequiresManager: false,
 };
 
 /**
@@ -528,6 +562,11 @@ export function resolveTieredManagerPolicy(tiers: {
     // made review-and-close authority an account-admin decision, so no project row can
     // grant it to itself or withhold it from the workspace.
     managerMayCloseReviewedTickets: lastSet(d.managerMayCloseReviewedTickets, tenant?.managerMayCloseReviewedTickets),
+    // PROJECT-ONLY (1177), the mirror image of the line above: how one board is run, not a
+    // workspace posture. The tenant tier has no column for it, so consulting it here would
+    // read `undefined` forever and invite someone to "fix" that with a second copy of the
+    // setting on the workspace row.
+    coordinationRequiresManager: project?.coordinationRequiresManager ?? d.coordinationRequiresManager,
     // Longest wait wins: a project may be more patient than the workspace, never less.
     agentReassignIdleHours: tightestBound(
       d.agentReassignIdleHours, Math.max,

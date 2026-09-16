@@ -431,6 +431,7 @@ export function ChatInput({
     evermindDetail: t('evermindDetail'),
     modelLocked: t('modelLocked'),
     accountSettings: t('accountSettings'),
+    status: t('status'),
   }), [t]);
 
   // Chat | Work, built from the SHARED mode list so a mode cannot exist in the

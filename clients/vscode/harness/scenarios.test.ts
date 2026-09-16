@@ -139,7 +139,9 @@ describe('context pressure', () => {
     expect(run.diagnostics.downgradeEvents).toBeGreaterThan(0);
     expect(run.diagnostics.likelyCause).toBe('context-exhaustion');
     expect(run.transcript).toContain('CONTEXT EXHAUSTION');
-    expect(run.transcript).toMatch(/truncated before the model saw them/);
+    // The trim is the per-result budget working; what makes this exhaustion is the
+    // downgrade and the `length` finish alongside it.
+    expect(run.transcript).toMatch(/trimmed to the 6 KB per-result budget \(by design\)/);
   });
 
   it('stops a run whose tool keeps failing and forces a prose answer instead of dying', async () => {

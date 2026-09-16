@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
-// Real English copy: a button labelled "creationCanvas.surface.ideas.capture.submit"
+// Real English copy: a button labelled "creationCanvas.surface.ideas.row.planInterview"
 // tells nobody what it does, so the words are part of the assertion.
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
@@ -34,33 +34,37 @@ function renderSurface(overrides: Partial<React.ComponentProps<typeof CanvasIdea
 }
 
 describe('the idea scratchpad', () => {
-  it('captures a jotted line as an idea card on the board', () => {
-    const { onCreate } = renderSurface();
-    fireEvent.change(screen.getByLabelText('New idea'), { target: { value: 'Tool rental for renters\nweekend projects' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Capture' }));
-    expect(onCreate).toHaveBeenCalledWith('idea', expect.objectContaining({
-      title: 'Tool rental for renters',
-      scratch: 'Tool rental for renters\nweekend projects',
-      stage: 'captured',
-    }));
-    // The box clears so the next thought can go straight in.
-    expect((screen.getByLabelText('New idea') as HTMLTextAreaElement).value).toBe('');
+  /**
+   * THE SURFACE HAS NO INPUT OF ITS OWN, AND THAT IS THE ASSERTION.
+   *
+   * Three tests used to live here — capture on click, capture on Ctrl+Enter, and a
+   * disabled box for a viewer who cannot edit — because the scratchpad drew its own
+   * textarea (`IdeaCaptureForm`) eight hundred pixels above the canvas's one composer.
+   * Two boxes on one screen, both asking for a sentence, and nothing saying which one
+   * the Enter key belonged to.
+   *
+   * The verb moved into the ONE composer as a surface-declared intent, so the capture
+   * behaviour is asserted where it now lives: `CanvasComposer.test.tsx` pins that Enter
+   * routes to `onCaptureIdea` and that a viewer who cannot edit is never offered the
+   * verb, and `CreationCanvas.test.tsx` pins that the host turns that call into an
+   * `idea` card on this board. What belongs HERE is that the second box is gone.
+   */
+  it('draws no text field of its own — the one composer captures', () => {
+    renderSurface();
+    // Not "the textarea is disabled" and not "the label reads differently": there is no
+    // second box on the screen at all, which is the defect this closes.
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Capture' })).toBeNull();
   });
 
-  it('captures on Ctrl+Enter, and never an empty card', () => {
-    const { onCreate } = renderSurface();
-    const box = screen.getByLabelText('New idea');
-    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
-    expect(onCreate).not.toHaveBeenCalled();
-    fireEvent.change(box, { target: { value: 'Second idea' } });
-    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
-    expect(onCreate).toHaveBeenCalledWith('idea', expect.objectContaining({ title: 'Second idea' }));
-  });
-
-  it('disables — never hides — capture for a viewer who cannot edit', () => {
+  /** A viewer who cannot edit loses the VERB, not the list — the read-only sentence the
+   *  old form carried has nothing left to explain, because there is no dead control for
+   *  it to sit under. What they keep is every idea, and what they lose is the buttons
+   *  that would write. */
+  it('keeps the whole list for a viewer who cannot edit, and offers nothing that writes', () => {
     renderSurface({ onCreate: undefined, onUpdate: undefined });
-    expect(screen.getByLabelText('New idea')).toBeDisabled();
-    expect(screen.getByText('You can read these ideas, but only editors can add to this canvas.')).toBeTruthy();
+    expect(screen.getAllByTestId('idea-log-row')).toHaveLength(3);
+    expect(screen.queryByRole('textbox')).toBeNull();
     for (const button of screen.getAllByRole('button', { name: 'Plan an interview' })) expect(button).toBeDisabled();
   });
 
@@ -109,9 +113,14 @@ describe('the idea scratchpad', () => {
     expect(onExit).toHaveBeenCalled();
   });
 
-  it('invites the first idea on an empty board', () => {
+  it('invites the first idea on an empty board, and points at the prompt for it', () => {
     renderSurface({ nodes: [] });
     expect(screen.getByText('No ideas yet')).toBeTruthy();
     expect(screen.queryByTestId('idea-log-row')).toBeNull();
+    // The copy names WHERE to write, because the surface no longer has a box to point
+    // at — an empty state that says "write one down" beside nothing to write in is the
+    // half of this defect a reader would hit first.
+    expect(screen.getByText(/in the prompt below/)).toBeTruthy();
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { BrainRunActivity, BrainRunPhase } from '@seanhogg/builderforce-brain-embedded';
+import { formatBytes, type BrainRunActivity, type BrainRunPhase } from '@seanhogg/builderforce-brain-embedded';
 
 /**
  * The in-flight step, animated.
@@ -40,6 +40,10 @@ export interface LiveActivityLabels {
   starting: string;
   thinking: string;
   writing: string;
+  /** The model is streaming a tool call's arguments — must contain `{tool}`. */
+  composing: string;
+  /** Appended to {@link composing} once bytes are known — must contain `{bytes}`. */
+  composed: string;
   tool: string;
   awaiting: string;
   finishing: string;
@@ -57,6 +61,8 @@ export const DEFAULT_LIVE_ACTIVITY_LABELS: LiveActivityLabels = {
   starting: 'Starting…',
   thinking: 'Thinking…',
   writing: 'Writing the reply…',
+  composing: 'Composing a {tool} call…',
+  composed: ' — {bytes} so far',
   tool: 'Running {tool}',
   awaiting: 'Waiting for you to approve {tool}',
   finishing: 'Wrapping up…',
@@ -81,6 +87,7 @@ const PHASE_GLYPH: Record<BrainRunPhase, string> = {
   starting: '◇',
   thinking: '◍',
   writing: '▍',
+  composing: '✎',
   tool: '⟳',
   awaiting: '⏸',
   finishing: '◆',
@@ -93,6 +100,15 @@ const PHASE_GLYPH: Record<BrainRunPhase, string> = {
  */
 export function phaseLine(activity: BrainRunActivity, labels: LiveActivityLabels): string {
   const tool = activity.label ?? '';
+  // Composing carries a SIZE rather than a subject: the arguments are the subject, and
+  // the only thing that proves the stream is alive is that number climbing. It is the
+  // one phase where the growing detail, not the elapsed clock, is the reassurance.
+  if (activity.phase === 'composing') {
+    const composing = labels.composing.replace('{tool}', tool);
+    return activity.bytes != null
+      ? `${composing}${labels.composed.replace('{bytes}', formatBytes(activity.bytes))}`
+      : composing;
+  }
   const base =
     activity.phase === 'starting' ? labels.starting
       : activity.phase === 'thinking' ? labels.thinking

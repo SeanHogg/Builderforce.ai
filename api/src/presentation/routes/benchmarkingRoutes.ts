@@ -15,15 +15,20 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
-import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { tenantBenchmarkProfiles } from '../../infrastructure/database/schema';
+import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   computeBenchmarking,
   getBenchmarkProfile,
   listBenchmarkCohorts,
-  DEFAULT_INDUSTRY,
-  DEFAULT_SIZE_BAND,
 } from '../../application/insights/benchmarkingInsights';
+import {
+  BenchmarkProfileError,
+  assertKnownCohort,
+  benchmarkProfileCacheKey,
+  benchmarkVersionKey,
+  resolveBenchmarkProfilePatch,
+  setBenchmarkProfile,
+} from '../../application/insights/benchmarkProfile';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam, daysParam } from './queryParams';
@@ -37,26 +42,9 @@ const BenchmarkProfileBody = z.object({
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
-
-
-function profileCacheKey(tenantId: number): string {
-  return `insights:bench:profile:t:${tenantId}`;
-}
-
-/**
- * Version token folded into every benchmark read key, bumped when the profile
- * changes.
- *
- * It replaces a delete loop over `[7, 30, 90]` days that had silently stopped
- * working: once the project scope joined the read key (`…:d:30:p:0`), none of the
- * three keys the loop deleted existed any more, so changing cohort left the old
- * cohort's rankings cached for the full TTL. A window × project keyspace is
- * unbounded — it cannot be enumerated for deletion — so the fix is the token, not
- * a longer loop. Same convention as the finance and workforce-metrics reads.
- */
-function benchVersionKey(tenantId: number): string {
-  return `insights:bench:ver:t:${tenantId}`;
-}
+// The profile cache key and the per-tenant version token live with the ONE
+// writer (`application/insights/benchmarkProfile.ts`) — the listing's declared
+// sector writes the same row through the same door, so both invalidate alike.
 
 /** The cohorts a tenant may select — DERIVED FROM THE SEEDED ROWS. Global, not
  *  per-tenant, and it changes only when a migration seeds a cohort, so it is
@@ -74,7 +62,7 @@ export function createBenchmarkingRoutes(db: Db): Hono<HonoEnv> {
     const days = daysParam(c.req.query('days'), 30);
     const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
-    const ver = await getCacheVersion(env, benchVersionKey(tenantId));
+    const ver = await getCacheVersion(env, benchmarkVersionKey(tenantId));
     const key = `insights:bench:t:${tenantId}:v:${ver}:d:${days}:p:${projectId ?? 0}`;
     return c.json(await getOrSetCached(env, key, () => computeBenchmarking(db, tenantId, days, projectId), SHORT_TTL));
   });
@@ -90,49 +78,25 @@ export function createBenchmarkingRoutes(db: Db): Hono<HonoEnv> {
   router.get('/benchmarking/profile', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const env = c.env as Env;
-    return c.json(await getOrSetCached(env, profileCacheKey(tenantId), () => getBenchmarkProfile(db, tenantId), SHORT_TTL));
+    return c.json(await getOrSetCached(env, benchmarkProfileCacheKey(tenantId), () => getBenchmarkProfile(db, tenantId), SHORT_TTL));
   });
 
   // Upsert the tenant's benchmark profile. Only industry + size_band are writable;
-  // missing fields keep their current (or default) value. Invalidates the profile +
-  // all benchmark read caches indirectly via the per-tenant profile key.
+  // missing fields keep their current (or default) value. The picker's door
+  // refuses a cohort with no seeded distribution: storing one is not a harmless
+  // no-op, every metric then ranks against nothing under a confident heading.
   router.patch('/benchmarking/profile', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const env = c.env as Env;
     const body = await parseOptionalBody(c, BenchmarkProfileBody);
-
-    const current = await getBenchmarkProfile(db, tenantId);
-    const industry = typeof body.industry === 'string' && body.industry.trim()
-      ? body.industry.trim().slice(0, 48) : current.industry;
-    const sizeBand = typeof body.sizeBand === 'string' && body.sizeBand.trim()
-      ? body.sizeBand.trim().slice(0, 16) : current.sizeBand;
-
-    // Reject a cohort with no seeded distribution. Storing one is not a harmless
-    // no-op: every metric then ranks against nothing and the lens renders a table
-    // of dashes under a confident cohort heading, which reads as "we have no data"
-    // rather than "you picked a cohort that does not exist".
-    const cohorts = await listBenchmarkCohorts(db);
-    if (!cohorts.industries.includes(industry)) {
-      return c.json({ error: 'Unknown industry cohort', industries: cohorts.industries }, 400);
+    const profile = await resolveBenchmarkProfilePatch(db, tenantId, body);
+    try {
+      await assertKnownCohort(db, profile);
+    } catch (err) {
+      if (err instanceof BenchmarkProfileError) return c.json({ error: err.message, ...err.detail }, err.status);
+      throw err;
     }
-    if (!cohorts.sizeBands.includes(sizeBand)) {
-      return c.json({ error: 'Unknown size band', sizeBands: cohorts.sizeBands }, 400);
-    }
-
-    const rows = await db
-      .insert(tenantBenchmarkProfiles)
-      .values({ tenantId, industry, sizeBand, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: tenantBenchmarkProfiles.tenantId,
-        set: { industry, sizeBand, updatedAt: new Date() },
-      })
-      .returning({ industry: tenantBenchmarkProfiles.industry, sizeBand: tenantBenchmarkProfiles.sizeBand });
-
-    // Refresh the profile, and re-arm EVERY cached ranking at once via the token.
-    await invalidateCached(env, profileCacheKey(tenantId));
-    await bumpCacheVersion(env, benchVersionKey(tenantId));
-
-    return c.json(rows[0] ?? { industry: DEFAULT_INDUSTRY, sizeBand: DEFAULT_SIZE_BAND });
+    return c.json(await setBenchmarkProfile(db, env, tenantId, profile));
   });
 
   return router;

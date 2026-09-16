@@ -10,6 +10,8 @@ function turn(
     upstream?: { calls: number; recovered?: number };
     requestedModel?: string;
     durationMs?: number;
+    argBytes?: number;
+    completion?: number;
   } = {},
 ): BrainTraceEvent {
   return {
@@ -22,8 +24,10 @@ function turn(
       ...(opts.requestedModel ? { requestedModel: opts.requestedModel } : {}),
       ...(opts.unliftedCallMarkup ? { unliftedCallMarkup: true } : {}),
       ...(opts.upstream ? { upstreamFunctionCalls: opts.upstream.calls, upstreamRecovered: opts.upstream.recovered ?? 0 } : {}),
+      ...(opts.argBytes != null ? { argBytes: opts.argBytes } : {}),
     },
     textChars: toolCalls ? 0 : 60,
+    ...(opts.completion != null ? { usage: { prompt: 1_000, completion: opts.completion } } : {}),
     ...(opts.durationMs != null ? { durationMs: opts.durationMs } : {}),
   };
 }
@@ -147,6 +151,21 @@ describe('modelTurnLog / formatModelTurnLog', () => {
     expect(lines[1]).toBe('  1. xai-oauth/grok-4.6 · 0 tool call(s) · text-only · raw response: 0 structured call(s) · 1200ms');
     expect(lines[2]).toBe('  2. direct/qwen/qwen3.8-max · 2 tool call(s) · 800ms');
     expect(lines[3]).toBe('  3. xai-oauth/grok-4.6 (requested anthropic/claude-opus-5) · 0 tool call(s) · text-only · raw response: 0 structured call(s)');
+  });
+
+  it('explains a long turn — the arguments it streamed and the tokens it burned', () => {
+    // Chat #113's line was `16. xai-oauth/grok-4.6 · 1 tool call(s) · 202509ms`, which
+    // gave a reader no way to know those 202 seconds were 21 KB of `write_file`
+    // arguments arriving a fragment at a time.
+    const lines = formatModelTurnLog(modelTurnLog([
+      turn('xai-oauth/grok-4.6', 1, { argBytes: 22_016, completion: 6_100, durationMs: 202_509 }),
+    ]));
+    expect(lines[1]).toBe('  1. xai-oauth/grok-4.6 · 1 tool call(s) · 21.5 KB of arguments · 6,100 completion tok · 202509ms');
+  });
+
+  it('leaves both off a turn that reported neither, so an old trace renders unchanged', () => {
+    const lines = formatModelTurnLog(modelTurnLog([turn('direct/qwen/qwen3.8-max', 2, { durationMs: 800 })]));
+    expect(lines[1]).toBe('  1. direct/qwen/qwen3.8-max · 2 tool call(s) · 800ms');
   });
 
   it('includes a failed completion and stays empty when nothing ran', () => {

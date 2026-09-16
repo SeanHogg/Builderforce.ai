@@ -22,17 +22,18 @@
  *      WAY TO SHARE OR INVITE ANYBODY. Nothing in the code said that; it fell out of a
  *      blanket `display:none` on a class name.
  *
- * So placement is DATA. `phone` is the field that closes (3): every action is either on
- * the phone bar or in the phone's overflow menu, both rendered from THIS list by
- * `CanvasSessionActions`, so an action cannot be dropped from a small screen by omission
- * — only by declaring it, which the tests then read back.
+ * So the SET is data, and (3) is closed by there being nowhere for an action to fall
+ * out of. A phone does not draw the command bar at all now: the composer's "+" opens
+ * one sheet built from THIS list, grouped by the arc's own captions, every entry
+ * present and worded. The `phone: 'bar' | 'menu'` field that used to split the list in
+ * two is gone with the split — see the note above `CANVAS_SESSION_ACTIONS`.
  *
  * ── ADDING AN ACTION ─────────────────────────────────────────────────────────────
- *   1. an entry below (including where it goes on a phone),
+ *   1. an entry below,
  *   2. the existing `creationCanvas.*` label keys it names — no new copy if the string
  *      is already in the catalogs,
  *   3. a `{ run }` entry in the host's handler map.
- * The bar, the overflow menu, the clustering and the accessible names all follow.
+ * The bar, the phone's actions sheet, the clustering and the accessible names all follow.
  */
 
 import {
@@ -131,13 +132,6 @@ export interface CanvasSessionActionDef {
    * needs which ARIA attribute.
    */
   state: 'none' | 'pressed' | 'expanded';
-  /**
-   * Where the action lives on a PHONE. `bar` keeps its own button in the session bar;
-   * `menu` moves it into the ••• sheet. Both are rendered from this list, so "reachable
-   * on a phone" is a property of the registry rather than of whether somebody remembered
-   * to add a second copy.
-   */
-  phone: 'bar' | 'menu';
   /** Catalog key for the accessible name. Existing keys, not a second copy of the copy. */
   labelKey: string;
   /** Catalog key for the name while the action is active, when that differs. */
@@ -151,14 +145,17 @@ export interface CanvasSessionActionDef {
   needs?: CanvasSessionActionNeed;
 }
 
-/**
- * A phone session bar is a title, an overflow button and a save button before any of
- * these are added. Two is what fits beside them at 360px without the title collapsing to
- * an ellipsis, so two is the budget — enforced by a test rather than by good intentions,
- * because the failure mode of "just one more" is a header that no longer shows which
- * canvas you are on.
+/*
+ * ── THERE IS NO `phone` AXIS ANY MORE ────────────────────────────────────────────
+ * Every action used to carry `phone: 'bar' | 'menu'` and a `PHONE_SESSION_BAR_LIMIT`
+ * of two, because a 360px command bar could hold two buttons beside the title and the
+ * rest had to be reachable from the ••• sheet. That axis answered a question the phone
+ * no longer asks: the bar is not drawn at that width at all. The composer's "+" opens
+ * ONE sheet carrying every action in this registry, grouped by the same arc captions
+ * the desktop bar uses, with nothing standing down and nothing scrolling sideways —
+ * so "where does this live on a phone" has one answer for every entry and needs no
+ * field. See `CanvasActionsSheet`.
  */
-export const PHONE_SESSION_BAR_LIMIT = 2;
 
 export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // ── IDEA · "What if?" ───────────────────────────────────────────────────────────
@@ -169,7 +166,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // Draw was a row in the ••• sheet, which filed "make a mark" alongside "export the
   // session" — one is the first thing anybody does on a canvas and the other is a
   // once-a-month errand.
-  { id: 'draw', cluster: 'idea', order: 0, chrome: 'icon', state: 'pressed', phone: 'menu', labelKey: 'draw', activeLabelKey: 'stopDrawing', needs: 'board' },
+  { id: 'draw', cluster: 'idea', order: 0, chrome: 'icon', state: 'pressed', labelKey: 'draw', activeLabelKey: 'stopDrawing', needs: 'board' },
 
   // ── MAKE · "Build it." ──────────────────────────────────────────────────────────
   // The three ways you shape what is already down. The prompt toggle is contributed by
@@ -177,11 +174,8 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // input to the canvas, and it used to sit in VIEW beside nine zoom glyphs, which said
   // it was chrome.
   //
-  // Undo keeps its phone slot: a fat-fingered drag on a touch board is the single
-  // likeliest thing a phone user needs to take back, and burying the only cure two taps
-  // deep is what makes a canvas feel unsafe to touch.
-  { id: 'undo', cluster: 'make', order: 10, chrome: 'icon', state: 'none', phone: 'bar', labelKey: 'undoCanvasChange' },
-  { id: 'redo', cluster: 'make', order: 11, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'redoCanvasChange' },
+  { id: 'undo', cluster: 'make', order: 10, chrome: 'icon', state: 'none', labelKey: 'undoCanvasChange' },
+  { id: 'redo', cluster: 'make', order: 11, chrome: 'icon', state: 'none', labelKey: 'redoCanvasChange' },
 
   // ── RUN · "Run it as a company." ────────────────────────────────────────────────
   // Start it, or show it running.
@@ -201,11 +195,11 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // lit up with nothing to run; the host decides that from the same predicate Run itself
   // resolves with (`canvasFlowTarget.ts`), so the button cannot be offered for one object
   // and then act on another.
-  { id: 'run', cluster: 'run', order: 20, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'runCanvas', titleKey: 'runWorkflow', needs: 'objects' },
+  { id: 'run', cluster: 'run', order: 20, chrome: 'icon', state: 'none', labelKey: 'runCanvas', titleKey: 'runWorkflow', needs: 'objects' },
   // Present is showing the board running to somebody in the room. It was a ••• row under
   // "Create and view", a heading that filed "start something" with "show what you
   // started".
-  { id: 'present', cluster: 'run', order: 21, chrome: 'icon', state: 'pressed', phone: 'menu', labelKey: 'present', activeLabelKey: 'exitPresentation' },
+  { id: 'present', cluster: 'run', order: 21, chrome: 'icon', state: 'pressed', labelKey: 'present', activeLabelKey: 'exitPresentation' },
 
   // ── MEASURE · "Is it working?" ──────────────────────────────────────────────────
   // Three readings of this session. They shared a trough captioned `Tools`, which is a
@@ -215,7 +209,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // worth. Over a conversation with nothing on it that is a button whose only answer is
   // "nothing", so it asks the surface for objects rather than naming which surfaces have
   // them.
-  { id: 'outcomes', cluster: 'measure', order: 30, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'viewOutcomeMetrics', titleKey: 'outcomeMetricsTitle', needs: 'objects' },
+  { id: 'outcomes', cluster: 'measure', order: 30, chrome: 'icon', state: 'expanded', labelKey: 'viewOutcomeMetrics', titleKey: 'outcomeMetricsTitle', needs: 'objects' },
   //
   // DIAGNOSTICS NEEDS NOTHING, and getting that wrong is why this comment is long.
   //
@@ -230,7 +224,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   //
   // So it is unconditional, deliberately, and the test asserts that it survives on every
   // surface the registry declares.
-  { id: 'diagnostics', cluster: 'measure', order: 31, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics' },
+  { id: 'diagnostics', cluster: 'measure', order: 31, chrome: 'icon', state: 'expanded', labelKey: 'openDiagnostics' },
   //
   // SHOW ME WHAT I WAS GIVEN.
   //
@@ -245,7 +239,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // guide, and an offer to walk somebody round them reads as the product not trusting
   // them. That threshold is the walkthrough's own (`MIN_WALKTHROUGH_OBJECTS`), asked
   // once, rather than a number repeated here.
-  { id: 'walkthrough', cluster: 'measure', order: 32, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'walkthrough.action', titleKey: 'walkthrough.actionTitle', needs: 'objects' },
+  { id: 'walkthrough', cluster: 'measure', order: 32, chrome: 'icon', state: 'expanded', labelKey: 'walkthrough.action', titleKey: 'walkthrough.actionTitle', needs: 'objects' },
 
   // ── REACH · "Sell it, be found, grow it." ───────────────────────────────────────
   // Getting it in front of somebody: a collaborator, a viewer, a buyer. The roster leads
@@ -256,7 +250,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // is here" and "bring someone else in" are one group to look at, and the word was the
   // only thing telling them apart. The glyph opens the same sheet, so nothing about WHAT
   // it does changed.
-  { id: 'share', cluster: 'reach', order: 40, chrome: 'roster', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
+  { id: 'share', cluster: 'reach', order: 40, chrome: 'roster', state: 'expanded', labelKey: 'share', titleKey: 'inviteCollaborators' },
   //
   // TALKTRACK — the recording of this board, beside the live version of it.
   //
@@ -266,7 +260,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // explaining what they just asked for. The recording becomes a `video` object on the
   // board like anything else the canvas produces, and leaves by whichever door that
   // object then takes.
-  { id: 'talktrack', cluster: 'reach', order: 41, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'recordTalktrack', titleKey: 'recordTalktrackTitle' },
+  { id: 'talktrack', cluster: 'reach', order: 41, chrome: 'icon', state: 'expanded', labelKey: 'recordTalktrack', titleKey: 'recordTalktrackTitle' },
   //
   // THE CALL IS AN ACTION, NOT A STRIP OF ITS OWN.
   //
@@ -279,7 +273,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // The host withdraws it (`available: false`) the moment a call is running: from then on
   // the dock IS the control, and a second lit "call" button in the bar would be one
   // decision with two homes.
-  { id: 'call', cluster: 'reach', order: 42, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
+  { id: 'call', cluster: 'reach', order: 42, chrome: 'icon', state: 'none', labelKey: 'startCall', titleKey: 'startCallTitle' },
   //
   // THE STANDUP IS THE CALL'S NEIGHBOUR. It used to be a captioned group the room
   // surface published into the bar — a project picker, two steppers and a Start button
@@ -287,7 +281,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // surface. A standup is people agreeing to talk about this canvas, which is what a
   // call is, so it sits beside it on every surface. `pressed` while one is running:
   // pressing again finishes it. The host decides the project (`useCanvasStandupAction`).
-  { id: 'standup', cluster: 'reach', order: 43, chrome: 'icon', state: 'pressed', phone: 'menu', labelKey: 'startStandup', activeLabelKey: 'finishStandup', titleKey: 'startStandupTitle' },
+  { id: 'standup', cluster: 'reach', order: 43, chrome: 'icon', state: 'pressed', labelKey: 'startStandup', activeLabelKey: 'finishStandup', titleKey: 'startStandupTitle' },
   //
   // ── THE DOORS OUT, behind ONE word ──────────────────────────────────────────────
   //
@@ -312,7 +306,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   //
   // It needs OBJECTS for the same reason the scorecard does: proving a conversation with
   // nothing on it has nothing to prove.
-  { id: 'prove', cluster: 'reach', order: 44, chrome: 'door', state: 'none', phone: 'menu', labelKey: 'proveIt', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
+  { id: 'prove', cluster: 'reach', order: 44, chrome: 'door', state: 'none', labelKey: 'proveIt', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
   // PUBLISH puts the result where strangers can reach it. It is here from the first
   // second of a session, before there is anything worth publishing, and that is the
   // point: it was previously reachable ONLY through `SellInMarketplace` in a selected
@@ -320,7 +314,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // commerce, and invisible until you had clicked the right card. It opens the SAME
   // release lifecycle that button does — one gate, two doors — scoped to the whole board,
   // which is the scope an application actually has.
-  { id: 'publish', cluster: 'reach', order: 45, chrome: 'door', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+  { id: 'publish', cluster: 'reach', order: 45, chrome: 'door', state: 'expanded', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
 
   // ── BOARD · not a stage, and that is the point ──────────────────────────────────
   // Full screen answers no stage's question — it is done to the board, not to the work —
@@ -328,9 +322,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // it does not serve. It used to live in `Tools` beside the diagnostics report, which is
   // how a shelf forms.
   //
-  // It keeps its phone slot for the reason it always had one: a small screen is where
-  // trading app chrome for board is worth the most.
-  { id: 'fullscreen', cluster: 'board', order: 50, chrome: 'icon', state: 'pressed', phone: 'bar', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },
+  { id: 'fullscreen', cluster: 'board', order: 50, chrome: 'icon', state: 'pressed', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },
 ];
 
 const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(
@@ -340,7 +332,7 @@ const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(
 /**
  * The actions that mean something on this surface.
  *
- * ONE filter, asked by the bar, the phone sheet and the tests alike — so "is this button
+ * ONE filter, asked by the bar, the actions sheet and the tests alike — so "is this button
  * on screen right now" has a single answer and a cluster of one can never be drawn as an
  * empty trough. Passing no surface answers for the board, which is what a caller that has
  * not got one (a test, a story) means.
@@ -364,18 +356,4 @@ export function canvasSessionClusters(surface?: CanvasSurfaceId): readonly { clu
     else clusters.push({ cluster: def.cluster, actions: [def] });
   }
   return clusters;
-}
-
-/** The actions that keep their own button in the session bar on a phone. */
-export function phoneSessionBarActions(surface?: CanvasSurfaceId): readonly CanvasSessionActionDef[] {
-  return canvasSessionActionsFor(surface).filter((def) => def.phone === 'bar');
-}
-
-/**
- * The actions the ••• sheet has to carry on a phone. This is the complement of the bar,
- * derived rather than listed, so the two can never disagree about an action and leave it
- * on neither.
- */
-export function phoneOverflowActions(surface?: CanvasSurfaceId): readonly CanvasSessionActionDef[] {
-  return canvasSessionActionsFor(surface).filter((def) => def.phone === 'menu');
 }

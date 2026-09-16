@@ -49,6 +49,8 @@ import {
   isEffort,
   reasoningForRun,
   gatherChatDiagnostics,
+  buildChatDiagnosticsReport,
+  traceWithPersistedSteps,
   getMcpToolStatus,
   fetchApiVersionVia,
   nextFallbackModel,
@@ -75,6 +77,7 @@ import {
   useMentionAutocomplete, ChatErrorBanner,
   PromptPanel, PromptOptionsMenu,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
+  chatSwitcherLabel,
   type ChatModelSelection,
 } from '@seanhogg/builderforce-brain-ui';
 import { loadComposerModels, type ComposerModelSurface } from '../modelOptions';
@@ -83,7 +86,7 @@ import { adoptChatProject } from '../adoptChatProject';
 import { EvermindStatusBadge } from '../EvermindStatusBadge';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from '../webviewBuildInfo';
-import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from '../accountPlan';
+import { AccountStatusPanel, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from '../accountPlan';
 import {
   getToken,
   getEditorContext,
@@ -107,7 +110,7 @@ import {
   effortDesc, makeT, personaModalityOptions, personaPickerLabels, promptMenuLabels, recipientPickerLabels, timelineLabels,
 } from './chatLabels';
 import { persistedToTraceEvent, type PersistedTraceRow } from './chatTrace';
-import { IconBolt, IconMic, IconPlus, IconRename, IconSend, MenuItem, PopoverMenu } from './ChatMenu';
+import { IconBolt, IconMic, IconPlus, IconRename, IconSend, IconStop, MenuItem, PopoverMenu } from './ChatMenu';
 import { useGlobalRunState } from './useGlobalRunState';
 
 
@@ -643,7 +646,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   );
   // Stable references so a keystroke / streaming token doesn't hand the memoized
   // <ChatTicketsPanel> fresh props and force its whole subtree to re-render.
-  const ticketChatList = useMemo(() => chats.map((c) => ({ id: c.id, title: c.title })), [chats]);
+  const ticketChatList = useMemo(() => chats.map((c) => ({
+    id: c.id,
+    title: c.title,
+    ticketCount: c.ticketCount,
+    ticketProgressPct: c.ticketProgressPct,
+  })), [chats]);
   const onTicketsChanged = useCallback(() => { reloadChats(); conv.reloadMessages(); }, [reloadChats, conv.reloadMessages]);
   // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
   // refreshes live (rings/links) rather than only on its own button actions.
@@ -977,6 +985,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         chatId,
         chatTitle: activeChat?.title ?? null,
         chatVisibility,
+        // The mode the run actually bound to (the resolved value, not the raw column) —
+        // it decides whether "planned it and stopped" is correct behaviour or a failure.
+        mode: chatMode,
         projectId: pid,
         projectName: associatedProject?.name ?? null,
         selectedProjectId: init.project?.id ?? null,
@@ -1013,7 +1024,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         // Plan + month-to-date quota. Open to any tenant-scoped JWT (no role gate), so a
         // brand-new free member can produce a report that states their own tier and
         // allowance instead of one that looks like an unexplained capability failure.
-        // Shared read-through cache — the same snapshot the footer's PlanBadge shows.
+        // Shared read-through cache — the same snapshot the `/` Status tab shows.
         readPlan: () => fetchPlanSnapshot(apiReq),
         // Which BUILD produced this capture. `/health` is public; it rides the gateway
         // base so the version reported is the one THIS webview is talking to. The
@@ -1021,6 +1032,28 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         // stalled probe can no longer leave the copy pending forever.
         readApiVersion: () => fetchApiVersionVia(() => apiReq<{ version?: string }>('/health').catch(() => null)),
       });
+      // The SAME capture as one versioned JSON object: appended to the copied report so a
+      // paste carries the machine-readable half, and persisted with the chat so the
+      // capture outlives the clipboard. Built from the MERGED trace (live steps plus the
+      // steps recovered from durable history) for the same reason the Markdown is — a
+      // reopened chat holds none of the earlier run's steps in memory.
+      const report = buildChatDiagnosticsReport({
+        diagnostics,
+        events: traceWithPersistedSteps(conv.messages, conv.trace),
+        messages: conv.messages,
+        model: init.model,
+        running: conv.sending,
+        surface: 'VS Code (VSIX)',
+      });
+      // Best-effort store. The copy must NEVER fail because persistence did: this button
+      // exists to make an opaque chat explainable, and a report that reached the
+      // clipboard has already done its job whether or not the row landed.
+      if (chatId != null) {
+        void apiReq(`/api/brain/chats/${chatId}/diagnostics`, {
+          method: 'POST',
+          body: JSON.stringify({ report }),
+        }).catch(() => {});
+      }
       post('copy', {
         text: buildTranscript({
           messages: conv.messages,
@@ -1032,6 +1065,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           chatTitle: activeChat?.title,
           chatId,
           diagnostics,
+          report,
           // Whether the run was STILL EXECUTING when the button was pressed. The trace
           // cannot know it, and it changes how the report must be read: a chat copied
           // mid-run has not failed to finish the work, it has not finished it YET.
@@ -1053,7 +1087,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       );
       window.setTimeout(() => setCopyState('idle'), 3000);
     }
-  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
+  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatMode, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the
@@ -1171,7 +1205,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           >
             <option value="">{t('app.newChat', 'New chat')}</option>
             {chatOptions.map((c) => (
-              <option key={c.id} value={c.id}>{runGlyph(c.id)}{c.title || `Chat ${c.id}`}</option>
+              <option key={c.id} value={c.id}>{chatSwitcherLabel({
+                title: c.title,
+                id: c.id,
+                ticketCount: c.ticketCount,
+                ticketProgressPct: c.ticketProgressPct,
+                runGlyph: runGlyph(c.id),
+              })}</option>
             ))}
           </select>
         )}
@@ -1384,25 +1424,40 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           </div>
         )}
         </> : undefined}
-        input={<textarea
-          ref={inputRef}
-          className="bf-input"
-          rows={2}
-          placeholder={recipient
-            ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
-            : t('app.placeholder', 'Ask BuilderForce to build or change something…')}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          onPaste={onPaste}
-          onSelect={mention.onSelect}
-          onKeyDown={(e) => {
-            // The @-mention picker consumes nav/select/escape first.
-            if (mention.onKeyDown(e)) return;
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
-          }}
-        />}
+        input={<div className="bf-composer__entry">
+          <textarea
+            ref={inputRef}
+            className="bf-input"
+            rows={2}
+            placeholder={recipient
+              ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
+              : t('app.placeholder', 'Ask BuilderForce to build or change something…')}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onPaste={onPaste}
+            onSelect={mention.onSelect}
+            onKeyDown={(e) => {
+              // The @-mention picker consumes nav/select/escape first.
+              if (mention.onKeyDown(e)) return;
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+            }}
+          />
+          {/* Mic lives in the input row (type XOR speak), not among the action chips. */}
+          {speechSupported && !conv.sending && (
+            <button
+              type="button"
+              className={`bf-iconbtn bf-composer__mic${listening ? ' is-listening' : ''}`}
+              title={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
+              aria-label={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
+              aria-pressed={listening}
+              onClick={toggleMic}
+            >
+              <IconMic />
+            </button>
+          )}
+        </div>}
         actions={<div className="bf-composer__actions">
           <input
             ref={fileInputRef}
@@ -1501,10 +1556,21 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               effective: servedModel ?? init.model,
               identity: composerModels.identity,
             } : undefined}
+            autoMode={{
+              enabled: autoApprove,
+              onChange: setAutoApproveMode,
+              description: t('app.autoModeHint', 'Auto-approve tool actions without asking'),
+            }}
+            status={<>
+              <AccountStatusPanel apiReq={apiReq} t={t} />
+              <EvermindStatusBadge baseUrl={init.baseUrl} projectId={associatedProjectId} t={t} />
+            </>}
             onAccountSettings={() => post('settings')}
           />
 
-          {/* Auto mode = auto-approve tool actions (same gate as the confirm dialog). */}
+          {/* Auto = auto-approve tool actions (same gate as the confirm dialog).
+              Label is "Auto", matching Claude's chrome; the longer "Auto mode"
+              copy lives in the `/` Mode tab. */}
           <button
             type="button"
             className={`bf-toggle${autoApprove ? ' is-on' : ''}`}
@@ -1513,42 +1579,14 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             onClick={() => setAutoApproveMode(!autoApprove)}
           >
             <IconBolt />
-            <span>{t('app.autoMode', 'Auto mode')}</span>
+            <span>{t('app.autoMode', 'Auto')}</span>
           </button>
-
-          <div className="bf-header__spacer" />
-
-          {/* Account tier, always visible: which plan is funding this chat and (on a
-              metered plan) what allowance is left. Click opens the web app to change
-              it. It lives here rather than in the header because it belongs with the
-              other "what will this turn cost / who runs it" chips (Evermind posture,
-              the model in force). Self-gating — renders nothing until it knows the
-              plan. */}
-          <PlanBadge apiReq={apiReq} t={t} />
-
-          {/* Evermind posture for the active project — parity with the web Brain
-              composer. Self-gates (renders nothing until a seeded Evermind). */}
-          <EvermindStatusBadge baseUrl={init.baseUrl} projectId={associatedProjectId} t={t} />
-
-          {/* Speech-to-text — only where the runtime supports it, and never while a
-              run is streaming (the composer is otherwise showing Stop). */}
-          {speechSupported && !conv.sending && (
-            <button
-              type="button"
-              className={`bf-iconbtn${listening ? ' is-listening' : ''}`}
-              title={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
-              aria-label={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
-              aria-pressed={listening}
-              onClick={toggleMic}
-            >
-              <IconMic />
-            </button>
-          )}
 
           {/* While a run is in flight the primary action becomes Stop — it aborts
               the streaming LLM request and unwinds the agent loop (conv.stop). The
               user can still compose: with text typed, a Queue button (and Enter) adds
-              the message to the drain queue instead of dropping it. */}
+              the message to the drain queue instead of dropping it. Icon-only, like
+              Send — the title/aria-label still name the action. */}
           {conv.sending ? (
             <>
               {input.trim() && (
@@ -1562,8 +1600,14 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
                   <IconSend />
                 </button>
               )}
-              <button className="bf-btn bf-btn--stop" onClick={conv.stop} title={t('app.stop', 'Stop')}>
-                <span className="bf-stop-glyph" aria-hidden="true">■</span> {t('app.stop', 'Stop')}
+              <button
+                type="button"
+                className="bf-iconbtn bf-iconbtn--stop"
+                onClick={conv.stop}
+                title={t('app.stop', 'Stop')}
+                aria-label={t('app.stop', 'Stop')}
+              >
+                <IconStop />
               </button>
             </>
           ) : (

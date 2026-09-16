@@ -34,11 +34,21 @@ export type FundingStage = (typeof FUNDING_STAGES)[number];
 export const BUSINESS_STAGES = ['idea', 'mvp', 'early_revenue', 'growth', 'scale'] as const;
 export type BusinessStage = (typeof BUSINESS_STAGES)[number];
 
-/** `companies.sector` — the directory's industry filter. */
+/**
+ * `companies.sector` — the directory's industry filter AND the platform's ONE
+ * industry vocabulary (PRD 25 §6.4, operator-approved 2026-09-15). The benchmark
+ * cohorts (`industry_benchmarks.industry`, `tenant_benchmark_profiles.industry`)
+ * carry these same values since migration 1176, so a company that declares a
+ * sector is in a benchmark cohort by construction rather than by a second pick.
+ *
+ * The ten values that carry a preconfigured KPI dashboard are `DASHBOARD_VERTICALS`
+ * in verticals.ts; the rest fold onto one of them or onto the founder layer alone.
+ */
 export const STARTUP_SECTORS = [
-  'fintech', 'healthtech', 'edtech', 'ecommerce', 'saas', 'marketplace', 'consumer_apps',
-  'enterprise_software', 'ai_ml', 'blockchain', 'gaming', 'media_entertainment', 'real_estate',
-  'logistics', 'sustainability', 'other',
+  'ai_ml', 'saas', 'fintech', 'healthtech', 'medtech', 'biotech', 'climate_energy',
+  'hardware_robotics', 'cybersecurity', 'marketplace', 'ecommerce', 'consumer_apps',
+  'enterprise_software', 'edtech', 'blockchain', 'gaming', 'media_entertainment', 'real_estate',
+  'logistics', 'other',
 ] as const;
 export type StartupSector = (typeof STARTUP_SECTORS)[number];
 

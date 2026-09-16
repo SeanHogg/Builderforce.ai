@@ -36,6 +36,13 @@ export interface ManagerAutonomyValue {
   enabled: TriState;
   allowAutoMerge: TriState;
   requireSignoffToComplete: TriState;
+  /**
+   * Must a MANAGER coordinate tickets (run the coordinator, add required roles, assign
+   * participants, create work items)? PROJECT tier only — there is no workspace default to
+   * inherit — so it is optional here exactly as `managerMayCloseReviewedTickets` is at the
+   * other tier, and the workspace form never constructs it.
+   */
+  coordinationRequiresManager?: TriState;
   prMergePolicy: PrMergePolicy | null;
   autoAssign: TriState;
   autoBusinessValue: TriState;
@@ -276,6 +283,15 @@ export function ManagerEffectiveSummary({ effective }: { effective: ManagerPolic
       tone: effective.requireSignoffToComplete ? 'on' : 'off',
     },
     {
+      // WHO may staff work. Withheld, this is the setting that turns every coordination
+      // call by a non-manager into a 403 — so it belongs in the strip a reader checks
+      // before concluding an agent "would not" assign the tickets it filed.
+      text: effective.coordinationRequiresManager
+        ? t('policy.effective.coordinationGated')
+        : t('policy.effective.coordinationOpen'),
+      tone: effective.coordinationRequiresManager ? 'on' : 'off',
+    },
+    {
       text: effective.allowUnattendedCeremonies
         ? t('policy.effective.ceremoniesUnattended')
         : t('policy.effective.ceremoniesNeedPeople'),
@@ -381,6 +397,17 @@ export function ManagerAutonomyControls({
         disabled={disabled}
         onChange={(v) => onChange({ requireSignoffToComplete: v })}
       />
+      {/* WHO may staff work — project tier only, so the workspace form never shows it
+          (a control that patched a column this tier does not have would do nothing).
+          `inheritable={false}`: there is no workspace default beneath it to inherit. */}
+      {!workspace && <TriStateRow
+        label={t('policy.coordinationGate.label')}
+        help={t('policy.coordinationGate.help')}
+        value={value.coordinationRequiresManager ?? false}
+        inheritable={false}
+        disabled={disabled}
+        onChange={(v) => onChange({ coordinationRequiresManager: v })}
+      />}
       {showEnabled && <TriStateRow
         label={t('policy.enabled.label')}
         help={t('policy.enabled.help')}

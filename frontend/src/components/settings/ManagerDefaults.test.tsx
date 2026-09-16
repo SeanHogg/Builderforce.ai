@@ -26,6 +26,7 @@ const policy = (enabled: boolean) => ({
   autoSchedule: true,
   managerType: 'general' as const,
   requireSignoffToComplete: false,
+  coordinationRequiresManager: false,
   allowAutoMerge: false,
   allowUnattendedCeremonies: false,
   allowAgentReassignment: false,

@@ -121,6 +121,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <QaTelemetry />
       <div
         className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}`}
+        // A STAGE ROUTE ON A PHONE IS AN APP SCREEN, and this attribute is how it says so.
+        //
+        // `/create/<id>` at phone width used to get the MARKETING HEADER over the board:
+        // a brand lockup, a theme toggle, Sign in and a green "Keep your work" — 56px of
+        // the top of a 640px screen belonging to the website rather than to the canvas,
+        // above a persistent bottom nav, with the canvas's own chrome floating over
+        // whatever was left. The canvas draws its own 52px app bar now
+        // (`CanvasPhoneAppBar`), every pixel of it about THIS session, so the shell's
+        // header stands down rather than being drawn twice.
+        //
+        // Declared here and applied in `globals.css` under the SAME `max-width: 767px` the
+        // bottom nav uses, so the header only goes on the widths the canvas has replaced
+        // it at. Desktop is untouched. The sidebar drawer is not needed either: on a phone
+        // stage route the bottom nav IS the navigation, and it stays.
+        {...(onStage ? { 'data-phone-chrome': 'stage' } : {})}
         style={{ position: 'relative' }}
       >
         {/* One header per visitor, not one per shell.

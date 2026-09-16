@@ -128,6 +128,9 @@ describe('detectUnbackedWriteClaim', () => {
 describe('context verdict — paged reads are not lost context', () => {
   const msg = (role: string, content: string): BrainMessage => ({ role, content } as BrainMessage);
   const llmTurn = (prompt: number): BrainTraceEvent => ({ ts: '', category: 'llm', label: 'llm.complete', usage: { prompt, completion: 40 } });
+  /** A turn the output ceiling CUT SHORT — the consequence that turns pressure into exhaustion. */
+  const truncatedTurn = (prompt: number): BrainTraceEvent =>
+    ({ ts: '', category: 'llm', label: 'llm.complete', usage: { prompt, completion: 4_096 }, finishReason: 'length' });
   const cut = (label: string, resultBytes: number): BrainTraceEvent =>
     ({ ts: '', category: 'tool', label, result: { ok: true }, truncated: true, resultBytes });
 
@@ -146,15 +149,52 @@ describe('context verdict — paged reads are not lost context', () => {
 
   it('names the evidence behind a context verdict instead of asserting the window was outgrown', () => {
     const d = computeBrainDiagnostics(
-      [llmTurn(46_228), cut('builtin_manager_stalled_tickets', 9_000)],
+      [truncatedTurn(146_228), cut('builtin_manager_stalled_tickets', 9_000)],
       undefined,
       [msg('user', 'Which tickets are stuck?'), msg('assistant', 'Several.')],
     );
     expect(d.likelyCause).toBe('context-exhaustion');
     const report = formatBrainDiagnostics(d).join('\n');
-    expect(report).toContain('the prompt peaked at 46,228 tokens');
-    expect(report).toContain('1 tool result(s) were cut before the model saw them');
+    expect(report).toContain('the prompt peaked at 146,228 tokens');
+    // A trim to the per-result budget is the budget WORKING — never "cut before the
+    // model saw them", which is what made a routine line read as the headline failure.
+    expect(report).toContain('1 tool result(s) were trimmed to the 6 KB tool-result budget (by design)');
+    expect(report).not.toContain('cut before the model saw them');
     expect(report).not.toContain('outgrew the model window');
+  });
+
+  it('is PRESSURE, not exhaustion, when nothing was cut short by it (chat #113)', () => {
+    // A 90k prompt against a 64k-token history budget is the design working: system
+    // prompt + tool catalog + transcript. Fourteen trims are the 6 KB per-result
+    // budget doing its job. Nothing failed, so nothing may be diagnosed.
+    const d = computeBrainDiagnostics(
+      // Fourteen DIFFERENT listings, so the only signal in play is the trimming.
+      [llmTurn(90_129), ...Array.from({ length: 14 }, (_, i) => cut(`builtin_list_${i}`, 9_000))],
+      undefined,
+      [msg('user', 'Which advisors are on the platform?'), msg('assistant', 'Fourteen, across three regions.')],
+    );
+    expect(d.contextPressureOnly).toBe(true);
+    expect(d.likelyCause).not.toBe('context-exhaustion');
+    expect(d.likelyCause).toBe('healthy');
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).not.toContain('CONTEXT EXHAUSTION');
+    expect(report).toContain('Context: pressure noted');
+    expect(report).toContain('prompt peaked at 90,129 tokens');
+    expect(report).toContain('14 tool result(s) trimmed to the 6 KB budget by design');
+    expect(report).toContain('no turn was cut short by it');
+    expect(report).toContain('64,000-token budget');
+  });
+
+  it('does not call a prompt within the transcript budget context pressure at all', () => {
+    // The old threshold was a hardcoded 24k, left behind when the history budget
+    // became 64k — so every healthy coding turn tripped it.
+    const d = computeBrainDiagnostics(
+      [llmTurn(46_228)],
+      undefined,
+      [msg('user', 'Which tickets are stuck?'), msg('assistant', 'Several.')],
+    );
+    expect(d.contextPressureOnly).toBe(false);
+    expect(d.likelyCause).toBe('healthy');
   });
 
   it('names the model a failed turn broke on, and omits the auto-routing placeholder', () => {
@@ -449,5 +489,68 @@ describe('formatBrainDiagnostics turn log', () => {
     expect(report).toContain('1. xai-oauth/grok-4.6 · 0 tool call(s) · text-only · raw response: 0 structured call(s) · 500ms');
     expect(report).toContain('2. direct/qwen/qwen3.8-max · 2 tool call(s) · 400ms');
     expect(report).toContain('Per model:');
+  });
+});
+
+/**
+ * Chat #113: a work-mode run that filed twelve tickets, made 141 tool calls and staffed
+ * nobody — every coordination call refused `403 manager role required`. Every other
+ * signal in the report read clean, so the verdict was "healthy" over a run whose whole
+ * output was unstarted work. The verdict now names it.
+ */
+describe('work filed but not staffed', () => {
+  const create = (i: number): BrainTraceEvent => ({
+    ts: `2026-09-15T10:0${i % 10}:00.000Z`,
+    category: 'tool',
+    label: 'builtin_tasks_create',
+    // Distinct args on purpose: identical back-to-back calls are a REPETITION signal,
+    // and twelve genuinely different creates must not read as a loop.
+    args: { title: `Ticket ${i}` },
+    result: { ok: true, id: i },
+  });
+  const refused = (label: string, taskId: number): BrainTraceEvent => ({
+    ts: '2026-09-15T10:20:00.000Z',
+    category: 'tool',
+    label,
+    args: { taskId },
+    result: { ok: false, error: 'manager role required' },
+    isError: true,
+  });
+
+  it('names the staffing gap instead of calling the run inconclusive', () => {
+    const events: BrainTraceEvent[] = [
+      ...Array.from({ length: 12 }, (_, i) => create(i + 1)),
+      refused('builtin_kanban_coordinate', 1),
+      refused('builtin_kanban_materialize_work_items', 2),
+      refused('builtin_kanban_assess_resource', 3),
+    ];
+    const d = computeBrainDiagnostics(events, undefined, []);
+    expect(d.staffing.ticketsCreated).toBe(12);
+    expect(d.staffing.dispatched).toBe(0);
+    expect(d.staffing.verdict).toBe('staffing-refused');
+    expect(d.likelyCause).toBe('work-filed-not-staffed');
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain('Likely WORK FILED BUT NOT STAFFED — 12 ticket(s) created, 0 dispatched');
+    expect(report).toContain('manager role required ×3');
+    expect(report).toContain('Nobody is running the work.');
+    expect(report).toContain('Staffing: 12 ticket(s) filed');
+  });
+
+  it('yields to a real model fault — a narrated call explains the missing dispatch better', () => {
+    // The staffing gap is a statement about the OUTCOME; a model that never emitted a
+    // call explains why there was no outcome at all, and is the thing to act on.
+    const messages = [{ role: 'assistant', content: 'run tool builtin_chats_dispatch_agent with chatId is 85' } as BrainMessage];
+    const d = computeBrainDiagnostics([], undefined, messages);
+    expect(d.likelyCause).toBe('tool-calls-not-emitted');
+  });
+
+  it('stays healthy when the tickets were actually dispatched', () => {
+    const events: BrainTraceEvent[] = [
+      create(1),
+      { ts: '2026-09-15T10:05:00.000Z', category: 'tool', label: 'builtin_chats_dispatch_agent', args: { taskId: 1 }, result: { ok: true, executionId: 7 } },
+    ];
+    const d = computeBrainDiagnostics(events, undefined, []);
+    expect(d.staffing.verdict).toBe('staffed');
+    expect(d.likelyCause).toBe('healthy');
   });
 });

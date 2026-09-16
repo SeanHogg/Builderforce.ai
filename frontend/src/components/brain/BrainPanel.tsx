@@ -17,7 +17,7 @@ import type { Formatter } from '@/i18n/format';
 import { useFormat } from '@/i18n/useFormat';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import Link from 'next/link';
-import { BrainTimeline, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId, PersonaPicker, RecipientPicker, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId, PersonaPicker, RecipientPicker, useRecipientChoice, chatSwitcherLabel } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import {
   consolidationMarkerContent,
@@ -90,6 +90,7 @@ import {
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { captureDiagnosticsBlock } from './captureDiagnostics';
 import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
 import { useChatModelOptions, useLlmModels } from '@/lib/useLlmModels';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
@@ -1061,6 +1062,9 @@ export function BrainPanel({
         surface: 'Web',
         chatId,
         chatTitle: chats.activeChat?.title ?? null,
+        // What the run was OBLIGED to do. The same trace is a good answer in `chat` and
+        // an unfinished execution in `work`; without the mode those read identically.
+        mode: chatMode,
         projectId: chatProjectId,
         projectName: projects.find((p) => p.id === chatProjectId)?.name ?? null,
         selectedProjectId: pinnedProjectId ?? viewingProjectId ?? null,
@@ -1104,9 +1108,21 @@ export function BrainPanel({
         readApiVersion: () => fetchApiVersion(),
       });
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
-      return `${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`;
+      // The SAME capture as one versioned JSON object, appended last and persisted with
+      // the chat (best-effort — the copy must never fail because the store did). The
+      // prose above is what a human reads; this is the half a query or an agent can.
+      const jsonBlock = captureDiagnosticsBlock({
+        diagnostics,
+        events: timelineTrace,
+        messages: conv.messages,
+        model: selectedModel ?? personaModelId ?? null,
+        running: conv.sending,
+        chatId,
+        store: brain.postChatDiagnostics,
+      });
+      return `${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}\n\n${jsonBlock}`;
     });
-  }, [capture, conv, personaLabel, selectedModel, personaModelId, llmModels, toolSpecs, timelineTrace, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+  }, [capture, conv, personaLabel, selectedModel, personaModelId, llmModels, toolSpecs, timelineTrace, chatMode, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (
@@ -1259,7 +1275,12 @@ export function BrainPanel({
                     onClick={(e) => e.stopPropagation()}
                     style={{ width: '100%', fontSize: 'var(--font-size-small)', padding: 2, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}
                   />
-                ) : chat.title}
+                ) : chatSwitcherLabel({
+                  title: chat.title,
+                  id: chat.id,
+                  ticketCount: chat.ticketCount,
+                  ticketProgressPct: chat.ticketProgressPct,
+                })}
               </div>
               {renamingId !== chat.id && (
                 <button

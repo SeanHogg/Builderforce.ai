@@ -257,6 +257,7 @@
     "effort_thorough": "深入",
     "thinking": "思考",
     "accountSettings": "账户设置",
+    "status": "状态",
     "autoMode": "自动模式",
     "autoModeHint": "自动批准操作，无需确认",
     "dictate": "语音输入",
@@ -3031,14 +3032,7 @@
       "sizeBand": "团队规模",
       "tableTitle": "你的指标 vs 群体",
       "footnote": "百分位是基于预置的行业群体分布（p10–p90）插值得出。对于越低越好的指标（前置时间、变更失败率、MTTR、成本），数值越小排名越高。",
-      "industries": {
-        "software_saas": "Software / SaaS",
-        "fintech": "金融科技 / 金融服务",
-        "ecommerce": "电子商务 / 零售",
-        "healthtech": "医疗科技 / 生命科学",
-        "agency_services": "代理机构 / 专业服务",
-        "enterprise_it": "企业 IT"
-      },
+      "noCohort": "{industry} 尚无基准队列。您的数值将不带排名显示；分布数据将随种子迁移到位，或现在选择一个已有队列进行比较。",
       "sizeBands": {
         "small": "小型（1–20）",
         "mid": "中型（21–200）",
@@ -11154,6 +11148,8 @@
         "starting": "正在启动…",
         "thinking": "思考中…",
         "writing": "正在撰写回复…",
+        "composing": "正在编写 {tool} 调用…",
+        "composed": " — 已收到 {bytes}",
         "tool": "正在运行 {tool}",
         "awaiting": "等待你批准 {tool}",
         "finishing": "正在收尾…",
@@ -11221,6 +11217,7 @@
     "tickets": {
       "none": "尚未关联任何工单。",
       "ringAria": "{label}：完成 {pct}%",
+      "inParent": "属于 {parent}",
       "spawned": "在此创建",
       "open": "打开",
       "run": "让代理执行该工单",
@@ -12176,6 +12173,10 @@
         "label": "完成前需要签核",
         "help": "默认关闭，需手动开启。开启后，只有在每位必需的审查人都已签核后，工单才会完成、其拉取请求才会合并，并且经理会持续催促仍未签核的角色。没有任何人被要求审查的工单永远不满足条件。"
       },
+      "coordinationGate": {
+        "label": "需要管理者协调工单",
+        "help": "默认关闭。关闭时，项目中的任何开发者或代理都可以运行工单协调器、添加所需角色、分配参与者并创建工作项。开启后，只有管理者可以——被要求协调的代理会被告知，请管理者将此项关闭。"
+      },
       "tri": {
         "on": "开启",
         "off": "关闭",
@@ -12192,6 +12193,8 @@
         "mergeWithheld": "合并需等待真人处理",
         "signoffRequired": "完成前必须签核",
         "signoffOptional": "无需签核",
+        "coordinationGated": "由管理者协调工单",
+        "coordinationOpen": "项目中任何人都可协调",
         "ceremoniesUnattended": "可在无人时举行仪式",
         "ceremoniesNeedPeople": "仪式需要有人出席",
         "reassignGranted": "可重新分配闲置 {hours} 小时以上的工作",
@@ -20574,6 +20577,8 @@
     "newSession": "新建会话",
     "add": "添加",
     "moreActions": "更多会话操作",
+    "actions": "操作",
+    "closeActions": "关闭操作",
     "createAndView": "创建与查看",
     "sessionTools": "会话工具",
     "selectionActions": "选择操作",
@@ -20595,6 +20600,19 @@
     "share": "邀请",
     "run": "运行",
     "askBrain": "就此画布询问 Brain",
+    "composerIntent": {
+      "label": "回车键的作用",
+      "ask": {
+        "label": "询问 Brain",
+        "placeholder": "就此画布询问 Brain",
+        "submit": "发送给 Brain"
+      },
+      "captureIdea": {
+        "label": "构想",
+        "placeholder": "记下一个想法。回车会把它保存为看板上的卡片；选择“询问 Brain”则改为发送给 Brain。",
+        "submit": "记录"
+      }
+    },
     "sendBrain": "发送给 Brain",
     "resizePrompt": "调整提示词区域大小",
     "dragHandle": "拖动以移动此面板",
@@ -20963,7 +20981,14 @@
     "diagnosticsCopyFailed": "无法复制诊断信息 — 剪贴板不可用",
     "diagnosticsBuildFailed": "无法生成诊断报告 — {reason}",
     "brain": "Brain",
+    "brainLauncher": {
+      "unread": "{count, plural, other {来自 Brain 的 # 条回复}}"
+    },
     "brainDock": "Brain 聊天",
+    "brainSheet": {
+      "veil": "关闭 Brain 面板并返回画布",
+      "grabber": "关闭 Brain 面板"
+    },
     "openBrainDock": "显示 Brain 聊天",
     "openBrainDockBusy": "Brain 正在处理 — 显示 Brain 聊天",
     "closeBrain": "关闭 Brain 聊天",
@@ -24397,14 +24422,7 @@
         "active": "你正在“想法”中",
         "regionLabel": "此画布的想法草稿本",
         "heading": "想法草稿本",
-        "lede": "想到就记下来，然后追踪每个想法从最初的念头到经过验证的全过程。每个想法都是看板上的一张卡片，Brain 可以调研它，客户访谈可以检验它。",
-        "capture": {
-          "label": "新想法",
-          "placeholder": "记下一个想法——一句话就够。第一行会成为标题。",
-          "submit": "记录",
-          "hint": "按 Ctrl+Enter 记录。整条笔记都会保留。",
-          "readOnly": "你可以查看这些想法，但只有编辑者才能向此画布添加内容。"
-        },
+        "lede": "想到就记下来——在下方的输入框里写一句，回车就会把它保存为看板上的一张卡片。追踪每个想法从最初的念头到经过验证的全过程，Brain 可以调研它，客户访谈可以检验它。",
         "filterLabel": "按阶段查看想法",
         "filterAll": "全部想法",
         "stageLabel": "“{idea}”的阶段",
@@ -24420,7 +24438,7 @@
         "count": "{count, plural, =0 {没有想法} other {# 个想法}}",
         "empty": {
           "title": "还没有想法",
-          "body": "记下你的下一个想法——不成熟也没关系。每个想法都会成为看板上的一张卡片，你可以调研它、用客户访谈检验它，并把它变成现实。"
+          "body": "在下方的输入框里记下你的下一个想法——不成熟也没关系。每个想法都会成为看板上的一张卡片，你可以调研它、用客户访谈检验它，并把它变成现实。"
         },
         "filteredEmpty": "此阶段没有想法。",
         "row": {
@@ -24571,7 +24589,10 @@
     "floatPrompt": "让输入框浮动在画板上",
     "hidePrompt": "隐藏输入框",
     "showPrompt": "显示输入框",
-    "canvasPanelControls": "画布面板",
+    "backToLibrary": "返回你的画布",
+    "sessionStage": "会话阶段",
+    "rosterChip": "{count, plural, other {此画布上有 # 人}}",
+    "surfaceStrip": "画布视图",
     "promptName": "询问 Brain",
     "objectDescription": {
       "workflow": "自动化执行的一系列步骤，完整贯穿你的业务流程。",
@@ -31646,21 +31667,25 @@
         "scale": "规模化"
       },
       "sector": {
+        "ai_ml": "AI / ML",
+        "saas": "SaaS",
         "fintech": "金融科技",
         "healthtech": "健康科技",
-        "edtech": "教育科技",
-        "ecommerce": "电子商务",
-        "saas": "SaaS",
+        "medtech": "医疗器械",
+        "biotech": "生物科技",
+        "climate_energy": "气候与能源",
+        "hardware_robotics": "硬件与机器人",
+        "cybersecurity": "网络安全",
         "marketplace": "市场",
+        "ecommerce": "电子商务",
         "consumer_apps": "消费类应用",
         "enterprise_software": "企业软件",
-        "ai_ml": "AI / ML",
+        "edtech": "教育科技",
         "blockchain": "区块链",
         "gaming": "游戏",
         "media_entertainment": "媒体与娱乐",
         "real_estate": "房地产",
         "logistics": "物流",
-        "sustainability": "可持续发展",
         "other": "其他"
       },
       "seeking": {

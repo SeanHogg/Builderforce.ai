@@ -58,6 +58,33 @@ export interface BuiltinCtx {
 }
 
 /**
+ * A replayed route answered non-2xx.
+ *
+ * Carries the route's OWN status instead of collapsing to a generic failure. `statusOf`
+ * (domain/shared/errors) honours an integer `status` in 400-599, so `/v1/mcp/call`
+ * answers a replayed 403 as 403 — it used to throw a bare `Error`, which `statusOf` read
+ * as 500 and the handler relayed as a 502. A model shown "502" retries the call; shown
+ * "403 manager role required" it reads the remedy and fixes the cause.
+ *
+ * The MESSAGE is unchanged (`<METHOD> <path> → <status> <body>`): it is what the model
+ * reads, and string assertions across the tool tests match on it.
+ */
+export class ReplayRouteError extends Error {
+  /** The replayed route's HTTP status, verbatim. */
+  readonly status: number;
+  /** The route's parsed JSON body (or its raw text when it was not JSON) — so a caller
+   *  can read `{ error, remedy, projectId }` without re-parsing the message. */
+  readonly body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = 'ReplayRouteError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/**
  * Run a platform action by REPLAYING the real `/api/*` route in-process (reuses
  * its logic AND its role-gate authz — the single source of truth). Forwards the
  * caller's JWT when present (real-user identity/role/segment); mints a short-lived
@@ -116,7 +143,7 @@ export async function replayRoute(
   try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
   if (!res.ok) {
     const detail = typeof parsed === 'object' && parsed ? JSON.stringify(parsed) : String(parsed);
-    throw new Error(`${method} ${path} → ${res.status} ${detail}`.slice(0, 400));
+    throw new ReplayRouteError(`${method} ${path} → ${res.status} ${detail}`.slice(0, 400), res.status, parsed);
   }
   return parsed;
 }

@@ -31,7 +31,7 @@ import { usePermission } from '@/lib/rbac';
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   chatId: number;
   projectId: number | null;
-  chatList: Array<Pick<BrainChat, 'id' | 'title'>>;
+  chatList: Array<Pick<BrainChat, 'id' | 'title' | 'ticketCount' | 'ticketProgressPct'>>;
   onChanged?: () => void;
 }) {
   const t = useTranslations('brain.tickets');
@@ -93,6 +93,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     showTickets: t('showTickets'), hideTickets: t('hideTickets'),
     kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec'), retro: t('kind.retro'), poker: t('kind.poker') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
+    inParent: (parent) => t('inParent', { parent }),
     ticketCount: (n) => t('ticketCount', { n }),
     overallAria: (pct) => t('overallAria', { pct }),
     runStarted: (agent) => t('runStarted', { agent }),
@@ -114,7 +115,12 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
       <SharedChatTicketsPanel
         chatId={chatId}
         projectId={projectId}
-        chatList={chatList.map((c) => ({ id: c.id, title: c.title }))}
+        chatList={chatList.map((c) => ({
+          id: c.id,
+          title: c.title,
+          ticketCount: c.ticketCount,
+          ticketProgressPct: c.ticketProgressPct,
+        }))}
         adapter={adapter}
         labels={labels}
         onChanged={onChanged}

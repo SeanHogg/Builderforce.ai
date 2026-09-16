@@ -277,14 +277,46 @@ export function BrainDock({
   });
 
   return (
-    <aside
-      className={styles.brainDock}
-      data-mode={mode}
-      data-side={side}
-      data-size={size}
-      style={{ '--brain-dock-size': `${width}px` } as CSSProperties}
-      aria-label={t('brainDock')}
-    >
+    <>
+      {/* THE VEIL, and its limits. On a phone this panel is a SHEET over the surface, so
+          something has to say the surface behind it is not the live thing — and tapping
+          away has to dismiss, which is the gesture a bottom sheet already teaches.
+
+          It stops at `--canvas-top-chrome-space` and at `--composer-space`, both measured:
+          the canvas app bar, the surface strip and the composer stay LIVE underneath it,
+          so a reader who opened the conversation can still leave the canvas, change
+          surface or type without dismissing it first. `display:none` on a desktop, where
+          this is a docked rail BESIDE the board and veils nothing. */}
+      <button
+        type="button"
+        className={styles.canvasSheetVeil}
+        data-testid="canvas-brain-veil"
+        // NOT the header's "Close Brain chat". Three controls dismissing one sheet may
+        // not share one accessible name — a screen-reader user tabbing the sheet would
+        // hear the same button three times with nothing saying which is which.
+        aria-label={t('brainSheet.veil')}
+        onClick={onClose}
+      />
+      <aside
+        className={styles.brainDock}
+        data-mode={mode}
+        data-side={side}
+        data-size={size}
+        style={{ '--brain-dock-size': `${width}px` } as CSSProperties}
+        aria-label={t('brainDock')}
+      >
+      {/* The sheet's own grabber — 24px of ink in a 44px hit area, because the bar IS
+          the affordance and the target has to be a thumb's. It closes: a phone sheet
+          between two measured edges has one size, so there is nothing for a drag to
+          resize and "pull it down" is the only thing the gesture can mean. */}
+      <button
+        type="button"
+        className={styles.brainDockGrabber}
+        data-testid="canvas-brain-grabber"
+        aria-label={t('brainSheet.grabber')}
+        title={t('brainSheet.grabber')}
+        onClick={onClose}
+      ><span aria-hidden /></button>
       <header className={styles.brainDockHeader}>
         <span className={styles.brainDockMark} aria-hidden><BrainMark running={running} /></span>
         <strong>{t('brain')}</strong>
@@ -334,7 +366,8 @@ export function BrainDock({
           Nothing is positioned: it is in normal flow, so the transcript above it flexes
           to whatever is left and the panel can never paint over the box you type in. */}
       {composer}
-    </aside>
+      </aside>
+    </>
   );
 }
 

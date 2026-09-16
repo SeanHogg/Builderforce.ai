@@ -20,6 +20,7 @@
  * Responses adapter on the production API until that deploy lands.
  */
 import type { BrainTraceEvent } from './brainTriage';
+import { formatBytes } from './runActivity';
 import { STOPPED_TURN_STEP } from './stoppedTurn';
 
 /** What one model did across the turns it served. */
@@ -175,6 +176,14 @@ export interface ModelTurn {
   /** Present when the vendor reported its raw response (Responses vendors). */
   upstreamFunctionCalls?: number;
   upstreamRecovered?: number;
+  /**
+   * UTF-8 bytes of tool-call ARGUMENTS the turn emitted. The missing half of a long
+   * turn: `16. xai-oauth/grok-4.6 · 1 tool call(s) · 202509ms` gave no clue that those
+   * 202 seconds were a 21 KB `write_file` call being streamed a fragment at a time.
+   */
+  argBytes?: number;
+  /** Completion tokens the gateway reported for the turn — the other reason a turn is long. */
+  completionTokens?: number;
   durationMs?: number;
   /** Completions that failed outright. */
   failed?: boolean;
@@ -198,6 +207,7 @@ export function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[] {
       upstreamFunctionCalls?: unknown;
       upstreamRecovered?: unknown;
       unliftedCallMarkup?: unknown;
+      argBytes?: unknown;
     } | undefined;
     const requested = typeof args?.requestedModel === 'string' && args.requestedModel && args.requestedModel !== 'default' && args.requestedModel !== model
       ? args.requestedModel
@@ -222,6 +232,10 @@ export function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[] {
       ...(requested ? { requestedModel: requested } : {}),
       toolCalls: calls,
       textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
+      // What the turn SPENT its time producing. Absent on traces that predate the
+      // accounting, so an old chat's log renders exactly as it used to.
+      ...(typeof args?.argBytes === 'number' && args.argBytes > 0 ? { argBytes: args.argBytes } : {}),
+      ...(typeof ev.usage?.completion === 'number' && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {}),
       ...(typeof ev.durationMs === 'number' ? { durationMs: ev.durationMs } : {}),
       ...(args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}),
     };
@@ -249,6 +263,10 @@ function formatOneTurn(t: ModelTurn): string {
   }
   if (t.upstreamRecovered) parts.push(`${t.upstreamRecovered} rebuilt from the final frame`);
   if (t.unliftedCallMarkup) parts.push('⚠ unlifted call markup');
+  // WHY the turn was long. A 202-second turn is a stall, a reasoning burn or a large
+  // tool call being streamed, and only these two numbers tell the three apart.
+  if (t.argBytes) parts.push(`${formatBytes(t.argBytes)} of arguments`);
+  if (t.completionTokens) parts.push(`${t.completionTokens.toLocaleString('en-US')} completion tok`);
   if (typeof t.durationMs === 'number') parts.push(`${t.durationMs}ms`);
   return `  ${t.index}. ${model} · ${parts.join(' · ')}`;
 }

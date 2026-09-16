@@ -225,3 +225,66 @@ describe('imageHostedChildCeiling', () => {
     expect(childCapabilities(ceiling, true).has('repo.write')).toBe(false);
   });
 });
+
+/**
+ * PERSONA DELEGATION (operator decision 2026-09-15) — when the Brain works locally
+ * instead of dispatching, the child should BE one of the workspace's agents.
+ *
+ * Two things must hold, and they pull in opposite directions: a resolved persona has to
+ * reach the kernel (or the child is Ada in name only), and an UNRESOLVED one must never
+ * be silently dropped (or the parent gets an anonymous answer it believes came from its
+ * data engineer).
+ */
+describe('buildOrchestrationCapability · as_agent', () => {
+  const ada = { name: 'Ada', brief: 'You are the data engineer.' };
+
+  const withPersona = (over: Partial<Parameters<typeof buildOrchestrationCapability>[0]> = {}) =>
+    buildOrchestrationCapability({
+      parentCaps: ALL_CAPS,
+      provider: provider(ALL_CAPS),
+      registry: registryWith(readTool, writeTool),
+      complete: async () => answer('done'),
+      personaBrief: async (agent) => (agent.toLowerCase() === 'ada' ? ada : null),
+      ...over,
+    });
+
+  it('runs the child under the resolved agent\'s persona', async () => {
+    const complete = vi.fn(async (_args: CompleteArgs) => answer('schema is fine'));
+    const result = await withPersona({ complete }).spawn({ label: 'check', task: 'read the migration', asAgent: 'Ada' });
+
+    const system = complete.mock.calls[0]![0].messages[0] as { content: string };
+    expect(system.content).toContain('acting as Ada');
+    expect(system.content).toContain('You are the data engineer.');
+    // And the answer is attributable to a REAL teammate, not to the string guessed.
+    expect(result).toMatchObject({ ok: true, asAgent: { ref: 'Ada', name: 'Ada' } });
+  });
+
+  it('refuses an unknown agent instead of running an anonymous child in its name', async () => {
+    const complete = vi.fn(async (_args: CompleteArgs) => answer('done'));
+    const result = await withPersona({ complete }).spawn({ label: 'check', task: 'do it', asAgent: 'Kevin' });
+
+    expect(result).toMatchObject({ ok: false, error: 'no agent named "Kevin" in this workspace' });
+    // Nothing was spent: a delegation to nobody must not buy a turn.
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the surface has no roster at all, rather than ignoring as_agent', async () => {
+    const result = await withPersona({ personaBrief: undefined }).spawn({ label: 'x', task: 'y', asAgent: 'Ada' });
+    expect(result).toMatchObject({ ok: false });
+  });
+
+  it('is an ordinary anonymous delegation when no agent is named', async () => {
+    const complete = vi.fn(async (_args: CompleteArgs) => answer('done'));
+    const result = await withPersona({ complete }).spawn({ label: 'look', task: 'find it' });
+
+    expect((complete.mock.calls[0]![0].messages[0] as { content: string }).content).not.toContain('acting as');
+    expect(result).toMatchObject({ ok: true });
+    expect(result.asAgent).toBeUndefined();
+  });
+
+  it('records the persona on the timeline, so a delegation names who did it', async () => {
+    const record = vi.fn(async (_e: RecordArgs) => undefined);
+    await withPersona({ record }).spawn({ label: 'check', task: 'read it', asAgent: 'Ada' });
+    expect(record.mock.calls[0]![0].detail).toMatchObject({ asAgent: 'Ada', asAgentName: 'Ada' });
+  });
+});

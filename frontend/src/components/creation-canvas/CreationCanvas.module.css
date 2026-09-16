@@ -31,6 +31,12 @@
   --canvas-shadow: rgba(15, 23, 42, .10);
   /* Wash held over the board while a file is dragged in from the desktop. */
   --canvas-drop-veil: color-mix(in srgb, var(--canvas-accent) 10%, transparent);
+  /* Wash held over the SURFACE while a phone sheet is open — the Brain conversation.
+     Deep enough that the sheet is plainly the live thing and the board behind it is
+     plainly not, and light enough that the reader can still see WHICH board it is.
+     A role of its own rather than a reuse of `--canvas-drop-veil`: one says "drop it
+     here", the other says "this is behind a sheet". */
+  --canvas-veil: rgba(15, 23, 42, .32);
   /* Accent INK: a tint or a glyph drawn ON a canvas surface. A hue legible on ink
      is invisible on paper, so this is a token with a value per theme rather than a
      literal repeated at each call site. */
@@ -534,13 +540,6 @@
 .barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled[aria-expanded='true'] {
   background:var(--canvas-panel); color:var(--canvas-accent); box-shadow:0 1px 2px var(--canvas-shadow);
 }
-/* The same actions inside the ••• sheet, where a phone reaches the ones the bar had no
-   room for. Words, always — a sheet opened to find a named thing must not answer with a
-   second row of glyphs. Chrome comes from `.moreMenu button`, so a session action and a
-   session tool are the same kind of row rather than two visitors' idea of one.
-   Only the phone needs this copy: on a desktop the bar already draws them, and a menu
-   that repeats the row above it is a menu with two answers. */
-.moreMenuPhoneOnly { display:none; }
 
 /* No `.iconAction` here any more. It sized a 34px bordered square and had exactly one
    consumer left - the board menu's trigger - which sat in the Board trough at 34px beside
@@ -946,7 +945,7 @@
 .mapFooter { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; }
 .mapFooter small { color:var(--canvas-muted); font-size:6px; }
 .node_map { width:340px; }
-@media (max-width:760px) { .node_map { width:100%; max-width:340px; } }
+@media (max-width:767px) { .node_map { width:100%; max-width:340px; } }
 
 .node_website .nodeBody,.node_prototype .nodeBody { display:flex; }
 /* A framed page reports no height of its own, so a card whose body IS one collapses to
@@ -1529,7 +1528,7 @@
   .resumePageModes { width:100%; overflow-x:auto; }
 }
 .resumePreviewViewport :global(.canvasResumeDocument) { box-shadow:0 8px 24px rgb(15 23 42 / 12%); }
-@media(max-width:760px){.resumeTemplateGallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:767px){.resumeTemplateGallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .resumeCompare { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .resumeCompareShell { display:flex; flex-direction:column; gap:10px; }
 .resumeDiffSummary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border:1px solid var(--border); border-radius:8px; padding:9px; }
@@ -2475,7 +2474,7 @@
 }
 .fileDownload:hover { background:var(--canvas-hover); }
 
-@media (max-width:760px) {
+@media (max-width:767px) {
   .filesPanel { left:12px; right:12px; width:auto; max-width:none; max-height:56%; }
 }
 
@@ -2929,9 +2928,40 @@
 .chatSurfaceFooter { flex:none; display:flex; justify-content:center; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:6px 16px 10px; }
 .chatSurfaceFooter button { display:inline-flex; align-items:center; gap:7px; min-height:34px; padding:7px 14px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); font:650 11px var(--font-sans); cursor:pointer; }
 .chatSurfaceFooter button:hover,.chatSurfaceFooter button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
-/* The phone-sized surface stack. Plain buttons rather than rail controls, sized by the
-   same rules as every other command in `.mobileCanvasActions`. */
-.surfaceSwitcherButton { display:grid; place-items:center; padding:0; border:0; background:transparent; color:inherit; cursor:pointer; }
+/* ── THE PHONE'S SURFACE STRIP ────────────────────────────────────────────────────
+   The band under the canvas app bar that says which reading of the session is on
+   screen. It replaced a floating icon COLUMN over the board's top-left corner: five
+   unlabelled glyphs stacked on the surface's own heading, which answered "what am I
+   looking at" with a picture.
+
+   Words AND icons, 44px tall, scrolling sideways in its OWN band — the one place a
+   sideways scroll is expected and the one place it cannot cover the work. `display:none`
+   on a desktop, where the fused phase/surface card is the chrome instead. */
+.surfaceStrip {
+  display:none;
+  align-items:center;
+  gap:4px;
+  height:56px;
+  padding:6px 10px;
+  border-bottom:1px solid var(--canvas-line);
+  background:var(--canvas-panel);
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+  overscroll-behavior-x:contain;
+}
+.surfaceStrip::-webkit-scrollbar { display:none; }
+.surfaceStripTab {
+  display:inline-flex; flex:none; align-items:center; gap:6px;
+  height:44px; padding:0 12px;
+  border:0; border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted);
+  font:650 13px var(--font-sans); white-space:nowrap; cursor:pointer;
+}
+.surfaceStripTab > svg { display:block; width:15px; height:15px; }
+.surfaceStripTab:hover,.surfaceStripTab:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.surfaceStripTab[aria-pressed='true'] { background:var(--canvas-accent); color:var(--text-on-accent); font-weight:700; }
+.surfaceStripTab[aria-pressed='true'] > svg { color:currentColor; }
 
 /* ── The surface switcher, in the session header ──────────────────────────────────
    A segmented control rather than three separate buttons, because these three are one
@@ -3027,6 +3057,31 @@
 .brainDockResizer::after { content:''; position:absolute; top:50%; left:50%; width:3px; height:40px; transform:translate(-50%,-50%); border-radius:var(--radius-sm); background:var(--canvas-brain-accent); opacity:0; transition:opacity .15s ease; }
 .brainDockResizer:hover::after,.brainDockResizer:focus-visible::after { opacity:.85; }
 .brainDockResizer:focus-visible { outline:2px solid var(--canvas-brain-accent); outline-offset:-2px; }
+/* ── THE PHONE SHEET'S TWO EXTRA PARTS ────────────────────────────────────────────
+   Both are `display:none` on a desktop, where Brain is a docked RAIL beside the board
+   rather than a sheet over it: there is nothing to drag and nothing to veil.
+
+   THE GRABBER is the gesture a bottom sheet teaches. 24px of ink in a 44px hit area,
+   because the bar itself is the affordance and the target has to be a thumb's.
+   THE VEIL stops at `--canvas-top-chrome-space`, so the canvas app bar and the surface
+   strip stay LIVE underneath it: a reader who opened the conversation can still leave
+   the canvas or change surface without dismissing it first. It is SHARED with the
+   actions sheet (`.canvasSheetVeil`), because one sheet's veil and another's are the
+   same statement about the same surface. */
+.brainDockGrabber {
+  display:none; place-items:center; flex:none;
+  width:100%; height:44px; margin-bottom:-14px; padding:0;
+  border:0; background:transparent; cursor:pointer;
+}
+.brainDockGrabber > span { display:block; width:36px; height:4px; border-radius:var(--radius-full); background:var(--canvas-brain-border); }
+.brainDockGrabber:hover > span,.brainDockGrabber:focus-visible > span { background:var(--canvas-brain-accent); }
+.brainDockGrabber:focus-visible { outline:2px solid var(--canvas-brain-accent); outline-offset:-4px; }
+.canvasSheetVeil {
+  display:none; position:absolute; z-index:16; left:0; right:0;
+  border:0; padding:0;
+  background:var(--canvas-veil);
+  cursor:pointer;
+}
 .brainDockHeader { display:flex; flex:none; align-items:center; gap:8px; padding:10px 11px; border-bottom:1px solid var(--canvas-brain-border); background:var(--canvas-brain-header); }
 .brainDockHeader strong { flex:1; min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
 .brainDockMark { display:grid; place-items:center; width:22px; height:22px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); font-size:12px; }
@@ -3084,22 +3139,176 @@
   .collaborators button[data-typing="true"],.humanChatActivity i { animation:none; }
 }
 
-/* ── The board's floating controls ────────────────────────────────────────────────
-   `display:contents` is the whole desktop story: the wrapper adds no box, so the
-   palette toggle keeps the corner it has always had and the phone column stays stood
-   down. It exists so that on a phone the two can become ONE rail (see the 560px block)
-   rather than two separate toolbars stacked down the same edge of a 360px screen. */
-.boardRail { display:contents; }
-.mobileCanvasActions { display:none; }
+/* ── THE COMPOSER'S INTENT SEGMENT ────────────────────────────────────────────────
+   WHAT ENTER MEANS, drawn beside the box it means it in. It is only ever drawn when a
+   surface offers two or more verbs (`CanvasComposerIntent` returns null below that), so
+   nothing here has to cope with a one-segment control.
+
+   A trough with one lit segment — the same shape the surface switcher and the bar's
+   groups use, because it is the same kind of decision: one of these, exactly one. */
+.composerIntent {
+  display:inline-flex; align-self:flex-start; align-items:center; gap:2px;
+  margin-bottom:6px; padding:2px;
+  border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full);
+  background:var(--canvas-brain-header);
+}
+.composerIntentSegment {
+  display:inline-flex; align-items:center; gap:6px;
+  height:28px; padding:0 10px 0 8px;
+  border:0; border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted);
+  font:650 12px var(--font-sans); white-space:nowrap; cursor:pointer;
+}
+.composerIntentSegment:hover,.composerIntentSegment:focus-visible { color:var(--canvas-ink); outline:none; }
+.composerIntentSegment[aria-checked='true'] {
+  background:var(--canvas-panel); color:var(--canvas-ink); font-weight:700;
+  box-shadow:0 1px 2px var(--canvas-shadow);
+}
+/* The arc's hue for a staged verb, exactly as `.barGroup[data-stage]` does it, so
+   "Idea" is one colour on this canvas and not two. */
+.composerIntentDot { width:7px; height:7px; flex:none; border-radius:var(--radius-full); background:var(--intent-stage,var(--canvas-muted)); }
+.composerIntentSegment[data-stage='idea'] { --intent-stage:var(--stage-idea); }
+.composerIntentSegment[data-stage='make'] { --intent-stage:var(--stage-make); }
+.composerIntentSegment[data-stage='run'] { --intent-stage:var(--stage-run); }
+.composerIntentSegment[data-stage='measure'] { --intent-stage:var(--stage-measure); }
+.composerIntentSegment[data-stage='reach'] { --intent-stage:var(--stage-reach); }
+.composerIntentSpark { display:inline-grid; place-items:center; flex:none; color:var(--canvas-brain-accent); }
+
+/* The row a finger uses: the phone's "+" then the field. On a desktop the trigger is
+   `display:none` and this is a one-child flex row, which is what the field always was. */
+.composerInputRow { display:flex; align-items:flex-end; gap:6px; width:100%; min-width:0; }
+.composerInputRow > .composer { flex:1; min-width:0; }
+/* THE "+" THAT IS THE COMMAND BAR. Hidden above the phone breakpoint, where the bar
+   itself is drawn — see the media query below for why it is a CSS decision and the bar's
+   own presence is a render decision. */
+.composerActionsTrigger {
+  display:none; place-items:center; flex:none;
+  width:44px; height:44px; margin-bottom:2px; padding:0;
+  border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full);
+  background:var(--canvas-panel); color:var(--canvas-ink); cursor:pointer;
+}
+.composerActionsTrigger > svg { display:block; width:18px; height:18px; }
+.composerActionsTrigger:hover,.composerActionsTrigger:focus-visible { border-color:var(--canvas-accent); color:var(--canvas-accent); outline:none; }
+
+/* ── THE PHONE'S ACTIONS SHEET ────────────────────────────────────────────────────
+   The command bar, as one scrolling sheet. It borrows `.moreMenu`'s box (that is what
+   `CanvasMenuSheet` draws) and re-lays its body: the captioned arc groups stacked down
+   the sheet, each a two-column grid of 44px worded tiles.
+
+   It STOPS under the canvas app bar and SITS ON the composer, both from the measured
+   bands, so the two things a reader must keep — which canvas this is, and the box they
+   type in — are never underneath it. */
+.actionsSheetBody { display:flex; flex-direction:column; gap:14px; grid-column:1 / -1; }
+.actionsSheetBody .barGroup { display:flex; align-items:stretch; width:100%; gap:6px; }
+.actionsSheetBody .barGroupCaption { align-self:flex-start; }
+.actionsSheetBody .barGroupRow {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px;
+  min-height:0; padding:0; border:0; background:transparent;
+}
+.actionsSheetBody .barGroupRow > * {
+  display:flex; align-items:center; gap:8px;
+  min-height:44px; width:100%; padding:0 12px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font:650 13px var(--font-sans); text-align:left; cursor:pointer;
+}
+.actionsSheetBody .barGroupRow > *:disabled { opacity:.45; cursor:not-allowed; }
+/* The DOORS OUT wear the accent the desktop bar gives the one worded button they hang
+   under, so "Make it real" reads as the way out of the canvas here too rather than as
+   two more grey rows among fifteen. */
+.actionsSheetBody .barGroupRow > [data-chrome='door'] {
+  border-color:var(--canvas-accent); background:var(--canvas-accent); color:var(--text-on-accent);
+}
+.actionsSheetBody .barGroupRow > * > span { display:grid; place-items:center; width:22px; height:22px; flex:none; }
+.actionsSheetBody .barGroupRow > * > span > svg { display:block; width:16px; height:16px; }
+
+/* ── THE CANVAS APP BAR AND ITS STRIP — the phone's own chrome ────────────────────
+   `/create/<id>` on a phone is an APP SCREEN. The shell stands its header down on a
+   stage route (`globals.css`, `.shell[data-phone-chrome='stage']`) and the canvas draws
+   this instead: a 52px bar that is entirely about THIS session, over a 56px strip of
+   surface tabs. `display:none` above the breakpoint, where the floating cards are the
+   chrome.
+
+   ABSOLUTE, like every other piece of canvas chrome, so the board still runs the whole
+   height of the shell behind it and everything that must clear it reads the MEASURED
+   `--canvas-top-chrome-space`. Never `position:fixed`: the persistent bottom nav owns
+   the bottom of the frame and `.app-frame` already reserves its height — a fixed band
+   here would have to subtract `--mobile-nav-height` and would be a second place that
+   number lives. */
+.canvasPhoneChrome { display:none; }
+.canvasAppBar {
+  display:flex; align-items:center; gap:4px;
+  height:52px; padding:0 6px 0 2px;
+  border-bottom:1px solid var(--canvas-line);
+  background:var(--canvas-panel);
+}
+.canvasAppBarButton {
+  display:grid; place-items:center; flex:none;
+  width:44px; height:44px; padding:0;
+  border:0; border-radius:var(--radius-md);
+  background:transparent; color:var(--canvas-ink);
+  font:400 22px/1 var(--font-sans); cursor:pointer;
+}
+.canvasAppBarButton:hover,.canvasAppBarButton:focus-visible { background:var(--canvas-hover); outline:none; }
+/* The session's name and its stage, as ONE control: pressing either opens the phase
+   stepper, because a stage you can read and not change is a label. */
+.canvasAppBarTitle {
+  display:flex; flex:1; flex-direction:column; align-items:flex-start; gap:1px;
+  min-width:0; min-height:44px; padding:0 6px;
+  border:0; border-radius:var(--radius-md);
+  background:transparent; color:var(--canvas-ink);
+  font-family:var(--font-sans); text-align:left; cursor:pointer;
+}
+.canvasAppBarTitle:hover,.canvasAppBarTitle:focus-visible { background:var(--canvas-hover); outline:none; }
+.canvasAppBarTitle strong { max-width:100%; overflow:hidden; font-size:15px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+/* The arc's hue and the arc's word — `--stage-<id>` and `nav.stage.<id>`, the same two
+   the left rail and the command bar's captions use. */
+.canvasAppBarStage { display:flex; align-items:center; gap:5px; color:var(--app-bar-stage,var(--canvas-muted)); font-size:11px; font-weight:650; }
+.canvasAppBarStage > i { width:6px; height:6px; flex:none; border-radius:var(--radius-full); background:currentColor; }
+.canvasAppBarStage[data-stage='idea'] { --app-bar-stage:var(--stage-idea); }
+.canvasAppBarStage[data-stage='make'] { --app-bar-stage:var(--stage-make); }
+.canvasAppBarStage[data-stage='run'] { --app-bar-stage:var(--stage-run); }
+.canvasAppBarStage[data-stage='measure'] { --app-bar-stage:var(--stage-measure); }
+.canvasAppBarStage[data-stage='reach'] { --app-bar-stage:var(--stage-reach); }
+/* Positioned, because the invite sheet anchors `right:0` against whatever wraps the
+   chip that opens it — the same reason `.rosterInviteAnchor` exists on the bar. */
+.canvasAppBarRoster { position:relative; display:inline-flex; flex:none; align-items:center; }
+.canvasAppBarFaces {
+  display:inline-flex; align-items:center;
+  height:32px; padding:0 8px 0 3px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  background:var(--canvas-panel); color:var(--canvas-muted);
+  font:700 11px var(--font-sans); cursor:pointer;
+}
+.canvasAppBarFaces:disabled { cursor:default; }
+.canvasAppBarFaces:not(:disabled):hover,.canvasAppBarFaces:focus-visible { border-color:var(--canvas-accent); outline:none; }
+.canvasAppBarFaces > i {
+  display:grid; place-items:center;
+  width:24px; height:24px;
+  border:2px solid var(--canvas-panel); border-radius:var(--radius-full);
+  font:700 9px var(--font-sans); font-style:normal;
+}
+.canvasAppBarFaces > i + i { margin-left:-8px; }
+.canvasAppBarFaces > b { margin-left:4px; font-weight:700; }
+/* The invite panel anchors `bottom: calc(100% + 10px)` because every other host of it
+   is the bottom bar. This one is the TOP bar, so it opens downward — otherwise it would
+   be drawn off the top of the screen. */
+.canvasAppBarRoster > .shareMenu { top:calc(100% + 8px); right:0; bottom:auto; }
 
 @media (max-width:1100px) {
   /* Narrower side panels leave a narrower centre; the prompt stays centred but
      stops short of the object panel rather than sliding under it. */
   .composerDock { right:calc(260px + var(--brain-dock-right, 0px)); left:calc(260px + var(--brain-dock-left, 0px)); max-width:520px; }
 }
-@media (max-width:760px) {
+@media (max-width:767px) {
   .canvasShell { flex:1; height:100%; min-height:0; }
   .saved,.secondaryButton { display:none; }
+  /* THE CANVAS APP BAR AND THE SURFACE STRIP, the phone's own chrome. Absolute at the
+     top of the shell, opaque, and MEASURED — `--canvas-top-chrome-space` is taken off
+     this wrapper (see `CreationCanvas.tsx`), so the band it publishes is the bar plus
+     the strip rather than one of them. */
+  .canvasPhoneChrome { position:absolute; z-index:20; top:0; left:0; right:0; display:flex; flex-direction:column; }
+  .surfaceStrip { display:flex; }
   /* The header has already given up its save button and its collaborators by here, so
      the segmented switcher stands down too and the phone's own control column carries
      the surface decision. Exactly ONE of the two is ever on screen.
@@ -3126,34 +3335,22 @@
      phone the trough gives that padding back, so the bare row has to give back the
      same or it becomes the one group inset from the rest. */
   .barGroupRow[data-shell='bare'] { padding:0; border:0; }
-  /* The captions go too, and for the same reason the troughs do: a 360px bar spends its
-     width on 40px touch targets, and the ••• sheet already names every section it
-     carries (`.moreMenuHeading`) — which is where a phone reads what a group is for. */
-  .barGroupCaption { display:none; }
-  /* A phone raises the ONE token rather than this one class, so the roster circles, the
-     green Run and the ••• trigger grow to the same touch target instead of staying at
-     their desktop size beside 40px neighbours. */
-  .commandBar { --canvas-bar-control:40px; }
-  .sessionActionButton { width:40px; border-radius:var(--radius-md); }
-  .sessionActionButton > svg { width:17px; height:17px; }
-  /* Keyed on `data-phone` alone, not on the chrome class beside it. A cluster used to
-     hold only icon buttons, so `.sessionActionButton[data-phone='menu']` was enough —
-     until `publish` joined `share` and the session cluster became two WORDED buttons,
-     which that selector does not match. The registry publishes `data-phone` on every
-     chrome it renders; matching the declaration rather than the styling is what keeps
-     this correct for the next chrome as well. */
-  .barGroupRow > [data-phone='menu'] { display:none; }
-  /* An empty group still draws its gap, so a group whose every member has stood down
-     stands down as a whole.
-     KEYED ON WHAT IS LEFT, not on what was declared. The previous rule hid any group that
-     declared placement and had no `bar` member — which was correct while a group held
-     nothing but registry actions, and became wrong the moment the groups became the arc:
-     Idea is the Add button (no placement of its own) beside `draw` (menu-only), and Reach
-     is the ROSTER beside two menu-only actions. Both would have vanished from a phone —
-     the palette's one door, and the avatars the whole collapse rule exists to protect.
-     This asks the only question that matters: is there a child that is not standing down. */
-  .barGroup:not(:has(.barGroupRow > :not([data-phone='menu']))) { display:none; }
-  .moreMenuPhoneOnly { display:grid; grid-column:1 / -1; gap:2px; }
+  /* NOTE THE SCOPE. This used to be a bare `.barGroupCaption { display:none }`, which
+     was correct while the command bar was the only thing drawing a captioned group. The
+     actions sheet draws the SAME groups with the SAME captions now, and that sheet is a
+     phone-only chrome — an unscoped rule would have hidden the one set of captions this
+     redesign exists to put in front of a phone user. */
+  .commandBar .barGroupCaption { display:none; }
+  /* NOTHING STANDS DOWN INSIDE THE BAR ANY MORE, because the BAR stands down. Six
+     rules used to live here — a 40px control token, a `[data-phone='menu']` hide, a
+     `:has()` rule that removed a group once every member had gone, and a phone-only
+     section inside the ••• sheet to catch what the hide had taken. They were all the
+     same idea: fit the desktop bar onto a 360px screen by removing most of it. The bar
+     is not rendered at this width at all (`CreationCanvas.tsx`), and the composer's "+"
+     opens one sheet with every action in it, captioned by the same arc groups. The rule
+     below is belt-and-braces for the one frame before `usePhoneViewport` has an
+     answer — `false` until mount, by design. */
+  .commandBar { display:none; }
   /* PHONE CHROME. Everything floats, so a narrow screen tightens the cards rather than
      dropping what is in them. The roster in particular STAYS — it is the slot the whole
      collapse rule exists to protect, and a 360px screen is exactly where "who else is
@@ -3161,13 +3358,12 @@
      sideways instead, which loses placement and never loses a control. */
   .sessionPill { left:8px; top:8px; right:auto; max-width:calc(100% - 16px); gap:4px; padding:4px 7px 4px 6px; }
   .sessionPill .spark { display:none; }
-  /* The fused phase/surface widget stands down here (`.surfaceChips { display:none }`
-     above) and nothing replaces it at the top — the phone's surface decision lives in
-     the board's own control column instead. The pill is what is left, and it is often
-     ABSENT (see `CanvasSessionPill`'s own self-gating): this is a rough pre-measurement
-     guess for the rare moment it shows, corrected to the real value once `useChromeSpace`
-     measures the actual box. */
-  .canvasShell { --canvas-top-chrome-space:46px; }  /* 8px corner + a pill's worth + clearance */
+  /* NO LITERAL HERE ANY MORE. The fused phase/surface widget stands down
+     (`.surfaceChips { display:none }` above) and the canvas app bar plus the surface
+     strip take the top of the screen instead — a real, always-present band that
+     `useChromeSpace` measures off `.canvasPhoneChrome`. The `46px` guess that used to
+     sit here was in force at every phone width, because the element the variable is
+     measured from was the one element `display:none` on a phone. */
   .commandBar { left:8px; right:8px; bottom:8px; transform:none; max-width:none; gap:4px; padding:5px; overflow-x:auto; scrollbar-width:none; }
   .commandBar::-webkit-scrollbar { display:none; }
   .commandBar > * { flex:none; }
@@ -3196,6 +3392,21 @@
   /* The sheet is now the phone's ONLY route to five session actions, so it stops being
      a two-column grid of 28px rows. One column, one 40px target per row, and it may
      scroll — a menu that runs off the bottom of a phone is a menu with a hidden half. */
+  /* A SHEET, not a popover. `placement='sheet'` is what the actions sheet and the app
+     bar's own menus declare: they are not opened from a bar (there is no bar at this
+     width), so "above the button that opened me" has no anchor to mean anything against.
+     It stops under the canvas app bar and sits ON the composer, both measured, and
+     scrolls down — the direction a thumb expects. */
+  .moreMenu[data-placement='sheet'] {
+    top:calc(var(--canvas-top-chrome-space) + 8px);
+    right:0; bottom:var(--composer-space); left:0;
+    z-index:18;
+    width:auto; max-height:none;
+    display:flex; flex-direction:column; gap:4px;
+    padding:0 16px 20px;
+    border-bottom:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    overflow-y:auto; overscroll-behavior:contain;
+  }
   .moreMenu { bottom:calc(100% + 10px); right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; grid-template-columns:1fr; box-sizing:border-box; }
   .moreMenu button,.moreMenu label { min-height:40px; padding:8px 10px; font-size:12px; }
   .moreMenu select { max-width:50%; min-height:32px; }
@@ -3222,11 +3433,29 @@
     max-height:calc(100% - var(--canvas-top-chrome-space) - var(--composer-space) - 16px);
   }
   .anchoredPanel::before { display:none; }
-  /* The prompt is still the bottom-of-the-page fixture, just edge to edge. It keeps the
-     MEASURED bar band as its offset rather than restating `bottom:8px` here — the bar is
-     also at `bottom:8px` on a phone, so the two were pinned to the same edge and the prompt
-     sat under the bar at every width below this breakpoint. */
-  .composerDock { left:8px; right:8px; width:auto; min-width:0; max-width:none; margin-inline:0; }
+  /* THE COMPOSER OWNS THE BOTTOM EDGE. There is no command bar under it at this width,
+     so `--canvas-command-bar-space` is 0 (the bar is unmounted, and `useChromeSpace`
+     publishes `0px` for a host it is not given a node for — which is precisely why the
+     bar is not merely `display:none`: a hidden box measures zero from the TOP of the
+     viewport, and the prompt would be pushed most of a screen up).
+
+     Edge to edge and squared off, like a phone's own keyboard accessory row: an inset
+     card with a radius floating above the bottom nav reads as something that might
+     scroll away, and this is the one control that never does. */
+  .composerDock {
+    left:0; right:0; bottom:0; width:auto; min-width:0; max-width:none; margin-inline:0;
+    padding:8px 10px 10px;
+    border-top:1px solid var(--canvas-brain-border);
+    background:var(--canvas-brain-surface);
+    box-shadow:0 -10px 34px var(--canvas-shadow);
+  }
+  /* The drag handle and the float/dock control are desktop affordances: there is
+     nowhere on a 360px screen to drag a full-width card TO, and no Brain panel beside
+     the board to dock it into. Closing stays — it is the way to see the whole surface. */
+  .composerDock .dragHandle { display:none; }
+  .composerActionsTrigger { display:grid; }
+  .composerIntent { min-height:44px; }
+  .composerIntentSegment { height:40px; padding:0 12px 0 10px; font-size:13px; }
   .composer { --prompt-panel-action-gap:4px; }
   .scopeChip { min-width:48px; max-width:110px; flex:1 1 84px; padding:4px 5px; overflow:hidden; }
   .scopeChip select { width:100%; max-width:none; }
@@ -3239,14 +3468,43 @@
   .iconButton { width:32px; height:32px; }
   .flowWrap :global(.react-flow__minimap) { display:none; }
   .flowWrap :global(.react-flow__controls) { display:none; }
-  /* A phone has no side to choose and no room to drag, so the docked placement
-     collapses to one sheet that sits ABOVE the prompt — the prompt keeps the bottom
-     edge. An inline Brain needs nothing here:it is an Object, and Objects already
-     size themselves to the board. */
-  .brainDock { top:auto; left:0; right:0; bottom:var(--composer-space); width:auto; height:min(58%, 420px); max-height:none; border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-left:0; border-right:0; border-bottom:0; box-shadow:0 -10px 34px var(--canvas-shadow); }
-  .brainDock[data-size='expanded'] { height:72%; }
+  /* BRAIN NEVER COVERS THE SURFACE UNINVITED, and on a phone that means a SHEET with a
+     declared top and bottom rather than a card with a height.
+
+     `height: min(58%, 420px)` was the bug: 58% of a 640px viewport is 371px of
+     conversation starting wherever the arithmetic put it — over the surface's heading on
+     a short screen, three lines tall on a tall one, and in neither case related to what
+     was above it. The sheet now starts UNDER the app bar and the surface strip
+     (`--canvas-top-chrome-space`, measured) and ends ON the composer
+     (`--composer-space`, measured), so the two things a reader must keep — which canvas
+     this is, and the box they type in — are never underneath it. `[data-size]` goes with
+     the height: a sheet between two measured edges has one size.
+
+     An inline Brain needs nothing here: it is an Object, and Objects already size
+     themselves to the board. */
+  .brainDock {
+    top:calc(var(--canvas-top-chrome-space) + 8px);
+    left:0; right:0; bottom:var(--composer-space);
+    width:auto; height:auto; max-height:none;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    border-left:0; border-right:0; border-bottom:0;
+    box-shadow:0 -10px 34px var(--canvas-shadow);
+  }
   .brainDockActions button[data-dock-side] { display:none; }
   .brainDockResizer { display:none; }
+  .brainDockGrabber { display:grid; }
+  /* The veil stops at the app bar, deliberately: the bar and the strip stay LIVE, so a
+     reader who opened the conversation can still leave the canvas or change surface
+     without dismissing it first. Tapping the veil closes the sheet, which is the gesture
+     a bottom sheet already teaches. */
+  .canvasSheetVeil { display:block; top:var(--canvas-top-chrome-space); bottom:var(--composer-space); }
+  /* Centred above the composer rather than pinned to a corner: it carries a COUNT now,
+     which is an announcement and not a corner affordance. */
+  .brainDockLauncher[data-side='left'],
+  .brainDockLauncher[data-side='right'] {
+    left:50%; right:auto; transform:translateX(-50%);
+    min-height:44px; padding:0 16px 0 10px; font-size:13px;
+  }
   .canvasOutline { left:8px; right:8px; width:auto; max-height:min(46%,300px); }
   /* The bottom sheet claims no side (the side insets zero out with the dock width
      above), so a surface that has taken the centre gives up the bottom edge instead. */
@@ -3276,51 +3534,12 @@
   .chatSurfaceHeader { padding:10px 12px 8px; }
   .chatSurfaceBody { padding:0 2px 0 54px; }
   .chatSurfaceFooter { padding:4px 12px 8px; }
-  /* ── ONE rail, not two ────────────────────────────────────────────────────────
-     The phone used to carry two floating toolbars down its left edge: the "add to
-     canvas" toggle alone at the top-left, and the view commands stacked at the
-     bottom-left. Two bars on one edge, with nothing saying why the add button was
-     not part of the set — and, on a short screen, one of them regularly landing
-     under the Brain sheet.
-
-     The wrapper takes over the box the column used to draw (the border, the radius,
-     the shadow, the scroll) and the toggle becomes its first command. So there is
-     exactly one rail, `+` is at the top of it where a create action belongs, and
-     both members give up their own chrome to it.
-
-     It grows upward from above the prompt. `--composer-space` is measured (see
-     `useComposerSpace`), so the execution chip that appears in the prompt's utility
-     row pushes the rail up instead of landing on its last two commands. The cap is
-     the other half: a rail with every command on it is ~10 buttons tall, and on a
-     short phone in landscape that ran off the top of the board with no way to reach
-     what had gone. */
-  .boardRail { position:absolute; z-index:13; left:10px; bottom:calc(var(--composer-space) + 8px); display:flex; flex-direction:column; max-height:calc(100% - var(--composer-space) - 68px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
-  /* …cut to a whole number of commands. The plain cap above lands wherever the
-     arithmetic falls, which on most phones is halfway through a button — and a rail
-     ending in half a glyph reads as broken chrome rather than as "there is more below".
-     Progressive enhancement on purpose: a browser without `round()` drops this line and
-     keeps the cap above, so nothing is ever unreachable either way. */
-  .boardRail { max-height:round(down, calc(100% - var(--composer-space) - 68px), 38px); }
-  /* A transparent sub-group inside the rail rather than `display:contents`, because it
-     carries `role="group"` and a name — and an element whose box is removed is an
-     element some assistive tech stops announcing. It inherits the rail's direction, so
-     the whole thing still lies down in a row when the Brain sheet takes the bottom. */
-  .mobileCanvasActions { display:flex; flex-direction:inherit; min-width:0; min-height:0; }
-  .boardRail button { flex:none; width:38px; height:38px; display:grid; place-items:center; padding:0; border:0; border-bottom:1px solid var(--canvas-line); border-radius:0; background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:none; cursor:pointer; }
-  /* One drawn size for every command on the rail. Without it each icon fills the
-     whole 38px cell, which is what made Files and the accessible outline tower
-     over the zoom controls. */
-  .boardRail button > svg { display:block; width:17px; height:17px; }
-  .boardRail button:last-child { border-bottom:0; }
-  /* Same rule as the desktop rail, applied to the edge a phone actually loses:
-     the Brain sheet covers the bottom of the board, so the board's controls move
-     to the free strip at the top and lie down in a row to fit a 360px screen. */
-  .flowWrap[data-brain-open='true'] .boardRail { top:56px; bottom:auto; flex-direction:row; max-width:calc(100% - 20px); overflow-x:auto; }
-  .flowWrap[data-brain-open='true'] .boardRail button { border-bottom:0; border-right:1px solid var(--canvas-line); }
-  .flowWrap[data-brain-open='true'] .boardRail button:last-child { border-right:0; }
-  .boardRail button:hover,.boardRail button:focus-visible { background:var(--canvas-hover); outline:none; }
-  /* A mode that is ON is lit here exactly as it is on the desktop rail. */
-  .boardRail button[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-accent) 88%,#000); color:var(--text-on-accent); }
+  /* NO FLOATING RAIL. The phone's surface switcher was a column of five unlabelled
+     glyphs parked over the board's top-left corner — over the surface's own heading —
+     with a `[data-brain-open='true']` rule that laid it DOWN in a row across that
+     heading whenever the Brain sheet opened. Both the column and the flip are gone:
+     `.surfaceStrip` is a worded band under the canvas app bar, where a phone's tabs
+     belong, and it is never over the work. */
   .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; }
   .changeSetPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
   .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
@@ -3514,6 +3733,8 @@
   --canvas-line:rgba(148,163,184,.24);
   --canvas-shadow:rgba(0,0,0,.42);
   --canvas-drop-veil:rgba(114,161,255,.14);
+  /* Darker in dark: the board is already near-black, so the same 32% would not read. */
+  --canvas-veil:rgba(0,0,0,.5);
   --canvas-accent-ink:#72a1ff;
   --canvas-positive-ink:#74d8a2;
   /* The same two roles, restated once for dark: marks brighten, inks invert from
@@ -3995,7 +4216,7 @@
 }
 .diagramCanvas { width:100%; max-height:340px; font-family:var(--font-sans); }
 
-@media (max-width:760px) {
+@media (max-width:767px) {
   .documentSheet,.slideDeck,.diagramSurface { max-height:220px; }
   /* The writing surface shrinks with the reading surface, and the toolbar wraps
      rather than pushing the card past a phone-width board. */
@@ -4021,7 +4242,7 @@
 :global(html:not([data-theme='light'])) .dataGridTones span[data-tone='danger'] i { background:#ff6b7c; }
 :global(html:not([data-theme='light'])) .dataGridTones span[data-tone='info'] i { background:#6b9bff; }
 
-@media (max-width:760px) {
+@media (max-width:767px) {
   .dataGridScroll { max-height:220px; }
   .filePreview { max-height:160px; }
 }
@@ -4048,7 +4269,7 @@
 .courseWorkspace details{border:1px solid var(--border);border-radius:var(--radius-lg);margin:8px 0;background:var(--surface)}.courseWorkspace summary{display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:7px;padding:11px;cursor:pointer}.courseWorkspace summary small{color:var(--text-secondary)}
 .courseLesson{padding:0 14px 14px;border-top:1px solid var(--border)}.courseLesson strong{display:block;margin-top:12px;color:#7559ed;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.courseLesson p{margin:5px 0 10px}.courseLesson button{padding:7px 10px;border:0;border-radius:var(--radius-sm);background:#6d52ed;color:white;font-weight:700}
 .courseQuiz{margin-top:14px;padding:14px;border-radius:var(--radius-lg);background:rgba(40,199,187,.08);border:1px solid rgba(40,199,187,.25)}.courseQuiz>strong{color:#118b83}.courseQuiz>button{display:flex;width:100%;gap:8px;text-align:left;margin:6px 0;padding:8px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-primary)}.courseQuiz>button[data-selected]{border-color:#6d52ed}.courseQuiz>button span{font-weight:800;color:#6d52ed}.courseQuiz>p[role="status"]{padding:8px;border-radius:var(--radius-sm);background:rgba(221,85,95,.1)}.courseQuiz>p[data-correct]{background:rgba(40,199,187,.12)}
-@media(max-width:760px){.courseShell{min-width:0}.courseWorkspace{grid-template-columns:1fr}.courseWorkspace>nav{display:grid;grid-template-columns:repeat(2,1fr)}}
+@media(max-width:767px){.courseShell{min-width:0}.courseWorkspace{grid-template-columns:1fr}.courseWorkspace>nav{display:grid;grid-template-columns:repeat(2,1fr)}}
 
 /* ── The sales pipeline, as a kanban with swimlanes ─────────────────────────
    Stages across (columns), segments down (lanes), a deal at the intersection.
@@ -4383,7 +4604,7 @@
    never a fixed width that pushes the board past the viewport. */
 .node_erd { width:760px; }
 .node_lineage, .node_dataQuality, .node_dataContract, .node_datasource { width:420px; }
-@media (max-width:760px) {
+@media (max-width:767px) {
   .node_erd,
   .node_lineage,
   .node_dataQuality,
@@ -4431,7 +4652,7 @@
 .courseEmpty{display:grid;gap:8px;min-width:320px;max-width:100%;padding:14px;border:1px dashed var(--border);border-radius:var(--radius-lg);background:var(--bg-elevated);color:var(--text-primary)}
 .courseEmpty input{width:100%;padding:9px 10px;min-height:38px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-primary)}
 .courseEmpty p{margin:0;font-size:12px;color:var(--text-secondary)}
-@media(max-width:760px){.practiceShell{min-width:0}}
+@media(max-width:767px){.practiceShell{min-width:0}}
 .readAloudButton{display:inline-flex;gap:6px;align-items:center;align-self:flex-start;padding:6px 10px;min-height:32px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-secondary);font-size:12px}
 .learningControl{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--border-subtle)}
 .practiceEditor{display:grid;gap:6px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-elevated)}
@@ -4458,7 +4679,7 @@
 /* An annotation is a mark ON something, so its own card gets out of the way. */
 .card:has([data-annotation]){background:transparent;border-color:transparent;box-shadow:none}
 .card:has([data-annotation]) .nodeHeader{display:none}
-@media(max-width:760px){.drawingToolbar{bottom:120px;gap:4px;padding:6px}.drawingToolbar button b{display:none}.drawingWidth input{width:64px}}
+@media(max-width:767px){.drawingToolbar{bottom:120px;gap:4px;padding:6px}.drawingToolbar button b{display:none}.drawingWidth input{width:64px}}
 
 /* ── Spec-object render styles: matrix, bars, math, reference ──────────────────
    Added for the academic vocabulary and available to every registered spec set.
@@ -4498,7 +4719,7 @@
 .specReference li { padding-left:14px; color:var(--canvas-ink); font-size:8px; line-height:1.5; text-indent:-14px; overflow-wrap:anywhere; }
 .specReferenceMarker { margin-right:4px; color:var(--canvas-muted); font-variant-numeric:tabular-nums; }
 
-@media(max-width:760px){
+@media(max-width:767px){
   .specMatrix tbody th { min-width:80px; }
   .specMatrix td { min-width:72px; }
   .specBars li { grid-template-columns:minmax(40px,34%) 1fr auto; }
@@ -4531,7 +4752,7 @@
 .gateBadge[data-gate-status='warn'] { background:var(--tone-warning-bg); color:var(--tone-warning-ink); border-left-color:var(--tone-warning-mark); }
 .gateBadge[data-gate-status='block'] { background:var(--tone-danger-bg); color:var(--tone-danger-ink); border-left-color:var(--tone-danger-mark); }
 
-@media(max-width:760px){
+@media(max-width:767px){
   .gateBadge { flex-direction:column; gap:2px; }
 }
 

@@ -195,8 +195,20 @@ export {
   stallUnrecoveredInTrace,
   toolExposureInTrace,
   narratedUnadvertisedInTrace,
+  isTicketWriteTool,
 } from './brainTriage';
 export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, BrainDiagnosticsContext, ByoUnresolvedEntry, ToolExposure } from './brainTriage';
+
+// Filed vs STAFFED — did anybody end up running the work this run created? The signal
+// that reads clean on every other diagnostic while twelve tickets sit with no agent.
+export {
+  staffingSummaryInTrace,
+  formatStaffingSummary,
+  formatDispatchRefusals,
+  workFiledNotStaffedVerdict,
+  isDispatchTool,
+} from './staffingSummary';
+export type { StaffingSummary, DispatchRefusal, PersonaSubagent } from './staffingSummary';
 
 // Did the run GET ANYWHERE? Repetition / reach / effect / timing — the signals that
 // separate "every turn succeeded and nothing got done" from a real context or model
@@ -207,8 +219,12 @@ export type { RunProgress, RepeatedTarget, RepeatStreak } from './runProgress';
 
 // Live, in-flight activity — what the run is doing RIGHT NOW, so a surface can animate
 // the CURRENT step instead of only rendering settled ones.
-export { activityTarget, toolActivity, shortenTarget, describeLiveStep, midRunNotice } from './runActivity';
+export { activityTarget, toolActivity, shortenTarget, describeLiveStep, midRunNotice, formatBytes } from './runActivity';
 export type { BrainRunActivity, BrainRunPhase } from './runActivity';
+// The `composing` phase: a turn streaming a tool call's ARGUMENTS, which is invisible
+// to any indicator that only watches text deltas.
+export { createComposingActivity, toolCallArgBytes, utf8ByteLength } from './composingActivity';
+export type { ComposingActivity, ComposingSink, ComposingOptions } from './composingActivity';
 
 // Size budget for a copied triage report, so its END survives pasting.
 export { createPayloadBudget } from './transcriptBudget';
@@ -229,6 +245,12 @@ export { FailureTally, failureReason, repeatedFailureAdvisory, FAILURE_NUDGE_AT,
 // `read_file`. Exported so a host can size its own reads to the same budget.
 export { trimToolResult, MAX_TOOL_RESULT_CHARS, READ_FILE_RESULT_CHARS } from './toolResultBudget';
 export type { TrimmedToolResult, TrimOptions } from './toolResultBudget';
+// The working transcript's token budget — the figure a triage reader needs to know a
+// 90k-token prompt is the design working, not a window being outgrown.
+export { HISTORY_TOKEN_BUDGET } from './workingTranscript';
+// A stream that goes silent must END, not hang until the user presses Stop.
+export { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
+export type { IdleWatchdogOptions, IdleWatchdogReader } from './streamIdleWatchdog';
 export { stableStringify } from './stableStringify';
 export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats } from './transcriptBudget';
 
@@ -460,6 +482,18 @@ export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLe
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
 export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
 export { gatherChatDiagnostics } from './gatherChatDiagnostics';
+// The same capture as DATA — versioned, persisted with the chat, and appended to the
+// copied report so a paste carries both the prose and the machine-readable copy.
+export {
+  buildChatDiagnosticsReport,
+  formatChatDiagnosticsReportJson,
+  CHAT_DIAGNOSTICS_SCHEMA_VERSION,
+} from './chatDiagnosticsReport';
+export type {
+  ChatDiagnosticsReport,
+  ChatDiagnosticsProvenance,
+  BuildChatDiagnosticsReportInput,
+} from './chatDiagnosticsReport';
 
 // Model choice — WHICH models a surface offers, in what order, and who pays. Shared
 // by the composer `/` menu (web + webview) AND the VS Code host's QuickPick, which

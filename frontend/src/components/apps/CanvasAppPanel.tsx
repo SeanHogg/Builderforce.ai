@@ -41,7 +41,7 @@
  * the actions somebody presses all day.
  *
  * It carries no chrome class of its own, which is the same decision
- * `CanvasSessionActions variant="menu"` makes for the session actions it puts in
+ * `CanvasSessionActions variant="tiles"` makes for the session actions it puts in
  * that sheet: the host's own `button` rules dress it, so it reads as one of the
  * sheet's rows rather than as a visitor, and a different host dresses it its own
  * way without this file knowing the host exists. What it DOES declare is

@@ -40,9 +40,25 @@ describe('phaseLine', () => {
   });
 
   it('has a distinct line for every phase', () => {
-    const phases: BrainRunActivity['phase'][] = ['starting', 'thinking', 'writing', 'tool', 'awaiting', 'finishing'];
+    const phases: BrainRunActivity['phase'][] = ['starting', 'thinking', 'writing', 'composing', 'tool', 'awaiting', 'finishing'];
     const lines = phases.map((phase) => phaseLine(at({ phase, label: 'x' }), L));
     expect(new Set(lines).size).toBe(phases.length);
+  });
+
+  it('names the tool being composed AND the arguments received so far', () => {
+    // The chat #113 picture: three minutes of a 21 KB write_file call, on screen.
+    const line = phaseLine(at({ phase: 'composing', label: 'write_file', bytes: 21_600 }), L);
+    expect(line).toBe('Composing a write_file call… — 21.1 KB so far');
+  });
+
+  it('omits the size until the first fragment has been measured', () => {
+    expect(phaseLine(at({ phase: 'composing', label: 'write_file' }), L)).toBe('Composing a write_file call…');
+  });
+
+  it('composes from the caller\'s bundle, never from the English defaults', () => {
+    const de = { ...L, composing: '{tool}-Aufruf wird verfasst…', composed: ' — bisher {bytes}' };
+    expect(phaseLine(at({ phase: 'composing', label: 'write_file', bytes: 812 }), de))
+      .toBe('write_file-Aufruf wird verfasst… — bisher 812 B');
   });
 
   it('substitutes from the caller\'s bundle, never from the English defaults', () => {

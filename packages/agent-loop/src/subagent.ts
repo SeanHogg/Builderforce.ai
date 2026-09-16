@@ -34,12 +34,40 @@ export const SUBAGENT_MAX_STEPS = 8;
 export const SUBAGENT_OUTPUT_CHARS = 4000;
 
 /**
+ * WHO the child is acting AS, when the parent delegated to one of the workspace's own
+ * agents rather than to an anonymous helper.
+ *
+ * `brief` is the agent's compiled persona prompt — its role, bio, skills and personality,
+ * built by whichever surface owns that compilation. This package never builds one (it has
+ * no dependencies and no idea what a workspace is); it only decides WHERE the brief goes,
+ * which has to be decided once or the two surfaces would delegate to different Adas.
+ */
+export interface SubagentPersona {
+  name: string;
+  brief: string;
+}
+
+/**
  * The child's standing instructions. It has no ticket, no history and no pull request
  * to open: its whole job is to answer the one brief it was given, and finishing is how
  * it hands that answer back.
+ *
+ * A PERSONA goes FIRST, above the sub-agent rules. The order is the point: identity
+ * frames the work ("you are Ada, the workspace's data engineer — and here is how a
+ * sub-agent behaves"), whereas appending it would read as an afterthought the model
+ * discards once the rules have set the tone. The sub-agent rules still follow and still
+ * win on procedure: a persona changes the VOICE and the EXPERTISE, never the budget, the
+ * read-only boundary or the requirement to finish with a standalone answer.
  */
-export function subagentSystemPrompt(readOnly: boolean): string {
+export function subagentSystemPrompt(readOnly: boolean, persona?: SubagentPersona): string {
+  const identity = persona
+    ? [
+      `You are acting as ${persona.name}, one of this workspace's agents. Stay in that agent's role and voice.`,
+      persona.brief,
+    ]
+    : [];
   return [
+    ...identity,
     "You are a sub-agent. Another agent delegated ONE self-contained question to you and is blocked until you answer.",
     "You cannot see its conversation, its ticket or its plan, and it cannot see yours — it receives only your final answer, so that answer must stand alone.",
     readOnly
@@ -65,6 +93,9 @@ export interface SubagentRunArgs<T> {
   complete(args: { messages: Row[]; tools: T[]; step: number }): Promise<LoopTurnResult>;
   /** Run one of the child's tool calls. */
   dispatch(call: ParsedToolCall): Promise<LoopDispatchResult>;
+  /** Run the child AS one of the workspace's agents — its persona is prepended to the
+   *  standing instructions. Absent for an anonymous delegation, which is the default. */
+  persona?: SubagentPersona;
   /** The PARENT run's cancel signal — a cancelled run must not leave a child spending. */
   signal?: AbortSignal;
   maxSteps?: number;
@@ -94,7 +125,7 @@ export interface SubagentRunResult {
  */
 export async function runSubagent<T>(args: SubagentRunArgs<T>): Promise<SubagentRunResult> {
   const messages: Row[] = [
-    { role: "system", content: subagentSystemPrompt(args.readOnly) },
+    { role: "system", content: subagentSystemPrompt(args.readOnly, args.persona) },
     { role: "user", content: args.task },
   ];
   const ports: LoopPorts<Row> = {

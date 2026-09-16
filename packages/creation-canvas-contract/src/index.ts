@@ -122,4 +122,5 @@ export * from './creativeCapabilities';
 // Shared because the Worker route, the typed client and the panel must offer
 // the same set; see channelPlatforms.ts.
 export * from './channelPlatforms';
+export * from './verticals';
 export * from './startupListing';

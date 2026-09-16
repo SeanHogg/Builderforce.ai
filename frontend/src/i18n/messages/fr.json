@@ -257,6 +257,7 @@
     "effort_thorough": "Approfondi",
     "thinking": "Réflexion",
     "accountSettings": "Paramètres du compte",
+    "status": "Statut",
     "autoMode": "Mode automatique",
     "autoModeHint": "Approuver les actions automatiquement sans demander",
     "dictate": "Dicter",
@@ -3031,14 +3032,7 @@
       "sizeBand": "Taille d’équipe",
       "tableTitle": "Vos métriques vs cohorte",
       "footnote": "Les percentiles sont interpolés à partir de distributions de cohortes sectorielles préchargées (p10–p90). Pour les métriques où plus bas est meilleur (lead time, taux d’échec des changements, MTTR, coût), une valeur plus faible se classe plus haut.",
-      "industries": {
-        "software_saas": "Software / SaaS",
-        "fintech": "Fintech / Services financiers",
-        "ecommerce": "E-commerce / Distribution",
-        "healthtech": "Healthtech / Sciences de la vie",
-        "agency_services": "Agence / Services professionnels",
-        "enterprise_it": "Informatique d’entreprise"
-      },
+      "noCohort": "Aucune cohorte de référence n'existe encore pour {industry}. Vos valeurs sont affichées sans classement ; la distribution arrivera avec une migration de données, ou choisissez dès maintenant une cohorte existante pour comparer.",
       "sizeBands": {
         "small": "Petite (1–20)",
         "mid": "Moyenne (21–200)",
@@ -11154,6 +11148,8 @@
         "starting": "Démarrage…",
         "thinking": "Réflexion…",
         "writing": "Rédaction de la réponse…",
+        "composing": "Composition d'un appel à {tool}…",
+        "composed": " — {bytes} jusqu’ici",
         "tool": "Exécution de {tool}",
         "awaiting": "En attente de votre approbation de {tool}",
         "finishing": "Finalisation…",
@@ -11221,6 +11217,7 @@
     "tickets": {
       "none": "Aucun ticket lié pour l’instant.",
       "ringAria": "{label} : {pct}% terminé",
+      "inParent": "dans {parent}",
       "spawned": "créé ici",
       "open": "Ouvrir",
       "run": "Exécuter l’agent sur le ticket",
@@ -12176,6 +12173,10 @@
         "label": "Exiger une validation avant de terminer",
         "help": "Désactivé tant que vous ne l’activez pas. Une fois activé, un ticket n’est terminé — et sa pull request fusionnée — qu’après validation de chaque relecteur requis, et le manager relance les rôles qui la doivent encore. Un ticket que personne n’était chargé de relire ne remplit jamais la condition."
       },
+      "coordinationGate": {
+        "label": "Exiger un manager pour coordonner les tickets",
+        "help": "Désactivé sauf si vous l'activez. Lorsqu'il est désactivé, tout développeur ou agent du projet peut lancer le coordinateur de tickets, ajouter les rôles requis, affecter des participants et créer des éléments de travail. Lorsqu'il est activé, seuls les managers le peuvent — et un agent à qui l'on demande de coordonner est invité à demander à un manager de le désactiver."
+      },
       "tri": {
         "on": "Activé",
         "off": "Désactivé",
@@ -12192,6 +12193,8 @@
         "mergeWithheld": "Les fusions attendent une personne",
         "signoffRequired": "Validation requise pour terminer",
         "signoffOptional": "Aucune validation requise",
+        "coordinationGated": "Les managers coordonnent les tickets",
+        "coordinationOpen": "Toute personne du projet coordonne",
         "ceremoniesUnattended": "Peut mener des cérémonies sans personne",
         "ceremoniesNeedPeople": "Les cérémonies exigent une personne",
         "reassignGranted": "Peut réattribuer après {hours} h d’inactivité",
@@ -20574,6 +20577,8 @@
     "newSession": "Nouvelle Session",
     "add": "Ajouter",
     "moreActions": "Plus d’actions de Session",
+    "actions": "Actions",
+    "closeActions": "Fermer les actions",
     "createAndView": "Créer et afficher",
     "sessionTools": "Outils de Session",
     "selectionActions": "Actions de sélection",
@@ -20595,6 +20600,19 @@
     "share": "Inviter",
     "run": "Exécuter",
     "askBrain": "Interroger Brain sur ce canevas",
+    "composerIntent": {
+      "label": "Ce que fait Entrée",
+      "ask": {
+        "label": "Demander à Brain",
+        "placeholder": "Interroger Brain sur ce canevas",
+        "submit": "Envoyer à Brain"
+      },
+      "captureIdea": {
+        "label": "Idée",
+        "placeholder": "Notez une idée. Entrée la capture sous forme de carte ; « Demander à Brain » l’envoie à Brain.",
+        "submit": "Noter"
+      }
+    },
     "sendBrain": "Envoyer à Brain",
     "resizePrompt": "Redimensionner la zone de saisie",
     "dragHandle": "Faire glisser pour déplacer ce panneau",
@@ -20963,7 +20981,14 @@
     "diagnosticsCopyFailed": "Impossible de copier les diagnostics — le presse-papiers était indisponible",
     "diagnosticsBuildFailed": "Impossible de générer les diagnostics — {reason}",
     "brain": "Brain",
+    "brainLauncher": {
+      "unread": "{count, plural, one {# réponse de Brain} other {# réponses de Brain}}"
+    },
     "brainDock": "Chat Brain",
+    "brainSheet": {
+      "veil": "Fermer le panneau Brain et revenir au canevas",
+      "grabber": "Fermer le panneau Brain"
+    },
     "openBrainDock": "Afficher le chat Brain",
     "openBrainDockBusy": "Brain travaille — afficher le chat Brain",
     "closeBrain": "Fermer le chat Brain",
@@ -24397,14 +24422,7 @@
         "active": "Vous êtes dans Idées",
         "regionLabel": "Le bloc-notes d’idées de ce canevas",
         "heading": "Bloc-notes d’idées",
-        "lede": "Notez vos idées dès qu’elles vous viennent, puis suivez chacune de la première intuition jusqu’à quelque chose de testé. Chaque idée est une carte du tableau : Brain peut l’étudier et des entretiens clients peuvent la mettre à l’épreuve.",
-        "capture": {
-          "label": "Nouvelle idée",
-          "placeholder": "Notez une idée — une phrase suffit. La première ligne devient son titre.",
-          "submit": "Noter",
-          "hint": "Ctrl+Entrée pour noter. La note entière est conservée.",
-          "readOnly": "Vous pouvez lire ces idées, mais seuls les éditeurs peuvent ajouter du contenu à ce canevas."
-        },
+        "lede": "Notez vos idées dès qu’elles vous viennent : écrivez-en une dans le champ ci-dessous et Entrée la conserve comme carte du tableau. Suivez chacune de la première intuition jusqu’à quelque chose de testé, pour que Brain puisse l’étudier et que des entretiens clients puissent la mettre à l’épreuve.",
         "filterLabel": "Afficher les idées par étape",
         "filterAll": "Toutes les idées",
         "stageLabel": "Étape de « {idea} »",
@@ -24420,7 +24438,7 @@
         "count": "{count, plural, =0 {Aucune idée} one {# idée} other {# idées}}",
         "empty": {
           "title": "Aucune idée pour l’instant",
-          "body": "Notez la prochaine idée qui vous vient — même à moitié formée. Chacune arrive sur le tableau sous forme de carte que vous pouvez étudier, tester par des entretiens clients et rendre concrète."
+          "body": "Notez dans le champ ci-dessous la prochaine idée qui vous vient — même à moitié formée. Chacune arrive sur le tableau sous forme de carte que vous pouvez étudier, tester par des entretiens clients et rendre concrète."
         },
         "filteredEmpty": "Aucune idée à cette étape.",
         "row": {
@@ -24571,7 +24589,10 @@
     "floatPrompt": "Faire flotter le prompt sur le tableau",
     "hidePrompt": "Masquer le prompt",
     "showPrompt": "Afficher le prompt",
-    "canvasPanelControls": "Panneaux du canevas",
+    "backToLibrary": "Revenir à vos canevas",
+    "sessionStage": "Étape de la session",
+    "rosterChip": "{count, plural, one {# personne sur ce canevas} other {# personnes sur ce canevas}}",
+    "surfaceStrip": "Vues du canevas",
     "promptName": "Demander a Brain",
     "objectDescription": {
       "workflow": "Une séquence d'étapes automatisée qui exécute votre processus de bout en bout.",
@@ -31646,21 +31667,25 @@
         "scale": "Passage à l'échelle"
       },
       "sector": {
+        "ai_ml": "IA / ML",
+        "saas": "SaaS",
         "fintech": "FinTech",
         "healthtech": "HealthTech",
-        "edtech": "EdTech",
-        "ecommerce": "E-commerce",
-        "saas": "SaaS",
+        "medtech": "MedTech",
+        "biotech": "BioTech",
+        "climate_energy": "Climat et énergie",
+        "hardware_robotics": "Matériel et robotique",
+        "cybersecurity": "Cybersécurité",
         "marketplace": "Marché",
+        "ecommerce": "E-commerce",
         "consumer_apps": "Applications grand public",
         "enterprise_software": "Logiciels d'entreprise",
-        "ai_ml": "IA / ML",
+        "edtech": "EdTech",
         "blockchain": "Blockchain",
         "gaming": "Jeux vidéo",
         "media_entertainment": "Médias et divertissement",
         "real_estate": "Immobilier",
         "logistics": "Logistique",
-        "sustainability": "Développement durable",
         "other": "Autre"
       },
       "seeking": {

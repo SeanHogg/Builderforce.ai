@@ -11,9 +11,6 @@ import {
   CANVAS_SESSION_ACTIONS,
   canvasSessionActionsFor,
   canvasSessionClusters,
-  PHONE_SESSION_BAR_LIMIT,
-  phoneOverflowActions,
-  phoneSessionBarActions,
 } from '@/lib/canvasSessionActions';
 import { CANVAS_SURFACES, canvasSurfaceDefinition } from '@/lib/canvasSurfaces';
 import { canvasBarGroup } from '@/lib/canvasBarGroups';
@@ -57,28 +54,34 @@ describe('canvas session action registry', () => {
   });
 
   /**
-   * THE ONE THIS FILE EXISTS FOR. A phone used to lose undo, redo, diagnostics, the
-   * outcome scorecard and every route to the invite panel to a blanket `display:none` on
-   * a class name — five actions, none of them declared missing anywhere. Placement is
-   * data now, so "reachable on a phone" is something the registry can be asked.
+   * THE ONE THIS FILE EXISTS FOR, restated for a phone that no longer has a bar.
+   *
+   * A phone used to lose undo, redo, diagnostics, the outcome scorecard and every route
+   * to the invite panel to a blanket `display:none` on a class name — five actions, none
+   * of them declared missing anywhere. The first fix declared PLACEMENT as data
+   * (`phone: 'bar' | 'menu'`) and asserted the two halves were complements.
+   *
+   * The second fix removed the question. There is no phone command bar to split a list
+   * across: the composer's "+" opens ONE sheet built from this registry. So the property
+   * to guard is no longer "the two sets are complements" but the simpler one underneath
+   * it — every action a surface offers is reachable, from one place, with a name. The
+   * rendered half of that is in `the session actions on the canvas` below.
    */
-  it('leaves no action unreachable on a phone', () => {
-    const bar = phoneSessionBarActions().map((def) => def.id);
-    const menu = phoneOverflowActions().map((def) => def.id);
-
-    // Complements: no action in both (two controls for one thing) and none in neither.
-    expect(bar.filter((id) => menu.includes(id))).toEqual([]);
-    expect([...bar, ...menu].sort()).toEqual(CANVAS_SESSION_ACTIONS.map((def) => def.id).sort());
-
-    // A phone session bar is a title, an overflow button and a save button before any of
-    // these are added. Past two, the title is what gets squeezed out — which is the one
-    // thing in the bar that says which canvas you are on.
-    expect(bar.length).toBeLessThanOrEqual(PHONE_SESSION_BAR_LIMIT);
-    // Undo keeps a slot on purpose: a fat-fingered drag on a touch board is the likeliest
-    // thing to need taking back, and burying the cure two taps deep makes a canvas feel
-    // unsafe to touch. Full screen keeps the other: a small screen is where trading app
-    // chrome for board is worth the most.
-    expect(bar).toEqual(['undo', 'fullscreen']);
+  it('offers every action a surface can answer, with nothing filed as unreachable', () => {
+    for (const surface of CANVAS_SURFACES) {
+      const offered = canvasSessionActionsFor(surface.id);
+      // No duplicates: one entry per action, so a sheet built from this cannot draw one
+      // command twice.
+      expect(new Set(offered.map((def) => def.id)).size).toBe(offered.length);
+      // Every one of them is NAMED — the phone sheet words every tile, and a tile whose
+      // label resolved to a dotted key is a tile nobody can read.
+      for (const def of offered) expect(typeof canvasCopy(def.labelKey)).toBe('string');
+    }
+    // Nothing carries a placement axis any more; the field is gone from the type, and
+    // this is the guard that it does not creep back as an untyped property.
+    for (const def of CANVAS_SESSION_ACTIONS) {
+      expect(def).not.toHaveProperty('phone');
+    }
   });
 
   /**
@@ -139,19 +142,6 @@ describe('canvas session action registry', () => {
         if (action.needs === 'objects') expect(def.showsObjects).toBe(true);
         if (action.needs === 'board') expect(def.showsBoard).toBe(true);
       }
-    }
-  });
-
-  /** The phone split has to survive the filter: an action hidden on this surface must
-   *  not still be counted against the two-button budget, and one that IS shown must
-   *  still land in exactly one of bar or sheet. */
-  it('keeps the phone bar and the overflow sheet complementary on every surface', () => {
-    for (const surface of CANVAS_SURFACES) {
-      const bar = phoneSessionBarActions(surface.id).map((def) => def.id);
-      const menu = phoneOverflowActions(surface.id).map((def) => def.id);
-      expect(bar.filter((id) => menu.includes(id))).toEqual([]);
-      expect([...bar, ...menu].sort()).toEqual(canvasSessionActionsFor(surface.id).map((def) => def.id).sort());
-      expect(bar.length).toBeLessThanOrEqual(PHONE_SESSION_BAR_LIMIT);
     }
   });
 
@@ -223,35 +213,59 @@ describe('the session actions on the canvas', () => {
   });
 
   /**
-   * The phone's route to everything the bar had no room for. This is the assertion that
-   * would have failed before the registry: the sheet listed templates, drawing and Miro,
-   * and not one of the five actions the phone breakpoint had just hidden.
+   * THE PHONE'S COMMAND BAR, AS ONE SHEET.
+   *
+   * This used to assert "the ••• sheet carries exactly the complement of the phone bar",
+   * which was the right guard while a 360px bar held two buttons and the sheet held the
+   * rest. There is no phone bar now — the composer's "+" opens this sheet, and the
+   * property worth guarding is the stronger one: EVERY action the surface offers is in
+   * it, including the doors out and the roster's Share, which the old overflow
+   * deliberately excluded because they had a second home on the bar.
+   *
+   * It is rendered by opening the trigger directly rather than at a phone width, because
+   * jsdom has no viewport: `usePhoneViewport` answers `false` here, which is exactly the
+   * desktop arrangement, and the sheet is the same component either way.
    */
-  it('carries every phone-overflow action in the ••• sheet', () => {
-    render(<CreationCanvas sessionId="session-actions-overflow-test" persistence="local" />);
+  it('carries every registry action for the surface in the actions sheet', () => {
+    render(<CreationCanvas sessionId="session-actions-sheet-test" persistence="local" />);
 
-    // Several overflow actions (`run`, `outcomes`) declare `needs: 'objects'` and the bar
-    // hides them via a runtime `available` handler until the canvas actually holds one — a
-    // fresh, empty canvas is exactly the state those actions are NOT available in, which is
-    // a different question from whether the surface can carry objects at all.
+    // Several actions (`run`, `outcomes`, `prove`) declare `needs: 'objects'` and the
+    // host withdraws them at runtime until the canvas actually holds one — a different
+    // question from whether the surface can carry objects at all.
     fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
     fireEvent.click(screen.getByTestId('canvas-picker-task'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+    fireEvent.click(screen.getByTestId('canvas-actions-trigger'));
+    const sheet = screen.getByTestId('canvas-actions-sheet');
 
-    const sheet = screen.getByTestId('canvas-more-menu');
-    // The DOORS are excluded, and that is the point of the exclusion: `Make it real` is a
-    // worded button, not a `data-phone` glyph the breakpoint stands down, so its menu
-    // survives on a phone — and repeating Publish in this sheet would be one decision
-    // with two homes on the one screen size where that costs the most.
-    for (const def of phoneOverflowActions().filter((action) => action.chrome !== 'door')) {
+    for (const def of canvasSessionActionsFor('graph')) {
       const label = canvasCopy(def.labelKey) as string;
-      expect(within(sheet).getByRole('button', { name: label })).toBeInTheDocument();
+      expect(within(sheet).getByRole('button', { name: label }), def.id).toBeInTheDocument();
     }
-    expect(within(sheet).queryByRole('button', { name: 'Publish' })).toBeNull();
-    expect(within(sheet).queryByRole('button', { name: 'Prove it' })).toBeNull();
-    // Sanity: the sheet carries the overflow, not a second copy of the whole bar.
-    expect(within(sheet).queryByRole('button', { name: 'Undo canvas change' })).toBeNull();
+    // The doors out are IN it — they were the one thing the old overflow left out,
+    // because they had a worded button of their own on a bar a phone no longer draws.
+    expect(within(sheet).getByRole('button', { name: 'Publish' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Prove it' })).toBeInTheDocument();
+    // …under the SAME arc captions the desktop bar uses, resolved by the same component,
+    // so the two chromes cannot drift into two vocabularies for one set of groups.
+    expect(within(sheet).getByRole('group', { name: 'Make — shape what is on the board' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('group', { name: 'This board' })).toBeInTheDocument();
+  });
+
+  /** A sheet is responsible for being closable — from its own header and on Escape.
+   *  Both come from being a `CanvasMenuSheet`, which is why the actions sheet gets them
+   *  by construction rather than by remembering to add them. */
+  it('closes the actions sheet from its header and on Escape', () => {
+    render(<CreationCanvas sessionId="session-actions-sheet-close-test" persistence="local" />);
+
+    fireEvent.click(screen.getByTestId('canvas-actions-trigger'));
+    fireEvent.click(within(screen.getByTestId('canvas-actions-sheet')).getByRole('button', { name: 'Close Actions' }));
+    expect(screen.queryByTestId('canvas-actions-sheet')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('canvas-actions-trigger'));
+    expect(screen.getByTestId('canvas-actions-sheet')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('canvas-actions-sheet')).toBeNull();
   });
 
   /**
@@ -345,16 +359,17 @@ describe('the session actions on the canvas', () => {
 
 describe('the board rail', () => {
   /**
-   * MOVING AROUND THE BOARD IS NOT ON THE RAIL ANY MORE.
+   * MOVING AROUND THE BOARD IS NOT ON THE RAIL ANY MORE — and neither is the rail.
    *
    * Zoom, fit and arrange moved into the one command bar, which is where "what can I do
    * to this canvas" lives. "Add to canvas" used to float as a second, top-left toggle on
    * the rail — a second door onto the exact same picker the bar's own button already
    * opens — which is the split this seam exists to prevent, so that toggle is gone and
-   * the bar's button is the ONE way in. The rail keeps only what the bar does not carry:
-   * the phone's surface switcher and the panels.
+   * the bar's button is the ONE way in. The last thing on the rail was the phone's surface
+   * switcher, and that is a worded STRIP under the canvas app bar now — so there is no
+   * floating rail left at any width.
    */
-  it('gives add-to-canvas to the bar and the view commands to the board menu, leaving the rail its panels', () => {
+  it('gives add-to-canvas to the bar and the view commands to the board menu, and keeps no floating rail', () => {
     render(<CreationCanvas sessionId="board-rail-test" persistence="local" />);
 
     // ONE door onto the palette, and it is on the bar, leading Idea.
@@ -379,6 +394,10 @@ describe('the board rail', () => {
     fireEvent.click(within(tools).getByRole('button', { name: 'Zoom in' }));
     expect(screen.getByTestId('canvas-more-menu')).toBeInTheDocument();
 
-    expect(screen.getByRole('group', { name: 'Canvas panels' })).toBeInTheDocument();
+    // WHAT IS LEFT WHERE THE RAIL WAS: nothing. The phone's surface switcher was the
+    // last thing on it — an icon column over the board's own heading — and it is a
+    // worded strip under the canvas app bar now, in its own band.
+    expect(screen.queryByRole('group', { name: 'Canvas panels' })).toBeNull();
+    expect(screen.getByTestId('canvas-surface-strip')).toBeInTheDocument();
   });
 });

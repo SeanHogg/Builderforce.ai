@@ -134,6 +134,7 @@ describe('runCreationCanvasAi', () => {
     const guest = await promptOf('local');
     expect(guest).not.toContain('canvas_read_project_prds');
     expect(guest).not.toContain('canvas_create_project_prd');
+    expect(guest).not.toContain('canvas_add_inbox');
     // …and the anonymous block must not deny a capability the board now has.
     expect(guest).not.toContain('connected social accounts, canonical project PRDs');
   });
@@ -153,6 +154,29 @@ describe('runCreationCanvasAi', () => {
       // The one genuine limitation, kept distinct from the supported half.
       expect(prompt).toContain('BRAND-NEW account on a social network is the one thing you cannot do');
     }
+  });
+
+  /**
+   * PRD 30 C0. "I want to run a marketing campaign" was answered with a portfolio
+   * table (catalog `marketing.campaigns.list`) or a bare refusal. The journey is
+   * unconditional and names only guest-safe `canvas_add_object`; inbox connect is
+   * account-required and stays on the tenant branch.
+   */
+  it('walks a marketing campaign as a run on BOTH surfaces, never as a portfolio table', async () => {
+    for (const persistence of ['local', 'server'] as const) {
+      const prompt = await promptOf(persistence);
+      expect(prompt).toContain('A request to run, launch, start or send a marketing campaign is a RUN, not a portfolio table');
+      expect(prompt).toContain('Never tell the user to use a competing marketing platform');
+      expect(prompt).toContain('author the emailCampaign (and emailTemplate) with canvas_add_object');
+    }
+  });
+
+  it('names canvas_add_inbox only on a tenant board', async () => {
+    const tenant = await promptOf('server');
+    expect(tenant).toContain('canvas_add_inbox');
+    expect(tenant).toContain('Growth → Mailboxes');
+    const guest = await promptOf('local');
+    expect(guest).not.toContain('canvas_add_inbox');
   });
 
   it('recovers a prose-only selected Website refinement and executes the update', async () => {

@@ -49,6 +49,11 @@ export const spawnAgentTool: ToolDefinition = defineTool({
         description:
           `What kind of call the child's turns are — lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'explore' when read_only, else 'code'. ${ROLE_ENUM_DESCRIPTION}`,
       },
+      as_agent: {
+        type: "string",
+        description:
+          "Run the child AS one of the workspace's agents — its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine.",
+      },
     },
     required: ["label", "task"],
   },
@@ -62,11 +67,15 @@ export const spawnAgentTool: ToolDefinition = defineTool({
     // which is what delegation is for. Only an explicit `false` widens it.
     const readOnly = args.read_only !== false;
     const role = delegationRole(args.role, readOnly);
+    // An empty `as_agent` is an anonymous delegation, not a request for an agent
+    // named "" — so it is dropped rather than sent for the surface to fail to resolve.
+    const asAgent = str(args.as_agent);
     const r = (await ctx.caps.orchestration!.spawn({
       label: label || task.slice(0, 60),
       task,
       readOnly,
       role,
+      ...(asAgent ? { asAgent } : {}),
     })) as SubagentResult;
     return { data: r as unknown as Record<string, unknown>, ...(r.ok ? {} : { isError: true }) };
   },

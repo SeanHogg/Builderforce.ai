@@ -2322,7 +2322,15 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
   if (!surface || !surface.open || surface.mode !== 'inline') {
     // No handler while presenting: nothing can reveal Brain there, and an anchor that
     // offers a way in and then does nothing is worse than an anchor that stays quiet.
-    return <BrainAnchorBody data={data} onOpen={surface?.canOpen ? () => surface.onOpen(nodeId) : undefined} />;
+    return <BrainAnchorBody
+      data={data}
+      // Replies that landed while this conversation was not on screen. The docked
+      // launcher pill wears the same number from the same count — published on the
+      // surface context (`useBrainUnreadReplies`) rather than counted twice, because two
+      // answers to "did anything arrive" drift the first time either changes.
+      unread={surface?.unreadReplies ?? 0}
+      onOpen={surface?.canOpen ? () => surface.onOpen(nodeId) : undefined}
+    />;
   }
 
   return (
@@ -2528,8 +2536,9 @@ function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () 
  * newest exchange scrolled into view, since the anchor is short and the reply that
  * just landed is the only one worth reading.
  */
-function BrainAnchorBody({ data, onOpen }: { data: CreationNodeData; onOpen?: () => void }) {
+function BrainAnchorBody({ data, unread = 0, onOpen }: { data: CreationNodeData; unread?: number; onOpen?: () => void }) {
   const t = useTranslations('creationCanvas.node');
+  const tCanvas = useTranslations('creationCanvas');
   const messages = canvasChatMessages(data);
   const lastUser = [...messages].reverse().find((message) => message.role === 'user');
   const lastAssistant = [...messages].reverse().find((message) => message.role !== 'user');
@@ -2556,7 +2565,10 @@ function BrainAnchorBody({ data, onOpen }: { data: CreationNodeData; onOpen?: ()
       <span ref={latestRef}><small>{t('brainAnchorBrain')}</small><p>{brainText}</p></span>
     </div>
     <BrainActivityBar state={activity} variant="inline" />
-    {onOpen && <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen(); }}>{t('openBrainChat')}</button></div>}
+    {/* The way in NAMES what is waiting when something is. "Open Brain chat" beside a
+        badge would be the control naming itself twice, so the count replaces the word —
+        exactly as the docked launcher pill does it, from the same string. */}
+    {onOpen && <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" data-unread={unread > 0 ? 'true' : 'false'} onClick={(event) => { event.stopPropagation(); onOpen(); }}>{unread > 0 ? tCanvas('brainLauncher.unread', { count: unread }) : t('openBrainChat')}</button></div>}
   </div>;
 }
 

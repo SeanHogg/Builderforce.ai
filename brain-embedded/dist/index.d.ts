@@ -33,6 +33,14 @@ interface BrainChat {
     mode?: string | null;
     createdAt: string;
     updatedAt: string;
+    /**
+     * Linked-ticket rollup from GET /api/brain/chats. Present when the chat has
+     * at least one linked work item; used by the conversation picker so a chat
+     * that still has open tickets reads as `67% · title` instead of title-only.
+     * Absent on older servers.
+     */
+    ticketCount?: number;
+    ticketProgressPct?: number | null;
 }
 /**
  * Truthful, server-reported outcome of the project-Evermind LEARN gate for a
@@ -427,6 +435,13 @@ interface StreamChatOptions {
      * byte-identical to a pre-feature request (same discipline as `reasoning`).
      */
     metadata?: CompletionMetadata;
+    /**
+     * Silence (zero bytes read) that ends this stream, defaulting to
+     * {@link STREAM_IDLE_MS}. A stalled upstream never settles its `read()`, so without
+     * this a dead turn hangs until the user presses Stop. Overridden only by tests,
+     * which cannot wait four minutes to prove it.
+     */
+    idleTimeoutMs?: number;
     signal?: AbortSignal;
     /** Auth + endpoint. Injected by BrainProvider; callers via the hook never set this directly. */
     transport: BrainTransport;
@@ -1468,6 +1483,7 @@ declare function chatConversationDirective(): string;
  */
 declare function chatWorkDirective(chatId: number, opts?: {
     canEditHere?: boolean;
+    canDelegate?: boolean;
 }): string;
 /**
  * The system-prompt block for a mode. This is the ONE place a mode becomes model-facing
@@ -1476,6 +1492,7 @@ declare function chatWorkDirective(chatId: number, opts?: {
  */
 declare function chatModeDirective(mode: ChatMode, chatId: number, opts?: {
     canEditHere?: boolean;
+    canDelegate?: boolean;
 }): string;
 
 /** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
@@ -1893,6 +1910,14 @@ interface ModelTurn {
     /** Present when the vendor reported its raw response (Responses vendors). */
     upstreamFunctionCalls?: number;
     upstreamRecovered?: number;
+    /**
+     * UTF-8 bytes of tool-call ARGUMENTS the turn emitted. The missing half of a long
+     * turn: `16. xai-oauth/grok-4.6 · 1 tool call(s) · 202509ms` gave no clue that those
+     * 202 seconds were a 21 KB `write_file` call being streamed a fragment at a time.
+     */
+    argBytes?: number;
+    /** Completion tokens the gateway reported for the turn — the other reason a turn is long. */
+    completionTokens?: number;
     durationMs?: number;
     /** Completions that failed outright. */
     failed?: boolean;
@@ -1910,6 +1935,94 @@ declare function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[];
  * run is attributable without counting.
  */
 declare function formatModelTurnLog(turns: ModelTurn[]): string[];
+
+/**
+ * staffingSummary — "work was filed; is anybody actually running it?"
+ *
+ * Measured on chat #113: a Work-mode run made 141 tool calls, filed 12 tickets
+ * (epics + tasks) and staffed NOBODY. Its `kanban.coordinate`,
+ * `kanban.materialize_work_items` and `kanban.assess_resource` calls all came back
+ * `403 manager role required`, nothing compensated, and every other diagnostic signal
+ * read clean — no exhaustion, no truncation, no narrated calls, tokens fine. The report
+ * a user copied said the run was healthy, because by every signal we measured it was:
+ * twelve successful creates and a wall of green tool steps.
+ *
+ * The missing fact is structural, not statistical: filing work and STARTING it are two
+ * different outcomes, and a report that counts tool calls cannot tell them apart. This
+ * module counts the second one — how many dispatch/coordination attempts were made, how
+ * many of them actually put someone on the work, which ones were refused and why, and
+ * whether any slice the Brain did itself was done in a real team agent's persona (a
+ * `spawn_agent` carrying `as_agent`). From those four numbers the verdict falls out:
+ * a ticket with nobody on it has not started, however many calls it took to create.
+ *
+ * Pure over the recorded trace, like the rest of `brainTriage`, so the web report, the
+ * VS Code transcript and the persisted JSON report all state the same thing.
+ */
+
+/** True when this tool call was an attempt to put somebody on the work. */
+declare function isDispatchTool(label: string): boolean;
+/** One `spawn_agent` delegation that ran in a named team agent's persona. */
+interface PersonaSubagent {
+    /** The agent the parent asked for, exactly as it passed it (`as_agent`). */
+    agent: string;
+    /** The delegation's own label, so a reader can see WHAT that persona was given. */
+    label: string;
+    /** Whether the child came back with an answer. */
+    ok: boolean;
+}
+/** One refused staffing attempt: which tool, and the reason it gave. */
+interface DispatchRefusal {
+    label: string;
+    message: string;
+}
+/**
+ * What this run FILED versus what it STAFFED. Every field is a count of observed trace
+ * steps — nothing here is inferred from prose.
+ */
+interface StaffingSummary {
+    /**
+     * Board work items this run filed — created or linked. Counted with the SAME predicate
+     * {@link isTicketWriteTool} that the unbacked-ticket-claim honesty check uses, so
+     * "what counts as filing work" is one list in one place rather than two that drift.
+     * (An Epic is a `tasks.create` with `taskType: "epic"`, so it is counted here too.)
+     */
+    ticketsCreated: number;
+    /** Calls that tried to put somebody on work — see {@link isDispatchTool}. */
+    dispatchAttempts: number;
+    /** Of those, the ones that actually did: no error, and any `autoRun.dispatched` true. */
+    dispatched: number;
+    /** The refused ones, with the reason each gave (this is where `403 manager role required` lands). */
+    dispatchRefusals: DispatchRefusal[];
+    /** Delegations carrying `as_agent` — work the Brain did HERE, in a team agent's persona. */
+    personaSubagents: PersonaSubagent[];
+    /**
+     * The one-word answer:
+     *  - `no-work-filed`     — nothing was filed and nothing was staffed; there is no gap.
+     *  - `staffed`           — somebody (or some persona) is on the work.
+     *  - `filed-not-staffed` — work exists, and nobody was even ASKED to run it.
+     *  - `staffing-refused`  — somebody was asked and the platform said no.
+     */
+    verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'staffing-refused';
+}
+/** Derive the staffing picture from a recorded trace. Pure — no clock, no I/O. */
+declare function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSummary;
+/**
+ * The refusals, grouped by reason with counts — "manager role required ×5" rather than
+ * the same sentence printed five times. Five identical refusals are ONE fact about the
+ * run, and spelling them out individually buries it.
+ */
+declare function formatDispatchRefusals(refusals: readonly DispatchRefusal[]): string;
+/**
+ * The "Likely cause" sentence for a run that filed work and staffed nobody. Lives here,
+ * beside the numbers it quotes, so `brainTriage` reaches it in one call rather than
+ * growing a second copy of this reasoning.
+ */
+declare function workFiledNotStaffedVerdict(s: StaffingSummary): string;
+/**
+ * Render the staffing picture as report lines (empty when the run neither filed nor
+ * staffed anything — a plain question does not need a staffing paragraph).
+ */
+declare function formatStaffingSummary(s: StaffingSummary): string[];
 
 /**
  * What the run is doing RIGHT NOW — the live activity value.
@@ -1934,6 +2047,12 @@ declare function formatModelTurnLog(turns: ModelTurn[]): string[];
  * - `thinking`  — a completion is open and no token has arrived (this is the
  *                 phase that used to look identical to a hang).
  * - `writing`   — tokens are streaming; the reply is visibly forming.
+ * - `composing` — the model is emitting a TOOL CALL's arguments; `label` is the tool
+ *                 name and `bytes` the argument bytes received so far. The run loop
+ *                 only ever watched text deltas, so a turn that streamed a 21 KB
+ *                 `write_file` call showed "streaming the reply" and then nothing at
+ *                 all for three minutes (chat #113) — indistinguishable from a hang
+ *                 while the model was in fact working the whole time.
  * - `tool`      — a tool call is executing. Carries which one and on what.
  * - `awaiting`  — paused on a human-in-the-loop confirm; the loop cannot advance
  *                 until the user answers, so this must NOT read as "busy".
@@ -1941,12 +2060,18 @@ declare function formatModelTurnLog(turns: ModelTurn[]): string[];
  *                 (minting the ticket for a code change, advancing linked tickets).
  *                 Real calls that take real time, and previously showed nothing.
  */
-type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'tool' | 'awaiting' | 'finishing';
+type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'composing' | 'tool' | 'awaiting' | 'finishing';
 /** A live, in-flight step. `null` on the snapshot means the run is idle. */
 interface BrainRunActivity {
     phase: BrainRunPhase;
-    /** The tool being executed (`tool` / `awaiting` phases only). */
+    /** The tool being executed or composed (`composing` / `tool` / `awaiting` phases). */
     label?: string;
+    /**
+     * Bytes of tool-call ARGUMENTS received so far (`composing` phase only). The one
+     * number that separates "the model is writing a large file" from "the stream died":
+     * it climbs, visibly, for every second the phase lasts.
+     */
+    bytes?: number;
     /**
      * The concrete THING being worked on, derived from the call's arguments — a
      * file path, a search query, a record id. "Reading LandingCanvasHero.module.css"
@@ -1971,6 +2096,13 @@ declare function shortenTarget(value: string, max?: number): string;
 declare function activityTarget(args: unknown): string | undefined;
 /** Build the live activity for a tool step about to execute. */
 declare function toolActivity(label: string, args: unknown, step: number, startedAt: number): BrainRunActivity;
+/**
+ * Human-readable byte size — `812 B`, `12.4 KB`. THE size formatter for this package:
+ * the triage report's tool-result sizes, the turn log's argument bytes and the live
+ * composing indicator all render a size the same way, so a reader who learns to read
+ * "21.1 KB" in one place reads the same number in the other two.
+ */
+declare function formatBytes(bytes: number): string;
 /**
  * One English clause describing an in-flight step, for a copied triage report —
  * "running `search_code` on frontend/src (67s so far, loop step 4)".
@@ -2081,6 +2213,9 @@ declare function isFailedToolResult(result: unknown): boolean;
 /** THE honesty-flag lines, shared by every copy surface so they cannot drift apart. */
 declare const UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
 declare const UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
+/** Did this tool call FILE board work (create or link)? THE predicate — the honesty check
+ *  below and `staffingSummary.ts` both read it, so "what counts as filing work" is one list. */
+declare function isTicketWriteTool(label: string): boolean;
 /**
  * Structural honesty check for the "it said it updated the file but didn't" failure:
  * an assistant message that CLAIMS a file/attachment write while NO file-write tool
@@ -2258,8 +2393,9 @@ interface BrainDiagnostics {
     lastPromptTokens: number;
     /** Total bytes of tool results returned this run (pre-trim). */
     toolResultBytes: number;
-    /** Count of tool results that were truncated before hitting the model — LOSSY cuts
-     *  only; a paged `read_file` window is counted in {@link pagedReadWindows}. */
+    /** Count of tool results trimmed to the per-result budget before hitting the model —
+     *  LOSSY cuts only; a paged `read_file` window is counted in {@link pagedReadWindows}.
+     *  A trim is the budget WORKING: it is evidence of pressure, never of a failure. */
     truncatedToolResults: number;
     /** `read_file` results handed over as one window of a larger file, with the offset
      *  that continues it. The budget working as designed, not lost context. */
@@ -2344,6 +2480,20 @@ interface BrainDiagnostics {
      */
     progress: RunProgress;
     /**
+     * The run showed context PRESSURE (a big prompt, trimmed tool results) but nothing was
+     * cut short by it — no truncated turn, no downgrade, no exhausted loop, no failed
+     * completion. Reported as an advisory line so the numbers are still visible, while the
+     * verdict stays whatever the rest of the run says (usually `healthy`).
+     */
+    contextPressureOnly: boolean;
+    /**
+     * What this run FILED versus what it STAFFED — see `staffingSummary.ts`. The signal
+     * that separates "twelve tickets and a hundred green tool calls" from "somebody is
+     * actually working on it": every other field here can read clean on a run that left
+     * every ticket it created with nobody on it.
+     */
+    staffing: StaffingSummary;
+    /**
      * Best-effort verdict — the header a triager reads first. `healthy` is distinct
      * from `inconclusive`: the former means there is no failure to explain, the
      * latter that there IS one but the signals don't separate A from B. Collapsing
@@ -2361,8 +2511,12 @@ interface BrainDiagnostics {
      * prompt peak and truncated tool results, so the context signals fire — but they are a
      * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
      * changes nothing. The loop has to be named first or it is never seen.
+     *
+     * `work-filed-not-staffed` sits LAST among the causes, above only `healthy`/`inconclusive`:
+     * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
+     * model fault or narrated-call failure explains the missing dispatch better and outranks it.
      */
-    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
+    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
@@ -3127,6 +3281,79 @@ declare function installRunDriver(driver: BrainRunDriver | null): void;
 declare function getRunDriver(): BrainRunDriver | null;
 
 /**
+ * The `composing` phase — a turn that is streaming a TOOL CALL, made visible.
+ *
+ * The run loop published its live phase off text deltas alone. A turn that emits no
+ * prose and one large tool call therefore showed nothing: chat #113 streamed
+ * "Writing the Advisor Platform PRD and filing the epic now." and then sat on
+ * "streaming the reply" for 3m 23s while the model pushed 21 KB of `write_file`
+ * arguments down the wire. Every byte of that was progress, and none of it was on
+ * screen — the one failure mode that makes a working agent indistinguishable from a
+ * wedged one.
+ *
+ * This module owns the whole of that behaviour: a factory that builds the
+ * `onToolCallDelta` member of `StreamHandlers` for one turn. It lives here rather
+ * than in `brainRunStore.ts` because that file is already ~2,700 lines, and because a
+ * pure fold over deltas is testable in isolation while a run-loop closure is not.
+ *
+ * Pure except for the injected sink and clock.
+ */
+
+/**
+ * Where a composing update goes. Deliberately three narrow callbacks rather than the
+ * run cell itself, so this module never learns what a `RunCell` is:
+ *
+ * - `set`              — store the activity value (no repaint of its own).
+ * - `repaint`          — draw NOW. A phase change must not wait for a frame.
+ * - `coalescedRepaint` — draw within a frame, folding every delta that lands meanwhile.
+ *   Argument fragments arrive as fast as tokens do, so the steady state has to cost a
+ *   frame, not a render per fragment.
+ */
+interface ComposingSink {
+    set(activity: BrainRunActivity): void;
+    repaint(): void;
+    coalescedRepaint(): void;
+}
+interface ComposingOptions {
+    /** 1-based agent-loop iteration this turn belongs to. */
+    step: number;
+    /** Clock, injected so the tests own it. Defaults to `Date.now`. */
+    now?: () => number;
+}
+/** One turn's composing tracker. `reset` starts it over for a retried turn. */
+interface ComposingActivity {
+    /** Wire this as `StreamHandlers.onToolCallDelta`. */
+    onDelta(index: number, partial: {
+        id?: string;
+        name?: string;
+        argsFragment?: string;
+    }): void;
+    /** Argument bytes seen so far this turn. */
+    bytes(): number;
+    /** Discard the attempt — a stream-interrupt retry re-streams the whole turn. */
+    reset(): void;
+}
+/** UTF-8 byte length of a string. What the wire actually carried, not its char count. */
+declare function utf8ByteLength(text: string): number;
+/** Total argument bytes of a turn's assembled tool calls — the settled twin of
+ *  {@link ComposingActivity.bytes}, for the durable turn record. */
+declare function toolCallArgBytes(calls: ReadonlyArray<{
+    args?: string;
+}>): number;
+/**
+ * Build the `onToolCallDelta` handler for one turn.
+ *
+ * On the first fragment it publishes the `composing` phase and repaints immediately —
+ * a phase change the user is waiting on must never trail a frame. Every later fragment
+ * adds its bytes and repaints on the coalesced path.
+ *
+ * `startedAt` is stamped ONCE and held. The live renderer re-seeds its elapsed ticker
+ * whenever `startedAt` changes, so re-stamping it per delta would pin the clock at 0s
+ * for the entire three minutes — the exact reassurance this phase exists to give.
+ */
+declare function createComposingActivity(sink: ComposingSink, opts: ComposingOptions): ComposingActivity;
+
+/**
  * A size budget for a copied triage report.
  *
  * Per-payload capping alone is not enough. A 26-call run with a 4 KB cap per
@@ -3568,6 +3795,90 @@ interface TrimOptions {
  * everything. `bytes` is always the ORIGINAL size — the diagnostics report it.
  */
 declare function trimToolResult(tool: string, out: unknown, opts?: TrimOptions): TrimmedToolResult;
+
+/**
+ * The working transcript — what of a run the model is SHOWN each turn.
+ *
+ * A run's full transcript grows without bound; the request sent to the model must not.
+ * This module owns the two ways it is kept in bounds: the message-count + token WINDOW
+ * (drop-oldest, anchored on a user turn) and AUTO-COMPACTION (fold the older part into a
+ * memory note, keep every later message verbatim). Extracted from `brainRunStore.ts` so
+ * the run engine only supplies what is run-specific: the transport the summarizer calls
+ * and the trace step a fold records.
+ *
+ * Pure except for {@link buildWorkingTranscript}, which awaits the injected summarizer and
+ * updates the caller's `compactMemo`.
+ */
+
+/**
+ * Token budget for the working transcript sent to the model each turn — how much of this
+ * run the model can SEE: the file windows it read, the searches it ran, what it decided.
+ *
+ * It bounds context, which message-count windowing (HISTORY_WINDOW) alone does not: one
+ * `tasks.list` result can be tens of thousands of tokens. It is NOT what keeps a request
+ * inside the serving model's window — the gateway fits every request to a model that can
+ * hold it (`modelsFittingContext` over `estimateRequestTokens`, with 413 failover behind).
+ *
+ * It was 24k, "sized under the smallest pool model's window". That protected nothing — the
+ * ~16k-token system prompt + tool catalog in front of it already put a full turn at ~40k,
+ * past any 32k window — and it cost every coding run its memory. Six 4k-token file windows
+ * filled it, compaction folded them into a 1.2k-token note, and the model went back for the
+ * files it had just read (chat #105: 55 turns, 63% of calls revisiting, zero edits, prompt
+ * peak 40,351). 64k holds a coding task's working set — a dozen-plus file windows —
+ * verbatim, while a full turn stays well inside the 128k window every coding-capable pool
+ * model has. See {@link windowed} and {@link buildWorkingTranscript}.
+ */
+declare const HISTORY_TOKEN_BUDGET = 64000;
+
+/**
+ * A dead stream has to END, not hang.
+ *
+ * `reader.read()` on a stalled upstream never settles: the socket is open, the gateway
+ * is waiting on a provider that will never speak again, and the agent loop waits with
+ * it — forever, or until the user presses Stop. Chat #113 sat on one turn for 3m 23s
+ * (that one was alive, streaming tool arguments), and the same picture with a genuinely
+ * dead upstream is indistinguishable from the outside. A turn that stops producing
+ * bytes must fail, so the run loop can do what it already knows how to do with an
+ * interrupted stream: retry once on another model.
+ *
+ * This is the whole mechanism: race each read against an idle timer, cancel the reader
+ * when the timer wins, and throw. Isolated from `streamChatCompletion.ts` so it can be
+ * tested with fake timers instead of a live socket, and so there is exactly ONE idle
+ * rule in the package.
+ */
+/**
+ * Silence that ends a stream. Deliberately generous: a reasoning model can think for
+ * minutes before its first token, and a false positive costs a wasted turn on another
+ * model. Four minutes of ZERO bytes is not thinking, it is a dead connection.
+ */
+declare const STREAM_IDLE_MS = 240000;
+/** The stream produced no bytes for {@link IdleWatchdogOptions.idleMs}. */
+declare class StreamIdleError extends Error {
+    /** The silence that was exceeded, so the caller can say it in its own message. */
+    readonly idleMs: number;
+    constructor(idleMs: number);
+}
+/** The slice of `ReadableStreamDefaultReader` this needs — structural, so a test
+ *  passes a plain object and a browser passes the real reader. */
+interface IdleWatchdogReader<T> {
+    read(): Promise<T>;
+    cancel(reason?: unknown): Promise<unknown> | unknown;
+}
+interface IdleWatchdogOptions {
+    /** Silence before the read is abandoned. Defaults to {@link STREAM_IDLE_MS}. */
+    idleMs?: number;
+    /** Observer for the idle trip (a trace line, a metric). Never throws the error itself. */
+    onIdle?(idleMs: number): void;
+}
+/**
+ * One `reader.read()`, bounded by an idle timer. Resolves with the chunk when the
+ * stream speaks; cancels the reader and throws {@link StreamIdleError} when it does not.
+ *
+ * The losing `read()` promise is left pending on purpose — cancelling the reader is what
+ * releases it — with its rejection swallowed so an aborted socket cannot surface as an
+ * unhandled rejection after the caller has already been told the stream went silent.
+ */
+declare function readWithIdleWatchdog<T>(reader: IdleWatchdogReader<T>, opts?: IdleWatchdogOptions): Promise<T>;
 
 /**
  * Deterministic JSON — object keys sorted at every depth — for anything that is KEYED
@@ -4946,6 +5257,14 @@ interface ChatDiagnosticsData {
     chatTitle?: string | null;
     /** 'shared' | 'locked' — who can see the chat. */
     chatVisibility?: string | null;
+    /**
+     * The chat's MODE — 'chat' (answer the question) or 'work' (file it, staff it, run it).
+     *
+     * Reported because it decides what the run was OBLIGED to do, and therefore what counts
+     * as a failure: "it made a plan and stopped" is the correct behaviour in chat mode and a
+     * broken run in work mode. A report that omits it makes those two indistinguishable.
+     */
+    mode?: string | null;
     /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
     projectId?: number | null;
     projectName?: string | null;
@@ -5148,6 +5467,9 @@ interface ChatDiagnosticsSources {
     chatTitle?: string | null;
     /** 'shared' | 'locked'. */
     chatVisibility?: string | null;
+    /** The chat's MODE ('chat' | 'work') — what the run was obliged to do, which is what
+     *  decides whether "planned it and stopped" is correct behaviour or a failed execution. */
+    mode?: string | null;
     /** The CHAT's own project — what the learn gate keys on. */
     projectId?: number | null;
     projectName?: string | null;
@@ -5219,6 +5541,93 @@ interface ChatDiagnosticsSources {
  * only ever produce a worse report.
  */
 declare function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promise<ChatDiagnosticsData>;
+
+/**
+ * chatDiagnosticsReport — the diagnostics capture as DATA, not prose.
+ *
+ * Every "Copy diagnostics" surface has, until now, produced exactly one artefact: a wall
+ * of Markdown on the user's clipboard. That is the right thing for a bug report and the
+ * wrong thing for everything else. Nobody can ask "how many work-mode runs filed tickets
+ * and staffed nobody last week?", the report is gone the moment the user closes the chat,
+ * and an agent asked to look into its own failure has to re-derive the facts from a
+ * transcript it cannot read reliably.
+ *
+ * So the same facts are ALSO assembled here as one versioned JSON object, persisted with
+ * the chat (`POST /api/brain/chats/:id/diagnostics`) and appended to the copied report so
+ * the paste carries both halves. There is no second derivation: this composes the exact
+ * values the Markdown renders — {@link ChatDiagnosticsData}, {@link BrainDiagnostics},
+ * the shared provenance readers and {@link StaffingSummary} — so the prose and the JSON
+ * can never disagree about the run they describe.
+ *
+ * Pure of clock and I/O (`now` is injected) so a test pins a capture time and a host can
+ * build the report anywhere it already holds the events.
+ */
+
+/**
+ * Schema version of the persisted report.
+ *
+ * Bumped whenever a field CHANGES MEANING or disappears — a reader that stored a v1 row
+ * must be able to tell it apart from a later shape without guessing from which keys are
+ * present. Purely additive fields do not bump it.
+ */
+declare const CHAT_DIAGNOSTICS_SCHEMA_VERSION = 1;
+/** Model/account provenance for the run, as data rather than the rendered header lines. */
+interface ChatDiagnosticsProvenance {
+    /** What the surface was CONFIGURED with — null when the gateway auto-selects. */
+    configuredModel: string | null;
+    /** What actually answered, first-seen order (a mid-run failover stays visible). */
+    modelsUsed: string[];
+    /** Which purse served it: 'own' | 'shared' | 'shared_byo_unused'. */
+    account: string | null;
+}
+/** One persisted diagnostics capture. The wire shape of `POST /api/brain/chats/:id/diagnostics`. */
+interface ChatDiagnosticsReport {
+    schemaVersion: 1;
+    /** ISO capture time. */
+    capturedAt: string;
+    /** Where the capture was taken ('VS Code (VSIX)' | 'Web' | …). */
+    surface: string;
+    /** The run verdict, or null when there were no events to judge. */
+    likelyCause: BrainDiagnostics['likelyCause'] | null;
+    /** True when the run was STILL EXECUTING at capture time — every "and then nothing
+     *  happened" field below describes an UNFINISHED run, not a failed one. */
+    running: boolean;
+    /** Chat identity + wiring state: project, tenant, Evermind head, agents, tickets, plan. */
+    chat: ChatDiagnosticsData;
+    /** The run's own numbers. Null when the capture holds no trace events at all — an
+     *  empty diagnostics object would claim measurements nobody took. */
+    run: BrainDiagnostics | null;
+    provenance: ChatDiagnosticsProvenance;
+    /** Filed vs staffed. Null alongside a null `run`, for the same reason. */
+    staffing: StaffingSummary | null;
+}
+interface BuildChatDiagnosticsReportInput {
+    /** The gathered chat state — exactly what the Markdown block renders. */
+    diagnostics: ChatDiagnosticsData;
+    /** The MERGED trace (live steps + steps recovered from durable history). */
+    events: BrainTraceEvent[];
+    /** The visible conversation — needed for the verdicts that read prose against the trace. */
+    messages: BrainMessage[];
+    /** The model this surface was configured with. */
+    model?: string | null;
+    /** True when the run was still executing when the capture was taken. */
+    running?: boolean;
+    surface: string;
+    /** Injected clock, so a capture time can be pinned in a test. */
+    now?: () => Date;
+}
+/** Assemble the persisted report. Pure; never throws. */
+declare function buildChatDiagnosticsReport(input: BuildChatDiagnosticsReportInput): ChatDiagnosticsReport;
+/**
+ * The report as a fenced JSON block for the copied Markdown.
+ *
+ * Appended at the very END of the transcript and deliberately EXEMPT from the payload
+ * budget that trims tool input/output: this is not another rendering of the run, it is
+ * the machine-readable copy of the same facts, and a half-elided JSON object is not
+ * valid JSON — it is useless to the only reader it exists for. The prose above it is
+ * what a human reads; trimming that is a cost, trimming this is a total loss.
+ */
+declare function formatChatDiagnosticsReportJson(report: ChatDiagnosticsReport): string[];
 
 /**
  * WHICH MODELS a chat surface may offer, in WHAT ORDER, and WHO PAYS for each —
@@ -5641,4 +6050,4 @@ interface PromptInputProps {
 }
 declare function PromptInput({ value, onChange, onSubmit, placeholder, submitLabel, ariaLabel, disabled, busy, leading, secondaryContent, rows, className, submitOnEnter, }: PromptInputProps): react_jsx_runtime.JSX.Element;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FailureTally, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistTraceEventInput, type PersistedStep, type PersonaModalityId, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamInterruptedError, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, coerceAskUserPayload, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createBrainRestPersistence, createPayloadBudget, declinesShipping, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, effortProfile, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatModelScorecard, formatModelTurnLog, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, projectMemoryHooks, ratedTurnContext, ratedTurnTool, reasoningForRun, repeatedFailureAdvisory, requestRunConfirm, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceEventToPersistInput, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FailureTally, type GitShortStatus, type GlobalRunState, HISTORY_TOKEN_BUDGET, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistTraceEventInput, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, type StaffingSummary, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, coerceAskUserPayload, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createBrainRestPersistence, createComposingActivity, createPayloadBudget, declinesShipping, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, effortProfile, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatEvermindMemoryBlock, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, projectMemoryHooks, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, requestRunConfirm, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceEventToPersistInput, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, utf8ByteLength, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workFiledNotStaffedVerdict, workItemLinkFromCreate };

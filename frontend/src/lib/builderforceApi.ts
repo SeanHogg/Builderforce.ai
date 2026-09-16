@@ -4,8 +4,9 @@
  * Uses tenant JWT from auth.
  */
 
+import { CHANNEL_PLATFORMS, type ChannelPlatform } from '@builderforce/creation-canvas-contract';
 import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
-import { createBrainRestPersistence } from '@seanhogg/builderforce-brain-embedded';
+import { createBrainRestPersistence, type ChatDiagnosticsReport } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
@@ -387,6 +388,10 @@ export interface BrainChat {
   mode?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Linked-ticket count from GET /api/brain/chats. Absent on older servers. */
+  ticketCount?: number;
+  /** Overall linked-ticket progress 0–100, or null when none are linked. */
+  ticketProgressPct?: number | null;
 }
 
 export interface BrainMessage {
@@ -537,7 +542,20 @@ export const brain = {
     return getOrSetClientCached(key, () =>
       request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`).then(({ trace }) => trace));
   },
+
+  /**
+   * Persist one captured ChatDiagnosticsReport for this chat. Best-effort — the
+   * copy path never waits on this; a capture that reached the user has already
+   * done its job whether or not the row landed. Returns the stored row id.
+   */
+  postChatDiagnostics: (chatId: number, report: ChatDiagnosticsReport) =>
+    request<{ id: number }>(`/api/brain/chats/${chatId}/diagnostics`, {
+      method: 'POST',
+      body: JSON.stringify({ report }),
+    }),
 };
+
+export type { ChatDiagnosticsReport };
 
 /** A persisted run-trace row as returned by GET /api/brain/chats/:id/trace. */
 export interface BrainChatTraceRow {
@@ -2187,6 +2205,13 @@ export interface ManagerPolicy {
   managerType: ManagerTypeId;
   /** Autonomous completion/merge is gated on unanimous role sign-off (0362). */
   requireSignoffToComplete: boolean;
+  /**
+   * Is ticket COORDINATION reserved to managers — the resolved grant? When false (the
+   * default) any developer or agent on the project may run the coordinator, add required
+   * roles, assign participants and materialize work items. Project-only: there is no
+   * workspace tier for it, so the fold reads the project row or the built-in `false`.
+   */
+  coordinationRequiresManager: boolean;
   /** Whether the manager may merge unattended at all (0363) — the resolved grant. */
   allowAutoMerge: boolean;
   /** May the manager CONDUCT a ceremony with no humans present (0365)? When false, a
@@ -2520,6 +2545,9 @@ export type ManagerConfigPatch = Partial<{
   autoSchedule: boolean;
   managerType: ManagerTypeId;
   requireSignoffToComplete: boolean;
+  /** Reserve ticket coordination to managers. Project-only and NOT NULL, so it is a plain
+   *  boolean here rather than one of the tri-states below. */
+  coordinationRequiresManager: boolean;
   /** Tri-state: true/false = an explicit project decision, `null` = inherit the workspace
    *  default. Omitting the key leaves whatever is stored alone. */
   allowAutoMerge: boolean | null;
@@ -4644,15 +4672,7 @@ export const agentHostProjectsApi = {
 // AgentHost Channels (multi-channel messaging integrations)
 // ---------------------------------------------------------------------------
 
-export type ChannelPlatform =
-  | 'whatsapp'
-  | 'telegram'
-  | 'slack'
-  | 'discord'
-  | 'google_chat'
-  | 'signal'
-  | 'teams'
-  | 'webhook';
+export { CHANNEL_PLATFORMS, type ChannelPlatform };
 
 export interface AgentHostChannel {
   id: string;

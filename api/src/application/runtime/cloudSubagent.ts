@@ -105,6 +105,16 @@ export interface SubagentDeps {
   /** The parent run's cancel signal — a cancelled run must not leave a child spending. */
   signal?: AbortSignal;
   maxSteps?: number;
+  /**
+   * Resolve one of the WORKSPACE's agents (by id or name) to the persona a child should
+   * run as — operator decision 2026-09-15.
+   *
+   * Injected rather than imported for the same reason `complete` is: this module owns
+   * what a child may TOUCH, not what a workspace knows. Absent on a surface that has no
+   * roster, in which case `asAgent` is refused rather than silently ignored — a parent
+   * that asked for Ada and got an anonymous helper would never learn it did not get her.
+   */
+  personaBrief?(agent: string): Promise<{ name: string; brief: string } | null>;
   /** Timeline recorder, so a delegation is visible in Observability rather than
    *  appearing as an unexplained gap in the parent's turns. */
   record?(event: { label: string; detail: Record<string, unknown>; result: string }): Promise<void>;
@@ -136,6 +146,29 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
       const maxSteps = deps.maxSteps ?? SUBAGENT_MAX_STEPS;
       const started = Date.now();
 
+      // Delegating AS one of the workspace's agents. A ref that resolves to nobody is
+      // returned as a failed delegation, NOT run anonymously: the parent asked for a
+      // named teammate, and quietly substituting a generic child would produce an answer
+      // attributed to expertise nobody applied. A delegation to nobody is information.
+      const asAgent = typeof input.asAgent === 'string' ? input.asAgent.trim() : '';
+      let persona: { name: string; brief: string } | undefined;
+      if (asAgent) {
+        const resolved = await deps.personaBrief?.(asAgent);
+        if (!resolved) {
+          const result: SubagentResult = { ok: false, error: `no agent named "${asAgent}" in this workspace` };
+          await deps.record?.({
+            label: input.label,
+            detail: { readOnly, asAgent, ms: Date.now() - started },
+            result: `${input.label} → ${result.error}`,
+          });
+          return result;
+        }
+        persona = resolved;
+      }
+      /** Echoed on the result and the timeline so the answer is attributable to a REAL
+       *  teammate rather than to the string the parent guessed. */
+      const asAgentEcho = persona ? { asAgent: { ref: asAgent, name: persona.name } } : {};
+
       try {
         const run = await runSubagent<ToolSchema>({
           task: input.task,
@@ -146,6 +179,7 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
           // here, at the one place that knows it, rather than threaded through the
           // loop itself.
           complete: (a) => deps.complete({ ...a, role: input.role }),
+          ...(persona ? { persona } : {}),
           dispatch: async (call) => {
             const dispatched = await deps.registry.dispatch(call.name, call.args, ctx);
             return { data: dispatched.data, ...(dispatched.control ? { control: dispatched.control } : {}) };
@@ -154,11 +188,11 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
           ...(deps.signal ? { signal: deps.signal } : {}),
         });
         const result: SubagentResult = run.cancelled
-          ? { ok: false, error: 'the run was cancelled while this sub-agent was working', steps: run.steps }
-          : { ok: run.ok, output: run.output, steps: run.steps, truncated: run.truncated };
+          ? { ok: false, error: 'the run was cancelled while this sub-agent was working', steps: run.steps, ...asAgentEcho }
+          : { ok: run.ok, output: run.output, steps: run.steps, truncated: run.truncated, ...asAgentEcho };
         await deps.record?.({
           label: input.label,
-          detail: { readOnly, steps: run.steps, maxSteps, truncated: run.truncated, ms: Date.now() - started, tools: tools.length },
+          detail: { readOnly, steps: run.steps, maxSteps, truncated: run.truncated, ms: Date.now() - started, tools: tools.length, ...(persona ? { asAgent, asAgentName: persona.name } : {}) },
           result: result.ok
             ? `${input.label} → ${run.output.slice(0, 200)}`
             : `${input.label} → ${result.error ?? 'the sub-agent stopped without an answer'}`,
@@ -169,8 +203,8 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
         // parent's cancellation, not a tool failure — let the parent's kernel see it.
         if (deps.signal?.aborted) throw error;
         const message = error instanceof Error ? error.message : String(error);
-        await deps.record?.({ label: input.label, detail: { readOnly, ms: Date.now() - started }, result: `${input.label} → failed: ${message}` });
-        return { ok: false, error: message };
+        await deps.record?.({ label: input.label, detail: { readOnly, ms: Date.now() - started, ...(persona ? { asAgent } : {}) }, result: `${input.label} → failed: ${message}` });
+        return { ok: false, error: message, ...asAgentEcho };
       }
     },
   };

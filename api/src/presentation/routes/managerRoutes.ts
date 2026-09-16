@@ -98,6 +98,10 @@ const ConfigBody = z.object({
   agentReassignIdleHours: zTriNumber,
   agentReassignMaxPerSession: zTriNumber,
   allowAutoStaffLanes: zTriBool,
+  // NOT tri-state (1177): the column is NOT NULL and there is no workspace tier to
+  // inherit from, so a project either requires the manager role for coordination or it
+  // does not — exactly like `requireSignoffToComplete` above.
+  coordinationRequiresManager: z.boolean().optional(),
 });
 
 const ClosePrsBody = z.object({
@@ -593,6 +597,9 @@ export function createManagerRoutes(
       ...(body.autoSchedule !== undefined ? { autoSchedule: !!body.autoSchedule } : {}),
       ...(body.managerType !== undefined ? { managerType: normalizeManagerType(body.managerType) } : {}),
       ...(body.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: !!body.requireSignoffToComplete } : {}),
+      // 1177 — plain `!!` like the line above, not triStateBool: NOT NULL column, no tier
+      // below it, so there is no "inherit" state for a null to mean.
+      ...(body.coordinationRequiresManager !== undefined ? { coordinationRequiresManager: !!body.coordinationRequiresManager } : {}),
       // NOT coerced with `!!` — null must survive as "inherit the workspace tier", which
       // `!!null === false` would silently turn into "this project refuses merge authority".
       ...(triStateBool(body.allowAutoMerge) !== undefined ? { allowAutoMerge: triStateBool(body.allowAutoMerge) } : {}),

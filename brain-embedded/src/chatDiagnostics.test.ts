@@ -194,3 +194,17 @@ describe('classifyModelFunding', () => {
     expect(classifyModelFunding(undefined, null)).toBe('auto');
   });
 });
+
+describe('chat mode', () => {
+  it('states the mode directly under the chat line', () => {
+    // The same trace is a healthy answer in `chat` and an unfinished execution in
+    // `work` — a report that omits the mode makes those two indistinguishable.
+    const lines = formatChatDiagnostics(baseline({ mode: 'work' }));
+    const chatLine = lines.findIndex((l) => l.startsWith('- Chat: '));
+    expect(lines[chatLine + 1]).toBe('- Mode: work');
+  });
+
+  it('omits the line entirely when the surface did not report a mode', () => {
+    expect(formatChatDiagnostics(baseline()).some((l) => l.startsWith('- Mode:'))).toBe(false);
+  });
+});

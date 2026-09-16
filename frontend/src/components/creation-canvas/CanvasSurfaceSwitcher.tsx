@@ -31,11 +31,18 @@ import styles from './CreationCanvas.module.css';
  * answer to "what am I looking at" — so on a desktop it belongs in the session header,
  * with WORDS. A glyph can say "zoom"; only a label can say "Chat".
  *
- * The phone keeps the compact stack: its header is already down to a title and a save
- * button by 860px, so the labelled segment has nowhere to go and the board's own control
- * column is where every other view command already lives. The two variants therefore
- * differ only in button chrome — which surfaces exist, what they are called, which one is
- * lit and what a press does are decided ONCE, above the split.
+ * ── WHY THE PHONE VARIANT GREW WORDS ─────────────────────────────────────────────
+ * It used to be an icon-only column floating over the board's top-left corner — five
+ * unlabelled glyphs, stacked, with a rule that laid them down in a ROW across the
+ * heading whenever the Brain sheet opened. So the one control that says what you are
+ * looking at was drawn over the thing it was naming, in a form that said nothing: a
+ * glyph can say "zoom", only a label can say "Ideas".
+ *
+ * It is a STRIP now, under the canvas app bar, where a phone's tabs go: icon AND word,
+ * 44px tall, scrolling sideways in the one place sideways scrolling is expected and
+ * never over the content. The two variants still differ only in button chrome — which
+ * surfaces exist, what they are called, which one is lit and what a press does are
+ * decided ONCE, above the split.
  */
 
 /* The glyph table used to live here, covering only the three board surfaces a rail
@@ -78,15 +85,17 @@ export function CanvasSurfaceSwitcher({ surface, onChange, variant, allowedIds }
       : t(`surface.${def.id}.enter` as 'surface.chat.enter');
 
     if (variant === 'mobile') {
+      // The word is DRAWN here as well as announced. `aria-label` still carries it so
+      // the accessible name is stable whatever the strip does with the text at 320px.
       return <button
         key={def.id}
         type="button"
-        className={styles.surfaceSwitcherButton}
+        className={styles.surfaceStripTab}
         onClick={press}
         aria-pressed={pressed}
         aria-label={label}
         title={title}
-      >{canvasSurfaceGlyph(def.id, label)}</button>;
+      >{canvasSurfaceGlyph(def.id, label)}<span>{label}</span></button>;
     }
 
     // The label is drawn, not just announced: `aria-label` still carries it so the

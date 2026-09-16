@@ -426,3 +426,50 @@ describe('requireSignoffToComplete · code ⇄ migration parity (0380)', () => {
     }).requireSignoffToComplete).toBe(true);
   });
 });
+
+/**
+ * COORDINATION GATE (1177) — a PROJECT-ONLY setting, off by default.
+ *
+ * Coordinating a ticket (coordinate / assess_resource / assign+remove participant /
+ * materialize) used to demand MANAGER on the route itself, which answered a workspace's
+ * own owner `403 manager role required` whenever their gateway key resolved below that
+ * tier. It is now a setting a project opts INTO, and it does NOT ride the workspace tier:
+ * how one board staffs its tickets is not a workspace posture, so `tenant_manager_defaults`
+ * has no column for it and the fold must never invent one.
+ */
+describe('coordinationRequiresManager (1177)', () => {
+  it('is OFF in the hardcoded default, and the column default agrees', () => {
+    expect(DEFAULT_MANAGER_POLICY.coordinationRequiresManager).toBe(false);
+    const sql = readFileSync(
+      fileURLToPath(new URL('../../../migrations/1177_coordination_requires_manager.sql', import.meta.url).href),
+      'utf8',
+    ).replace(/\s+/g, ' ');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS coordination_requires_manager boolean NOT NULL DEFAULT false');
+  });
+
+  it('is off for a project that has never expressed an opinion', () => {
+    expect(resolveTieredManagerPolicy({}).coordinationRequiresManager).toBe(false);
+    expect(resolveTieredManagerPolicy({ tenant: tenantRow(), project: projectRow() })
+      .coordinationRequiresManager).toBe(false);
+  });
+
+  it('is on when the project opts in', () => {
+    expect(resolveTieredManagerPolicy({
+      project: projectRow({ coordinationRequiresManager: true }),
+    }).coordinationRequiresManager).toBe(true);
+  });
+
+  it('reads a row written before the column existed as OFF, never as a gate', () => {
+    const { coordinationRequiresManager: _omitted, ...legacy } = projectRow({ coordinationRequiresManager: true });
+    expect(resolveEffectiveManagerPolicy(legacy).coordinationRequiresManager).toBe(false);
+  });
+
+  it('is PROJECT-ONLY — a workspace row carrying it changes nothing', () => {
+    // Typed as an override so the test can state the shape the fold must ignore; the
+    // workspace ROW type deliberately has no such field.
+    expect(resolveTieredManagerPolicy({
+      tenant: { coordinationRequiresManager: true },
+      project: projectRow(),
+    }).coordinationRequiresManager).toBe(false);
+  });
+});

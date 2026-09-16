@@ -22,6 +22,12 @@
  * - `thinking`  — a completion is open and no token has arrived (this is the
  *                 phase that used to look identical to a hang).
  * - `writing`   — tokens are streaming; the reply is visibly forming.
+ * - `composing` — the model is emitting a TOOL CALL's arguments; `label` is the tool
+ *                 name and `bytes` the argument bytes received so far. The run loop
+ *                 only ever watched text deltas, so a turn that streamed a 21 KB
+ *                 `write_file` call showed "streaming the reply" and then nothing at
+ *                 all for three minutes (chat #113) — indistinguishable from a hang
+ *                 while the model was in fact working the whole time.
  * - `tool`      — a tool call is executing. Carries which one and on what.
  * - `awaiting`  — paused on a human-in-the-loop confirm; the loop cannot advance
  *                 until the user answers, so this must NOT read as "busy".
@@ -29,13 +35,19 @@
  *                 (minting the ticket for a code change, advancing linked tickets).
  *                 Real calls that take real time, and previously showed nothing.
  */
-export type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'tool' | 'awaiting' | 'finishing';
+export type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'composing' | 'tool' | 'awaiting' | 'finishing';
 
 /** A live, in-flight step. `null` on the snapshot means the run is idle. */
 export interface BrainRunActivity {
   phase: BrainRunPhase;
-  /** The tool being executed (`tool` / `awaiting` phases only). */
+  /** The tool being executed or composed (`composing` / `tool` / `awaiting` phases). */
   label?: string;
+  /**
+   * Bytes of tool-call ARGUMENTS received so far (`composing` phase only). The one
+   * number that separates "the model is writing a large file" from "the stream died":
+   * it climbs, visibly, for every second the phase lasts.
+   */
+  bytes?: number;
   /**
    * The concrete THING being worked on, derived from the call's arguments — a
    * file path, a search query, a record id. "Reading LandingCanvasHero.module.css"
@@ -126,6 +138,17 @@ export function toolActivity(label: string, args: unknown, step: number, started
   return { phase: 'tool', label, startedAt, step, ...(detail ? { detail } : {}) };
 }
 
+/**
+ * Human-readable byte size — `812 B`, `12.4 KB`. THE size formatter for this package:
+ * the triage report's tool-result sizes, the turn log's argument bytes and the live
+ * composing indicator all render a size the same way, so a reader who learns to read
+ * "21.1 KB" in one place reads the same number in the other two.
+ */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+
 /** Compact elapsed for a REPORT line (not the live UI, which has its own ticker). */
 function elapsedText(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0s';
@@ -150,10 +173,12 @@ export function describeLiveStep(step: BrainRunActivity, capturedAtMs: number): 
   const what =
     step.phase === 'tool' ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ''}`
       : step.phase === 'awaiting' ? `PAUSED waiting for the user to approve \`${step.label}\` — nothing advances until they answer`
-        : step.phase === 'thinking' ? 'waiting on the model (no token received yet)'
-          : step.phase === 'writing' ? 'streaming the reply'
-            : step.phase === 'finishing' ? 'doing post-run work (ticket capture / status reconciliation)'
-              : 'starting up';
+        : step.phase === 'composing'
+          ? `composing a \`${step.label || 'tool'}\` call${step.bytes != null ? ` — ${formatBytes(step.bytes)} of arguments so far` : ''}`
+          : step.phase === 'thinking' ? 'waiting on the model (no token received yet)'
+            : step.phase === 'writing' ? 'streaming the reply'
+              : step.phase === 'finishing' ? 'doing post-run work (ticket capture / status reconciliation)'
+                : 'starting up';
   return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ''})`;
 }
 

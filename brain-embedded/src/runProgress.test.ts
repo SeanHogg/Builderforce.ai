@@ -346,7 +346,9 @@ describe('the verdict this replaced', () => {
   it('still reports context exhaustion when the run did NOT spin', () => {
     clock = 0;
     const events = [
-      llm({ usage: { prompt: 40_000, completion: 10 }, finishReason: 'length' }),
+      // Past 1.5× the 64k working-transcript budget AND cut short by the output
+      // ceiling: pressure with a consequence is what the verdict now requires.
+      llm({ usage: { prompt: 140_000, completion: 10 }, finishReason: 'length' }),
       tool('read_file', { path: 'a.css' }, { truncated: true, resultBytes: 30_000 }),
     ];
     expect(computeBrainDiagnostics(events, undefined, [msg('user', 'What does this file do?')]).likelyCause)

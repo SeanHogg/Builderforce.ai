@@ -128,7 +128,13 @@ function parseAgentPsychometric(raw: unknown): LimbicPsychProfile | undefined {
  *  per request (query-dependent) by {@link resolveWorkforceModel}. */
 type WorkforceAgentBase = { baseModel: string | null; descriptor: AgentDescriptor; inferenceMode: 'base' | 'lora' | 'hybrid' };
 
-async function loadWorkforceAgentBase(env: Env, tenantId: number, agentId: string): Promise<WorkforceAgentBase | null> {
+/**
+ * EXPORTED so the persona-brief resolver (`agentPersonaBrief.ts`) compiles a sub-agent's
+ * persona from the SAME cached base every other surface runs the agent on. A second
+ * loader would be a second answer to "who is Ada", and the two would drift the first time
+ * a descriptor field is added.
+ */
+export async function loadWorkforceAgentBase(env: Env, tenantId: number, agentId: string): Promise<WorkforceAgentBase | null> {
   return getOrSetCached(
     env,
     `workforce_model:resolve:${tenantId}:${agentId}`,

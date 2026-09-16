@@ -46,6 +46,10 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Workforce roster — the tenant's own cloud agents (any publish state), so an agent
   // handing work off knows the REAL agents that exist and their ids (never invents a ref).
   'cloud_agents.list_mine',
+  // …and WHO each of them is. A run handing a slice to a teammate (spawn_agent
+  // { as_agent }) reads the persona first, so the choice is made on what the agent
+  // brings rather than on its name. Read-only.
+  'cloud_agents.persona_brief',
   // Specs / PRDs — read + write (no delete)
   'specs.list', 'specs.get', 'specs.create', 'specs.patch',
   // Strategy / OKRs — read + write (no delete). "update project related items (OKR)".
@@ -170,6 +174,9 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
 export const CHAT_SCOPED_AGENT_TOOLS: readonly string[] = [
   'chats.get_messages', 'chats.list_tickets', 'chats.link_ticket', 'chats.unlink_ticket',
   'chats.ticket_lineage', 'chats.list_agents',
+  // Why the LAST run on this chat did not finish. Read-only, and the whole point is
+  // that it is consulted BEFORE the failed attempt is repeated.
+  'chats.diagnostics',
   // The addressed agent's hands. This reply runs on the Worker with no working tree;
   // the agent's clone, shell and git live in its RUNTIME. This is how an instruction
   // that needs them ("merge and push", "run the tests") reaches that runtime — it

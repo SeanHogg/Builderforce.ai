@@ -1286,6 +1286,10 @@ const POLICY_KEYS: ReadonlyArray<keyof ManagerPolicy & keyof ManagerConfig> = [
   // manager is REPORTING a gap it is deliberately not closing, which is a policy answer
   // rather than a defect — and the two are indistinguishable without this row.
   'allowAutoStaffLanes',
+  // Decisive on a "filed twelve tickets, staffed nobody" capture: with this ON, every
+  // coordination call a non-manager makes is refused `403 manager role required`, and the
+  // run looks like an agent that would not staff its work rather than one that could not.
+  'coordinationRequiresManager',
 ];
 
 function formatPolicy(

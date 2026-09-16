@@ -119,6 +119,14 @@ export interface ChatDiagnosticsData {
   chatTitle?: string | null;
   /** 'shared' | 'locked' — who can see the chat. */
   chatVisibility?: string | null;
+  /**
+   * The chat's MODE — 'chat' (answer the question) or 'work' (file it, staff it, run it).
+   *
+   * Reported because it decides what the run was OBLIGED to do, and therefore what counts
+   * as a failure: "it made a plan and stopped" is the correct behaviour in chat mode and a
+   * broken run in work mode. A report that omits it makes those two indistinguishable.
+   */
+  mode?: string | null;
   /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
   projectId?: number | null;
   projectName?: string | null;
@@ -447,6 +455,9 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     if (d.versions.posixShell) lines.push(`  - ${d.versions.posixShell}`);
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : 'Untitled'}${d.chatId != null ? ` (#${d.chatId})` : ''}${d.chatVisibility ? ` · ${d.chatVisibility}` : ''}`);
+  // Directly under the chat line, because it qualifies everything below it: the same
+  // trace reads as a healthy answer in `chat` and as an unfinished execution in `work`.
+  if (d.mode) lines.push(`- Mode: ${d.mode}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   // ALWAYS printed, even when it matches (or is absent). Printing it only on a mismatch
   // is what made "nothing selected" and "selected but unadopted" indistinguishable.

@@ -183,6 +183,25 @@
     Advisors and new/solo entrepreneurs; dogfood via marketplace listings (Meeting Notes agent,
     Minutes-to-board skill). **Not a SCORE clone.**
 
+28. **[28 — PRD: Canvas — one composer, and the phone as a first-class canvas client](./28-prd-canvas-one-composer-phone-chrome.md)**
+    A surface declares a VERB, never its own text input; Brain never covers the surface uninvited;
+    on a phone the `+` IS the command bar and the persistent bottom nav stays. The code landed
+    uncommitted at frontend 2026.9.34 — this PRD is the **remainder**: the verification gate that
+    `DONE.md` is writing a cheque for, the phone arrangements no jsdom test can see, the VS Code
+    webview that compiles the same canvas source, and four implementer decisions awaiting a ruling.
+
+29. **[29 — PRD: Verify and package the run-visibility + ticket-parent changes](./29-prd-run-visibility-verify-and-package.md)**
+    A verification runbook, not a design. The composing run phase (a streaming tool call stops
+    looking like a hang), the stream idle watchdog, the context-exhaustion verdict that now needs
+    a consequence, and the ticket rail naming each ticket's parent epic — all written, none
+    compiled, tested or packaged. **Run the checks in order, then package one VSIX.**
+
+30. **[30 — PRD: Prompt-driven marketing campaign](./30-prd-guided-marketing-campaign.md)**
+    A founder who says “I want to run a marketing campaign” gets a run (intake → checklist →
+    connect → copy → confirmed send), not a portfolio table. Compose Growth + canvas kinds +
+    social/ads tools. **Not a HubSpot clone.** Campaign ROI and a frontend ICP picker are later
+    tracks. First slice: the canvas journey prompt (C0).
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

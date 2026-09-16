@@ -822,6 +822,44 @@ function selectPendingAskUser(messages) {
   return null;
 }
 
+// src/streamIdleWatchdog.ts
+var STREAM_IDLE_MS = 24e4;
+var StreamIdleError = class extends Error {
+  /** The silence that was exceeded, so the caller can say it in its own message. */
+  idleMs;
+  constructor(idleMs) {
+    super(`the stream produced no bytes for ${Math.round(idleMs / 1e3)}s`);
+    this.name = "StreamIdleError";
+    this.idleMs = idleMs;
+  }
+};
+async function readWithIdleWatchdog(reader, opts = {}) {
+  const idleMs = opts.idleMs ?? STREAM_IDLE_MS;
+  const read = reader.read();
+  if (!Number.isFinite(idleMs) || idleMs <= 0) return read;
+  read.catch(() => void 0);
+  let timer;
+  const idle = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const error = new StreamIdleError(idleMs);
+      opts.onIdle?.(idleMs);
+      reject(error);
+      try {
+        const cancelled = reader.cancel(error);
+        if (cancelled && typeof cancelled.catch === "function") {
+          cancelled.catch(() => void 0);
+        }
+      } catch {
+      }
+    }, idleMs);
+  });
+  try {
+    return await Promise.race([read, idle]);
+  } finally {
+    if (timer !== void 0) clearTimeout(timer);
+  }
+}
+
 // src/streamChatCompletion.ts
 var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
 function readUpstreamEvidence(frame) {
@@ -987,9 +1025,12 @@ async function streamChatCompletion(opts, handlers = {}) {
   while (true) {
     let chunkRead;
     try {
-      chunkRead = await reader.read();
+      chunkRead = await readWithIdleWatchdog(reader, { idleMs: opts.idleTimeoutMs ?? STREAM_IDLE_MS });
     } catch (e) {
       if (opts.signal?.aborted) throw e;
+      if (e instanceof StreamIdleError) {
+        throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1e3)}s`, resolvedModel());
+      }
       throw new StreamInterruptedError(`the stream dropped mid-answer: ${e instanceof Error ? e.message : String(e)}`, resolvedModel());
     }
     const { done, value } = chunkRead;
@@ -1900,11 +1941,13 @@ function chatConversationDirective() {
   return "MODE: CHAT. This conversation is a conversation. Your job is to understand the question and answer it.\n\u2022 Read, search, inspect and reason as much as the question needs \u2014 every read-only tool is available to you and using them is encouraged. Ground the answer in what you actually looked up.\n\u2022 Do NOT create, staff, re-status, or dispatch board work as a side effect of answering. Identifying that something ought to be done is part of a good answer; opening a ticket about it is not.\n\u2022 If the work plainly ought to be tracked, END the answer with one short line naming it and telling the user they can switch this conversation to Work mode to have it opened and run. Offer it once; do not repeat the offer on later turns.\n\u2022 The single exception: if the user explicitly asks you to create, assign, schedule or run something in THIS message, do it. An explicit instruction outranks the mode.";
 }
 function chatWorkDirective(chatId, opts) {
+  const throughThem = opts?.canDelegate ? " When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns." : "";
   const doItHere = opts?.canEditHere ? `\u2022 DO IT HERE WHEN YOU CAN. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.
 ` : "";
   return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.
 ${chatWorkLinkingDirective(chatId)}
 ` + doItHere + `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
+\u2022 STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. When you file tickets, assign and dispatch the agent whose role fits each one \u2014 never leave a ticket with no agent on it.${throughThem}
 \u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason, do not retry the same dispatch hoping for a different answer, and if the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
 }
 function chatModeDirective(mode, chatId, opts) {
@@ -2878,6 +2921,10 @@ function toolActivity(label, args, step, startedAt) {
   const detail = activityTarget(args);
   return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
 }
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
 function elapsedText(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return "0s";
   if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
@@ -2885,7 +2932,7 @@ function elapsedText(ms) {
 }
 function describeLiveStep(step, capturedAtMs) {
   const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
-  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
+  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
   return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
 }
 function midRunNotice(activity, capturedAtMs) {
@@ -3163,6 +3210,10 @@ function modelTurnLog(events) {
       ...requested ? { requestedModel: requested } : {},
       toolCalls: calls,
       textOnly: calls === 0 && (ev.textChars ?? 0) > 0,
+      // What the turn SPENT its time producing. Absent on traces that predate the
+      // accounting, so an old chat's log renders exactly as it used to.
+      ...typeof args?.argBytes === "number" && args.argBytes > 0 ? { argBytes: args.argBytes } : {},
+      ...typeof ev.usage?.completion === "number" && ev.usage.completion > 0 ? { completionTokens: ev.usage.completion } : {},
       ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
       ...args?.unliftedCallMarkup === true ? { unliftedCallMarkup: true } : {}
     };
@@ -3188,12 +3239,106 @@ function formatOneTurn(t) {
   }
   if (t.upstreamRecovered) parts.push(`${t.upstreamRecovered} rebuilt from the final frame`);
   if (t.unliftedCallMarkup) parts.push("\u26A0 unlifted call markup");
+  if (t.argBytes) parts.push(`${formatBytes(t.argBytes)} of arguments`);
+  if (t.completionTokens) parts.push(`${t.completionTokens.toLocaleString("en-US")} completion tok`);
   if (typeof t.durationMs === "number") parts.push(`${t.durationMs}ms`);
   return `  ${t.index}. ${model} \xB7 ${parts.join(" \xB7 ")}`;
 }
 function formatModelTurnLog(turns) {
   if (!turns.length) return [];
   return ["Turn log:", ...turns.map(formatOneTurn)];
+}
+
+// src/staffingSummary.ts
+var DISPATCH_TOOL = /chats[._](dispatch_agent|execute_as_agent)|kanban[._](coordinate|materialize_work_items|assess_resource|assign_participant)|executions[._]submit|run[._-]?now/i;
+function isDispatchTool(label) {
+  return DISPATCH_TOOL.test(label);
+}
+var MAX_REFUSAL_CHARS = 180;
+function resultObject(result) {
+  if (result && typeof result === "object") return result;
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function didDispatch(ev) {
+  if (ev.isError || isFailedToolResult(ev.result)) return false;
+  const r = resultObject(ev.result);
+  if (!r) return true;
+  const autoRun = r.autoRun && typeof r.autoRun === "object" ? r.autoRun : null;
+  if (autoRun && typeof autoRun.dispatched === "boolean") return autoRun.dispatched;
+  if (typeof r.dispatched === "boolean") return r.dispatched;
+  return true;
+}
+function refusalMessage(ev) {
+  const r = resultObject(ev.result);
+  const raw = r && typeof r.error === "string" && r.error || r && typeof r.detail === "string" && r.detail || (r && r.autoRun && typeof r.autoRun === "object" && typeof r.autoRun.detail === "string" ? String(r.autoRun.detail) : "") || (typeof ev.result === "string" ? ev.result : "") || (r ? JSON.stringify(r) : "") || "no reason given";
+  const flat = String(raw).replace(/\s+/g, " ").trim();
+  return flat.length > MAX_REFUSAL_CHARS ? `${flat.slice(0, MAX_REFUSAL_CHARS)}\u2026` : flat || "no reason given";
+}
+function asAgentOf(args) {
+  const a = args && typeof args === "object" ? args : null;
+  const v = a?.as_agent;
+  return typeof v === "string" ? v.trim() : "";
+}
+function staffingSummaryInTrace(events) {
+  let ticketsCreated = 0;
+  let dispatchAttempts = 0;
+  let dispatched = 0;
+  const dispatchRefusals = [];
+  const personaSubagents = [];
+  for (const ev of events) {
+    if (ev.category !== "tool") continue;
+    if (isTicketWriteTool(ev.label) && !ev.isError && !isFailedToolResult(ev.result)) ticketsCreated += 1;
+    if (isDispatchTool(ev.label)) {
+      dispatchAttempts += 1;
+      if (didDispatch(ev)) dispatched += 1;
+      else dispatchRefusals.push({ label: ev.label, message: refusalMessage(ev) });
+    }
+    if (ev.label === "spawn_agent") {
+      const agent = asAgentOf(ev.args);
+      if (!agent) continue;
+      const args = ev.args;
+      const result = resultObject(ev.result);
+      const label = typeof args?.label === "string" && args.label.trim() || typeof result?.label === "string" && result.label.trim() || (typeof args?.task === "string" ? args.task.trim().slice(0, 60) : "") || "delegated work";
+      personaSubagents.push({
+        agent,
+        label,
+        ok: !ev.isError && !isFailedToolResult(ev.result) && result?.ok !== false
+      });
+    }
+  }
+  const verdict = dispatched > 0 || personaSubagents.some((p) => p.ok) ? "staffed" : dispatchRefusals.length > 0 ? "staffing-refused" : ticketsCreated > 0 ? "filed-not-staffed" : "no-work-filed";
+  return { ticketsCreated, dispatchAttempts, dispatched, dispatchRefusals, personaSubagents, verdict };
+}
+function formatDispatchRefusals(refusals) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const r of refusals) counts.set(r.message, (counts.get(r.message) ?? 0) + 1);
+  return [...counts.entries()].map(([msg, n]) => n > 1 ? `${msg} \xD7${n}` : msg).join("; ");
+}
+function workFiledNotStaffedVerdict(s) {
+  const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
+  return `Likely WORK FILED BUT NOT STAFFED \u2014 ${s.ticketsCreated} ticket(s) created, ${s.dispatched} dispatched${refused}. Nobody is running the work.`;
+}
+function formatStaffingSummary(s) {
+  if (s.verdict === "no-work-filed" && s.dispatchAttempts === 0 && s.personaSubagents.length === 0) return [];
+  const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
+  const tail = s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
+  const lines = [
+    `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
+  ];
+  if (s.personaSubagents.length) {
+    lines.push(
+      `Persona sub-agents: ${s.personaSubagents.map((p) => `${p.agent} \u2014 ${p.label}${p.ok ? "" : " (no answer)"}`).join("; ")}`
+    );
+  }
+  return lines;
 }
 
 // src/readOnlyShell.ts
@@ -3474,7 +3619,7 @@ function isReadOnlyShellCall(tool, args) {
   const command = typeof record.command === "string" ? record.command : typeof record.cmd === "string" ? record.cmd : "";
   return isReadOnlyShellCommand(command);
 }
-function resultObject(result) {
+function resultObject2(result) {
   if (result && typeof result === "object" && !Array.isArray(result)) return result;
   if (typeof result === "string") {
     try {
@@ -3501,7 +3646,7 @@ function requestedReadWindow(args) {
   return { start, end: start + limit - 1 };
 }
 function servedReadWindow(result) {
-  const data = resultObject(result);
+  const data = resultObject2(result);
   if (!data || data.ok === false) return null;
   const start = asPositiveInt(data.offset, 1);
   const content = typeof data.content === "string" ? data.content : "";
@@ -3517,7 +3662,7 @@ function spanContains(outer, inner) {
   return inner.start >= outer.start && inner.end <= outer.end;
 }
 function clipRequestedToEof(want, covering) {
-  const data = resultObject(covering);
+  const data = resultObject2(covering);
   if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
   return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
 }
@@ -3700,7 +3845,7 @@ var ReadCoverage = class _ReadCoverage {
       const earlier = typeof earlierPath === "string" ? earlierPath : "";
       if (earlier === scope || !isUnderDir(scope, earlier)) continue;
       if (stableStringify(earlierRest) !== others) continue;
-      const result = resultObject(read.cached.result);
+      const result = resultObject2(read.cached.result);
       if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
       const matches = result.matches.filter(
         (m) => typeof m.path === "string" && isUnderDir(m.path, scope)
@@ -3801,8 +3946,147 @@ ${opts.advisory}` : ""}`;
   return { content, bytes, truncated: true };
 }
 
+// src/workingTranscript.ts
+var HISTORY_WINDOW = 80;
+var HISTORY_TOKEN_BUDGET = 64e3;
+var COMPACT_TAIL_TOKEN_BUDGET = 4e4;
+function estimateTokens(chars) {
+  return Math.ceil(chars / 4);
+}
+function messageTokens(m) {
+  let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
+  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
+  return estimateTokens(chars) + 4;
+}
+function windowed(convo) {
+  let w = convo.slice(-HISTORY_WINDOW);
+  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
+  if (w.length === 0) {
+    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
+  }
+  return tokenBounded(w);
+}
+function tokenBounded(w) {
+  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) return w;
+  const lastUser = w.map((m) => m.role).lastIndexOf("user");
+  let start = 0;
+  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
+    total -= messageTokens(w[start]);
+    start += 1;
+  }
+  let trimmed = w.slice(start);
+  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
+  return trimmed;
+}
+function stillInWorkingContext(state, anchor) {
+  const convo = state.transcript;
+  const idx = convo.indexOf(anchor);
+  if (idx < 0) return false;
+  if (state.compactMemo) return idx >= verbatimStart(convo, state.compactMemo.coveredEnd);
+  return windowed(convo).includes(convo[idx]);
+}
+var COMPACT_TAIL_TURNS = 8;
+var COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
+function verbatimStart(convo, from) {
+  let start = Math.max(0, Math.min(from, convo.length));
+  while (start < convo.length && convo[start].role === "tool") start += 1;
+  return start;
+}
+function compactTailStartForBudget(convo, budgetTokens) {
+  let start = convo.length;
+  let tokens2 = 0;
+  while (start > 0) {
+    const kept = convo.length - start;
+    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
+    const next = messageTokens(convo[start - 1]);
+    if (kept >= COMPACT_TAIL_TURNS && tokens2 + next > budgetTokens) break;
+    tokens2 += next;
+    start -= 1;
+  }
+  return verbatimStart(convo, start);
+}
+function pinnedDirectiveIndex(convo, tailStart) {
+  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
+}
+function assembleCompacted(systemPrompt, convo, note, coveredEnd) {
+  const tailStart = verbatimStart(convo, coveredEnd);
+  const out = [{ role: "system", content: systemPrompt }];
+  out.push({ role: "assistant", content: note });
+  const directiveIdx = pinnedDirectiveIndex(convo, tailStart);
+  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
+  out.push(...convo.slice(tailStart));
+  return out;
+}
+function renderForSummary(msgs) {
+  return msgs.map((m) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
+    return `${m.role}${calls}: ${content}`;
+  }).join("\n\n");
+}
+async function summarizeMiddle(stream, model, msgs, signal) {
+  if (msgs.length === 0) return null;
+  try {
+    const res = await stream({
+      messages: [
+        {
+          role: "system",
+          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Keep every file path, symbol name and line number the remaining work depends on, with the specific facts learned from each file \u2014 the agent no longer sees those results, so what you leave out it must read again. Be information-dense; drop pleasantries. No preamble."
+        },
+        { role: "user", content: renderForSummary(msgs) }
+      ],
+      model,
+      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
+      // Left unset, it inherited the run's full output ceiling and, on a thinking-
+      // capable model, the run's reasoning depth — the most expensive way to write a
+      // paragraph the user never sees. Bounded at ~2.5k tokens: the note is the agent's
+      // only record of every file it folds (paths, symbols, line numbers), and 1.2k was
+      // too little to carry them — the run re-read whatever the note had to leave out.
+      maxTokens: 2500,
+      reasoning: { level: "off" },
+      signal
+    });
+    const out = (res.text ?? "").trim();
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+function tokensOf(msgs) {
+  return msgs.reduce((sum, m) => sum + messageTokens(m), 0);
+}
+function fitsVerbatim(msgs, extraTokens = 0) {
+  return msgs.length <= HISTORY_WINDOW && extraTokens + tokensOf(msgs) <= HISTORY_TOKEN_BUDGET;
+}
+async function buildWorkingTranscript(state, systemPrompt, summarize, onFolded) {
+  const convo = state.transcript;
+  if (fitsVerbatim(convo)) {
+    state.compactMemo = null;
+    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const memo = state.compactMemo && state.compactMemo.coveredEnd <= convo.length ? state.compactMemo : null;
+  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), estimateTokens(memo.note.length))) {
+    return assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd);
+  }
+  const from = memo?.coveredEnd ?? 0;
+  const to = Math.max(from, compactTailStartForBudget(convo, COMPACT_TAIL_TOKEN_BUDGET));
+  const fold = memo ? [{ role: "assistant", content: memo.note }, ...convo.slice(from, to)] : convo.slice(from, to);
+  const summary = to > from ? await summarize(fold) : null;
+  if (summary == null) {
+    return memo ? assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd) : [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const note = `Compressed memory of the first ${to} message(s) of this conversation:
+${summary}`;
+  state.compactMemo = { note, coveredEnd: to };
+  onFolded(to - from);
+  return assembleCompacted(systemPrompt, convo, note, to);
+}
+
 // src/brainTriage.ts
-var CONTEXT_PROMPT_PEAK = 24e3;
+var CONTEXT_PROMPT_PEAK = Math.round(HISTORY_TOKEN_BUDGET * 1.5);
 var LARGE_LOSSY_RESULT_BYTES = 2e4;
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -3826,6 +4110,9 @@ var UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assis
 var FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
 var TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta/i;
 var TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
+function isTicketWriteTool(label) {
+  return TICKET_WRITE_TOOL.test(label);
+}
 function detectUnbackedWriteClaim(events, messages) {
   const wroteOk = events.some(
     (e) => e.category === "tool" && isFileWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result)
@@ -3835,7 +4122,7 @@ function detectUnbackedWriteClaim(events, messages) {
 }
 function detectUnbackedTicketClaim(events, messages) {
   const filedOk = events.some(
-    (e) => e.category === "tool" && TICKET_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result)
+    (e) => e.category === "tool" && isTicketWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result)
   );
   if (filedOk) return false;
   return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
@@ -4072,7 +4359,10 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
   const recoveredTurns = llm.filter((e) => e.recovered).length;
   const turnCoveragePartial = recoveredToolEvents > 0 && recoveredTurns === 0;
-  const contextSignal = promptTokenPeak >= CONTEXT_PROMPT_PEAK || truncatedToolResults > 0 || downgradeEvents > 0 || largestLossyResultBytes >= LARGE_LOSSY_RESULT_BYTES;
+  const contextPressure = promptTokenPeak >= CONTEXT_PROMPT_PEAK || truncatedToolResults > 0 || downgradeEvents > 0 || largestLossyResultBytes >= LARGE_LOSSY_RESULT_BYTES;
+  const contextConsequence = emptyOrLengthFinishes > 0 || downgradeEvents > 0 || loopExhausted || errors.some((e) => e.label === "llm.complete");
+  const contextSignal = contextPressure && contextConsequence;
+  const contextPressureOnly = contextPressure && !contextConsequence;
   const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < CONTEXT_PROMPT_PEAK) && truncatedToolResults === 0;
   const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
   const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
@@ -4087,8 +4377,10 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
   const progress = computeRunProgress(events, messages);
   const noProgress = progress.spinning || progress.noEffect && !ctx.running;
+  const staffing = staffingSummaryInTrace(events);
+  const workFiledNotStaffed = staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused";
   const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !noProgress && didWork;
-  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
+  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -4122,23 +4414,34 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     memoryAnswers,
     turnCoveragePartial,
     progress,
+    contextPressureOnly,
+    staffing,
     likelyCause
   };
 }
-function kb(bytes) {
-  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
-}
+var kb = formatBytes;
 function contextEvidence(d) {
   const parts = [];
   if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
-  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were cut before the model saw them`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were trimmed to the ${toolResultBudgetText()} tool-result budget (by design)`);
   if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
   if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
   return parts.length ? parts.join("; ") : "context pressure without a single dominant signal";
 }
+function toolResultBudgetText() {
+  return `${Math.round(MAX_TOOL_RESULT_CHARS / 1e3)} KB`;
+}
+function contextPressureLine(d) {
+  if (!d.contextPressureOnly) return null;
+  const parts = [];
+  if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
+  if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return `Context: pressure noted (${parts.join("; ")}) \u2014 no turn was cut short by it. The working transcript is held to a ${HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget on purpose, so a prompt above that figure is the design working, not a fault.`;
+}
 function formatBrainDiagnostics(d) {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
-  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "work-filed-not-staffed" ? workFiledNotStaffedVerdict(d.staffing) : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -4155,9 +4458,12 @@ function formatBrainDiagnostics(d) {
     );
   }
   lines.push(
-    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}${d.pagedReadWindows ? ` \xB7 ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ""}`
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} trimmed to the ${toolResultBudgetText()} per-result budget (by design)` : ""}${d.pagedReadWindows ? ` \xB7 ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ""}`
   );
+  const pressure = contextPressureLine(d);
+  if (pressure) lines.push(pressure);
   lines.push(...d.progress ? formatRunProgress(d.progress) : []);
+  lines.push(...d.staffing ? formatStaffingSummary(d.staffing) : []);
   if (d.errorSteps?.length) {
     for (const e of d.errorSteps) lines.push(`Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}`);
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
@@ -4702,6 +5008,64 @@ function leftChangeUnshipped(input) {
 }
 function unshippedChangeNudge() {
   return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
+// src/composingActivity.ts
+function utf8ByteLength(text) {
+  if (!text) return 0;
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
+  let bytes = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4;
+  }
+  return bytes;
+}
+function toolCallArgBytes(calls) {
+  let total = 0;
+  for (const c of calls) total += utf8ByteLength(c.args ?? "");
+  return total;
+}
+function createComposingActivity(sink, opts) {
+  const now = opts.now ?? Date.now;
+  let names = /* @__PURE__ */ new Map();
+  let bytes = 0;
+  let startedAt = null;
+  let published;
+  const publish = (label, immediate) => {
+    sink.set({
+      phase: "composing",
+      startedAt,
+      step: opts.step,
+      bytes,
+      ...label ? { label } : {}
+    });
+    published = label;
+    if (immediate) sink.repaint();
+    else sink.coalescedRepaint();
+  };
+  return {
+    onDelta(index, partial) {
+      if (partial.name) names.set(index, partial.name);
+      bytes += utf8ByteLength(partial.argsFragment ?? "");
+      const label = names.get(index) ?? published;
+      if (startedAt === null) {
+        startedAt = now();
+        publish(label, true);
+        return;
+      }
+      publish(label, !published && !!label);
+    },
+    bytes() {
+      return bytes;
+    },
+    reset() {
+      names = /* @__PURE__ */ new Map();
+      bytes = 0;
+      startedAt = null;
+      published = void 0;
+    }
+  };
 }
 
 // src/repeatedFailure.ts
@@ -6107,6 +6471,10 @@ var spawnAgentTool = defineTool({
         type: "string",
         enum: [...MODEL_ROLES],
         description: `What kind of call the child's turns are \u2014 lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'explore' when read_only, else 'code'. ${ROLE_ENUM_DESCRIPTION}`
+      },
+      as_agent: {
+        type: "string",
+        description: "Run the child AS one of the workspace's agents \u2014 its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine."
       }
     },
     required: ["label", "task"]
@@ -6119,154 +6487,17 @@ var spawnAgentTool = defineTool({
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const readOnly = args.read_only !== false;
     const role = delegationRole(args.role, readOnly);
+    const asAgent = str2(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
       readOnly,
-      role
+      role,
+      ...asAgent ? { asAgent } : {}
     });
     return { data: r, ...r.ok ? {} : { isError: true } };
   }
 });
-
-// src/workingTranscript.ts
-var HISTORY_WINDOW = 80;
-var HISTORY_TOKEN_BUDGET = 64e3;
-var COMPACT_TAIL_TOKEN_BUDGET = 4e4;
-function estimateTokens(chars) {
-  return Math.ceil(chars / 4);
-}
-function messageTokens(m) {
-  let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
-  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
-  return estimateTokens(chars) + 4;
-}
-function windowed(convo) {
-  let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
-  if (w.length === 0) {
-    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
-  }
-  return tokenBounded(w);
-}
-function tokenBounded(w) {
-  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
-  if (total <= HISTORY_TOKEN_BUDGET) return w;
-  const lastUser = w.map((m) => m.role).lastIndexOf("user");
-  let start = 0;
-  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
-    total -= messageTokens(w[start]);
-    start += 1;
-  }
-  let trimmed = w.slice(start);
-  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
-  return trimmed;
-}
-function stillInWorkingContext(state, anchor) {
-  const convo = state.transcript;
-  const idx = convo.indexOf(anchor);
-  if (idx < 0) return false;
-  if (state.compactMemo) return idx >= verbatimStart(convo, state.compactMemo.coveredEnd);
-  return windowed(convo).includes(convo[idx]);
-}
-var COMPACT_TAIL_TURNS = 8;
-var COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
-function verbatimStart(convo, from) {
-  let start = Math.max(0, Math.min(from, convo.length));
-  while (start < convo.length && convo[start].role === "tool") start += 1;
-  return start;
-}
-function compactTailStartForBudget(convo, budgetTokens) {
-  let start = convo.length;
-  let tokens2 = 0;
-  while (start > 0) {
-    const kept = convo.length - start;
-    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
-    const next = messageTokens(convo[start - 1]);
-    if (kept >= COMPACT_TAIL_TURNS && tokens2 + next > budgetTokens) break;
-    tokens2 += next;
-    start -= 1;
-  }
-  return verbatimStart(convo, start);
-}
-function pinnedDirectiveIndex(convo, tailStart) {
-  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
-}
-function assembleCompacted(systemPrompt, convo, note, coveredEnd) {
-  const tailStart = verbatimStart(convo, coveredEnd);
-  const out = [{ role: "system", content: systemPrompt }];
-  out.push({ role: "assistant", content: note });
-  const directiveIdx = pinnedDirectiveIndex(convo, tailStart);
-  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
-  out.push(...convo.slice(tailStart));
-  return out;
-}
-function renderForSummary(msgs) {
-  return msgs.map((m) => {
-    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
-    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
-    return `${m.role}${calls}: ${content}`;
-  }).join("\n\n");
-}
-async function summarizeMiddle(stream, model, msgs, signal) {
-  if (msgs.length === 0) return null;
-  try {
-    const res = await stream({
-      messages: [
-        {
-          role: "system",
-          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Keep every file path, symbol name and line number the remaining work depends on, with the specific facts learned from each file \u2014 the agent no longer sees those results, so what you leave out it must read again. Be information-dense; drop pleasantries. No preamble."
-        },
-        { role: "user", content: renderForSummary(msgs) }
-      ],
-      model,
-      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
-      // Left unset, it inherited the run's full output ceiling and, on a thinking-
-      // capable model, the run's reasoning depth — the most expensive way to write a
-      // paragraph the user never sees. Bounded at ~2.5k tokens: the note is the agent's
-      // only record of every file it folds (paths, symbols, line numbers), and 1.2k was
-      // too little to carry them — the run re-read whatever the note had to leave out.
-      maxTokens: 2500,
-      reasoning: { level: "off" },
-      signal
-    });
-    const out = (res.text ?? "").trim();
-    return out.length > 0 ? out : null;
-  } catch {
-    return null;
-  }
-}
-function tokensOf(msgs) {
-  return msgs.reduce((sum, m) => sum + messageTokens(m), 0);
-}
-function fitsVerbatim(msgs, extraTokens = 0) {
-  return msgs.length <= HISTORY_WINDOW && extraTokens + tokensOf(msgs) <= HISTORY_TOKEN_BUDGET;
-}
-async function buildWorkingTranscript(state, systemPrompt, summarize, onFolded) {
-  const convo = state.transcript;
-  if (fitsVerbatim(convo)) {
-    state.compactMemo = null;
-    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  const memo = state.compactMemo && state.compactMemo.coveredEnd <= convo.length ? state.compactMemo : null;
-  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), estimateTokens(memo.note.length))) {
-    return assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd);
-  }
-  const from = memo?.coveredEnd ?? 0;
-  const to = Math.max(from, compactTailStartForBudget(convo, COMPACT_TAIL_TOKEN_BUDGET));
-  const fold = memo ? [{ role: "assistant", content: memo.note }, ...convo.slice(from, to)] : convo.slice(from, to);
-  const summary = to > from ? await summarize(fold) : null;
-  if (summary == null) {
-    return memo ? assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd) : [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  const note = `Compressed memory of the first ${to} message(s) of this conversation:
-${summary}`;
-  state.compactMemo = { note, coveredEnd: to };
-  onFolded(to - from);
-  return assembleCompacted(systemPrompt, convo, note, to);
-}
 
 // src/brainRunStore.ts
 function provenanceMetadata(result, requested) {
@@ -6939,7 +7170,7 @@ ${extra}`;
   const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}
 
-${chatModeDirective(runMode, chatId, { canEditHere })}
+${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent") })}
 
 ${turnOptimizationDirective()}`;
   const canShip = canShipHere(catalogToolNames);
@@ -7387,6 +7618,12 @@ ${revisit}` : covered.note;
         });
       }
       setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
+      const composing = createComposingActivity(
+        { set: (a) => {
+          c.activity = a;
+        }, repaint: () => emit(c), coalescedRepaint: () => emitStreaming(c) },
+        { step: iter }
+      );
       const handlers = {
         onModel: liveTurnModel(c),
         onTextDelta: (d) => {
@@ -7398,6 +7635,12 @@ ${revisit}` : covered.note;
             return;
           }
           emitStreaming(c);
+        },
+        // The first argument fragment is this turn's first token too: a tool-only turn
+        // recorded no ttft at all, so "Thought for Xs" covered the whole turn.
+        onToolCallDelta: (index, partial) => {
+          if (firstTokenAt === void 0) firstTokenAt = nowMs2();
+          composing.onDelta(index, partial);
         }
       };
       let turnRole = tools ? phase : "chat";
@@ -7436,6 +7679,7 @@ ${revisit}` : covered.note;
       const restartTurn = () => {
         c.streamingText = "";
         firstTokenAt = void 0;
+        composing.reset();
         emit(c);
       };
       try {
@@ -7494,6 +7738,7 @@ ${revisit}` : covered.note;
         });
       }
       const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
+      const argBytes = toolCallArgBytes(result.toolCalls);
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "llm",
@@ -7512,6 +7757,10 @@ ${revisit}` : covered.note;
           // report shows which model planned and which one wrote the code.
           role: turnRole,
           toolCalls: result.toolCalls.length,
+          // How much the turn actually EMITTED. "1 tool call(s) · 202509ms" said
+          // nothing about a turn that spent three minutes streaming 21 KB of
+          // `write_file` arguments — which is what a long turn usually is.
+          ...argBytes > 0 ? { argBytes } : {},
           // Which account served the turn + any connected-BYO provider the gateway
           // could NOT resolve — so triage tells "ran on the shared pool despite a
           // connected Claude account (expired?)" apart from "nothing connected".
@@ -8874,6 +9123,7 @@ function formatChatDiagnostics(d) {
     if (d.versions.posixShell) lines.push(`  - ${d.versions.posixShell}`);
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
+  if (d.mode) lines.push(`- Mode: ${d.mode}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   lines.push(
     `- Panel's selected project: ${fmtProject(d.selectedProjectId, d.selectedProjectName)}` + (d.selectedProjectId != null && d.selectedProjectId === d.projectId ? " (same as the chat's)" : "")
@@ -9003,6 +9253,7 @@ async function gatherChatDiagnostics(src) {
     chatId: src.chatId ?? null,
     chatTitle: src.chatTitle ?? null,
     chatVisibility: src.chatVisibility ?? null,
+    mode: src.mode ?? null,
     projectId: src.projectId ?? null,
     projectName: projectName ?? src.projectName ?? null,
     selectedProjectId: src.selectedProjectId ?? null,
@@ -9031,6 +9282,34 @@ async function gatherChatDiagnostics(src) {
       posixShell: src.posixShell ?? null
     }
   };
+}
+
+// src/chatDiagnosticsReport.ts
+var CHAT_DIAGNOSTICS_SCHEMA_VERSION = 1;
+function buildChatDiagnosticsReport(input) {
+  const { diagnostics, events, messages, model, running = false, surface, now } = input;
+  const configuredModel = model && model !== "default" ? model : null;
+  const run = events.length ? computeBrainDiagnostics(events, configuredModel ?? void 0, messages, { running }) : null;
+  return {
+    schemaVersion: CHAT_DIAGNOSTICS_SCHEMA_VERSION,
+    capturedAt: (now ? now() : /* @__PURE__ */ new Date()).toISOString(),
+    surface,
+    likelyCause: run?.likelyCause ?? null,
+    running,
+    chat: diagnostics,
+    run,
+    provenance: {
+      configuredModel,
+      modelsUsed: modelsUsedInTrace(events),
+      account: accountUsedInTrace(events) ?? null
+    },
+    // Read off the trace directly rather than through `run`, so the field is populated
+    // identically whether or not a run block was built.
+    staffing: events.length ? staffingSummaryInTrace(events) : null
+  };
+}
+function formatChatDiagnosticsReportJson(report) {
+  return ["## Diagnostics (JSON)", "```json", JSON.stringify(report, null, 2), "```"];
 }
 
 // src/artifactRoute.ts
@@ -9171,6 +9450,7 @@ export {
   BrainContextProvider,
   BrainProvider,
   BrainRequestError,
+  CHAT_DIAGNOSTICS_SCHEMA_VERSION,
   CHAT_MODES,
   CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS,
@@ -9188,6 +9468,7 @@ export {
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FailureTally,
+  HISTORY_TOKEN_BUDGET,
   LOCAL_WORKSPACE_TOOLS,
   MAX_TOOL_RESULT_CHARS,
   MODALITY_PERSONAS,
@@ -9209,6 +9490,8 @@ export {
   STEP_MESSAGE_ROLE,
   STOPPED_TURN_META_KEY,
   STOPPED_TURN_STEP,
+  STREAM_IDLE_MS,
+  StreamIdleError,
   StreamInterruptedError,
   TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE,
@@ -9239,6 +9522,7 @@ export {
   brainPersonaAgents,
   brainRequestError,
   buildBrainTriageReport,
+  buildChatDiagnosticsReport,
   buildComposerDirectives,
   buildModelItems,
   byoReasonHint,
@@ -9266,6 +9550,7 @@ export {
   consolidationMetadata,
   countReconciledMemories,
   createBrainRestPersistence,
+  createComposingActivity,
   createPayloadBudget,
   declinesShipping,
   deriveChatTitle,
@@ -9289,12 +9574,16 @@ export {
   formatAssistantTranscriptHeading,
   formatBrainDiagnostics,
   formatBrainProvenance,
+  formatBytes,
   formatChatDiagnostics,
+  formatChatDiagnosticsReportJson,
+  formatDispatchRefusals,
   formatEvermindLearnStep,
   formatEvermindMemoryBlock,
   formatModelScorecard,
   formatModelTurnLog,
   formatRunProgress,
+  formatStaffingSummary,
   gatherChatDiagnostics,
   getGlobalRunState,
   getLastResolvedModel,
@@ -9312,6 +9601,7 @@ export {
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
+  isDispatchTool,
   isEffort,
   isEvermindModel,
   isFailedToolResult,
@@ -9323,6 +9613,7 @@ export {
   isStepMessage,
   isStoppedTurn,
   isTicketRecordingTool,
+  isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
   isUserConfiguredModelRef,
@@ -9376,6 +9667,7 @@ export {
   projectMemoryHooks,
   ratedTurnContext,
   ratedTurnTool,
+  readWithIdleWatchdog,
   reasoningForRun,
   repeatedFailureAdvisory,
   requestRunConfirm,
@@ -9400,6 +9692,7 @@ export {
   shippedToBaseBranch,
   shortenTarget,
   stableStringify,
+  staffingSummaryInTrace,
   stallRecoveriesInTrace,
   stallUnrecoveredInTrace,
   startRun,
@@ -9413,6 +9706,7 @@ export {
   subscribeToChatMessages,
   takePendingPrompt,
   toolActivity,
+  toolCallArgBytes,
   toolExposureInTrace,
   toolNamesMentionedIn,
   toolSpecsFor,
@@ -9431,10 +9725,12 @@ export {
   useOptionalBrainContext,
   useRegisterBrainActions,
   useToolConfirmationGate,
+  utf8ByteLength,
   withAdvisory,
   withDirectedMetadata,
   withObservedModel,
   withProvenanceMetadata,
+  workFiledNotStaffedVerdict,
   workItemLinkFromCreate
 };
 //# sourceMappingURL=index.mjs.map

@@ -132,7 +132,14 @@ export function chatConversationDirective(): string {
  * Tool names here are the ADVERTISED (`builtin_*`) names the model actually sees on
  * the gateway relay — never the catalog ids, which appear nowhere in its tool list.
  */
-export function chatWorkDirective(chatId: number, opts?: { canEditHere?: boolean }): string {
+export function chatWorkDirective(chatId: number, opts?: { canEditHere?: boolean; canDelegate?: boolean }): string {
+  // Delegation is named ONLY where the surface actually advertises `spawn_agent`. A tool
+  // the prompt names and the catalog does not carry is the "narrated but never advertised"
+  // failure by construction: the model writes the call it was told to make, nothing
+  // executes, and the run reads as a model fault. The web Brain has no sub-agent tool.
+  const throughThem = opts?.canDelegate
+    ? " When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns."
+    : '';
   const doItHere = opts?.canEditHere
     ? `• DO IT HERE WHEN YOU CAN. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls — a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code — you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.\n`
     : '';
@@ -141,6 +148,7 @@ export function chatWorkDirective(chatId: number, opts?: { canEditHere?: boolean
     `${chatWorkLinkingDirective(chatId)}\n` +
     doItHere +
     `• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict — read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n` +
+    `• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. When you file tickets, assign and dispatch the agent whose role fits each one — never leave a ticket with no agent on it.${throughThem}\n` +
     `• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason, do not retry the same dispatch hoping for a different answer, and if the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`
   );
 }
@@ -150,6 +158,6 @@ export function chatWorkDirective(chatId: number, opts?: { canEditHere?: boolean
  * behaviour, so the two surfaces (web Brain, VS Code webview) and the shared agent loop
  * cannot drift on what a mode means.
  */
-export function chatModeDirective(mode: ChatMode, chatId: number, opts?: { canEditHere?: boolean }): string {
+export function chatModeDirective(mode: ChatMode, chatId: number, opts?: { canEditHere?: boolean; canDelegate?: boolean }): string {
   return mode === 'work' ? chatWorkDirective(chatId, opts) : chatConversationDirective();
 }

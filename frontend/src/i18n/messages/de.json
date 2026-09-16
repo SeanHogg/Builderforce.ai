@@ -257,6 +257,7 @@
     "effort_thorough": "Gründlich",
     "thinking": "Nachdenken",
     "accountSettings": "Kontoeinstellungen",
+    "status": "Status",
     "autoMode": "Automatikmodus",
     "autoModeHint": "Aktionen automatisch ohne Rückfrage genehmigen",
     "dictate": "Diktieren",
@@ -3031,14 +3032,7 @@
       "sizeBand": "Teamgröße",
       "tableTitle": "Ihre Kennzahlen vs. Kohorte",
       "footnote": "Perzentile werden gegen vordefinierte Branchenkohorten-Verteilungen (p10–p90) interpoliert. Bei Kennzahlen, bei denen niedriger besser ist (Lead Time, Change-Failure-Rate, MTTR, Kosten), schneidet ein kleinerer Wert höher ab.",
-      "industries": {
-        "software_saas": "Software / SaaS",
-        "fintech": "Fintech / Finanzdienstleistungen",
-        "ecommerce": "E-Commerce / Handel",
-        "healthtech": "Healthtech / Life Sciences",
-        "agency_services": "Agentur / Professional Services",
-        "enterprise_it": "Enterprise IT"
-      },
+      "noCohort": "Für {industry} gibt es noch keine Benchmark-Kohorte. Ihre Werte werden ohne Rangfolge angezeigt; die Verteilung kommt mit einer Seed-Migration, oder wählen Sie jetzt eine vorhandene Kohorte zum Vergleich.",
       "sizeBands": {
         "small": "Klein (1–20)",
         "mid": "Mittel (21–200)",
@@ -11154,6 +11148,8 @@
         "starting": "Wird gestartet…",
         "thinking": "Denkt nach…",
         "writing": "Antwort wird geschrieben…",
+        "composing": "{tool}-Aufruf wird verfasst…",
+        "composed": " — bisher {bytes}",
         "tool": "{tool} wird ausgeführt",
         "awaiting": "Warten auf Ihre Freigabe von {tool}",
         "finishing": "Wird abgeschlossen…",
@@ -11221,6 +11217,7 @@
     "tickets": {
       "none": "Noch keine Tickets verknüpft.",
       "ringAria": "{label}: {pct}% erledigt",
+      "inParent": "in {parent}",
       "spawned": "hier erstellt",
       "open": "Öffnen",
       "run": "Agent auf dem Ticket ausführen",
@@ -12176,6 +12173,10 @@
         "label": "Freigabe vor dem Abschluss verlangen",
         "help": "Aus, bis Sie es einschalten. Wenn aktiviert, wird ein Ticket erst abgeschlossen – und sein Pull Request erst gemergt –, wenn alle erforderlichen Prüfenden freigegeben haben, und der Manager erinnert weiterhin die Rollen, die noch ausstehen. Ein Ticket, das niemand prüfen sollte, erfüllt die Bedingung nie."
       },
+      "coordinationGate": {
+        "label": "Für die Koordination von Tickets einen Manager verlangen",
+        "help": "Standardmäßig aus. Ist die Option aus, können alle Entwicklerinnen, Entwickler und Agenten im Projekt den Ticket-Koordinator ausführen, erforderliche Rollen hinzufügen, Beteiligte zuweisen und Arbeitspakete anlegen. Ist sie an, dürfen das nur Manager — und einem Agenten, der koordinieren soll, wird gesagt, er möge einen Manager bitten, sie auszuschalten."
+      },
       "tri": {
         "on": "Ein",
         "off": "Aus",
@@ -12192,6 +12193,8 @@
         "mergeWithheld": "Merges warten auf einen Menschen",
         "signoffRequired": "Freigabe zum Abschließen erforderlich",
         "signoffOptional": "Keine Freigabe erforderlich",
+        "coordinationGated": "Manager koordinieren Tickets",
+        "coordinationOpen": "Alle im Projekt koordinieren",
         "ceremoniesUnattended": "Darf Zeremonien ohne Personen führen",
         "ceremoniesNeedPeople": "Zeremonien brauchen eine Person",
         "reassignGranted": "Darf ab {hours} h Untätigkeit neu zuweisen",
@@ -20574,6 +20577,8 @@
     "newSession": "Neue Session",
     "add": "Hinzufügen",
     "moreActions": "Weitere Session-Aktionen",
+    "actions": "Aktionen",
+    "closeActions": "Aktionen schließen",
     "createAndView": "Erstellen und ansehen",
     "sessionTools": "Session-Werkzeuge",
     "selectionActions": "Auswahlaktionen",
@@ -20595,6 +20600,19 @@
     "share": "Einladen",
     "run": "Ausführen",
     "askBrain": "Brain zu diesem Canvas fragen",
+    "composerIntent": {
+      "label": "Was die Eingabetaste tut",
+      "ask": {
+        "label": "Brain fragen",
+        "placeholder": "Brain zu diesem Canvas fragen",
+        "submit": "An Brain senden"
+      },
+      "captureIdea": {
+        "label": "Idee",
+        "placeholder": "Notiere eine Idee. Die Eingabetaste erfasst sie als Karte; mit „Brain fragen“ geht sie stattdessen an Brain.",
+        "submit": "Notieren"
+      }
+    },
     "sendBrain": "An Brain senden",
     "resizePrompt": "Größe des Prompt-Bereichs ändern",
     "dragHandle": "Ziehen, um dieses Panel zu verschieben",
@@ -20963,7 +20981,14 @@
     "diagnosticsCopyFailed": "Diagnosedaten konnten nicht kopiert werden — die Zwischenablage war nicht verfügbar",
     "diagnosticsBuildFailed": "Diagnosedaten konnten nicht erstellt werden — {reason}",
     "brain": "Brain",
+    "brainLauncher": {
+      "unread": "{count, plural, one {# Antwort von Brain} other {# Antworten von Brain}}"
+    },
     "brainDock": "Brain-Chat",
+    "brainSheet": {
+      "veil": "Brain-Panel schließen und zum Canvas zurückkehren",
+      "grabber": "Brain-Panel schließen"
+    },
     "openBrainDock": "Brain-Chat einblenden",
     "openBrainDockBusy": "Brain arbeitet — Brain-Chat einblenden",
     "closeBrain": "Brain-Chat schließen",
@@ -24397,14 +24422,7 @@
         "active": "Sie sind in Ideen",
         "regionLabel": "Der Ideen-Notizblock dieses Canvas",
         "heading": "Ideen-Notizblock",
-        "lede": "Notieren Sie Ideen, sobald sie Ihnen kommen, und verfolgen Sie jede vom ersten Gedanken bis zu etwas Getestetem. Jede Idee ist eine Karte auf dem Board – Brain kann sie recherchieren, Kundeninterviews können sie prüfen.",
-        "capture": {
-          "label": "Neue Idee",
-          "placeholder": "Notieren Sie eine Idee – ein Satz genügt. Die erste Zeile wird zum Titel.",
-          "submit": "Notieren",
-          "hint": "Strg+Enter zum Notieren. Die ganze Notiz bleibt erhalten.",
-          "readOnly": "Sie können diese Ideen lesen, aber nur Bearbeiter können diesem Canvas etwas hinzufügen."
-        },
+        "lede": "Notieren Sie Ideen, sobald sie Ihnen kommen – schreiben Sie eine in das Feld unten, und die Eingabetaste behält sie als Karte auf dem Board. Verfolgen Sie jede vom ersten Gedanken bis zu etwas Getestetem, damit Brain sie recherchieren und Kundeninterviews sie prüfen können.",
         "filterLabel": "Ideen nach Phase anzeigen",
         "filterAll": "Alle Ideen",
         "stageLabel": "Phase von „{idea}“",
@@ -24420,7 +24438,7 @@
         "count": "{count, plural, =0 {Keine Ideen} one {# Idee} other {# Ideen}}",
         "empty": {
           "title": "Noch keine Ideen",
-          "body": "Notieren Sie Ihre nächste Idee – halb fertig ist in Ordnung. Jede landet als Karte auf dem Board, die Sie recherchieren, mit Kundeninterviews testen und real werden lassen können."
+          "body": "Notieren Sie Ihre nächste Idee im Feld unten – halb fertig ist in Ordnung. Jede landet als Karte auf dem Board, die Sie recherchieren, mit Kundeninterviews testen und real werden lassen können."
         },
         "filteredEmpty": "Keine Ideen in dieser Phase.",
         "row": {
@@ -24571,7 +24589,10 @@
     "floatPrompt": "Den Prompt ueber dem Board schweben lassen",
     "hidePrompt": "Den Prompt ausblenden",
     "showPrompt": "Den Prompt einblenden",
-    "canvasPanelControls": "Canvas-Bereiche",
+    "backToLibrary": "Zurück zu deinen Canvas",
+    "sessionStage": "Phase der Sitzung",
+    "rosterChip": "{count, plural, one {# Person auf diesem Canvas} other {# Personen auf diesem Canvas}}",
+    "surfaceStrip": "Canvas-Ansichten",
     "promptName": "Brain fragen",
     "objectDescription": {
       "workflow": "Eine automatisierte Schrittfolge, die Ihren Prozess von Anfang bis Ende ausführt.",
@@ -31646,21 +31667,25 @@
         "scale": "Skalierung"
       },
       "sector": {
+        "ai_ml": "KI / ML",
+        "saas": "SaaS",
         "fintech": "FinTech",
         "healthtech": "HealthTech",
-        "edtech": "EdTech",
-        "ecommerce": "E-Commerce",
-        "saas": "SaaS",
+        "medtech": "MedTech",
+        "biotech": "BioTech",
+        "climate_energy": "Klima & Energie",
+        "hardware_robotics": "Hardware & Robotik",
+        "cybersecurity": "Cybersicherheit",
         "marketplace": "Marktplatz",
+        "ecommerce": "E-Commerce",
         "consumer_apps": "Verbraucher-Apps",
         "enterprise_software": "Unternehmenssoftware",
-        "ai_ml": "KI / ML",
+        "edtech": "EdTech",
         "blockchain": "Blockchain",
         "gaming": "Gaming",
         "media_entertainment": "Medien & Unterhaltung",
         "real_estate": "Immobilien",
         "logistics": "Logistik",
-        "sustainability": "Nachhaltigkeit",
         "other": "Sonstiges"
       },
       "seeking": {

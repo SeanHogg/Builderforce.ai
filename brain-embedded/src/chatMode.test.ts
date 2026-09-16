@@ -88,6 +88,34 @@ describe('chatModeDirective', () => {
       expect(chatWorkDirective(7)).toContain('builtin_executions_post_message');
     });
 
+    /**
+     * Chat #113 filed twelve tickets and assigned nobody. Work mode's dispatch bullet
+     * described the MECHANISM (read `autoRun`, call dispatch) without ever saying that
+     * the workspace's agents are the people the work belongs to.
+     */
+    it('names the team as the people the work belongs to', () => {
+      const d = chatWorkDirective(7);
+      expect(d).toContain('STAFF WITH THE TEAM');
+      expect(d).toContain('builtin_chats_list_agents');
+      expect(d).toContain('builtin_cloud_agents_list_mine');
+      expect(d).toMatch(/never leave a ticket with no agent on it/i);
+    });
+
+    it('asks a delegating surface to do its own slices IN an agent\'s persona', () => {
+      const d = chatWorkDirective(7, { canDelegate: true });
+      expect(d).toContain('spawn_agent with as_agent=');
+      expect(d).toMatch(/work nobody owns/i);
+    });
+
+    it('never names spawn_agent on a surface that lacks it', () => {
+      // A tool named in the prompt but absent from the catalog is the
+      // "narrated but never advertised" failure by construction: the model writes the
+      // call it was told to make and nothing executes. The web Brain has no sub-agents.
+      expect(chatWorkDirective(7)).not.toContain('spawn_agent');
+      expect(chatWorkDirective(7, { canEditHere: true })).not.toContain('spawn_agent');
+      expect(chatModeDirective('work', 7, { canDelegate: true })).toContain('spawn_agent');
+    });
+
     it('tells the model to read a refusal rather than retry it', () => {
       // The measured turn retried the identical dispatch after a refusal, twice.
       expect(chatWorkDirective(7)).toMatch(/do not retry the same dispatch/i);

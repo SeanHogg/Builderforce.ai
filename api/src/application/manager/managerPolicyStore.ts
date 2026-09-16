@@ -64,6 +64,9 @@ export async function getManagerConfigRow(
       agentReassignIdleHours: projectManagerConfigs.agentReassignIdleHours,
       agentReassignMaxPerSession: projectManagerConfigs.agentReassignMaxPerSession,
       allowAutoStaffLanes: projectManagerConfigs.allowAutoStaffLanes,
+      // Coordination gate (1177) — project-only, so it is read HERE and nowhere on the
+      // workspace tier.
+      coordinationRequiresManager: projectManagerConfigs.coordinationRequiresManager,
       lastRunAt: projectManagerConfigs.lastRunAt,
       lastSweepDecision: projectManagerConfigs.lastSweepDecision,
       lastSweepReason: projectManagerConfigs.lastSweepReason,
@@ -238,7 +241,7 @@ export async function upsertManagerConfig(
   db: Db,
   tenantId: number,
   projectId: number,
-  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'autoSchedule' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge' | 'allowUnattendedCeremonies' | 'allowAgentReassignment' | 'agentReassignIdleHours' | 'agentReassignMaxPerSession' | 'allowAutoStaffLanes'>>,
+  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'autoSchedule' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge' | 'allowUnattendedCeremonies' | 'allowAgentReassignment' | 'agentReassignIdleHours' | 'agentReassignMaxPerSession' | 'allowAutoStaffLanes' | 'coordinationRequiresManager'>>,
 ): Promise<ManagerConfigRow> {
   const now = new Date();
   await db
@@ -275,6 +278,9 @@ export async function upsertManagerConfig(
       // 0386 — NULL on insert for the same reason as the two above: a brand-new project
       // has never had an opinion about whether the manager may configure a lane for it.
       allowAutoStaffLanes: patch.allowAutoStaffLanes ?? null,
+      // 1177 — NOT NULL like requireSignoffToComplete, so it takes the shared hardcoded
+      // floor rather than a NULL "inherit": there is no workspace tier to inherit from.
+      coordinationRequiresManager: patch.coordinationRequiresManager ?? DEFAULT_MANAGER_POLICY.coordinationRequiresManager,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -295,6 +301,7 @@ export async function upsertManagerConfig(
         ...(patch.agentReassignIdleHours !== undefined ? { agentReassignIdleHours: patch.agentReassignIdleHours } : {}),
         ...(patch.agentReassignMaxPerSession !== undefined ? { agentReassignMaxPerSession: patch.agentReassignMaxPerSession } : {}),
         ...(patch.allowAutoStaffLanes !== undefined ? { allowAutoStaffLanes: patch.allowAutoStaffLanes } : {}),
+        ...(patch.coordinationRequiresManager !== undefined ? { coordinationRequiresManager: patch.coordinationRequiresManager } : {}),
         updatedAt: now,
       },
     });

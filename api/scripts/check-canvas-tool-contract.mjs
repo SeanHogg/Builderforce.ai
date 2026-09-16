@@ -211,7 +211,12 @@ for (const [name, description] of declarations) {
 // A prompt block wrapped in `persistence === 'server'` is exempt, because that block
 // does not exist on an anonymous board — that is how the BUILDING SOFTWARE paragraph
 // legitimately names the seven account-required build tools.
-const PROMPT_FILE = path.resolve(repoRoot, 'frontend', 'src', 'lib', 'creationCanvasAi.ts');
+const PROMPT_FILES = [
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'creationCanvasAi.ts'),
+  // The assembled system prompt moved here. Scanning only the runner left rule 3
+  // vacuous for every paragraph that actually reaches the model.
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasAiSystemPrompt.ts'),
+];
 
 /** True when this node sits inside the true-branch of a `persistence === 'server'`
  *  conditional — i.e. the text only reaches a signed-in board. */
@@ -228,10 +233,13 @@ function isServerOnly(node) {
   return false;
 }
 
-if (!fs.existsSync(PROMPT_FILE)) {
-  failures.push(`the canvas prompt is missing — expected ${PROMPT_FILE}. This guard reads it; a moved file must move this path too.`);
-} else {
-  const source = ts.createSourceFile(PROMPT_FILE, fs.readFileSync(PROMPT_FILE, 'utf8'), ts.ScriptTarget.Latest, true);
+for (const promptFile of PROMPT_FILES) {
+  const rel = path.relative(repoRoot, promptFile).replaceAll('\', '/');
+  if (!fs.existsSync(promptFile)) {
+    failures.push(`the canvas prompt is missing — expected ${rel}. This guard reads it; a moved file must move this path too.`);
+    continue;
+  }
+  const source = ts.createSourceFile(promptFile, fs.readFileSync(promptFile, 'utf8'), ts.ScriptTarget.Latest, true);
   const visit = (node) => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
       const text = node.getText();
@@ -241,7 +249,7 @@ if (!fs.existsSync(PROMPT_FILE)) {
         for (const name of reachable) {
           if (guestAdvertised.has(name)) continue;
           const { line } = source.getLineAndCharacterOfPosition(node.getStart());
-          failures.push(`the canvas system prompt names ${name} at creationCanvasAi.ts:${line + 1}, but that tool is account-required and absent from an anonymous board. Either reclassify it as guest-gated so it states its own reason when called, or move that prompt block inside the \`options.persistence === 'server'\` branch.`);
+          failures.push(`the canvas system prompt names ${name} at ${rel}:${line + 1}, but that tool is account-required and absent from an anonymous board. Either reclassify it as guest-gated so it states its own reason when called, or move that prompt block inside the \`options.persistence === 'server'\` branch.`);
         }
       }
     }
@@ -249,7 +257,6 @@ if (!fs.existsSync(PROMPT_FILE)) {
   };
   visit(source);
 }
-
 if (failures.length) {
   console.error('check-canvas-tool-contract FAILED:\n');
   for (const failure of failures) console.error(`  • ${failure}`);

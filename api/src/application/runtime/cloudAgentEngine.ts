@@ -94,6 +94,7 @@ import {
 } from '@builderforce/agent-tools';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
 import { buildOrchestrationCapability, imageHostedChildCeiling } from './cloudSubagent';
+import { resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
 import { imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
 import { RUN_CONTEXT_ORDER } from './runContextSource';
@@ -1282,6 +1283,11 @@ async function runCloudToolLoop(
       provider: decoratedProvider,
       registry: cloudToolRegistry,
       signal: abortController.signal,
+      // Delegating AS one of the workspace's agents (operator decision 2026-09-15).
+      // The child then runs under Ada's role, skills and personality instead of the
+      // surface's generic sub-agent instructions — compiled by the ONE persona
+      // compiler every other surface runs an agent on.
+      personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
       complete: async ({ messages: childMessages, tools, step, role }) => {
         const tGen0 = Date.now();
         // A CODE delegation rides the model the parent LOCKED onto: a delegation is a

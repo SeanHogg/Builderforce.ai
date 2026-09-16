@@ -17,18 +17,12 @@ import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect } from './LensShell';
 import { useFormat } from "@/i18n/useFormat";
+import { useStartupLabels } from '@/components/startups/useStartupLabels';
 
-/**
- * Label a cohort id. The catalogues carry a name for every SEEDED cohort, but the
- * list is now server-derived — a migration can seed a cohort before the
- * catalogues name it, and a missing key must not render as a raw `benchmarking.
- * industries.foo` in the picker. Falls back to the id, humanised.
- */
-function industryLabel(t: ReturnType<typeof useTranslations>, id: string): string {
-  const key = `benchmarking.industries.${id}`;
-  const label = t.has(key) ? t(key) : '';
-  return label || id.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
-}
+// Cohort ids ARE the startup sectors since migration 1176 (PRD 25 §6.4), so the
+// picker spells them the way the directory and the listing wizard do — one
+// vocabulary, one label per locale. An id the catalog does not know falls back
+// to the raw key inside the hook rather than to an inline English string.
 
 /** Format a percentile (e.g. 72 → "72nd"). */
 function ordinal(n: number | null): string {
@@ -100,6 +94,7 @@ const selectStyle: React.CSSProperties = {
 export function BenchmarkingLens() {
   const fmt = useFormat();
   const t = useTranslations('insights');
+  const labels = useStartupLabels();
   const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);
   const [profileTick, setProfileTick] = useState(0);
@@ -148,7 +143,7 @@ export function BenchmarkingLens() {
               aria-label={t('benchmarking.industry')}
             >
               {(cohorts?.industries ?? [data.industry]).map((id) => (
-                <option key={id} value={id}>{industryLabel(t, id)}</option>
+                <option key={id} value={id}>{labels.sector(id)}</option>
               ))}
             </Select>
           </label>
@@ -171,6 +166,11 @@ export function BenchmarkingLens() {
       </div>
 
       <PmCard title={t('benchmarking.tableTitle')}>
+        {!data.cohortSeeded && (
+          <p role="status" style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '0 0 12px', padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2, var(--surface))', border: '1px solid var(--border)' }}>
+            {t('benchmarking.noCohort', { industry: labels.sector(data.industry) })}
+          </p>
+        )}
         <div style={tableWrapStyle}>
           <table style={tableStyle}>
             <thead>

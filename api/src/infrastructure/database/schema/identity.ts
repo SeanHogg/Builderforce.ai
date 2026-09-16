@@ -986,7 +986,8 @@ export const vscodeConnections = pgTable('vscode_connections', {
 
 export const tenantBenchmarkProfiles = pgTable('tenant_benchmark_profiles', {
   tenantId:  integer('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
-  industry:  varchar('industry', { length: 48 }).notNull().default('software_saas'),
+  // The startup-sector vocabulary (`STARTUP_SECTORS`) since migration 1176 — PRD 25 §6.4.
+  industry:  varchar('industry', { length: 48 }).notNull().default('saas'),
   sizeBand:  varchar('size_band', { length: 16 }).notNull().default('mid'),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

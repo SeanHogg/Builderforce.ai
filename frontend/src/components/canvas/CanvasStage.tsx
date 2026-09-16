@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
@@ -28,6 +28,7 @@ import styles from './CanvasStage.module.css';
 export function CanvasStage() {
   const t = useTranslations('canvasStage');
   const pathname = usePathname() || '';
+  const router = useRouter();
   const canvas = useOptionalActiveCanvas();
   const scope = useOptionalProjectScope();
   const live = useOptionalLiveSession();
@@ -97,6 +98,12 @@ export function CanvasStage() {
               // teammate joined from the footer must land on the board being
               // looked at, not on every cached instance behind it.
               stageActive={selected}
+              // THE WAY OUT, on a phone. `/create/<id>` draws its own app bar at that
+              // width (the shell's header stands down on a stage route), and its back
+              // button goes to the canvas LIBRARY. It is a prop rather than a push
+              // inside the canvas because an embedding host may have no library behind
+              // it — the VS Code webview passes nothing and no button is drawn.
+              onExitToLibrary={() => router.push('/create')}
             />
           </div>
         );

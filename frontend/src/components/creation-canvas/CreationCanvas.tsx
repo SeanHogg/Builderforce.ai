@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import dynamic from 'next/dynamic';
 import {
@@ -20,7 +20,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DisclosureIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ProveIdeaIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, DisclosureIcon, MoreActionsIcon, ProveIdeaIcon, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { CanvasNodeFace } from '@/components/canvas/CanvasNodeFace';
 import type { CanvasRoomSurfaceProps } from './CanvasRoomSurface';
@@ -47,16 +47,23 @@ import { CanvasNodePanel } from './CanvasNodePanel';
 import { CanvasObjectPicker } from './CanvasObjectPicker';
 import { parsePaletteChoice, stencilSeed, stencilSize, type PaletteChoice } from '@/lib/canvasStencils';
 import {
-  CONNECTION_ENDS, CONNECTION_LINES, CONNECTION_ROUTERS, DEFAULT_CONNECTION_STYLE,
-  edgeVisuals, readConnectionStyle, type ConnectionStyle,
+  DEFAULT_CONNECTION_STYLE, edgeVisuals, readConnectionStyle, type ConnectionStyle,
 } from '@/lib/canvasConnectionStyle';
 import { CanvasSurfaceRouter, type CanvasSurfaceNodes } from './CanvasSurfaceRouter';
 import { CanvasFacilitateSurface } from './CanvasFacilitateSurface';
 import { publishPoll, setPollState } from '@/lib/pollApi';
 import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import { CanvasCalendarSurface } from './CanvasCalendarSurface';
-import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { PhaseModalitySelector } from './PhaseModalitySelector';
+import { CanvasSurfaceStrip } from './CanvasSurfaceStrip';
+import { CanvasPhoneAppBar } from './CanvasPhoneAppBar';
+import { CanvasComposer } from './CanvasComposer';
+import { CanvasActionsSheet } from './CanvasActionsSheet';
+import { CanvasActionsTrigger } from './CanvasActionsTrigger';
+import { CanvasBoardMenuBody, type CanvasDockPanel } from './CanvasBoardMenuBody';
+import { useBrainUnreadReplies } from './useBrainUnreadReplies';
+import { usePhoneViewport } from '@/lib/usePhoneViewport';
+import { IDEA_KIND, ideaFromScratch } from '@/lib/ideaLog';
 import { CanvasInsightsSurface } from './CanvasInsightsSurface';
 import { CanvasIdeasSurface } from './CanvasIdeasSurface';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
@@ -297,9 +304,6 @@ import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode'
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
 import { useChromeSpace } from './useChromeSpace';
-import { usePanelDragOffset } from './usePanelDragOffset';
-import { PanelDragHandle } from './PanelDragHandle';
-import { mergeRefs } from '@/lib/mergeRefs';
 import {
   fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
 } from '@/domains/canvas/application/ImportCanvasFile';
@@ -364,7 +368,7 @@ import { SectionTour, type SectionTourStep } from '@/components/onboarding/Secti
 import { useSectionTour } from '@/components/onboarding/useSectionTour';
 import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 import { useChatModelOptions } from '@/lib/useLlmModels';
-import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
+import type { ChatModelSelection } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
 import {
   C_SUITE_CANVAS_USE_CASES,
@@ -676,9 +680,6 @@ type FramePreset = { id: string; name: string; data: CreationNodeData };
 type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number; metadata?: CreationTimelineMessage['metadata'] };
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 type AccountGate = { title: string; description: string; action: string };
-/** The panels that share the canvas's left dock. One is open, or none is. */
-type CanvasDockPanel = 'files' | 'miro' | 'social' | 'ads' | 'outline';
-
 
 export async function persistCanonicalProjectPrd(
   node: CreationFlowNode,
@@ -1019,7 +1020,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
   };
 }
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId }) {
+function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface, onExitToLibrary }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId; onExitToLibrary?: () => void }) {
   const fmt = useFormat();
   /** The board's language — recorded on content minted INTO the board (the worked
    *  course's `language`), alongside the copy `canvasText` mints in it. */
@@ -1269,6 +1270,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** The phone's actions sheet — the one that IS the command bar at that width. Its own
+   *  flag for the reason `realOpen` has one: three sheets, three presses. */
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const closeActionsSheet = useCallback(() => setActionsOpen(false), []);
+  /** The two phone decisions CSS cannot make: which host renders the board menu and the
+   *  invite sheet (rendering, not hiding — see `usePhoneViewport`), and which verb the
+   *  composer arms while the Brain sheet is open. */
+  const phoneViewport = usePhoneViewport();
   /** Whether the Make it real menu is open. Its own state and not `moreOpen`'s: the two
    *  sheets sit at opposite ends of the bar and each closes the other, which a shared
    *  flag could not express. */
@@ -1591,33 +1600,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // tools, one memo) is not rebuilt on every keystroke.
   const promptRef = useRef(prompt);
   useEffect(() => { promptRef.current = prompt; }, [prompt]);
-  const [promptHeight, setPromptHeight] = useState(34);
-  const promptResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
-  const clampPromptHeight = useCallback((height: number) => Math.min(240, Math.max(34, height)), []);
-  const handlePromptResizeStart = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    promptResizeRef.current = { pointerId: event.pointerId, startY: event.clientY, startHeight: promptHeight };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  }, [promptHeight]);
-  const handlePromptResizeMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    const resize = promptResizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    setPromptHeight(clampPromptHeight(resize.startHeight + resize.startY - event.clientY));
-  }, [clampPromptHeight]);
-  const handlePromptResizeEnd = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (promptResizeRef.current?.pointerId !== event.pointerId) return;
-    promptResizeRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-  }, []);
-  const handlePromptResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? 32 : 16;
-    if (event.key === 'ArrowUp') setPromptHeight((height) => clampPromptHeight(height + step));
-    else if (event.key === 'ArrowDown') setPromptHeight((height) => clampPromptHeight(height - step));
-    else if (event.key === 'Home') setPromptHeight(34);
-    else if (event.key === 'End') setPromptHeight(240);
-    else return;
-    event.preventDefault();
-  }, [clampPromptHeight]);
+  /* The prompt's HEIGHT, its resize grip and its drag offset all moved into
+     `CanvasComposer` with the markup: they are chrome of that one card, nothing outside
+     it ever read the number, and seven hooks here were seven hooks this file did not
+     need to own. */
   const [twilioPromptSelected, setTwilioPromptSelected] = useState(false);
   const [thinking, setThinking] = useState(false);
   /**
@@ -1996,10 +1982,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // band every bottom-anchored panel and the phone command rail sit above. It
   // was a hardcoded 112px, which the execution chip alone overran.
   const composerDockRef = useChromeSpace(flowWrapRef, '--composer-space');
-  // The composer is one of the floating cards a reader can pull clear of the board with
-  // its own handle; see `usePanelDragOffset`. Only meaningful while it floats — docked
-  // into the Brain panel it is a row in that column, not a positioned card of its own.
-  const composerDrag = usePanelDragOffset('composer');
   // The command bar's real height, published to the SHELL as `--canvas-command-bar-space`
   // — the band the floating prompt sits above. Measured for the same reason and by the
   // same hook: the bar grows by whatever the SURFACE contributes to it (the App surface's
@@ -3718,6 +3700,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
     return node;
   }, [localizedTourDefaults, sessionId, setNodes, timeline]);
+
+  /**
+   * WHAT ENTER MEANS ON THE SCRATCHPAD — the `captureIdea` composer intent, wired to the
+   * SAME board mutation the retired `IdeaCaptureForm` called. It clears the prompt on
+   * success and only on success: a line that produced no card must not be thrown away.
+   */
+  const captureIdeaFromComposer = useCallback((text: string) => {
+    if (!cardsEditable) return;
+    const data = ideaFromScratch(text);
+    if (!data) return;
+    appendAtCenter(IDEA_KIND, data as Partial<CreationNodeData>);
+    setPrompt('');
+  }, [appendAtCenter, cardsEditable]);
 
   const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>, size?: { width: number; height: number }) => {
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
@@ -11998,8 +11993,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     next: `/create/${sessionId}`,
     onAccept: () => trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: 'guest_limit' } }),
   }), [guestLimit, sessionId]);
+  /**
+   * HOW MANY REPLIES LANDED BEHIND A CLOSED BRAIN — the number the launcher pill wears
+   * and the Brain Object reads off the context below. See `useBrainUnreadReplies` for
+   * what "unread" means and why the mark is taken while the surface is open.
+   */
+  const brainUnreadReplies = useBrainUnreadReplies(brainMessages, brainSurfaceOpen);
   const brainSurface = useMemo<BrainSurfaceContextValue>(() => ({
     open: brainSurfaceOpen,
+    unreadReplies: brainUnreadReplies,
     canOpen: !presentMode,
     mode: brainPlacement,
     showExecutionDetail: brainDock.showExecutionDetail,
@@ -12022,16 +12024,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     onClose: () => updateBrainDock({ open: false }),
   }), [
     brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt,
-    brainRunning, brainSurfaceOpen, brainTrace, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence,
-    presentMode, rateBrainMessage, replayBrainMessage, updateBrainDock,
+    brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes,
+    openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, updateBrainDock,
   ]);
 
-  /**
-   * The prompt lives in the centre of the board, bottom-aligned — where ChatGPT and
-   * every other chat product people already use puts it. It is deliberately NOT part
-   * of the Brain surface: it stays put and stays reachable whether Brain is inline in
-   * its Object, docked to either edge, or closed entirely.
-  */
+  /* The prompt sits bottom-centre, where every chat product people already use puts it,
+     and is deliberately NOT part of the Brain surface: it stays reachable whether Brain
+     is inline in its Object, docked to either edge, or closed entirely. */
   const canvasUsesTwilio = twilioPromptSelected || nodes.some((node) => (
     Array.isArray(node.data.steps) && node.data.steps.some((step) => {
       if (!step || typeof step !== 'object' || Array.isArray(step)) return false;
@@ -12058,44 +12057,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }} />
   </div>;
 
-  /**
-   * `data-testid` on the composer, the board, the palette and every node.
-   *
-   * ── WHY THESE EXIST ──────────────────────────────────────────────────────────
-   * The canvas shipped with ZERO test ids, so `qa-e2e/tests/creation-canvas.spec.ts`
-   * selected by accessible name — `/session title/i`, `/ask brain/i`. Two silent
-   * consequences: the suite could not run in any of the four non-English locales the
-   * product ships, and a copy edit turned it red with no behaviour change (which had
-   * already happened for "Create free account" vs "Create a free account"). The
-   * Agentic Tester has the same problem one layer down: `QaHeatZone.selector` wants a
-   * stable selector for an element-level hot zone, and the product's most important
-   * surface offered none.
-   *
-   * They are additive: every aria-label stays, because a test id is for a test and an
-   * accessible name is for a person.
-   */
-  // When Brain IS the surface (chat mode), there is no separate dock to join and no board
-  // behind it to hand the composer's space back to — it is the surface's only input, so it
-  // stays fixed, centred and always open, exactly like `CanvasChatSurface`'s docs describe.
-  // `float`/`docked`/`closed` remain a per-browser preference for every OTHER surface; chat
-  // just declines to read it, the same way `BrainSurfaceActions` declines the dock toggle
-  // (see the `onModeChange` comment in `CanvasChatSurface.tsx`).
-  //
-  // `docked` means the prompt is rendered INSIDE the Brain panel's column (see `BrainDock`),
-  // so it only holds while that panel is actually on screen. With Brain closed, inline in
-  // its Object, or replaced by a surface that IS the conversation, there is no column to be
-  // the last row of — so the preference is untouched and the prompt floats until the panel
-  // comes back, rather than being drawn into a panel that is not there.
+  // WHERE THE ONE COMPOSER GOES. When Brain IS the surface (chat) there is no dock to
+  // join and no board to hand the space back to, so it stays floating and open whatever
+  // the stored preference says. `docked` renders it INSIDE the Brain panel's column, so
+  // it only holds while that panel is on screen — otherwise the preference is untouched
+  // and the prompt floats until the panel comes back.
   const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
   /**
-   * A surface the EMBEDDING HOST supplies owns its whole centre, input included.
-   *
-   * The composer is wired to `evaluateCanvas`, which runs the turn in THIS browser
-   * context. A host that replaces a surface does so precisely because its runtime is
-   * somewhere this component cannot reach — in VS Code the run executes in the
-   * extension host so it survives the tab closing — so a composer pointing at the
-   * in-page runtime would be a second, quieter way to start a turn that behaves
-   * differently from the one the reader can see. The host brings its own.
+   * A surface the EMBEDDING HOST supplies owns its whole centre, input included: its
+   * runtime is somewhere this component cannot reach (in VS Code, the extension host),
+   * so a composer wired to the in-page `evaluateCanvas` would be a second, quieter way
+   * to start a turn that behaves differently from the one the reader can see.
    */
   const hostOwnsSurface = !!hostSurfaces?.[surface];
   const effectivePromptPlacement: CanvasPromptPlacement = hostOwnsSurface
@@ -12104,128 +12076,73 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ? 'float'
       : promptPlacement === 'docked' && !brainDockDrawn ? 'float' : promptPlacement;
   const promptInBrainPanel = effectivePromptPlacement === 'docked';
-  const composer = !presentMode && effectivePromptPlacement !== 'closed' && <div
-    // Measured ONLY while it floats over the board. In the Brain panel it is that panel's
-    // last row rather than the board's chrome, so the band the board reserves for it is
-    // zero — publishing the panel-relative height instead would push every low-anchored
-    // panel up by most of the window. `useChromeSpace` publishes `0px` the moment
-    // this ref stops being handed the node.
-    ref={promptInBrainPanel ? undefined : mergeRefs(composerDockRef, composerDrag.elementRef)}
-    data-testid="canvas-composer"
-    className={styles.composerDock}
-    data-placement={effectivePromptPlacement}
-    data-tour="creation-brain-dock"
-    style={promptInBrainPanel ? undefined : composerDrag.style}
-  >
-    {/* The prompt's own header, and the only place the dock decision is made. Closing is
-        offered from here and from the command bar; DOCKING is deliberate enough to belong
-        only on the thing being docked. Neither is offered while chat is the surface.
-        Inside the Brain panel the whole row stands down: that panel has a header of its
-        own naming this conversation, and the way back out is a control in it. */}
-    {!promptInBrainPanel && <div className={styles.promptChrome}>
-      <PanelDragHandle isMoved={composerDrag.isMoved} {...composerDrag.handleProps} />
-      <span className={styles.promptChromeName}>{t('promptName')}</span>
-      {!surfaceDef.brainIsSurface && <>
-        <button
-          type="button"
-          data-testid="canvas-prompt-dock"
-          aria-pressed={promptPlacement === 'docked'}
-          aria-label={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
-          title={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
-          // Docking puts the prompt in the Brain panel, so it OPENS that panel: a control
-          // whose whole effect is invisible until you separately find the launcher reads
-          // as a control that did nothing.
-          onClick={() => {
-            const next = promptPlacement === 'docked' ? 'float' : 'docked';
-            setPromptPlacement(next);
-            if (next === 'docked' && !brainDockDrawn) updateBrainDock({ open: true, mode: 'docked' });
-          }}
-        ><Icon name={promptPlacement === 'docked' ? 'external-link' : 'message'} size={14} /></button>
-        <button
-          type="button"
-          data-testid="canvas-prompt-close"
-          aria-label={t('hidePrompt')}
-          title={t('hidePrompt')}
-          onClick={() => setPromptPlacement('closed')}
-        ><Icon name="close" size={15} /></button>
-      </>}
-    </div>}
-    <div className={styles.composerUtilities}>
-      {/* Keep the settled receipt mounted after the run. Token consumption used
-          to disappear at the exact moment the answer arrived because this whole
-          component was conditional on `thinking`.
-
-          Not in the Brain panel: that panel's own footer (`BrainActivityBar`) is the
-          same reading of the same run, from the same `useBrainActivity` state, and two
-          copies of "Executing… read object · 36s" eight pixels apart is one live turn
-          reported twice. */}
-      {!promptInBrainPanel && <BrainActivityIndicator
-        running={thinking}
-        trace={brainTrace}
-        startedAt={brainRunStartedAt}
-        variant="composer"
-      />}
-      {promptStarter}
-    </div>
-    <div className={styles.promptComposerShell} style={{ '--canvas-prompt-height': `${promptHeight}px` } as CSSProperties}>
-      <div
-        role="separator"
-        tabIndex={0}
-        className={styles.promptResizeHandle}
-        aria-label={t('resizePrompt')}
-        aria-orientation="horizontal"
-        aria-valuemin={34}
-        aria-valuemax={240}
-        aria-valuenow={promptHeight}
-        onPointerDown={handlePromptResizeStart}
-        onPointerMove={handlePromptResizeMove}
-        onPointerUp={handlePromptResizeEnd}
-        onPointerCancel={handlePromptResizeEnd}
-        onLostPointerCapture={() => { promptResizeRef.current = null; }}
-        onKeyDown={handlePromptResizeKeyDown}
-      >
-        <span aria-hidden="true">↕</span>
-      </div>
-      <ChatInput
-      className={styles.composer}
-      value={prompt}
-      onChange={setPrompt}
-      onSubmit={startCanvasTurn}
-      placeholder={t('askBrain')}
-      submitLabel={t('sendBrain')}
-      // NEVER disabled while Brain works. An empty composer offers Stop (which
-      // interrupts the run); typing into it queues the next turn. The box being
-      // greyed out for the length of a research turn was the single most common
-      // way the canvas read as hung.
+  /**
+   * THE ONE COMPOSER. Its markup, its height, its resize grip and its drag offset are
+   * `CanvasComposer`'s. What stays here is what only the host knows: where the box is
+   * PLACED, what its verbs DO, and the `ChatInput` wiring.
+   */
+  const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasComposer
+    placement={promptInBrainPanel ? 'docked' : 'float'}
+    intents={surfaceDef.composerIntents}
+    // The same gate the scratchpad's own form used: a viewer who cannot add cards is
+    // offered Ask alone rather than a verb that would silently do nothing.
+    editable={cardsEditable}
+    // Opening the conversation on a phone means you are talking to it.
+    {...(phoneViewport && brainSurfaceOpen ? { preferIntent: 'ask' as const } : {})}
+    onAsk={() => startCanvasTurn()}
+    onCaptureIdea={captureIdeaFromComposer}
+    // Measured ONLY while it floats over the board; docked it is the Brain panel's last
+    // row rather than the board's chrome, and the band reserved for it is zero.
+    {...(promptInBrainPanel ? {} : { hostRef: composerDockRef })}
+    leading={<CanvasActionsTrigger open={actionsOpen} onToggle={() => setActionsOpen((open) => !open)} />}
+    starter={promptStarter || undefined}
+    activity={<BrainActivityIndicator
       running={thinking}
-      onStop={stopCanvasRun}
-      queuedCount={queuedTurns.count}
-      rows={1}
-      submitOnEnter
-      contextControls={<>
-        <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
-      </>}
-      onAttach={attachCanvasArtifact}
-      onAddContext={openObjectPicker}
-      autoMode={autoApply}
-      onAutoModeChange={setAutoApplyMode}
-      modelSelection={modelSelection}
-      modelOptions={canvasModelOptions}
-      onModelSelectionChange={setModelSelection}
-      modelIdentity={modelIdentity}
-    // Mode and memory live in the `/` menu now — on a phone this row had grown to
-    // eight unlabelled circles, and the two settings that actually decide what a turn
-    // does were the two hardest to read. The menu's trigger names the armed mode, so
-    // nothing has to be opened to see whether this turn can dispatch work.
-      chatMode={sessionMode}
-      onChatModeChange={setSessionMode}
-      memoryEnabled={memoryEnabled}
-      onMemoryChange={setMemoryMode}
-      memoryUnavailableReason={evermindProjectId == null || persistence !== 'server' ? t('memoryNeedsProject') : undefined}
-      showVoice
-      />
-    </div>
-  </div>;
+      trace={brainTrace}
+      startedAt={brainRunStartedAt}
+      variant="composer"
+    />}
+    // Neither control means anything once Brain IS the surface: there is nothing to dock
+    // into and no board to hand the composer's space back to.
+    {...(surfaceDef.brainIsSurface ? {} : {
+      dockControls: {
+        docked: promptPlacement === 'docked',
+        // Docking puts the prompt in the Brain panel, so it OPENS that panel: a control
+        // whose effect is invisible until you find the launcher reads as one that did nothing.
+        onToggleDock: () => {
+          const next = promptPlacement === 'docked' ? 'float' : 'docked';
+          setPromptPlacement(next);
+          if (next === 'docked' && !brainDockDrawn) updateBrainDock({ open: true, mode: 'docked' });
+        },
+        onClose: () => setPromptPlacement('closed'),
+      },
+    })}
+    input={{
+      value: prompt,
+      onChange: setPrompt,
+      // NEVER disabled while Brain works: an empty composer offers Stop, typing queues the
+      // next turn. A box greyed out for a research turn is how a canvas reads as hung.
+      running: thinking,
+      onStop: stopCanvasRun,
+      queuedCount: queuedTurns.count,
+      contextControls: <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>,
+      onAttach: attachCanvasArtifact,
+      onAddContext: openObjectPicker,
+      autoMode: autoApply,
+      onAutoModeChange: setAutoApplyMode,
+      modelSelection,
+      modelOptions: canvasModelOptions,
+      onModelSelectionChange: setModelSelection,
+      modelIdentity,
+      // Mode and memory live in the `/` menu, whose trigger names the armed mode — this
+      // row had grown to eight unlabelled circles on a phone.
+      chatMode: sessionMode,
+      onChatModeChange: setSessionMode,
+      memoryEnabled,
+      onMemoryChange: setMemoryMode,
+      memoryUnavailableReason: evermindProjectId == null || persistence !== 'server' ? t('memoryNeedsProject') : undefined,
+    }}
+  />;
 
   /**
    * What each session action DOES. The registry owns the rest — the glyph, the name, the
@@ -12451,108 +12368,75 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   );
 
   /**
-   * THE BOARD MENU — the ••• sheet, and the one group on the bar that names no stage.
+   * THE BOARD MENU — the ••• trigger and its sheet, wherever that sheet is hosted.
    *
-   * Everything in here is done to the BOARD rather than to the work: how you are looking
-   * at it, what it is made of, where its history went. That is why the group has a
-   * caption of its own instead of a stage's — a control that answers no stage's question
-   * must not be given a stage's name, which is how the old `Tools` shelf formed.
+   * Everything in it is done to the BOARD rather than to the work: how you are looking
+   * at it, what it is made of, where its history went. That is why the group it hangs
+   * under on the desktop bar has a caption of its own instead of a stage's — a control
+   * that answers no stage's question must not be given a stage's name, which is how the
+   * old `Tools` shelf formed. The body itself, and the reasoning for what is in it, is
+   * `CanvasBoardMenuBody`.
    *
-   * ── WHY THE VIEW COMMANDS ARE IN HERE AND NOT IN A CORNER PILL ──────────────────
-   * Zoom, fit, arrange, the mini map and the outline are not a stage of anything — they
-   * move the viewport, they do not advance the work — so they cannot be captioned by the
-   * arc, and a sixth caption invented for them is what the whole regroup was undoing.
-   * The obvious alternative was a small floating pill in the bottom-right corner, the way
-   * every drawing tool does it. It was rejected: a second floating panel over one canvas
-   * is the exact thing the left-hand rail was deleted for, and it would have put "what
-   * can I do here" back into two places with nothing saying why.
-   *
-   * They are drawn as a TROUGH of glyphs rather than as menu rows, and pressing one does
-   * NOT dismiss the sheet — zoom is a control you press repeatedly, and a menu that
-   * closes under the second press is a menu you cannot zoom with.
+   * ── ONE HOST AT A TIME ──────────────────────────────────────────────────────────
+   * On a desktop it is contributed to the command bar's `Board` group. A phone does not
+   * draw that bar, so this whole node is handed to the canvas app bar instead. Passed to
+   * exactly one of the two (`phoneViewport`), never rendered in both and hidden in one:
+   * `display:none` would leave two ••• buttons and two sheets in one document.
    */
   const boardMenuChrome = (
       <span className={styles.handoffGroup} data-testid="canvas-board-menu">
           <button type="button" className={styles.sessionActionButton} aria-expanded={moreOpen} aria-haspopup="menu" aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); setRealOpen(false); }}><MoreActionsIcon /></button>
-          {/* NO SAVE BUTTON HERE. A guest board is kept by taking an account, and the
-              header already offers exactly that — its CTA becomes "Keep your work" as
-              soon as this browser holds a local board (`MarketingHeader`). Carrying a
-              second "Save & collaborate" on the canvas put two bars on one screen
-              competing to be the way to save the same thing, and the canvas copy was
-              the one nobody could reach from anywhere else in the product. The pill
-              still SAYS where the board lives; saying it is not the same as offering
-              it twice. */}
-          {moreOpen && <CanvasMenuSheet title={t('moreActions')} testId="canvas-more-menu" onClose={closeMoreMenu}>
-            {/* First, because these are the session-bar actions a phone gave up its
-                room for — including the only way to invite anybody, which used to be
-                reachable on a desktop and nowhere else. On a desktop the bar already
-                draws them, so the section stands down. */}
-            <div className={styles.moreMenuPhoneOnly}>
-              <span className={styles.moreMenuHeading}>{t('moreMenuSessionActions')}</span>
-              {/* Never collapsed: the ••• sheet IS the phone's expanded state, and folding the
-                  actions out of the one place a phone can reach them would leave a small
-                  screen with no undo and no way to share. */}
-              <CanvasSessionActions variant="menu" surface={surface} handlers={sessionActionHandlers} />
-            </div>
-            {/* HOW YOU ARE LOOKING AT IT. React Flow owns the viewport, so the host owns
-                what these do; they are drawn as a trough of glyphs rather than as rows
-                because they are a set you press repeatedly, and none of them closes the
-                sheet for the same reason. */}
-            <span className={styles.moreMenuHeading}>{t('barGroup.view')}</span>
-            <div className={styles.moreMenuTools} role="group" aria-label={t('canvasViewControls')}>
-              <button type="button" className={styles.sessionActionButton} onClick={zoomInAction} aria-label={t('zoomIn')} title={t('zoomIn')}><ZoomInIcon /></button>
-              <button type="button" className={styles.sessionActionButton} onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
-              <button type="button" className={styles.sessionActionButton} onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
-              <button type="button" className={styles.sessionActionButton} onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
-              {/* WHAT THE BOARD ALONE HAS. A mini map is a map of the flat board, and pan vs
-                  marquee is a decision about dragging on one; neither means anything on a
-                  surface that has no board, so these two are the only view commands that read
-                  the surface at all. */}
-              {surfaceDef.showsBoard && <>
-                <button type="button" className={styles.sessionActionButton} onClick={() => setMinimapOpen((open) => !open)} aria-pressed={minimapOpen} aria-label={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
-                <button type="button" className={styles.sessionActionButton} onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))} aria-pressed={canvasGesture === 'select'} aria-label={t('canvasGestureToggle')} title={canvasGesture === 'select' ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
-              </>}
-              {/* WHAT THE SCENE ADDS while it is up. These were the last commands living on the
-                  bottom-left rail; with the rail gone they are contributed here, beside the
-                  zoom and reset that already switch to the scene's own camera. */}
-              {threeDControls && <>
-                <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')} title={threeDControls.depthMode !== 'flow' ? tCommands('threeD.depthGroupActive') : tCommands('threeD.depthGroupInactive')}><DepthIcon /></button>
-                <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')} title={threeDControls.layersVisible ? tCommands('threeD.layerGuidesActive') : tCommands('threeD.layerGuidesInactive')}><LayerGuidesIcon /></button>
-                {threeDControls.dropToLayers && <button type="button" className={styles.sessionActionButton} onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')} title={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
-              </>}
-              {/* WHAT EVERY SURFACE HAS. This canvas's files and its readable outline are about
-                  the SESSION, not about which way it is being read. They used to be gated on
-                  the board here and drawn on the corner rail everywhere else — one control in
-                  two places, and neither of them where you last saw it. */}
-              <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
-              <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
-            </div>
-            <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
-            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
-            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
-            {/* Errands against a connected account, kept off the rail. Each one
-                opens the SAME dock panel its rail button used to, drawn with the
-                same glyph, so this is a move rather than a second entry point. */}
-            <span className={styles.moreMenuHeading}>{t('connectedSources')}</span>
-            <button aria-pressed={dockPanel === 'miro'} onClick={() => { if (connectedAccountGate(tMiro('title'))) toggleDockPanel('miro'); setMoreOpen(false); }}><span aria-hidden><CanvasMiroIcon /></span>{tMiro('title')}</button>
-            <button aria-pressed={dockPanel === 'social'} onClick={() => { if (connectedAccountGate(tSocial('title'))) toggleDockPanel('social'); setMoreOpen(false); }}><span aria-hidden><CanvasSocialIcon /></span>{tSocial('title')}</button>
-            <button aria-pressed={dockPanel === 'ads'} onClick={() => { if (connectedAccountGate(tAds('title'))) toggleDockPanel('ads'); setMoreOpen(false); }}><span aria-hidden><CanvasAdsIcon /></span>{tAds('title')}</button>
-            <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
-            <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
-            <button onClick={() => { sectionTour.openOffer(); setMoreOpen(false); }}><span aria-hidden>?</span>{t('tutorial')}</button>
-            <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}><span aria-hidden>◉</span>{showHidden ? t('hideHidden') : t('showHidden')}</button>
-            <button onClick={() => { createBranch(); setMoreOpen(false); }}><span aria-hidden>⑂</span>{t('branch')}</button>
-            {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
-            {/* TWO AXES, TWO CONTROLS. The first says what a connector MEANS — the
-                board folds `blocks` into a critical path and `verifies` into coverage,
-                so it must never be chosen for how it looks. The three below say how it
-                is DRAWN, and they restyle whatever edges are selected as well as arming
-                the next draw, which is how every drawing tool a person has used already
-                works. See `lib/canvasConnectionStyle.ts` for why these are not one list. */}
-            <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label={t('connectionKind')} value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
-            <label><span><i aria-hidden>─</i>{t('connector.line')}</span><select aria-label={t('connector.line')} value={connectionStyle.line} onChange={(event) => setConnectionStyle({ line: event.target.value as ConnectionStyle['line'] })}>{CONNECTION_LINES.map((line) => <option key={line} value={line}>{t(`connector.line_${line}` as 'connector.line_solid')}</option>)}</select></label>
-            <label><span><i aria-hidden>→</i>{t('connector.ends')}</span><select aria-label={t('connector.ends')} value={connectionStyle.ends} onChange={(event) => setConnectionStyle({ ends: event.target.value as ConnectionStyle['ends'] })}>{CONNECTION_ENDS.map((ends) => <option key={ends} value={ends}>{t(`connector.ends_${ends}` as 'connector.ends_arrow')}</option>)}</select></label>
-            <label><span><i aria-hidden>⌐</i>{t('connector.router')}</span><select aria-label={t('connector.router')} value={connectionStyle.router} onChange={(event) => setConnectionStyle({ router: event.target.value as ConnectionStyle['router'] })}>{CONNECTION_ROUTERS.map((router) => <option key={router} value={router}>{t(`connector.router_${router}` as 'connector.router_step')}</option>)}</select></label>
+          {/* NO SAVE BUTTON HERE: a guest board is kept by taking an account, and the
+              header's CTA already becomes "Keep your work" the moment this browser holds
+              a local board. The pill SAYS where the board lives; saying it is not the
+              same as offering it twice. */}
+          {moreOpen && <CanvasMenuSheet
+            title={t('moreActions')}
+            testId="canvas-more-menu"
+            // The SAME node, two hosts: anchored above the command bar's ••• on a
+            // desktop, and a full-width sheet under the canvas app bar on a phone —
+            // where "above the button that opened me" would be off the top of the
+            // screen, because that button is in the top bar rather than the bottom one.
+            placement={phoneViewport ? 'sheet' : 'popover'}
+            onClose={closeMoreMenu}
+          >
+            {/* ONE body, two hosts — `CanvasBoardMenuBody`. Its phone-only session-action
+                section is gone: it carried what a 360px command bar could not fit, and
+                that bar is not drawn at this width any more. */}
+            <CanvasBoardMenuBody
+              showsBoard={surfaceDef.showsBoard}
+              view={{
+                onZoomIn: zoomInAction,
+                onZoomOut: zoomOutAction,
+                onFit: fitViewAction,
+                onArrange: cleanLayout,
+                minimapOpen,
+                onToggleMinimap: () => setMinimapOpen((open) => !open),
+                marquee: canvasGesture === 'select',
+                onToggleGesture: () => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select')),
+                threeD: threeDControls,
+              }}
+              panels={{ open: dockPanel, onToggle: toggleDockPanel, allow: connectedAccountGate }}
+              create={{
+                onTemplates: () => setTemplateOpen(true),
+                onConversation: () => setConversationOpen((value) => !value),
+              }}
+              session={{
+                onHistory: openHistory,
+                onTutorial: sectionTour.openOffer,
+                hiddenShown: showHidden,
+                onToggleHidden: () => setShowHidden((value) => !value),
+                onBranch: createBranch,
+                ...(branchParentId ? { onMerge: prepareMerge } : {}),
+              }}
+              connectors={{
+                kind: connectionKind,
+                onKindChange: setConnectionKind,
+                style: connectionStyle,
+                onStyleChange: setConnectionStyle,
+              }}
+              onDismiss={closeMoreMenu}
+            />
           </CanvasMenuSheet>}
           {templateOpen && <div className={styles.templateMenu}>
             <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label={t('closeTemplates')}>×</button></header>
@@ -12604,26 +12488,53 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       } as CSSProperties}
     >
       {/* ── THE FLOATING CHROME ────────────────────────────────────────────────────
-          There is no chrome band any more. The board takes the whole shell and each
-          piece of chrome floats over it in the region `lib/canvasChrome.ts` gives it:
-          is the work safe (top left), how it is READ and which phase it is in (top
-          centre), and what you DO to it — including how work LEAVES it (the one bar,
-          bottom centre).
+          No chrome band: the board takes the whole shell and each piece floats over it
+          in the region `lib/canvasChrome.ts` gives it — is the work safe (top left), how
+          it is READ and which phase it is in (top centre), and what you DO to it,
+          including how work LEAVES it (the one bar, bottom centre). A phone replaces the
+          top two with its own app bar; see below. */}
+      {/* THE PHONE'S APP CHROME — a 52px canvas app bar over a worded surface strip,
+          drawn in place of the shell's header on a stage route (`AppShell`,
+          `data-phone-chrome="stage"`). Stands down above 767px, where the floating cards
+          below are the chrome instead. See `CanvasPhoneAppBar` for what is on it.
 
-          The band this replaced was 54px of full-width surface holding a title, a
-          switcher, seven buttons, a roster and a save button — mostly empty space
-          between things with nothing to do with each other, drawn ABOVE a hard line
-          that made the board start below the chrome rather than run behind it. */}
+          The ref measures the bar AND the strip together — everything below has to clear
+          both — and exactly one of this wrapper and the desktop card is ever handed it,
+          because the other is `display:none` and a hidden box measures zero. */}
+      <div
+        ref={phoneViewport ? topChromeSpaceRef : undefined}
+        className={styles.canvasPhoneChrome}
+      >
+        <CanvasPhoneAppBar
+          title={title}
+          phase={phase}
+          onPhaseChange={setPhase}
+          surface={surface}
+          onSurfaceChange={setSurface}
+          roster={rosterMembers}
+          {...(sessionActionHandlers.share.available === false || sessionActionHandlers.share.disabled
+            ? {}
+            : { onOpenRoster: sessionActionHandlers.share.run })}
+          // ONE host at a time for each sheet: handing them to both chromes and hiding
+          // one would put two copies of each in the document.
+          {...(phoneViewport ? { inviteMenu, boardMenu: boardMenuChrome } : {})}
+          {...(onExitToLibrary ? { onBack: onExitToLibrary } : {})}
+        />
+        <CanvasSurfaceStrip surface={surface} onChange={setSurface} />
+      </div>
       <CanvasSessionPill notice={notice} />
       {/* Which PHASE this session is in and which surface reads it — ON the canvas
           rather than in a bar across it, fused into one widget (`PhaseModalitySelector`).
-          The phone's copy of the surface half lives in the board's control column, with
-          no phase row of its own — a phone has nowhere to widen the offer back out, so it
-          keeps every board surface rather than risk a dead end; the stylesheet keeps
-          exactly one of the two on screen. Measured for `--canvas-top-chrome-space`: this
-          card is now the taller of the two on the top line, now that the doors-out row
-          no longer floats up here (see `handoffChrome`'s own header). */}
-      {canvasChromeShows('surfaces', barCollapsed) && <div ref={topChromeSpaceRef} className={`${styles.floatCard} ${styles.surfaceChips}`}>
+          THE DESKTOP'S copy: a phone gets the surface half as a worded strip under its
+          own app bar, and the phase half inside a sheet that bar opens — the SAME
+          component, so the two rows cannot drift apart. The stylesheet keeps exactly one
+          of the two chromes on screen.
+
+          Measured for `--canvas-top-chrome-space` at desktop widths, where this card is
+          the taller of the two things on the top line; on a phone the app-bar wrapper
+          above is measured instead, because this one is `display:none` there and a
+          hidden box measures zero. */}
+      {canvasChromeShows('surfaces', barCollapsed) && <div ref={phoneViewport ? undefined : topChromeSpaceRef} className={`${styles.floatCard} ${styles.surfaceChips}`}>
         <PhaseModalitySelector phase={phase} onPhaseChange={setPhase} surface={surface} onSurfaceChange={setSurface} />
       </div>}
 
@@ -12691,7 +12602,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           — including whatever the SURFACE contributed, so an app's Run, its readings and
           the address it is running at land here rather than in a second toolbar of their
           own. See `CanvasCommandBar` for why one bar and why the bottom. */}
-      <CanvasCommandBar
+      {/* NOT DRAWN ON A PHONE AT ALL, and the distinction from `display:none` is
+          load-bearing: a hidden box measures zero from the TOP of the viewport rather
+          than zero height, so `--canvas-command-bar-space` would push the composer most
+          of a screen up — and its ••• sheet and invite panel would each exist twice in
+          one document. The composer's "+" opens the same registry instead. */}
+      {!phoneViewport && <CanvasCommandBar
         // Its measured height becomes the band the prompt floats above. See the ref's
         // declaration: this used to be a literal that the App surface's own controls
         // overran, which is how the bar came to be drawn on top of the prompt.
@@ -12755,7 +12671,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             onError={setNotice}
           />
         </> : undefined}
-      />
+      />}
 
       {/* THE GATE ASKS FOR WHAT IS ACTUALLY MISSING. Every caller writes signup-framed
           copy because `persistence === 'local'` was read as "no account" — so a
@@ -12967,23 +12883,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </ReactFlow>
         </BrainSurfaceProvider>
 
-        {/* ── THE BOARD'S FLOATING CONTROLS ────────────────────────────────────────
-            "Add to canvas" is not here — it used to float as its own top-left toggle,
-            a second door onto the exact same picker the command bar's own button
-            already opens. Two controls for one decision was the failure the surface
-            registry was written to prevent, so the toggle is gone and the bar's single
-            button (see `CanvasCommandBar`) is the ONE way in. What remains on this rail
-            is what the bar does not carry: the surface switcher's phone form. */}
-        <div className={styles.boardRail}>
-        {/* The phone's column keeps ONLY what the bar does not carry: which surface this
-            canvas is read through, in the form that fits a 360px screen. Files, the
-            outline and the scene's depth/layer commands were duplicated here while the bar
-            drew them on the board alone; the bar draws them on every surface now, so a
-            second copy on the same screen is only a second place to look. */}
-        <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasPanelControls')}>
-          <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="mobile" />
-        </div>
-        </div>
+        {/* NOTHING FLOATS OVER THE BOARD HERE ANY MORE.
+            The phone's surface switcher used to be an icon COLUMN parked in this
+            corner — five unlabelled glyphs over the surface's own heading, with a rule
+            that laid them down in a row ACROSS that heading whenever the Brain sheet
+            opened. It is `CanvasSurfaceStrip` now, worded, in its own band under the
+            canvas app bar at the top of the shell. "Add to canvas" left this corner
+            earlier and for the same reason: one door onto the picker, on the bar. */}
 
         {/* The runtime that takes the centre. The board itself is not in the map — it is
             the React Flow tree above, rendered unconditionally so the viewport, the
@@ -13413,19 +13319,55 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             inside the panel above, and rendering it in both places would mount the same
             live composer twice. */}
         {!promptInBrainPanel && composer}
-        {/* The way back to a closed Brain. An inline Brain that still has its Object on
-            the board already offers one ("Open Brain chat"), so the pill would be a
-            second control for the same thing — it appears only when there is no Object
-            to click, which is exactly when the board has no other route back. */}
-        {!presentMode && !brainDock.open && !surfaceDef.brainIsSurface && (brainPlacement === 'docked' || !brainNode) && <button
-          type="button"
-          className={styles.brainDockLauncher}
-          data-side={brainDock.side}
-          data-state={thinking ? 'running' : 'idle'}
-          aria-label={thinking ? t('openBrainDockBusy') : t('openBrainDock')}
-          title={thinking ? t('openBrainDockBusy') : t('openBrainDock')}
-          onClick={() => updateBrainDock({ open: true })}
-        ><BrainMark running={thinking} size={14} />{t('brain')}</button>}
+        {/* The way back to a closed Brain, and the only thing that says a reply arrived
+            while it was shut. An inline Brain with its Object still on the board offers
+            its own way back, so this appears only when there is none.
+
+            THE COUNT IS WHAT MAKES "BRAIN NEVER COVERS THE SURFACE" HONEST: on a phone
+            the dock is a sheet the reader opens, and without a count "open it when you
+            want it" means "open it every thirty seconds in case". It WINS the label when
+            there is one — "Show Brain chat" beside a badge names itself twice. */}
+        {!presentMode && !brainDock.open && !surfaceDef.brainIsSurface && (brainPlacement === 'docked' || !brainNode) && (() => {
+          const label = brainUnreadReplies > 0
+            ? t('brainLauncher.unread', { count: brainUnreadReplies })
+            : thinking ? t('openBrainDockBusy') : t('openBrainDock');
+          return <button
+            type="button"
+            className={styles.brainDockLauncher}
+            data-testid="canvas-brain-launcher"
+            data-side={brainDock.side}
+            data-state={thinking ? 'running' : brainUnreadReplies > 0 ? 'unread' : 'idle'}
+            aria-label={label}
+            title={label}
+            onClick={() => updateBrainDock({ open: true })}
+          ><BrainMark running={thinking} size={14} />{brainUnreadReplies > 0 ? t('brainLauncher.unread', { count: brainUnreadReplies }) : t('brain')}</button>;
+        })()}
+        {/* THE PHONE'S COMMAND BAR: one sheet, opened from the composer's "+", holding
+            every registry action under the same arc captions the desktop bar uses.
+            Mounted only while open. */}
+        {actionsOpen && <CanvasActionsSheet
+          surface={surface}
+          handlers={sessionActionHandlers}
+          // The one door the registry does not own: the palette opens against the
+          // pressed button's own screen rect, so the chrome that draws the button
+          // contributes it — through the same `CanvasBarGroupSlots` seam the bar uses.
+          slots={{
+            idea: {
+              lead: surface === 'graph' ? <button
+                type="button"
+                data-testid="canvas-actions-quick-add"
+                aria-label={t('quickAdd')}
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setActionsOpen(false);
+                  setNodePanel(null);
+                  setObjectPicker({ anchor: { x: Math.max(12, Math.min(rect.left, window.innerWidth - 412)), y: Math.max(12, rect.top - 330) } });
+                }}
+              ><span aria-hidden><AddObjectIcon /></span>{t('quickAdd')}</button> : undefined,
+            },
+          }}
+          onClose={closeActionsSheet}
+        />}
       </div>
       {/* TWO TOURS, TWO SUBJECTS. The one below teaches the CANVAS — dock, palette,
           Share — and is offered on somebody's first board. This one walks what the
@@ -14649,10 +14591,19 @@ function ActivityInspector({ sessionId, objectId, data, persistence, role, membe
   </div>;
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true, hostSurfaces, initialSurface }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; /** Surfaces the embedding host implements itself — see `CanvasSurfaceRouter`. VS Code supplies `chat`, whose runs execute in the extension host. */ hostSurfaces?: CanvasSurfaceNodes; /** The surface this ENTRY asked for, above the stored preference — what "open my chat" means. */ initialSurface?: CanvasSurfaceId }) {
+export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true, hostSurfaces, initialSurface, onExitToLibrary }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; /** Surfaces the embedding host implements itself — see `CanvasSurfaceRouter`. VS Code supplies `chat`, whose runs execute in the extension host. */ hostSurfaces?: CanvasSurfaceNodes; /** The surface this ENTRY asked for, above the stored preference — what "open my chat" means. */ initialSurface?: CanvasSurfaceId;
+  /**
+   * The way OUT of this board, on a phone — the back button in the canvas app bar.
+   *
+   * A prop rather than a `router.push` in here because not every host has a library to
+   * go back to: the VS Code webview opens one canvas and has no `/create` behind it, and
+   * a back button that navigates nowhere is worse than no back button. The web page
+   * passes the push; an embedding host passes nothing and the button is not drawn.
+   */
+  onExitToLibrary?: () => void }) {
   // The 3D scene publishes its view commands to the canvas rail rather than
   // carrying a toolbar of its own, so both live under one provider — and the app
   // surface publishes ITS controls into the session bar for the same reason, which
   // is what leaves this canvas with one bar instead of one per runtime.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasSurfaceActionsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} hostSurfaces={hostSurfaces} initialSurface={initialSurface} /></CanvasSurfaceActionsProvider></Canvas3DControlsProvider></ReactFlowProvider>;
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasSurfaceActionsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} hostSurfaces={hostSurfaces} initialSurface={initialSurface} onExitToLibrary={onExitToLibrary} /></CanvasSurfaceActionsProvider></Canvas3DControlsProvider></ReactFlowProvider>;
 }

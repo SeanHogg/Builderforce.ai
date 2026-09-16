@@ -49,6 +49,7 @@ import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { CompanyError, companyObjectId } from './companyWorkspace';
 import { STARTUP_DIRECTORY_VERSION_KEY } from './startupDirectoryCache';
 import { runwayVersionKey } from '../finance/runwayCache';
+import { alignBenchmarkIndustry } from '../insights/benchmarkProfile';
 
 export const LISTING_VERBS = {
   updated: 'company.listing_updated',
@@ -338,6 +339,12 @@ export async function updateStartupListing(
     metadata: { fields: Object.keys(values) },
   });
   if (current.isPubliclyListed) await bumpCacheVersion(env, STARTUP_DIRECTORY_VERSION_KEY);
+  // The declared sector IS the benchmark industry (PRD 25 §6.4): one pick places
+  // the company in the directory, the benchmark cohort and, next, its vertical
+  // dashboard. Same door the manager's picker uses, so the caches agree.
+  if (typeof values.sector === 'string' && values.sector) {
+    await alignBenchmarkIndustry(db, env, tenantId, values.sector);
+  }
   return readStartupListing(db, tenantId, current.id);
 }
 

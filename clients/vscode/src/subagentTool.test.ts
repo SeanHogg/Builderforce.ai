@@ -177,6 +177,72 @@ describe("subagentToolDef", () => {
     expect(out).toMatchObject({ ok: true });
   });
 
+  /**
+   * A slice the Brain does HERE instead of dispatching it is work nobody owns: no agent
+   * on the ticket, nothing in anyone's queue, and a user who cannot tell who did what.
+   * `as_agent` keeps the accountability a dispatch would have carried.
+   */
+  describe("as_agent — running a slice in a team agent's persona", () => {
+    const ADA = { ref: "agent_12", name: "Ada", brief: "Backend Engineer — owns the auth and billing services." };
+
+    it("resolves the persona, prefixes the label and names the agent in the result", async () => {
+      const personaBrief = vi.fn(async () => ADA);
+      const stream = streamOf({ text: "ported it" });
+      const tool = subagentToolDef({
+        stream: async () => stream as never,
+        catalog: () => CATALOG,
+        personaBrief,
+      });
+      const out = JSON.parse(
+        await tool.execute({ label: "port the auth middleware", task: "port it", as_agent: "Ada" }, "/repo"),
+      );
+
+      expect(personaBrief).toHaveBeenCalledWith("Ada");
+      // The timeline row says WHO, not just what.
+      expect(out.label).toBe("as Ada: port the auth middleware");
+      expect(out.asAgent).toEqual({ ref: "agent_12", name: "Ada" });
+      expect(out.ok).toBe(true);
+    });
+
+    it("refuses an agent this workspace does not have, and runs no child", async () => {
+      // Running it anonymously would make the parent's "Ada did this" report false.
+      const stream = streamOf({ text: "should never run" });
+      const tool = subagentToolDef({
+        stream: async () => stream as never,
+        catalog: () => CATALOG,
+        personaBrief: async () => null,
+      });
+      const out = JSON.parse(
+        await tool.execute({ label: "port it", task: "port it", as_agent: "Nobody" }, "/repo"),
+      );
+
+      expect(out.ok).toBe(false);
+      expect(out.error).toContain("no agent named 'Nobody' in this workspace");
+      // The refusal names the tools that list the REAL agents, so the next turn can fix it.
+      expect(out.error).toContain("builtin_chats_list_agents");
+      expect(out.error).toContain("builtin_cloud_agents_list_mine");
+      expect(stream).not.toHaveBeenCalled();
+    });
+
+    it("refuses when the host cannot name personas at all", async () => {
+      const stream = streamOf({ text: "should never run" });
+      const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
+      const out = JSON.parse(await tool.execute({ label: "port it", task: "port it", as_agent: "Ada" }, "/repo"));
+      expect(out.ok).toBe(false);
+      expect(stream).not.toHaveBeenCalled();
+    });
+
+    it("leaves an ordinary delegation untouched", async () => {
+      const personaBrief = vi.fn(async () => ADA);
+      const stream = streamOf({ text: "found it" });
+      const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG, personaBrief });
+      const out = JSON.parse(await tool.execute({ label: "look", task: "find it" }, "/repo"));
+      expect(personaBrief).not.toHaveBeenCalled();
+      expect(out.label).toBe("look");
+      expect(out.asAgent).toBeUndefined();
+    });
+  });
+
   it("asks for nothing when the child only reads, even on a writable delegation", async () => {
     const confirmWrite = vi.fn(async () => ({ ok: true }) as const);
     const tool = subagentToolDef({

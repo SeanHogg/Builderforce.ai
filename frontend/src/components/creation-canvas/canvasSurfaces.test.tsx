@@ -17,6 +17,12 @@ import {
   sanitizeCanvasSurface,
   writeCanvasSurface,
 } from '@/lib/canvasSurfaces';
+import {
+  canvasComposerIntent,
+  canvasComposerIntentIds,
+  DEFAULT_CANVAS_COMPOSER_INTENT,
+  offeredCanvasComposerIntents,
+} from '@/lib/canvasComposerIntents';
 import { creationObjectSurface } from './creationObjectSurfaces';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CreationCanvas } from './CreationCanvas';
@@ -82,6 +88,51 @@ describe('canvas surface registry', () => {
     // `ideas` sits straight after the board: it is the Idea stage of the arc, the list a
     // founder writes into before there is anything to meet about, run or measure.
     expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'room', 'app', 'insights']);
+  });
+
+  /**
+   * THE COMPOSER IS A PROPERTY OF THE PAGE; ITS VERB IS A PROPERTY OF THE SURFACE.
+   *
+   * The scratchpad used to draw a text field of its own beside the canvas's one
+   * composer — two boxes on one screen, both asking for a sentence, with nothing saying
+   * which one Enter belonged to. A surface declares INTENTS now, and these are the two
+   * properties that make that safe: every surface has at least one (there is nowhere on
+   * this canvas where "ask Brain about this" has no answer), and only the surface that
+   * actually creates something from a plain line declares a second.
+   */
+  it('gives every surface a composer verb, and only the scratchpad more than one', () => {
+    for (const def of CANVAS_SURFACES) {
+      expect(def.composerIntents.length, def.id).toBeGreaterThan(0);
+      // Every declared id is a real registry entry — a typo here would render a button
+      // labelled with a dotted catalog path.
+      for (const id of def.composerIntents) expect(canvasComposerIntentIds()).toContain(id);
+    }
+
+    // The scratchpad LEADS with capture: on that surface a plain line is a card, not a
+    // question. `ask` stays beside it, because asking Brain about your ideas is the
+    // other half of what the list is for.
+    expect(canvasSurfaceDefinition('ideas').composerIntents).toEqual(['captureIdea', 'ask']);
+    // Everything else offers exactly one, which is what makes the segment disappear
+    // there: a segmented control with one segment is a label wearing a control's chrome.
+    for (const def of CANVAS_SURFACES) {
+      if (def.id === 'ideas') continue;
+      expect(def.composerIntents, def.id).toEqual(['ask']);
+    }
+
+    // The default verb is the one every surface has, so a surface whose whole offer is
+    // filtered away still has a composer.
+    expect(DEFAULT_CANVAS_COMPOSER_INTENT).toBe('ask');
+    // A viewer who cannot edit is offered `ask` alone: a verb that creates a card is a
+    // button whose only outcome would be a silent no. One filter, asked by the composer
+    // and by the tests, so the two cannot disagree.
+    expect(offeredCanvasComposerIntents(['captureIdea', 'ask'], false)).toEqual(['ask']);
+    expect(offeredCanvasComposerIntents(['captureIdea', 'ask'], true)).toEqual(['captureIdea', 'ask']);
+    expect(offeredCanvasComposerIntents([], true)).toEqual(['ask']);
+
+    // Only `captureIdea` names a stage, and it names the one it IS — so its dot takes
+    // `--stage-idea`, the same hue the rail and the bar's first group already use.
+    expect(canvasComposerIntent('captureIdea').stage).toBe('idea');
+    expect(canvasComposerIntent('ask').stage).toBeUndefined();
   });
 
   /**

@@ -24,6 +24,8 @@ export interface BenchmarkingResult {
   industry: string;
   sizeBand: string;
   windowDays: number;
+  /** False when the tenant's industry has no seeded cohort yet — values render without a ranking. */
+  cohortSeeded: boolean;
   metrics: BenchmarkMetric[];
 }
 
@@ -37,10 +39,11 @@ export interface BenchmarkProfile {
  *
  * SERVER-DERIVED, from the seeded `industry_benchmarks` rows. It was a hardcoded
  * `['software_saas']`, which had to be edited in lockstep with every cohort
- * migration — and was not: 0930 seeded five more industries that this list would
+ * migration — and was not: 0932 seeded five more industries that this list would
  * still have hidden. A constant here can also drift the other way and offer a
  * cohort with no distribution, after which every metric ranks against nothing.
- * The rows are the single source; this is a projection of them.
+ * The rows are the single source; this is a projection of them. Since 1176 the
+ * ids are the startup sectors, so they are labelled by `useStartupLabels().sector`.
  */
 export interface BenchmarkCohorts {
   industries: string[];

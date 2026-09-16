@@ -47,6 +47,8 @@ export function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels
       starting: t('tl.liveStarting', 'Starting…'),
       thinking: t('tl.thinking', 'Thinking…'),
       writing: t('tl.liveWriting', 'Writing the reply…'),
+      composing: t('tl.liveComposing', 'Composing a {tool} call…'),
+      composed: t('tl.liveComposed', ' — {bytes} so far'),
       tool: t('tl.liveTool', 'Running {tool}'),
       awaiting: t('tl.liveAwaiting', 'Waiting for you to approve {tool}'),
       finishing: t('tl.liveFinishing', 'Wrapping up…'),
@@ -223,5 +225,6 @@ export function promptMenuLabels(
     all: t('app.all', 'All'),
     modelLocked: t('app.modelLocked', 'Model choice needs a paid plan or a connected provider account.'),
     accountSettings: t('app.accountSettings', 'Account settings'),
+    status: t('app.status', 'Status'),
   };
 }

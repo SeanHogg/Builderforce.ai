@@ -49,6 +49,7 @@ import { CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, cloudToolRegistry } from
 import { applyPendingSteering } from '../cloudLoopControl';
 import { handleCloudRunCrash } from '../cloudSelfHeal';
 import { buildOrchestrationCapability, imageHostedChildCeiling } from '../cloudSubagent';
+import { resolveAgentPersonaBrief } from '../../agent/agentPersonaBrief';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
 import {
@@ -421,6 +422,9 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       parentCaps,
       provider,
       registry: cloudToolRegistry,
+      // Same roster, same compiler as the durable surface: an image-hosted parent that
+      // delegates to "Ada" must get the same Ada (operator decision 2026-09-15).
+      personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
       complete: async ({ messages: childMessages, tools, role: turnRole }) => {
         // Cancel BEFORE the paid call, on every child turn. The image polls cancel from
         // its own loop, but it is blocked on this op for the whole delegation — so
@@ -452,7 +456,11 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
         });
       },
     });
-    const result = await orchestration.spawn({ task, label, readOnly, role });
+    // `as_agent` rides through from the image's own tool call — the persona is resolved
+    // HERE (the image has no roster), and an unknown name comes back as a failed
+    // delegation the parent can read.
+    const asAgent = typeof args.as_agent === 'string' ? args.as_agent.trim() : '';
+    const result = await orchestration.spawn({ task, label, readOnly, role, ...(asAgent ? { asAgent } : {}) });
     await heartbeatExecution(db, executionId);
     // A child's writes are the RUN's writes. The provider already did the Worker-side
     // bookkeeping (the commit, the `task_file_changes` row, the subscriber notify), but

@@ -6,12 +6,11 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  IDEA_KIND, ideaFromScratch, ideaLogEntries, ideaStageCounts, untestedIdeaCount, withTestedBy,
+  IDEA_KIND, ideaLogEntries, ideaStageCounts, untestedIdeaCount, withTestedBy,
   type IdeaLogEntry,
 } from '@/lib/ideaLog';
 import { makeSpecDeriveBoard } from '@/lib/specObjects';
 import type { CreationNodeData } from './types';
-import { IdeaCaptureForm } from './IdeaCaptureForm';
 import { IdeaLogRow } from './IdeaLogRow';
 import { IdeaStageBar, type IdeaStageFilter } from './IdeaStageBar';
 import canvasStyles from './CreationCanvas.module.css';
@@ -23,7 +22,13 @@ export type IdeaSurfaceCreatableKind = typeof IDEA_KIND | 'customerInterview';
 
 export interface CanvasIdeasSurfaceProps {
   nodes: ReadonlyArray<{ id: string; data: CreationNodeData }>;
-  /** Appends an object to the board. ABSENT when the viewer cannot edit this canvas. */
+  /**
+   * Appends an object to the board. ABSENT when the viewer cannot edit this canvas.
+   *
+   * It no longer carries the idea itself — the composer's `captureIdea` intent does
+   * that, through the host. What is left is the OTHER card this surface creates: the
+   * `customerInterview` that "Plan an interview" puts on the board beside an idea.
+   */
   onCreate?: (kind: IdeaSurfaceCreatableKind, data: Partial<CreationNodeData>) => void;
   /** Patches an object on the board. ABSENT when the viewer cannot edit this canvas. */
   onUpdate?: (id: string, patch: Partial<CreationNodeData>) => void;
@@ -39,8 +44,19 @@ const text = (value: unknown): string => (typeof value === 'string' ? value.trim
 /**
  * THE IDEA SCRATCHPAD — write an idea down in seconds, and keep track of every one.
  *
+ * ── IT HAS NO INPUT OF ITS OWN, AND THAT IS THE POINT ────────────────────────────
+ * It used to draw `IdeaCaptureForm` — a textarea, a hint and a Capture button — eight
+ * hundred pixels above the canvas's own composer. Two boxes on one screen, both asking
+ * for a sentence, and nothing saying which one the Enter key you were about to press
+ * belonged to. On a phone the pair cost the screen two lots of chrome for one act.
+ *
+ * A surface does not want an input; it wants a MEANING for the input that is already
+ * there. So this surface declares `composerIntents: ['captureIdea', 'ask']`
+ * (`lib/canvasSurfaces.ts`) and the ONE composer captures — through the same board
+ * mutation the form called, from the same `ideaFromScratch` parse. The form is deleted.
+ *
  * ── WHAT IT READS ────────────────────────────────────────────────────────────────
- * Nothing of its own. Every line captured here becomes an `idea` card ON THE BOARD
+ * Nothing of its own. Every line captured becomes an `idea` card ON THE BOARD
  * (`founderObjects.ts`), so the scratchpad and the board are two readings of one set of
  * objects: Brain can research an idea you jotted, an idea Brain authored shows up in
  * this list, and dragging a card on the board never desynchronises a second store. The
@@ -54,25 +70,31 @@ const text = (value: unknown): string => (typeof value === 'string' ? value.trim
  */
 export function CanvasIdeasSurface({ nodes, onCreate, onUpdate, onOpenObject, onExit }: CanvasIdeasSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.ideas');
-  const [filter, setFilter] = useState<IdeaStageFilter>('all');
-
   const entries = useMemo(() => ideaLogEntries(nodes), [nodes]);
   const counts = useMemo(() => ideaStageCounts(entries), [entries]);
   const untested = useMemo(() => untestedIdeaCount(entries), [entries]);
   // Indexed once per board change, for every row's `evidence` derivation — see
   // `makeSpecDeriveBoard` for why this is O(N) exactly once.
   const board = useMemo(() => makeSpecDeriveBoard(nodes.map((node) => node.data)), [nodes]);
-  const visible = filter === 'all' ? entries : entries.filter((entry) => entry.stage === filter);
 
-  const capture = onCreate
-    ? (value: string) => {
-      const data = ideaFromScratch(value);
-      if (!data) return;
-      onCreate(IDEA_KIND, data as Partial<CreationNodeData>);
-      // A fresh idea is `captured`; filtered to any other stage, it would land invisibly.
-      if (filter !== 'all' && filter !== 'captured') setFilter('all');
-    }
-    : undefined;
+  /**
+   * WHICH STAGE IS BEING READ, and why the count it was taken at is held beside it.
+   *
+   * A fresh idea is always `captured`. Filtered to any other stage it would land
+   * invisibly — the reader types a line, the composer clears, and nothing appears. The
+   * form that used to live here handled that itself because it was the thing doing the
+   * capturing; the composer is not, and it cannot reach this surface's filter.
+   *
+   * So the filter widens back to All when the list GROWS under a narrower one. Keyed on
+   * the count taken when the filter was set, adjusted during render rather than in an
+   * effect: an effect paints one frame of an empty list, and that frame is the one that
+   * reads as "my idea did not save".
+   */
+  const [filter, setFilter] = useState<{ at: number; value: IdeaStageFilter }>({ at: entries.length, value: 'all' });
+  const grew = entries.length > filter.at;
+  const value = grew && filter.value !== 'captured' ? 'all' : filter.value;
+  if (filter.at !== entries.length || filter.value !== value) setFilter({ at: entries.length, value });
+  const visible = value === 'all' ? entries : entries.filter((entry) => entry.stage === value);
 
   const planInterview = (entry: IdeaLogEntry) => {
     if (!onCreate || !onUpdate) return;
@@ -98,7 +120,6 @@ export function CanvasIdeasSurface({ nodes, onCreate, onUpdate, onOpenObject, on
           <h2 className={styles.heading}>{t('heading')}</h2>
           <p className={styles.lede}>{t('lede')}</p>
         </header>
-        <IdeaCaptureForm {...(capture ? { onCapture: capture } : {})} />
         {entries.length === 0 ? (
           <div className={styles.empty} role="status">
             <strong>{t('empty.title')}</strong>
@@ -106,7 +127,7 @@ export function CanvasIdeasSurface({ nodes, onCreate, onUpdate, onOpenObject, on
           </div>
         ) : (
           <div className={styles.columns}>
-            <IdeaStageBar counts={counts} total={entries.length} untested={untested} value={filter} onChange={setFilter} />
+            <IdeaStageBar counts={counts} total={entries.length} untested={untested} value={value} onChange={(next) => setFilter({ at: entries.length, value: next })} />
             <div className={styles.list}>
               <p className={styles.count}>{t('count', { count: visible.length })}</p>
               {visible.length === 0 ? (
