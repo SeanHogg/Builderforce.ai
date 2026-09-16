@@ -85,6 +85,7 @@ import { limitParam } from './queryParams';
 import { clamp, clamp01 } from '../../domain/shared/numbers';
 import { parseJsonOr } from '../../domain/shared/json';
 import { parseBody, z } from './requestBody';
+import { invalidatePsychometricCache } from '../../application/artifact/capabilityContext';
 
 /** Every delta is `Number()`d, clamped and re-capped by the handler, so values stay loose. */
 const zDeltas = z.record(z.string(), z.unknown()).nullish();
@@ -449,6 +450,10 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
     if (!nextProfileRaw) return c.json({ error: 'Reinforcement produced an empty profile' }, 400);
 
     await db.update(ideAgents).set({ psychometric: nextProfileRaw, updatedAt: new Date() }).where(and(eq(ideAgents.id, agentRef), eq(ideAgents.tenantId, tenantId)));
+    // The limbic block caches this column per agent (it is read on every addressed
+    // turn), so a reinforcement that is not invalidated here does not reach the agent's
+    // own prompt until the TTL lapses — which is the whole point of applying it.
+    await invalidatePsychometricCache(c.env as Env, { tenantId, agentId: agentRef });
 
     const [inserted] = await db
       .insert(traitReinforcements)

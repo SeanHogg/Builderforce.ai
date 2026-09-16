@@ -14834,7 +14834,17 @@
       "allTables": "toutes les tables",
       "maintenanceCleanup": "lancer le nettoyage de rétention",
       "maintenanceVacuum": "vacuum de {table} dans {target}",
-      "confirmMaintenance": "Confirmer : {label} ? Il s’agit d’une opération de maintenance auditée."
+      "confirmMaintenance": "Confirmer : {label} ? Il s’agit d’une opération de maintenance auditée.",
+      "storage": {
+        "label": "{used} sur {ceiling} utilisés",
+        "tier": {
+          "ok": "{percent}% utilisés",
+          "warn": "{percent}% — nettoyage renforcé",
+          "critical": "{percent}% — au plancher"
+        },
+        "noteWarn": "Au-delà de 80 % : le balayage de maintenance nocturne purge désormais toutes les tables de journaux compressibles sur une fenêtre raccourcie et récupère l'espace immédiatement, sans attendre la réécriture hebdomadaire.",
+        "noteCritical": "Au-delà de 90 % : toutes les tables de journaux compressibles sont purgées sur leur fenêtre déclarée la plus courte. Les fenêtres de conformité et de facturation ne sont jamais raccourcies."
+      }
     }
   },
   "providerKeys": {

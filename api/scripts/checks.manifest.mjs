@@ -21,6 +21,7 @@ export default [
   ['check:db-access', 'check-db-access.mjs'],
   ['check:migrations', 'check-migrations.mjs'],
   ['check:swept-tables', 'check-swept-tables.mjs'],
+  ['check:usage-counts', 'check-usage-counts.mjs'],
   ['check:signature-duplication', 'check-signature-duplication.mjs'],
   ['check:shape-lint', 'check-shape-lint.mjs'],
   ['check:tenant-column', 'check-tenant-column.mjs'],

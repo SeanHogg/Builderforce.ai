@@ -21,7 +21,7 @@ import { getCatalogCached } from './modelCatalog';
 import { buildDatabase, buildTransactionalDatabase, hasSiblingDatabase, siblingDatabaseOf } from '../../infrastructure/database/connection';
 import { clearProviderAuthAlertAfterByoSuccess } from './providerAuthAlerts';
 import { providerForVendor } from './llmProviderCatalog';
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, sql, type SQL } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { utcDayStart } from './tokenUsage';
 
@@ -363,6 +363,37 @@ export function resolveUsageDatabase(
  */
 export function usageDatabaseOf(db: Db): Db {
   return siblingDatabaseOf(db, 'operational');
+}
+
+/**
+ * HOW MANY LLM CALLS a set of `llm_usage_log` rows represents.
+ *
+ * THE ONE expression for that question, and it must be used everywhere the answer is
+ * shown — a usage panel's "requests", a per-model breakdown, an interaction count, a
+ * per-key summary. `COUNT(*)` was the obvious spelling and is now WRONG: past
+ * `LLM_USAGE_ROLLUP_AFTER_DAYS` the grain rollup folds a day of calls into one row per
+ * dimension set, so a row can stand for hundreds of calls and `calls` is where that
+ * number went. Every summed quantity beside it (tokens, cache tiers, cost, retries) is
+ * summed by the fold and therefore needs no equivalent; the row count is the only
+ * casualty, so it is the only thing that needs a shared primitive.
+ *
+ * `COALESCE` rather than trusting the NOT NULL default, so the expression is still
+ * correct against a database where migration 1180/0012 has not landed yet — a reader
+ * deployed ahead of its migration reports real counts instead of zeroes.
+ *
+ * Pass the alias when the query names the table something else (`u`, `l`, a CTE).
+ * `npm run check:usage-counts` fails any query that counts these rows another way.
+ */
+export function usageRequestCount(alias?: string): SQL<number> {
+  const column = alias ? sql.raw(`${alias}.calls`) : sql`${llmUsageLog.calls}`;
+  return sql<number>`COALESCE(SUM(${column}), 0)::int`;
+}
+
+/** The same count as a raw SQL FRAGMENT, for the hand-written statements that never
+ *  reference the Drizzle table. Identical semantics — one definition, two spellings of
+ *  the call site, so a raw query cannot drift from the typed one. */
+export function usageRequestCountSql(alias?: string): string {
+  return `COALESCE(SUM(${alias ? `${alias}.calls` : 'calls'}), 0)::int`;
 }
 
 /**

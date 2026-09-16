@@ -221,6 +221,8 @@ import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { randomHex } from '../../domain/shared/bytes';
 import { excluded } from '../../infrastructure/database/upsert';
+import { usageRequestCountSql } from '../../application/llm/usageLedger';
+import { storageCeilingBytes, tierFor } from '../../application/maintenance/storagePressure';
 
 /** Defensive coercion for `models_json` (now `jsonb` [1449]): the pg driver
  *  decodes JSONB to an array, but legacy rows written while the column was
@@ -340,8 +342,19 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
 
 type DatabaseTarget = 'primary' | 'transactional';
 
-async function inspectDatabase(db: Db, name: DatabaseTarget) {
+/**
+ * Inspect one endpoint: its total size, the plan headroom that size is judged against,
+ * and its hundred largest relations.
+ *
+ * `ceilingBytes` / `ratio` / `tier` come from the SAME functions the storage-pressure
+ * sweep acts on ({@link storageCeilingBytes}, {@link tierFor}) rather than a second
+ * threshold defined here. An operator looking at this panel and a sweep deciding to
+ * compress a retention window must be reading one number; two would be a console that
+ * says "fine" on the morning the nightly tick started deleting history.
+ */
+async function inspectDatabase(db: Db, name: DatabaseTarget, env: Env) {
   const started = Date.now();
+  const ceilingBytes = storageCeilingBytes(env);
   try {
     const [database] = (await db.execute(sql`
       SELECT current_database() AS "databaseName", pg_database_size(current_database())::bigint AS "totalBytes"
@@ -359,16 +372,21 @@ async function inspectDatabase(db: Db, name: DatabaseTarget) {
       ORDER BY pg_total_relation_size(relid) DESC
       LIMIT 100
     `)).rows;
+    const totalBytes = Number(database?.totalBytes ?? 0);
     return {
       name, ok: true, latencyMs: Date.now() - started,
       databaseName: database?.databaseName ?? null,
-      totalBytes: Number(database?.totalBytes ?? 0),
+      totalBytes,
+      ceilingBytes,
+      ratio: ceilingBytes > 0 ? totalBytes / ceilingBytes : 0,
+      tier: tierFor(ceilingBytes > 0 ? totalBytes / ceilingBytes : 0).tier,
       tables,
     };
   } catch (error) {
     return {
       name, ok: false, latencyMs: Date.now() - started, databaseName: null,
-      totalBytes: 0, tables: [], error: error instanceof Error ? error.message : 'Database inspection failed',
+      totalBytes: 0, ceilingBytes, ratio: 0, tier: 'ok' as const,
+      tables: [], error: error instanceof Error ? error.message : 'Database inspection failed',
     };
   }
 }
@@ -2059,8 +2077,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const primary = requestDb(c);
     const transactional = buildTransactionalDatabase(c.env);
     const [primaryDb, transactionalDb, runtime] = await Promise.all([
-      inspectDatabase(primary, 'primary'),
-      inspectDatabase(transactional, 'transactional'),
+      inspectDatabase(primary, 'primary', c.env as Env),
+      inspectDatabase(transactional, 'transactional', c.env as Env),
       primary.execute(sql`
         SELECT
           (SELECT COUNT(*)::int FROM agent_hosts) AS "agentHosts",
@@ -2472,12 +2490,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const byModel = await db.execute(sql`
       SELECT
         model,
-        COUNT(*)::int                    AS requests,
+        ${sql.raw(usageRequestCountSql())} AS requests,
         SUM(prompt_tokens)::bigint       AS prompt_tokens,
         SUM(completion_tokens)::bigint   AS completion_tokens,
         SUM(total_tokens)::bigint        AS total_tokens,
         SUM(retries)::int                AS retries,
-        COUNT(CASE WHEN streamed THEN 1 END)::int AS streamed_requests
+        COALESCE(SUM(calls) FILTER (WHERE streamed), 0)::int AS streamed_requests
       FROM llm_usage_log
       WHERE created_at >= NOW() - (${days} || ' days')::interval
       GROUP BY model
@@ -2488,7 +2506,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const daily = await db.execute(sql`
       SELECT
         DATE_TRUNC('day', created_at)::date::text AS day,
-        COUNT(*)::int                             AS requests,
+        ${sql.raw(usageRequestCountSql())}        AS requests,
         SUM(total_tokens)::bigint                 AS total_tokens
       FROM llm_usage_log
       WHERE created_at >= NOW() - (${days} || ' days')::interval
@@ -2502,7 +2520,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     // windowed table said "No usage in this period").
     const [totals] = (await db.execute(sql`
       SELECT
-        COUNT(*)::int          AS total_requests,
+        ${sql.raw(usageRequestCountSql())} AS total_requests,
         SUM(total_tokens)::bigint AS total_tokens,
         SUM(prompt_tokens)::bigint AS total_prompt_tokens,
         SUM(completion_tokens)::bigint AS total_completion_tokens,
@@ -2529,7 +2547,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     // happened; hiding them would keep the discrepancy.
     const [orphaned] = (await db.execute(sql`
       SELECT
-        COUNT(*)::int                          AS requests,
+        ${sql.raw(usageRequestCountSql())}     AS requests,
         COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
         COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_millicents
       FROM llm_usage_log

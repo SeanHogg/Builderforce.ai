@@ -14834,7 +14834,17 @@
       "allTables": "todas las tablas",
       "maintenanceCleanup": "ejecutar la limpieza de retención",
       "maintenanceVacuum": "vacuum de {table} en {target}",
-      "confirmMaintenance": "Confirmar: ¿{label}? Es una operación de mantenimiento auditada."
+      "confirmMaintenance": "Confirmar: ¿{label}? Es una operación de mantenimiento auditada.",
+      "storage": {
+        "label": "{used} de {ceiling} en uso",
+        "tier": {
+          "ok": "{percent}% en uso",
+          "warn": "{percent}% — limpieza intensificada",
+          "critical": "{percent}% — en el mínimo"
+        },
+        "noteWarn": "Por encima del 80 %: el barrido de mantenimiento nocturno ya purga todas las tablas de registro comprimibles con una ventana más corta y recupera espacio de inmediato en lugar de esperar a la reescritura semanal.",
+        "noteCritical": "Por encima del 90 %: todas las tablas de registro comprimibles se purgan con su ventana declarada más corta. Las ventanas de cumplimiento y facturación nunca se acortan."
+      }
     }
   },
   "providerKeys": {

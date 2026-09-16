@@ -34,6 +34,7 @@
  */
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { foldDaysBefore, type DayFoldResult } from './dayFold';
 
 /**
  * Days a raw tool-audit row keeps its individual identity.
@@ -65,18 +66,10 @@ import type { Db } from '../../infrastructure/database/connection';
  */
 export const TOOL_AUDIT_ROLLUP_AFTER_DAYS = 30;
 
-/** Days of tallies to fold per invocation. Bounds the work of one sweep tick; the
- *  backlog drains over consecutive ticks rather than in one long transaction. */
-const DEFAULT_MAX_DAYS = 14;
-
-export interface ToolAuditRollupResult {
-  /** Calendar days folded this run. */
-  days: number;
-  /** Raw events removed. */
-  folded: number;
-  /** Tally rows written or added to. */
-  tallies: number;
-}
+/** What one fold pass did. The shared {@link DayFoldResult} — this rollup and the usage
+ *  ledger's report the same four facts, and keeping two identical interfaces in step by
+ *  hand buys nothing. */
+export type ToolAuditRollupResult = DayFoldResult;
 
 /**
  * Fold one calendar day of raw events into `tool_audit_daily` and delete them.
@@ -126,44 +119,23 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
          (SELECT count(*) FROM removed)::int AS folded
 `);
 
-/** Rows of `{ tallies, folded }` come back untyped from `db.execute`. */
-function readCounts(result: unknown): { tallies: number; folded: number } {
-  const row = (Array.isArray(result) ? result[0] : (result as { rows?: unknown[] })?.rows?.[0]) as
-    | { tallies?: unknown; folded?: unknown }
-    | undefined;
-  return { tallies: Number(row?.tallies ?? 0), folded: Number(row?.folded ?? 0) };
-}
-
 /**
  * Fold every whole day of `tool_audit_events` strictly before `cutoff`, oldest first.
  *
  * `cutoff` is floored to its calendar day, so the day the cutoff falls in is never
- * touched — see WHOLE DAYS ONLY above.
+ * touched — see WHOLE DAYS ONLY above. Scheduling, bounding and per-day isolation are
+ * the shared {@link foldDaysBefore}; this supplies only the statement.
  */
 export async function rollUpToolAudit(
   db: Db,
   cutoff: Date,
   opts: { maxDays?: number } = {},
 ): Promise<ToolAuditRollupResult> {
-  const boundary = cutoff.toISOString().slice(0, 10);
-  const maxDays = opts.maxDays ?? DEFAULT_MAX_DAYS;
-
-  const dayRows = await db.execute(sql`
-    SELECT DISTINCT ts::date::text AS day
-      FROM tool_audit_events
-     WHERE ts < ${boundary}::date
-     ORDER BY 1
-     LIMIT ${maxDays}
-  `);
-  const days = (Array.isArray(dayRows) ? dayRows : (dayRows as { rows?: unknown[] }).rows ?? [])
-    .map((r) => String((r as { day: string }).day));
-
-  const total: ToolAuditRollupResult = { days: 0, folded: 0, tallies: 0 };
-  for (const day of days) {
-    const { tallies, folded } = readCounts(await foldDay(db, day));
-    total.days += 1;
-    total.folded += folded;
-    total.tallies += tallies;
-  }
-  return total;
+  return foldDaysBefore(db, cutoff, {
+    relation: 'tool_audit_events',
+    tsColumn: 'ts',
+    foldDay,
+    source: 'application/maintenance/toolAuditRollup.ts',
+    operation: 'rollUpToolAudit',
+  }, opts);
 }

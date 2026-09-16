@@ -6,7 +6,7 @@
  */
 import { and, desc, eq, gte, isNull, sql, sum } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { usageDatabaseOf } from './usageLedger';
+import { usageDatabaseOf, usageRequestCount } from './usageLedger';
 import type { Env } from '../../env';
 import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
@@ -512,7 +512,7 @@ export async function queryTenantApiKeyUsage(
   // than three separate queries and keeps the cards consistent with rows.
   const [summary] = await usageDb
     .select({
-      total:       sql<number>`COUNT(*)::int`,
+      total:       usageRequestCount(),
       totalTokens: sum(llmUsageLog.totalTokens),
       modelCount:  sql<number>`COUNT(DISTINCT ${llmUsageLog.model})::int`,
     })

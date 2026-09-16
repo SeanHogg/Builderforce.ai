@@ -53,6 +53,7 @@ import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidatePsychometricCache } from '../../application/artifact/capabilityContext';
 import { invalidateSalesReferrals } from '../../application/sales/salesReferralFacts';
 import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import { createSessionIntrospectRoutes } from './sessionIntrospectRoutes';
@@ -997,6 +998,10 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     if (body.psychometric !== undefined) {
       const memberships = await db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers).where(eq(tenantMembers.userId, userId));
       await Promise.all(memberships.map((m) => invalidateCached(c.env, assigneeProfilesCacheKey(m.tenantId))));
+      // …and the per-turn limbic read, which caches this same column so the chat
+      // participant does not fetch it on every message. Without this the person keeps
+      // being addressed in the personality they just replaced until the TTL lapses.
+      await invalidatePsychometricCache(c.env, { userId });
     }
     return c.json({ user: toUserResponse(row) });
   });

@@ -15,7 +15,7 @@ import { llmUsageLog } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { millicentsToUsd } from '../../domain/shared/money';
 import type { Env } from '../../env';
-import { usageDatabaseOf } from './usageLedger';
+import { usageDatabaseOf, usageRequestCount } from './usageLedger';
 
 export interface UsageCostSummary {
   estimatedCostUsd: number;
@@ -36,7 +36,7 @@ async function summarize(env: Env | undefined, db: Db, cacheKey: string, predica
         .select({
           cost_mc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)::bigint`,
           tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)::bigint`,
-          requests: sql<number>`count(*)::int`,
+          requests: usageRequestCount(),
         })
         .from(llmUsageLog)
         .where(predicate);

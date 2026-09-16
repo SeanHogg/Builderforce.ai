@@ -9,29 +9,64 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * these deletes free has to act on exactly the same set. Add a new unbounded log
  * table THERE — one place, one policy (DRY).
  *
- * Every table in that registry is a diagnostic/event log (no business records), so
- * deletion is safe and never cascades to domain data. The two purges that cannot
- * be registry entries — a row-level expiry, and a row-level window inside a table
- * the registry may not touch — are declared alongside it in {@link runRetentionPurge}.
+ * Almost every table in that registry is a diagnostic/event log (no business records),
+ * so deletion is safe and never cascades to domain data; the two that are not say so in
+ * their own entry (see the registry's own header). The two policies that genuinely
+ * cannot be registry entries — a row-level EXPIRY on domain data, and a COLUMN-level
+ * window on a relation with live business writers — are declared alongside it in
+ * {@link runRetentionPurge}.
+ *
+ * COMPRESSIBLE UNDER PRESSURE. The windows above are the steady-state policy. When an
+ * endpoint approaches its storage ceiling the same pass runs again on SHORTER windows,
+ * bounded per table by `pressureFloorDays` — see {@link RetentionOptions.pressure} and
+ * `storagePressure.ts`, which is the only caller that passes one.
  */
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { SWEPT_TABLES } from './sweptTables';
 import { purgeExpiredMemories } from '../memory/memoryService';
-import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
 import { EXECUTION_PAYLOAD_RETENTION_DAYS, redactStaleExecutionPayloads } from '../runtime/executionPayloadRetention';
 import { DAY_MS } from '../../domain/shared/time';
 
 const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
+
+export interface RetentionOptions {
+  /**
+   * How hard to compress every window, 0 = the declared policy and 1 = each table's
+   * own `pressureFloorDays`. Interpolated linearly, so the tables with the most room
+   * between window and floor give up the most days first, and a table that declares no
+   * floor gives up none at all.
+   *
+   * Passed ONLY by the storage-pressure sweep. The daily tick leaves it undefined,
+   * which is not the same as passing 0: `applyPressure` is then never consulted at all,
+   * so the ordinary purge cannot be affected by a bug in the compression arithmetic.
+   */
+  pressure?: number;
+}
+
+/** The window a table is purged on at this pressure level, never below its floor and
+ *  never below one day. A table with no `pressureFloorDays` is not compressible. */
+export function compressedWindow(table: { retentionDays: number; pressureFloorDays?: number }, pressure: number | undefined): number {
+  if (pressure == null || table.pressureFloorDays == null) return table.retentionDays;
+  const clamped = Math.min(1, Math.max(0, pressure));
+  const floor = Math.min(table.pressureFloorDays, table.retentionDays);
+  return Math.max(1, Math.round(table.retentionDays - (table.retentionDays - floor) * clamped));
+}
 
 /**
  * Delete expired rows from every unbounded log table. Best-effort per table — a
  * failure on one is logged and does not block the others. `now` is injectable for
  * tests; defaults to the cron's wall clock.
  */
-export async function runRetentionPurge(env: Env, now: number = Date.now(), db: Db = buildDatabase(env)): Promise<void> {
+export async function runRetentionPurge(
+  env: Env,
+  now: number = Date.now(),
+  db: Db = buildDatabase(env),
+  options: RetentionOptions = {},
+): Promise<void> {
   const transactionalDb = buildTransactionalDatabase(env);
   const dbFor = (connection: 'primary' | 'transactional'): Db => (connection === 'primary' ? db : transactionalDb);
+  const windowFor = (table: { retentionDays: number; pressureFloorDays?: number }) => compressedWindow(table, options.pressure);
 
   const targets: Array<{ name: string; run: () => Promise<unknown> }> = [
     // Grain-level retention, FIRST — and the order is load-bearing, not tidiness. A
@@ -51,7 +86,7 @@ export async function runRetentionPurge(env: Env, now: number = Date.now(), db: 
     // purged on both, or the copy on the endpoint that lost its writer is never swept.
     ...SWEPT_TABLES.flatMap((table) => table.connections.map((connection) => ({
       name: `${table.relation}@${connection}`,
-      run: () => table.purge(dbFor(connection), cutoff(now, table.retentionDays)),
+      run: () => table.purge(dbFor(connection), cutoff(now, windowFor(table))),
     }))),
     // Column-level retention, on its own shorter window. Runs AFTER every purge so it
     // never rewrites a row that was about to be deleted anyway.
@@ -67,15 +102,17 @@ export async function runRetentionPurge(env: Env, now: number = Date.now(), db: 
     // stopped returning, and the relations behind it are domain data no maintenance
     // sweep may rewrite.
     { name: 'expired_memories', run: () => purgeExpiredMemories(env, db) },
-    // The anonymous visitor journey (1111). Also NOT in SWEPT_TABLES, for the
-    // opposite reason to the memories above: it lives INSIDE `activity_log`, the
-    // audit trail, which that registry may neither purge wholesale nor rewrite.
-    // The window is the row's, declared beside the writer that produces them.
-    {
-      name: 'visitor_activity',
-      run: () => purgeVisitorActivity(db, cutoff(now, VISITOR_RETENTION_DAYS)),
-    },
-    // The dispatch payload on old runs. A THIRD kind of non-registry policy: column-level
+    // The anonymous visitor journey (1111) used to be declared HERE, outside the
+    // registry, on the reasoning that `activity_log` is the audit trail and the registry
+    // "may neither purge wholesale nor rewrite" it. Half of that was right and the half
+    // that was wrong cost the endpoint dearly: the standalone target was handed the
+    // PRIMARY `db` while every row is written through `activityDatabase()` to the
+    // operational sibling, so the only policy this table has deleted nothing, on the
+    // endpoint that was actually filling up — and no vacuum ever followed the deletes it
+    // was supposed to be making. It is now a registry entry with a predicate-scoped
+    // `purge` and `reclaimable: false`: swept and vacuumed on BOTH endpoints, never
+    // rewritten, and no longer able to point at the wrong database.
+    // The dispatch payload on old runs. The OTHER kind of non-registry policy: column-level
     // on domain data. `executions` is business data with twelve cascading children and
     // live writers, so the sweep may neither delete from it nor rewrite it — but one
     // column on it was 29 MB that no reader of a 30-day-old run can reach.

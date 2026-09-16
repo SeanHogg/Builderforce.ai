@@ -36,6 +36,7 @@ import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
 import { runBloatReclaim, runTableVacuum } from './application/maintenance/tableMaintenance';
+import { describeStoragePressure, runStoragePressureSweep } from './application/maintenance/storagePressure';
 import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
 import { runAlertSweep } from './application/alerts/runAlertSweep';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
@@ -281,6 +282,22 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runTableVacuum(env);
       return r.failed.length > 0 ? `vacuumed=${r.vacuumed.length} failed=${r.failed.length}` : null;
     },
+  },
+  {
+    key: 'db-pressure',
+    cadence: 'daily',
+    // LAST of the three maintenance sweeps, and the ordering is the whole point: it
+    // measures what `retention` + `db-vacuum` have just left behind, so it escalates
+    // only when the steady-state policy has demonstrably failed to keep the endpoint
+    // under its ceiling — rather than compressing windows on a database the ordinary
+    // pass was about to bring down anyway.
+    //
+    // DAILY, NOT `frequent`. A storage ceiling is not a five-minute problem, and the
+    // 5-minute tick would add ~576 measurement round trips a day to the endpoints this
+    // exists to keep small and quiet. Running it beside the sweeps whose result it
+    // judges is both cheaper and more meaningful.
+    description: 'Measure each Neon endpoint against its plan ceiling; past 80% re-purge at compressed windows and reclaim immediately instead of waiting for the weekly rewrite.',
+    run: async ({ env }) => describeStoragePressure(await runStoragePressureSweep(env)),
   },
   {
     key: 'byo-health',

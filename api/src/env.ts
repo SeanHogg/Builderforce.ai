@@ -19,6 +19,12 @@ export interface Env {
    * talk to the Postgres container from docker-compose.yml instead of Neon.
    * Leave unbound in production, where the endpoint is derived from the host. */
   NEON_FETCH_ENDPOINT?: string;
+  /** Bytes of storage one Neon branch may hold before the plan's cap bites, as a
+   * decimal string. The storage-pressure sweep measures each endpoint against this
+   * and escalates its cleanup as the ratio climbs. Unbound = the Free-plan 512 MB
+   * branch ceiling — bind it after a plan change so the sweep stops acting on a
+   * limit that no longer applies. See `application/maintenance/storagePressure.ts`. */
+  NEON_STORAGE_CEILING_BYTES?: string;
   /** Comma-separated allowed CORS origins, e.g. "https://builderforce.ai" */
   CORS_ORIGINS: string;
   /** "production" | "development" */

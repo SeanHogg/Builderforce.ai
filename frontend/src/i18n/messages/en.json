@@ -14834,7 +14834,17 @@
       "allTables": "all tables",
       "maintenanceCleanup": "run retention cleanup",
       "maintenanceVacuum": "vacuum {table} in {target}",
-      "confirmMaintenance": "Confirm: {label}? This is an audited maintenance operation."
+      "confirmMaintenance": "Confirm: {label}? This is an audited maintenance operation.",
+      "storage": {
+        "label": "{used} of {ceiling} used",
+        "tier": {
+          "ok": "{percent}% used",
+          "warn": "{percent}% — cleanup escalated",
+          "critical": "{percent}% — at the floor"
+        },
+        "noteWarn": "Past 80%: the nightly maintenance sweep now purges every compressible log table on a shortened window and reclaims space immediately instead of waiting for the weekly rewrite.",
+        "noteCritical": "Past 90%: every compressible log table is being purged at its shortest declared window. Compliance and billing windows are never shortened."
+      }
     }
   },
   "providerKeys": {

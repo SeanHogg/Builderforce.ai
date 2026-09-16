@@ -3458,6 +3458,15 @@ select.input option {
   color: var(--success-text);
 }
 
+/* The third state the admin badge set was missing. Something can be degraded without
+   being broken — an endpoint past its storage warn threshold, a sweep running on
+   compressed windows — and with no `badge-warning` rule that read as an unstyled span.
+   Both tokens are redefined per theme above, so this is correct in light and dark. */
+.admin-page .badge-warning {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
 .admin-page .admin-select {
   padding: 6px 10px;
   border-radius: var(--radius-md);

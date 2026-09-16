@@ -23,7 +23,7 @@ import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { llmUsageLog } from '../../infrastructure/database/schema';
-import { resolveUsageDatabase } from '../../application/llm/usageLedger';
+import { resolveUsageDatabase, usageRequestCount } from '../../application/llm/usageLedger';
 import { completeJson } from '../../application/llm/completeJson';
 import { asJsonObject } from '../../domain/shared/json';
 import { parseBody } from './requestBody';
@@ -625,7 +625,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
           usageDb.select({
             totalTokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)`,
             costMc: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)`,
-            requests: sql<number>`COUNT(*)`,
+            requests: usageRequestCount(),
             byoTokens: sql<number>`COALESCE(SUM(CASE WHEN ${llmUsageLog.byo} THEN ${llmUsageLog.totalTokens} ELSE 0 END), 0)`,
           }).from(llmUsageLog).where(where),
           usageDb.select({

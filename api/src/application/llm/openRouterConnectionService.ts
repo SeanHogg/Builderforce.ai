@@ -35,7 +35,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { resolveUsageDatabase } from './usageLedger';
+import { resolveUsageDatabase, usageRequestCountSql } from './usageLedger';
 import { tenantOpenRouterConnections } from '../../infrastructure/database/schema';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { credentialSecret } from '../integrations/credentialCrypto';
@@ -272,7 +272,7 @@ async function openRouterModelUsage(env: Env, tenantId: number): Promise<Record<
       const db = resolveUsageDatabase(env, buildDatabase(env));
       const result = await db.execute(sql`
         SELECT model,
-               COUNT(*)::int                          AS requests,
+               ${sql.raw(usageRequestCountSql())}      AS requests,
                COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
                COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_millicents,
                MAX(created_at)                        AS last_used_at

@@ -76,6 +76,8 @@ export interface CapabilityContext {
 
 const skillCacheKey = (slug: string) => `cap:skill:${slug}`;
 const personaCacheKey = (slug: string) => `cap:persona:${slug}`;
+const userPsychCacheKey = (userId: string) => `cap:psych:user:${userId}`;
+const agentPsychCacheKey = (tenantId: number, agentId: string) => `cap:psych:agent:${tenantId}:${agentId}`;
 
 async function loadSkillBody(env: Env, db: Db, slug: string): Promise<SkillBody> {
   return getOrSetCached<SkillBody>(env, skillCacheKey(slug), async () => {
@@ -202,18 +204,44 @@ export async function resolvePsychometricProfile(
   const inline = parsePsychometricProfile(source.psychometric as string | LimbicPsychProfile | null | undefined);
   if (inline) return inline;
 
+  // CACHED, like the persona leg below it already was. `POST /api/limbic/block` is a
+  // PER-TURN call — the VS Code chat participant makes one on every message — and this
+  // was an uncached `users` SELECT behind each of them, on data that changes only when
+  // somebody retakes a psychometric assessment. Two minutes is long enough that a
+  // conversation costs one read instead of one per turn, and short enough that a fresh
+  // profile is in effect before the person has finished reading the confirmation.
   if (typeof source.userId === 'string' && source.userId) {
-    const [row] = await db.select({ psychometric: users.psychometric }).from(users).where(eq(users.id, source.userId)).limit(1);
-    const p = parsePsychometricProfile(row?.psychometric ?? null);
+    const raw = await getOrSetCached(
+      env,
+      userPsychCacheKey(source.userId),
+      async () => {
+        const [row] = await db.select({ psychometric: users.psychometric }).from(users).where(eq(users.id, source.userId as string)).limit(1);
+        // `null` rather than `undefined` for "no profile": a miss has to be CACHEABLE,
+        // or the majority case — someone who has never taken the assessment — keeps
+        // paying the per-turn read this exists to remove.
+        return (row?.psychometric ?? null) as string | LimbicPsychProfile | null;
+      },
+      { kvTtlSeconds: 120, l1TtlMs: 120_000 },
+    );
+    const p = parsePsychometricProfile(raw);
     if (p) return p;
   }
   if (typeof source.agentId === 'string' && source.agentId && tenantId != null) {
-    const [row] = await db
-      .select({ psychometric: ideAgents.psychometric })
-      .from(ideAgents)
-      .where(scopedToTenant(ideAgents, tenantId, eq(ideAgents.id, source.agentId)))
-      .limit(1);
-    const p = parsePsychometricProfile(row?.psychometric ?? null);
+    const agentId = source.agentId;
+    const raw = await getOrSetCached(
+      env,
+      agentPsychCacheKey(tenantId, agentId),
+      async () => {
+        const [row] = await db
+          .select({ psychometric: ideAgents.psychometric })
+          .from(ideAgents)
+          .where(scopedToTenant(ideAgents, tenantId, eq(ideAgents.id, agentId)))
+          .limit(1);
+        return (row?.psychometric ?? null) as string | LimbicPsychProfile | null;
+      },
+      { kvTtlSeconds: 120, l1TtlMs: 120_000 },
+    );
+    const p = parsePsychometricProfile(raw);
     if (p) return p;
   }
   if (typeof source.personaId === 'string' && source.personaId) {
@@ -287,6 +315,20 @@ export async function invalidateCapabilityCache(
   slug: string,
 ): Promise<void> {
   await invalidateCached(env, kind === 'skill' ? skillCacheKey(slug) : personaCacheKey(slug));
+}
+
+/** Drop the cached psychometric profile for one person or agent. Called from the
+ *  mutation that stores a new assessment result, so a retake takes effect on the very
+ *  next turn instead of after the TTL — the cache is a per-turn read saver, never a
+ *  reason for someone to keep being addressed by the personality they just replaced. */
+export async function invalidatePsychometricCache(
+  env: Env,
+  subject: { userId?: string | null; tenantId?: number | null; agentId?: string | null },
+): Promise<void> {
+  if (subject.userId) await invalidateCached(env, userPsychCacheKey(subject.userId));
+  if (subject.agentId && subject.tenantId != null) {
+    await invalidateCached(env, agentPsychCacheKey(subject.tenantId, subject.agentId));
+  }
 }
 
 function personaBlock(p: NonNullable<PersonaBody>): string {

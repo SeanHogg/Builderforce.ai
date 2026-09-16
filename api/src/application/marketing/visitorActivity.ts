@@ -34,12 +34,16 @@
  * it is a fact ABOUT an event, not a dimension anything grouped by, so it rides
  * in metadata rather than earning a column on the platform's audit table.
  *
- * ── RETENTION IS ROW-LEVEL, NOT TABLE-LEVEL ──────────────────────────────────
- * `SWEPT_TABLES` is explicit that membership is the permission and that it holds
- * only relations with "no business records". `activity_log` is the audit trail;
- * it must never be swept wholesale. So the 90-day visitor window follows the
- * lapsed-memory precedent that registry names: a policy on the ROW, run from
- * `runRetentionPurge` and never a vacuum rewrite. See {@link purgeVisitorActivity}.
+ * ── RETENTION IS ROW-LEVEL, INSIDE A TABLE-LEVEL ENTRY ───────────────────────
+ * `activity_log` is the audit trail and must never be swept wholesale, so this
+ * window is a PREDICATE, not an age: it names the visitor rows and touches nothing
+ * else. That predicate is now the `purge` of the relation's `SWEPT_TABLES` entry
+ * rather than a standalone target beside it, which fixes two things the standalone
+ * version got wrong. It ran against the PRIMARY handle while every row is written
+ * to the operational sibling, so it deleted nothing; and nothing vacuumed the
+ * relation after the deletes it was meant to be making. The entry is marked
+ * `reclaimable: false`, so the weekly rewrite still never takes an exclusive lock
+ * on the audit trail. See {@link purgeVisitorActivity}.
  */
 
 import { eq, lt, sql } from 'drizzle-orm';
@@ -143,9 +147,11 @@ export async function forgetVisitorActivity(db: Db, visitorId: string): Promise<
 /**
  * Drop journey rows past the retention window.
  *
- * A row-level policy rather than a `SWEPT_TABLES` entry, because the table it
- * lives in is the audit trail: the predicate names the visitor rows and touches
- * nothing else, and the relation is never vacuum-rewritten on their account.
+ * A PREDICATE-scoped purge, because the table it lives in is the audit trail: it
+ * names the visitor rows and touches nothing else, and the relation is never
+ * vacuum-rewritten on their account. It is the `purge` of `activity_log`'s registry
+ * entry, so it runs on every endpoint the relation exists on and the daily plain
+ * vacuum follows it.
  */
 export async function purgeVisitorActivity(db: Db, cutoff: Date): Promise<unknown> {
   return db

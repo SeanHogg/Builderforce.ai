@@ -65,9 +65,27 @@ function enqueueTrace(ctx: TraceCtx | undefined | null, promise: Promise<unknown
   else void promise;
 }
 
-/** Per-body cap. Full bodies are wanted for diagnostics, but a runaway payload
- *  shouldn't bloat a single row unbounded — truncate with a visible marker. */
-const BODY_CAP = 100_000;
+/**
+ * Per-body cap.
+ *
+ * Full bodies are wanted for diagnostics, but a runaway payload shouldn't bloat a
+ * single row unbounded — truncate with a visible marker.
+ *
+ * WHY 20k AND NOT 100k. A trace row carries TWO of these (`request_body` and
+ * `response_body`) plus `attempts`, and every LLM call on every surface writes one —
+ * the Brain, the cloud agent engine and the IDE routes all reach {@link logTrace}.
+ * At the old cap an agentic coding turn, whose request body IS the whole context
+ * window, wrote a ~200 KB row per call, which made `llm_traces` the largest object on
+ * the operational endpoint and put it over 80% of the Neon 512 MB branch ceiling.
+ *
+ * 20k is the width at which a body is still READABLE as diagnostics: the system
+ * prompt, the tools header and the first few messages of the turn, which is what a
+ * superadmin reads when asking why the cascade behaved as it did. What it gives up is
+ * the tail of a long conversation — recoverable from the chat itself, which is where
+ * anyone looks for it anyway. Past {@link SweptTable.redact} the columns are blanked
+ * entirely, so this cap governs the first week only.
+ */
+const BODY_CAP = 20_000;
 
 function cap(s: string): string {
   return s.length > BODY_CAP ? `${s.slice(0, BODY_CAP)}\n…[truncated ${s.length - BODY_CAP} chars]` : s;

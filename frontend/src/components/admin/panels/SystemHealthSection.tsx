@@ -7,6 +7,7 @@ import { errText } from '../adminShared';
 import { formatBytes } from '@/lib/formatBytes';
 import { useAdminFormat } from '../adminShared';
 import { InlineConfirmButton } from '@/components/InlineConfirmButton';
+import { StorageHeadroom } from './StorageHeadroom';
 
 type MaintenanceAction = 'purge_expired' | 'vacuum_analyze';
 type MaintenanceTarget = 'primary' | 'transactional';
@@ -71,6 +72,7 @@ export function SystemHealthSection() {
             <div><strong style={{ textTransform: 'capitalize' }}>{t('neonDatabase', { name: db.name })}</strong><div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{db.databaseName ?? t('unavailable')} · {db.ok ? t('latency', { ms: db.latencyMs }) : db.error}</div></div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>{formatBytes(db.totalBytes)}</strong><InlineConfirmButton className="btn-ghost" disabled={Boolean(busy) || !db.ok} hint={maintenanceHint('vacuum_analyze', db.name)} onConfirm={() => maintain('vacuum_analyze', db.name)}>{t('vacuumAnalyze')}</InlineConfirmButton></div>
           </div>
+          <StorageHeadroom totalBytes={db.totalBytes} ceilingBytes={db.ceilingBytes} tier={db.tier} />
           <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table" style={{ fontSize: 'var(--font-size-small)' }}><thead><tr><th>{t('colTable')}</th><th>{t('colSize')}</th><th>{t('colRows')}</th><th>{t('colWrites')}</th><th>{t('colLastVacuum')}</th><th></th></tr></thead><tbody>{db.tables.map((table) => <tr key={table.name}><td>{table.name}</td><td>{formatBytes(Number(table.totalBytes))}</td><td>{fmtNum(Number(table.estimatedRows))}</td><td>{fmtNum(Number(table.insertsSinceStatsReset) + Number(table.updatesSinceStatsReset) + Number(table.deletesSinceStatsReset))}</td><td>{table.lastAutovacuum ? fmtDateTime(table.lastAutovacuum) : '—'}</td><td><InlineConfirmButton className="btn-ghost" disabled={Boolean(busy)} hint={maintenanceHint('vacuum_analyze', db.name, table.name)} onConfirm={() => maintain('vacuum_analyze', db.name, table.name)}>{t('vacuum')}</InlineConfirmButton></td></tr>)}</tbody></table></div>
         </div>)}
       </>}

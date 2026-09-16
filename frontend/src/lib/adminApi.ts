@@ -374,6 +374,15 @@ export interface AdminSystemDatabase {
   latencyMs: number;
   databaseName: string | null;
   totalBytes: number;
+  /** Bytes the plan allows one Neon branch — what `totalBytes` is judged against. */
+  ceilingBytes: number;
+  /** totalBytes / ceilingBytes. */
+  ratio: number;
+  /** The storage-pressure sweep's own verdict on `ratio`: past `warn` it shortens every
+   *  compressible retention window on its next nightly tick, and past `critical` it takes
+   *  each of them to its declared floor. Sent by the server rather than re-derived in the
+   *  UI so the panel and the sweep can never disagree about which one is in force. */
+  tier: 'ok' | 'warn' | 'critical';
   tables: AdminSystemTable[];
   error?: string;
 }

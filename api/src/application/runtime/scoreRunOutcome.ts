@@ -42,7 +42,7 @@ const CLOUD_RUN_ROLE: ModelRole = 'code';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { lexicalEval } from '../eval/semanticEval';
-import { resolveUsageDatabase, usageDatabaseOf } from '../llm/usageLedger';
+import { resolveUsageDatabase, usageDatabaseOf, usageRequestCount } from '../llm/usageLedger';
 import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
@@ -260,13 +260,13 @@ async function resolveRunModel(db: Db, executionId: number): Promise<{ model: st
     const rows = await usageDatabaseOf(db)
       .select({
         model: llmUsageLog.model,
-        n: sql<number>`count(*)::int`,
+        n: usageRequestCount(),
         cost: sql<number>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)::int`,
       })
       .from(llmUsageLog)
       .where(eq(llmUsageLog.executionId, executionId))
       .groupBy(llmUsageLog.model)
-      .orderBy(desc(sql`count(*)`));
+      .orderBy(desc(usageRequestCount()));
     if (rows.length === 0) return { model: '', steps: 0, costMc: 0 };
     const steps = rows.reduce((a, r) => a + (Number(r.n) || 0), 0);
     const costMc = rows.reduce((a, r) => a + (Number(r.cost) || 0), 0);

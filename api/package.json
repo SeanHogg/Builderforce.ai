@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.9.37",
+  "version": "2026.9.38",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -17,6 +17,7 @@
     "check:db-access": "node scripts/check-db-access.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",
     "check:swept-tables": "node scripts/check-swept-tables.mjs",
+    "check:usage-counts": "node scripts/check-usage-counts.mjs",
     "check:signature-duplication": "node scripts/check-signature-duplication.mjs",
     "check:shape-lint": "node scripts/check-shape-lint.mjs",
     "check:tenant-column": "node scripts/check-tenant-column.mjs",

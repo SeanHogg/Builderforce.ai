@@ -1989,6 +1989,18 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  migration 1167. Stamped by every producer that knows it (the gateway from the
    *  request's `role`, a cloud run per turn); null for callers that send none. */
   role:             varchar('role', { length: 16 }),
+  /**
+   * How many individual LLM calls this row accounts for (migration 1180 / 0012).
+   *
+   * 1 for every row a writer produces. It becomes >1 only when the grain rollup folds a
+   * day of calls into one row per dimension set — the ledger's answer to being both the
+   * billing record (so it cannot be purged) and the operational endpoint's fastest
+   * unbounded grower. Every SUMmed quantity beside it is summed by the fold, so totals
+   * are unchanged; the ROW COUNT is the one thing a fold destroys, which is why
+   * "how many requests" is `SUM(calls)` — see {@link usageRequestCount} — and never
+   * `COUNT(*)`. `npm run check:usage-counts` enforces that.
+   */
+  calls:            integer('calls').notNull().default(1),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

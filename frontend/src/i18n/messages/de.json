@@ -14834,7 +14834,17 @@
       "allTables": "alle Tabellen",
       "maintenanceCleanup": "Aufbewahrungsbereinigung ausführen",
       "maintenanceVacuum": "Vacuum von {table} in {target}",
-      "confirmMaintenance": "Bestätigen: {label}? Dies ist ein auditierter Wartungsvorgang."
+      "confirmMaintenance": "Bestätigen: {label}? Dies ist ein auditierter Wartungsvorgang.",
+      "storage": {
+        "label": "{used} von {ceiling} belegt",
+        "tier": {
+          "ok": "{percent}% belegt",
+          "warn": "{percent}% — Bereinigung verschärft",
+          "critical": "{percent}% — auf dem Mindestwert"
+        },
+        "noteWarn": "Über 80 %: Der nächtliche Wartungslauf bereinigt jetzt alle komprimierbaren Protokolltabellen mit verkürzter Aufbewahrung und gibt Speicher sofort frei, statt auf das wöchentliche Umschreiben zu warten.",
+        "noteCritical": "Über 90 %: Alle komprimierbaren Protokolltabellen werden mit ihrer kürzesten deklarierten Aufbewahrung bereinigt. Compliance- und Abrechnungsfenster werden niemals verkürzt."
+      }
     }
   },
   "providerKeys": {

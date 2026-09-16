@@ -14834,7 +14834,17 @@
       "allTables": "所有表",
       "maintenanceCleanup": "运行保留期清理",
       "maintenanceVacuum": "在 {target} 中清理 {table}",
-      "confirmMaintenance": "确认：{label}？这是一项受审计的维护操作。"
+      "confirmMaintenance": "确认：{label}？这是一项受审计的维护操作。",
+      "storage": {
+        "label": "已使用 {used}，共 {ceiling}",
+        "tier": {
+          "ok": "已使用 {percent}%",
+          "warn": "{percent}% — 已加强清理",
+          "critical": "{percent}% — 已降至下限"
+        },
+        "noteWarn": "超过 80%：每晚的维护任务现在会以缩短的保留期清理所有可压缩的日志表，并立即回收空间，而不再等待每周的重写。",
+        "noteCritical": "超过 90%：所有可压缩的日志表都以其声明的最短保留期清理。合规与计费窗口绝不会被缩短。"
+      }
     }
   },
   "providerKeys": {

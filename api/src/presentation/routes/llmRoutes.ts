@@ -50,7 +50,7 @@ import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody, imageTraceResult } from '../../application/llm/traceLogger';
 import { wrapStreamForTrace } from '../../application/llm/streamTrace';
-import { recordUsageRow, resolveUsageDatabase, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
+import { recordUsageRow, resolveUsageDatabase, usageRequestCountSql, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
 import { pickUsage, vendorForModel, type VendorEgress } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
@@ -1271,7 +1271,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         loadProviderAuthAlert(c.env, access.tenantId, d.provider).catch(() => null))),
       db.execute(sql`
         SELECT byo_provider AS provider,
-               COUNT(*)::int AS requests,
+               ${sql.raw(usageRequestCountSql())} AS requests,
                COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
                MAX(created_at) AS last_used_at
         FROM llm_usage_log
@@ -1484,7 +1484,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const { status, configured, usable } = await resolveProviderKeyHealth(c.env, access.tenantId, provider, { details, creds, authAlert });
     const db = buildTransactionalDatabase(c.env);
     const usage = await db.execute(sql`
-      SELECT COUNT(*)::int AS requests,
+      SELECT ${sql.raw(usageRequestCountSql())} AS requests,
              COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
              MAX(created_at) AS last_used_at
       FROM llm_usage_log
@@ -3013,7 +3013,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         LIMIT ${limit} OFFSET ${offset}
       `);
 
+      // COUNT(*) here and NOT `usageRequestCountSql()`, deliberately: this is the page
+      // count for the ROW LISTING above, so it has to count rows the way LIMIT/OFFSET
+      // walks them. A folded row is one row on this page however many calls it stands
+      // for, and paging by call count would ask for records that do not exist.
       const [count] = (await db.execute(sql`
+        -- usage-count-ok: rows, not calls, is the right unit for a page total.
         SELECT COUNT(*)::int AS total
         FROM llm_usage_log
         WHERE tenant_id = ${access.tenantId}
@@ -3040,7 +3045,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       SELECT
         llm_product AS "llmProduct",
         model,
-        COUNT(*)::int                    AS requests,
+        ${sql.raw(usageRequestCountSql())} AS requests,
         SUM(prompt_tokens)::bigint       AS prompt_tokens,
         SUM(completion_tokens)::bigint   AS completion_tokens,
         SUM(total_tokens)::bigint        AS total_tokens,
@@ -3055,7 +3060,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const byDay = await db.execute(sql`
       SELECT
         DATE_TRUNC('day', created_at)::date::text AS day,
-        COUNT(*)::int                             AS requests,
+        ${sql.raw(usageRequestCountSql())}                                       AS requests,
         SUM(total_tokens)::bigint                 AS total_tokens
       FROM llm_usage_log
       WHERE tenant_id = ${access.tenantId}
@@ -3067,7 +3072,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const byUser = await db.execute(sql`
       SELECT
         COALESCE(user_id, 'agentHost-runtime') AS user_id,
-        COUNT(*)::int                     AS requests,
+        ${sql.raw(usageRequestCountSql())}                               AS requests,
         SUM(total_tokens)::bigint         AS total_tokens
       FROM llm_usage_log
       WHERE tenant_id = ${access.tenantId}
@@ -3083,7 +3088,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const bySource = await db.execute(sql`
       SELECT
         ${USAGE_KIND}                  AS source,
-        COUNT(*)::int                  AS requests,
+        ${sql.raw(usageRequestCountSql())} AS requests,
         SUM(prompt_tokens)::bigint     AS prompt_tokens,
         SUM(completion_tokens)::bigint AS completion_tokens,
         SUM(total_tokens)::bigint      AS total_tokens
@@ -3102,7 +3107,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       SELECT
         CASE WHEN byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END AS "type",
         COALESCE(byo_provider, tenant_api_key_id::text) AS "id",
-        COUNT(*)::int AS requests,
+        ${sql.raw(usageRequestCountSql())} AS requests,
         COUNT(DISTINCT model)::int AS "modelCount",
         SUM(total_tokens)::bigint AS tokens
       FROM llm_usage_log
@@ -3129,7 +3134,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     const [totals] = (await db.execute(sql`
       SELECT
-        COUNT(*)::int                  AS requests,
+        ${sql.raw(usageRequestCountSql())} AS requests,
         SUM(total_tokens)::bigint      AS total_tokens,
         SUM(prompt_tokens)::bigint     AS prompt_tokens,
         SUM(completion_tokens)::bigint AS completion_tokens
@@ -3146,7 +3151,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const [mine] = access.userId
       ? (await db.execute(sql`
           SELECT
-            COUNT(*)::int                  AS requests,
+            ${sql.raw(usageRequestCountSql())} AS requests,
             SUM(total_tokens)::bigint      AS total_tokens,
             SUM(prompt_tokens)::bigint     AS prompt_tokens,
             SUM(completion_tokens)::bigint AS completion_tokens

@@ -21,9 +21,12 @@
  *   • {@link runBloatReclaim} — `VACUUM (FULL, ANALYZE)`, weekly, and ONLY for a
  *     relation whose bloat is past both thresholds. This rewrites the table and does
  *     return the space, at the cost of an ACCESS EXCLUSIVE lock for the duration. It
- *     is bounded hard: one relation per run, worst first, from the SWEPT_TABLES
- *     registry only — every member of which is a diagnostic log with a best-effort
- *     writer, so blocking it briefly loses a log line at worst.
+ *     is bounded hard: one relation per run, worst first, and only from the registry
+ *     entries that declare themselves `reclaimable` — every one of which is a diagnostic
+ *     log with a best-effort writer, so blocking it briefly loses a log line at worst.
+ *     `activity_log` is the exception that made the flag necessary: it needs the vacuum
+ *     above and must never be rewritten, because what a blocked write loses there is an
+ *     audit line.
  *
  * This is what replaces "pending the operator running a one-time VACUUM FULL in the
  * Neon console": the reclaim happens on the next weekly tick and keeps happening.
@@ -35,7 +38,7 @@ import { sql } from 'drizzle-orm';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { SWEPT_TABLES, sweptRelations, type SweptConnection } from './sweptTables';
+import { SWEPT_TABLES, reclaimableRelations, type SweptConnection } from './sweptTables';
 
 /**
  * Guard on any relation name interpolated into a maintenance statement. `VACUUM` takes
@@ -135,7 +138,11 @@ export interface RelationBloat {
  * would either miss a bloated table or fire on a clean one.
  */
 export async function measureBloat(env: Env, connection: SweptConnection): Promise<RelationBloat[]> {
-  const relations = sweptRelations(connection);
+  // Only what the rewrite is ALLOWED to act on. Measuring a relation this sweep may never
+  // touch would put it at the top of `eligible` — it is the biggest and the most bloated
+  // precisely because it is never rewritten — and every run would then report a candidate
+  // it silently skips, which reads as the reclaim being broken.
+  const relations = reclaimableRelations(connection);
   if (relations.length === 0) return [];
   const rows = (await dbFor(env, connection).execute(sql`
     SELECT c.relname                                   AS relation,
