@@ -23,6 +23,7 @@ const t = ((key: string, values?: Record<string, unknown>) => {
 function form(overrides: Record<string, unknown> = {}): CanvasObject {
   return {
     id: 'form-1',
+    type: 'creation',
     position: { x: 0, y: 0 },
     data: {
       kind: 'form',

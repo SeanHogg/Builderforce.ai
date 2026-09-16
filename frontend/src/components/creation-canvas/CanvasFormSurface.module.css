@@ -22,7 +22,7 @@
 
 .title {
   margin: 0;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-card-title);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -31,7 +31,7 @@
 
 .status {
   margin: 0.15rem 0 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
   opacity: 0.75;
 }
 
@@ -57,7 +57,7 @@
 .primary {
   background: var(--coral-bright);
   border-color: transparent;
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .danger {
@@ -76,7 +76,7 @@
 .notice,
 .share {
   margin: 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
 }
 
 .share a {
@@ -92,13 +92,13 @@
 }
 
 .tally dt {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
   opacity: 0.7;
 }
 
 .tally dd {
   margin: 0.15rem 0 0;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-card-title);
   font-weight: 600;
 }
 
@@ -116,7 +116,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
 }
 
 .audience select,
@@ -156,6 +156,6 @@
 }
 
 .questions span {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-small);
   opacity: 0.7;
 }

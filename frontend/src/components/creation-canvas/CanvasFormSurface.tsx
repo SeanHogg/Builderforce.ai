@@ -53,6 +53,7 @@ export function CanvasFormSurface({ data, objectId, onExit, onEdit }: CanvasForm
   const [notice, setNotice] = useState<string | null>(null);
   const [audiences, setAudiences] = useState<Audience[]>([]);
   const [audienceId, setAudienceId] = useState<number | ''>('');
+  const [summary, setSummary] = useState<FormSummary | null>(null);
 
   const writeBack = useCallback((patch: Partial<CreationNodeData>) => {
     onEdit?.(patch);
@@ -63,6 +64,7 @@ export function CanvasFormSurface({ data, objectId, onExit, onEdit }: CanvasForm
     const { summary } = await summarizeForm(questionSetId);
     if (signal.aborted) return summary;
     if (!summary) return null;
+    setSummary(summary);
     const invited = summary.invitedCount;
     const responded = summary.respondedCount;
     writeBack({
@@ -74,8 +76,7 @@ export function CanvasFormSurface({ data, objectId, onExit, onEdit }: CanvasForm
     return summary;
   }, [questionSetId, writeBack]);
 
-  const tally = usePolledResource(read, { intervalMs: REFRESH_MS, enabled: !!questionSetId, immediate: true });
-  const summary: FormSummary | null = tally.data ?? null;
+  usePolledResource(read, { intervalMs: REFRESH_MS, enabled: !!questionSetId, immediate: true });
 
   useEffect(() => {
     if (!onEdit) return;

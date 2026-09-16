@@ -12972,7 +12972,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onOpenObject={revealObject}
               onExit={() => setSurface('graph')}
               {...(cardsEditable ? {
-                onCreate: (kind: 'idea' | 'customerInterview', data: Partial<CreationNodeData>) => { appendAtCenter(kind, data); },
+                onCreate: (kind: 'idea' | 'customerInterview' | 'form', data: Partial<CreationNodeData>) => { appendAtCenter(kind, data); },
                 onUpdate: updateNodeData,
               } : {})}
             />,
