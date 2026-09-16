@@ -261,7 +261,21 @@ describe('the entity catalog', () => {
     // parent stays unregistered would put one member of an unregistered family on the
     // generic reader, the exact `job_invites`/`job_postings` situation above. This leaves
     // the pair together, not before it.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(28);
+    //
+    // Ceiling moved 27 → 28 (2026-09-16) with `brain_chat_diagnostics` (migration 1178),
+    // adjudicated rather than counted: it is a CHILD of `brain_chats` on `chat_id`,
+    // `ON DELETE CASCADE`, and the sibling of `brain_chat_trace`. Both of those predate
+    // the 0418 series (`brain_chats` is 0018; the per-step trace is 0332), so they are
+    // not even in `created` to be counted. On its own merits the row is closer to
+    // `job_invites` than to a join — it has an id, a tenant, and a person (or a model)
+    // opens the captured verdict — so the exemption is the family reason, not the shape.
+    // Registering the child while the chat and the trace stay unregistered would put one
+    // member of an unregistered family on the generic reader, the exact
+    // `job_invites`/`job_postings` situation above. This leaves the family together, not
+    // before it. The writer is `application/brain/chatDiagnosticsStore.ts` (25-per-chat
+    // retention, size clamp); a generic PATCH would be a false statement about a run
+    // that already happened.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(29);
   });
 
   it('declares nothing that no migration creates', () => {
