@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
+import { logLine } from "./errorReporter";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -54,6 +55,23 @@ export function respondToWebview(
   void webview.postMessage({ type: "response", id, ok, result, ...(error ? { error } : {}) });
 }
 
+/** A failed API answer relayed by `webview/src/apiFailureRelay.ts`. */
+interface ApiFailureMessage extends WebviewInbound {
+  method?: string;
+  path?: string;
+  status?: number;
+  error?: string;
+  errorId?: string;
+}
+
+/** One output-channel line per failed answer: the endpoint, the status, the API's
+ *  reference (the lookup key of its stored error row) and its sentence. */
+export function apiFailureLine(m: ApiFailureMessage): string {
+  const ref = m.errorId ? ` · ref ${m.errorId}` : "";
+  const said = m.error ? ` — ${m.error}` : "";
+  return `[webview api] ${m.method ?? "GET"} ${m.path ?? "?"} → ${m.status ?? "?"}${ref}${said}`;
+}
+
 /**
  * Handle the cases the HOST owns on every surface. Returns true when the message
  * was handled, so a caller's own switch runs only for its own messages.
@@ -74,6 +92,9 @@ export async function handleSharedHostMessage(
     }
     case "signin":
       void vscode.commands.executeCommand("builderforce.signIn");
+      return true;
+    case "api.failure":
+      logLine(apiFailureLine(msg as ApiFailureMessage));
       return true;
     default:
       return false;

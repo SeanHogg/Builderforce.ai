@@ -1,10 +1,10 @@
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { isClientError } from '../../domain/shared/errors';
+import { isClientError, statusOf } from '../../domain/shared/errors';
 import { reportUnhandledError } from '../../application/observability/caughtErrorReporter';
 import type { HonoEnv } from '../../env';
 import { addCorsToResponse } from './cors';
-import { errorResponseBody } from './errorResponse';
+import { errorResponseBody, mintErrorId } from './errorResponse';
 
 /**
  * Global error handler for the Hono application.
@@ -18,14 +18,18 @@ import { errorResponseBody } from './errorResponse';
  * explicitly caught exceptions (platform logs, api_error_log, Product Quality)
  * and is answered with a GENERIC message. The thrown message used to be echoed
  * to the caller; `relation "x" does not exist` is a diagnostic, not a response.
+ * It carries a reference the stored row shares (`mintErrorId`), so a failure a
+ * user sees can be looked up rather than guessed at by path and time.
  */
 export async function errorHandler(err: Error, c: Context): Promise<Response> {
-  const { status, body } = errorResponseBody(err);
+  const errorId = isClientError(statusOf(err)) ? undefined : mintErrorId();
+  const { status, body } = errorResponseBody(err, errorId);
   const honoContext = c as Context<HonoEnv>;
-  if (!isClientError(status)) {
+  if (errorId) {
     await reportUnhandledError(err, {
       source: 'presentation/middleware/errorHandler.ts',
       operation: 'request',
+      context: { errorId },
     }, {
       env: honoContext.env,
       method: honoContext.req.method,

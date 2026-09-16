@@ -22,6 +22,7 @@ import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { HostMessageType } from '../../src/bridgeProtocol';
 import type { EditorContext } from '../../src/idePersona';
 import type { PendingChangeSet } from '../../src/gitChangeModel';
+import { installApiFailureRelay } from './apiFailureRelay';
 
 /**
  * A localized string bundle the host builds from its `vscode.l10n` catalog and
@@ -243,6 +244,10 @@ function settlePending(id: string, error: Error): void {
 export function post(type: HostMessageType, payload?: Record<string, unknown>): void {
   api.postMessage({ type, ...(payload ?? {}) });
 }
+
+// Every failed API answer this webview receives goes to the host's output channel,
+// where a user can copy the endpoint, status and the API's error reference from.
+installApiFailureRelay((failure) => post('api.failure', { ...failure }));
 
 /** Request/response round-trip to the host (resolved by a matching `response`).
  *  Same typed vocabulary as {@link post} — a request nobody answers hangs until the

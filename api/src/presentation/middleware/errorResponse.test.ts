@@ -132,19 +132,34 @@ describe('errorHandler + failResponse', () => {
     expect(sink).not.toHaveBeenCalled();
   });
 
+  /** The 5xx body must reference exactly the id its stored row carries. */
+  async function expectReferenced(res: Response, error: string, extra: Record<string, unknown> = {}) {
+    const record = sink.mock.calls.at(-1)![0] as { context: { errorId?: string } };
+    const errorId = record.context.errorId;
+    expect(errorId).toMatch(/^[0-9a-f]{12}$/);
+    expect(await res.json()).toEqual({ error: `${error} Reference: ${errorId}`, errorId, ...extra });
+  }
+
   it('answers a thrown unknown error generically and reports it as unhandled', async () => {
     const res = await app().request('/throw-500');
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: GENERIC_SERVER_ERROR });
     expect(sink).toHaveBeenCalledWith(expect.objectContaining({ message: 'secret db text', handled: false }));
+    await expectReferenced(res, GENERIC_SERVER_ERROR);
+  });
+
+  it('gives every 5xx its own reference', async () => {
+    const a = app();
+    const first = (await (await a.request('/throw-500')).json()) as { errorId: string };
+    const second = (await (await a.request('/catch-500')).json()) as { errorId: string };
+    expect(first.errorId).not.toBe(second.errorId);
   });
 
   it('failResponse reports only 5xx, passes extra fields through', async () => {
     const a = app();
     const server = await a.request('/catch-500');
     expect(server.status).toBe(500);
-    expect(await server.json()).toEqual({ error: GENERIC_SERVER_ERROR });
     expect(sink).toHaveBeenCalledWith(expect.objectContaining({ message: 'secret db text', handled: true, source: 't' }));
+    await expectReferenced(server, GENERIC_SERVER_ERROR);
     sink.mockReset();
     const client = await a.request('/catch-404');
     expect(client.status).toBe(404);
@@ -155,8 +170,8 @@ describe('errorHandler + failResponse', () => {
   it('a thrown InternalError keeps its body and is reported with its cause', async () => {
     const res = await app().request('/throw-internal');
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: 'Failed to create user' });
     expect(sink).toHaveBeenCalledTimes(1);
+    await expectReferenced(res, 'Failed to create user');
     const record = sink.mock.calls[0]![0] as { message: string; handled: boolean; context: { cause?: { message?: string } } };
     expect(record).toMatchObject({ message: 'Failed to create user', handled: false });
     expect(record.context.cause?.message).toBe('insert returned no row');
@@ -165,7 +180,7 @@ describe('errorHandler + failResponse', () => {
   it('failResponse with an InternalError keeps the authored body and reports the cause', async () => {
     const res = await app().request('/catch-internal');
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: 'Processing failed' });
+    await expectReferenced(res, 'Processing failed');
     const record = sink.mock.calls[0]![0] as { handled: boolean; source: string; context: { logMessage?: string; cause?: { message?: string } } };
     expect(record).toMatchObject({ handled: true, source: 't' });
     expect(record.context).toMatchObject({ logMessage: 'webhook', cause: { message: 'db down' } });
@@ -182,8 +197,8 @@ describe('errorHandler + failResponse', () => {
     const a = app();
     const server = await a.request('/status-503');
     expect(server.status).toBe(503);
-    expect(await server.json()).toEqual({ error: 'Mailbox unreachable', code: 'upstream' });
     expect(sink).toHaveBeenCalledTimes(1);
+    await expectReferenced(server, 'Mailbox unreachable', { code: 'upstream' });
     const record = sink.mock.calls[0]![0] as { message: string; handled: boolean; operation: string; context: { cause?: { message?: string } } };
     expect(record).toMatchObject({ message: 'Mailbox unreachable', handled: true, operation: 'mailbox' });
     expect(record.context.cause?.message).toBe('ECONNRESET');

@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.79] — Sending a message works again, and a server error now says which one
+
+- **Every chat send was failing with "Something went wrong on our side."** The server rejected the save of each new message before the conversation could continue. That is fixed on the server, so it recovers without reinstalling anything; this release is what makes the next failure explainable.
+- **A server error carries a reference.** The banner now ends with `Reference: <id>`, and the same id is stored with the failure, so quoting it is enough for the exact error to be found.
+- **Failed API calls are written to the BuilderForce output channel.** Each one logs the method, path, status and reference — the record that used to be missing for the very failure on screen.
+
 ## [2026.9.76] — A reply that could not be saved is now sent again, not dropped
 
 - **A turn survives a connection that drops while it is being saved.** If the write failed, the text was gone — the only copy lived in the run that produced it. Each message now carries a key the server recognises, so the same turn can be sent again and lands exactly once; a retry that arrives after the first attempt already committed gets the original back rather than posting a second copy.

@@ -35,9 +35,9 @@ interface StorageHeadroomProps {
 /** Bar colour per tier. Theme tokens only — the same three read correctly in light and
  *  dark, where a literal green/amber/red would not. */
 const TIER_COLOR: Record<StorageTier, string> = {
-  ok: 'var(--success, #15803d)',
-  warn: 'var(--warning, #b45309)',
-  critical: 'var(--danger, #b91c1c)',
+  ok: 'var(--success)',
+  warn: 'var(--warning)',
+  critical: 'var(--danger)',
 };
 
 export function StorageHeadroom({ totalBytes, ceilingBytes, tier = 'ok' }: StorageHeadroomProps) {
@@ -72,12 +72,12 @@ export function StorageHeadroom({ totalBytes, ceilingBytes, tier = 'ok' }: Stora
           marginTop: 6,
           height: 6,
           width: '100%',
-          borderRadius: 999,
+          borderRadius: 'var(--radius-full)',
           background: 'var(--border)',
           overflow: 'hidden',
         }}
       >
-        <div style={{ height: '100%', width: `${width}%`, background: TIER_COLOR[tier], borderRadius: 999 }} />
+        <div style={{ height: '100%', width: `${width}%`, background: TIER_COLOR[tier], borderRadius: 'var(--radius-full)' }} />
       </div>
       {tier !== 'ok' && (
         <div className="text-muted" style={{ fontSize: 'var(--font-size-small)', marginTop: 6 }}>

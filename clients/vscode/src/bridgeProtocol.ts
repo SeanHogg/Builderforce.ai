@@ -33,6 +33,9 @@ export const SHARED_HOST_MESSAGES = [
   'token.refresh',
   /** Run the sign-in command (the webview cannot execute commands). */
   'signin',
+  /** A non-2xx API answer the webview received, for the output channel — see
+   *  `webview/src/apiFailureRelay.ts`. Fire-and-forget. */
+  'api.failure',
 ] as const;
 
 /** The Brain panel: the run loop, the tool bridge and the editor's own state. */

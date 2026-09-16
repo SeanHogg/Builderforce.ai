@@ -30,6 +30,19 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   998 → 1000 (`useClientFiles`, 2026-09-16) — two files that landed unrecorded and
+ *   turned `Deploy frontend` red. Judged per file:
+ *
+ *     - `lib/viewerSession.ts` holds `useState`/`useEffect` at its root (the stored-token
+ *       fallback is read after mount) and reads `useOptionalAuth()`. It is the
+ *       provider-free answer to "who is looking at this board", and it exists BECAUSE its
+ *       consumers mount outside the web app's tree — the VS Code panel — so its runtime
+ *       cannot be inherited from whoever imports it.
+ *     - `components/admin/panels/StorageHeadroom.tsx` is the endpoint-storage bar, built
+ *       self-contained to sit beside any endpoint readout. It reads `useTranslations`, and
+ *       the directive is its declaration rather than an observation about
+ *       `SystemHealthSection`, its one importer today.
+ *
  *   997 → 998 (`useClientFiles`, 2026-09-16) — `components/insights/widgets/founderWidgets.tsx`,
  *   PRD 25 A4. The three founder tiles (runway, cash commitment, peer position) live
  *   in the widget registry imported from `lib/components/allComponents.ts`, which is

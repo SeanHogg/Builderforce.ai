@@ -18,6 +18,32 @@ import type { HonoEnv } from '../../env';
 /** What a 500 says. The real message went to the reporter, not to the caller. */
 export const GENERIC_SERVER_ERROR = 'Something went wrong on our side. The failure has been recorded.';
 
+/**
+ * A short id shared by a 5xx ANSWER and the error row it was reported as.
+ *
+ * The answer is generic on purpose, so without this nothing a user sees ties back
+ * to the stored failure: "Something went wrong on our side" in a VS Code chat
+ * banner could only be explained by someone with production database access
+ * scanning `api_error_log` by path and time. The id is written into the row's
+ * `context.errorId` and onto the answer, so the reference in the banner IS the
+ * lookup key. 48 bits: no realistic collision inside the 30-day retention window.
+ */
+export function mintErrorId(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
+/**
+ * A 5xx body carrying its reference: as `errorId` for a client that reads fields,
+ * and inside the sentence for every surface that only renders the text — which is
+ * every chat banner, so the reference reaches the user with no client release.
+ */
+function referenced<T extends object>(body: T, errorId: string): T & { errorId: string } {
+  const said = (body as { error?: unknown }).error;
+  return typeof said === 'string'
+    ? { ...body, error: `${said} Reference: ${errorId}`, errorId }
+    : { ...body, errorId };
+}
+
 export interface ErrorResponseBody {
   error: string;
   /** Present for a {@link RequestValidationError}: the per-field problems. */
@@ -26,20 +52,23 @@ export interface ErrorResponseBody {
   details?: unknown;
   /** Passed through when the error carries a string `.code` (a machine-readable refusal). */
   code?: string;
+  /** A 5xx only: the id its stored error row carries — see {@link mintErrorId}. */
+  errorId?: string;
 }
 
 /**
  * The status and JSON body an error answers with. PURE — no reporting here, so
- * both callers decide (with the same rule: 5xx ⇒ report) before rendering.
+ * both callers decide (with the same rule: 5xx ⇒ report) before rendering. A 5xx
+ * given the `errorId` it was reported under carries it as a reference.
  */
-export function errorResponseBody(error: unknown): { status: number; body: ErrorResponseBody } {
+export function errorResponseBody(error: unknown, errorId?: string): { status: number; body: ErrorResponseBody } {
   const status = statusOf(error);
   // An InternalError's message was written for the caller; any other 5xx text is a diagnostic.
   if (status >= 500) {
     const body: ErrorResponseBody = { error: error instanceof InternalError ? error.message : GENERIC_SERVER_ERROR };
     // An outage's code lets the client say "temporarily unavailable" instead of "something broke".
     if (error instanceof ServiceUnavailableError && error.code) body.code = error.code;
-    return { status, body };
+    return { status, body: errorId ? referenced(body, errorId) : body };
   }
   const message = error instanceof Error ? error.message : String(error);
   const body: ErrorResponseBody = { error: message };
@@ -64,8 +93,8 @@ export function failResponse(
   details: CaughtErrorDetails,
   extra?: Record<string, unknown>,
 ): Response {
-  const { status, body } = errorResponseBody(error);
-  if (!isClientError(status)) reportServerError(c, error, details);
+  const errorId = isClientError(statusOf(error)) ? undefined : reportServerError(c, error, details);
+  const { status, body } = errorResponseBody(error, errorId);
   return c.json(extra ? { ...body, ...extra } : body, status as ContentfulStatusCode);
 }
 
@@ -89,7 +118,8 @@ export function statusResponse<E extends HonoBaseEnv = HonoEnv>(
   const ctx = c as unknown as Context<HonoEnv>;
   if (status >= 500) {
     const said = (body as { error?: unknown }).error;
-    reportServerError(ctx, new InternalError(typeof said === 'string' ? said : `answered ${status}`, cause === undefined ? undefined : { cause }), details);
+    const errorId = reportServerError(ctx, new InternalError(typeof said === 'string' ? said : `answered ${status}`, cause === undefined ? undefined : { cause }), details);
+    return ctx.json(referenced(body, errorId) as Record<string, unknown>, status as ContentfulStatusCode);
   }
   return ctx.json(body as Record<string, unknown>, status as ContentfulStatusCode);
 }
@@ -98,15 +128,18 @@ export function statusResponse<E extends HonoBaseEnv = HonoEnv>(
  * Report a server failure with the request's identity attached, for the rare handler
  * whose 5xx body is a PROTOCOL's shape rather than `{ error }` (a JSON-RPC error
  * envelope) and so cannot answer through {@link failResponse} or {@link statusResponse}.
+ * Returns the {@link mintErrorId} the stored row carries, for a body that can hold it.
  */
-export function reportServerError(c: Context<HonoEnv>, error: unknown, details: CaughtErrorDetails): void {
-  reportCaughtError(error, details, {
+export function reportServerError(c: Context<HonoEnv>, error: unknown, details: CaughtErrorDetails): string {
+  const errorId = mintErrorId();
+  reportCaughtError(error, { ...details, context: { ...details.context, errorId } }, {
     env: c.env,
     method: c.req.method,
     path: new URL(c.req.url).pathname,
     tenantId: c.get('tenantId'),
     userId: c.get('userId'),
   });
+  return errorId;
 }
 
 /**

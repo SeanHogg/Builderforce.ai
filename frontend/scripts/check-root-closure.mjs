@@ -45,6 +45,15 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   329 → 331 files (2026-09-16, the board in the editor panel) — `lib/viewerSession.ts`
+ *   (65 lines) and `lib/tokenClaims.ts` (41 lines). No new first-paint WORK: the shell's
+ *   `SessionGate` / `RoleGate` already asked `useSampleWorkspace` "is someone signed in"
+ *   on every route, through `useAuth()`. That call threw wherever no `AuthProvider` is
+ *   mounted (the VS Code panel), so the question moved into `useViewerSession`, which
+ *   answers from the provider when there is one and from the stored tenant token when
+ *   there is not — and `tokenClaims` is the ONE decoder of that token, which `apiClient`
+ *   (already here) now shares instead of carrying its own copy. The gate decides what
+ *   renders on the first paint, so an `import()` would flash the signed-out state.
  *   328 → 329 files (2026-09-15, database outage) — `lib/errors/serviceOutage.ts`
  *   (15 lines, one type-only import) is the ONE reading of the API's
  *   `503 database_unavailable`. `GlobalErrorHandler` and `QualityErrorReporter` are the

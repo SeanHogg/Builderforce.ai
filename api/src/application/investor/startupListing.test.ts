@@ -8,7 +8,7 @@
  *   - Runway on the facet is DERIVED from the declared inputs by the shared
  *     formula, never read from a column.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeRunway } from '@builderforce/creation-canvas-contract';
 import { CompanyError } from './companyWorkspace';
 import { LISTING_REQUIRED_FIELDS, facetFromRow, listingCompleteness, validateListingPatch } from './startupListing';
@@ -46,7 +46,13 @@ describe('the completeness meter and the publish gate agree', () => {
 });
 
 describe('the facet derives its runway from the declared inputs', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('is cash over NET burn — 900k over (100k − 80k) is 45 months, not 9', () => {
+    // `zeroCashDate` is measured from NOW, and the facet and the expectation each
+    // read the clock: one millisecond between them failed the deploy. Pin it.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-16T12:00:00Z'));
     const facet = facetFromRow(row());
     expect(facet.runway.runwayMonths).toBe(45);
     expect(facet.runway).toEqual(computeRunway({ cashOnHand: 900_000, monthlyBudget: 100_000, monthlyRevenue: 80_000 }));
