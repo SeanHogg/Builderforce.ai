@@ -31,7 +31,7 @@
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { connections, credentials, ledgerEntries } from '../../infrastructure/database/schema';
+import { connectionCredentialConflict, connections, credentials, ledgerEntries } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidatePersonPayouts, personPayoutsVersionKey } from './personPayoutsCache';
@@ -260,7 +260,7 @@ export class PayoutAccountService {
       status: 'active',
       updatedAt: new Date(),
     }).onConflictDoUpdate({
-      target: [credentials.tenantId, credentials.connectionId, credentials.purpose],
+      ...connectionCredentialConflict,
       set: { secretEnc: sealed.enc, secretIv: sealed.iv, status: 'active', updatedAt: new Date() },
     });
 

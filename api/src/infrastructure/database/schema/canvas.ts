@@ -153,12 +153,16 @@ export const chatMemories = pgTable('chat_memories', {
   // Vestigial link to the old legacy brain_chats (dropped 0272) — chat memories
   // are keyed on agent_host_session_id in practice; no FK (plain nullable id).
   chatId:         integer('chat_id').unique(),
-  agentHostSessionId:  integer('agent_host_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }).unique(),
+  agentHostSessionId:  integer('agent_host_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }),
   projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   summary:        text('summary').notNull().default(''),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+  // PARTIAL, as it exists in the database — it was declared `.unique()` here, which
+  // let the summary upsert omit the predicate and fail on every write.
+  uniqueIndex('idx_chat_memories_agent_host_session').on(t.agentHostSessionId).where(sql`agent_host_session_id IS NOT NULL`),
+]);
 
 
 // ---------------------------------------------------------------------------
@@ -282,7 +286,8 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
   seq:       integer('seq').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_brain_chat_messages_event').on(t.chatId, t.eventKey),
+  // Partial (migration 0341): NULL is every ordinary turn. Upserts must restate it.
+  uniqueIndex('uq_brain_chat_messages_event').on(t.chatId, t.eventKey).where(sql`event_key IS NOT NULL`),
 ]);
 
 

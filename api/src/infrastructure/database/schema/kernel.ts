@@ -339,6 +339,9 @@ export const connections = pgTable('connections', {
  * rows without decrypting every one of them — the pattern `mailbox_connections`
  * established in 0414.
  */
+/** The predicate of `uq_credentials_purpose` — see {@link connectionCredentialConflict}. */
+const CONNECTION_OWNED_CREDENTIAL = sql`connection_id IS NOT NULL`;
+
 export const credentials = pgTable('credentials', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull(),
@@ -366,11 +369,28 @@ export const credentials = pgTable('credentials', {
   // a retried `tax_id` write would have sealed a SECOND secret under the same
   // subject and every later read would have picked one arbitrarily (1117).
   uniqueIndex('uq_credentials_purpose').on(t.tenantId, t.connectionId, t.purpose)
-    .where(sql`connection_id IS NOT NULL`),
+    .where(CONNECTION_OWNED_CREDENTIAL),
   uniqueIndex('uq_credentials_subject_purpose').on(t.tenantId, t.subjectRef, t.purpose)
     .where(sql`connection_id IS NULL AND subject_ref IS NOT NULL`),
   index('idx_credentials_expiry').on(t.status, t.expiresAt),
 ]);
+
+/**
+ * The ON CONFLICT target for a CONNECTION-OWNED secret: spread it into
+ * `onConflictDoUpdate({ ...connectionCredentialConflict, set })`.
+ *
+ * One declaration, beside the index, because the target is only valid WITH the
+ * index's predicate. Postgres matches ON CONFLICT to a partial unique index by its
+ * WHERE clause; a statement naming the three columns alone resolves to no index and
+ * raises "no unique or exclusion constraint matching the ON CONFLICT specification"
+ * on every write. Four writers had copied the bare column list, so connecting a
+ * ledger, a payout account, a YouTube channel or an API-key integration all failed
+ * at the secret. `check:conflict-targets` holds every other upsert to the same rule.
+ */
+export const connectionCredentialConflict = {
+  target: [credentials.tenantId, credentials.connectionId, credentials.purpose],
+  targetWhere: CONNECTION_OWNED_CREDENTIAL,
+};
 
 /**
  * Staging and cursor state per importer. Absorbs 7 tables.

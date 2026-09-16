@@ -14,7 +14,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * blobs (Welford, no table scan) so the next run's seed reflects it.
  */
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
@@ -224,7 +224,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         terminalStatus: o.terminalStatus,
         rateLimited: !!o.rateLimited,
       })
-      .onConflictDoNothing({ target: runModelOutcomes.clientRunId })
+      .onConflictDoNothing({ target: runModelOutcomes.clientRunId, where: isNotNull(runModelOutcomes.clientRunId) })
       .returning({ id: runModelOutcomes.id });
 
     // Only a first-seen outcome folds into the routing blob (the fold is not

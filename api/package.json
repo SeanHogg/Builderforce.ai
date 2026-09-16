@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.9.38",
+  "version": "2026.9.39",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -20,6 +20,7 @@
     "check:usage-counts": "node scripts/check-usage-counts.mjs",
     "check:signature-duplication": "node scripts/check-signature-duplication.mjs",
     "check:shape-lint": "node scripts/check-shape-lint.mjs",
+    "check:conflict-targets": "node scripts/check-conflict-targets.mjs",
     "check:tenant-column": "node scripts/check-tenant-column.mjs",
     "check:polymorphic-fk": "node scripts/check-polymorphic-fk.mjs",
     "check:domain-boundary": "node scripts/check-domain-boundary.mjs",

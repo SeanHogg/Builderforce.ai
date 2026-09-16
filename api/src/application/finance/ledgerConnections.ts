@@ -27,7 +27,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { connections, credentials, syncStates } from '../../infrastructure/database/schema';
+import { connections, connectionCredentialConflict, credentials, syncStates } from '../../infrastructure/database/schema';
 import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
@@ -193,7 +193,7 @@ export async function saveLedgerConnection(
       status: 'active',
     })
     .onConflictDoUpdate({
-      target: [credentials.tenantId, credentials.connectionId, credentials.purpose],
+      ...connectionCredentialConflict,
       set: {
         secretEnc: sealed.enc,
         secretIv: sealed.iv,

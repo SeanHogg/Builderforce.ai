@@ -1532,7 +1532,11 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   /** 'lexical' | 'llm' — which evaluation backend scored this run. */
   evalMethod:       varchar('eval_method', { length: 8 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  // Declared with its predicate so an upsert on `clientRunId` is held to restating it
+  // (`check:conflict-targets`) — the index exists since 0283 either way.
+  uniqueIndex('run_model_outcomes_client_run_id_key').on(t.clientRunId).where(sql`client_run_id IS NOT NULL`),
+]);
 
 
 // ---------------------------------------------------------------------------

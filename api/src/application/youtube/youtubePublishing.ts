@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { connections, credentials } from '../../infrastructure/database/schema';
+import { connectionCredentialConflict, connections, credentials } from '../../infrastructure/database/schema';
 import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
 import {
   isTerminalRefreshFailure,
@@ -42,7 +42,7 @@ export async function saveYouTubeConnection(db: Db, env: Env, input: { tenantId:
     tenantId: input.tenantId, connectionId: connection!.id, purpose: 'oauth', secretEnc: sealed.enc, secretIv: sealed.iv,
     expiresAt: input.tokens.expiresAtMs ? new Date(input.tokens.expiresAtMs) : null,
   }).onConflictDoUpdate({
-    target: [credentials.tenantId, credentials.connectionId, credentials.purpose],
+    ...connectionCredentialConflict,
     set: { secretEnc: sealed.enc, secretIv: sealed.iv, expiresAt: input.tokens.expiresAtMs ? new Date(input.tokens.expiresAtMs) : null, status: 'active', updatedAt: sql`NOW()` },
   });
 }

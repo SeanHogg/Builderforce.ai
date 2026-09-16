@@ -25,7 +25,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { credentials } from '../../infrastructure/database/schema';
+import { connectionCredentialConflict, credentials } from '../../infrastructure/database/schema';
 import { sealOAuthTokens, unsealOAuthTokens } from './oauthTokenVault';
 
 const PURPOSE = 'api_key';
@@ -46,7 +46,7 @@ export async function writeConnectionApiKey(
     secretEnc: sealed.enc,
     secretIv: sealed.iv,
   }).onConflictDoUpdate({
-    target: [credentials.tenantId, credentials.connectionId, credentials.purpose],
+    ...connectionCredentialConflict,
     set: {
       secretEnc: sealed.enc, secretIv: sealed.iv,
       status: 'active', rotatedAt: new Date(), updatedAt: new Date(),

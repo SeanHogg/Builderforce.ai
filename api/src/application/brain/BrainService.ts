@@ -1,5 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { eq, and, or, desc, isNull, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import {
   brainChats,
   brainChatMessages,
@@ -1008,7 +1008,15 @@ export class BrainService {
         metadata: msg.metadata ?? null,
         eventKey: msg.eventKey ?? null,
       })))
-      .onConflictDoNothing({ target: [brainChatMessages.chatId, brainChatMessages.eventKey] })
+      // `where` restates the index's predicate: `uq_brain_chat_messages_event` is
+      // partial (`event_key IS NOT NULL`), and Postgres only matches ON CONFLICT to a
+      // partial index when the statement repeats it. Without it EVERY append — keyed
+      // or not — fails with "no unique or exclusion constraint matching the ON
+      // CONFLICT specification", which is every chat send. `check:conflict-targets`.
+      .onConflictDoNothing({
+        target: [brainChatMessages.chatId, brainChatMessages.eventKey],
+        where: isNotNull(brainChatMessages.eventKey),
+      })
       .returning({ ...messageColumns, eventKey: brainChatMessages.eventKey });
 
     // The generated PK is an atomic database append order. A read-then-write
@@ -2318,6 +2326,7 @@ export class BrainService {
       })
       .onConflictDoUpdate({
         target: chatMemories.agentHostSessionId,
+        targetWhere: isNotNull(chatMemories.agentHostSessionId),
         set: { summary, projectId: session.projectId, updatedAt: new Date() },
       });
 

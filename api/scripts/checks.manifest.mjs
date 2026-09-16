@@ -18,6 +18,10 @@ export default [
   // invisible. See scripts/pinnedDependencies.mjs.
   ['check:pinned-deps', '../../scripts/check-pinned-deps.mjs'],
   ['check:schema', 'check-schema-drift.mjs'],
+  // Type-checks, passes every stubbed test, and fails on EVERY execution against a real
+  // Postgres: an ON CONFLICT on a partial unique index that omits the predicate. That
+  // is how every VSIX chat send broke. Lexical, so it runs before anything builds.
+  ['check:conflict-targets', 'check-conflict-targets.mjs'],
   ['check:db-access', 'check-db-access.mjs'],
   ['check:migrations', 'check-migrations.mjs'],
   ['check:swept-tables', 'check-swept-tables.mjs'],
