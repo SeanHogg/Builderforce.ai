@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   activeModelKey,
   buildModelItems,
@@ -121,25 +121,37 @@ export interface PromptOptionsMenuProps {
   onThinkingChange?: (on: boolean) => void;
   describeThinking?: (on: boolean) => string;
   model?: PromptOptionsModel;
+  /**
+   * Host-owned account / usage / Evermind details for the Status tab. The menu
+   * never fetches billing itself — each host already has its own plan snapshot.
+   * Omit on a surface with nothing to show besides `onAccountSettings`.
+   */
+  status?: ReactNode;
   onAccountSettings?: () => void;
   className?: string;
 }
 
 const EFFORT_LEVELS: Effort[] = ['quick', 'balanced', 'thorough'];
 const EFFORT_ICON: Record<Effort, string> = { quick: '🏃', balanced: '⚖️', thorough: '🎯' };
+const EFFORT_LABEL: Record<Effort, 'effortQuick' | 'effortBalanced' | 'effortThorough'> = {
+  quick: 'effortQuick',
+  balanced: 'effortBalanced',
+  thorough: 'effortThorough',
+};
+
+type PromptOptionsTab = 'mode' | 'effort' | 'model' | 'status';
 
 /**
  * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
  * runs in, whether it remembers, whether actions auto-apply, run shaping (effort,
- * thinking), the model in use
- * and the model picker, plus account settings. One affordance, shared by every
- * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
+ * thinking), the model in use and the model picker, plus account status. One
+ * affordance, shared by every BuilderForce prompt surface (web Brain, Creation
+ * Canvas, the VS Code webview).
  *
- * Every one of those settings used to be its own pill in the composer's action row
- * — a segmented Chat|Work control, a memory button, a model chip — which on a phone
- * left a row of eight unlabelled circles and no room for the send button. They live
- * here now, and the trigger states the two consequential ones (the armed mode, the
- * model in use) so nothing has to be opened to read what will happen.
+ * The popover is tabbed (Mode, Effort, Model, Status) so the user is not scrolling
+ * a single mixed list to find the setting they opened the menu for. The trigger
+ * still states the two consequential ones (the armed mode, the model in use) so
+ * nothing has to be opened to read what will happen.
  *
  * Self-gating: renders nothing until a host wires at least one section.
  */
@@ -157,6 +169,7 @@ export function PromptOptionsMenu({
   onThinkingChange,
   describeThinking,
   model,
+  status,
   onAccountSettings,
   className,
 }: PromptOptionsMenuProps) {
@@ -164,6 +177,7 @@ export function PromptOptionsMenu({
   const { open, toggle, close, rootRef } = usePopover<HTMLDivElement>();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | ModelCategory>('all');
+  const [tab, setTab] = useState<PromptOptionsTab>('mode');
 
   const identity = model?.identity ?? DEFAULT_MODEL_IDENTITY;
   const items = useMemo(() => (model ? buildModelItems(model.options, labels, identity) : []), [model, labels, identity]);
@@ -177,8 +191,13 @@ export function PromptOptionsMenu({
   );
   const visible = useMemo(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
 
+  const hasModeTab = !!(mode || memory || autoMode || session);
+  const hasEffortTab = !!(onEffortChange || onThinkingChange);
+  const hasModelTab = !!model;
+  const hasStatusTab = !!(status || onAccountSettings);
+
   // Nothing wired ⇒ no control (the component decides its own visibility).
-  if (!mode && !memory && !autoMode && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
+  if (!hasModeTab && !hasEffortTab && !hasModelTab && !hasStatusTab) return null;
 
   const canChoose = identity.canChoose;
   const activeKey = model ? activeModelKey(model.selection) : '';
@@ -191,6 +210,13 @@ export function PromptOptionsMenu({
     inUse && `${labels.modelInUse}: ${inUse.name}`,
   ].filter(Boolean).join(' · ');
 
+  const tabs: { id: PromptOptionsTab; label: string }[] = [];
+  if (hasModeTab) tabs.push({ id: 'mode', label: labels.mode });
+  if (hasEffortTab) tabs.push({ id: 'effort', label: labels.effort });
+  if (hasModelTab) tabs.push({ id: 'model', label: labels.model });
+  if (hasStatusTab) tabs.push({ id: 'status', label: labels.status ?? 'Status' });
+  const activeTab = tabs.some((entry) => entry.id === tab) ? tab : tabs[0]!.id;
+
   return (
     <div ref={rootRef} className={['bf-pmenu', className].filter(Boolean).join(' ')}>
       <button
@@ -199,7 +225,7 @@ export function PromptOptionsMenu({
         disabled={disabled}
         title={title}
         aria-label={title}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         onClick={toggle}
       >
@@ -212,234 +238,251 @@ export function PromptOptionsMenu({
       </button>
 
       {open && (
-        <div className="bf-pmenu__pop" role="menu">
-          {mode && (
-            <>
-              <div className="bf-pmenu__group">{labels.mode}</div>
-              {mode.choices.map((choice) => (
-                <button
-                  key={choice.value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={choice.value === mode.value}
-                  className={`bf-pmenu__item${choice.value === mode.value ? ' is-active' : ''}`}
-                  onClick={() => { mode.onChange(choice.value); close(); }}
-                >
-                  <span className="bf-pmenu__ico" aria-hidden="true">{choice.icon ?? ''}</span>
-                  <span className="bf-pmenu__lbl">
-                    {choice.label}
-                    {choice.hint && <span className="bf-pmenu__desc">{choice.hint}</span>}
-                  </span>
-                  <span className="bf-pmenu__check" aria-hidden="true">{choice.value === mode.value ? '✓' : ''}</span>
-                </button>
-              ))}
-            </>
-          )}
-
-          {memory && (
-            <>
-              {mode && <div className="bf-pmenu__sep" />}
+        <div className="bf-pmenu__pop bf-pmenu__pop--tabs" role="dialog" aria-label={labels.options}>
+          <div className="bf-pmenu__tabs" role="tablist" aria-label={labels.options}>
+            {tabs.map((entry) => (
               <button
+                key={entry.id}
                 type="button"
-                role="menuitemcheckbox"
-                aria-checked={memory.enabled}
-                disabled={!!memory.unavailableReason}
-                className={`bf-pmenu__item${memory.enabled && !memory.unavailableReason ? ' is-active' : ''}`}
-                title={memory.unavailableReason}
-                onClick={() => { if (!memory.unavailableReason) memory.onChange(!memory.enabled); }}
+                role="tab"
+                id={`bf-pmenu-tab-${entry.id}`}
+                aria-selected={entry.id === activeTab}
+                aria-controls={`bf-pmenu-pane-${entry.id}`}
+                className={`bf-pmenu__tab${entry.id === activeTab ? ' is-active' : ''}`}
+                onClick={() => setTab(entry.id)}
               >
-                <span className="bf-pmenu__ico" aria-hidden="true">🧠</span>
-                <span className="bf-pmenu__lbl">
-                  {labels.memory}
-                  {(memory.unavailableReason ?? memory.describe?.(memory.enabled)) && (
-                    <span className="bf-pmenu__desc">{memory.unavailableReason ?? memory.describe?.(memory.enabled)}</span>
-                  )}
-                </span>
-                {!memory.unavailableReason && <span className="bf-pmenu__hint">{memory.enabled ? labels.on : labels.off}</span>}
-                <span className="bf-pmenu__check" aria-hidden="true">{memory.enabled && !memory.unavailableReason ? '✓' : ''}</span>
+                {entry.label}
               </button>
-            </>
-          )}
+            ))}
+          </div>
 
-          {autoMode && (
-            <>
-              {(mode || memory) && <div className="bf-pmenu__sep" />}
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={autoMode.enabled}
-                className={`bf-pmenu__item${autoMode.enabled ? ' is-active' : ''}`}
-                onClick={() => autoMode.onChange(!autoMode.enabled)}
-              >
-                <span className="bf-pmenu__ico" aria-hidden="true">⚡</span>
-                <span className="bf-pmenu__lbl">
-                  {labels.autoMode}
-                  <span className="bf-pmenu__desc">{autoMode.description ?? labels.autoModeHint}</span>
-                </span>
-                <span className="bf-pmenu__hint">{autoMode.enabled ? labels.on : labels.off}</span>
-                <span className="bf-pmenu__check" aria-hidden="true">{autoMode.enabled ? '✓' : ''}</span>
-              </button>
-            </>
-          )}
-
-          {onEffortChange && (
-            <>
-              {(mode || memory || autoMode) && <div className="bf-pmenu__sep" />}
-              <div className="bf-pmenu__group">{labels.effort}</div>
-              {EFFORT_LEVELS.map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={effort === level}
-                  className={`bf-pmenu__item${effort === level ? ' is-active' : ''}`}
-                  onClick={() => onEffortChange(level)}
-                >
-                  <span className="bf-pmenu__ico" aria-hidden="true">{EFFORT_ICON[level]}</span>
-                  <span className="bf-pmenu__lbl">
-                    {level === 'quick' ? labels.effortQuick : level === 'balanced' ? labels.effortBalanced : labels.effortThorough}
-                    {describeEffort && <span className="bf-pmenu__desc">{describeEffort(level)}</span>}
-                  </span>
-                  <span className="bf-pmenu__check" aria-hidden="true">{effort === level ? '✓' : ''}</span>
-                </button>
-              ))}
-            </>
-          )}
-
-          {onThinkingChange && (
-            <>
-              {(mode || memory || autoMode || onEffortChange) && <div className="bf-pmenu__sep" />}
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={!!thinking}
-                className={`bf-pmenu__item${thinking ? ' is-active' : ''}`}
-                onClick={() => onThinkingChange(!thinking)}
-              >
-                <span className="bf-pmenu__ico" aria-hidden="true">💭</span>
-                <span className="bf-pmenu__lbl">
-                  {labels.thinking}
-                  {describeThinking && <span className="bf-pmenu__desc">{describeThinking(!!thinking)}</span>}
-                </span>
-                <span className="bf-pmenu__hint">{thinking ? labels.on : labels.off}</span>
-                <span className="bf-pmenu__check" aria-hidden="true">{thinking ? '✓' : ''}</span>
-              </button>
-            </>
-          )}
-
-          {model && inUse && (
-            <>
-              {(mode || memory || autoMode || onEffortChange || onThinkingChange) && <div className="bf-pmenu__sep" />}
-              <div className="bf-pmenu__group">{labels.model}</div>
-              <div className="bf-pmenu__info">
-                <span className="bf-pmenu__ico" aria-hidden="true">🧠</span>
-                <span className="bf-pmenu__lbl">
-                  {inUse.name}
-                  <span className="bf-pmenu__desc">{inUse.detail}</span>
-                </span>
-              </div>
-              {canChoose ? (
-                <>
-                  <input
-                    className="bf-pmenu__search"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder={labels.searchModels}
-                    aria-label={labels.searchModels}
-                  />
-                  <div className="bf-pmenu__filters" aria-label={labels.filterModels}>
-                    {(['all', ...categories] as Array<'all' | ModelCategory>).map((category) => (
+          <div
+            className="bf-pmenu__pane"
+            role="tabpanel"
+            id={`bf-pmenu-pane-${activeTab}`}
+            aria-labelledby={`bf-pmenu-tab-${activeTab}`}
+          >
+            {activeTab === 'mode' && (
+              <>
+                {mode && (
+                  <>
+                    {mode.choices.map((choice) => (
                       <button
-                        key={category}
+                        key={choice.value}
                         type="button"
-                        className={`bf-pmenu__filter${filter === category ? ' is-active' : ''}`}
-                        aria-pressed={filter === category}
-                        onClick={() => setFilter(category)}
+                        role="radio"
+                        aria-checked={choice.value === mode.value}
+                        className={`bf-pmenu__item${choice.value === mode.value ? ' is-active' : ''}`}
+                        onClick={() => { mode.onChange(choice.value); close(); }}
                       >
-                        {category === 'all' ? labels.all : modelCategoryLabel(category, labels)}
+                        <span className="bf-pmenu__ico" aria-hidden="true">{choice.icon ?? ''}</span>
+                        <span className="bf-pmenu__lbl">
+                          {choice.label}
+                          {choice.hint && <span className="bf-pmenu__desc">{choice.hint}</span>}
+                        </span>
+                        <span className="bf-pmenu__check" aria-hidden="true">{choice.value === mode.value ? '✓' : ''}</span>
                       </button>
                     ))}
+                  </>
+                )}
+
+                {memory && (
+                  <>
+                    {mode && <div className="bf-pmenu__sep" />}
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={memory.enabled}
+                      disabled={!!memory.unavailableReason}
+                      className={`bf-pmenu__item${memory.enabled && !memory.unavailableReason ? ' is-active' : ''}`}
+                      title={memory.unavailableReason}
+                      onClick={() => { if (!memory.unavailableReason) memory.onChange(!memory.enabled); }}
+                    >
+                      <span className="bf-pmenu__ico" aria-hidden="true">🧠</span>
+                      <span className="bf-pmenu__lbl">
+                        {labels.memory}
+                        {(memory.unavailableReason ?? memory.describe?.(memory.enabled)) && (
+                          <span className="bf-pmenu__desc">{memory.unavailableReason ?? memory.describe?.(memory.enabled)}</span>
+                        )}
+                      </span>
+                      {!memory.unavailableReason && <span className="bf-pmenu__hint">{memory.enabled ? labels.on : labels.off}</span>}
+                      <span className="bf-pmenu__check" aria-hidden="true">{memory.enabled && !memory.unavailableReason ? '✓' : ''}</span>
+                    </button>
+                  </>
+                )}
+
+                {autoMode && (
+                  <>
+                    {(mode || memory) && <div className="bf-pmenu__sep" />}
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={autoMode.enabled}
+                      className={`bf-pmenu__item${autoMode.enabled ? ' is-active' : ''}`}
+                      onClick={() => autoMode.onChange(!autoMode.enabled)}
+                    >
+                      <span className="bf-pmenu__ico" aria-hidden="true">⚡</span>
+                      <span className="bf-pmenu__lbl">
+                        {labels.autoMode}
+                        <span className="bf-pmenu__desc">{autoMode.description ?? labels.autoModeHint}</span>
+                      </span>
+                      <span className="bf-pmenu__hint">{autoMode.enabled ? labels.on : labels.off}</span>
+                      <span className="bf-pmenu__check" aria-hidden="true">{autoMode.enabled ? '✓' : ''}</span>
+                    </button>
+                  </>
+                )}
+
+                {session && (
+                  <>
+                    {(mode || memory || autoMode) && <div className="bf-pmenu__sep" />}
+                    <div className="bf-pmenu__group">{labels.conversation}</div>
+                    <button
+                      type="button"
+                      disabled={!session.canConsolidate || session.consolidating}
+                      className="bf-pmenu__item"
+                      title={!session.canConsolidate ? labels.sessionUnavailable : undefined}
+                      onClick={() => { if (session.canConsolidate && !session.consolidating) { session.onConsolidate(); close(); } }}
+                    >
+                      <span className="bf-pmenu__ico" aria-hidden="true"><IconConsolidate /></span>
+                      <span className="bf-pmenu__lbl">
+                        {session.consolidating ? labels.consolidating : labels.consolidate}
+                        <span className="bf-pmenu__desc">{labels.consolidateHint}</span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!session.canConsolidate || session.forking}
+                      className="bf-pmenu__item"
+                      title={!session.canConsolidate ? labels.sessionUnavailable : undefined}
+                      onClick={() => { if (session.canConsolidate && !session.forking) { session.onFork(); close(); } }}
+                    >
+                      <span className="bf-pmenu__ico" aria-hidden="true"><IconFork /></span>
+                      <span className="bf-pmenu__lbl">
+                        {session.forking ? labels.forking : labels.fork}
+                        <span className="bf-pmenu__desc">{labels.forkHint}</span>
+                      </span>
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+
+            {activeTab === 'effort' && (
+              <>
+                {onEffortChange && EFFORT_LEVELS.map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    role="radio"
+                    aria-checked={effort === level}
+                    className={`bf-pmenu__item${effort === level ? ' is-active' : ''}`}
+                    onClick={() => onEffortChange(level)}
+                  >
+                    <span className="bf-pmenu__ico" aria-hidden="true">{EFFORT_ICON[level]}</span>
+                    <span className="bf-pmenu__lbl">
+                      {labels[EFFORT_LABEL[level]]}
+                      {describeEffort && <span className="bf-pmenu__desc">{describeEffort(level)}</span>}
+                    </span>
+                    <span className="bf-pmenu__check" aria-hidden="true">{effort === level ? '✓' : ''}</span>
+                  </button>
+                ))}
+
+                {onThinkingChange && (
+                  <>
+                    {onEffortChange && <div className="bf-pmenu__sep" />}
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={!!thinking}
+                      className={`bf-pmenu__item${thinking ? ' is-active' : ''}`}
+                      onClick={() => onThinkingChange(!thinking)}
+                    >
+                      <span className="bf-pmenu__ico" aria-hidden="true">💭</span>
+                      <span className="bf-pmenu__lbl">
+                        {labels.thinking}
+                        {describeThinking && <span className="bf-pmenu__desc">{describeThinking(!!thinking)}</span>}
+                      </span>
+                      <span className="bf-pmenu__hint">{thinking ? labels.on : labels.off}</span>
+                      <span className="bf-pmenu__check" aria-hidden="true">{thinking ? '✓' : ''}</span>
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+
+            {activeTab === 'model' && model && (
+              <>
+                {inUse && (
+                  <div className="bf-pmenu__info">
+                    <span className="bf-pmenu__lbl">
+                      {labels.modelInUse}
+                      <span className="bf-pmenu__desc">{inUse.name}</span>
+                    </span>
                   </div>
-                  <div className="bf-pmenu__list" role="listbox" aria-label={labels.chooseModel}>
-                    {visible.map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        role="option"
-                        aria-selected={item.key === activeKey}
-                        className={`bf-pmenu__option${item.key === activeKey ? ' is-active' : ''}`}
-                        onClick={() => { model.onChange(item.selection); setQuery(''); close(); }}
-                      >
-                        <span className="bf-pmenu__optName">{item.label}</span>
-                        <span className="bf-pmenu__optTag">{modelCategoryLabel(item.category, labels)}</span>
-                        <span className="bf-pmenu__optDetail">{item.detail}</span>
-                      </button>
-                    ))}
-                    {!visible.length && <div className="bf-pmenu__empty">{labels.noModels}</div>}
-                  </div>
-                </>
-              ) : (
-                <div className="bf-pmenu__info">
-                  <span className="bf-pmenu__ico" aria-hidden="true">🔒</span>
-                  <span className="bf-pmenu__lbl">
+                )}
+                {canChoose ? (
+                  <>
+                    <input
+                      className="bf-pmenu__search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder={labels.searchModels}
+                      aria-label={labels.searchModels}
+                    />
+                    <div className="bf-pmenu__filters" aria-label={labels.filterModels}>
+                      {(['all', ...categories] as Array<'all' | ModelCategory>).map((category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          className={`bf-pmenu__filter${filter === category ? ' is-active' : ''}`}
+                          onClick={() => setFilter(category)}
+                        >
+                          {category === 'all' ? labels.all : modelCategoryLabel(category, labels)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="bf-pmenu__list" role="listbox" aria-label={labels.chooseModel}>
+                      {visible.map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          role="option"
+                          aria-selected={item.key === activeKey}
+                          className={`bf-pmenu__option${item.key === activeKey ? ' is-active' : ''}`}
+                          onClick={() => { model.onChange(item.selection); setQuery(''); close(); }}
+                        >
+                          <span className="bf-pmenu__optName">{item.label}</span>
+                          <span className="bf-pmenu__optTag">{modelCategoryLabel(item.category, labels)}</span>
+                          {item.detail ? <span className="bf-pmenu__optDetail">{item.detail}</span> : null}
+                        </button>
+                      ))}
+                      {!visible.length && <div className="bf-pmenu__empty">{labels.noModels}</div>}
+                    </div>
+                  </>
+                ) : (
+                  <div className="bf-pmenu__info">
                     <span className="bf-pmenu__desc">{labels.modelLocked}</span>
-                  </span>
-                </div>
-              )}
-            </>
-          )}
+                  </div>
+                )}
+              </>
+            )}
 
-          {/* Actions on the conversation itself, kept last (above settings) because
-              they FIRE rather than arm: everything above shapes the next turn, these
-              two change the chat you are in. Both state their reason when inert, so a
-              short chat explains itself instead of showing two dead pills. */}
-          {session && (
-            <>
-              <div className="bf-pmenu__sep" />
-              <div className="bf-pmenu__group">{labels.conversation}</div>
-              <button
-                type="button"
-                role="menuitem"
-                className="bf-pmenu__item"
-                disabled={!session.canConsolidate || !!session.consolidating || !!session.forking}
-                onClick={() => { close(); session.onConsolidate(); }}
-              >
-                <span className="bf-pmenu__ico" aria-hidden="true"><IconConsolidate /></span>
-                <span className="bf-pmenu__lbl">
-                  {session.consolidating ? labels.consolidating : labels.consolidate}
-                  <span className="bf-pmenu__desc">{session.canConsolidate ? labels.consolidateHint : labels.sessionUnavailable}</span>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="bf-pmenu__item"
-                disabled={!session.canConsolidate || !!session.consolidating || !!session.forking}
-                onClick={() => { close(); session.onFork(); }}
-              >
-                <span className="bf-pmenu__ico" aria-hidden="true"><IconFork /></span>
-                <span className="bf-pmenu__lbl">
-                  {session.forking ? labels.forking : labels.fork}
-                  <span className="bf-pmenu__desc">{session.canConsolidate ? labels.forkHint : labels.sessionUnavailable}</span>
-                </span>
-              </button>
-            </>
-          )}
-
-          {onAccountSettings && (
-            <>
-              <div className="bf-pmenu__sep" />
-              <button
-                type="button"
-                role="menuitem"
-                className="bf-pmenu__item"
-                onClick={() => { close(); onAccountSettings(); }}
-              >
-                <span className="bf-pmenu__ico" aria-hidden="true">⚙</span>
-                <span className="bf-pmenu__lbl">{labels.accountSettings}</span>
-              </button>
-            </>
-          )}
+            {activeTab === 'status' && (
+              <div className="bf-pmenu__status">
+                {status}
+                {onAccountSettings && (
+                  <button
+                    type="button"
+                    className="bf-pmenu__item"
+                    onClick={() => { close(); onAccountSettings(); }}
+                  >
+                    <span className="bf-pmenu__ico" aria-hidden="true">⚙️</span>
+                    <span className="bf-pmenu__lbl">{labels.accountSettings}</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

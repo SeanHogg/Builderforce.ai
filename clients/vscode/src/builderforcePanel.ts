@@ -131,6 +131,10 @@ function buildLabels(): Record<string, string> {
     // renderer, not by l10n.
     "tl.liveStarting": t("Starting…"),
     "tl.liveWriting": t("Writing the reply…"),
+    // A turn streaming a tool call's ARGUMENTS. `{bytes}` is the size so far — the one
+    // thing that proves a three-minute `write_file` call is working, not wedged.
+    "tl.liveComposing": t("Composing a {tool} call…"),
+    "tl.liveComposed": t(" — {bytes} so far"),
     "tl.liveTool": t("Running {tool}"),
     "tl.liveAwaiting": t("Waiting for you to approve {tool}"),
     "tl.liveFinishing": t("Wrapping up…"),
@@ -318,7 +322,15 @@ function buildLabels(): Record<string, string> {
     "app.all": t("All"),
     "app.modelLocked": t("Model choice needs a paid plan or a connected provider account."),
     "app.accountSettings": t("Account settings"),
-    "app.autoMode": t("Auto mode"),
+    "app.status": t("Status"),
+    "app.statusLoading": t("Loading account…"),
+    "app.account": t("Account"),
+    "app.usage": t("Usage"),
+    "app.plan": t("Plan"),
+    "app.resets": t("Resets"),
+    "app.unlimited": t("Unlimited"),
+    "app.managePlan": t("Manage plan"),
+    "app.autoMode": t("Auto"),
     "app.autoModeHint": t("Auto-approve tool actions without asking"),
     "app.pickModel": t("Change model"),
     "app.dictate": t("Dictate"),

@@ -90,8 +90,122 @@ function planLabel(key: string): string {
   return key.replace(/^./, (ch) => ch.toUpperCase());
 }
 
+/** Human label for a `/api/consumption` meter key. */
+function meterLabel(key: string, t: (key: string, fallback: string) => string): string {
+  switch (key) {
+    case 'ai_tokens': return t('app.meterAiTokens', 'AI tokens');
+    case 'ingestion': return t('app.meterIngestion', 'Ingestion');
+    case 'error_events': return t('app.meterErrorEvents', 'Error events');
+    case 'outbound_fetches': return t('app.meterOutboundFetches', 'Outbound fetches');
+    case 'cloud_runs': return t('app.meterCloudRuns', 'Cloud runs');
+    default: return key.replace(/_/g, ' ');
+  }
+}
+
+/** Compact "in 22m" / "in 6d" for a future ISO timestamp. */
+function formatReset(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso) - Date.now();
+  if (!Number.isFinite(ms)) return null;
+  if (ms <= 0) return tNow();
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `in ${Math.max(1, minutes)}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `in ${hours}h`;
+  return `in ${Math.round(hours / 24)}d`;
+}
+
+function tNow(): string {
+  return 'now';
+}
+
 /**
- * The account-tier chip in the composer footer. Self-gating and self-navigating: it
+ * Full account + usage readout for the `/` menu's Status tab. Same snapshot as
+ * {@link PlanBadge}, but lists every meter (not just AI tokens) the way an
+ * account panel does — plan, billing status, period reset, and a bar per meter.
+ */
+export function AccountStatusPanel({
+  apiReq,
+  t,
+}: {
+  apiReq: AuthedFetch;
+  t: (key: string, fallback: string) => string;
+}) {
+  const plan = usePlanSnapshot(apiReq);
+  if (!plan) {
+    return <div className="bf-pmenu__desc">{t('app.statusLoading', 'Loading account…')}</div>;
+  }
+
+  const tier = plan.plan.effective;
+  const isFree = tier === 'free';
+  const label = planLabel(tier);
+  const billing = plan.plan.billingStatus;
+  const reset = formatReset(plan.period?.resetsAt);
+
+  return (
+    <div className="bf-acct">
+      <div className="bf-pmenu__group">{t('app.account', 'Account')}</div>
+      <div className="bf-acct__row">
+        <span className="bf-acct__k">{t('app.plan', 'Plan')}</span>
+        <span className="bf-acct__v">
+          {label}
+          {billing && billing !== 'active' && billing !== 'none' ? ` · ${billing}` : ''}
+        </span>
+      </div>
+      {reset && (
+        <div className="bf-acct__row">
+          <span className="bf-acct__k">{t('app.resets', 'Resets')}</span>
+          <span className="bf-acct__v">{reset}</span>
+        </div>
+      )}
+
+      <div className="bf-pmenu__group">{t('app.usage', 'Usage')}</div>
+      {(plan.meters ?? []).length === 0 && (
+        <div className="bf-pmenu__desc">{t('app.usageEmpty', 'No usage meters for this plan.')}</div>
+      )}
+      {(plan.meters ?? []).map((m) => {
+        const pct = m.unlimited ? null : Math.max(0, Math.min(100, Math.round(m.percentUsed)));
+        return (
+          <div key={m.key} className="bf-acct__meter">
+            <div className="bf-acct__row bf-acct__row--flush">
+              <span className="bf-acct__k">{meterLabel(m.key, t)}</span>
+              <span className="bf-acct__v">
+                {m.unlimited ? t('app.unlimited', 'Unlimited') : `${pct}%`}
+              </span>
+            </div>
+            {pct != null && (
+              <div className="bf-acct__bar" aria-hidden="true">
+                <div className="bf-acct__bar-fill" style={{ width: `${pct}%` }} />
+              </div>
+            )}
+            {!m.unlimited && (
+              <div className="bf-acct__meta">
+                {m.used.toLocaleString()} / {m.limit.toLocaleString()}
+                {m.unit && m.unit !== 'count' ? ` ${m.unit}` : ''}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <button
+        type="button"
+        className="bf-pmenu__item"
+        onClick={() => {
+          invalidatePlanSnapshot();
+          openUpgrade(isFree ? 'pricing' : 'billing');
+        }}
+      >
+        <span className="bf-pmenu__lbl">
+          {isFree ? t('app.upgrade', 'Upgrade') : t('app.managePlan', 'Manage plan')}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The account-tier chip. Self-gating and self-navigating: it
  * fetches its own plan, renders nothing until it knows one (never a misleading
  * "Free" while loading), and clicking it opens the page that changes the tier.
  *

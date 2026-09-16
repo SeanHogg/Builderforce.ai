@@ -69,6 +69,8 @@ export interface PromptOptionsLabels extends ModelChoiceLabels {
   /** Shown instead of the list when the tenant may not pin a model at all. */
   modelLocked: string;
   accountSettings: string;
+  /** Tab heading for account / usage / Evermind details. Hosts may omit it — the merge fills English "Status". */
+  status?: string;
 }
 
 export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
@@ -102,6 +104,7 @@ export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
   all: 'All',
   modelLocked: 'Model choice needs a paid plan or a connected provider account.',
   accountSettings: 'Account settings',
+  status: 'Status',
 };
 
 /** Merge a host's partial overrides over the English defaults. */

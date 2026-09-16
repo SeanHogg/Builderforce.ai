@@ -1472,6 +1472,63 @@
   overflow-y: auto;
 }
 
+/* Tabbed `/` popover: sticky Mode / Effort / Model / Status chrome, pane scrolls.
+   A modifier so PersonaPicker / RecipientPicker (which reuse .bf-pmenu__pop) keep
+   the original single-list scroll. */
+.bf-pmenu__pop--tabs {
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+  max-width: min(400px, calc(100vw - 24px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.bf-pmenu__tabs {
+  display: flex;
+  gap: 0;
+  padding: 4px 6px 0;
+  border-bottom: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  flex: 0 0 auto;
+}
+
+.bf-pmenu__tab {
+  flex: 1 1 0;
+  padding: 7px 4px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--bf-text-muted, #8a8a8a);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.bf-pmenu__tab:hover { color: var(--bf-text, inherit); }
+
+.bf-pmenu__tab.is-active {
+  color: var(--bf-text, inherit);
+  border-bottom-color: var(--bf-accent, #6ea8fe);
+}
+
+.bf-pmenu__pane {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 6px 5px 8px;
+}
+
+.bf-pmenu__status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 4px;
+}
+
 .bf-pmenu__group {
   padding: 6px 9px 3px;
   font-size: 10px;
