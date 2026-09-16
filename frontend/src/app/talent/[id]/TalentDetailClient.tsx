@@ -124,6 +124,18 @@ export default function TalentDetailClient() {
         {canHire && (
           <MessagesButton side="employer" context={{ freelancerUserId: profile.userId, title: profile.displayName ?? undefined }} label={t('message')} />
         )}
+        {/* Visitor chat (#2581). A tenant visitor is already served by the `canHire`
+            MessagesButton above, so this renders only the gate the visitor lacks:
+            no tenant session yet. Identity is the EXISTING auth (`signInHref` with
+            `next` back to this profile) — not name+email, which is booking (#2534).
+            We do not auto-send on return; the visitor clicks Message again and the
+            normal employer flow opens (or reuses) the one thread. */}
+        {showChatCta && !canHire && (
+          <a href={signInHref()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, textDecoration: 'none' }}>
+            <Icon source="💬" size="1em" /> {t('message')}
+          </a>
+        )}
         {canHire && (
           <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}
             style={{ padding: '9px 16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-small)', cursor: 'pointer' }}>
