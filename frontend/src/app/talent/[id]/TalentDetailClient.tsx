@@ -14,6 +14,7 @@ import { getFreelancer, type FreelancerProfile } from '@/lib/freelance/talentPro
 import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { ShortlistToggle } from '@/components/talent/ShortlistToggle';
 import { Icon } from '@/components/ui/Icon';
+import { signInHref } from '@/lib/auth';
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
