@@ -88,6 +88,10 @@ export * from './career';
 // creative dispatch, and the sendable arithmetic is printed on the campaign card AND
 // decides whether the send control refuses.
 export * from './marketing';
+// The GUIDED CAMPAIGN RUN — the founder journey from "I want to run a
+// marketing campaign". Distinct from send-readiness (operational blockers)
+// and from listing campaigns. See guidedCampaign.ts.
+export * from './guidedCampaign';
 // ANYTHING THAT IS A DATE WITH A SUBJECT — the event shape, the day/week/month grain,
 // the conflict rule, and the projection that reads a board's own dates as events. It
 // used to live inside `marketing.ts` and to serve exactly one hardcoded reading; a
