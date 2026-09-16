@@ -113,6 +113,17 @@ export interface ChatOptionVM {
   title: string;
   ticketCount?: number | null;
   ticketProgressPct?: number | null;
+  /**
+   * Required-on-the-wire companion to {@link ChatOptionVM.ticketProgressPct}: the
+   * same 0–100 linked-ticket rollup, but never null — a chat with no tickets (or
+   * one the health batch omitted) reads `0`. `GET /api/brain/chats` always emits
+   * it, so a consumer can render a ring without a null branch.
+   *
+   * Optional HERE only so existing merge-picker callers that build a
+   * `ChatOptionVM` from other sources keep compiling; the chat switcher/dropdown
+   * bind that consumes it is a sibling ticket, not this one.
+   */
+  progressPct?: number;
 }
 
 /** A pending human question associated with one of this chat's linked tasks. */
