@@ -815,6 +815,10 @@ export interface BfBrainChat {
   /** Agents/humans invited into the chat (multi-party chat). Refs resolve to
    *  display names via {@link listAgentPool}. Absent on older servers. */
   participants?: Array<{ ref: string; kind: string }>;
+  /** Linked-ticket count from GET /api/brain/chats. Absent on older servers. */
+  ticketCount?: number;
+  /** Overall linked-ticket progress 0–100, or null when none are linked. */
+  ticketProgressPct?: number | null;
 }
 
 /** An agent in the tenant's pool, id→display-name (for resolving participant refs). */

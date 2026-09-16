@@ -53,6 +53,25 @@ export const AppendTraceBody = z.object({
   events: z.array(z.custom<BrainTraceEventInput>(isObjectLike, 'each event must be an object')).optional(),
 });
 
+/**
+ * POST /chats/:id/diagnostics — one captured `ChatDiagnosticsReport`.
+ *
+ * The four fields the store lifts into COLUMNS are named here, because a report that
+ * cannot say which surface it came from or when it was taken is not a capture; the rest of
+ * the document (`chat`, `run`, `staffing`, and whatever a later schemaVersion adds) passes
+ * through untouched — `looseObject` rather than `object`, because zod 4 STRIPS unknown
+ * keys and a stripped report is a report with its findings deleted. This validates the
+ * INDEXED contract, not the report's interior, which the capturer owns and evolves.
+ */
+export const ChatDiagnosticsBody = z.object({
+  report: z.looseObject({
+    schemaVersion: z.number(),
+    capturedAt: z.string(),
+    surface: z.string(),
+    likelyCause: z.string().nullable(),
+  }),
+});
+
 /** POST /chats/:id/tickets. `ref` is `String()`ed, so a numeric id is as good as a string one. */
 export const LinkTicketBody = z.object({
   kind: z.string().optional(),

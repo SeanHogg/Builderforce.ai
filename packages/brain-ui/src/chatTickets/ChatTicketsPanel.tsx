@@ -17,6 +17,10 @@ import { HealthRing } from '../HealthRing';
 import { nativeOptionStyle } from '../optionStyle';
 import { resolveRunGate } from './runGate';
 import { aggregateTicketHealth } from './aggregateTicketHealth';
+import { chatSwitcherLabel } from './chatSwitcherLabel';
+// The rail's ONE palette, shared with every part it composes (see tokens.ts).
+import { V } from './tokens';
+import { TicketParentLine } from './TicketParentLine';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
@@ -110,6 +114,15 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const flash = (m: string) => { setMsg(m); if (typeof window !== 'undefined') window.setTimeout(() => setMsg(null), 3500); };
   const poolName = useCallback((ref: string) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
 
+  /** This chat's OWN link row for a ticket's parent, when the chat is linked to the
+   *  parent too — the common case, since the Brain links the epic it created as well
+   *  as the children it hung under it. That real VM is what makes the chip's parent
+   *  line clickable; a parent the chat does not link has no VM to route, so its line
+   *  stays plain text rather than being routed through an invented health row. */
+  const parentLink = useCallback((tk: TicketLinkVM): TicketLinkVM | undefined => (
+    tk.parent ? tickets.find((t) => t.kind === tk.parent!.kind && t.ref === tk.parent!.ref) : undefined
+  ), [tickets]);
+
   const unlink = async (tk: TicketLinkVM) => {
     setBusy(true);
     try { await adapter.unlinkTicket(chatId, tk.kind, tk.ref); await load(); } finally { setBusy(false); }
@@ -172,6 +185,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           <span style={S.muted}>{labels.none}</span>
         ) : tickets.map((tk) => {
           const key = `${tk.kind}:${tk.ref}`;
+          const parentTk = parentLink(tk);
           return (
             <div key={tk.linkId} style={S.chip}>
               <HealthRing percent={tk.progressPct} size={36} caption={tk.total > 0 ? `${tk.done}/${tk.total}` : undefined} muted={!tk.exists} ariaLabel={labels.ringAria(tk.label, tk.progressPct)} />
@@ -182,6 +196,15 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
                   <span style={S.ticketLabel} title={tk.label}>{tk.label}</span>
                 )}
                 <span style={S.ticketMeta}>{labels.kind[tk.kind]} · {tk.status}{tk.linkType === 'created' ? ` · ${labels.spawned}` : ''}</span>
+                {/* Which work item this ticket belongs to. Clickable only when the
+                    parent is ALSO one of this chat's links, so the host is handed a
+                    real TicketLinkVM rather than a fabricated health row. */}
+                <TicketParentLine
+                  parent={tk.parent}
+                  inParent={labels.inParent}
+                  openTitle={labels.open}
+                  onOpen={onOpenTicket && parentTk ? () => onOpenTicket(parentTk) : undefined}
+                />
               </div>
               <div style={{ display: 'flex', gap: 2 }}>
                 {onOpenTicket && tk.exists && (
@@ -491,7 +514,7 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
         {candidates.length === 0 ? <span style={S.muted}>{labels.mergeNoOthers}</span> : candidates.map((c) => (
           <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
             <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggle(c.id)} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatSwitcherLabel({ title: c.title, id: c.id, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct })}</span>
           </label>
         ))}
       </div>
@@ -509,28 +532,6 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
  * props (memoize `chatList` and `onChanged`) for the memo to take effect.
  */
 export const ChatTicketsPanel = memo(ChatTicketsPanelInner);
-
-// ── theme tokens ──────────────────────────────────────────────────────────────
-// Each value is a CSS-var fallback CHAIN read left→right: first the web app's
-// semantic tokens (--bf-ct-* / --bg-base / --text-primary …), then the VS Code
-// webview's tokens (--vscode-* / --bf-*), then a literal. The webview does NOT
-// define the --bf-ct-*/--bg-base names, so before this chain the native <select>s
-// fell through to `transparent`/`inherit` with no color-scheme and Chromium drew
-// them as default LIGHT controls (white popup) in a dark editor. Resolving to the
-// editor's --vscode-dropdown-* tokens fixes them in BOTH hosts, light AND dark.
-const V = {
-  border: 'var(--bf-ct-border, var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3)))))',
-  surface: 'var(--bf-ct-surface, var(--bg-elevated, var(--bf-surface, var(--vscode-editorWidget-background, transparent))))',
-  surface2: 'var(--bf-ct-surface-2, var(--bg-base, var(--bf-surface-2, var(--vscode-textBlockQuote-background, transparent))))',
-  // Form controls specifically prefer the editor's dropdown/input tokens so the
-  // native <select> and its option list match VS Code's own dropdowns.
-  field: 'var(--bf-ct-surface-2, var(--bg-base, var(--vscode-dropdown-background, var(--bf-surface, transparent))))',
-  fieldText: 'var(--bf-ct-text, var(--text-primary, var(--vscode-dropdown-foreground, var(--bf-text, inherit))))',
-  text: 'var(--bf-ct-text, var(--text-primary, var(--bf-text, inherit)))',
-  text2: 'var(--bf-ct-text-2, var(--text-secondary, var(--bf-text, inherit)))',
-  muted: 'var(--bf-ct-text-muted, var(--text-muted, var(--bf-text-muted, #6b7280)))',
-  accent: 'var(--bf-ct-accent, var(--accent, var(--bf-accent, #3b82f6)))',
-};
 
 const S = {
   root: { margin: '4px 0 0', padding: '8px 10px', border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: 'flex', flexDirection: 'column', gap: 8 } as React.CSSProperties,

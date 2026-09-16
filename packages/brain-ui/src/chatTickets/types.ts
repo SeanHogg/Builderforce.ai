@@ -22,6 +22,17 @@ export const RUNNABLE_KINDS: TicketKind[] = ['task', 'epic', 'gap'];
 
 export type LinkType = 'linked' | 'created';
 
+/**
+ * The work item a ticket hangs UNDER — the epic a task belongs to, or the epic a
+ * sub-epic sits beneath. Mirrors `TicketParent` in the api's ChatTicketService.
+ */
+export interface TicketParentVM {
+  kind: TicketKind;
+  ref: string;
+  /** The parent's title, as the rail renders it ("↳ in Advisor Platform"). */
+  label: string;
+}
+
 /** A chat↔ticket link with a live health summary. */
 export interface TicketLinkVM {
   linkId: number;
@@ -45,6 +56,16 @@ export interface TicketLinkVM {
   total: number;
   exists: boolean;
   linkType: LinkType;
+  /**
+   * The work item this ticket belongs to, when the server resolved one. Present for
+   * the task-tier kinds (task/epic/gap) that hang off a parent; absent for a
+   * top-level item, an orphan whose parent is gone, and for every other tier.
+   *
+   * Without it a chat that spawned an epic, three child epics and their tasks
+   * rendered them as one indistinguishable run of "EPIC · BACKLOG · SPAWNED HERE"
+   * chips — the hierarchy the conversation had just created was invisible.
+   */
+  parent?: TicketParentVM;
 }
 
 /** A chat that references a ticket (a lineage row). */
@@ -90,6 +111,8 @@ export interface TicketOptionVM {
 export interface ChatOptionVM {
   id: number;
   title: string;
+  ticketCount?: number | null;
+  ticketProgressPct?: number | null;
 }
 
 /** A pending human question associated with one of this chat's linked tasks. */
@@ -229,6 +252,9 @@ export interface ChatTicketsLabels {
   hideTickets: string;
   kind: Record<TicketKind, string>;
   ringAria: (label: string, pct: number) => string;
+  /** The chip's parent line: which work item this ticket belongs to ("in Advisor
+   *  Platform"). Parametric so a host localizes the preposition, not just the noun. */
+  inParent: (parent: string) => string;
   /** N-linked-tickets count shown in the collapsible header. */
   ticketCount: (n: number) => string;
   /** Aria label for the collapsed header's overall-progress ring. */
@@ -291,6 +317,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   hideTickets: 'Hide linked tickets',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec', retro: 'Retrospective', poker: 'Planning poker' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
+  inParent: (parent) => `in ${parent}`,
   ticketCount: (n) => `${n} ticket${n === 1 ? '' : 's'}`,
   overallAria: (pct) => `Overall progress: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,

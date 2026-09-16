@@ -16,11 +16,16 @@
  *
  * `progressPct` IS the authoritative progress signal (it is what each per-ticket
  * ring renders), so the headline aggregates that instead, weighting each ticket
- * by its `total` so a ten-child epic outweighs a single leaf task. When no ticket
- * reports sub-items, weights are meaningless and an unweighted mean is used.
+ * by its `total` so a ten-child epic outweighs a single leaf task.
+ *
+ * A ticket that reports `total: 0` still counts as weight 1. Incomplete
+ * spec/roadmap/retro used to emit `total: done ? 1 : 0`, so a 0% ring had no
+ * weight and vanished from the headline — "100% · 4/4" beside six chips, two
+ * of them empty. Deleted tickets (`total: 0`, `progressPct: 0`) have the same
+ * shape. Counting them as one item keeps the header honest against the rings.
  *
  * `done`/`total` are still returned so the caller can show the item counter
- * alongside — "0 of 3 complete" is separately true, and useful.
+ * alongside — "4 of 6 complete" is separately true, and useful.
  */
 export interface TicketHealthInput {
   /** Authoritative progress for this ticket, 0–100. */
@@ -43,23 +48,19 @@ export interface AggregateTicketHealth {
 export function aggregateTicketHealth(tickets: readonly TicketHealthInput[]): AggregateTicketHealth {
   let done = 0;
   let total = 0;
-  let sumPct = 0;
   let weightedPct = 0;
 
   for (const tk of tickets) {
     const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
-    const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 0;
+    // Weight 1 when the server omitted a denominator (legacy spec/roadmap/retro
+    // `total: 0`, deleted items) so a 0% ring still pulls the headline down.
+    const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
     done += Number.isFinite(tk.done) ? tk.done : 0;
     total += weight;
-    sumPct += pct;
     weightedPct += pct * weight;
   }
 
-  const pct = total > 0
-    ? Math.round(weightedPct / total)
-    : tickets.length
-      ? Math.round(sumPct / tickets.length)
-      : 0;
+  const pct = tickets.length ? Math.round(weightedPct / total) : 0;
 
   return { pct, done, total };
 }

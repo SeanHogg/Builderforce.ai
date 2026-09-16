@@ -100,7 +100,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // A conversation. Same panel, opened at its chat surface — which is why this row
     // sits in the same list as the boards rather than under a heading of its own.
     const chat = node.row.source.chat;
-    const item = new vscode.TreeItem(chat.title || `Chat ${chat.id}`, vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(conversationTreeLabel(chat), vscode.TreeItemCollapsibleState.None);
     item.id = String(chat.id);
     const time = relativeTime(chat.updatedAt);
     // Filtered: the project is implied by the header, so just show the time. Unfiltered:
@@ -211,6 +211,19 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     this.rowCache = { ts: Date.now(), rows };
     return rows;
   }
+}
+
+/**
+ * Sessions-tree label for a conversation. Host `src/` cannot import brain-ui
+ * (`sourcePackages.test` forbids it), so this is the same `pct% · title` shape
+ * as `chatSwitcherLabel` without sharing the module.
+ */
+function conversationTreeLabel(chat: BfBrainChat): string {
+  const title = chat.title || `Chat ${chat.id}`;
+  const count = chat.ticketCount ?? 0;
+  const pct = chat.ticketProgressPct;
+  if (count <= 0 || pct == null || !Number.isFinite(pct)) return title;
+  return `${Math.max(0, Math.min(100, Math.round(pct)))}% · ${title}`;
 }
 
 /** Up to two initials from a display name (e.g. "Bob Developer" → "BD"). */

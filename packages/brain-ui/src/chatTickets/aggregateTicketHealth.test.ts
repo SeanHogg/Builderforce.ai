@@ -47,6 +47,26 @@ describe('aggregateTicketHealth', () => {
     expect(result.pct).toBe(75);
   });
 
+  it('counts a 0-total ticket as weight 1 so 0% rings pull the headline down', () => {
+    // Screenshot: 4 done leaves + incomplete spec (total:0) + incomplete roadmap (total:0).
+    // Old weighting dropped the two 0% chips → 100% · 4/4. They must count.
+    const tickets = [
+      { progressPct: 100, done: 1, total: 1 },
+      { progressPct: 100, done: 1, total: 1 },
+      { progressPct: 0, done: 0, total: 0 },
+      { progressPct: 100, done: 1, total: 1 },
+      { progressPct: 0, done: 0, total: 0 },
+      { progressPct: 100, done: 1, total: 1 },
+    ];
+
+    const result = aggregateTicketHealth(tickets);
+
+    // (100×4 + 0×1 + 0×1) / 6 = 400/6 → 67%
+    expect(result.pct).toBe(67);
+    expect(result.done).toBe(4);
+    expect(result.total).toBe(6);
+  });
+
   it('returns 0% for empty ticket list', () => {
     const result = aggregateTicketHealth([]);
     expect(result.pct).toBe(0);

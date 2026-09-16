@@ -133,6 +133,7 @@ export type { ChatTicketsExtension } from './chatTickets/types';
 // The chat↔ticket REST client, ONE implementation. The web app and the VS Code
 // webview each carried a hand-written copy, and the VSIX one had lost the run’s
 // chat binding entirely — see chatTickets/restAdapter.ts.
+export { chatSwitcherLabel } from './chatTickets/chatSwitcherLabel';
 export { createChatTicketsRestAdapter } from './chatTickets/restAdapter';
 export type { ChatTicketsRequest, ChatTicketsRestOptions } from './chatTickets/restAdapter';
 export { useChatParticipants } from './chatTickets/useChatParticipants';
@@ -145,6 +146,7 @@ export type {
   TicketKind,
   LinkType,
   TicketLinkVM,
+  TicketParentVM,
   LineageVM,
   ChatAgentVM,
   AgentOptionVM,

@@ -78,6 +78,18 @@ export function ticketKindForTaskType(taskType?: string | null): 'epic' | 'gap' 
   return taskType === 'epic' || taskType === 'gap' ? taskType : 'task';
 }
 
+/**
+ * The work item a ticket hangs UNDER — the epic a task belongs to, or the epic a
+ * sub-epic sits beneath. Task, epic and gap all live in the `tasks` table and hang
+ * off `tasks.parent_task_id`, so ONE resolution names the parent of all three.
+ */
+export interface TicketParent {
+  kind: 'epic' | 'task' | 'gap';
+  ref: string;
+  /** The parent's title, for display ("in Advisor Platform"). */
+  label: string;
+}
+
 export interface TicketHealth {
   kind: TicketKind;
   ref: string;
@@ -112,6 +124,17 @@ export interface TicketHealth {
   total: number;
   /** False when the referenced ticket no longer exists in the tenant. */
   exists: boolean;
+  /**
+   * The work item this ticket belongs to — the epic above a task, or the epic above
+   * a sub-epic. Set for the task-tier kinds (task/epic/gap) whose `parentTaskId`
+   * resolves inside the tenant; ABSENT for a top-level item, an orphan whose parent
+   * was deleted, and for every other tier (portfolio/objective/initiative/roadmap/
+   * spec/retro/poker have no `tasks.parent_task_id`).
+   *
+   * This is what lets a chat's ticket rail say WHICH epic each chip belongs to
+   * instead of rendering a flat list where a hierarchy cannot be told apart.
+   */
+  parent?: TicketParent;
 }
 
 export interface ChatTicketLink extends TicketHealth {
@@ -341,8 +364,62 @@ export class ChatTicketService {
   }
 
   /**
+   * Name the PARENT of every task-tier row that has one — child task ⇒ its epic,
+   * sub-epic ⇒ the epic above it.
+   *
+   * Costs at most ONE query however many rows come in, and none at all when nothing
+   * in the batch has a `parentTaskId`: parents that are already among the self rows
+   * (a chat linked to both the epic and its tasks — the common case) are named for
+   * free, and only the ids still unresolved are fetched, in a single `IN (...)`.
+   * That keeps {@link ticketHealthBatch}'s constant-query-count promise intact —
+   * never one lookup per link.
+   *
+   * A parent that no longer exists, or that lives in another tenant, simply does not
+   * resolve: the caller reports NO parent rather than inventing a hierarchy or
+   * leaking a cross-tenant title.
+   */
+  private async resolveTaskParents(
+    tenantId: number,
+    selfRows: ReadonlyArray<{ id: number; title: string; taskType?: string | null; parentTaskId?: number | null }>,
+  ): Promise<Map<number, TicketParent>> {
+    const byChild = new Map<number, TicketParent>();
+    const wanted = new Set<number>();
+    for (const r of selfRows) {
+      if (r.parentTaskId == null) continue;
+      const pid = Number(r.parentTaskId);
+      if (Number.isInteger(pid) && pid > 0) wanted.add(pid);
+    }
+    if (wanted.size === 0) return byChild;
+
+    const known = new Map<number, { title: string; taskType?: string | null }>();
+    for (const r of selfRows) if (wanted.has(r.id)) known.set(r.id, r);
+
+    const unresolved = [...wanted].filter((id) => !known.has(id));
+    if (unresolved.length > 0) {
+      const parentRows = await this.db
+        .select({ id: tasks.id, title: tasks.title, taskType: tasks.taskType })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .where(and(inArray(tasks.id, unresolved), eq(projects.tenantId, tenantId)));
+      for (const p of parentRows) known.set(Number(p.id), p);
+    }
+
+    for (const r of selfRows) {
+      if (r.parentTaskId == null) continue;
+      const pid = Number(r.parentTaskId);
+      const p = known.get(pid);
+      if (!p) continue;
+      byChild.set(r.id, { kind: ticketKindForTaskType(p.taskType), ref: String(pid), label: p.title });
+    }
+    return byChild;
+  }
+
+  /**
    * Batched health for a set of (kind, ref) targets — one aggregate query per
    * tier, so a chat with N linked tickets costs a constant handful of queries.
+   *
+   * Task-tier rows additionally carry {@link TicketHealth.parent}, so a chat's
+   * ticket rail can say which epic each ticket belongs to.
    */
   async ticketHealthBatch(tenantId: number, targets: Array<{ kind: string; ref: string }>): Promise<Map<string, TicketHealth>> {
     const out = new Map<string, TicketHealth>();
@@ -378,17 +455,24 @@ export class ChatTicketService {
     const allTaskLike = [...taskIds, ...epicIds, ...gapIds];
     if (allTaskLike.length > 0) {
       const rows = await this.db
-        .select({ id: tasks.id, title: tasks.title, status: tasks.status, completedAt: tasks.completedAt })
+        .select({
+          id: tasks.id, title: tasks.title, status: tasks.status, completedAt: tasks.completedAt,
+          // Named so the rail can say which epic a chip belongs to (see resolveTaskParents).
+          taskType: tasks.taskType, parentTaskId: tasks.parentTaskId,
+        })
         .from(tasks)
         .innerJoin(projects, eq(projects.id, tasks.projectId))
         .where(and(inArray(tasks.id, allTaskLike), eq(projects.tenantId, tenantId)));
       const selfById = new Map(rows.map((r) => [r.id, r]));
+      // ONE extra batched query at most — the parents not already among these rows.
+      const parentByChild = await this.resolveTaskParents(tenantId, rows);
 
       // Tasks and gaps are both leaf work items — identical health derivation.
       for (const kind of ['task', 'gap'] as const) {
         for (const id of kind === 'task' ? taskIds : gapIds) {
           const r = selfById.get(id);
           if (!r) { out.set(key(kind, String(id)), missing(kind, String(id))); continue; }
+          const parent = parentByChild.get(id);
           const done = r.completedAt != null || DONE_STATUS.has(r.status) ? 1 : 0;
           // Delegate to the canonical status ladder so a chat ticket chip and the
           // task list API never disagree about the same task (in_review is 75, not 50).
@@ -399,6 +483,7 @@ export class ChatTicketService {
             kind, ref: String(id), label: r.title, status: r.status,
             progressPct,
             done, total: 1, exists: true,
+            ...(parent ? { parent } : {}),
           });
         }
       }
@@ -421,7 +506,11 @@ export class ChatTicketService {
           const total = c.total;
           const done = c.done;
           const progressPct = total > 0 ? Math.round((done / total) * 100) : (r.completedAt != null || DONE_STATUS.has(r.status) ? 100 : 0);
-          out.set(key('epic', String(id)), { kind: 'epic', ref: String(id), label: r.title, status: r.status, progressPct, done, total, exists: true });
+          const parent = parentByChild.get(id);
+          out.set(key('epic', String(id)), {
+            kind: 'epic', ref: String(id), label: r.title, status: r.status, progressPct, done, total, exists: true,
+            ...(parent ? { parent } : {}),
+          });
         }
       }
     }
@@ -504,7 +593,7 @@ export class ChatTicketService {
         const s = (r.status ?? '').toLowerCase();
         const done = ROADMAP_DONE.has(s) ? 1 : 0;
         const progressPct = done ? 100 : (s === 'in_progress' || s === 'active' ? 50 : 0);
-        out.set(key('roadmap', id), { kind: 'roadmap', ref: id, label: r.title, status: r.status, progressPct, done, total: done ? 1 : 0, exists: true });
+        out.set(key('roadmap', id), { kind: 'roadmap', ref: id, label: r.title, status: r.status, progressPct, done, total: 1, exists: true });
       }
     }
 
@@ -520,7 +609,7 @@ export class ChatTicketService {
         const st = (s.status ?? '').toLowerCase();
         const done = st === 'complete' ? 1 : 0;
         const progressPct = done ? 100 : (st === 'in_progress' || st === 'ready' ? 50 : 0);
-        out.set(key('spec', id), { kind: 'spec', ref: id, label: s.goal, status: s.status, progressPct, done, total: done ? 1 : 0, exists: true });
+        out.set(key('spec', id), { kind: 'spec', ref: id, label: s.goal, status: s.status, progressPct, done, total: 1, exists: true });
       }
     }
 
@@ -549,7 +638,7 @@ export class ChatTicketService {
         const done = isCeremonySessionDone(r.status) ? 1 : 0;
         const items = itemsById.get(id) ?? 0;
         const progressPct = done ? 100 : (items > 0 ? 50 : 0);
-        out.set(key('retro', id), { kind: 'retro', ref: id, label: r.name, status: r.status, progressPct, done, total: done ? 1 : 0, exists: true });
+        out.set(key('retro', id), { kind: 'retro', ref: id, label: r.name, status: r.status, progressPct, done, total: 1, exists: true });
       }
     }
 
@@ -621,6 +710,76 @@ export class ChatTicketService {
     return links.map((l) => {
       const h = health.get(`${l.ticketKind}:${l.ticketRef}`) ?? missing(l.ticketKind as TicketKind, l.ticketRef);
       return { ...h, linkId: l.id, linkType: l.linkType as LinkType, createdBy: l.createdBy, createdAt: l.createdAt };
+    });
+  }
+
+  /**
+   * Per-chat ticket rollup for the conversation picker. ONE query for all links
+   * in `chatIds`, then the same health batch as the ticket rail. Fail-soft: a
+   * health miss returns an empty map so the chat list itself still renders.
+   */
+  async summarizeChatsTicketHealth(
+    tenantId: number,
+    chatIds: number[],
+  ): Promise<Map<number, { ticketCount: number; ticketProgressPct: number }>> {
+    const out = new Map<number, { ticketCount: number; ticketProgressPct: number }>();
+    if (chatIds.length === 0) return out;
+    try {
+      const links = await this.db
+        .select({
+          chatId: chatTicketLinks.chatId,
+          ticketKind: chatTicketLinks.ticketKind,
+          ticketRef: chatTicketLinks.ticketRef,
+        })
+        .from(chatTicketLinks)
+        .where(and(
+          eq(chatTicketLinks.tenantId, tenantId),
+          inArray(chatTicketLinks.chatId, chatIds),
+        ));
+      if (links.length === 0) return out;
+      const refs = links
+        .filter((l) => isTicketKind(l.ticketKind))
+        .map((l) => ({ kind: l.ticketKind as TicketKind, ref: l.ticketRef }));
+      const health = refs.length ? await this.ticketHealthBatch(tenantId, refs) : new Map<string, TicketHealth>();
+      const byChat = new Map<number, TicketHealth[]>();
+      for (const l of links) {
+        const kind = isTicketKind(l.ticketKind) ? l.ticketKind : null;
+        const h = kind
+          ? (health.get(`${kind}:${l.ticketRef}`) ?? missing(kind, l.ticketRef))
+          : missing('task', l.ticketRef);
+        const list = byChat.get(l.chatId) ?? [];
+        list.push(h);
+        byChat.set(l.chatId, list);
+      }
+      for (const [chatId, tickets] of byChat) {
+        out.set(chatId, {
+          ticketCount: tickets.length,
+          ticketProgressPct: rollupChatTicketHealth(tickets).pct,
+        });
+      }
+      return out;
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'application/brain/ChatTicketService.ts',
+        operation: 'summarizeChatsTicketHealth',
+      });
+      return out;
+    }
+  }
+
+  /** Fold ticketCount + ticketProgressPct onto chat rows for the picker. */
+  async attachChatTicketSummaries<T extends { id: number }>(
+    tenantId: number,
+    rows: T[],
+  ): Promise<Array<T & { ticketCount: number; ticketProgressPct: number | null }>> {
+    const summaries = await this.summarizeChatsTicketHealth(tenantId, rows.map((r) => r.id));
+    return rows.map((r) => {
+      const s = summaries.get(r.id);
+      return {
+        ...r,
+        ticketCount: s?.ticketCount ?? 0,
+        ticketProgressPct: s ? s.ticketProgressPct : null,
+      };
     });
   }
 
@@ -980,4 +1139,26 @@ export class ChatTicketService {
 
 function missing(kind: TicketKind, ref: string): TicketHealth {
   return { kind, ref, label: '(deleted)', status: 'unknown', progressPct: 0, done: 0, total: 0, exists: false };
+}
+
+/**
+ * Chat-level rollup of linked ticket health. Mirrors
+ * `packages/brain-ui/src/chatTickets/aggregateTicketHealth.ts` — keep them in
+ * lockstep: a ticket with `total: 0` still counts as weight 1 so a 0% ring
+ * cannot vanish from the conversation's overall %.
+ */
+export function rollupChatTicketHealth(
+  tickets: ReadonlyArray<{ progressPct: number; done: number; total: number }>,
+): { pct: number; done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  let weightedPct = 0;
+  for (const tk of tickets) {
+    const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
+    const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
+    done += Number.isFinite(tk.done) ? tk.done : 0;
+    total += weight;
+    weightedPct += pct * weight;
+  }
+  return { pct: tickets.length ? Math.round(weightedPct / total) : 0, done, total };
 }

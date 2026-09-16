@@ -28,6 +28,7 @@ import { handleAssetSign, handleAssetUpload, handleTenantAssetRead } from './ass
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
+import { latestChatDiagnostics, saveChatDiagnostics } from '../../application/brain/chatDiagnosticsStore';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
@@ -38,6 +39,7 @@ import {
   AgentReplyBody,
   AppendMessagesBody,
   AppendTraceBody,
+  ChatDiagnosticsBody,
   ClaimGuestRoomBody,
   ConsolidateChatsBody,
   CreateChatBody,
@@ -63,6 +65,10 @@ function parseId(raw: string): number | null {
 /** Per-chat version token for the cached trace read — bumped on every append so
  *  the next GET /chats/:id/trace re-loads (the trace keyspace folds this token in). */
 const traceVersionKey = (chatId: number): string => `brain-trace-version:chat:${chatId}`;
+
+/** Per-chat version token for the cached diagnostics read — same scheme as the trace's,
+ *  bumped on every capture so the next GET sees it without a per-chat cache key to purge. */
+const diagnosticsVersionKey = (chatId: number): string => `brain-diagnostics-version:chat:${chatId}`;
 
 // ---------------------------------------------------------------------------
 // Route factory
@@ -103,7 +109,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
         offset: offsetParam(c.req.query('offset')),
       },
     );
-    return c.json({ chats: rows });
+    const chats = await new ChatTicketService(db, c.env as Env)
+      .attachChatTicketSummaries(c.get('tenantId') as number, rows);
+    return c.json({ chats });
   });
 
   // POST /chats
@@ -156,7 +164,13 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
     const chat = await brainService.getChat(id, c.get('tenantId') as number, c.get('userId') as string);
     if (!chat) return c.json({ error: 'Chat not found' }, 404);
-    return c.json(chat);
+    // `getChat`'s return type is widened through an internal `Record<string, unknown>`
+    // cast (BrainService.ts), so it loses the `id` property TS can see even though the
+    // row has it — this route already knows it (the validated route param), so restate
+    // it rather than widen ChatTicketService's `T extends { id: number }` constraint.
+    const [withTickets] = await new ChatTicketService(db, c.env as Env)
+      .attachChatTicketSummaries(c.get('tenantId') as number, [{ ...chat, id }]);
+    return c.json(withTickets);
   });
 
   // PATCH /chats/:id
@@ -413,6 +427,43 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
     });
     return c.json(result, 201);
+  });
+
+  // ── Captured diagnostics ────────────────────────────────────────────────────
+  // The per-STEP trace above says what happened; a capture says what it MEANT. Same
+  // access check, because the verdict is about the same conversation.
+
+  // POST /chats/:id/diagnostics — store one ChatDiagnosticsReport.
+  router.post('/chats/:id/diagnostics', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
+
+    const { report } = await parseBody(c, ChatDiagnosticsBody);
+    const saved = await saveChatDiagnostics(db, { chatId: id, tenantId, report });
+    await bumpCacheVersion(c.env as Env, diagnosticsVersionKey(id)).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "saveChatDiagnostics" });
+    });
+    return c.json(saved, 201);
+  });
+
+  // GET /chats/:id/diagnostics — the latest captures, newest first.
+  router.get('/chats/:id/diagnostics', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
+
+    const limit = limitParam(c.req.query('limit'), 1, 25);
+    const token = await getCacheVersion(c.env as Env, diagnosticsVersionKey(id));
+    const key = `brain-diagnostics:chat:${id}:v:${token}:l:${limit}`;
+    const diagnostics = await getOrSetCached(c.env as Env, key, () => latestChatDiagnostics(db, id, limit));
+    return c.json({ diagnostics });
   });
 
   // POST /chats/:id/summarize

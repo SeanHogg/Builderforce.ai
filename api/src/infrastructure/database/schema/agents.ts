@@ -2181,6 +2181,43 @@ export const brainChatTrace = pgTable('brain_chat_trace', {
   index('idx_brain_chat_trace_chat').on(t.chatId, t.id),
 ]);
 
+/**
+ * ONE CAPTURED VERDICT about a Brain chat (migration 1178).
+ *
+ * The sibling above is PER-STEP and says what happened. This is per-CAPTURE and says what
+ * it meant: the surface the run was on, the cause the capture concluded ("tool budget",
+ * "nobody staffed", "model refused"), and the full report — token/tool pressure, the model
+ * turns, the error steps, the staffing summary — as one JSON document.
+ *
+ * `likelyCause` is a COLUMN rather than a path inside `report` on purpose: the reports'
+ * value is partly cross-chat ("how often is this the reason?"), and that question must be
+ * an index scan, not a jsonb extraction per row.
+ *
+ * `capturedAt` is the client's instant, `createdAt` the server's. Keeping both means a
+ * slow upload cannot reorder captures relative to when they were actually taken.
+ */
+export const brainChatDiagnostics = pgTable('brain_chat_diagnostics', {
+  id:            serial('id').primaryKey(),
+  chatId:        integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  /** Scoped so a cross-chat question ("which cause is this workspace hitting?") never
+   *  reaches another tenant's rows — the chat alone would make that a join. */
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Where the run was: 'vscode' | 'canvas' | 'web' | … (the capturer's own vocabulary). */
+  surface:       varchar('surface', { length: 32 }).notNull(),
+  /** The report's own shape version — a reader that does not know it can say so instead
+   *  of mis-reading fields that moved. */
+  schemaVersion: integer('schema_version').notNull().default(1),
+  /** The capture's verdict, e.g. 'tool_budget' | 'no_staffed_agent' | 'stream_error'.
+   *  Null when the capture could not name one — which is itself worth recording. */
+  likelyCause:   varchar('likely_cause', { length: 64 }),
+  capturedAt:    timestamp('captured_at', { withTimezone: true }).notNull(),
+  report:        jsonb('report').notNull(),
+  createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_brain_chat_diagnostics_chat').on(t.chatId, t.id),
+  index('idx_brain_chat_diagnostics_cause').on(t.tenantId, t.likelyCause),
+]);
+
 
 // ---------------------------------------------------------------------------
 // Prompt Library — versioned prompt templates with a public gallery
