@@ -1,2 +1,1 @@
--- WRITE TEST for repo bind verification -- this is a temporary probe
-SELECT 1;
+-- removed: write-probe file, not part of this ticket. See PRD note (exec 32069).
