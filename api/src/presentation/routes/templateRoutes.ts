@@ -198,6 +198,7 @@ export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
       env: c.env as Env,
       tenantId,
       segmentId: c.get('segmentId') ?? null,
+      installedByUserId: (c.get('userId') as string | undefined) ?? null,
       template,
       answers: coerceAnswers(body.answers),
     });

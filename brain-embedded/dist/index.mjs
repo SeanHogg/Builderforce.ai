@@ -2255,6 +2255,15 @@ function isStoppedTurn(msg) {
   }
 }
 
+// src/mergeTranscript.ts
+function mergeTranscript(base, extra) {
+  if (extra.length === 0) return base;
+  const have = new Set(base.map((m) => m.id));
+  const fresh = extra.filter((m) => !have.has(m.id));
+  if (fresh.length === 0) return base;
+  return [...base, ...fresh].sort((a, b) => a.seq - b.seq);
+}
+
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
 function consolidationMetadata() {
@@ -6678,6 +6687,15 @@ function pushDurableStep(c, chatId, persistence, ev) {
   pushTrace(c, ev);
   persistStep(chatId, persistence, ev);
 }
+function recordRunFailure(c, chatId, persistence, label, message) {
+  pushDurableStep(c, chatId, persistence, {
+    ts: nowIso(),
+    category: "error",
+    label,
+    result: message,
+    isError: true
+  });
+}
 function recordAppended(c, msg) {
   const next = [...c.appended, msg];
   c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
@@ -6904,6 +6922,7 @@ async function startRun(chatId, req) {
     if (!c.abort?.signal.aborted) {
       c.error = e instanceof Error ? e.message : "Reply failed";
       c.errorAction = chatErrorAction(e);
+      recordRunFailure(c, chatId, req.persistence, "agent.run", c.error);
     }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
@@ -7918,13 +7937,13 @@ ${revisit}` : covered.note;
   }
   if (c.abort?.signal.aborted) return;
   c.streamingText = "";
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "error",
-    label: "agent.loop",
-    result: `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`,
-    isError: true
-  });
+  recordRunFailure(
+    c,
+    chatId,
+    req.persistence,
+    "agent.loop",
+    `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`
+  );
   c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
   emit(c);
 }
@@ -7997,7 +8016,7 @@ function useBrainConversation(options) {
     setLoadingMessages(true);
     setLocalError("");
     persistence.getMessages(chatId).then((list) => {
-      if (!cancelled) setMessages(list);
+      if (!cancelled) setMessages(mergeTranscript(list, getRunSnapshot(chatId).appended));
     }).catch((e) => {
       if (!cancelled) setLocalError(e instanceof Error ? e.message : "Failed to load messages");
     }).finally(() => {
@@ -8027,11 +8046,7 @@ function useBrainConversation(options) {
   useEffect6(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
-    setMessages((prev) => {
-      const have = new Set(prev.map((m) => m.id));
-      const fresh = appended.filter((m) => !have.has(m.id));
-      return fresh.length === 0 ? prev : [...prev, ...fresh];
-    });
+    setMessages((prev) => mergeTranscript(prev, appended));
   }, [snapshot.messagesEpoch, snapshot.appended]);
   useEffect6(() => {
     const map = {};

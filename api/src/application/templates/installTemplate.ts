@@ -36,6 +36,8 @@ export interface InstallTemplateArgs {
   env: Env;
   tenantId: number;
   segmentId: string | null;
+  /** Who pressed install, when the caller knows. Provenance only. */
+  installedByUserId?: string | null;
   template: ResolvedTemplate;
   answers: GuidedAnswers;
 }
@@ -132,7 +134,7 @@ async function recordInstall(db: Db, env: Env, tenantId: number, template: Resol
 }
 
 export async function installTemplate(args: InstallTemplateArgs): Promise<InstallTemplateResult> {
-  const { db, env, tenantId, segmentId, template, answers } = args;
+  const { db, env, tenantId, segmentId, installedByUserId, template, answers } = args;
   const { manifest } = template;
 
   // 1 — re-validate, with every step treated as visited.
@@ -162,6 +164,7 @@ export async function installTemplate(args: InstallTemplateArgs): Promise<Instal
     env,
     tenantId,
     segmentId,
+    installedByUserId: installedByUserId ?? null,
     projectId: project?.id ?? null,
     projectKey: project?.key ?? null,
     ...resolveRunTarget(effective),

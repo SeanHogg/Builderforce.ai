@@ -13,7 +13,7 @@ import {
   canvasSessionClusters,
 } from '@/lib/canvasSessionActions';
 import { CANVAS_SURFACES, canvasSurfaceDefinition } from '@/lib/canvasSurfaces';
-import { canvasBarGroup } from '@/lib/canvasBarGroups';
+import { CANVAS_BAR_GROUP_ORDER, canvasBarGroup } from '@/lib/canvasBarGroups';
 import enMessages from '@/i18n/messages/en.json';
 import { CreationCanvas } from './CreationCanvas';
 
@@ -239,17 +239,24 @@ describe('the session actions on the canvas', () => {
     const sheet = screen.getByTestId('canvas-actions-sheet');
 
     for (const def of canvasSessionActionsFor('graph')) {
+      // A local board withdraws Prove rather than gating it — the header already offers
+      // "Keep your work" for the same canvas. The registry still lists it; the host does
+      // not. Assert the withdrawal below instead of treating the registry as the sheet.
+      if (def.id === 'prove') continue;
       const label = canvasCopy(def.labelKey) as string;
       expect(within(sheet).getByRole('button', { name: label }), def.id).toBeInTheDocument();
     }
     // The doors out are IN it — they were the one thing the old overflow left out,
     // because they had a worded button of their own on a bar a phone no longer draws.
     expect(within(sheet).getByRole('button', { name: 'Publish' })).toBeInTheDocument();
-    expect(within(sheet).getByRole('button', { name: 'Prove it' })).toBeInTheDocument();
+    expect(within(sheet).queryByRole('button', { name: 'Prove it' })).toBeNull();
     // …under the SAME arc captions the desktop bar uses, resolved by the same component,
-    // so the two chromes cannot drift into two vocabularies for one set of groups.
-    expect(within(sheet).getByRole('group', { name: 'Make — shape what is on the board' })).toBeInTheDocument();
-    expect(within(sheet).getByRole('group', { name: 'This board' })).toBeInTheDocument();
+    // so the two chromes cannot drift into two vocabularies for one set of groups — and
+    // in the SAME order the bar walks them (`CANVAS_BAR_GROUP_ORDER`).
+    const groups = within(sheet).getAllByRole('group')
+      .map((el) => el.getAttribute('data-group'))
+      .filter((id): id is string => Boolean(id));
+    expect(groups).toEqual([...CANVAS_BAR_GROUP_ORDER]);
   });
 
   /** A sheet is responsible for being closable — from its own header and on Escape.
@@ -280,12 +287,15 @@ describe('the session actions on the canvas', () => {
    * inert rather than absent — "you cannot call from here yet" is a thing the bar should
    * say, and a missing button says nothing.
    */
-  it('offers the call from the ••• sheet on a canvas with no room, and draws no dock', () => {
+  it('offers the call from the command bar on a canvas with no room, and draws no dock', () => {
     render(<CreationCanvas sessionId="session-actions-call-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
 
-    const call = within(screen.getByTestId('canvas-more-menu')).getByRole('button', { name: 'Start call' });
+    const call = within(screen.getByTestId('canvas-command-bar')).getByRole('button', { name: 'Start call' });
     expect(call).toBeDisabled();
+    // Session actions live on the command bar (and the phone's "+" sheet), not in the
+    // board menu — that sheet is board errands only. A local canvas with no room still
+    // draws the control inert rather than absent.
+    expect(screen.queryByTestId('canvas-more-menu')).toBeNull();
     // The dock belongs to a RUNNING call. Nothing about an idle canvas may reserve the
     // band it occupies, which is the whole reason the dormant strip went.
     expect(screen.queryByRole('region', { name: 'Live session' })).toBeNull();
@@ -313,14 +323,14 @@ describe('the session actions on the canvas', () => {
 
   /** Acting from the sheet dismisses the sheet — a menu that stays open over the panel it
    *  just opened is a menu in the way. */
-  it('closes the ••• sheet when one of its session actions runs', () => {
+  it('closes the actions sheet when one of its session actions runs', () => {
     render(<CreationCanvas sessionId="session-actions-dismiss-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+    fireEvent.click(screen.getByTestId('canvas-actions-trigger'));
 
-    const sheet = screen.getByTestId('canvas-more-menu');
+    const sheet = screen.getByTestId('canvas-actions-sheet');
     fireEvent.click(within(sheet).getByRole('button', { name: 'View outcome metrics' }));
 
-    expect(screen.queryByTestId('canvas-more-menu')).toBeNull();
+    expect(screen.queryByTestId('canvas-actions-sheet')).toBeNull();
     expect(screen.getByRole('complementary', { name: 'Session outcome metrics' })).toBeInTheDocument();
   });
 

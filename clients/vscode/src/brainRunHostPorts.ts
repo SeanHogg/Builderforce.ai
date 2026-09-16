@@ -51,7 +51,16 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     persistence: {
       async sendMessages(chatId, messages): Promise<BrainMessage[]> {
         const r = await postBrainMessages(secrets, chatId, messages);
-        if (!r) throw new Error("Could not save the turn — sign in again and retry.");
+        // Say which failure it was. "Sign in again" is advice a person can only act on
+        // when signing in is the problem; for a dropped connection it sends them to fix
+        // something that was never broken, and hides the reason the turn was lost.
+        if (!r.ok) {
+          throw new Error(
+            r.signedOut
+              ? "Could not save the turn — sign in again and retry."
+              : `Could not save the turn — ${r.reason}`,
+          );
+        }
         // The server's truthful learn-gate outcome rides on the assistant turn(s) so
         // the run renders a learn step — or an explained skip — exactly as the web does.
         return attachEvermindLearn(r.messages, r.evermindLearn);

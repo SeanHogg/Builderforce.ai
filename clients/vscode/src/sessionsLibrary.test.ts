@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BfBrainChat, BfCreationSessionSummary } from "./bfApi";
-import { sessionsLibraryGroup, sessionsLibraryRows } from "./sessionsLibrary";
+import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup } from "./sessionsLibrary";
 
 function board(overrides: Partial<BfCreationSessionSummary> = {}): BfCreationSessionSummary {
   return { id: "s1", title: "Launch plan", revision: 1, lastActivityAt: "2026-09-05T10:00:00.000Z", ...overrides };
@@ -96,5 +96,43 @@ describe("sessionsLibraryGroup", () => {
     expect(sessionsLibraryGroup(rows, "pinned").map((row) => row.title)).toEqual(["Pinned board"]);
     expect(sessionsLibraryGroup(rows, "shared").map((row) => row.title)).toEqual(["Shared board"]);
     expect(sessionsLibraryGroup(rows, "running").map((row) => row.title)).toEqual(["Running board"]);
+  });
+});
+
+describe("sessionsLibraryRowId", () => {
+  const groups: SessionsLibraryGroup[] = ["all", "pinned", "shared", "running"];
+
+  it("gives a row a DIFFERENT id in each group it appears in", () => {
+    // A pinned, shared or running row is drawn twice — once under "Recent" and once
+    // under its facet. VS Code keys tree items by id across the whole tree, so the
+    // same id in two groups makes the second row displace the first and takes the
+    // displaced row's command with it ("Actual command not found, wanted to execute
+    // builderforce.openSession" on click).
+    const rows = sessionsLibraryRows({
+      sessions: [board({ id: "p", pinned: true, collaboratorCount: 3, preview: { objects: [{ status: "running" }] } })],
+      chats: [chat({ id: 2067 })],
+      runningChatIds: new Set([2067]),
+    });
+
+    const ids = groups.flatMap((group) =>
+      sessionsLibraryGroup(rows, group).map((row) => sessionsLibraryRowId(group, row)),
+    );
+
+    expect(ids.length).toBeGreaterThan(rows.length);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps a board and a conversation apart even on the same numeric id", () => {
+    const rows = sessionsLibraryRows({ sessions: [board({ id: "5" })], chats: [chat({ id: 5 })] });
+
+    const ids = rows.map((row) => sessionsLibraryRowId("all", row));
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it("is stable across refreshes so a row keeps its place", () => {
+    const build = () => sessionsLibraryRows({ sessions: [board({ id: "s1" })], chats: [chat({ id: 9 })] });
+
+    expect(build().map((row) => sessionsLibraryRowId("all", row)))
+      .toEqual(build().map((row) => sessionsLibraryRowId("all", row)));
   });
 });

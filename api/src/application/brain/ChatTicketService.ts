@@ -16,6 +16,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * batched across a chat's links (≤ one query per tier, never N+1).
  */
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { readTimelineTail } from '../../domain/shared/timelineTail';
 import {
   brainChats,
   brainChatMessages,
@@ -688,12 +689,16 @@ export class ChatTicketService {
   ): Promise<{ error: string } | Array<{ role: string; content: string; seq: number; createdAt: Date }>> {
     const chat = await this.ownedChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' };
-    return this.db
-      .select({ role: brainChatMessages.role, content: brainChatMessages.content, seq: brainChatMessages.seq, createdAt: brainChatMessages.createdAt })
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId))
-      .orderBy(brainChatMessages.seq)
-      .limit(Math.min(limit, 500));
+    return readTimelineTail(
+      (rows) => this.db
+        .select({ role: brainChatMessages.role, content: brainChatMessages.content, seq: brainChatMessages.seq, createdAt: brainChatMessages.createdAt })
+        .from(brainChatMessages)
+        .where(eq(brainChatMessages.chatId, chatId))
+        .orderBy(desc(brainChatMessages.seq))
+        .limit(rows),
+      limit,
+      500,
+    );
   }
 
   // ── links (forward: chat → tickets) ───────────────────────────────────────

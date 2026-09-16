@@ -19,7 +19,6 @@ import {
   creationSessionComments,
   creationSessionClaims,
   brainChats,
-  brainChatMessages,
   creationSessionEvents,
   creationSessionFolders,
   creationSessionMembers,
@@ -58,6 +57,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env, HonoEnv } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { resolveChatAccess } from '../../application/brain/chatAccess';
+import { BrainService } from '../../application/brain/BrainService';
 import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
@@ -2859,8 +2859,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       title = String(chat.title || 'Brain session');
       projectId = chat.projectId == null ? null : Number(chat.projectId);
       kind = 'chat';
-      initialTimeline = await db.select({ id: brainChatMessages.id, role: brainChatMessages.role, content: brainChatMessages.content, createdAt: brainChatMessages.createdAt })
-        .from(brainChatMessages).where(eq(brainChatMessages.chatId, chatId)).orderBy(asc(brainChatMessages.seq), asc(brainChatMessages.id)).limit(500);
+      // Through the application port, not the table: `getMessages` is THE transcript
+      // read (access-checked, and windowed to the tail by `readTimelineTail`), so the
+      // session seed cannot drift from what the chat itself shows.
+      const transcript = await new BrainService(db).getMessages(chatId, tenantId, userId, 500);
+      if ('error' in transcript) return c.json({ error: transcript.error }, 404);
+      initialTimeline = transcript.map((m) => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }));
     } else if (resourceType === 'workflow') {
       if (!UUID_RE.test(resourceId)) return c.json({ error: 'Invalid workflow id' }, 400);
       const [definition] = await db.select({ id: workflowDefinitions.id, name: workflowDefinitions.name, projectId: workflowDefinitions.projectId })

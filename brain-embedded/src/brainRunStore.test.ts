@@ -110,6 +110,51 @@ describe('a user Stop keeps what it cut off', () => {
   });
 });
 
+describe('a run that ends badly leaves a durable record', () => {
+  type Sent = { role: string; content: string; metadata?: string };
+  const recorder = () => {
+    const sent: Sent[] = [];
+    const persistence = {
+      sendMessages: async (chatId: number, msgs: Sent[]) => {
+        sent.push(...msgs);
+        return msgs.map((m, i) => ({ id: 2000 + sent.length + i, chatId, createdAt: '', ...m }));
+      },
+    } as never;
+    return { sent, persistence };
+  };
+  const stepsIn = (sent: Sent[]) =>
+    sent.filter((m) => m.role === 'tool').map((m) => JSON.parse(m.metadata ?? '{}'));
+
+  it('persists the terminal error, so a reopened chat does not just stop', async () => {
+    const { sent, persistence } = recorder();
+    const stream: BrainStreamFn = () => Promise.reject(new Error('Could not save the turn — network unreachable'));
+    await startRun(4270, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+
+    const failure = stepsIn(sent).find((s) => s.label === 'agent.run');
+    expect(failure).toBeTruthy();
+    expect(failure.isError).toBe(true);
+    expect(failure.category).toBe('error');
+    expect(failure.result).toContain('network unreachable');
+    // Live trace AND the durable row — the point is that the two agree.
+    expect(getRunTrace(4270).some((e) => e.label === 'agent.run' && e.isError)).toBe(true);
+  });
+
+  it('records nothing extra for a user Stop — that is a clean exit, not a failure', async () => {
+    const { sent, persistence } = recorder();
+    let streaming!: () => void;
+    const started = new Promise<void>((resolve) => { streaming = resolve; });
+    const stream: BrainStreamFn = (opts) => new Promise((_r, reject) => {
+      opts.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      streaming();
+    });
+    const run = startRun(4271, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
+    await started;
+    stopRun(4271);
+    await run;
+    expect(stepsIn(sent).some((s) => s.label === 'agent.run')).toBe(false);
+  });
+});
+
 describe('brainRunStore cell eviction', () => {
   it('evicts least-recently-used idle cells beyond the cap', () => {
     // Subscribe-then-immediately-unsubscribe leaves each cell idle (no listener,

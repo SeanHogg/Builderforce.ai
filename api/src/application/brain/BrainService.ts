@@ -16,6 +16,7 @@ import {
   tenantMembers,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { readTimelineTail } from '../../domain/shared/timelineTail';
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, newTraceId, type ChatCompletionRequest, type LlmProxyService, type ProxyResult } from '../llm/LlmProxyService';
 import { logTrace } from '../llm/traceLogger';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
@@ -795,13 +796,17 @@ export class BrainService {
   async readTeamChat(tenantId: number, scope: TeamChatScope, limit = 30) {
     const resolved = await this.getOrCreateTeamChat(tenantId, null, scope);
     if ('error' in resolved) return resolved;
-    const msgs = await this.db
-      .select(messageColumns)
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, resolved.id as number))
-      .orderBy(desc(brainChatMessages.seq))
-      .limit(Math.min(Math.max(1, limit), 100));
-    return { chatId: resolved.id, messages: msgs.reverse() };
+    const msgs = await readTimelineTail(
+      (rows) => this.db
+        .select(messageColumns)
+        .from(brainChatMessages)
+        .where(eq(brainChatMessages.chatId, resolved.id as number))
+        .orderBy(desc(brainChatMessages.seq))
+        .limit(rows),
+      limit,
+      100,
+    );
+    return { chatId: resolved.id, messages: msgs };
   }
 
   /** Post a message INTO a team chat as an agent (agent-facing — no human userId
@@ -903,18 +908,23 @@ export class BrainService {
   // Messages
   // -----------------------------------------------------------------------
 
+  /** A chat's transcript: the MOST RECENT `limit` messages, oldest-first.
+   *  The window is the tail, not the head — see {@link readTimelineTail} for why
+   *  that distinction is what makes a reopened chat still show its last reply. */
   async getMessages(chatId: number, tenantId: number, userId: string, limit = 100) {
     const chat = await this.canAccessChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
 
-    const msgs = await this.db
-      .select(messageColumns)
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId))
-      .orderBy(brainChatMessages.seq)
-      .limit(Math.min(limit, 500));
-
-    return msgs;
+    return readTimelineTail(
+      (rows) => this.db
+        .select(messageColumns)
+        .from(brainChatMessages)
+        .where(eq(brainChatMessages.chatId, chatId))
+        .orderBy(desc(brainChatMessages.seq))
+        .limit(rows),
+      limit,
+      500,
+    );
   }
 
   /** Advance the caller's read high-water mark for a chat (unread-badge state).
@@ -1064,15 +1074,21 @@ export class BrainService {
     return { appended: rows.length };
   }
 
-  /** Read a chat's persisted trace timeline, oldest-first (insert order). NO access
-   *  check — the route gates + wraps this in the read-through cache. */
+  /** Read a chat's persisted trace timeline, oldest-first (insert order), capped to
+   *  its MOST RECENT `limit` steps so a long run keeps the steps that explain the
+   *  reply on screen rather than the ones that opened the chat. NO access check —
+   *  the route gates + wraps this in the read-through cache. */
   async getTrace(chatId: number, limit = 500) {
-    return this.db
-      .select(traceColumns)
-      .from(brainChatTrace)
-      .where(eq(brainChatTrace.chatId, chatId))
-      .orderBy(brainChatTrace.id)
-      .limit(Math.min(Math.max(1, limit), 2000));
+    return readTimelineTail(
+      (rows) => this.db
+        .select(traceColumns)
+        .from(brainChatTrace)
+        .where(eq(brainChatTrace.chatId, chatId))
+        .orderBy(desc(brainChatTrace.id))
+        .limit(rows),
+      limit,
+      2000,
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -1119,12 +1135,16 @@ export class BrainService {
     const apiKey = env.OPENROUTER_API_KEY;
     if (!apiKey) return { error: 'LLM not configured' as const };
 
-    const msgs = await this.db
-      .select(messageColumns)
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId))
-      .orderBy(brainChatMessages.seq)
-      .limit(80);
+    const msgs = await readTimelineTail(
+      (rows) => this.db
+        .select(messageColumns)
+        .from(brainChatMessages)
+        .where(eq(brainChatMessages.chatId, chatId))
+        .orderBy(desc(brainChatMessages.seq))
+        .limit(rows),
+      80,
+      80,
+    );
     if (msgs.length === 0) return { error: 'Nothing to reply to' as const };
     // Client fan-out AND sendMessages waitUntil can both call this for the same
     // turn; return the already-posted reply instead of running the LLM twice.
@@ -2004,12 +2024,16 @@ export class BrainService {
     }) as { id: number; projectId: number | null } | null;
     if (!chat) return { error: 'Chat not found' as const };
 
-    const msgs = await this.db
-      .select({ role: brainChatMessages.role, content: brainChatMessages.content })
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId))
-      .orderBy(brainChatMessages.seq)
-      .limit(500);
+    const msgs = await readTimelineTail(
+      (rows) => this.db
+        .select({ role: brainChatMessages.role, content: brainChatMessages.content })
+        .from(brainChatMessages)
+        .where(eq(brainChatMessages.chatId, chatId))
+        .orderBy(desc(brainChatMessages.seq))
+        .limit(rows),
+      500,
+      500,
+    );
 
     if (msgs.length < 2) {
       return { summary: null, reason: 'Not enough messages to summarize' };

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { DASHBOARD_VERTICALS } from '@builderforce/creation-canvas-contract';
 import {
+  ALL_DASHBOARD_PRESETS,
   DASHBOARD_PRESETS,
   applyDashboardPreset,
   isPresetKey,
@@ -100,6 +102,58 @@ describe('the Executive preset', () => {
   it('gives every tile a distinct identity', () => {
     const ids = DASHBOARD_PRESETS.executive.tiles.map(tileIdentity);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('founder + vertical presets (PRD 25 A2)', () => {
+  it('declares one preset per vertical, plus the founder layer', () => {
+    // Derived from the contract's list, so a vertical added there without a
+    // preset here is a failing test rather than a template that installs nothing.
+    const keys = new Set<string>(listPresetKeys());
+    expect(keys.has('founder')).toBe(true);
+    for (const vertical of DASHBOARD_VERTICALS) expect(keys.has(vertical), vertical).toBe(true);
+  });
+
+  it('opens every vertical with the founder layer', () => {
+    // The promise of the slice: whatever your sector, the dashboard leads with
+    // runway and ownership. A vertical that drifts off that is a regression.
+    const founder = ALL_DASHBOARD_PRESETS.founder.tiles.map(tileIdentity);
+    for (const vertical of DASHBOARD_VERTICALS) {
+      const ids = ALL_DASHBOARD_PRESETS[vertical].tiles.map(tileIdentity);
+      expect(ids.slice(0, founder.length), vertical).toEqual(founder);
+      // …and adds the peer comparison the vertical exists to provide.
+      expect(ids, vertical).toContain('w:bench.position');
+    }
+  });
+
+  it('leads with runway — the only number that can end the company', () => {
+    expect(ALL_DASHBOARD_PRESETS.founder.tiles.map(tileIdentity)[0]).toBe('m:finance.runwayMonths');
+  });
+
+  it('names only whitelisted metric keys and declared widget ids', () => {
+    // A preset naming a retired metric materialises a tile that renders "unknown
+    // metric", and nothing upstream would have complained.
+    const declared = new Set<string>(COMPOSABLE_WIDGET_IDS);
+    for (const [key, preset] of Object.entries(ALL_DASHBOARD_PRESETS)) {
+      expect(presetMetricKeysAreWhitelisted(preset), key).toBe(true);
+      for (const tile of preset.tiles) {
+        if ('widgetKey' in tile) expect(declared.has(String(tile.widgetKey)), String(tile.widgetKey)).toBe(true);
+      }
+    }
+  });
+
+  it('gives every preset distinct tiles and a distinct name', () => {
+    const names = new Set<string>();
+    for (const [key, preset] of Object.entries(ALL_DASHBOARD_PRESETS)) {
+      const ids = preset.tiles.map(tileIdentity);
+      // Duplicate identities would make the reconcile insert one and skip the
+      // other forever, leaving a preset that can never fully materialise.
+      expect(new Set(ids).size, key).toBe(ids.length);
+      // Names are the idempotence key: two presets sharing one would collide on
+      // (tenant, segment, name) and silently merge into a single dashboard.
+      expect(names.has(preset.name), preset.name).toBe(false);
+      names.add(preset.name);
+    }
   });
 });
 

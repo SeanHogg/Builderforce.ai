@@ -25,11 +25,13 @@ import { formatTaskKey, nextProjectKeySeqBase } from '../task/taskKeys';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { createWorkflowDefinition, coerceRunTarget } from '../workflow/definitionStore';
 import type {
+  DashboardOutput,
   TasksOutput,
   TemplateOutput,
   TemplateOutputKind,
   WorkflowOutput,
 } from '../../domain/template/templateManifest';
+import { dashboardOutputKind } from './dashboardOutput';
 
 /** What one materialiser produced. `ref` is the created row's id, so the UI can
  *  link straight to the thing rather than telling somebody to go and look. */
@@ -53,6 +55,13 @@ export interface MaterializeOutputContext {
   env: Env;
   tenantId: number;
   segmentId: string | null;
+  /**
+   * Who pressed install, when the route knows. `savedDashboards.createdBy` is a
+   * nullable string, and the install route carries no user today, so this is
+   * null far more often than not — a materialiser must treat it as optional
+   * provenance, never as an authorisation fact.
+   */
+  installedByUserId: string | null;
   /** Project the install files things under, when the setup collected one. */
   projectId: number | null;
   projectKey: string | null;
@@ -225,3 +234,13 @@ registerOutputKind<TasksOutput>({
     };
   },
 });
+
+// ---------------------------------------------------------------------------
+// dashboard
+// ---------------------------------------------------------------------------
+// The materialiser itself lives in `dashboardOutput.ts` (PRD 25 A1) because it
+// reaches into the dashboard preset library and the benchmark profile writer,
+// and inlining it here would make this registry depend on half the insights
+// layer. That module imports this one for TYPES ONLY, so the dependency runs one
+// way and the registration stays here, in registration order.
+registerOutputKind<DashboardOutput>(dashboardOutputKind);

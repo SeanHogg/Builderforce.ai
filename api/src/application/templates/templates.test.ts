@@ -87,11 +87,22 @@ describe('output kinds', () => {
     // The sentence the installer files against a stranded output and the save path
     // refuses a manifest with. "Unknown kind" sends a person to the source; the
     // list lets them fix the manifest.
-    expect(outputKindSpec('dashboard')).toBeNull();
-    const reason = uninstallableOutputError('dashboard');
-    expect(reason).toContain('"dashboard"');
+    // `mailbox` is deliberately a kind nothing declares or registers — the test
+    // needs a stranded kind, and `dashboard` stopped being one when PRD 25 A1
+    // registered its materialiser.
+    expect(outputKindSpec('mailbox')).toBeNull();
+    const reason = uninstallableOutputError('mailbox');
+    expect(reason).toContain('"mailbox"');
     for (const kind of TEMPLATE_OUTPUT_KINDS) expect(reason).toContain(kind);
     expect(reason).toMatch(/Installable kinds: /);
+  });
+
+  it('installs a dashboard output kind (PRD 25 A1)', () => {
+    // The vertical-KPI slice's whole delivery mechanism: a template install is
+    // how a founder gets the dashboard, so the kind must be both declarable and
+    // materialisable.
+    expect(TEMPLATE_OUTPUT_KINDS).toContain('dashboard');
+    expect(outputKindSpec('dashboard')).not.toBeNull();
   });
 });
 

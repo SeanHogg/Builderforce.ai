@@ -37,6 +37,7 @@ import {
 } from '../guidedSetup/guidedStep';
 import { referencedBindings } from '../guidedSetup/guidedPlan';
 import { parseDefinition, validateDefinition, type WorkflowDefinition } from '../workflowGraph';
+import { isStartupSector } from '@builderforce/creation-canvas-contract';
 
 export type { RequiredConnector, RequiredSecret };
 
@@ -70,7 +71,7 @@ export function isTemplateCategory(v: unknown): v is TemplateCategory {
 // Outputs
 // ---------------------------------------------------------------------------
 
-export const TEMPLATE_OUTPUT_KINDS = ['workflow', 'tasks'] as const;
+export const TEMPLATE_OUTPUT_KINDS = ['workflow', 'tasks', 'dashboard'] as const;
 export type TemplateOutputKind = (typeof TEMPLATE_OUTPUT_KINDS)[number];
 
 /** An automation the install creates and wires up. */
@@ -105,7 +106,27 @@ export interface TasksOutput {
   items: TemplateTask[];
 }
 
-export type TemplateOutput = WorkflowOutput | TasksOutput;
+/**
+ * A KPI dashboard the install materialises from a declared preset (PRD 25).
+ *
+ * The preset is a server-side key, not a widget list: a manifest that carried
+ * its own tiles would let a published template name any metric, and the metric
+ * catalogue is a whitelist for a reason. `sector` and `sizeBand` are optional
+ * hints that align the tenant's benchmark cohort with the vertical they just
+ * installed, so the peer tile compares against the right population.
+ */
+export interface DashboardOutput {
+  kind: 'dashboard';
+  id: string;
+  /** Server-declared preset key (`founder`, `saas`, …). */
+  preset: string;
+  /** Startup sector to align the benchmark industry to. */
+  sector?: string;
+  /** Peer cohort size band; usually bound from a `{{setup.size_band}}` answer. */
+  sizeBand?: string;
+}
+
+export type TemplateOutput = WorkflowOutput | TasksOutput | DashboardOutput;
 
 // ---------------------------------------------------------------------------
 // The manifest
@@ -226,6 +247,41 @@ function parseTasksOutput(raw: Record<string, unknown>, where: string, errors: s
   };
 }
 
+const PRESET_RE = /^[a-z0-9_]{1,48}$/;
+const SIZE_BANDS = ['small', 'mid', 'large'];
+
+function parseDashboardOutput(raw: Record<string, unknown>, where: string, errors: string[]): DashboardOutput | null {
+  const preset = String(raw.preset ?? '').trim();
+  if (!PRESET_RE.test(preset)) {
+    errors.push(`${where}.preset: must match [a-z0-9_]+`);
+    return null;
+  }
+  const output: DashboardOutput = {
+    kind: 'dashboard',
+    id: String(raw.id ?? 'dashboard').slice(0, 48),
+    preset,
+  };
+  if (raw.sector != null) {
+    const sector = String(raw.sector).trim();
+    if (!isStartupSector(sector)) {
+      errors.push(`${where}.sector: unknown startup sector "${sector}"`);
+      return null;
+    }
+    output.sector = sector;
+  }
+  if (raw.sizeBand != null) {
+    const band = String(raw.sizeBand).trim();
+    // A `{{setup.x}}` binding is resolved at install time, so it cannot be
+    // checked against the closed set here — coverage is checked below instead.
+    if (!band.includes('{{') && !SIZE_BANDS.includes(band)) {
+      errors.push(`${where}.sizeBand: must be one of ${SIZE_BANDS.join(', ')}`);
+      return null;
+    }
+    output.sizeBand = band;
+  }
+  return output;
+}
+
 function parseOutput(raw: unknown, index: number, errors: string[]): TemplateOutput | null {
   const where = `outputs[${index}]`;
   if (!isPlainObject(raw)) {
@@ -240,6 +296,7 @@ function parseOutput(raw: unknown, index: number, errors: string[]): TemplateOut
   switch (raw.kind) {
     case 'workflow': return parseWorkflowOutput(raw, where, errors);
     case 'tasks':    return parseTasksOutput(raw, where, errors);
+    case 'dashboard': return parseDashboardOutput(raw, where, errors);
     default:
       errors.push(`${where}.kind: must be one of ${TEMPLATE_OUTPUT_KINDS.join(', ')}`);
       return null;

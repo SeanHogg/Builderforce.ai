@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { statusOf } from '../../domain/shared/errors';
 import { TenantRole } from '../../domain/shared/types';
+import * as appCache from '../../presentation/appCache';
+import { replayRoute, ReplayRouteError } from './builtinToolContext';
 
 /**
  * A replayed route's status must reach the caller AS ITSELF.
@@ -15,23 +17,12 @@ import { TenantRole } from '../../domain/shared/types';
  * The MESSAGE text is deliberately unchanged, so the string the model reads (and the
  * assertions elsewhere that match on it) are the same as before.
  *
- * The Worker app is stubbed at `loadReplayApp` with `vi.doMock` and a dynamic import
- * of the helper afterwards. A hoisted `vi.mock` of `appCache` / `index` does not
- * intercept under this package's Vitest 4 + threads pool, and the real composition
- * root then hangs the suite.
+ * The Worker app is stubbed by spying `loadReplayApp`. A hoisted `vi.mock` of
+ * `appCache` / `index` does not intercept under this package's Vitest 4 + threads
+ * pool, and the real composition root then hangs the suite.
  */
 
 const request = vi.fn();
-
-vi.doMock('../../presentation/appCache', () => ({
-  loadReplayApp: async () => ({ request }),
-}));
-vi.doMock('../../infrastructure/auth/JwtService', () => ({
-  signJwt: vi.fn(async () => 'signed.jwt.token'),
-  signOpaqueJwt: vi.fn(async () => 'signed.opaque.token'),
-}));
-
-const { replayRoute, ReplayRouteError } = await import('./builtinToolContext');
 
 function ctx() {
   return {
@@ -46,6 +37,11 @@ function ctx() {
 
 beforeEach(() => {
   request.mockReset();
+  vi.spyOn(appCache, 'loadReplayApp').mockResolvedValue({ request } as never);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('replayRoute failure', () => {

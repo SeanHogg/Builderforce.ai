@@ -24,6 +24,7 @@ import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } f
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
 import { currentPeriodMonth } from '../../domain/shared/period';
 import { usageDatabaseOf } from '../llm/usageLedger';
+import { FOUNDER_METRICS } from './founderMetrics';
 
 /** Millicents → USD (llm_usage_log.cost_usd_millicents is 1e-5 USD units). */
 const MILLICENTS_PER_USD = 100_000;
@@ -329,6 +330,13 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
       return last?.rdToRevenuePct ?? null;
     },
   },
+
+  // ── Founder (PRD 25) ───────────────────────────────────────────────────────
+  // Runway, cash, burn, ownership, option pool and cliffs. Declared in their own
+  // module because they read the finance and equity ledgers rather than an
+  // insights service, and spread here so they are whitelisted like everything
+  // else — a founder tile is not a special case to the route or the NL parser.
+  ...FOUNDER_METRICS,
 };
 
 /** The whitelisted metric keys (stable order) — drives the widget picker + parser. */

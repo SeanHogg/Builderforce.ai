@@ -31,6 +31,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { dashboardWidgets, savedDashboards } from '../../infrastructure/database/schema';
+import { DASHBOARD_VERTICALS, type DashboardVertical } from '@builderforce/creation-canvas-contract';
 import { isMetricKey } from './metricRegistry';
 import type { ComposableWidgetId } from './widgetIds';
 
@@ -83,16 +84,88 @@ export const DASHBOARD_PRESETS = {
   },
 } satisfies Record<string, DashboardPreset>;
 
-export type PresetKey = keyof typeof DASHBOARD_PRESETS;
+/**
+ * THE FOUNDER LAYER (PRD 25) — the tiles every founder dashboard opens with,
+ * whatever the vertical.
+ *
+ * Runway first, because it is the only number that can end the company, and the
+ * three that produce it (cash, net burn, the date it reaches zero) directly
+ * after. Then the founder's own position: ownership, the unallocated pool and
+ * the cliffs landing inside a quarter — the facts a founder is asked for in
+ * every board meeting and currently rebuilds in a spreadsheet each time.
+ *
+ * Declared once and spread into every vertical below, so \"what a founder sees\"
+ * is one edit rather than eleven, and no vertical can silently drift off it.
+ */
+const FOUNDER_TILES: PresetTile[] = [
+  { metricKey: 'finance.runwayMonths', viz: 'stat', title: 'Runway' },
+  { metricKey: 'finance.cash', viz: 'stat', title: 'Cash on hand' },
+  { metricKey: 'finance.netBurn', viz: 'stat', title: 'Net burn' },
+  { metricKey: 'finance.cashZeroDate', viz: 'stat', title: 'Cash zero date' },
+  { metricKey: 'equity.founderOwnership', viz: 'stat', title: 'Founder ownership' },
+  { metricKey: 'equity.poolUnallocated', viz: 'stat', title: 'Unallocated option pool' },
+  { metricKey: 'equity.cliffsDue90d', viz: 'stat', title: 'Cliffs due in 90 days' },
+  { widgetKey: 'founder.runway-projection', title: 'Runway projection' },
+  { widgetKey: 'founder.ownership', title: 'Ownership' },
+];
+
+/**
+ * The VERTICAL presets — one per {@link DASHBOARD_VERTICALS}, built by DATA
+ * rather than by a `switch` (PRD 25 §5).
+ *
+ * In this slice a vertical dashboard is the founder layer plus the peer-position
+ * tile, which is already vertical-aware: the benchmark cohort was aligned to the
+ * declared sector when the template installed it, so the same tile compares a
+ * fintech against fintechs and a biotech against biotechs. The vertical-specific
+ * KPI rows (ARR/NDR, CAC payback, trial-to-paid…) arrive in Slice D, and they
+ * arrive as extra entries in this map — not as a branch anywhere else.
+ */
+const VERTICAL_TILES: PresetTile[] = [
+  ...FOUNDER_TILES,
+  { widgetKey: 'bench.position', title: 'Position vs peers' },
+];
+
+/** Display names, so a materialised dashboard is titled the way a founder says it. */
+const VERTICAL_NAMES: Record<DashboardVertical, string> = {
+  ai_ml: 'AI-native',
+  saas: 'SaaS',
+  fintech: 'FinTech',
+  healthtech: 'Digital health',
+  medtech: 'MedTech',
+  biotech: 'BioTech',
+  climate_energy: 'Climate & energy',
+  hardware_robotics: 'Hardware & robotics',
+  cybersecurity: 'Cybersecurity',
+  marketplace: 'Marketplace',
+};
+
+/**
+ * Every preset a tenant can install: the curated Executive view, the founder
+ * layer on its own (the fold target for a sector with no vertical of its own),
+ * and one per vertical — derived from the contract's list so a vertical added
+ * there cannot be forgotten here.
+ */
+export const ALL_DASHBOARD_PRESETS: Record<string, DashboardPreset> = {
+  ...DASHBOARD_PRESETS,
+  founder: { name: 'Founder', tiles: FOUNDER_TILES },
+  ...Object.fromEntries(
+    DASHBOARD_VERTICALS.map((vertical) => [
+      vertical,
+      { name: `${VERTICAL_NAMES[vertical]} KPIs`, tiles: VERTICAL_TILES },
+    ]),
+  ),
+};
+
+export type PresetKey = keyof typeof DASHBOARD_PRESETS | 'founder' | DashboardVertical;
 
 /** The preset keys a client may ask for (drives the UI and the route's guard). */
 export function listPresetKeys(): PresetKey[] {
-  return Object.keys(DASHBOARD_PRESETS) as PresetKey[];
+  return Object.keys(ALL_DASHBOARD_PRESETS) as PresetKey[];
 }
 
 /** THE GATE: a route param is a preset key only if it is declared here. */
 export function isPresetKey(key: string): key is PresetKey {
-  return Object.prototype.hasOwnProperty.call(DASHBOARD_PRESETS, key);
+  return Object.prototype.hasOwnProperty.call(ALL_DASHBOARD_PRESETS, key);
 }
 
 /** The identity a tile is reconciled on — one tile per subject, per dashboard. */
@@ -148,7 +221,8 @@ export async function applyDashboardPreset(
   presetKey: PresetKey,
   createdBy: string | null,
 ): Promise<ApplyPresetResult> {
-  const preset: DashboardPreset = DASHBOARD_PRESETS[presetKey];
+  const preset: DashboardPreset = ALL_DASHBOARD_PRESETS[presetKey];
+  if (!preset) throw new Error(`unknown dashboard preset: ${presetKey}`);
 
   // Scoped by (tenant, segment, name) — the SAME scope `GET /dashboards` lists on,
   // so the dashboard this returns is the one the manager will actually see. A

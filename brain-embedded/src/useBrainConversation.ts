@@ -28,6 +28,7 @@ import { replayTextOf } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
 import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import { isStoppedTurn } from './stoppedTurn';
+import { mergeTranscript } from './mergeTranscript';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
@@ -337,7 +338,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     persistence
       .getMessages(chatId)
       .then((list) => {
-        if (!cancelled) setMessages(list);
+        // MERGE, never replace: a run that persisted its reply hands it over through
+        // the run store's `appended` buffer, and this fetch can resolve after that
+        // splice. Replacing would drop the turn, and the splice effect below will not
+        // re-fire to restore it (its epoch has not moved). See `mergeTranscript`.
+        if (!cancelled) setMessages(mergeTranscript(list, getRunSnapshot(chatId).appended));
       })
       .catch((e) => {
         if (!cancelled) setLocalError(e instanceof Error ? e.message : 'Failed to load messages');
@@ -387,11 +392,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   useEffect(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
-    setMessages((prev) => {
-      const have = new Set(prev.map((m) => m.id));
-      const fresh = appended.filter((m) => !have.has(m.id));
-      return fresh.length === 0 ? prev : [...prev, ...fresh];
-    });
+    setMessages((prev) => mergeTranscript(prev, appended));
   }, [snapshot.messagesEpoch, snapshot.appended]);
 
   // Re-hydrate this viewer's thumbs from the persisted message metadata, so a

@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.75] — Leaving a chat no longer loses the model's last reply
+
+- **A capped transcript now reads from the END of the conversation.** `GET /api/brain/chats/:id/messages` ordered by `seq` ascending and took the first 100 rows, so the window was the START of the chat. Every tool step is persisted as a message row, so a working chat crosses a hundred rows in a handful of turns; from then on, reopening it served the opening of the conversation and silently dropped the tail — the model's closing reply included. The reply was never missing from the database, only from the window. The same head-truncation is corrected on the trace timeline, the addressed-agent reply context, the chat summary, the ticket-review transcript and the creation-session seed.
+- **Switching chats merges instead of replacing.** A run hands its freshly-persisted turns to mounted views through the run store; the history fetch resolved afterwards and replaced them, and the splice could not put them back because no new turn had happened. The two paths now commute in either order.
+- **A dropped connection no longer reads as "sign in again".** A turn that could not be saved reports what actually failed; only a refused credential says to sign in.
+
 ## [2026.9.73] — A 500px editor panel is not a phone
 
 - **The canvas phone app bar stays on the web.** A VS Code panel is routinely narrower than 767px; treating that width as a phone would replace the command bar with a 52px app bar that has nowhere to go back to. The canvas now tags an embedding host (`data-host="editor"`) and keeps desktop chrome at every width. The web phone layout is unchanged.

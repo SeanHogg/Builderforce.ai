@@ -1850,5 +1850,34 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
       // Open is "you are reading it": the launcher (and its unread count) unmounts.
       expect(screen.queryByTestId('canvas-brain-launcher')).toBeNull();
     });
+
+    it('opens every arc group from the composer +, in order', async () => {
+      render(<CreationCanvas sessionId="phone-actions-sheet-test" persistence="local" />);
+      await waitFor(() => expect(screen.getByTestId('canvas-app-bar')).toBeInTheDocument());
+      expect(screen.queryByTestId('canvas-command-bar')).toBeNull();
+
+      fireEvent.click(screen.getByTestId('canvas-actions-trigger'));
+      const sheet = screen.getByTestId('canvas-actions-sheet');
+      const groups = within(sheet).getAllByRole('group')
+        .map((el) => el.getAttribute('data-group'))
+        .filter((id): id is string => Boolean(id));
+      expect(groups).toEqual(['idea', 'make', 'run', 'measure', 'reach', 'board']);
+    });
+
+    it('arms Ask while the Brain sheet is open, and restores the surface default after', async () => {
+      render(<CreationCanvas sessionId="phone-brain-ask-test" persistence="local" />);
+      await waitFor(() => expect(screen.getByTestId('canvas-app-bar')).toBeInTheDocument());
+
+      fireEvent.click(within(screen.getByTestId('canvas-surface-strip')).getByRole('button', { name: 'Ideas' }));
+      expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-intent', 'captureIdea');
+
+      fireEvent.click(await screen.findByTestId('canvas-brain-launcher'));
+      expect(screen.getByTestId('canvas-brain-veil')).toBeInTheDocument();
+      expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-intent', 'ask');
+
+      fireEvent.click(screen.getByTestId('canvas-brain-veil'));
+      expect(screen.queryByTestId('canvas-brain-veil')).toBeNull();
+      expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-intent', 'captureIdea');
+    });
   });
 });

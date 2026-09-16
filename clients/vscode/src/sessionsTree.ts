@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
-import { BfBrainChat, listBrainChats, listAgentPool, listCreationSessions } from "./bfApi";
+import { BfBrainChat, BfCreationSessionSummary, listBrainChats, listAgentPool, listCreationSessions } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
-import { sessionsLibraryGroup, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
+import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
 
 /**
  * The sidebar list (Activity Bar → BuilderForce → Sessions): everything this
@@ -29,7 +29,10 @@ import { sessionsLibraryGroup, sessionsLibraryRows, type SessionsLibraryGroup, t
  * legible.
  */
 type CreationGroup = { nodeType: "group"; kind: SessionsLibraryGroup; label: string };
-type CreationItem = { nodeType: "item"; row: SessionsLibraryRow };
+// The group is part of the NODE, not just the query that produced it: a row shown
+// under both "Recent" and its facet is two tree items, and each needs its own id
+// (see `sessionsLibraryRowId`).
+type CreationItem = { nodeType: "item"; group: SessionsLibraryGroup; row: SessionsLibraryRow };
 export type SessionTreeNode = CreationGroup | CreationItem;
 
 /**
@@ -89,7 +92,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     if (node.row.source.kind === "canvas") {
       const session = node.row.source.session;
       const item = new vscode.TreeItem(session.title || vscode.l10n.t("Untitled Session"), vscode.TreeItemCollapsibleState.None);
-      item.id = `creation:${session.id}`;
+      item.id = sessionsLibraryRowId(node.group, node.row);
       item.description = `${relativeTime(session.lastActivityAt)}${session.collaboratorCount && session.collaboratorCount > 1 ? ` · ${vscode.l10n.t("{0} people", session.collaboratorCount)}` : ""}`;
       item.tooltip = new vscode.MarkdownString(`**${session.title}**\n\n${session.pinned ? `${vscode.l10n.t("Pinned")} · ` : ""}${session.unread ? `${vscode.l10n.t("Updated")} · ` : ""}${vscode.l10n.t("{0} revisions", session.revision)}`);
       item.iconPath = new vscode.ThemeIcon(session.preview?.objects?.some((object) => object.status?.toLowerCase() === "running") ? "loading~spin" : session.unread ? "circle-filled" : "multiple-windows");
@@ -101,7 +104,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // sits in the same list as the boards rather than under a heading of its own.
     const chat = node.row.source.chat;
     const item = new vscode.TreeItem(conversationTreeLabel(chat), vscode.TreeItemCollapsibleState.None);
-    item.id = String(chat.id);
+    item.id = sessionsLibraryRowId(node.group, node.row);
     const time = relativeTime(chat.updatedAt);
     // Filtered: the project is implied by the header, so just show the time. Unfiltered:
     // prefix the project name (or "No project") so a mixed history stays readable.
@@ -165,7 +168,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     if (element.nodeType !== "group") return [];
 
     const rows = await this.rows();
-    return sessionsLibraryGroup(rows, element.kind).map((row) => ({ nodeType: "item" as const, row }));
+    return sessionsLibraryGroup(rows, element.kind).map((row) => ({ nodeType: "item" as const, group: element.kind, row }));
   }
 
   /**
@@ -178,17 +181,35 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
   private async rows(): Promise<SessionsLibraryRow[]> {
     if (this.rowCache && Date.now() - this.rowCache.ts < SessionsTreeProvider.TTL) return this.rowCache.rows;
 
-    const [sessions, chats] = await Promise.all([
-      listCreationSessions(this.secrets),
-      listBrainChats(this.secrets),
-    ]);
+    let sessions: BfCreationSessionSummary[];
+    let chats: BfBrainChat[];
+    try {
+      [sessions, chats] = await Promise.all([
+        listCreationSessions(this.secrets),
+        listBrainChats(this.secrets),
+      ]);
+    } catch (error) {
+      // Offline, or the gateway blinked. Keep showing the last good list rather than
+      // rejecting: a rejected `getChildren` drops the children in the extension host
+      // while the rows stay painted, so the next click lands on a row the host no
+      // longer knows about. Re-stamp the cache so the other three groups in the same
+      // paint reuse it instead of each retrying the same failing pair of requests.
+      if (!this.rowCache) throw error;
+      this.rowCache = { ts: Date.now(), rows: this.rowCache.rows };
+      return this.rowCache.rows;
+    }
 
     // Resolve participant names ONCE (and only when a chat has any) — a single stable
-    // pool fetch, not a per-row call, so the roster costs no N+1.
+    // pool fetch, not a per-row call, so the roster costs no N+1. Best-effort: a row
+    // with a raw participant ref still opens, a list that failed to draw does not.
     if (!this.poolLoaded && chats.some((c) => (c.participants?.length ?? 0) > 0)) {
       this.poolLoaded = true;
-      const pool = await listAgentPool(this.secrets);
-      this.agentNames = new Map(pool.map((a) => [a.ref, a.name]));
+      try {
+        const pool = await listAgentPool(this.secrets);
+        this.agentNames = new Map(pool.map((a) => [a.ref, a.name]));
+      } catch {
+        this.poolLoaded = false;
+      }
     }
 
     // The active project scopes the CONVERSATIONS, as it always has. Boards are not
@@ -198,7 +219,13 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     this.filtered = !!project;
     const scopedChats = project ? chats.filter((c) => c.projectId === project.id) : chats;
     // Unfiltered: resolve project names for the per-row labels (best-effort, cached).
-    if (!project) this.projectNameById = await getProjectNames(this.secrets);
+    if (!project) {
+      try {
+        this.projectNameById = await getProjectNames(this.secrets);
+      } catch {
+        // Keep whatever names we already resolved; the row falls back to the time alone.
+      }
+    }
 
     const rows = sessionsLibraryRows({
       sessions,

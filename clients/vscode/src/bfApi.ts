@@ -903,32 +903,59 @@ export async function appendBrainMessages(
   messages: Array<{ role: string; content: string }>,
 ): Promise<EvermindLearnOutcome | null> {
   if (messages.length === 0) return null;
-  return (await postBrainMessages(secrets, chatId, messages))?.evermindLearn ?? null;
+  const r = await postBrainMessages(secrets, chatId, messages);
+  return r.ok ? r.evermindLearn ?? null : null;
 }
+
+/**
+ * Why a turn could not be saved. The two cases need DIFFERENT words from the user's
+ * point of view, and collapsing them is how "your connection dropped for a second"
+ * came to read as "sign in again and retry": `signedOut` is the only one the person
+ * can act on, and it is true ONLY when the key/token exchange itself refused. A
+ * network that was not there is not a credential problem.
+ */
+export interface BrainMessageWriteFailure {
+  ok: false;
+  signedOut: boolean;
+  reason: string;
+}
+
+export interface BrainMessageWriteSuccess {
+  ok: true;
+  messages: BrainMessage[];
+  evermindLearn?: EvermindLearnOutcome;
+}
+
+export type BrainMessageWrite = BrainMessageWriteSuccess | BrainMessageWriteFailure;
 
 /**
  * POST turns to a Brain chat and get back the rows the server created, plus the
  * learn-gate outcome — the ONE write behind both the participant's after-the-fact
  * persist ({@link appendBrainMessages}) and the host-owned webview run's in-loop
  * persistence, which needs the created rows to append them to the live transcript.
- * Best-effort: undefined on any failure, never a throw.
+ *
+ * Never throws; it REPORTS instead. It used to answer `undefined` for every failure
+ * alike, which left the one caller that must explain itself to a person no choice
+ * but to guess — and it guessed "sign in again" for what was usually a dropped
+ * connection.
  */
 export async function postBrainMessages(
   secrets: vscode.SecretStorage,
   chatId: number,
   messages: Array<{ role: string; content: string; metadata?: string }>,
-): Promise<{ messages: BrainMessage[]; evermindLearn?: EvermindLearnOutcome } | undefined> {
+): Promise<BrainMessageWrite> {
   try {
     const r = await authed<{ messages?: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(
       secrets,
       `/api/brain/chats/${chatId}/messages`,
       { method: "POST", body: JSON.stringify({ messages }) },
     );
-    if (!r) return undefined;
-    return { messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
-  } catch {
+    // `authed` answers undefined only when there is no usable token to send.
+    if (!r) return { ok: false, signedOut: true, reason: "not signed in" };
+    return { ok: true, messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
+  } catch (e) {
     /* best-effort persistence — never blocks the chat turn */
-    return undefined;
+    return { ok: false, signedOut: false, reason: e instanceof Error ? e.message : String(e) };
   }
 }
 

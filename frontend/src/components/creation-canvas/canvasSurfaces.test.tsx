@@ -324,7 +324,7 @@ describe('the chat surface on the canvas', () => {
     // Room IS offered from Idea — unlike Insights it is legible with one person in it,
     // and gating a meeting by which stage a board says it is in would be the wrong rule.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', 'Room', 'App']);
+    expect(offered).toEqual(['Chat', 'Board', 'Ideas', 'Room', 'App']);
   });
 
   /**

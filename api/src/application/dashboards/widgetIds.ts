@@ -53,6 +53,10 @@ export const COMPOSABLE_WIDGET_IDS = [
   'ai-impact.productivity',
   'ai-impact.merge-rate',
   'ai-impact.quality',
+  // Founder (PRD 25) — the layer every vertical dashboard opens with.
+  'founder.runway-projection',
+  'founder.ownership',
+  'bench.position',
 ] as const;
 
 /** A widget id the server may return — narrowed from {@link COMPOSABLE_WIDGET_IDS}. */

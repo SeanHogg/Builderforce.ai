@@ -90,7 +90,7 @@ const iso = (value: unknown): string | null => {
 /** The company a projection is scoped to. Normalised through `partyRef` — the
  *  SAME normaliser the counterparty work uses — so two surfaces cannot address
  *  one company as "Acme Inc" and "acme-inc". */
-const companyKey = (companyRef: string | null | undefined): string => partyRef(String(companyRef ?? '')) || 'default';
+export const companyKey = (companyRef: string | null | undefined): string => partyRef(String(companyRef ?? '')) || 'default';
 
 /**
  * The cache VERSION token for one company's ownership.
@@ -265,7 +265,13 @@ export async function capTable(
   );
 }
 
-async function computeCapTable(db: Db, tenantId: number, company: string, at: string): Promise<CapTable> {
+/**
+ * The uncached fold. Exported so a caller with no `Env` — the dashboard metric
+ * registry, whose `compute(db, tenantId, days)` signature has nowhere to put one
+ * — can still read a cap table. Prefer {@link capTable} wherever an env exists;
+ * this one hits the database every call.
+ */
+export async function computeCapTable(db: Db, tenantId: number, company: string, at: string): Promise<CapTable> {
   const [classes, grants, ledger, instruments] = await Promise.all([
     readShareClasses(db, tenantId, company),
     readGrants(db, tenantId, company),

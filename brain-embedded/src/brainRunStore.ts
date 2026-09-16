@@ -705,6 +705,36 @@ function pushDurableStep(c: RunCell, chatId: number, persistence: BrainRunPersis
 }
 
 /**
+ * The run ENDED BADLY — record that where a reload can still see it.
+ *
+ * A run's terminal error lived only in `c.error`, an in-memory field on the cell.
+ * Every tool step along the way was durable, so a failed run rehydrated as a
+ * transcript that performed a dozen steps and then simply stopped, with nothing
+ * saying why — indistinguishable from the reply having been lost. That silence
+ * is the part a person cannot act on.
+ *
+ * Best-effort, like every other step: if the failure WAS the persistence layer,
+ * this write can fail too and the run is no worse off. Most failures are not
+ * (a 4xx, an exhausted loop, a connection back by the time the run unwinds), and
+ * for those the reopened chat now ends with a reason instead of a cliff.
+ */
+function recordRunFailure(
+  c: RunCell,
+  chatId: number,
+  persistence: BrainRunPersistence,
+  label: string,
+  message: string,
+): void {
+  pushDurableStep(c, chatId, persistence, {
+    ts: nowIso(),
+    category: 'error',
+    label,
+    result: message,
+    isError: true,
+  });
+}
+
+/**
  * Record a freshly-persisted assistant message for live splice-in and bump the
  * epoch. The buffer is capped to the most recent {@link MAX_APPENDED}: any older
  * entries were already merged into mounted views (merge is id-keyed), and a
@@ -1121,6 +1151,9 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
       // needs-a-plan, 401 expired session) attached to the surfaced error, so
       // the banner can offer the fix instead of only naming the problem.
       c.errorAction = chatErrorAction(e);
+      // `c.error` is this cell's memory and nothing else's. Without a durable
+      // twin, reopening the chat showed the steps and then nothing at all.
+      recordRunFailure(c, chatId, req.persistence, 'agent.run', c.error);
     }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
@@ -2705,13 +2738,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   if (c.abort?.signal.aborted) return;
 
   c.streamingText = '';
-  pushTrace(c, {
-    ts: nowIso(),
-    category: 'error',
-    label: 'agent.loop',
-    result: `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`,
-    isError: true,
-  });
+  recordRunFailure(
+    c,
+    chatId,
+    req.persistence,
+    'agent.loop',
+    `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`,
+  );
   c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
   emit(c);
 }

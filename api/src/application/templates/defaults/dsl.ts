@@ -102,6 +102,25 @@ export const ask = (
   ...(placeholder ? { placeholder } : {}),
 });
 
+/** A required pick from a fixed list — the inline-options counterpart of `ask`.
+ *  A connector-resolved list stays hand-written, because its four source fields
+ *  are the whole point of that step and a helper would only hide them. */
+export const choose = (
+  id: string,
+  title: string,
+  help: string,
+  options: readonly { value: string; label: string }[],
+  defaultValue?: string,
+): GuidedStep => ({
+  kind: 'choice',
+  id,
+  title,
+  help,
+  required: true,
+  options: options.map((o) => ({ value: o.value, label: o.label })),
+  ...(defaultValue ? { default: defaultValue } : {}),
+});
+
 /** The project a template files its seeded work under. Every template that
  *  produces tickets declares one, and they all word it the same way. */
 export const projectStep = (help: string): GuidedStep => ({
