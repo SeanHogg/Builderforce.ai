@@ -114,14 +114,14 @@ export interface ChatOptionVM {
   ticketCount?: number | null;
   ticketProgressPct?: number | null;
   /**
-   * Required-on-the-wire companion to {@link ChatOptionVM.ticketProgressPct}: the
-   * same 0–100 linked-ticket rollup, but never null — a chat with no tickets (or
-   * one the health batch omitted) reads `0`. `GET /api/brain/chats` always emits
-   * it, so a consumer can render a ring without a null branch.
+   * The chat's overall ticket completion, 0–100, as `GET /api/brain/chats` now emits
+   * it on every list item: the same weighted rollup as {@link ticketProgressPct}, but
+   * never null — a chat with no linked tickets reads `0` rather than "unknown".
    *
-   * Optional HERE only so existing merge-picker callers that build a
-   * `ChatOptionVM` from other sources keep compiling; the chat switcher/dropdown
-   * bind that consumes it is a sibling ticket, not this one.
+   * Optional HERE only because this view-model is also built by hosts that have not
+   * been moved onto the new list field yet; the API contract itself is required. It is
+   * carried so the list JSON and this VM do not drift. Nothing renders it yet — the
+   * Sessions tree and the chat switcher bind it separately.
    */
   progressPct?: number;
 }
