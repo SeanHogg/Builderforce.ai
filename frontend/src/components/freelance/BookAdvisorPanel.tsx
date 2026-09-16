@@ -44,7 +44,7 @@ export function BookAdvisorPanel(props: {
    */
   const describe = (s: TalentBookingService): string => {
     const price = s.priceCents === 0 ? t('bookFree') : fmt.money(s.priceCents / 100, s.currency);
-    return `${price} · ${t('bookMinutes', { minutes: fmt.number(s.durationMin) })}`;
+    return `${price} · ${t('bookMinutes', { minutes: s.durationMin })}`;
   };
 
   const confirm = async () => {
