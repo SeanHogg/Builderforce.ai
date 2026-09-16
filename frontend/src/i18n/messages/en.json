@@ -769,7 +769,8 @@
       "listing": "Listing",
       "inquiries": "Interest",
       "runway": "Runway",
-      "cashflow": "Cashflow"
+      "cashflow": "Cashflow",
+      "dashboard": "Dashboard"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -32000,6 +32001,11 @@
       },
       "observedNote": "Observed from approved spend, processed payroll and synced ledgers.",
       "declaredNote": "A projection at the declared cash, spend and revenue — the same every month. Not a forecast."
+    },
+    "dashboard": {
+      "loading": "Loading your dashboard…",
+      "installPrompt": "No KPI dashboard installed yet. Install the one built for your vertical to see the metrics your peers track.",
+      "installCta": "Install from Marketplace"
     }
   }
 }

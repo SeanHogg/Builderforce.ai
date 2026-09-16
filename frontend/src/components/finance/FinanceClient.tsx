@@ -23,6 +23,7 @@ import { faultMessage } from '@/lib/apiClient';
 import { financeApi, type RunwayReport } from '@/lib/financeApi';
 import { RunwayView } from './RunwayView';
 import { CashflowView } from './CashflowView';
+import { FinanceDashboardView } from './FinanceDashboardView';
 import { errorStyle, labelStyle, mutedStyle, rowStyle, sectionStyle } from './financeStyles';
 
 export default function FinanceClient() {
@@ -82,7 +83,7 @@ export default function FinanceClient() {
         </div>
 
         {error && <p style={errorStyle} role="alert">{error}</p>}
-        {loading && !report && <p style={mutedStyle}>{t('loading')}</p>}
+        {loading && !report && tab !== 'dashboard' && <p style={mutedStyle}>{t('loading')}</p>}
 
         {report && tab === '' && (
           <RunwayView
@@ -93,6 +94,9 @@ export default function FinanceClient() {
           />
         )}
         {report && tab === 'cashflow' && <CashflowView report={report} />}
+        {/* The dashboard reads its own tiles, so it does not wait on the runway
+            report the other two tabs share. */}
+        {tab === 'dashboard' && <FinanceDashboardView />}
       </div>
     </PageContainer>
   );

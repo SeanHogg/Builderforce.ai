@@ -769,7 +769,8 @@
       "listing": "Ficha",
       "inquiries": "Interés",
       "runway": "Runway",
-      "cashflow": "Flujo de caja"
+      "cashflow": "Flujo de caja",
+      "dashboard": "Panel"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -32000,6 +32001,11 @@
       },
       "observedNote": "Observado a partir del gasto aprobado, la nómina procesada y los libros contables sincronizados.",
       "declaredNote": "Una proyección con el efectivo, el gasto y los ingresos declarados — igual todos los meses. No es una previsión."
+    },
+    "dashboard": {
+      "loading": "Cargando tu panel…",
+      "installPrompt": "Aún no hay ningún panel de KPI instalado. Instala el panel de tu sector para ver las métricas que siguen tus pares.",
+      "installCta": "Instalar desde el Marketplace"
     }
   }
 }

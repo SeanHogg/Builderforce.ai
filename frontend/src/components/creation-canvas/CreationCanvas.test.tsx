@@ -961,7 +961,10 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(microphone.querySelector('svg')).toBeInTheDocument();
     const options = screen.getByRole('button', { name: /^Options/ });
     fireEvent.click(options);
-    const autoApply = screen.getByRole('menuitemcheckbox', { name: /Auto mode/ });
+    // The Options popover is the shared brain-ui tabbed menu: its rows are
+    // `role="checkbox"` inside the Mode pane, not `menuitemcheckbox` children of a
+    // menu, and the accessible name carries the row's description and state.
+    const autoApply = screen.getByRole('checkbox', { name: /^Auto mode/ });
     expect(autoApply).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(autoApply);
     expect(autoApply).toHaveAttribute('aria-checked', 'false');
@@ -1424,7 +1427,13 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     fireEvent.change(screen.getByLabelText('Call to action'), { target: { value: 'Start building' } });
     fireEvent.change(screen.getByLabelText('Accent color'), { target: { value: '#d946ef' } });
     expect(screen.getByText('Build the future together')).toBeInTheDocument();
-    expect(screen.getByText('Start building')).toHaveStyle({ background: '#d946ef' });
+    // The accent reaches the CTA as `--site-accent` on the preview wrapper and is
+    // painted by the stylesheet, so the button's own `background` is a `var()` jsdom
+    // cannot resolve. Assert the variable the author's colour actually travels in.
+    const cta = screen.getByText('Start building');
+    const preview = cta.closest<HTMLElement>('[data-viewport]');
+    expect(preview).not.toBeNull();
+    expect(preview!.style.getPropertyValue('--site-accent')).toBe('#d946ef');
   });
 
   it('renders authored WYSIWYG pages instead of the fixed ecommerce mock', () => {

@@ -311,6 +311,8 @@ export const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: '', labelKey: 'tab.runway', icon: 'clock' },
       { id: 'cashflow', labelKey: 'tab.cashflow', icon: 'insights' },
+      // PRD 25 A6: the vertical's KPI dashboard, installed from the Marketplace.
+      { id: 'dashboard', labelKey: 'tab.dashboard', icon: 'board' },
     ],
   },
   { id: 'revenue', labelKey: 'group.revenue', icon: '📈', href: '/seat/revenue', match: ['/seat/revenue'], seat: 'CRO', stage: 'run' },

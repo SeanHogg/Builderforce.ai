@@ -769,7 +769,8 @@
       "listing": "Fiche",
       "inquiries": "Intérêt",
       "runway": "Runway",
-      "cashflow": "Trésorerie"
+      "cashflow": "Trésorerie",
+      "dashboard": "Tableau de bord"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -32000,6 +32001,11 @@
       },
       "observedNote": "Observé à partir des dépenses approuvées, de la paie traitée et des livres comptables synchronisés.",
       "declaredNote": "Une projection basée sur la trésorerie, les dépenses et les revenus déclarés — identique chaque mois. Ce n'est pas une prévision."
+    },
+    "dashboard": {
+      "loading": "Chargement de votre tableau de bord…",
+      "installPrompt": "Aucun tableau de bord KPI installé. Installez celui conçu pour votre secteur pour voir les indicateurs suivis par vos pairs.",
+      "installCta": "Installer depuis la Marketplace"
     }
   }
 }

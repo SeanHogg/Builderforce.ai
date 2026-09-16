@@ -37,6 +37,18 @@ const gridStyle: React.CSSProperties = {
   alignItems: 'stretch',
 };
 
+/**
+ * The marketplace key for a vertical's dashboard template.
+ *
+ * A template key may only carry `[a-z0-9-]` while a sector id is snake_case, so
+ * `climate_energy` installs from `vertical-dashboard-climate-energy`. Getting
+ * this wrong renders an install button that 404s — the exact failure the
+ * catalogue's own key-grammar guard rejects on the API side.
+ */
+export function dashboardTemplateKey(vertical: string | null): string {
+  return vertical ? `vertical-dashboard-${vertical.replace(/_/g, '-')}` : 'vertical-dashboard-founder';
+}
+
 const PRESET_NAMES = new Set([
   'Executive',
   'Founder',
@@ -67,15 +79,15 @@ export function FinanceDashboardView() {
     let cancelled = false;
     void (async () => {
       try {
-        const [dashboards, profile] = await Promise.all([
+        const [listed, profile] = await Promise.all([
           dashboardsApi.list(),
           benchmarkingApi.getProfile().catch(() => null),
         ]);
         if (cancelled) return;
+        const dashboards = listed.dashboards;
         setList(dashboards);
         const sector = profile?.industry ?? null;
-        const vertical = (sector ? verticalForSector(sector) : null) ?? 'founder';
-        setTemplateKey(`vertical-dashboard-${vertical}`);
+        setTemplateKey(dashboardTemplateKey(sector ? verticalForSector(sector) : null));
         const chosen = pickDashboard(dashboards);
         if (!chosen) return;
         const payload = await dashboardsApi.data(chosen.id);

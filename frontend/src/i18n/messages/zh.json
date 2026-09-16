@@ -769,7 +769,8 @@
       "listing": "展示信息",
       "inquiries": "意向",
       "runway": "现金跑道",
-      "cashflow": "现金流"
+      "cashflow": "现金流",
+      "dashboard": "仪表板"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -32000,6 +32001,11 @@
       },
       "observedNote": "根据已批准的支出、已处理的工资单和同步的账本观测得出。",
       "declaredNote": "基于申报的现金、支出和收入进行的预测——每月数值相同，并非真正的预测。"
+    },
+    "dashboard": {
+      "loading": "正在加载仪表板…",
+      "installPrompt": "尚未安装 KPI 仪表板。安装适合你所在行业的仪表板，查看同行关注的指标。",
+      "installCta": "从应用市场安装"
     }
   }
 }

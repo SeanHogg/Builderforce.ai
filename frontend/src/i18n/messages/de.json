@@ -769,7 +769,8 @@
       "listing": "Eintrag",
       "inquiries": "Interesse",
       "runway": "Runway",
-      "cashflow": "Cashflow"
+      "cashflow": "Cashflow",
+      "dashboard": "Dashboard"
     },
     "primaryAria": "Primär",
     "destination": {
@@ -32000,6 +32001,11 @@
       },
       "observedNote": "Beobachtet aus genehmigten Ausgaben, verarbeiteten Gehaltsabrechnungen und synchronisierten Buchhaltungsdaten.",
       "declaredNote": "Eine Prognose auf Basis des angegebenen Kassenbestands, der Ausgaben und des Umsatzes — jeden Monat gleich. Keine Vorhersage."
+    },
+    "dashboard": {
+      "loading": "Dashboard wird geladen…",
+      "installPrompt": "Noch kein KPI-Dashboard installiert. Installieren Sie das Dashboard für Ihre Branche, um die Kennzahlen Ihrer Vergleichsgruppe zu sehen.",
+      "installCta": "Aus dem Marktplatz installieren"
     }
   }
 }
