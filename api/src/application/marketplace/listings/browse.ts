@@ -18,6 +18,30 @@ export interface BrowseQuery {
   kind?: string;
   page?: number;
   limit?: number;
+  /**
+   * Scope the feed to ONE seller — the `publisherRef` behind the `sellerRef` every
+   * listing view already publishes, so a caller filters by exactly the value it
+   * reads back off a card rather than by a second identifier it has to look up.
+   *
+   * This is what lets a profile surface show "everything by this advisor" without a
+   * private endpoint: it narrows the SAME public predicate (`visibility = 'public'`
+   * and published) rather than relaxing it, so an unpublished or withdrawn listing
+   * stays invisible no matter whose ref is asked for. `sellerListings` remains the
+   * seller's own management view — it is tenant-scoped and shows drafts, which is
+   * precisely why it cannot serve this.
+   */
+  sellerRef?: string;
+}
+
+/** Bound on an untrusted ref. `publisher_ref` holds a user id; anything longer is
+ *  not one, and truncating rather than rejecting keeps the feed answering — an
+ *  over-long ref simply matches nothing, which is the honest result. */
+const MAX_SELLER_REF = 128;
+
+/** The seller ref as it will be matched, or '' when absent/unusable. Exported so the
+ *  route and the tests agree on what normalisation happened without restating it. */
+export function normalizeSellerRef(raw: string | undefined | null): string {
+  return (raw ?? '').trim().slice(0, MAX_SELLER_REF);
 }
 
 /** The public feed. Cached behind the version token; every publish bumps it. */
