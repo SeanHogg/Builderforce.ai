@@ -252,7 +252,7 @@ export const mailboxConnections = pgTable('mailbox_connections', {
   lastSyncedAt: timestamp('last_synced_at'),
   /** False hides the mailbox from campaign sending while leaving it readable — a
    *  shared inbox you want on the canvas but must never blast a campaign from. */
-  allowSending: boolean('allow_sending').notNull().default(true),
+  allowSending: boolean('allow_sending').notNull().default(false),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
