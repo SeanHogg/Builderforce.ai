@@ -48,6 +48,52 @@ describe('the talent listing Book CTA', () => {
   });
 });
 
+/**
+ * Visitor chat on the public advisor profile (#2581).
+ *
+ * The contract is an ENTRY POINT into the existing employer↔freelancer thread —
+ * so most of these assert what must NOT appear. A second composer, a name+email
+ * gate, or a guest thread would all "work" in a browser while quietly shipping
+ * the messenger product this ticket exists to avoid.
+ */
+describe('the advisor-profile visitor chat CTA', () => {
+  const detail = read('../../app/talent/[id]/TalentDetailClient.tsx');
+
+  it('shows the chat CTA only on an advisor-mode listing, never to the owner', () => {
+    expect(detail).toContain('const showChatCta = !isOwner && bound;');
+  });
+
+  it('gates a visitor with no tenant through the existing sign-in, not a lead form', () => {
+    expect(detail).toContain('{showChatCta && !canHire && (');
+    expect(detail).toContain('href={signInHref()}');
+    expect(detail).toContain("import { signInHref } from '@/lib/auth';");
+  });
+
+  it('does not collect name+email as the chat identity (that is booking, #2534)', () => {
+    const chatBlock = detail.slice(detail.indexOf('{showChatCta && !canHire && ('));
+    expect(chatBlock).not.toContain('type="email"');
+    expect(chatBlock).not.toContain('guest');
+  });
+
+  it('starts no conversation from the profile itself — no in-profile composer', () => {
+    expect(detail).not.toContain('startEmployerConversation');
+    expect(detail).not.toContain('MessagesPanel');
+    expect(detail).not.toContain('sendConversationMessage');
+  });
+
+  it('reuses the existing Message label rather than naming a new messenger', () => {
+    const chatBlock = detail.slice(detail.indexOf('{showChatCta && !canHire && ('));
+    expect(chatBlock).toContain("{t('message')}");
+    expect(detail).not.toContain('Messenger');
+  });
+
+  it('keeps the tenant visitor on the existing MessagesButton (no duplicate CTA)', () => {
+    // `!canHire` is what stops an advisor profile rendering two Message controls.
+    expect(detail).toContain('{showChatCta && !canHire && (');
+    expect(detail).toContain("<MessagesButton side=\"employer\"");
+  });
+});
+
 describe('talent.book is localised', () => {
   for (const locale of ['en', 'de', 'es', 'fr', 'zh'] as const) {
     it(`${locale} has talent.book next to talent.message`, () => {
