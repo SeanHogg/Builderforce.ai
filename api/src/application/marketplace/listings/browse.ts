@@ -54,8 +54,15 @@ export async function browseCreationListings(
   const page = Math.max(1, Math.round(query.page ?? 1));
   const q = (query.q ?? '').trim().slice(0, 80);
   const kind = isListingKind(query.kind) ? query.kind : '';
+  const sellerRef = normalizeSellerRef(query.sellerRef);
   const version = await getCacheVersion(env, LISTINGS_VERSION_KEY);
-  const key = `${LISTINGS_VERSION_KEY}:${version}:${kind}:${q}:${page}:${limit}`;
+  // `sellerRef` is part of the KEY, not just the predicate. Leaving it out is how a
+  // seller-scoped page and the unscoped feed collide on one entry and each serves
+  // the other's rows — the scoped read is a different question, so it is a
+  // different key. It goes last so every previously-cached unscoped key keeps its
+  // shape, and it is the normalised value rather than the raw query so two spellings
+  // of the same ref cannot occupy two entries.
+  const key = `${LISTINGS_VERSION_KEY}:${version}:${kind}:${q}:${page}:${limit}:${sellerRef}`;
 
   return getOrSetCached(env, key, async () => {
     const where = [eq(catalogItems.visibility, 'public'), isNotNull(catalogItems.publishedAt)];
