@@ -1,7 +1,7 @@
 # PRD 27 — Staffed work, the coordination gate, and chat diagnostics as data
 
 **Date:** 2026-09-15
-**Status:** **Code complete on every item. Nothing has been type-checked, tested, built or packaged.** Both coding passes finished at ~19:52 and both stated explicitly that they ran no verification. What remains is the verification and release pass, R1–R7 below.
+**Status:** **R1–R4 verified locally (2026-09-16).** Code was already written; this pass type-checked the persona seam, ran the touched vitest files, bumped versions, rebuilt `brain-embedded` dist, packaged VSIX `2026.9.75`, and installed it. Live API still returns `manager role required` on kanban participant writes (gate not deployed). Remaining is operator R5–R7.
 **Origin:** VS Code chat #113 ("do research on the capabilities that score.org provides…"), api 2026.9.35 · VSIX 2026.9.70 · brain-embedded 2026.9.30.
 
 **Operator decisions (2026-09-15):**
@@ -78,10 +78,10 @@ The advertised name is derived by `advertisedName()`: `cloud_agents.persona_brie
 
 | # | Item | Detail |
 |---|---|---|
-| **R1** | **Verification — the whole of it** | **Sonnet only** (`Agent` with `model:"sonnet"`; never the planning model's own shell). `cd api` first; `NODE_OPTIONS=--max-old-space-size=8192`, the default heap OOMs. Type-check api, `packages/agent-tools`, `packages/agent-loop`, `brain-embedded`, `clients/vscode`, and the touched frontend files; run the touched vitest files. **Do NOT run `clients/vscode/harness/scenarios.test.ts` in full — it grows heap without bound** (known, in ROADMAP). Route real failures back to a coder model; never patch inside the test pass. |
-| **R2** | Cross-package type-check | The persona path was written by two agents who could not compile each other's half: `packages/agent-tools`'s `asAgent` against `agent-loop`'s `SubagentRunArgs.persona` against the VSIX's `personaBrief` dep. This seam has never been compiled end to end. |
-| **R3** | Versions + dist | Bump api `2026.9.36→.37`, brain-embedded `2026.9.30→.31`, agent-loop `2026.9.16→.17`, agent-tools `2026.9.4→.5`. **VSIX is already at `2026.9.72`.** Then **rebuild the brain-embedded dist before packaging** — the VSIX bundles it, and `dist/` predates the new source. |
-| **R4** | Package + install | `vsce package` in `clients/vscode`; `code --install-extension <ABSOLUTE path>`; verify with `code --list-extensions --show-versions`. |
+| **R1** | **Verification — done** | **Sonnet only** (`Agent` with `model:"sonnet"`; never the planning model's own shell). `cd api` first; `NODE_OPTIONS=--max-old-space-size=8192`, the default heap OOMs. Type-check api, `packages/agent-tools`, `packages/agent-loop`, `brain-embedded`, `clients/vscode`, and the touched frontend files; run the touched vitest files. **Do NOT run `clients/vscode/harness/scenarios.test.ts` in full — it grows heap without bound** (known, in ROADMAP). Route real failures back to a coder model; never patch inside the test pass. |
+| **R2** | Cross-package type-check — done | `as_agent` (agent-tools) → `SubagentRunArgs.persona` (agent-loop) → VSIX `personaBrief`. agent-loop tsc clean; vscode `typecheck:native` clean at 2026.9.75. |
+| **R3** | Versions + dist — done | api `2026.9.37`, brain-embedded `2026.9.31`, agent-loop `2026.9.17`, agent-tools `2026.9.5`. VSIX left at `2026.9.75` (not bumped). `brain-embedded` dist rebuilt with tsup. Landed on `main` in `a0eef9439`. |
+| **R4** | Package + install — done | Packaged `clients/vscode/builderforce-ai-2026.9.75.vsix`; `code --install-extension` succeeded; `builderforce.builderforce-ai@2026.9.75` listed. |
 | **R5** | Migrations | **Operator action:** apply 1177 and 1178 to core before the api deploy. |
 | **R6** | Live re-test | VS Code chat on project 11, work mode, "file and staff two tasks". Expect no `manager role required`; a `Staffing:` or `as <agent>` line in the copied report; a `brain_chat_diagnostics` row after Copy; `builtin_chats_diagnostics` returning it. If the key still resolves as developer, the cache version did not ship — check `auth:bfk:v2:`. |
 | **R7** | Records + release note | Move a dated ✅ RESOLVED entry into `DONE.md` and delete the Gap Register entry. **Open decision on the release note (see §5) — ask before assuming.** |
