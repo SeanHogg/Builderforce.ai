@@ -283,8 +283,11 @@ function findAudience(input: ChecklistEvalInput): BrandBoardObject | undefined {
  * is the whole reason this checks `undefined` rather than length.
  */
 function evaluateBrand(input: ChecklistEvalInput): ChecklistItem {
+  // Resolve through the SAME function the compose path uses, keyed on the SAME field,
+  // so the checklist and the generator can never disagree about which kit is in force.
+  const ref = input.brandKitRef ?? undefined;
   const binding = resolveBrandBinding(
-    { data: { brandKitRef: input.brandKitRef ?? undefined } },
+    { data: { [BRAND_BINDING_FIELD]: ref } },
     input.board,
   );
   if (!binding) {
@@ -293,15 +296,24 @@ function evaluateBrand(input: ChecklistEvalInput): ChecklistItem {
   if (!text(binding.voice)) {
     return item('brand', 'fail', 'voice_empty', 'brandKit', binding.name, null);
   }
-  // `resolveBrandBinding` always returns a defined array (it normalises), so "absent"
-  // can only be detected on the raw kit. We re-resolve the kit's own field to honour
-  // the "authored [] is valid, never-authored is fail" rule.
+
+  // `resolveBrandBinding` normalises `doNotSay` to an array and MERGES the board's
+  // battlecard claims in, so a never-authored field and an authored `[]` are
+  // indistinguishable on the binding. The parent contract distinguishes them — an
+  // authored empty list means "nothing forbidden" and passes, a missing field means the
+  // list was never written and fails — so presence is read off the KIT itself, matched
+  // by the same three rules and the same casing rule the resolver used.
   const kits = input.board.filter((entry) => entry.kind === 'brandKit');
-  const kit = kits.find(
-    (entry) =>
-      text(entry.title) === binding.name || text(entry.data.title) === binding.name,
-  ) ?? (kits.length === 1 ? kits[0] : undefined);
-  const rawDoNotSay = kit ? kit.data.doNotSay : undefined;
+  const refKey = brandRefKey(ref);
+  const kit = refKey
+    ? kits.find(
+        (entry) =>
+          brandRefKey(entry.title) === refKey || brandRefKey(entry.data.title) === refKey,
+      )
+    : kits.length === 1
+      ? kits[0]
+      : undefined;
+  const rawDoNotSay = kit?.data.doNotSay;
   if (rawDoNotSay === undefined || rawDoNotSay === null) {
     return item('brand', 'fail', 'donotsay_missing', 'brandKit', binding.name, null);
   }
