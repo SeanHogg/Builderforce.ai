@@ -258,7 +258,7 @@ export const mailboxConnections = pgTable('mailbox_connections', {
    *  cannot be blasted from until someone with MANAGER role explicitly opts it
    *  in via `PATCH /api/mailbox/connections/:id`. Reconnecting a revoked grant
    *  deliberately does NOT touch this column, so recovering a mailbox never
-   *  silently re-arms sending. See migration 0456. */
+   *  silently re-arms sending. See migrations 0414 and 0457. */
   allowSending: boolean('allow_sending').notNull().default(false),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
