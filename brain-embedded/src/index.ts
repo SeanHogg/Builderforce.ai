@@ -263,6 +263,7 @@ export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats } from './
 export {
   parseChatActivity,
   isActivityMessage,
+  activityMessageCount,
   chatActivityText,
   activityIcon,
   activityTone,

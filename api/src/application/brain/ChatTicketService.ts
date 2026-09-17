@@ -972,6 +972,21 @@ export class ChatTicketService {
 
   // ── assignment → chat handoff ─────────────────────────────────────────────
 
+  /**
+   * THE one way a cloud agent becomes a chat participant as a side effect of ticket work
+   * (agent_assignments scope='chat', role 'participant'). Idempotent: returns true only
+   * when the agent was newly joined, so a caller can announce the FIRST join exactly once.
+   */
+  private async joinAgentToChat(tenantId: number, chatId: number, agentRef: string): Promise<boolean> {
+    const existing = await this.assignments.list(tenantId, CHAT_SCOPE, String(chatId));
+    const already = Array.isArray(existing) && existing.some((e) => String((e as { agentRef?: unknown }).agentRef) === String(agentRef));
+    if (already) return false;
+    await this.assignments.assign(tenantId, {
+      agentKind: 'workforce', agentRef, scope: CHAT_SCOPE, scopeId: String(chatId), role: 'participant',
+    });
+    return true;
+  }
+
   /** Display name for a cloud agent (falls back to the ref when unknown). */
   private async agentDisplayName(tenantId: number, agentRef: string): Promise<string> {
     const [row] = await this.db
@@ -1028,12 +1043,7 @@ export class ChatTicketService {
     let name: string | undefined = opts?.agentName;
     for (const t of targets) {
       if (t.isArchived || t.mergedIntoChatId != null) continue;
-      const existing = await this.assignments.list(tenantId, CHAT_SCOPE, String(t.chatId));
-      const already = Array.isArray(existing) && existing.some((e) => String((e as { agentRef?: unknown }).agentRef) === String(agentRef));
-      if (already) continue;
-      await this.assignments.assign(tenantId, {
-        agentKind: 'workforce', agentRef, scope: CHAT_SCOPE, scopeId: String(t.chatId), role: 'participant',
-      });
+      if (!(await this.joinAgentToChat(tenantId, t.chatId, agentRef))) continue;
       if (name === undefined) name = await this.agentDisplayName(tenantId, agentRef);
       await this.postSystemMessage(
         tenantId,
@@ -1124,6 +1134,17 @@ export class ChatTicketService {
         ? ChatTicketService.firstLine(input.resultText)
         : (phase === 'failed' ? ChatTicketService.firstLine(input.errorMessage) : '');
       const question = phase === 'paused' ? ChatTicketService.firstLine(input.questionText) : '';
+      // An agent that narrates into a chat IS in that chat. The run's agent comes from lane
+      // staffing / the managed producer role, which is often NOT the ticket's
+      // `assignedAgentRef` — so the assignment-time handoff never joined it, and the chat
+      // showed "Bob started working…" while its Agents list named only the ticket owner.
+      // Joined silently: the milestone line itself is the announcement.
+      const agentRef = input.agentRef;
+      if (agentRef) {
+        await Promise.all(chats.map((c) => this.joinAgentToChat(tenantId, c.chatId, agentRef).catch((error) => {
+          reportCaughtError(error, { source: "application/brain/ChatTicketService.ts", operation: "postRunMilestone.joinAgentToChat" });
+        })));
+      }
       await Promise.all(chats.map((c) => this.postSystemMessage(tenantId, c.chatId, text, {
           runMilestone: key, ticketKind: kind, ticketRef: ref, phase, executionId, agentRef: input.agentRef ?? null,
           agentName: name,

@@ -425,6 +425,37 @@ describe('upstream diagnostic capture', () => {
     expect(diagnostic!.headers['x-request-id']).toBe('req_abc123');
   });
 
+  // The Qwen Token Plan trace that motivated this: a 429 with a text/plain body and the
+  // same correlation headers a gateway throttle would carry. Without the provider's own
+  // words the trace could not say which refusal it was.
+  it('keeps the provider\'s own message — the envelope\'s, or a plain-text body verbatim', async () => {
+    stubResponse(429, 'Allocated quota exceeded,\n please try again later.', { 'content-type': 'text/plain' });
+    expect(await diagnosticFrom(callKimi)).toMatchObject({
+      status: 429, edgeBlocked: false, providerMessage: 'Allocated quota exceeded, please try again later.',
+    });
+
+    stubResponse(401, JSON.stringify({ error: { message: 'Invalid Authentication', type: 'invalid_request_error' } }), {});
+    expect((await diagnosticFrom(callKimi))!.providerMessage).toBe('Invalid Authentication');
+
+    // An HTML edge page is already `edgeBlocked`; its markup is not a message.
+    stubResponse(403, '<!doctype html><html><body>Forbidden</body></html>', {});
+    expect((await diagnosticFrom(callKimi))!.providerMessage).toBeUndefined();
+  });
+
+  it('masks anything credential-shaped in the provider message', async () => {
+    // Assembled at runtime so no token shape appears in the file text (push protection).
+    const reflected = 'q7'.repeat(20);
+    stubResponse(401, JSON.stringify({ error: { message: `Key ${reflected} rejected; header Bear` + `er ${reflected}` } }), {});
+    const message = (await diagnosticFrom(callKimi))!.providerMessage!;
+    expect(message).not.toContain(reflected);
+    expect(message).toContain('[redacted]');
+  });
+
+  it('keeps snake_case error codes, which are the words the message exists for', async () => {
+    stubResponse(429, JSON.stringify({ error: { message: 'token_quota_exceeded_for_this_model_window' } }), {});
+    expect((await diagnosticFrom(callKimi))!.providerMessage).toBe('token_quota_exceeded_for_this_model_window');
+  });
+
   it('carries ONLY allowlisted headers — never a cookie or a reflected credential', async () => {
     stubResponse(403, '<html></html>', {
       'cf-ray': 'ray-1',

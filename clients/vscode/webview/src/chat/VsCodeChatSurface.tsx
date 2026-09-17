@@ -72,7 +72,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from '../authedFetch';
 import {
-  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, useChatParticipants,
+  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, useChatParticipants, useChatActivitySignal,
   RecipientPicker, PersonaPicker, useRecipientChoice,
   useMentionAutocomplete, ChatErrorBanner,
   PromptPanel, PromptOptionsMenu,
@@ -735,7 +735,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Multi-party chat: who a message goes to. The BRAIN (default) executes; an
   // invited agent/human is just talked to. The selector only appears once a chat
   // actually has participants, so a solo chat is unchanged (everything → BRAIN).
-  const participants = useChatParticipants(ticketAdapter, chatId, ticketRefresh);
+  // A run milestone joins its agent to the chat server-side; the activity line arriving
+  // over the live subscription is the signal to re-read the Agents list.
+  const activitySignal = useChatActivitySignal(conv.messages);
+  const railRefresh = ticketRefresh + activitySignal;
+  const participants = useChatParticipants(ticketAdapter, chatId, railRefresh);
   // The effective target (shared with the web composer): an explicit BRAIN pick wins;
   // else an explicit participant; else a leading @mention; else the BRAIN (null). The
   // pick resets on a chat switch and drops a participant who has since left.
@@ -1259,7 +1263,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             adapter={ticketAdapter}
             labels={DEFAULT_CHAT_TICKETS_LABELS}
             onChanged={onTicketsChanged}
-            refreshSignal={ticketRefresh}
+            refreshSignal={railRefresh}
             visibility={chatVisibility}
             onSetVisibility={chatIsOwner ? async (v) => { await persistence.updateChat(chatId, { visibility: v }); setChatVisibility(v); } : undefined}
             onOpenTicket={(tk) => post('open.artifact', { kind: tk.kind, ref: tk.ref, projectId: init.project?.id ?? undefined })}

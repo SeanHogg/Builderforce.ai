@@ -1545,6 +1545,7 @@ export function BrainPanel({
               projectId={chats.activeChat.projectId ?? pinnedProjectId ?? viewingProjectId ?? null}
               chatList={chats.chats}
               onChanged={onTicketsChanged}
+              transcript={conv.messages}
             />
           )}
           {showNewProject && (

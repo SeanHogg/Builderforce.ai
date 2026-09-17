@@ -248,7 +248,7 @@ export function BrainSurfaceBody({
         <GuestSignupCta prompt={guestSignup} />
       </>
       : <div className={styles.brainDockContext}>
-        <BrainContextPanel node={node} nodes={nodes} edges={edges} />
+        <BrainContextPanel node={node} nodes={nodes} edges={edges} transcript={messages} />
       </div>}
     <BrainActivityBar state={activity} />
   </>;
@@ -376,7 +376,7 @@ export function BrainDock({
  * created or opened, and every other connected Object. Previously duplicated in the
  * details panel; it belongs beside the conversation it describes.
  */
-export function BrainContextPanel({ node, nodes, edges }: { node: CreationFlowNode | null; nodes: CreationFlowNode[]; edges: Edge[] }) {
+export function BrainContextPanel({ node, nodes, edges, transcript }: { node: CreationFlowNode | null; nodes: CreationFlowNode[]; edges: Edge[]; transcript?: BrainMessage[] }) {
   const t = useTranslations('creationCanvas');
   if (!node) return <p className={styles.brainEmpty}>{t('brainContextEmpty')}</p>;
   const connectedIds = new Set(edges.flatMap((edge) => edge.source === node.id ? [edge.target] : edge.target === node.id ? [edge.source] : []));
@@ -388,7 +388,7 @@ export function BrainContextPanel({ node, nodes, edges }: { node: CreationFlowNo
   const connectedProjectId = connected.find((candidate) => candidate.data.kind === 'project')?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
 
   if (canonicalChatId) return <section aria-label={t('brainContext')} className={styles.brainCanonicalAssociations}>
-    <ChatTicketsPanel chatId={Number(canonicalChatId)} projectId={connectedProjectId ? Number(connectedProjectId) : null} chatList={[{ id: Number(canonicalChatId), title: node.data.title }]} />
+    <ChatTicketsPanel chatId={Number(canonicalChatId)} projectId={connectedProjectId ? Number(connectedProjectId) : null} chatList={[{ id: Number(canonicalChatId), title: node.data.title }]} transcript={transcript} />
   </section>;
 
   const roster = (items: CreationFlowNode[], empty: string) => items.length
