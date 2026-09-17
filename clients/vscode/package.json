@@ -226,6 +226,12 @@
         "icon": "$(plug)"
       },
       {
+        "command": "builderforce.manageByoConnections",
+        "title": "%command.manageByoConnections%",
+        "category": "BuilderForce",
+        "icon": "$(key)"
+      },
+      {
         "command": "builderforce.refreshProjects",
         "title": "%command.refreshProjects%",
         "icon": "$(sync)"

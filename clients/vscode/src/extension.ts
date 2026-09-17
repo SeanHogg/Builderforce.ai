@@ -1,5 +1,6 @@
 import * as os from "os";
 import { manageMcpServers } from "./mcpServers";
+import { manageByoConnections } from "./byoConnections";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
@@ -364,6 +365,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.registerMcpServer", async () => {
       if (!(await ensureSignedIn(context))) return;
       await manageMcpServers(context.secrets);
+    }),
+    // Bring-your-own model provider connections (Anthropic, OpenAI, Google, etc.):
+    // connect, test, reconnect, or remove BYO provider credentials.
+    vscode.commands.registerCommand("builderforce.manageByoConnections", async () => {
+      if (!(await ensureSignedIn(context))) return;
+      await manageByoConnections(context.secrets);
     }),
     vscode.commands.registerCommand("builderforce.refreshProjects", () => {
       bfApi.invalidateTasks();
