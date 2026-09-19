@@ -33,6 +33,7 @@ import type {
 import type { SyncState } from './reconciler';
 import type { ChangeSet } from './providers';
 import { parseJsonObject } from '../../domain/shared/json';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 /**
  * Coerce a stored `fields` jsonb value back into a plain object. The driver may
@@ -223,7 +224,7 @@ export function createDrizzleStore(db: Db, env?: Env): BoardSyncStore {
           projectId:   input.projectId,
           taskId:      row.id,
           status:      input.status ?? 'backlog',
-          submittedBy: `system:board-sync:${input.provider}`,
+          submittedBy: composeDispatcherLabel('system', 'board-sync', input.provider),
         });
       }
       return row.id;
