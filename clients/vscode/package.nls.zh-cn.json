@@ -82,5 +82,6 @@
   "view.changes": "更改",
   "command.refreshChanges": "BuilderForce：刷新更改",
   "command.openChange": "BuilderForce：打开更改",
-  "command.openSourceControl": "BuilderForce：打开源代码管理"
+  "command.openSourceControl": "BuilderForce：打开源代码管理",
+  "command.manageByoConnections": "BuilderForce：管理模型连接"
 }

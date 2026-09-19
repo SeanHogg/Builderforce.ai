@@ -82,5 +82,6 @@
   "view.changes": "Cambios",
   "command.refreshChanges": "BuilderForce: Actualizar cambios",
   "command.openChange": "BuilderForce: Abrir cambio",
-  "command.openSourceControl": "BuilderForce: Abrir control de código fuente"
+  "command.openSourceControl": "BuilderForce: Abrir control de código fuente",
+  "command.manageByoConnections": "BuilderForce: Gestionar conexiones de modelo"
 }
