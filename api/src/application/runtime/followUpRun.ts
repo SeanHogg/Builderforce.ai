@@ -29,7 +29,38 @@ import { enforceCloudRunCap, type CloudRunCapResult } from './cloudRunLedger';
 import { startDispatchedExecution, type ExecutionTaskRow, type SubmittedExecution } from './dispatchCloudRun';
 import { enqueueExecutionMessage } from './executionSteering';
 import { recordPrdDirective } from './cloudAgent/prd';
+import { submittingUserId } from './dispatcherLabel';
 import { AUTO_RUN_REASON_TEXT } from '../swimlane/evaluateAutoRun';
+
+/** `users.id` is `varchar(36)`; a wider value can never match and would raise 22001. */
+const MAX_USER_ID_CHARS = 36;
+
+/**
+ * The USER id inside a `submitted_by` dispatcher label, for the entitlement gates.
+ *
+ * `submittedBy` is a DISPATCHER LABEL, not a user id: `user:<id>`, `system:coordinator`,
+ * or a composed `<base>:lane-approver:<role>` of up to `MAX_SUBMITTED_BY_CHARS` (128).
+ * The token gate resolves its argument against `users.id`, which is `varchar(36)` — so
+ * passing the label raw did two bad things:
+ *
+ *   1. A label longer than 36 chars (every composed lane-approver label) made Postgres
+ *      raise 22001 `value too long for type character varying(36)` on the superadmin
+ *      lookup, killing the follow-up dispatch instead of gating it.
+ *   2. Even a SHORT label never matched: `user:u1` is not the id `u1`, so the superadmin
+ *      bypass silently never fired for a follow-up run.
+ *
+ * Subsystem-dispatched follow-ups correctly resolve to `null` — no acting user, so the
+ * gate stays funding-neutral rather than billing a run to whoever the label named.
+ * A bare id with no recognised prefix is passed through unchanged (it is already an id),
+ * but never something too wide to be one.
+ */
+function actingUserIdFor(submittedBy: string): string | null {
+  const parsed = submittingUserId(submittedBy);
+  if (parsed) return parsed;
+  const bare = (submittedBy ?? '').trim();
+  if (!bare || bare.includes(':')) return null;
+  return bare.length <= MAX_USER_ID_CHARS ? bare : null;
+}
 
 /** The run a follow-up continues from — what its payload and targeting are built from. */
 export interface FollowUpPriorRun {
@@ -69,7 +100,7 @@ export async function startFollowUpRun(
   const { tenantId, prior, taskRow, directive, submittedBy, agentLabel } = args;
 
   // (1) Entitlements — before any row exists.
-  const tokenBlock = await checkTenantTokenGate(db, tenantId, { actingUserId: submittedBy }, env);
+  const tokenBlock = await checkTenantTokenGate(db, tenantId, { actingUserId: actingUserIdFor(submittedBy) }, env);
   if (tokenBlock) return { kind: 'refused', reason: 'tenant_token_limit', message: tokenBlock.error };
 
   // On-prem runs execute on the user's own machine and are unlimited by policy, so only
