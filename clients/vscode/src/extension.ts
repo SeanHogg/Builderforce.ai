@@ -140,7 +140,7 @@ export function activate(context: vscode.ExtensionContext): void {
       })();
     }),
   );
-  const tree = new SessionsTreeProvider(context.secrets);
+  const tree = new SessionsTreeProvider(context.secrets, context);
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
 

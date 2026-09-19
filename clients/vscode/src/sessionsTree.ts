@@ -5,6 +5,12 @@ import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
+import { archive as archiveRows, partitionArchived, pruneArchive, sweepArchivable, type ArchiveState } from "./sessionsArchive";
+
+/** globalState keys for archive state and view toggle. */
+const ARCHIVE_STATE_KEY = "builderforce.sessions.archive";
+const SHOW_ARCHIVED_KEY = "builderforce.sessions.showArchived";
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
 
 /**
  * The sidebar list (Activity Bar → BuilderForce → Sessions): everything this
@@ -69,13 +75,57 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
   private agentNames = new Map<string, string>();
   private poolLoaded = false;
 
-  constructor(private readonly secrets: vscode.SecretStorage) {
+  constructor(
+    private readonly secrets: vscode.SecretStorage,
+    private readonly ctx: vscode.ExtensionContext,
+  ) {
     // The active project scopes this list — repaint when it changes.
     onProjectChange(() => this.refresh());
+    // Load archive state from globalState.
+    this.archiveState = this.ctx.globalState.get<ArchiveState>(ARCHIVE_STATE_KEY, {});
+    this.showArchived = this.ctx.globalState.get<boolean>(SHOW_ARCHIVED_KEY, false);
+    // Seed the menu when-clause context so the right toggle icon shows on load.
+    void vscode.commands.executeCommand("setContext", SHOW_ARCHIVED_KEY, this.showArchived);
+    // Schedule the archive sweep: run once now (on activation) and then daily.
+    this.runSweep();
+    const sweepInterval = setInterval(() => this.runSweep(), SWEEP_INTERVAL_MS);
+    ctx.subscriptions.push({ dispose: () => clearInterval(sweepInterval) });
+  }
+
+  private archiveState: ArchiveState = {};
+  private showArchived = false;
+
+  /** Toggle showing archived sessions. */
+  setShowArchived(show: boolean): void {
+    this.showArchived = show;
+    void this.ctx.globalState.update(SHOW_ARCHIVED_KEY, show);
+    void vscode.commands.executeCommand("setContext", SHOW_ARCHIVED_KEY, show);
+    this.refresh();
+  }
+
+  /** Run the archive sweep: auto-archive finished sessions older than 5 days. */
+  private runSweep(): void {
+    const rows = this.rowCache?.rows;
+    if (!rows) return;
+    const now = Date.now();
+    const due = sweepArchivable(rows, this.archiveState, now);
+    if (due.length > 0) {
+      this.archiveState = archiveRows(this.archiveState, due, now, false);
+      this.persistArchive();
+    }
+  }
+
+  private persistArchive(): void {
+    void this.ctx.globalState.update(ARCHIVE_STATE_KEY, this.archiveState);
   }
 
   /** Drop the cache and repaint (call after create / rename / delete / invite / sign-in). */
   refresh(): void {
+    // Prune the archive: drop entries for rows the server no longer returns.
+    if (this.rowCache?.rows) {
+      this.archiveState = pruneArchive(this.archiveState, this.rowCache.rows);
+      this.persistArchive();
+    }
     this.rowCache = undefined;
     this.poolLoaded = false;
     this._onDidChangeTreeData.fire();
@@ -158,17 +208,29 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
       // FACETS of one list, not sources. "Recent" is the list; the other three are
       // readings of it. There is no "Chats" group: a conversation is a row in the
       // same list, because it opens the same panel (see the module header).
-      return [
+      const groups: SessionTreeNode[] = [
         { nodeType: "group", kind: "all", label: vscode.l10n.t("Recent") },
         { nodeType: "group", kind: "pinned", label: vscode.l10n.t("Pinned") },
         { nodeType: "group", kind: "shared", label: vscode.l10n.t("Shared") },
         { nodeType: "group", kind: "running", label: vscode.l10n.t("Running") },
       ];
+      // Show "Archived" group when the user has toggled it on.
+      if (this.showArchived) {
+        groups.push({ nodeType: "group", kind: "archived", label: vscode.l10n.t("Archived") });
+      }
+      return groups;
     }
     if (element.nodeType !== "group") return [];
 
     const rows = await this.rows();
-    return sessionsLibraryGroup(rows, element.kind).map((row) => ({ nodeType: "item" as const, group: element.kind, row }));
+    // Partition into active and archived, then show the right slice per group.
+    const { active, archived } = partitionArchived(rows, this.archiveState);
+    const pool = element.kind === "archived" ? archived : active;
+    return sessionsLibraryGroup(pool, element.kind === "archived" ? "all" : element.kind).map((row) => ({
+      nodeType: "item" as const,
+      group: element.kind,
+      row,
+    }));
   }
 
   /**
