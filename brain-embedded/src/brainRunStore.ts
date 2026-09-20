@@ -30,6 +30,7 @@ import type { BrainMessage } from './types';
 import { getRunDriver } from './runDriver';
 import {
   StreamInterruptedError,
+  TransportError,
   type BrainToolSpec,
   type ChatCompletionMessage,
   type CompletionMetadata,
@@ -2396,19 +2397,33 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // auto-routing, retry the turn ONCE on another connected model instead of ending
         // the run: this is the "Grok starts and then stops" failure. A pinned model is the
         // user's own choice, so it is not routed around.
-        if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
+        // TransportError (network failure before response) also retries: we never reached the
+        // gateway, so we don't know which model would have been used, but another model might work.
+        const isRetryableError = e instanceof StreamInterruptedError || e instanceof TransportError;
+        if (!isRetryableError || activeModel) throw turnError(e);
         // Out of every LATER turn too, not only this retry. Excluding it for the retry alone
         // sent the next turn straight back to it: chat #105 broke on the same model and was
         // retried on eighteen separate turns — a wasted, often looping, attempt per step.
-        brokenModels.add(e.model);
-        // Durable, so a reopened chat's report can still say which model broke and was retried.
-        pushDurableStep(c, chatId, persistence, {
-          ts: nowIso(),
-          category: 'message',
-          label: 'llm.stream_interrupted',
-          args: { model: e.model, step: iter },
-          result: `${e.message} — retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`,
-        });
+        // For StreamInterruptedError, we know which model failed. For TransportError, we don't
+        // (the fetch never reached the gateway), so we retry without excluding any specific model.
+        if (e instanceof StreamInterruptedError && e.model) {
+          brokenModels.add(e.model);
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: 'message',
+            label: 'llm.stream_interrupted',
+            args: { model: e.model, step: iter },
+            result: `${e.message} — retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`,
+          });
+        } else {
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: 'message',
+            label: 'llm.transport_error',
+            args: { step: iter },
+            result: `${e.message} — retrying this turn on another connected model.`,
+          });
+        }
         restartTurn();
         try {
           result = await request(turnRole, [...brokenModels]);
