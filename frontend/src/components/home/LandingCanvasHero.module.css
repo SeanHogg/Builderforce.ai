@@ -470,10 +470,6 @@
 }
 
 /* ── Composer — bottom-centre ON the board, per the canvas convention ── */
-/* On a phone this is the FIXED band at the bottom of the stacked board: the
-   last flex child, outside `.boardScroll`, so the prompt and its controls are
-   on screen at every scroll position while the options move above it. The tray
-   carries the board's bottom corners and a top edge that reads as a seam. */
 .promptWrap {
   position: relative;
   z-index: 10;
@@ -488,6 +484,19 @@
   border-top: 1px solid var(--border-subtle);
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   background: var(--surface-sunken);
+}
+
+/* On a phone the prompt STAYS FIXED at the bottom while the cards scroll above.
+   The prompt band is the last flex child so it anchors the bottom edge; making
+   it sticky keeps it in view at every scroll position. The options panel (the
+   PromptUseCasePicker) escapes the board's overflow via its own 899px media
+   query — it becomes a viewport-anchored bottom sheet that scrolls inside. */
+@media (max-width: 899px) {
+  .promptWrap {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+  }
 }
 .prompt {
   width: 100%;
