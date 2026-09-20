@@ -205,6 +205,20 @@
         "icon": "$(trash)"
       },
       {
+        "command": "builderforce.archiveSession",
+        "title": "%command.archiveSession%",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "builderforce.unarchiveSession",
+        "title": "%command.unarchiveSession%",
+        "icon": "$(unarchive)"
+      },
+      {
+        "command": "builderforce.toggleShowArchived",
+        "title": "%command.toggleShowArchived%"
+      },
+      {
         "command": "builderforce.selectProject",
         "title": "%command.selectProject%",
         "icon": "$(folder)"
@@ -469,6 +483,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "builderforce.toggleShowArchived",
+          "when": "view == builderforce.sessions",
+          "group": "navigation@4"
+        },
+        {
           "command": "builderforce.pickModel",
           "when": "view == builderforce.sessions",
           "group": "overflow@1"
@@ -629,6 +648,16 @@
           "command": "builderforce.deleteSession",
           "when": "view == builderforce.sessions && viewItem == builderforceSession",
           "group": "inline@2"
+        },
+        {
+          "command": "builderforce.archiveSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline@3"
+        },
+        {
+          "command": "builderforce.unarchiveSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline@4"
         },
         {
           "command": "builderforce.runTask",

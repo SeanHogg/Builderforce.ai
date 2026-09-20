@@ -5,12 +5,17 @@ import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
-import { archive as archiveRows, partitionArchived, pruneArchive, sweepArchivable, type ArchiveState } from "./sessionsArchive";
+import { archive as archiveRows, unarchive, partitionArchived, pruneArchive, sweepArchivable, type ArchiveState } from "./sessionsArchive";
 
 /** globalState keys for archive state and view toggle. */
 const ARCHIVE_STATE_KEY = "builderforce.sessions.archive";
 const SHOW_ARCHIVED_KEY = "builderforce.sessions.showArchived";
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
+
+/** Extract the row key from a SessionTreeNode, if it has one. */
+export function keyOfSessionNode(node: SessionTreeNode): string | undefined {
+  return node.nodeType === "item" ? node.row.key : undefined;
+}
 
 /**
  * The sidebar list (Activity Bar → BuilderForce → Sessions): everything this
@@ -82,24 +87,42 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // The active project scopes this list — repaint when it changes.
     onProjectChange(() => this.refresh());
     // Load archive state from globalState.
-    this.archiveState = this.ctx.globalState.get<ArchiveState>(ARCHIVE_STATE_KEY, {});
-    this.showArchived = this.ctx.globalState.get<boolean>(SHOW_ARCHIVED_KEY, false);
+    this._archiveState = this.ctx.globalState.get<ArchiveState>(ARCHIVE_STATE_KEY, {});
+    this._showArchived = this.ctx.globalState.get<boolean>(SHOW_ARCHIVED_KEY, false);
     // Seed the menu when-clause context so the right toggle icon shows on load.
-    void vscode.commands.executeCommand("setContext", SHOW_ARCHIVED_KEY, this.showArchived);
+    void vscode.commands.executeCommand("setContext", SHOW_ARCHIVED_KEY, this._showArchived);
     // Schedule the archive sweep: run once now (on activation) and then daily.
     this.runSweep();
     const sweepInterval = setInterval(() => this.runSweep(), SWEEP_INTERVAL_MS);
     ctx.subscriptions.push({ dispose: () => clearInterval(sweepInterval) });
   }
 
-  private archiveState: ArchiveState = {};
-  private showArchived = false;
+  private _archiveState: ArchiveState = {};
+  get archiveState(): ArchiveState { return this._archiveState; }
+  set archiveState(v: ArchiveState) { this._archiveState = v; }
+
+  get showArchived(): boolean { return this._showArchived; }
+  private _showArchived = false;
 
   /** Toggle showing archived sessions. */
   setShowArchived(show: boolean): void {
-    this.showArchived = show;
+    this._showArchived = show;
     void this.ctx.globalState.update(SHOW_ARCHIVED_KEY, show);
     void vscode.commands.executeCommand("setContext", SHOW_ARCHIVED_KEY, show);
+    this.refresh();
+  }
+
+  /** Archive one session by key. */
+  archiveSession(key: string): void {
+    this._archiveState = archiveRows(this._archiveState, [key], Date.now(), true);
+    this.persistArchive();
+    this.refresh();
+  }
+
+  /** Unarchive one session by key. */
+  unarchiveSession(key: string): void {
+    this._archiveState = unarchive(this._archiveState, key);
+    this.persistArchive();
     this.refresh();
   }
 
@@ -108,22 +131,23 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     const rows = this.rowCache?.rows;
     if (!rows) return;
     const now = Date.now();
-    const due = sweepArchivable(rows, this.archiveState, now);
+    const due = sweepArchivable(rows, this._archiveState, now);
     if (due.length > 0) {
-      this.archiveState = archiveRows(this.archiveState, due, now, false);
+      this._archiveState = archiveRows(this._archiveState, due, now, false);
       this.persistArchive();
     }
   }
 
-  private persistArchive(): void {
-    void this.ctx.globalState.update(ARCHIVE_STATE_KEY, this.archiveState);
+  /** Persist archive state to global storage (exposed for extension commands). */
+  persistArchive(): void {
+    void this.ctx.globalState.update(ARCHIVE_STATE_KEY, this._archiveState);
   }
 
   /** Drop the cache and repaint (call after create / rename / delete / invite / sign-in). */
   refresh(): void {
     // Prune the archive: drop entries for rows the server no longer returns.
     if (this.rowCache?.rows) {
-      this.archiveState = pruneArchive(this.archiveState, this.rowCache.rows);
+      this._archiveState = pruneArchive(this._archiveState, this.rowCache.rows);
       this.persistArchive();
     }
     this.rowCache = undefined;
