@@ -229,3 +229,73 @@ export function resolveRecipient(choice: RecipientChoice, mention: DirectedRecip
   if (choice === 'brain') return null;
   return choice ?? mention;
 }
+
+// ── Ticket tagging (#123) ───────────────────────────────────────────────────────
+
+/** A ticket that can be #tagged in chat. */
+export interface ChatTicket {
+  /** Unique ticket id (numeric). */
+  id: number;
+  /** Display title/subject. */
+  title: string;
+  /** Optional status for display (e.g. "in_progress"). */
+  status?: string;
+  /** Optional key (e.g. "1-ABC-123"). */
+  key?: string;
+  /** Reference string (e.g. "#123" or the key). */
+  ref?: string;
+}
+
+/** Token returned when the caret is inside a #ticket query. */
+export interface TicketToken {
+  /** The text after '#' that the user is typing. */
+  query: string;
+  /** Start position of '#' in the text. */
+  start: number;
+  /** End position (caret) in the text. */
+  end: number;
+}
+
+/** Alias for ChatTicket, used in ticket autocomplete. */
+export type TicketTag = ChatTicket;
+
+/** Alias for activeTicketToken, used in ticket autocomplete. */
+export const activeHashtagToken = activeTicketToken;
+
+/**
+ * Detect an in-progress "#ticket" tag at the caret, for a composer typeahead.
+ * The token is a '#' at the start of the text or right after whitespace, followed
+ * by a run of non-whitespace, non-'#' characters, with the caret inside that run.
+ * Returns null when the caret is not in such a token.
+ */
+export function activeTicketToken(text: string, caret: number): TicketToken | null {
+  const hash = text.lastIndexOf('#', Math.max(0, caret - 1));
+  // No '#', or the caret sits at/before it (nothing is being typed into a token).
+  if (hash < 0 || hash >= caret) return null;
+  // Must start the text or follow whitespace.
+  if (hash > 0 && !/\s/.test(text[hash - 1])) return null;
+  const query = text.slice(hash + 1, caret);
+  // The run from '#' to the caret must be one unbroken token (no space/# inside).
+  if (/[\s#]/.test(query)) return null;
+  return { query, start: hash, end: caret };
+}
+
+/**
+ * Filter + rank tickets for a tag query — case-insensitive substring match on
+ * title or key. An empty query returns every ticket (so typing a bare '#'
+ * opens the full list).
+ */
+export function filterTicketCandidates(tickets: ChatTicket[], query: string): ChatTicket[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return tickets;
+  return tickets
+    .map((t) => {
+      const titleIdx = t.title.toLowerCase().indexOf(q);
+      const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
+      const idx = titleIdx >= 0 ? titleIdx : keyIdx;
+      return { t, idx };
+    })
+    .filter((s) => s.idx >= 0)
+    .sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title))
+    .map((s) => s.t);
+}

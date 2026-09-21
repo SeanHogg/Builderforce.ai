@@ -405,6 +405,10 @@ export {
 } from './directedMessage';
 export type { DirectedRecipient, DirectedGroup, RecipientChoice, MentionToken } from './directedMessage';
 
+// Ticket tagging (#123) in chat messages
+export { activeTicketToken, activeHashtagToken, filterTicketCandidates } from './directedMessage';
+export type { ChatTicket, TicketToken, TicketTag } from './directedMessage';
+
 // The tenant's assignable agent pool (owned + purchased + registered), one mapping
 export {
   AGENT_POOL_PATHS,

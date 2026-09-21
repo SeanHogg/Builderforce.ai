@@ -82,14 +82,17 @@ __export(src_exports, {
   TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND: () => TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE: () => TOOL_ROUTER_INVOKE,
+  TransportError: () => TransportError,
   UNBACKED_TICKET_CLAIM_NOTICE: () => UNBACKED_TICKET_CLAIM_NOTICE,
   UNBACKED_WRITE_CLAIM_NOTICE: () => UNBACKED_WRITE_CLAIM_NOTICE,
   UNSCOPED_MUTATION_TOOLS: () => UNSCOPED_MUTATION_TOOLS,
   WEB_FETCH_TOOL_NAME: () => WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter: () => XmlToolCallFilter,
   accountUsedInTrace: () => accountUsedInTrace,
+  activeHashtagToken: () => activeHashtagToken,
   activeMentionToken: () => activeMentionToken,
   activeModelKey: () => activeModelKey,
+  activeTicketToken: () => activeTicketToken,
   activityIcon: () => activityIcon,
   activityMessageCount: () => activityMessageCount,
   activityTarget: () => activityTarget,
@@ -155,6 +158,7 @@ __export(src_exports, {
   fetchMcpToolEntries: () => fetchMcpToolEntries,
   filterMentionCandidates: () => filterMentionCandidates,
   filterModelItems: () => filterModelItems,
+  filterTicketCandidates: () => filterTicketCandidates,
   findTools: () => findTools,
   forgetResolvedModels: () => forgetResolvedModels,
   formatAssistantTranscriptHeading: () => formatAssistantTranscriptHeading,
@@ -1255,6 +1259,14 @@ var StreamInterruptedError = class extends Error {
     this.model = model;
   }
 };
+var TransportError = class extends Error {
+  model;
+  constructor(message, model = void 0) {
+    super(message);
+    this.name = "TransportError";
+    this.model = model;
+  }
+};
 var LOOP_QUOTE_CHARS = 90;
 var RepetitionLoopError = class extends StreamInterruptedError {
   kept;
@@ -1310,12 +1322,20 @@ async function streamChatCompletion(opts, handlers = {}) {
     if (Object.keys(meta).length > 0) body.metadata = meta;
   }
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
-  const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: opts.signal
-  });
+  let res;
+  try {
+    res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: opts.signal
+    });
+  } catch (e) {
+    if (e instanceof TypeError) {
+      throw new TransportError(`fetch failed: ${e.message}`);
+    }
+    throw e;
+  }
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
   let headerModel = null;
@@ -2880,6 +2900,25 @@ function mentionRecipient(text, participants) {
 function resolveRecipient(choice, mention) {
   if (choice === "brain") return null;
   return choice ?? mention;
+}
+var activeHashtagToken = activeTicketToken;
+function activeTicketToken(text, caret) {
+  const hash = text.lastIndexOf("#", Math.max(0, caret - 1));
+  if (hash < 0 || hash >= caret) return null;
+  if (hash > 0 && !/\s/.test(text[hash - 1])) return null;
+  const query = text.slice(hash + 1, caret);
+  if (/[\s#]/.test(query)) return null;
+  return { query, start: hash, end: caret };
+}
+function filterTicketCandidates(tickets, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return tickets;
+  return tickets.map((t) => {
+    const titleIdx = t.title.toLowerCase().indexOf(q);
+    const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
+    const idx = titleIdx >= 0 ? titleIdx : keyIdx;
+    return { t, idx };
+  }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
 }
 
 // ../packages/agent-stall/src/requestIntent.ts
@@ -8081,15 +8120,26 @@ ${revisit}` : covered.note;
         result = await request(turnRole, [...brokenModels]);
       } catch (e) {
         if (c.abort?.signal.aborted) throw e;
-        if (!(e instanceof StreamInterruptedError) || activeModel || !e.model) throw turnError(e);
-        brokenModels.add(e.model);
-        pushDurableStep(c, chatId, persistence, {
-          ts: nowIso(),
-          category: "message",
-          label: "llm.stream_interrupted",
-          args: { model: e.model, step: iter },
-          result: `${e.message} \u2014 retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`
-        });
+        const isRetryableError = e instanceof StreamInterruptedError || e instanceof TransportError;
+        if (!isRetryableError || activeModel) throw turnError(e);
+        if (e instanceof StreamInterruptedError && e.model) {
+          brokenModels.add(e.model);
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: "message",
+            label: "llm.stream_interrupted",
+            args: { model: e.model, step: iter },
+            result: `${e.message} \u2014 retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`
+          });
+        } else {
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: "message",
+            label: "llm.transport_error",
+            args: { step: iter },
+            result: `${e.message} \u2014 retrying this turn on another connected model.`
+          });
+        }
         restartTurn();
         try {
           result = await request(turnRole, [...brokenModels]);
@@ -9894,14 +9944,17 @@ function PromptInput({
   TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE,
+  TransportError,
   UNBACKED_TICKET_CLAIM_NOTICE,
   UNBACKED_WRITE_CLAIM_NOTICE,
   UNSCOPED_MUTATION_TOOLS,
   WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter,
   accountUsedInTrace,
+  activeHashtagToken,
   activeMentionToken,
   activeModelKey,
+  activeTicketToken,
   activityIcon,
   activityMessageCount,
   activityTarget,
@@ -9967,6 +10020,7 @@ function PromptInput({
   fetchMcpToolEntries,
   filterMentionCandidates,
   filterModelItems,
+  filterTicketCandidates,
   findTools,
   forgetResolvedModels,
   formatAssistantTranscriptHeading,

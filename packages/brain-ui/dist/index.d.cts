@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, TicketTag, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
 /**
@@ -1088,6 +1088,17 @@ interface ChatOptionVM {
     title: string;
     ticketCount?: number | null;
     ticketProgressPct?: number | null;
+    /**
+     * The chat's overall ticket completion, 0–100, as `GET /api/brain/chats` now emits
+     * it on every list item: the same weighted rollup as {@link ticketProgressPct}, but
+     * never null — a chat with no linked tickets reads `0` rather than "unknown".
+     *
+     * Optional HERE only because this view-model is also built by hosts that have not
+     * been moved onto the new list field yet; the API contract itself is required. It is
+     * carried so the list JSON and this VM do not drift. Nothing renders it yet — the
+     * Sessions tree and the chat switcher bind it separately.
+     */
+    progressPct?: number;
 }
 /** A pending human question associated with one of this chat's linked tasks. */
 interface ChatQuestionVM {
@@ -1428,6 +1439,55 @@ interface MentionAutocomplete {
     open: boolean;
 }
 declare function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): MentionAutocomplete;
+
+/**
+ * #ticket autocomplete — the shared composer typeahead that lets a user tag
+ * a ticket in the chat by typing "#". Similar to @mention but for tickets.
+ *
+ * Headless-ish: {@link useTicketAutocomplete} owns the token/selection state and
+ * returns handlers you spread onto YOUR <textarea> plus a `popup` node you render
+ * inside a `position: relative` composer container. Picking a ticket replaces the
+ * "#query" fragment with the ticket reference (e.g., "#123") and calls `onPick`.
+ */
+
+interface TicketAutocompleteLabels {
+    /** Heading above the list, e.g. "Tag ticket". */
+    title?: string;
+    /** Row sub-label for ticket status, e.g. "In Progress". */
+    status?: string;
+    /** Text when no tickets match. */
+    noMatches?: string;
+}
+interface UseTicketAutocompleteOptions {
+    /** Ref to the composer's <textarea> — read for the live caret position. */
+    textareaRef: React__default.RefObject<HTMLTextAreaElement | null>;
+    /** Current composer text (controlled). */
+    value: string;
+    /** Setter for the composer text (same one the textarea's onChange calls). */
+    setValue: (v: string) => void;
+    /** The available tickets to choose from. */
+    tickets: TicketTag[];
+    /** Called with the ticket the user picked. */
+    onPick: (t: TicketTag) => void;
+    labels?: TicketAutocompleteLabels;
+    /** Suppress the picker entirely (e.g. while a run is streaming). */
+    disabled?: boolean;
+}
+interface TicketAutocomplete {
+    /**
+     * Attach to the textarea's onKeyDown BEFORE your own logic. Returns true when it
+     * consumed the key (nav / select / escape) — when true you must NOT also submit
+     * or insert a newline for that key.
+     */
+    onKeyDown: (e: React__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+    /** Attach to the textarea's onSelect so a caret move re-detects the token. */
+    onSelect: () => void;
+    /** The popup element; render it inside a `position: relative` container. */
+    popup: React__default.ReactNode;
+    /** True while the picker is open (its nav keys are being intercepted). */
+    open: boolean;
+}
+declare function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): TicketAutocomplete;
 
 /**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the
@@ -2551,4 +2611,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, healthRingColor, initialsOf, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice };
+export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, healthRingColor, initialsOf, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete };
