@@ -144,7 +144,7 @@ describe('probeOpenRouterConnection', () => {
 
     const result = await probeOpenRouterConnection(env, 7, 6);
 
-    expect(result).toMatchObject({ ok: false, status: 'failed', upstreamStatus: 401 });
+    expect(result).toMatchObject({ ok: false, status: 'needs_attention', upstreamStatus: 401 });
     expect(result.error).toContain('No auth credentials found');
   });
 
@@ -212,7 +212,7 @@ describe('probeOpenRouterConnection', () => {
       'openrouter/moonshotai/kimi-k3',
     ]);
     expect(result).toMatchObject({
-      ok: false, status: 'failed',
+      ok: false, status: 'capacity',
       limitedModels: ['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3'],
       alert: { connectionId: 25, reason: 'capacity' },
     });

@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.80] — A running agent now joins the chat it reports into
+
+- **A running agent now joins the chat it reports into** — the Agents list names whoever is posting progress, and updates live when a run starts.
+
 ## [2026.9.79] — Sending a message works again, and a server error now says which one
 
 - **Every chat send was failing with "Something went wrong on our side."** The server rejected the save of each new message before the conversation could continue. That is fixed on the server, so it recovers without reinstalling anything; this release is what makes the next failure explainable.

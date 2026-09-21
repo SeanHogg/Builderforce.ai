@@ -67,6 +67,7 @@ import {
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
 import type { Env } from '../../env';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 /**
  * Wall-clock ONE project's merge queue may spend.
@@ -448,7 +449,7 @@ async function runPrMergeQueueBody(
       recoveryStarted = (await runs.spend(
         () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
-          submittedBy: `manager:conflict-resolution:${policy.managerRef ?? 'system'}`,
+          submittedBy: composeDispatcherLabel('manager', 'conflict-resolution', policy.managerRef ?? 'system'),
         }),
         (v) => v === true,
       )).result === true;

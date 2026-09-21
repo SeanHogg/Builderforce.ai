@@ -37,6 +37,7 @@ import type { SignoffGateResult, SignoffOwnership } from './signoffGate';
 import { classifySignoffOwnership, describeSignoffOwnership } from './signoffGate';
 import { requestRoleRun } from './requestRoleRun';
 import { TicketParticipantsService } from './ticketParticipants';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 /** The minimal ticket shape a sign-off request needs. */
 export interface SignoffTargetTask {
@@ -137,7 +138,7 @@ export async function driveOutstandingSignoffs(
       agentRef: candidate.assigneeRef,
       laneKey: candidate.stageKey ?? args.task.status,
       kind: contractFor(candidate.responsibility),
-      submittedBy: `manager:signoff-request:${args.managerRef ?? 'system'}`,
+      submittedBy: composeDispatcherLabel('manager', 'signoff-request', args.managerRef ?? 'system'),
       prUrl: args.task.githubPrUrl,
     });
     // A REFUSAL is not an ask. The dispatcher returns null when the cloud-run cap, the

@@ -137,6 +137,7 @@ export { chatSwitcherLabel } from './chatTickets/chatSwitcherLabel';
 export { createChatTicketsRestAdapter } from './chatTickets/restAdapter';
 export type { ChatTicketsRequest, ChatTicketsRestOptions } from './chatTickets/restAdapter';
 export { useChatParticipants } from './chatTickets/useChatParticipants';
+export { useChatActivitySignal } from './chatTickets/useChatActivitySignal';
 export { useMentionAutocomplete } from './mention/MentionAutocomplete';
 export type { MentionAutocomplete, MentionLabels, UseMentionAutocompleteOptions } from './mention/MentionAutocomplete';
 export { DEFAULT_CHAT_TICKETS_LABELS, TICKET_KINDS, RUNNABLE_KINDS } from './chatTickets/types';

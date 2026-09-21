@@ -700,11 +700,53 @@ export interface UpstreamDiagnostic {
    *  envelope — the signature of a CDN/WAF block that ran BEFORE the API saw the
    *  credential, which is a different problem from a rejected key. */
   edgeBlocked: boolean;
+  /** The provider's OWN words about the failure — the error envelope's message, or the
+   *  plain-text body when there is no envelope — whitespace-collapsed, bounded, and with
+   *  anything credential-shaped masked. Absent for an HTML page (`edgeBlocked` already
+   *  says what that is) and for an empty body.
+   *
+   *  The headers alone cannot tell a support desk WHICH refusal happened: a Qwen Token
+   *  Plan 429 whose window is spent and a gateway throttle carry the identical status and
+   *  correlation ids, and the trace an operator pasted for one of those was unanswerable
+   *  without this line. */
+  providerMessage?: string;
   observedAt: string;
 }
 
+const PROVIDER_MESSAGE_MAX_CHARS = 300;
+
+/** Bearer values, prefixed API keys, and long opaque runs. A provider error message has no
+ *  reason to echo a credential, but this string is pasted into a third party's ticket
+ *  system, so anything that LOOKS like one is masked rather than trusted. A run must carry
+ *  a digit to count: real keys do, and snake_case error codes (`token_quota_exceeded_…`)
+ *  are exactly the words the message exists to keep. */
+const CREDENTIAL_SHAPED = /\bBearer\s+\S+|\b(?:sk|pk|rk|xai)[-_](?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{12,}|(?=[A-Za-z0-9_+/=-]*\d)[A-Za-z0-9_+/=-]{32,}/gi;
+
+function isHtmlBody(bodyText: string): boolean {
+  return /^\s*(<!doctype\s+html|<html\b)/i.test(bodyText);
+}
+
+/** The provider's message out of a failed response body — see {@link UpstreamDiagnostic.providerMessage}. */
+function redactedProviderMessage(bodyText: string): string | undefined {
+  if (!bodyText.trim() || isHtmlBody(bodyText)) return undefined;
+  let text: string;
+  try {
+    const parsed = JSON.parse(bodyText) as { error?: { message?: unknown } | string; message?: unknown } | null;
+    const envelope = parsed?.error;
+    text = typeof envelope === 'string' ? envelope
+      : typeof envelope?.message === 'string' ? envelope.message
+      : typeof parsed?.message === 'string' ? parsed.message
+      : bodyText;
+  } catch {
+    // Not JSON: a gateway or throttle answering in plain text IS the message.
+    text = bodyText;
+  }
+  const flat = text.replace(/\s+/g, ' ').trim().replace(CREDENTIAL_SHAPED, '[redacted]');
+  return flat ? flat.slice(0, PROVIDER_MESSAGE_MAX_CHARS) : undefined;
+}
+
 /** Capture the redacted diagnostic for a failed upstream response. */
-export function captureUpstreamDiagnostic(
+function captureUpstreamDiagnostic(
   endpoint: string,
   status: number,
   responseHeaders: Headers,
@@ -724,19 +766,46 @@ export function captureUpstreamDiagnostic(
     // fallback remains visible to the silent-catch ratchet and future reviewers.
     safeEndpoint = endpoint;
   }
+  const providerMessage = redactedProviderMessage(bodyText);
   return {
     endpoint: safeEndpoint,
     status,
     headers,
-    edgeBlocked: /^\s*(<!doctype\s+html|<html\b)/i.test(bodyText),
+    edgeBlocked: isHtmlBody(bodyText),
+    ...(providerMessage ? { providerMessage } : {}),
     observedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Classify a failed upstream response and throw — carrying the redacted diagnostic on
+ * whatever error `classify` raises.
+ *
+ * THE single seam every vendor's non-OK branch goes through. It exists because the
+ * capture used to live only in the shared OpenAI-compatible transport: the hand-rolled
+ * vendors (SuperGrok, Codex, Anthropic, Bedrock) threw bare errors, so their failed
+ * "Test connection" rendered no trace at all and an operator had nothing to send xAI.
+ * A new vendor that routes its failure through here gets the evidence for free; one
+ * that throws directly is the gap this closed.
+ */
+export function throwWithUpstreamDiagnostic(
+  endpoint: string,
+  response: Pick<Response, 'status' | 'headers'>,
+  bodyText: string,
+  classify: () => never,
+): never {
+  const diagnostic = captureUpstreamDiagnostic(endpoint, response.status, response.headers, bodyText);
+  try {
+    classify();
+  } catch (err) {
+    throw withUpstreamDiagnostic(err, diagnostic);
+  }
 }
 
 /** Attach `diagnostic` to a vendor error on its way out, so every throw site in the
  *  status ladder carries it without repeating the field at each `new`. Returns the
  *  error so callers can `throw withUpstreamDiagnostic(err, d)`. */
-export function withUpstreamDiagnostic(error: unknown, diagnostic: UpstreamDiagnostic): unknown {
+function withUpstreamDiagnostic(error: unknown, diagnostic: UpstreamDiagnostic): unknown {
   if (error instanceof VendorRetryableError
     || error instanceof VendorFatalError
     || error instanceof VendorSchemaError) {
@@ -1128,8 +1197,7 @@ export async function executeVendorPost<T>(args: {
   // below throws. Doing it here rather than at each `new` keeps the classification
   // rules readable and means `onFatal` (whose signature is shared with the image and
   // embedding surfaces) needs no extra parameter.
-  const diagnostic = captureUpstreamDiagnostic(endpoint, resp.status, resp.headers, errText);
-  try {
+  return throwWithUpstreamDiagnostic(endpoint, resp, errText, () => {
     if (CASCADE_STATUSES.has(resp.status)) {
       throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
     }
@@ -1156,9 +1224,7 @@ export async function executeVendorPost<T>(args: {
     }
 
     return onFatal(vendorId, model, resp.status, errText);
-  } catch (err) {
-    throw withUpstreamDiagnostic(err, diagnostic);
-  }
+  });
 }
 
 export async function executeChatCompletion(args: {
@@ -1248,8 +1314,7 @@ export async function executeChatCompletionStream(args: {
     const errText = (await resp.text()).slice(0, 400);
     // Same single-capture / attach-on-the-way-out shape as `executeVendorPost`, so a
     // streamed failure carries the identical evidence as a non-streamed one.
-    const diagnostic = captureUpstreamDiagnostic(endpoint, resp.status, resp.headers, errText);
-    try {
+    throwWithUpstreamDiagnostic(endpoint, resp, errText, () => {
       if (CASCADE_STATUSES.has(resp.status)) {
         throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
       }
@@ -1269,10 +1334,8 @@ export async function executeChatCompletionStream(args: {
         throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}`);
       }
       // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
-      throwClassified4xx(vendorId, model, resp.status, errText);
-    } catch (err) {
-      throw withUpstreamDiagnostic(err, diagnostic);
-    }
+      return throwClassified4xx(vendorId, model, resp.status, errText);
+    });
   }
 
   if (!resp.body) {

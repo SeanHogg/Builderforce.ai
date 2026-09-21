@@ -113,6 +113,17 @@ export function isActivityMessage(msg: { metadata?: string | null }): boolean {
 }
 
 /**
+ * How many activity lines a transcript holds. A NEW one means the server just changed the
+ * chat's ticket/agent state (a run milestone joins the running agent to the chat), so a
+ * host feeds this into its ticket-rail refresh signal to re-read the Agents list live.
+ */
+export function activityMessageCount(messages: ReadonlyArray<{ metadata?: string | null }>): number {
+  let n = 0;
+  for (const m of messages) if (isActivityMessage(m)) n += 1;
+  return n;
+}
+
+/**
  * The label templates a surface must supply to render an activity line in ITS language.
  * Every value is a template with `{…}` placeholders — never a pre-composed sentence — so
  * word order is the translator's to decide.
