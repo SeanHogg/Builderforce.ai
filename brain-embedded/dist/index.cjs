@@ -91,6 +91,7 @@ __export(src_exports, {
   activeMentionToken: () => activeMentionToken,
   activeModelKey: () => activeModelKey,
   activityIcon: () => activityIcon,
+  activityMessageCount: () => activityMessageCount,
   activityTarget: () => activityTarget,
   activityTone: () => activityTone,
   agentPersonaChoice: () => agentPersonaChoice,
@@ -8916,6 +8917,11 @@ function parseChatActivity(msg) {
 function isActivityMessage(msg) {
   return parseChatActivity(msg) !== null;
 }
+function activityMessageCount(messages) {
+  let n = 0;
+  for (const m of messages) if (isActivityMessage(m)) n += 1;
+  return n;
+}
 var DEFAULT_CHAT_ACTIVITY_LABELS = {
   milestoneStarted: "{agent} started working on {kind} #{ref}",
   milestoneCompleted: "{agent} finished {kind} #{ref}",
@@ -9897,6 +9903,7 @@ function PromptInput({
   activeMentionToken,
   activeModelKey,
   activityIcon,
+  activityMessageCount,
   activityTarget,
   activityTone,
   agentPersonaChoice,

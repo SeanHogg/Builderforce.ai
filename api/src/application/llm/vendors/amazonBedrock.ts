@@ -28,7 +28,7 @@
  */
 
 import { signAwsRequest, canonicalUri } from './awsSigV4';
-import { VendorFatalError, VendorRetryableError, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModelEntry, type VendorModule } from './types';
+import { VendorFatalError, VendorRetryableError, throwWithUpstreamDiagnostic, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModelEntry, type VendorModule } from './types';
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2 (Bedrock)', brand: 'Anthropic', tier: 'PREMIUM' },
@@ -114,14 +114,17 @@ export const amazonBedrockModule: VendorModule = {
       secretAccessKey,
     });
 
-    const res = await fetch(`https://${host}${path}`, { method: 'POST', headers: signed.headers, body, signal: params.signal });
+    const endpoint = `https://${host}${path}`;
+    const res = await fetch(endpoint, { method: 'POST', headers: signed.headers, body, signal: params.signal });
     const text = await res.text();
     if (!res.ok) {
       const status = res.status;
-      if (status === 429 || status >= 500) {
-        throw new VendorRetryableError('amazon-bedrock', params.model, status, text.slice(0, 400));
-      }
-      throw new VendorFatalError('amazon-bedrock', status, text.slice(0, 400));
+      throwWithUpstreamDiagnostic(endpoint, res, text.slice(0, 400), () => {
+        if (status === 429 || status >= 500) {
+          throw new VendorRetryableError('amazon-bedrock', params.model, status, text.slice(0, 400));
+        }
+        throw new VendorFatalError('amazon-bedrock', status, text.slice(0, 400));
+      });
     }
     let parsed: ConverseResponse;
     try {

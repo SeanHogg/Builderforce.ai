@@ -1,4 +1,4 @@
-import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, fetchWithVendorTimeout, isCapacityLimitBody, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, fetchWithVendorTimeout, isCapacityLimitBody, throwWithUpstreamDiagnostic, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
@@ -136,18 +136,20 @@ async function xaiFetch(params: VendorCallParams, chain: ReasoningChain, extra?:
   }
   if (!response.ok) {
     const message = (await response.text()).slice(0, 1000);
-    // xAI reports a depleted weekly SuperGrok/API allowance as 403 — the same
-    // status it uses for a genuine entitlement rejection. Preserve the actual HTTP
-    // status, but tag the detail so cooldown + operator remediation classify it as
-    // capacity (wait for reset / buy credits), never "reconnect or upgrade access".
-    if (isCapacityLimitBody(message)) {
-      throw new VendorRetryableError(
-        'xai-oauth', params.model, response.status,
-        `${CAPACITY_LIMIT_MARKER} (upstream ${response.status}): ${message.slice(0, 200)}`,
-      );
-    }
-    if (response.status === 400 || response.status === 422) throw new VendorFatalError('xai-oauth', response.status, message);
-    throw new VendorRetryableError('xai-oauth', params.model, response.status, message);
+    throwWithUpstreamDiagnostic(ENDPOINT, response, message, () => {
+      // xAI reports a depleted weekly SuperGrok/API allowance as 403 — the same
+      // status it uses for a genuine entitlement rejection. Preserve the actual HTTP
+      // status, but tag the detail so cooldown + operator remediation classify it as
+      // capacity (wait for reset / buy credits), never "reconnect or upgrade access".
+      if (isCapacityLimitBody(message)) {
+        throw new VendorRetryableError(
+          'xai-oauth', params.model, response.status,
+          `${CAPACITY_LIMIT_MARKER} (upstream ${response.status}): ${message.slice(0, 200)}`,
+        );
+      }
+      if (response.status === 400 || response.status === 422) throw new VendorFatalError('xai-oauth', response.status, message);
+      throw new VendorRetryableError('xai-oauth', params.model, response.status, message);
+    });
   }
   return response;
 }

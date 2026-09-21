@@ -21,7 +21,7 @@
  *   • {@link runBloatReclaim} — `VACUUM (FULL, ANALYZE)`, weekly, and ONLY for a
  *     relation whose bloat is past both thresholds. This rewrites the table and does
  *     return the space, at the cost of an ACCESS EXCLUSIVE lock for the duration. It
- *     is bounded hard: one relation per run, worst first, and only from the registry
+ *     is bounded hard: one relation per endpoint per run, worst first, and only from the registry
  *     entries that declare themselves `reclaimable` — every one of which is a diagnostic
  *     log with a best-effort writer, so blocking it briefly loses a log line at worst.
  *     `activity_log` is the exception that made the flag necessary: it needs the vacuum
@@ -99,54 +99,85 @@ export async function runTableVacuum(env: Env): Promise<TableVacuumResult> {
   return result;
 }
 
-/** Heap must be at least this big before a rewrite is worth an exclusive lock. */
-export const RECLAIM_MIN_HEAP_BYTES = 64 * 1024 * 1024;
+/** The table — heap AND TOAST, not indexes — must be at least this big before a rewrite
+ *  is worth an exclusive lock. */
+export const RECLAIM_MIN_TABLE_BYTES = 64 * 1024 * 1024;
 /** …and at least this fraction of it must be estimated bloat. */
 export const RECLAIM_MIN_BLOAT_RATIO = 0.5;
-/** One rewrite per run, so a single tick can never chain exclusive locks. */
-export const RECLAIM_MAX_PER_RUN = 1;
+/**
+ * One rewrite per ENDPOINT per run.
+ *
+ * Per endpoint rather than per run because the reason for the bound is lock chaining, and
+ * locks do not chain across separate databases. A global limit of one let the fuller
+ * endpoint's worst table starve the other endpoint indefinitely — which is precisely when
+ * both are near the ceiling and both need the rewrite.
+ */
+export const RECLAIM_MAX_PER_CONNECTION = 1;
+/** Percentage of pages the live-size sample reads. Small on purpose: the answer only has
+ *  to separate "mostly empty" from "mostly full", and the sample detoasts what it reads. */
+export const LIVE_SAMPLE_PERCENT = 5;
+/** Below this many sampled rows the average is noise, and the planner estimate is used. */
+export const LIVE_SAMPLE_MIN_ROWS = 50;
 
 /**
- * Per-row overhead the bloat estimate adds to the summed column widths: 23 bytes of
- * tuple header rounded to the 24-byte MAXALIGN boundary, plus the 4-byte line pointer
- * in the page header. This is the standard estimate — it ignores per-page overhead and
- * alignment padding, so it reads slightly LOW, i.e. it under-reports bloat rather than
- * inventing it. That bias is the right one for a check that authorises a table rewrite.
+ * Per-row overhead the planner-statistics estimate adds to the summed column widths: 23
+ * bytes of tuple header rounded to the 24-byte MAXALIGN boundary, plus the 4-byte line
+ * pointer. It ignores per-page overhead and padding, so it reads slightly LOW — it
+ * under-reports bloat rather than inventing it, the right bias for a check that
+ * authorises a rewrite.
  */
 const ROW_OVERHEAD_BYTES = 28;
+/** The line pointer alone — `pg_column_size(t.*)` already counts the tuple header. */
+const LINE_POINTER_BYTES = 4;
 
 export interface RelationBloat {
   relation: string;
   connection: SweptConnection;
-  /** Heap size on disk, excluding indexes and TOAST. */
-  heapBytes: number;
-  /** Estimated bytes of live tuple data. */
+  /** Heap + TOAST on disk (`pg_table_size`), excluding indexes. */
+  tableBytes: number;
+  /** Estimated bytes of live data, heap and TOAST together. */
   liveBytes: number;
-  /** heapBytes - liveBytes, floored at 0. */
+  /** tableBytes - liveBytes, floored at 0. */
   bloatBytes: number;
-  /** bloatBytes / heapBytes, 0 when the heap is empty. */
+  /** bloatBytes / tableBytes, 0 when the table is empty. */
   bloatRatio: number;
+  /** Where `liveBytes` came from: a page sample, or the planner's column widths. */
+  estimate: 'sample' | 'stats';
 }
 
 /**
- * Estimate bloat for the registered relations on one connection.
+ * Estimate bloat for the rewritable relations on one connection.
  *
- * Uses the planner's own statistics — `pg_class.reltuples` for the row count and the
- * summed `pg_stats.avg_width` for the row width — rather than `pgstattuple`, which is
- * an extension Neon does not install by default. The daily `VACUUM (ANALYZE)` above is
- * what keeps both inputs current; without it this would read stale and the reclaim
- * would either miss a bloated table or fire on a clean one.
+ * WHY THE TABLE AND NOT THE HEAP. This used to measure `pg_relation_size` — the heap
+ * only — and the omission was not academic. A log table whose weight is large text is
+ * stored almost entirely in TOAST: `llm_traces` on 2026-09-16 was 241 MB with a 29 MB
+ * heap and 209 MB of TOAST, so it sat under the size floor forever and could never be
+ * chosen however much of its body text had been blanked. `pg_table_size` is heap + TOAST.
+ *
+ * WHY A SAMPLE AND NOT JUST `pg_stats`. The planner's `avg_width` cannot see out-of-line
+ * values, so a stats estimate of live bytes is blind to exactly the part that was just
+ * missing. For any relation big enough to be a candidate, live size is instead measured
+ * from a `TABLESAMPLE` of its pages: `pg_column_size(t.*)` builds the whole row, which
+ * pulls its TOASTed values inline (still compressed, as TOAST stores them), so the
+ * average row it reports is the real on-disk cost of a live row. Five percent of pages is
+ * enough to tell a table that is mostly free space from one that is mostly data, which is
+ * the only thing the thresholds ask. Smaller relations, and samples too thin to trust,
+ * fall back to the statistics — they cannot clear the size floor either way.
+ *
+ * Neon ships no `pgstattuple`, which would answer this exactly; the daily
+ * `VACUUM (ANALYZE)` keeps `reltuples` current for the multiplication below.
  */
 export async function measureBloat(env: Env, connection: SweptConnection): Promise<RelationBloat[]> {
   // Only what the rewrite is ALLOWED to act on. Measuring a relation this sweep may never
   // touch would put it at the top of `eligible` — it is the biggest and the most bloated
   // precisely because it is never rewritten — and every run would then report a candidate
   // it silently skips, which reads as the reclaim being broken.
-  const relations = reclaimableRelations(connection);
+  const relations = reclaimableRelations(connection).filter(isSafeRelationName);
   if (relations.length === 0) return [];
-  const rows = (await dbFor(env, connection).execute(sql`
+  const db = dbFor(env, connection);
+  const rows = (await db.execute(sql`
     SELECT c.relname                                   AS relation,
-           pg_relation_size(c.oid)::bigint             AS "heapBytes",
+           pg_table_size(c.oid)::bigint                AS "tableBytes",
            GREATEST(c.reltuples, 0)::bigint            AS "estRows",
            COALESCE(s.width, 0)::bigint                AS "rowWidth"
       FROM pg_class c
@@ -159,21 +190,38 @@ export async function measureBloat(env: Env, connection: SweptConnection): Promi
      WHERE n.nspname = 'public'
        AND c.relkind = 'r'
        AND c.relname IN (${sql.join(relations.map((r) => sql`${r}`), sql`, `)})
-  `)).rows as Array<{ relation: string; heapBytes: number | string; estRows: number | string; rowWidth: number | string }>;
+  `)).rows as Array<{ relation: string; tableBytes: number | string; estRows: number | string; rowWidth: number | string }>;
 
-  return rows.map((row) => {
-    const heapBytes = Number(row.heapBytes ?? 0);
-    const liveBytes = Number(row.estRows ?? 0) * (Number(row.rowWidth ?? 0) + ROW_OVERHEAD_BYTES);
-    const bloatBytes = Math.max(0, heapBytes - liveBytes);
-    return {
+  const measured: RelationBloat[] = [];
+  for (const row of rows) {
+    const tableBytes = Number(row.tableBytes ?? 0);
+    const estRows = Number(row.estRows ?? 0);
+    let liveBytes = estRows * (Number(row.rowWidth ?? 0) + ROW_OVERHEAD_BYTES);
+    let estimate: RelationBloat['estimate'] = 'stats';
+    // Sample only what could actually be chosen — the sample detoasts what it reads, and a
+    // relation under the floor is ineligible whatever it reports.
+    if (tableBytes >= RECLAIM_MIN_TABLE_BYTES && isSafeRelationName(row.relation)) {
+      const [sample] = (await db.execute(sql.raw(
+        `SELECT COALESCE(AVG(pg_column_size(t.*)), 0)::bigint AS "avgRowBytes", COUNT(*)::int AS "sampled"`
+        + ` FROM "${row.relation}" t TABLESAMPLE SYSTEM (${LIVE_SAMPLE_PERCENT})`,
+      ))).rows as Array<{ avgRowBytes: number | string; sampled: number | string }>;
+      if (Number(sample?.sampled ?? 0) >= LIVE_SAMPLE_MIN_ROWS) {
+        liveBytes = estRows * (Number(sample?.avgRowBytes ?? 0) + LINE_POINTER_BYTES);
+        estimate = 'sample';
+      }
+    }
+    const bloatBytes = Math.max(0, tableBytes - liveBytes);
+    measured.push({
       relation: row.relation,
       connection,
-      heapBytes,
+      tableBytes,
       liveBytes,
       bloatBytes,
-      bloatRatio: heapBytes > 0 ? bloatBytes / heapBytes : 0,
-    };
-  });
+      bloatRatio: tableBytes > 0 ? bloatBytes / tableBytes : 0,
+      estimate,
+    });
+  }
+  return measured;
 }
 
 export interface BloatReclaimResult {
@@ -191,8 +239,9 @@ export interface BloatReclaimResult {
  *
  * Ordering is by ABSOLUTE bloat, not ratio: a 400 MB relation that is 60% bloat is the
  * one costing money, while a 2 MB one at 95% is noise. The absolute floor
- * ({@link RECLAIM_MIN_HEAP_BYTES}) is what keeps a small, permanently-ratio-bloated
- * table from taking an exclusive lock every week for no benefit.
+ * ({@link RECLAIM_MIN_TABLE_BYTES}) is what keeps a small, permanently-ratio-bloated
+ * table from taking an exclusive lock every week for no benefit. The worst table is
+ * chosen PER ENDPOINT — see {@link RECLAIM_MAX_PER_CONNECTION}.
  */
 export async function runBloatReclaim(env: Env): Promise<BloatReclaimResult> {
   const result: BloatReclaimResult = { inspected: 0, eligible: [], reclaimed: [], failed: [] };
@@ -213,14 +262,18 @@ export async function runBloatReclaim(env: Env): Promise<BloatReclaimResult> {
   }
   result.inspected = measured.length;
   result.eligible = measured
-    .filter((m) => m.heapBytes >= RECLAIM_MIN_HEAP_BYTES && m.bloatRatio >= RECLAIM_MIN_BLOAT_RATIO)
+    .filter((m) => m.tableBytes >= RECLAIM_MIN_TABLE_BYTES && m.bloatRatio >= RECLAIM_MIN_BLOAT_RATIO)
     .sort((a, b) => b.bloatBytes - a.bloatBytes);
 
-  for (const target of result.eligible.slice(0, RECLAIM_MAX_PER_RUN)) {
+  const targets = connections.flatMap((connection) => result.eligible
+    .filter((e) => e.connection === connection)
+    .slice(0, RECLAIM_MAX_PER_CONNECTION));
+
+  for (const target of targets) {
     try {
       await vacuumRelation(dbFor(env, target.connection), target.relation, { full: true });
       const [after] = (await measureBloat(env, target.connection)).filter((m) => m.relation === target.relation);
-      result.reclaimed.push({ relation: target.relation, beforeBytes: target.heapBytes, afterBytes: after?.heapBytes ?? target.heapBytes });
+      result.reclaimed.push({ relation: target.relation, beforeBytes: target.tableBytes, afterBytes: after?.tableBytes ?? target.tableBytes });
     } catch (error) {
       result.failed.push({ relation: target.relation, error: error instanceof Error ? error.message : 'VACUUM FULL failed' });
       reportCaughtError(error, {
@@ -229,7 +282,7 @@ export async function runBloatReclaim(env: Env): Promise<BloatReclaimResult> {
         level: 'warning',
         context: {
           logMessage: `[cron:db-reclaim] VACUUM (FULL, ANALYZE) ${target.relation} failed`,
-          details: { relation: target.relation, heapBytes: target.heapBytes, bloatBytes: target.bloatBytes },
+          details: { relation: target.relation, tableBytes: target.tableBytes, bloatBytes: target.bloatBytes },
         },
       });
     }

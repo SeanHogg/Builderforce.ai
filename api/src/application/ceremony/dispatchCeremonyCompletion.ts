@@ -27,6 +27,7 @@ import { tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { buildRuntimeService } from '../../buildRuntimeService';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 /** Hard ceiling on agent runs kicked off by one completed ceremony. */
 export const MAX_DISPATCH_PER_CEREMONY = 20;
@@ -63,7 +64,7 @@ export async function dispatchCeremonyCompletion(
         projectId: args.projectId,
         taskId: t.id,
         status: t.status,
-        submittedBy: `system:ceremony:${args.sessionId}`,
+        submittedBy: composeDispatcherLabel('system', 'ceremony', args.sessionId),
       });
       if (started) dispatched += 1;
     } catch (err) {

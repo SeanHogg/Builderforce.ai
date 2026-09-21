@@ -3768,6 +3768,10 @@ export interface ProbeDiagnostic {
   status: number;
   headers: Record<string, string>;
   edgeBlocked: boolean;
+  /** The provider's own error message — bounded, whitespace-collapsed, credential-shaped
+   *  runs masked. Absent for an HTML edge page or an empty body. It is what tells "your
+   *  plan's usage window is spent" from a gateway throttle when both are the same 429. */
+  providerMessage?: string;
   observedAt: string;
   traceId: string;
   model: string;

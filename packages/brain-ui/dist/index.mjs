@@ -3210,8 +3210,15 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   );
 }
 
+// src/chatTickets/useChatActivitySignal.ts
+import { useMemo as useMemo8 } from "react";
+import { activityMessageCount } from "@seanhogg/builderforce-brain-embedded";
+function useChatActivitySignal(messages) {
+  return useMemo8(() => activityMessageCount(messages), [messages]);
+}
+
 // src/mention/MentionAutocomplete.tsx
-import { useCallback as useCallback3, useEffect as useEffect7, useMemo as useMemo8, useState as useState11 } from "react";
+import { useCallback as useCallback3, useEffect as useEffect7, useMemo as useMemo9, useState as useState11 } from "react";
 import {
   activeMentionToken,
   filterMentionCandidates
@@ -3221,7 +3228,7 @@ function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
   const [token, setToken] = useState11(null);
   const [index, setIndex] = useState11(0);
-  const matches = useMemo8(
+  const matches = useMemo9(
     () => token && !disabled ? filterMentionCandidates(participants, token.query) : [],
     [token, participants, disabled]
   );
@@ -3349,7 +3356,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback9, useEffect as useEffect10, useId, useMemo as useMemo10, useRef as useRef6, useState as useState16 } from "react";
+import { useCallback as useCallback9, useEffect as useEffect10, useId, useMemo as useMemo11, useRef as useRef6, useState as useState16 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -3915,7 +3922,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-import { useCallback as useCallback6, useEffect as useEffect8, useMemo as useMemo9, useState as useState14 } from "react";
+import { useCallback as useCallback6, useEffect as useEffect8, useMemo as useMemo10, useState as useState14 } from "react";
 import { Fragment as Fragment7, jsx as jsx21, jsxs as jsxs20 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
@@ -3975,7 +3982,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = useMemo9(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = useMemo10(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
   return /* @__PURE__ */ jsxs20("div", { style: sectionBlock, children: [
     /* @__PURE__ */ jsx21("div", { style: fieldTitle, children: t.analyzeTitle }),
@@ -4544,7 +4551,7 @@ import { Fragment as Fragment9, jsx as jsx25, jsxs as jsxs23 } from "react/jsx-r
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = useMemo10(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const t = useMemo11(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = useState16(null);
   const [targets, setTargets] = useState16(null);
   const [seedModels, setSeedModels] = useState16([]);
@@ -5333,7 +5340,7 @@ var targetChip = {
 };
 
 // src/project360/Project360View.tsx
-import { useMemo as useMemo11, useState as useState17 } from "react";
+import { useMemo as useMemo12, useState as useState17 } from "react";
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -5513,9 +5520,9 @@ var DEFAULT_PROJECT360_LABELS = {
 import { Fragment as Fragment10, jsx as jsx27, jsxs as jsxs25 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo11(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const L = useMemo12(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
   const [selected, setSelected] = useState17(null);
-  const sortedWorkforce = useMemo11(
+  const sortedWorkforce = useMemo12(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -5682,7 +5689,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-import { useMemo as useMemo12 } from "react";
+import { useMemo as useMemo13 } from "react";
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -5697,7 +5704,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 import { jsx as jsx28, jsxs as jsxs26 } from "react/jsx-runtime";
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo12(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = useMemo13(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ jsxs26("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ jsxs26("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ jsx28("span", { className: "bf-list-head__title", children: title }),
@@ -5851,6 +5858,7 @@ export {
   stripAskUser,
   toolPreview,
   toolStepView,
+  useChatActivitySignal,
   useChatParticipants,
   useMentionAutocomplete,
   usePopover,

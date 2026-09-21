@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseChatActivity,
   isActivityMessage,
+  activityMessageCount,
   chatActivityText,
   activityTone,
   DEFAULT_CHAT_ACTIVITY_LABELS,
@@ -77,5 +78,19 @@ describe('chatActivityText', () => {
     const done = parseChatActivity({ metadata: JSON.stringify({ runMilestone: 'k', phase: 'completed', ticketRef: '1' }) })!;
     expect(activityTone(fail)).toBe('bad');
     expect(activityTone(done)).toBe('good');
+  });
+});
+
+describe('activityMessageCount', () => {
+  it("counts only activity lines — the signal a host uses to re-read the chat's Agents list", () => {
+    const msgs = [
+      { metadata: null },
+      { metadata: JSON.stringify({ runMilestone: '42:started', phase: 'started', agentName: 'Bob', ticketKind: 'epic', ticketRef: '2570' }) },
+      { metadata: JSON.stringify({ agentDispatch: true, agentName: 'Ada', ticketKind: 'task', ticketRef: '7' }) },
+      { metadata: '{not json' },
+      { metadata: JSON.stringify({ model: 'claude-opus-5' }) },
+    ];
+    expect(activityMessageCount(msgs)).toBe(2);
+    expect(activityMessageCount([])).toBe(0);
   });
 });

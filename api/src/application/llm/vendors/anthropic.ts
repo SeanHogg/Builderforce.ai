@@ -38,6 +38,7 @@ import {
   fetchWithVendorTimeout,
   parseOpenAIResponse,
   throwClassified4xx,
+  throwWithUpstreamDiagnostic,
   VendorRetryableError,
   type AiModelTier,
   type VendorCallParams,
@@ -473,20 +474,22 @@ function prepareAnthropicRequest(
  *  by `call` + `callStream` so both surfaces fail over identically. Always throws. */
 async function throwAnthropicHttpError(resp: Response, model: string, isOAuth: boolean): Promise<never> {
   const errText = (await resp.text()).slice(0, 400);
-  if (resp.status === OVERLOADED_STATUS || CASCADE_STATUSES.has(resp.status)) {
-    throw new VendorRetryableError('anthropic', model, resp.status, errText.slice(0, 240));
-  }
-  if (AUTH_STATUSES.has(resp.status)) {
-    console.error(
-      `[vendors] anthropic/${model} auth ${resp.status} — ${isOAuth ? 'tenant Claude subscription token rejected (expired/revoked — reconnect)' : 'check CLAUDE_API_KEY'}. Failing over to next model.`,
-      errText.slice(0, 200),
-    );
-    throw new VendorRetryableError('anthropic', model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-  }
-  // 400/422 (and other 4xx) fatal — the dispatcher advances past them — UNLESS the 400
-  // is a usage-cap / credit-balance limit (Anthropic returns those as 400s), which is a
-  // capacity condition another vendor can serve: fail over + cool instead of dying.
-  throwClassified4xx('anthropic', model, resp.status, errText);
+  return throwWithUpstreamDiagnostic(ENDPOINT, resp, errText, () => {
+    if (resp.status === OVERLOADED_STATUS || CASCADE_STATUSES.has(resp.status)) {
+      throw new VendorRetryableError('anthropic', model, resp.status, errText.slice(0, 240));
+    }
+    if (AUTH_STATUSES.has(resp.status)) {
+      console.error(
+        `[vendors] anthropic/${model} auth ${resp.status} — ${isOAuth ? 'tenant Claude subscription token rejected (expired/revoked — reconnect)' : 'check CLAUDE_API_KEY'}. Failing over to next model.`,
+        errText.slice(0, 200),
+      );
+      throw new VendorRetryableError('anthropic', model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
+    }
+    // 400/422 (and other 4xx) fatal — the dispatcher advances past them — UNLESS the 400
+    // is a usage-cap / credit-balance limit (Anthropic returns those as 400s), which is a
+    // capacity condition another vendor can serve: fail over + cool instead of dying.
+    return throwClassified4xx('anthropic', model, resp.status, errText);
+  });
 }
 
 // ---------------------------------------------------------------------------
