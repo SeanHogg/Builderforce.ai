@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.9.82",
+  "version": "2026.9.83",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -216,7 +216,8 @@
       },
       {
         "command": "builderforce.toggleShowArchived",
-        "title": "%command.toggleShowArchived%"
+        "title": "%command.toggleShowArchived%",
+        "icon": "$(archive)"
       },
       {
         "command": "builderforce.selectProject",
