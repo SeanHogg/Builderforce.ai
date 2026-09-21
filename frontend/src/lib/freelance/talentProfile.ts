@@ -86,6 +86,28 @@ export interface FreelancerProfile {
   updatedAt?: string | null;
   /** True when this person hosts an active booking_service (marketplace Book). */
   bookable?: boolean;
+
+  // ---- Advisor mode (PRD 21 / #2530 / #2527) ---------------------------
+  /** Master toggle for advisor/hire-me mode. False = not in setup; no gating. */
+  advisorMode?: boolean;
+  /** Areas of expertise (required when advisorMode=true). */
+  advisorExpertise?: string[];
+  /** Industries served (optional). */
+  advisorIndustries?: string[];
+  /** Languages for sessions (optional). */
+  advisorLanguages?: string[];
+  /** Booking methods (required when advisorMode=true). */
+  advisorMethods?: ('video' | 'phone' | 'email' | 'in-person')[];
+  /** Business stages served (optional). */
+  advisorStages?: ('start' | 'grow' | 'exit')[];
+  /** Typical session length in minutes. */
+  advisorSessionLengthMinutes?: number | null;
+  /** Price per session in cents (0 = volunteer). */
+  advisorSessionPriceCents?: number | null;
+  /** Location/timezone for in-person sessions. */
+  advisorLocation?: string | null;
+  /** Whether sessions default to confidential. */
+  advisorConfidentialityDefault?: boolean;
 }
 
 /**
