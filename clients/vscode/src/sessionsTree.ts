@@ -5,6 +5,13 @@ import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
+import {
+  appendTicketProgress,
+  clampTicketProgressPct,
+  conversationAccessibilityName,
+  conversationTreeLabel,
+  ticketProgressTooltipLine,
+} from "./ticketProgressDisplay";
 import { archive as archiveRows, unarchive, partitionArchived, pruneArchive, sweepArchivable, type ArchiveState } from "./sessionsArchive";
 
 /** globalState keys for archive state and view toggle. */
@@ -180,12 +187,18 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     const item = new vscode.TreeItem(conversationTreeLabel(chat), vscode.TreeItemCollapsibleState.None);
     item.id = sessionsLibraryRowId(node.group, node.row);
     const time = relativeTime(chat.updatedAt);
+    // Linked-ticket complete percent lives AFTER the relative time in description
+    // (`2h · 85%`). Title stays title-only so VS Code ellipsizes the label, not
+    // the marker (#2442 / #2439). Absent/non-finite pct omits the suffix; a real
+    // 0% still shows.
+    const ticketPct = clampTicketProgressPct(chat.ticketProgressPct);
+    const timeAndPct = appendTicketProgress(time, ticketPct);
     // Filtered: the project is implied by the header, so just show the time. Unfiltered:
     // prefix the project name (or "No project") so a mixed history stays readable.
-    let description = time;
+    let description = timeAndPct;
     if (!this.filtered) {
       const project = projectLabel(this.projectNameById, chat.projectId);
-      description = project ? (time ? `${project} · ${time}` : project) : time;
+      description = project ? (timeAndPct ? `${project} · ${timeAndPct}` : project) : timeAndPct;
     }
     // Multi-party chat: show the participants as coloured initial avatars. The row
     // ICON becomes a composite avatar (up to two overlapping discs — a native
@@ -220,6 +233,21 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
         : vscode.l10n.t("Agent is working…");
       item.tooltip = new vscode.MarkdownString(`${chat.title}\n\n**${state}**`);
     }
+    if (ticketPct != null) {
+      // Tooltip is the only place extra wording ("ticket progress") appears.
+      const progressLine = ticketProgressTooltipLine(ticketPct);
+      if (item.tooltip instanceof vscode.MarkdownString) {
+        item.tooltip.appendMarkdown(`\n\n${progressLine}`);
+      } else {
+        const base = typeof item.tooltip === "string" && item.tooltip.length > 0
+          ? item.tooltip
+          : conversationTreeLabel(chat);
+        item.tooltip = `${base}\n${progressLine}`;
+      }
+    }
+    item.accessibilityInformation = {
+      label: conversationAccessibilityName(conversationTreeLabel(chat), time, ticketPct),
+    };
     item.description = description;
     item.contextValue = "builderforceSession";
     item.command = { command: "builderforce.openSession", title: vscode.l10n.t("Open Chat"), arguments: [chat.id] };
@@ -324,19 +352,6 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     this.rowCache = { ts: Date.now(), rows };
     return rows;
   }
-}
-
-/**
- * Sessions-tree label for a conversation. Host `src/` cannot import brain-ui
- * (`sourcePackages.test` forbids it), so this is the same `pct% · title` shape
- * as `chatSwitcherLabel` without sharing the module.
- */
-function conversationTreeLabel(chat: BfBrainChat): string {
-  const title = chat.title || `Chat ${chat.id}`;
-  const count = chat.ticketCount ?? 0;
-  const pct = chat.ticketProgressPct;
-  if (count <= 0 || pct == null || !Number.isFinite(pct)) return title;
-  return `${Math.max(0, Math.min(100, Math.round(pct)))}% · ${title}`;
 }
 
 /** Up to two initials from a display name (e.g. "Bob Developer" → "BD"). */
