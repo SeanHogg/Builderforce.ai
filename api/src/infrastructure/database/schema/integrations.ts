@@ -251,8 +251,15 @@ export const mailboxConnections = pgTable('mailbox_connections', {
   lastError:    text('last_error'),
   lastSyncedAt: timestamp('last_synced_at'),
   /** False hides the mailbox from campaign sending while leaving it readable — a
-   *  shared inbox you want on the canvas but must never blast a campaign from. */
-  allowSending: boolean('allow_sending').notNull().default(true),
+   *  shared inbox you want on the canvas but must never blast a campaign from.
+   *
+   *  Defaults FALSE: connecting a mailbox is a linking act, not a grant of
+   *  sending authority. A freshly connected mailbox is readable immediately but
+   *  cannot be blasted from until someone with MANAGER role explicitly opts it
+   *  in via `PATCH /api/mailbox/connections/:id`. Reconnecting a revoked grant
+   *  deliberately does NOT touch this column, so recovering a mailbox never
+   *  silently re-arms sending. See migrations 0414 and 0457. */
+  allowSending: boolean('allow_sending').notNull().default(false),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
