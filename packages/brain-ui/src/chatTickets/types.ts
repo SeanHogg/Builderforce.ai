@@ -113,6 +113,17 @@ export interface ChatOptionVM {
   title: string;
   ticketCount?: number | null;
   ticketProgressPct?: number | null;
+  /**
+   * The chat's overall ticket completion, 0–100, as `GET /api/brain/chats` now emits
+   * it on every list item: the same weighted rollup as {@link ticketProgressPct}, but
+   * never null — a chat with no linked tickets reads `0` rather than "unknown".
+   *
+   * Optional HERE only because this view-model is also built by hosts that have not
+   * been moved onto the new list field yet; the API contract itself is required. It is
+   * carried so the list JSON and this VM do not drift. Nothing renders it yet — the
+   * Sessions tree and the chat switcher bind it separately.
+   */
+  progressPct?: number;
 }
 
 /** A pending human question associated with one of this chat's linked tasks. */
