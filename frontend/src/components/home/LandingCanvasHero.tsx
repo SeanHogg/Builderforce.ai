@@ -214,6 +214,12 @@ export function LandingCanvasHero() {
                 </span>
               </div>
 
+              {/* The scrolling half of the stacked board: the objects and the
+                  roster move inside it while the session bar above and the
+                  composer below stay put — on a phone the prompt is always on
+                  screen and it is the OPTIONS that scroll. Above 900px the
+                  wrapper is `display: contents`, so the plane is unchanged. */}
+              <div className={styles.boardScroll}>
               <div className={styles.field}>
                 <svg
                   className={styles.wires}
@@ -284,6 +290,7 @@ export function LandingCanvasHero() {
                     {mate.name}
                   </button>
                 ))}
+              </div>
               </div>
 
               <div

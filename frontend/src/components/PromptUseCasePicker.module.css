@@ -26,4 +26,29 @@
 .icon { display:grid; place-items:center; flex:none; width:25px; height:25px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); border-radius:var(--radius-sm); color:var(--coral-bright, var(--canvas-accent)); font:600 13px/1 ui-sans-serif,system-ui,sans-serif; }
 .empty { padding:20px; color:var(--text-muted,var(--canvas-muted)); font-size:var(--font-size-eyebrow); text-align:center; }
 @media (max-width:700px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+/* On a phone the picker's host is often a height-capped, overflow-clipped
+   surface — the landing hero's board, where the prompt is a fixed band and the
+   options scroll. An absolutely-positioned sheet would be clipped by it, so
+   while open the sheet anchors to the VIEWPORT instead: a bottom sheet over
+   everything, scrolling inside, with the tab that opened it staying put. */
+@media (max-width:899px) {
+  /* Positioned whether open or not, so the open AND close transitions both run
+     at the viewport anchor — gating this on `data-open` would snap the sheet
+     back into the clipped host mid-fade. Closed it is opacity 0, 0fr-tall and
+     pointer-events none, so the anchor costs nothing. */
+  .reveal {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    /* Clear the persistent mobile bottom nav when it is present — the token is
+       0px wherever the bar does not render, and already includes safe-area. */
+    bottom: calc(12px + var(--mobile-nav-height, 0px));
+    left: 12px;
+    width: auto;
+    /* Above the page chrome (header 60, mobile bottom nav 900) and below the
+       nav drawer (1001+) — a sheet over the app, under its drawers. */
+    z-index: 950;
+  }
+  .catalog { max-height: min(52vh, 420px); }
+}
 @media (prefers-reduced-motion:reduce) { .reveal,.arrow { transition:none; } }

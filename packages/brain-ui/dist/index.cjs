@@ -31,7 +31,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var src_exports = {};
 __export(src_exports, {
   Avatar: () => Avatar,
-  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded11.BUILDERFORCE_PRODUCT_NAME,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded12.BUILDERFORCE_PRODUCT_NAME,
   BrainTimeline: () => BrainTimeline,
   ChatErrorBanner: () => ChatErrorBanner,
   ChatTicketsPanel: () => ChatTicketsPanel,
@@ -41,7 +41,7 @@ __export(src_exports, {
   DEFAULT_CHAT_TICKETS_LABELS: () => DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_EVERMIND_LABELS: () => DEFAULT_EVERMIND_LABELS,
   DEFAULT_LIVE_ACTIVITY_LABELS: () => DEFAULT_LIVE_ACTIVITY_LABELS,
-  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded11.DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded12.DEFAULT_MODEL_IDENTITY,
   DEFAULT_PENDING_CHANGES_LABELS: () => DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PERSONA_PICKER_LABELS: () => DEFAULT_PERSONA_PICKER_LABELS,
   DEFAULT_PROJECT360_LABELS: () => DEFAULT_PROJECT360_LABELS,
@@ -52,9 +52,9 @@ __export(src_exports, {
   EvermindConsole: () => EvermindConsole,
   HealthRing: () => HealthRing,
   LiveActivity: () => LiveActivity,
-  MODEL_CATEGORIES: () => import_builderforce_brain_embedded11.MODEL_CATEGORIES,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded12.MODEL_CATEGORIES,
   Markdown: () => Markdown,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded11.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded12.PROJECT_EVERMIND_MODEL_PREFIX,
   PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
   PersonaPicker: () => PersonaPicker,
@@ -70,36 +70,36 @@ __export(src_exports, {
   Sunburst: () => Sunburst,
   TICKET_KINDS: () => TICKET_KINDS,
   ToolStep: () => ToolStep,
-  activeModelKey: () => import_builderforce_brain_embedded11.activeModelKey,
+  activeModelKey: () => import_builderforce_brain_embedded12.activeModelKey,
   askUserAnchorId: () => import_builderforce_brain_embedded.askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
-  buildModelItems: () => import_builderforce_brain_embedded11.buildModelItems,
+  buildModelItems: () => import_builderforce_brain_embedded12.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
-  byoVendorLabel: () => import_builderforce_brain_embedded11.byoVendorLabel,
+  byoVendorLabel: () => import_builderforce_brain_embedded12.byoVendorLabel,
   chatSwitcherLabel: () => chatSwitcherLabel,
   commandOf: () => commandOf,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
-  displayModelName: () => import_builderforce_brain_embedded11.displayModelName,
+  displayModelName: () => import_builderforce_brain_embedded12.displayModelName,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
-  filterModelItems: () => import_builderforce_brain_embedded11.filterModelItems,
+  filterModelItems: () => import_builderforce_brain_embedded12.filterModelItems,
   formatDuration: () => formatDuration,
   formatElapsed: () => formatElapsed,
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
-  modelCategoryLabel: () => import_builderforce_brain_embedded11.modelCategoryLabel,
-  modelInUse: () => import_builderforce_brain_embedded11.modelInUse,
+  modelCategoryLabel: () => import_builderforce_brain_embedded12.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded12.modelInUse,
   parseAskUser: () => import_builderforce_brain_embedded.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
-  perMillionUsd: () => import_builderforce_brain_embedded11.perMillionUsd,
-  premiumCostLabel: () => import_builderforce_brain_embedded11.premiumCostLabel,
-  productForPlan: () => import_builderforce_brain_embedded11.productForPlan,
-  productModelName: () => import_builderforce_brain_embedded11.productModelName,
+  perMillionUsd: () => import_builderforce_brain_embedded12.perMillionUsd,
+  premiumCostLabel: () => import_builderforce_brain_embedded12.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded12.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded12.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
   resolvePendingChangesLabels: () => resolvePendingChangesLabels,
-  revealsModelId: () => import_builderforce_brain_embedded11.revealsModelId,
+  revealsModelId: () => import_builderforce_brain_embedded12.revealsModelId,
   selectPendingAskUser: () => import_builderforce_brain_embedded.selectPendingAskUser,
   serializeAskUser: () => import_builderforce_brain_embedded.serializeAskUser,
   shellOutcomeOf: () => shellOutcomeOf,
@@ -108,6 +108,7 @@ __export(src_exports, {
   stripAskUser: () => import_builderforce_brain_embedded.stripAskUser,
   toolPreview: () => toolPreview,
   toolStepView: () => toolStepView,
+  useChatActivitySignal: () => useChatActivitySignal,
   useChatParticipants: () => useChatParticipants,
   useMentionAutocomplete: () => useMentionAutocomplete,
   usePopover: () => usePopover,
@@ -2016,7 +2017,7 @@ function PromptOptionsMenu({
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded12 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/picker/PickerShell.tsx
 var import_jsx_runtime11 = require("react/jsx-runtime");
@@ -3277,35 +3278,42 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   );
 }
 
-// src/mention/MentionAutocomplete.tsx
+// src/chatTickets/useChatActivitySignal.ts
 var import_react12 = require("react");
 var import_builderforce_brain_embedded10 = require("@seanhogg/builderforce-brain-embedded");
+function useChatActivitySignal(messages) {
+  return (0, import_react12.useMemo)(() => (0, import_builderforce_brain_embedded10.activityMessageCount)(messages), [messages]);
+}
+
+// src/mention/MentionAutocomplete.tsx
+var import_react13 = require("react");
+var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime18 = require("react/jsx-runtime");
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react12.useState)(null);
-  const [index, setIndex] = (0, import_react12.useState)(0);
-  const matches = (0, import_react12.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded10.filterMentionCandidates)(participants, token.query) : [],
+  const [token, setToken] = (0, import_react13.useState)(null);
+  const [index, setIndex] = (0, import_react13.useState)(0);
+  const matches = (0, import_react13.useMemo)(
+    () => token && !disabled ? (0, import_builderforce_brain_embedded11.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react12.useCallback)(() => {
+  const recompute = (0, import_react13.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded10.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded11.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  (0, import_react12.useEffect)(() => {
+  (0, import_react13.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react12.useCallback)((r) => {
+  const choose = (0, import_react13.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded10.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded11.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);
@@ -3325,7 +3333,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react12.useCallback)((e) => {
+  const onKeyDown = (0, import_react13.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -3413,7 +3421,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-var import_react18 = require("react");
+var import_react19 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -3638,7 +3646,7 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-var import_react13 = require("react");
+var import_react14 = require("react");
 
 // src/evermind/consoleStyles.ts
 var C = {
@@ -3803,10 +3811,10 @@ var warnBox = {
 // src/evermind/EvermindTestBench.tsx
 var import_jsx_runtime19 = require("react/jsx-runtime");
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = (0, import_react13.useState)("");
-  const [running, setRunning] = (0, import_react13.useState)(false);
-  const [error, setError] = (0, import_react13.useState)(null);
-  const run = (0, import_react13.useCallback)(async (withPrompt) => {
+  const [prompt, setPrompt] = (0, import_react14.useState)("");
+  const [running, setRunning] = (0, import_react14.useState)(false);
+  const [error, setError] = (0, import_react14.useState)(null);
+  const run = (0, import_react14.useCallback)(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -3859,7 +3867,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-var import_react14 = require("react");
+var import_react15 = require("react");
 var import_jsx_runtime20 = require("react/jsx-runtime");
 function EvermindMaintenance({
   t,
@@ -3869,13 +3877,13 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = (0, import_react14.useState)("");
-  const [pending, setPending] = (0, import_react14.useState)(null);
-  const doReseed = (0, import_react14.useCallback)(async () => {
+  const [slug, setSlug] = (0, import_react15.useState)("");
+  const [pending, setPending] = (0, import_react15.useState)(null);
+  const doReseed = (0, import_react15.useCallback)(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = (0, import_react14.useCallback)(async () => {
+  const doCleanup = (0, import_react15.useCallback)(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
@@ -3979,7 +3987,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-var import_react15 = require("react");
+var import_react16 = require("react");
 var import_jsx_runtime21 = require("react/jsx-runtime");
 var TONE = {
   ok: "ok",
@@ -3990,15 +3998,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = (0, import_react15.useState)(/* @__PURE__ */ new Set());
-  const [running, setRunning] = (0, import_react15.useState)(false);
-  const [applying, setApplying] = (0, import_react15.useState)(false);
-  const [repair, setRepair] = (0, import_react15.useState)(null);
-  const [error, setError] = (0, import_react15.useState)(null);
-  (0, import_react15.useEffect)(() => {
+  const [selected, setSelected] = (0, import_react16.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react16.useState)(false);
+  const [applying, setApplying] = (0, import_react16.useState)(false);
+  const [repair, setRepair] = (0, import_react16.useState)(null);
+  const [error, setError] = (0, import_react16.useState)(null);
+  (0, import_react16.useEffect)(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = (0, import_react15.useCallback)(async () => {
+  const run = (0, import_react16.useCallback)(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -4011,7 +4019,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = (0, import_react15.useCallback)(async () => {
+  const apply = (0, import_react16.useCallback)(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -4030,7 +4038,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = (0, import_react15.useCallback)((id) => {
+  const toggle = (0, import_react16.useCallback)((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -4039,7 +4047,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = (0, import_react15.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = (0, import_react16.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
   return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: sectionBlock, children: [
     /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
@@ -4142,13 +4150,13 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-var import_react16 = require("react");
+var import_react17 = require("react");
 var import_jsx_runtime22 = require("react/jsx-runtime");
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = (0, import_react16.useState)(null);
-  const [copied, setCopied] = (0, import_react16.useState)(false);
-  const [revealed, setRevealed] = (0, import_react16.useState)(false);
-  const copy = (0, import_react16.useCallback)(async () => {
+  const [report, setReport] = (0, import_react17.useState)(null);
+  const [copied, setCopied] = (0, import_react17.useState)(false);
+  const [revealed, setRevealed] = (0, import_react17.useState)(false);
+  const copy = (0, import_react17.useCallback)(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -4163,13 +4171,13 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = (0, import_react16.useCallback)(() => setRevealed((v) => !v), []);
+  const toggleReveal = (0, import_react17.useCallback)(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = (0, import_react16.useRef)(null);
-  (0, import_react16.useEffect)(() => {
+  const areaRef = (0, import_react17.useRef)(null);
+  (0, import_react17.useEffect)(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
@@ -4200,11 +4208,11 @@ function EvermindDiagnostics({ t, disabled, copy }) {
 }
 
 // src/evermind/ConsoleTabs.tsx
-var import_react17 = require("react");
+var import_react18 = require("react");
 var import_jsx_runtime23 = require("react/jsx-runtime");
 function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
-  const stripRef = (0, import_react17.useRef)(null);
-  const onKeyDown = (0, import_react17.useCallback)((e) => {
+  const stripRef = (0, import_react18.useRef)(null);
+  const onKeyDown = (0, import_react18.useCallback)((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
     e.preventDefault();
@@ -4608,26 +4616,26 @@ var import_jsx_runtime25 = require("react/jsx-runtime");
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = (0, import_react18.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react18.useState)(null);
-  const [targets, setTargets] = (0, import_react18.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react18.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react18.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react18.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react18.useState)("");
-  const [teachText, setTeachText] = (0, import_react18.useState)("");
-  const [busy, setBusy] = (0, import_react18.useState)(false);
-  const [validating, setValidating] = (0, import_react18.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react18.useState)(null);
-  const [notice, setNotice] = (0, import_react18.useState)(null);
-  const [noticeTone, setNoticeTone] = (0, import_react18.useState)("good");
-  const [error, setError] = (0, import_react18.useState)(null);
-  const [loaded, setLoaded] = (0, import_react18.useState)(false);
-  const [tab, setTab] = (0, import_react18.useState)("teach");
-  const [probeResult, setProbeResult] = (0, import_react18.useState)(null);
-  const [analysis, setAnalysis] = (0, import_react18.useState)(null);
-  const [loadFailed, setLoadFailed] = (0, import_react18.useState)(false);
-  const reload = (0, import_react18.useCallback)(async () => {
+  const t = (0, import_react19.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react19.useState)(null);
+  const [targets, setTargets] = (0, import_react19.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react19.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react19.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react19.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react19.useState)("");
+  const [teachText, setTeachText] = (0, import_react19.useState)("");
+  const [busy, setBusy] = (0, import_react19.useState)(false);
+  const [validating, setValidating] = (0, import_react19.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react19.useState)(null);
+  const [notice, setNotice] = (0, import_react19.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react19.useState)("good");
+  const [error, setError] = (0, import_react19.useState)(null);
+  const [loaded, setLoaded] = (0, import_react19.useState)(false);
+  const [tab, setTab] = (0, import_react19.useState)("teach");
+  const [probeResult, setProbeResult] = (0, import_react19.useState)(null);
+  const [analysis, setAnalysis] = (0, import_react19.useState)(null);
+  const [loadFailed, setLoadFailed] = (0, import_react19.useState)(false);
+  const reload = (0, import_react19.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -4644,11 +4652,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react18.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react18.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -4666,7 +4674,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react18.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     if (!refreshMs) return;
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
@@ -4681,13 +4689,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react18.useRef)(refreshSignal);
-  (0, import_react18.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react19.useRef)(refreshSignal);
+  (0, import_react19.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react18.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react19.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -4703,20 +4711,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react18.useCallback)(() => {
+  const clearValidate = (0, import_react19.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = (0, import_react18.useRef)(null);
-  const mounted = (0, import_react18.useRef)(true);
-  (0, import_react18.useEffect)(() => {
+  const pollTimer = (0, import_react19.useRef)(null);
+  const mounted = (0, import_react19.useRef)(true);
+  (0, import_react19.useEffect)(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = (0, import_react18.useCallback)((status) => {
+  const describeTeachOutcome = (0, import_react19.useCallback)((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -4732,7 +4740,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = (0, import_react18.useCallback)((contributionId) => {
+  const trackTeach = (0, import_react19.useCallback)((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -4766,7 +4774,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = (0, import_react18.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react19.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -4781,8 +4789,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  const panelId = (0, import_react18.useId)();
-  const buildReport = (0, import_react18.useCallback)(() => buildEvermindDiagnostics({
+  const panelId = (0, import_react19.useId)();
+  const buildReport = (0, import_react19.useCallback)(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -5342,7 +5350,7 @@ function RecentList({ t, entries }) {
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react18.useState)(false);
+  const [open, setOpen] = (0, import_react19.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
@@ -5397,7 +5405,7 @@ var targetChip = {
 };
 
 // src/project360/Project360View.tsx
-var import_react19 = require("react");
+var import_react20 = require("react");
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -5577,9 +5585,9 @@ var DEFAULT_PROJECT360_LABELS = {
 var import_jsx_runtime27 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react19.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react19.useState)(null);
-  const sortedWorkforce = (0, import_react19.useMemo)(
+  const L = (0, import_react20.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react20.useState)(null);
+  const sortedWorkforce = (0, import_react20.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -5746,7 +5754,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react20 = require("react");
+var import_react21 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -5761,7 +5769,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 var import_jsx_runtime28 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react20.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = (0, import_react21.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { className: "bf-list-head__title", children: title }),
@@ -5916,6 +5924,7 @@ function Row2({ item, onAction }) {
   stripAskUser,
   toolPreview,
   toolStepView,
+  useChatActivitySignal,
   useChatParticipants,
   useMentionAutocomplete,
   usePopover,

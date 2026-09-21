@@ -6,7 +6,7 @@
  * is wrong, and the reclaim that actually returns pages to Neon runs weekly. Between
  * them they have no notion of how full the database is, so the failure they cannot see
  * is the one that matters — a write rate that outgrows its own windows. The operational
- * endpoint reached 86.5% of the Free-plan 512 MB branch ceiling with both sweeps
+ * endpoint reached 86.5% of the Free-plan 0.5 GB ceiling with both sweeps
  * running nightly and correctly: nothing was broken, the windows were simply too
  * generous for the volume, and the first anyone knew of it was a console banner.
  *
@@ -14,10 +14,15 @@
  * a graduated response keyed to it:
  *
  *   < 80%  nothing. The steady-state sweeps own the database and this reports the ratio.
- *   ≥ 80%  purge every compressible table at a window interpolated HALFWAY to its
- *          `pressureFloorDays`, vacuum, then run the bloat reclaim immediately instead
- *          of waiting out the weekly tick.
- *   ≥ 90%  the same, at the floor itself.
+ *   ≥ 80%  purge every compressible table, and blank every compressible PAYLOAD, at a
+ *          window interpolated HALFWAY to its declared floor; vacuum; then run the bloat
+ *          reclaim immediately instead of waiting out the weekly tick.
+ *   ≥ 90%  the same, at the floors themselves.
+ *
+ * The payload half is not optional. A table whose weight is body text and whose rows are
+ * young — `llm_traces` on 2026-09-16, 209 of 241 MB in TOAST and nearly all of it under
+ * five days old — has nothing a row purge can delete, so compressing only row windows
+ * reported "critical" and freed nothing.
  *
  * THE FLOOR IS THE SAFETY PROPERTY. This sweep can shorten a retention window without a
  * human, so what it may never do has to be declared rather than judged: every window it
@@ -37,11 +42,18 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { SWEPT_TABLES, type SweptConnection } from './sweptTables';
-import { compressedWindow, runRetentionPurge } from './retentionPurge';
+import { compressDays, compressedWindow, runRetentionPurge } from './retentionPurge';
 import { runBloatReclaim, runTableVacuum } from './tableMaintenance';
 
 /**
- * The storage a single Neon branch may hold on the Free plan.
+ * The storage a single Neon project may hold on the Free plan: 0.5 GB, DECIMAL.
+ *
+ * Not 512 MiB, which is what this first said. Neon states the limit as "0.5 GB" and its
+ * meter counts more than `pg_database_size` can see — on 2026-09-16 the console showed
+ * 478 MB for an endpoint whose database reported 433 MiB. Measuring the smaller number
+ * against the larger ceiling put the sweep a full tier behind the vendor: it read "warn"
+ * while the console read nearly full. Both corrections point the same way, so the
+ * ceiling is the smaller, stated one.
  *
  * The default rather than a required binding because it is the limit the platform is
  * actually deployed under, and a sweep that silently did nothing when a var was unset
@@ -49,7 +61,7 @@ import { runBloatReclaim, runTableVacuum } from './tableMaintenance';
  * exactly the one nobody is watching for. Override with `NEON_STORAGE_CEILING_BYTES`
  * after a plan change.
  */
-export const DEFAULT_STORAGE_CEILING_BYTES = 512 * 1024 * 1024;
+export const DEFAULT_STORAGE_CEILING_BYTES = 500 * 1000 * 1000;
 
 /** Ratio at which compression begins, and the pressure applied from there. */
 export const PRESSURE_WARN_RATIO = 0.8;
@@ -81,7 +93,7 @@ export interface StoragePressureResult {
   pressure: number;
   tier: PressureTier;
   /** Windows actually shortened this run, for the operator report. Empty at `ok`. */
-  compressed: Array<{ relation: string; fromDays: number; toDays: number }>;
+  compressed: CompressedWindow[];
   /** Relations rewritten by the early reclaim, and the bytes it returned. */
   reclaimed: Array<{ relation: string; beforeBytes: number; afterBytes: number }>;
   failed: Array<{ target: string; error: string }>;
@@ -149,12 +161,30 @@ export function measureStorage(env: Env): Promise<EndpointStorage[]> {
   return Promise.all(CONNECTIONS.map((connection) => measureEndpointStorage(env, connection)));
 }
 
+/** One window a pressure level shortens: a row purge, or a payload redaction. */
+export interface CompressedWindow {
+  relation: string;
+  window: 'rows' | 'payload';
+  fromDays: number;
+  toDays: number;
+}
+
 /** Which windows a given pressure actually shortens — the report, and the thing to read
- *  when asking what a run at this tier would delete BEFORE letting it. */
-export function compressionPlan(pressure: number): Array<{ relation: string; fromDays: number; toDays: number }> {
-  return SWEPT_TABLES
-    .map((table) => ({ relation: table.relation, fromDays: table.retentionDays, toDays: compressedWindow(table, pressure) }))
-    .filter((row) => row.toDays < row.fromDays);
+ *  when asking what a run at this tier would delete BEFORE letting it. Uses the same
+ *  {@link compressDays} the purge does, so the plan cannot describe a different run. */
+export function compressionPlan(pressure: number): CompressedWindow[] {
+  return SWEPT_TABLES.flatMap((table) => {
+    const rows: CompressedWindow = { relation: table.relation, window: 'rows', fromDays: table.retentionDays, toDays: compressedWindow(table, pressure) };
+    const payload: CompressedWindow[] = table.redact
+      ? [{
+        relation: table.relation,
+        window: 'payload',
+        fromDays: table.redact.afterDays,
+        toDays: compressDays(table.redact.afterDays, table.redact.pressureFloorDays, pressure),
+      }]
+      : [];
+    return [rows, ...payload].filter((w) => w.toDays < w.fromDays);
+  });
 }
 
 /**

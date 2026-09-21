@@ -1548,3 +1548,139 @@ export async function fetchRunContextSection(
     return "";
   }
 }
+
+// ---------------------------------------------------------------------------
+// BYO provider connections (bring-your-own model provider accounts)
+// ---------------------------------------------------------------------------
+
+/** A configured BYO model provider. */
+export interface ByoProvider {
+  /** Provider key (anthropic, openai, google, etc.) */
+  id: string;
+  /** Display name */
+  label: string;
+  /** How the provider is authenticated (api_key, oauth, etc.) */
+  authType: "api_key" | "oauth" | "none";
+  /** Whether the connection is currently working */
+  isConnected: boolean;
+  /** Last error message if not connected */
+  error?: string;
+  /** API key is configured (masked value not returned) */
+  hasApiKey: boolean;
+  /** OAuth is connected */
+  hasOauth: boolean;
+}
+
+/** Result of testing a provider connection */
+export interface ByoProviderTestResult {
+  ok: boolean;
+  provider: string;
+  error?: string;
+}
+
+/** OAuth start response */
+export interface ByoOAuthStartResult {
+  authorizeUrl: string;
+  state: string;
+  grant?: "paste" | "device";
+  userCode?: string;
+  pollIntervalSeconds?: number;
+}
+
+/** OAuth complete response */
+export interface ByoOAuthCompleteResult {
+  ok: boolean;
+  provider: string;
+  authType?: "api_key" | "oauth";
+  status?: "pending" | "slow_down";
+}
+
+/**
+ * List the tenant's configured BYO model providers.
+ * Returns the providers that have credentials configured (API key or OAuth).
+ */
+export async function listByoProviders(secrets: vscode.SecretStorage): Promise<ByoProvider[]> {
+  const ws = await getCurrentWorkspace(secrets);
+  if (!ws) return [];
+  try {
+    const r = await authed<{ providers?: ByoProvider[] }>(secrets, `/llm/provider-keys`);
+    return r?.providers ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Set an API key for a BYO provider.
+ */
+export async function setByoProviderKey(
+  secrets: vscode.SecretStorage,
+  provider: string,
+  apiKey: string,
+): Promise<{ ok: boolean; provider: string } | undefined> {
+  const ws = await getCurrentWorkspace(secrets);
+  if (!ws) return undefined;
+  return authed<{ ok: boolean; provider: string }>(secrets, `/llm/provider-keys/${provider}`, {
+    method: "PUT",
+    body: JSON.stringify({ apiKey }),
+  });
+}
+
+/**
+ * Remove a BYO provider connection.
+ */
+export async function removeByoProvider(secrets: vscode.SecretStorage, provider: string): Promise<{ ok: boolean } | undefined> {
+  const ws = await getCurrentWorkspace(secrets);
+  if (!ws) return undefined;
+  return authed<{ ok: boolean }>(secrets, `/llm/provider-keys/${provider}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Test a BYO provider connection.
+ */
+export async function testByoProvider(
+  secrets: vscode.SecretStorage,
+  provider: string,
+): Promise<ByoProviderTestResult | undefined> {
+  const ws = await getCurrentWorkspace(secrets);
+  if (!ws) return undefined;
+  return authed<ByoProviderTestResult>(secrets, `/llm/provider-keys/${provider}/test`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Start OAuth flow for a BYO provider (Anthropic, OpenAI, xAI).
+ * Returns the authorize URL to open in a browser.
+ */
+export async function startByoOAuth(
+  secrets: vscode.SecretStorage,
+  provider: string,
+): Promise<ByoOAuthStartResult | undefined> {
+  const ws = await getCurrentWorkspace(secrets);
+  if (!ws) return undefined;
+  return authed<ByoOAuthStartResult>(secrets, `/llm/provider-keys/${provider}/oauth/start`, {
+    method: "POST",
+  });
+}
+
+/**
+ * Complete OAuth flow for a BYO provider.
+ * For 'paste' grant: code is the authorization code from the provider.
+ * For 'device' grant: polls until complete.
+ */
+export async function completeByoOAuth(
+  secrets: vscode.SecretStorage,
+  provider: string,
+  code: string,
+  state?: string,
+): Promise<ByoOAuthCompleteResult | undefined> {
+  const ws = await getCurrentWorkspace(secrets);
+  if (!ws) return undefined;
+  return authed<ByoOAuthCompleteResult>(secrets, `/llm/provider-keys/${provider}/oauth/complete`, {
+    method: "POST",
+    body: JSON.stringify({ code, ...(state ? { state } : {}) }),
+  });
+}

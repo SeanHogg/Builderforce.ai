@@ -57,6 +57,7 @@ import { recordActivity, resolveActorFromContext } from '../../application/activ
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { limitParam } from './queryParams';
 import { parseBody, z } from './requestBody';
+import { composeDispatcherLabel } from '../../application/runtime/dispatcherLabel';
 
 // ── Request bodies ───────────────────────────────────────────────────────────
 // Tri-state fields (0363/0365/0386): true/false = an explicit decision, null =
@@ -671,7 +672,7 @@ export function createManagerRoutes(
       let ok = false;
       try {
         summary = await runManagerForProject(c.env as Env, db, runtimeService, {
-          tenantId, projectId, submittedBy: `manager:${userId ?? 'human'}`, runTaskId,
+          tenantId, projectId, submittedBy: composeDispatcherLabel('manager', userId ?? 'human'), runTaskId,
         });
         ok = true;
       } catch (error) {

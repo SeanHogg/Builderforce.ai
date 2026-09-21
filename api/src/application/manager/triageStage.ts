@@ -59,6 +59,7 @@ import {
 } from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall } from './stallWatch';
 import { normalizeBuildStatus, pickCurrentPr } from '../../domain/task/buildStatus';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import {
   createTickDispatchBudget, tenantDispatchReserver, MAX_TENANT_DISPATCHES_PER_TICK,
   type DispatchReserver,
@@ -1036,7 +1037,7 @@ export async function applyRemedy(
         env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); },
         {
           taskId: task.id, tenantId, payload: JSON.stringify(payload),
-          submittedBy: `${by}:breaker-reset`,
+          submittedBy: composeDispatcherLabel(by, 'breaker-reset'),
           // THE OVERRIDE, without which this remedy is a no-op: `dispatchCloudRunForTask`
           // enforces the very breaker being reset, so an unforced call was refused every
           // time and returned null. `applied` then stayed false, the attempt counter never
@@ -1166,7 +1167,7 @@ export async function applyRemedy(
       }
       const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
-        submittedBy: `${by}:conflict-resolution`,
+        submittedBy: composeDispatcherLabel(by, 'conflict-resolution'),
       }).catch(() => false);
       // ── ATTEMPTED, WHETHER OR NOT A RUN STARTED ─────────────────────────────────
       //

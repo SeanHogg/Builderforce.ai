@@ -20,6 +20,7 @@ import { useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
   createChatTicketsRestAdapter,
+  useChatActivitySignal,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
 import { artifactRoutePath } from '@seanhogg/builderforce-brain-embedded';
@@ -28,11 +29,15 @@ import { apiRequest } from '@/lib/apiClient';
 import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { usePermission } from '@/lib/rbac';
 
-export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
+const NO_TRANSCRIPT: ReadonlyArray<{ metadata?: string | null }> = [];
+
+export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT }: {
   chatId: number;
   projectId: number | null;
   chatList: Array<Pick<BrainChat, 'id' | 'title' | 'ticketCount' | 'ticketProgressPct'>>;
   onChanged?: () => void;
+  /** The chat's live messages — a new run-milestone line re-reads the Agents list. */
+  transcript?: ReadonlyArray<{ metadata?: string | null }>;
 }) {
   const t = useTranslations('brain.tickets');
   const tc = useTranslations('common');
@@ -61,6 +66,9 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   // invite, or a task move that changes a health ring) — not just our own actions.
   const [refreshSignal, setRefreshSignal] = useState(0);
   useEffect(() => onBrainDataChanged(['chats', 'brain', 'tasks'], () => setRefreshSignal((n) => n + 1)), []);
+  // A run milestone joins its agent to the chat server-side; its activity line arriving
+  // in the transcript is the signal to re-read the Agents list.
+  const activitySignal = useChatActivitySignal(transcript);
 
   // LOCK state — owner-only toggle. Read once per chat (also picks up ownership).
   const [visibility, setVisibility] = useState<'shared' | 'locked'>('shared');
@@ -124,7 +132,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
         adapter={adapter}
         labels={labels}
         onChanged={onChanged}
-        refreshSignal={refreshSignal}
+        refreshSignal={refreshSignal + activitySignal}
         visibility={visibility}
         onSetVisibility={isOwner ? async (v) => { await brain.updateChat(chatId, { visibility: v }); setVisibility(v); } : undefined}
         onOpenTicket={openTicket}

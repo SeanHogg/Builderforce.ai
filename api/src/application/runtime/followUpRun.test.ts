@@ -108,4 +108,46 @@ describe('startFollowUpRun', () => {
     expect(JSON.parse(gateArgs[5].payload)).toMatchObject({ followUp: { priorExecutionId: 42 } });
     expect(submit).not.toHaveBeenCalled();
   });
+
+  /**
+   * `submittedBy` is a DISPATCHER LABEL, but the token gate resolves its argument
+   * against `users.id` (`varchar(36)`). Passing the label raw crashed the dispatch
+   * with Postgres 22001 on any composed lane-approver label, and silently skipped
+   * the superadmin bypass on every prefixed one. The run still records the full
+   * label as `submitted_by` — only the GATE takes the extracted id.
+   */
+  describe('the entitlement gate receives a user id, never the raw dispatcher label', () => {
+    it('extracts the id from a `user:<id>` label so the superadmin bypass can fire', async () => {
+      await startFollowUpRun(env, db, runtimeService, () => undefined, args({ submittedBy: 'user:u1' }));
+
+      expect(checkTenantTokenGate).toHaveBeenCalledWith(db, 7, { actingUserId: 'u1' }, env);
+      // The run is still attributed to the full label.
+      expect(submit).toHaveBeenCalledWith(expect.objectContaining({ submittedBy: 'user:u1' }));
+    });
+
+    it('a composed lane-approver label yields the base user id, not a >36-char value (22001)', async () => {
+      const label = `user:u1:lane-approver:${'product-manager'.repeat(4)}`;
+      expect(label.length).toBeGreaterThan(36);
+
+      await startFollowUpRun(env, db, runtimeService, () => undefined, args({ submittedBy: label }));
+
+      const opts = (checkTenantTokenGate.mock.calls[0] as unknown as [unknown, number, { actingUserId: string | null }])[2];
+      expect(opts.actingUserId).toBe('u1');
+      expect((opts.actingUserId ?? '').length).toBeLessThanOrEqual(36);
+    });
+
+    it('a subsystem dispatch has no acting user — the gate stays funding-neutral', async () => {
+      for (const label of ['system:coordinator', 'system:coordinator:lane-approver:product-manager', 'manager:signoff-request:abc']) {
+        checkTenantTokenGate.mockClear();
+        await startFollowUpRun(env, db, runtimeService, () => undefined, args({ submittedBy: label }));
+        expect(checkTenantTokenGate).toHaveBeenCalledWith(db, 7, { actingUserId: null }, env);
+      }
+    });
+
+    it('never hands the gate a value too wide to be a user id', async () => {
+      await startFollowUpRun(env, db, runtimeService, () => undefined, args({ submittedBy: 'x'.repeat(120) }));
+
+      expect(checkTenantTokenGate).toHaveBeenCalledWith(db, 7, { actingUserId: null }, env);
+    });
+  });
 });

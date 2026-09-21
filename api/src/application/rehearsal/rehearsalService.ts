@@ -36,6 +36,7 @@ import type { Env } from '../../env';
 import { freezeIdeAgentDefinition, type FrozenAgentDefinition } from '../agentIdentity/agentRunIdentity';
 import { findTaskPrimarySpec } from '../prd/taskPrd';
 import { parseJsonOr } from '../../domain/shared/json';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 export const REHEARSAL_KINDS = ['dry_run', 'replay', 'trial'] as const;
 export type RehearsalKind = (typeof REHEARSAL_KINDS)[number];
@@ -198,7 +199,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
     .values({
       taskId: task.id,
       tenantId,
-      submittedBy: `rehearsal:${input.kind}`,
+      submittedBy: composeDispatcherLabel('rehearsal', input.kind),
       status: 'running',
       mode: 'rehearsal',
       cloudAgentRef: agentRef,

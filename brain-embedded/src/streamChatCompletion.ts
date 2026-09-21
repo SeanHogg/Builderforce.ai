@@ -331,6 +331,25 @@ export class StreamInterruptedError extends Error {
   }
 }
 
+/**
+ * A transport-level failure: the fetch itself threw (network error, DNS failure,
+ * connection refused, timeout before response). This is distinct from the gateway
+ * returning an HTTP error — that reaches us as a non-OK Response and maps through
+ * `transport.mapError`. This catches the case where NO response was ever received.
+ *
+ * The caller retries these the same way as `StreamInterruptedError`: under auto-routing,
+ * the turn is retried on another connected model. The model is unknown because the
+ * failure happened BEFORE the gateway could commit to one.
+ */
+export class TransportError extends Error {
+  readonly model: string | undefined;
+  constructor(message: string, model: string | undefined = undefined) {
+    super(message);
+    this.name = 'TransportError';
+    this.model = model;
+  }
+}
+
 /** How much of a looped block the error message quotes. */
 const LOOP_QUOTE_CHARS = 90;
 
@@ -433,12 +452,25 @@ export async function streamChatCompletion(
   }
 
   const doFetch = transport.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
-  const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal: opts.signal,
-  });
+  let res: Response;
+  try {
+    res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: opts.signal,
+    });
+  } catch (e) {
+    // A transport-level failure (network error, DNS, refused, timeout before response).
+    // This is NOT an HTTP error — we never got a Response. Throw a TransportError so
+    // the caller can retry under auto-routing, the same way it handles StreamInterruptedError.
+    if (e instanceof TypeError) {
+      // `fetch failed` is the standard message when the network request cannot be made.
+      throw new TransportError(`fetch failed: ${e.message}`);
+    }
+    // Rethrow anything else as-is — unexpected.
+    throw e;
+  }
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
 
