@@ -66,11 +66,24 @@ export interface ProviderKeyHealthFacts {
   localEgressOnline: boolean;
 }
 
+/**
+ * The status an owner-actionable alert reads as — shared by the status READ below and by
+ * both Test-connection probes (`byoCredentialHealth.ts`).
+ *
+ * The probes used to answer a bare `failed` for exactly the failures they had already
+ * classified, so a Qwen Token Plan whose window was spent and a SuperGrok account xAI
+ * refused both rendered "Connection test failed: failed." directly above a card that
+ * said "usage depleted" / "needs attention". One mapping, so the Test line and the
+ * card can no longer describe the same alert in two ways.
+ */
+export function alertHealthStatus(alert: Pick<ProviderAuthAlert, 'reason'>): 'capacity' | 'needs_attention' {
+  return alert.reason === 'capacity' ? 'capacity' : 'needs_attention';
+}
+
 /** Pure verdict — the ONE ordering of the facts, testable without a database. */
 export function deriveProviderKeyHealth(facts: ProviderKeyHealthFacts): ProviderKeyHealthStatus {
   if (!facts.configured) return 'not_connected';
-  if (facts.authAlert?.reason === 'capacity') return 'capacity';
-  if (facts.authAlert) return 'needs_attention';
+  if (facts.authAlert) return alertHealthStatus(facts.authAlert);
   if (!facts.usable) return facts.unresolvedReason ?? 'unavailable';
   if (facts.requiresLocalEgress && !facts.localEgressOnline) return 'local_egress_required';
   return 'ready';

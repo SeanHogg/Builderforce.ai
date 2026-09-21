@@ -141,6 +141,19 @@ export interface SweptTable {
   redact?: {
     /** Days before the payload columns are blanked — must be < `retentionDays`. */
     afterDays: number;
+    /**
+     * The shortest window the payload may be kept under storage pressure — same contract
+     * as the row-level {@link SweptTable.pressureFloorDays}, applied to the COLUMN.
+     *
+     * WHY REDACTION HAS TO COMPRESS TOO. Compressing only the row window cannot help a
+     * table whose weight is its payload and whose rows are all young. That is exactly
+     * how `llm_traces` stood on 2026-09-16: 209 of its 241 MB was body text in TOAST,
+     * written almost entirely in the previous five days, so a 7-day redaction had nothing
+     * to blank and a purge floored at 7 days had nothing to delete — the sweep would have
+     * reported "critical" and freed nothing. A payload window is the cheaper one to give
+     * up: the row, and every figure computed from it, survives.
+     */
+    pressureFloorDays?: number;
     /** What the payload is and why nothing needs it past the window. */
     rationale: string;
     /** Blank the payload on rows older than `cutoff`, leaving the row itself intact. */
@@ -189,6 +202,9 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     purge: (db, cutoff) => db.delete(llmTraces).where(acrossTenants(llmTraces, 'scheduled_sweep', lt(llmTraces.createdAt, cutoff))),
     redact: {
       afterDays: 7,
+      // One day of bodies under pressure: enough to debug the incident that is happening
+      // now, which is the only reason anyone opens a body at all.
+      pressureFloorDays: 1,
       rationale:
         'The verbatim `request_body` (the whole message array), `response_body` and the per-attempt '
         + '`attempts` blob. This relation is the operational endpoint what `tool_audit_events` is to the '
@@ -329,6 +345,9 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
     redact: {
       afterDays: 14,
+      // The compliance summary and evidence pack never read `args`/`result`, so the SOC 2
+      // window is untouched by blanking them sooner; three days keeps a live run readable.
+      pressureFloorDays: 3,
       rationale:
         'The verbatim tool `args`/`result` payloads. No consumer reads either column past the live '
         + 'timeline: the compliance summary and the evidence pack both project only ts, tool, category, '

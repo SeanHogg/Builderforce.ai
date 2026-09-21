@@ -1,5 +1,6 @@
 import * as os from "os";
 import { manageMcpServers } from "./mcpServers";
+import { manageByoConnections } from "./byoConnections";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
@@ -31,6 +32,7 @@ import { getSelectedProject, initProjectState, onProjectChange, setSelectedProje
 import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
+import { archive, unarchive } from "./sessionsArchive";
 import { InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, onLocalRunsChange, managerAttention } from "./attention";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
@@ -139,7 +141,7 @@ export function activate(context: vscode.ExtensionContext): void {
       })();
     }),
   );
-  const tree = new SessionsTreeProvider(context.secrets);
+  const tree = new SessionsTreeProvider(context.secrets, context);
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
 
@@ -365,6 +367,12 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!(await ensureSignedIn(context))) return;
       await manageMcpServers(context.secrets);
     }),
+    // Bring-your-own model provider connections (Anthropic, OpenAI, Google, etc.):
+    // connect, test, reconnect, or remove BYO provider credentials.
+    vscode.commands.registerCommand("builderforce.manageByoConnections", async () => {
+      if (!(await ensureSignedIn(context))) return;
+      await manageByoConnections(context.secrets);
+    }),
     vscode.commands.registerCommand("builderforce.refreshProjects", () => {
       bfApi.invalidateTasks();
       projects.refresh();
@@ -506,6 +514,26 @@ export function activate(context: vscode.ExtensionContext): void {
       } catch (e) {
         surfaceError(e, "command:renameSession", `BuilderForce: could not rename chat (${(e as Error).message}).`);
       }
+    }),
+    vscode.commands.registerCommand("builderforce.archiveSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
+      const chat = chatOfSessionNode(item);
+      if (!chat) return;
+      const key = `chat:${chat.id}`;
+      const now = Date.now();
+      tree.archiveState = archive(tree.archiveState, [key], now, true);
+      tree.persistArchive();
+      tree.refresh();
+    }),
+    vscode.commands.registerCommand("builderforce.unarchiveSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
+      const chat = chatOfSessionNode(item);
+      if (!chat) return;
+      const key = `chat:${chat.id}`;
+      tree.archiveState = unarchive(tree.archiveState, key);
+      tree.persistArchive();
+      tree.refresh();
+    }),
+    vscode.commands.registerCommand("builderforce.toggleShowArchived", () => {
+      tree.setShowArchived(!tree.showArchived);
     }),
     // THREE ids, ONE action: open the unified Brain — the same React <BrainTimeline>
     // + brain-embedded core as the web app, backed by the same server-side

@@ -14,6 +14,7 @@ import { getFreelancer, type FreelancerProfile } from '@/lib/freelance/talentPro
 import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { ShortlistToggle } from '@/components/talent/ShortlistToggle';
 import { Icon } from '@/components/ui/Icon';
+import { signInHref } from '@/lib/auth';
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
@@ -76,6 +77,13 @@ export default function TalentDetailClient() {
   const canHire = !!auth?.hasTenant && !isOwner;
   const listingServices = profile.bookable ? services : [];
   const bound = talentPrimaryAction(Boolean(profile.bookable) || listingServices.length > 0) === 'book';
+  // Visitor chat (#2581): an ENTRY POINT into the existing employer↔freelancer
+  // thread, not a second messenger. It is the one control on this page a stranger
+  // can use to start a real conversation, so its visibility is deliberately wider
+  // than `canHire` — but only on an advisor-mode listing (`bound`), which keeps
+  // non-advisor talent profiles on exactly today's `canHire` Message rule.
+  // `bound` is false until P0 advisor mode lands, so this stays dark until then.
+  const showChatCta = !isOwner && bound;
   const hirePrimary = {
     padding: '9px 18px', borderRadius: 'var(--radius-lg)', border: 'none',
     background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
@@ -115,6 +123,18 @@ export default function TalentDetailClient() {
         )}
         {canHire && (
           <MessagesButton side="employer" context={{ freelancerUserId: profile.userId, title: profile.displayName ?? undefined }} label={t('message')} />
+        )}
+        {/* Visitor chat (#2581). A tenant visitor is already served by the `canHire`
+            MessagesButton above, so this renders only the gate the visitor lacks:
+            no tenant session yet. Identity is the EXISTING auth (`signInHref` with
+            `next` back to this profile) — not name+email, which is booking (#2534).
+            We do not auto-send on return; the visitor clicks Message again and the
+            normal employer flow opens (or reuses) the one thread. */}
+        {showChatCta && !canHire && (
+          <a href={signInHref()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, textDecoration: 'none' }}>
+            <Icon source="💬" size="1em" /> {t('message')}
+          </a>
         )}
         {canHire && (
           <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}

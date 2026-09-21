@@ -18,6 +18,7 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { INCIDENT_TRIAGE_LANE_KEY } from './incidentTriageMarker';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 /**
  * The tenant's Incident Manager agent id, or null when the tenant has none. An active
@@ -72,7 +73,7 @@ export async function dispatchIncidentTriage(
       taskId: params.boardTaskId,
       tenantId: params.tenantId,
       payload,
-      submittedBy: `incident:${incidentRef}`,
+      submittedBy: composeDispatcherLabel('incident', incidentRef),
     });
     await Promise.allSettled(deferred);
     // A refusal is not a triage. Reporting `true` for one told the incident feed an

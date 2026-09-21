@@ -173,6 +173,42 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     expect(screen.queryByText(/providerKeys\.diagnostic\.traceHint/)).not.toBeInTheDocument();
   });
 
+  // A spent usage window (the Qwen Token Plan 429 that motivated this) used to read
+  // "Connection test failed: failed." in red, with nothing but headers in the trace. It is
+  // a verdict ABOUT the account, not against the key: amber, named, with the provider's words.
+  it('reads a capacity verdict as amber, by name, with the provider\'s own message', async () => {
+    mockApi([{ provider: 'qwen', authType: 'api_key', priority: 0 }]);
+    vi.spyOn(api.providerKeysApi, 'status').mockImplementation(async (provider) => ({
+      provider, configured: provider === 'qwen', usable: provider === 'qwen',
+      status: provider === 'qwen' ? 'capacity' : 'not_connected',
+      usage: { periodDays: 30, requests: 0, tokens: 0, lastUsedAt: null },
+    }));
+    vi.spyOn(api.providerKeysApi, 'test').mockResolvedValue({
+      ok: false,
+      status: 'capacity',
+      diagnostic: {
+        endpoint: 'https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions',
+        status: 429,
+        headers: { 'x-request-id': 'req-1' },
+        edgeBlocked: false,
+        providerMessage: 'Plan usage window exhausted',
+        observedAt: '2026-09-17T01:48:28.417Z',
+        traceId: 'llm-qwen',
+        model: 'direct/qwen/qwen3.7-plus',
+      },
+    } as Awaited<ReturnType<typeof api.providerKeysApi.test>>);
+
+    render(<ProviderKeysSettings />);
+    fireEvent.click((await screen.findByText('Qwen')).closest('[role="button"]')!);
+    fireEvent.click(await screen.findByText('providerKeys.diagnostic.test'));
+
+    const verdict = await screen.findByText(/providerKeys\.diagnostic\.failedFallback/);
+    // `status`, not `alert`: amber is the "not a broken key" tone.
+    expect(verdict.closest('[role]')).toHaveAttribute('role', 'status');
+    expect(screen.getByText(/providerKeys\.diagnostic\.providerSaid/)).toBeInTheDocument();
+    expect(screen.getByText('providerKeys.diagnostic.copyTrace')).toBeInTheDocument();
+  });
+
   it('offers no trace when the test never reached the provider', async () => {
     // No response, no evidence — a copy button that yields nothing is worse than absent.
     mockApi([{ provider: 'kimi', authType: 'api_key', priority: 0 }]);

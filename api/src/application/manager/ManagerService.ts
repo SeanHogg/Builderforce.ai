@@ -218,6 +218,7 @@ export {
 } from './managerActionJournal';
 import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
 import { loadProjectInTenant } from '../project/projectOwnership';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 export interface ManagerActionRow {
   id: string; taskId: number | null; ticketKey: string | null; ticketTitle: string | null;
@@ -1302,7 +1303,7 @@ export async function runManagerForProject(
           // later production census proves the cohort collapsed.
           autoAssignAgent: true,
           autoDispatch: true,
-          submittedBy: `manager:systemic:${policy.managerRef ?? 'system'}`,
+          submittedBy: composeDispatcherLabel('manager', 'systemic', policy.managerRef ?? 'system'),
         }),
         ensureTicket: async (taskId) => {
           const [current] = await db.select({
@@ -1346,7 +1347,7 @@ export async function runManagerForProject(
             const { refused, result: started } = await runs.spend(
               () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
                 tenantId, projectId, taskId, status,
-                submittedBy: `manager:systemic-verify:${policy.managerRef ?? 'system'}`,
+                submittedBy: composeDispatcherLabel('manager', 'systemic-verify', policy.managerRef ?? 'system'),
               }),
               (value) => value === true,
             ).catch(() => ({ refused: false, result: false }));
@@ -1953,7 +1954,7 @@ async function coordinatePullRequests(
           const restarted = (await runs.spend(
             () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
               tenantId, projectId, taskId: t.id, status: TaskStatus.IN_PROGRESS,
-              submittedBy: `manager:review-return:${policy.managerRef ?? 'system'}`,
+              submittedBy: composeDispatcherLabel('manager', 'review-return', policy.managerRef ?? 'system'),
             }).catch(() => false),
             (v) => v === true,
           )).result === true;

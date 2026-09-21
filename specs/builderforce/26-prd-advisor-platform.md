@@ -1,268 +1,224 @@
-# PRD 26 — Advisor platform as marketplace composition (not a SCORE clone)
+# PRD 26 — Advisor Platform (epic #2522)
 
-**Status:** Proposed — research artifact for the Advisor epic · **Owner:** platform (Talent + Marketplace, CEO seat as buyer) · **Created:** 2026-09-16
-**Board:** epic #2545 · spec `400b7152-cd22-48da-afcb-8a791ac6cdfd` · roadmap `69584c3f-0b8c-49fe-975a-e40a7e1f0648`
-**Companion to:** [PRD 21 §11.5](./21-prd-unified-experience.md) (four marketplace families), [PRD 19 B7/B9](./19-prd-burnrateos-consolidation.md) (bookings, LMS, consultants), [PRD-marketplace-v2.md](./PRD-marketplace-v2.md)
-**Implementation notes:** [26 — Advisor Platform implementation notes](./26-implementation-notes-advisor-platform.md) (composition / bind contract)
-**Research source:** SCORE.org public feature set (mentoring, workshops, Academy, templates, chapters, lifecycle), captured 2026-09-16. SCORE is a U.S. SBA resource partner (since 1964). This PRD uses it as a **capability checklist**, not as a product to reproduce.
+**Status:** Product contract for epic **#2522** · rewritten 2026-09-16 on ticket **#2604**
+**Owner:** platform (Talent listing + meetings + board-sync)
+**Board:** epic **#2522** · Spec path (do not change): `specs/builderforce/26-prd-advisor-platform.md`
+**Companion (compose-only):** [`26-implementation-notes-advisor-platform.md`](./26-implementation-notes-advisor-platform.md) — build detail only; **this file wins** if the two diverge
+**Not this epic:** marketplace composition A0–A5, `/marketplace?family=talent` Book bind, restricted Brain thread — those belong to epic **#2545** (see §6)
+
+This revision **replaces** the 2026-09-16 research artifact that specified epic **#2545** (SCORE-checklist marketplace composition) as PRD 26. Git history retains that body. Do not implement it to close **#2522**.
 
 ---
 
-## 1. Verdict
+## 0. Composition contract (read this first)
 
-SCORE.org is a **one-stop support platform for U.S. entrepreneurs**: free confidential 1:1 mentoring with volunteer professionals, plus workshops, an Academy, downloadable templates, a content library, and local chapters. It is useful because it pairs **a person** with **tools the founder can use the same day**.
+1. **Single product source.** Children of **#2522** use **this file** as the only product contract for this epic. Implementation notes may add wiring, filters, and module pointers. They MUST NOT introduce product behaviour that is absent here. If notes and this PRD disagree, **edit the notes**.
+2. **Direction of reconcile.** This file was rewritten to match epic **#2522**. Do **not** rewrite the notes so that #2522 would ship the old #2545 product.
+3. **Sufficiency.** A child that implements only this PRD cannot be required to ship A2–A5, `/marketplace?family=talent` Book bind, or a restricted Brain thread in order to close #2522.
+4. **Behaviour, not unshipped filenames-as-done.** This PRD specifies *what* must be true. Naming the real meeting/minutes modules children will edit is sibling **#2606**. Presenting unshipped HTTP routes, `meetingRoutes.ts` (if absent on `main`), or `BookAdvisorPanel` as already decided/done is sibling **#2605**. Do not make that error here.
+5. **Epic ticket text is not a second PRD.** #2522’s board description may still mention marketplace Book / SCORE-class advising. After this rewrite, **this file** is source of truth. A later coordinator may re-align epic title/description; this ticket does not.
 
-Builderforce already has every *shape* SCORE sells:
+---
 
-| SCORE shape | Builderforce primitive that already exists |
+## 1. Goal
+
+Founders and operators can find Advisors on the talent catalog, hold an **advisory** meeting as a first-class meeting kind, and get structured minutes onto the board **without** a standup ritual and **without** a second scrape pipeline.
+
+SCORE.org remains a **capability checklist**, not a product to clone. Builderforce does not add a fifth marketplace family, an `/advisors` destination, or `advisor` as a listing kind.
+
+---
+
+## 2. Who
+
+| Role | Need |
 |---|---|
-| 1:1 mentoring | `booking_services` mode `one_to_one` ([bookings.ts](../../api/src/application/commerce/bookings.ts)); meetings + ceremony sessions; Brain chat |
-| Workshops / webinars / office hours | `booking_services` mode `one_to_many` (`capacity > 1`); calendar events with `category: meeting` |
-| Academy / self-paced courses | People-domain LMS (`courses`, modules, lessons, enrolments, cohorts, certificates, SCORM/xAPI); canvas listing kind `course` |
-| Templates, checklists, worksheets | listing kinds `template`, `playbook`, `tool`, `survey`, `pack` |
-| Articles / guides | `marketplace_knowledge`; public knowledge documents; blog |
-| “Find someone who has done this” | Marketplace **Talent** family (`person` · `gig`); company `seeking` already includes `advisors` and `mentorship` ([startupListing.ts](../../packages/creation-canvas-contract/src/startupListing.ts)) |
-| Expertise match | `EXPERTISE_AREAS` (product, marketing, operations, finance, legal, people, technology, BD, fundraising, international) |
-| Confidentiality | canvas `CONFIDENTIALITY_LEVELS`; mentoring objects must default `restricted` |
-| Lifecycle (idea → exit) | `BUSINESS_STAGES` (`idea` · `mvp` · `early_revenue` · `growth` · `scale`) + domain seats (CFO, CRO, CHRO, …) as **AI** advisors |
-
-What SCORE has that we do not is **composition**: a founder can ask “I need a mentor for a pre-seed raise” and get a person, a slot, a confidential thread, and a pack of tools in one motion. Those four things live in four bounded contexts today and never meet.
-
-**Do not clone SCORE.** SCORE is a nonprofit volunteer network, U.S.-only, SBA-affiliated, free by constitution. Cloning it would mean a second product (chapters, volunteer roster, in-person workshops, SCORE Academy brand) that fights the marketplace we already sell. Builderforce’s Advisor platform is **marketplace-dogfooded composition**: human advisors list on Talent, book through the existing scheduling service, teach through the existing LMS, and publish tools as existing listing kinds. Seat agents stay in the **Agents** family. Free is a **price of 0**, not a separate product.
+| **Founder / operator** | Hire or meet Advisors; keep a durable record of advisory conversations on the board |
+| **Advisor** | Talent listed under `category=advisors`; run advisory meetings; notes land without a separate standup |
+| **Meeting Notes agent** | Input = the advisory meeting; output = structured minutes suitable for the shared board pull |
+| **Board-sync** | One generalised pull path for standup **and** advisory minutes |
+| **Downstream implementer on #2522** | Must not also build marketplace family Book bind, academy, workshops, packs, or restricted Brain from this PRD |
 
 ---
 
-## 2. Why SCORE is the wrong product and the right checklist
+## 3. In scope for epic #2522
 
-### 2.1 What SCORE actually offers (the checklist)
+1. Talent listing / filter for Advisors (`category=advisors`).
+2. First-class meeting kind `advisory` (create, list, complete).
+3. Meeting Notes agent scoped to advisory meetings.
+4. Minutes → board via **one** generalised pull of today’s standup-minutes pull (standup and advisory share the path).
 
-1. **Free business mentoring** — 1:1 with volunteer professionals; confidential; video / phone / email / in-person; ongoing as the business evolves; covers planning, startup, marketing, finance, operations, growth.
-2. **Workshops and webinars** — live online, in-person, on-demand, roundtables. Topics span start → grow.
-3. **Online courses / SCORE Academy** — self-paced (start, manage, plan, marketing, finance, exit). Some Academy programmes are paid.
-4. **Templates and tools** — business-plan, financial-statement and forecast templates, marketing tools, checklists, worksheets, guides.
-5. **Articles and educational content** — lifecycle library (validate → launch → manage → scale → exit).
-6. **Local chapters and events** — national platform + local mentor/workshop supply.
-7. **Lifecycle coverage** — idea/startup, early operation, growth, transition/exit.
-
-### 2.2 What we will not build
-
-- A volunteer-only, nonprofit, SBA-partner network.
-- U.S.-only eligibility or chapter offices.
-- A parallel “Advisor” app, nav, or storefront next to Marketplace.
-- A sixth canvas `LISTING_LAUNCH_MODE`. The five verbs (`play` · `open` · `run` · `preview` · `install`) describe **things**. Booking a person is Talent, not a canvas kind. Adding `advisor` to `MARKETPLACE_LISTING_KINDS` would file a human under Assets and force one publish form to serve two shapes — the failure PRD 21 already named.
-- In-person venue management.
-- SCORE branding, Academy curriculum IP, or “we are SCORE for X”.
-
-### 2.3 What we will build instead
-
-One founder journey, four existing families:
-
-```
-Founder (company.seeking ⊇ advisors|mentorship, business_stage = …)
-        │
-        ├─ Talent listing (person) ──► booking_service (one_to_one | one_to_many)
-        │                               └─ calendar event + meeting + Brain thread
-        ├─ Agents listing (seat)   ──► roster row (CFO/CRO/… already the AI mentor)
-        ├─ Asset listing (course)  ──► LMS enrolment
-        └─ Asset listing (pack/playbook/template/tool) ──► install on their board
-```
-
-The primary buyer action on a human advisor is **Book**, not Install. The service row already has duration, buffer, price, capacity and host. The storefront does not yet bind a Talent listing to that row, and no frontend calls `booking_services` (API-only today). That bind **is** the product.
+**Not in scope for #2522** (owned by **#2545**, not “later in 26”): A2–A5 workshops / academy / packs; `/marketplace?family=talent` Book bind; a restricted Brain thread for advisor conversations; advisory meetings existing *only* as a side effect of a Book bind.
 
 ---
 
-## 3. Evidence — what is already in the repo
+## 4. Product
 
-### 3.1 Marketplace families (do not add a fifth)
+### 4.1 Advisors talent filter
 
-From [marketplaceFamilies.ts](../../frontend/src/lib/marketplaceFamilies.ts) and PRD 21 §11.5:
+Users can filter talent to Advisors and act on that list.
 
-| Family | Kinds | Advisor use |
-|---|---|---|
-| **Talent** | `person` · `gig` | Human advisors. Availability + rate. CTA: Book / Message. |
-| **Agents** | built-in · community | Seat agents as always-on AI mentors. CTA: Hire to roster. |
-| **Assets** | `course` · `template` · `playbook` · `tool` · `pack` · `survey` · … | Academy, templates, worksheets. CTA: Run / Install. |
-| **Companies** | claimed businesses | Demand side: `seeking: advisors \| mentorship`. |
+- Advisors is a talent **category / listing filter** (`category=advisors` on the existing talent catalog). It is **not** a marketplace family, **not** a listing kind, **not** a second user type, and **not** a new `/advisors` route.
+- Do **not** add `advisor` (or `advisors`) to `MARKETPLACE_LISTING_KINDS`.
+- Do **not** invent `/advisors` as a marketplace family route as part of this epic.
+- Do **not** specify this filter as `/marketplace?family=talent` Book bind (that bind is **#2545**).
+- In-scope action on the list is the **advisory-meeting flow** (schedule / join / notes). Existing talent CTAs (e.g. Hire when the person is also available-for-hire) may remain; they are not this epic’s product.
+- Advisor profile fields that make the filter useful (expertise, industries, languages, methods, stages, session length, price including 0, location, confidentiality *default on the listing*) are compatible with child **#2527**. They do not create a new user type and do not add `advisory` to `PEOPLE_OBJECT_KINDS`.
 
-`/marketplace?family=talent` and `/marketplace?family=talent&kind=gig` already exist in `navGroups.ts`.
+### 4.2 Meeting kind `advisory`
 
-### 3.2 Scheduling (the mentoring runtime)
+Creating, listing, and completing advisory meetings uses kind `advisory`.
 
-[bookings.ts](../../api/src/application/commerce/bookings.ts) (PRD 19 §9):
+- **Standup** remains a distinct kind. Advisory is not a standup with a different label.
+- Unknown kinds continue to coerce to `adhoc` (existing behaviour).
+- Register `advisory` in the meeting-kind list used to create/list/complete meetings. Child **#2536** owns that registration. Do **not** add `advisory` to `TEAM_CEREMONY_KINDS` (`standup` / `planning` / `retrospective` / `review`). Advisory must **not** default-link team chat.
+- There is **no** requirement that an advisory meeting exists only as a side effect of a Book bind.
+- Frontend `ScheduleMeetingPanel` (or equivalent) duplicating the KINDS list is a **follow-on**, not shipped by this rewrite and not claimed as already done.
 
-- Modes: `one_to_one` · `one_to_many` · `round_robin`.
-- `one_to_many` **is** a webinar / office hours: capacity counted per slot, overlap refused in a transaction, buffers applied on the write.
-- Reservations: `confirmed` · `cancelled` · `completed` · `no_show`.
-- `availability_slots` remains the single source of “free”.
+### 4.3 Origins of an advisory meeting
 
-**Gap:** no frontend import of `bookingServices`. Mentoring cannot be booked from the storefront today.
+An `advisory` meeting is first-class. Any of the following may create one; **none** is the only origin:
 
-### 3.3 Calendar and meetings
+| Origin | Status on this epic |
+|---|---|
+| Authenticated schedule / create with kind `advisory` | Required (R4) |
+| Public ATS-style `/book/[token]` (or slug-scoped token) that writes kind `advisory`, advisor as organizer, visitor as attendee | **Allowed** — child **#2532**. Compatible. Must **not** be specified as `/marketplace?family=talent` Book bind. Must **not** be the only origin |
+| A0 storefront Book CTA on `/marketplace?family=talent` binding Talent listing ↔ `booking_services` | **Not this epic** — **#2545** |
 
-A `calendar` object bound to a source ([calendar.ts](../../packages/creation-canvas-contract/src/calendar.ts)). Events carry `category` (`meeting`, …). Ceremony sessions already open a `meetings` row with attendees. Voice/video is PRD 18 (hired.video), not a new stack.
+Visitor join-by-token, if shipped by **#2532**, must not punch a hole in auth for the whole meetings surface.
 
-### 3.4 LMS / Academy
+### 4.4 Meeting Notes agent
 
-People domain ([entities.ts](../../api/src/application/domains/people/entities.ts)): `courses`, `courseModules`, `courseLessons`, `courseEnrollments`, `learningCohorts`, `courseCertificates`, `courseCheckouts`, SCORM CMI + xAPI LRS. Canvas listing kind `course` launches `run` with harness `instrument`.
+An agent produces minutes for `advisory` meetings.
 
-**Gap:** no curated founder curriculum by `BUSINESS_STAGES`. The tables exist; the Academy pack does not.
+- **Input:** the advisory meeting (attendees, time, whatever transcript/notes the workspace already captures for meetings).
+- **Output:** structured minutes suitable for the generalised board pull. Use the **same three-section Markdown contract** already used by standup minutes so parsers do not fork.
+- The agent is in-scope for **#2522**. Defining it does **not** require publishing it as a marketplace `agent` listing.
+- Publishing Meeting Notes as a marketplace `agent` listing is **optional P1** (child **#2538** may still ship it). It is **not** deferred to **#2545** by this contract, and it is **not** required to close #2522.
 
-### 3.5 Demand already on the company row
+### 4.5 Minutes → board (one pull path)
 
-`SEEKING_TYPES` includes `advisors` and `mentorship`. `EXPERTISE_AREAS` is the match vocabulary. `BUSINESS_STAGES` is the lifecycle axis. Matching is a **filter over existing columns**, not a new directory.
+Board sync uses a **generalised** pull of today’s standup-minutes pull (renamed or extended) that accepts **standup and advisory** minutes.
 
-### 3.6 Confidentiality
-
-Mentoring notes, transcripts and the Brain thread are the same class of object as a performance 1:1: named audience, never a public listing. Default `restricted`. Do not invent a sixth confidentiality level.
-
----
-
-## 4. Product — the composed journey
-
-### 4.1 Personas
-
-| Role | Who | What they do |
-|---|---|---|
-| **Founder** | First buyer (ROADMAP: raising in the next few months) | Declares `seeking`, books 1:1s, enrols in a course, installs a pack |
-| **Human advisor** | Operator, operator-turned-mentor, freelancer | Publishes a Talent listing, binds a booking service, optionally publishes a course/pack |
-| **Seat agent** | Built-in CFO/CRO/CHRO/… | Already the always-on mentor; Advisor does not replace them |
-| **Operator (us)** | Marketplace | Curates a default “Founder toolkit” pack per stage; does not staff a volunteer network |
-
-### 4.2 The four motions (SCORE checklist → one CTA each)
-
-| SCORE | Motion | CTA | Writes |
-|---|---|---|---|
-| 1:1 mentoring | Book a Talent listing whose service is `one_to_one` | **Book** | `booking_reservations` + `meetings` + restricted Brain thread |
-| Workshops | Book / join `one_to_many` | **Join** | same, capacity counted |
-| Academy | Enrol in a `course` listing | **Take course** | `course_enrollments` (checkout if priced) |
-| Templates | Install a `pack` / `playbook` / `template` / `tool` | **Install** | canvas objects on the founder’s board |
-| Articles | Open knowledge | **Read** | nothing (or an acknowledgement) |
-| Ongoing relationship | Mentoring **engagement** (not a new listing kind) | **Continue** | a kernel object linking founder company ↔ advisor person, holding the thread + upcoming slots |
-| Local chapter | Optional `geo` filter on Talent + `one_to_many` events | **Near me** | no chapter table |
-
-### 4.3 Matching (no new matching engine)
-
-Rank Talent listings for a founder by, in order:
-
-1. Overlap of listing expertise with the founder’s current question (or `EXPERTISE_AREAS` they picked).
-2. Advisor `business_stage` experience vs company `business_stage`.
-3. `seeking` already `advisors` / `mentorship` (demand is declared).
-4. Price (0 first if the founder filtered Free).
-5. Optional geo — never required. Builderforce is global-first; SCORE is local-first. That is a difference we keep.
-
-Do not introduce a “SCORE match score” column. The rank is a query.
-
-### 4.4 Price
-
-SCORE’s “free” is `priceCents = 0` on the booking service and `price = 0` on the listing (Marketplace V2 already renders “Free”). Paid advisors, paid Academy, and free volunteer-style listings **share one storefront**. No second “community” catalogue.
+- Advisory minutes appear on the board **without** a standup meeting and **without** a second scrape pipeline.
+- Standup minutes continue to work on the **same** path.
+- Do **not** replace board pull with a new minutes store or a second act beside the generalised pull.
+- Idempotent placement of open action items (by title) is compatible with child **#2538** P1; it is not a second pipeline.
+- Propose-don’t-silently-book a follow-up slot, and guest-workspace claim, are **#2538** P1 / children **#2542** / **#2543** — not P0 of this PRD.
 
 ---
 
 ## 5. Functional requirements
 
-### FR-1 — Bind Talent listing ↔ booking service
+### FR-1 — Single product on this file (R0, R1, R7, R8)
 
-- **FR-1.1** A Talent `person` listing may reference one or more `booking_services` (1:1 mentoring, office hours, workshop).
-- **FR-1.2** The storefront primary button is **Book** when a service is bound, **Message** when it is not. It is never Install.
-- **FR-1.3** Publishing an advisor does not require a canvas object. It is the existing Talent publish flow plus the bind.
-- **FR-1.4** Do not add `advisor` to `MARKETPLACE_LISTING_KINDS`.
+- **FR-1.1** #2522 Spec remains this path.
+- **FR-1.2** Notes compose; they do not become a second PRD.
+- **FR-1.3** This file is sufficient for children to implement #2522 without reading #2545’s product as in-scope.
 
-### FR-2 — Founder can complete a 1:1 without leaving Marketplace
+### FR-2 — Advisors filter (R3)
 
-- **FR-2.1** Pick a slot from `availability_slots` (host’s free time).
-- **FR-2.2** `reserve` refuses overlap inside a transaction (already true); the UI must surface the 409, not double-book in the calendar.
-- **FR-2.3** On confirm: meeting row, calendar event, restricted Brain thread between founder and advisor.
-- **FR-2.4** Channel is whatever the workspace already has (in-app + video when PRD 18 is live). Email/phone are contact fields on the person, not a new stack.
-- **FR-2.5** Skip the POST while the founder is offline the same way visitor telemetry does — booking is **not** fire-and-forget; show an in-flow error, never the global API-error toast for a missed availability fetch.
+- **FR-2.1** Talent catalog accepts `category=advisors` and returns Advisor listings.
+- **FR-2.2** Users can act on that list via the advisory-meeting flow.
+- **FR-2.3** No `advisor` listing kind; no `/advisors` family route; not `/marketplace?family=talent` Book bind.
 
-### FR-3 — Workshops are `one_to_many`, not a new kind
+### FR-3 — Kind `advisory` (R4)
 
-- **FR-3.1** A workshop is a booking service with `capacity > 1` plus a calendar event.
-- **FR-3.2** The public catalogue is Marketplace filtered to Talent listings that have a future `one_to_many` slot. No `/webinars` destination (PRD 21: authenticated work is a destination or a canvas object, never a new page).
+- **FR-3.1** Create / list / complete with kind `advisory`.
+- **FR-3.2** Standup stays distinct; unknown kinds still coerce to `adhoc`.
+- **FR-3.3** `advisory` is not a team-ceremony kind and does not default-link team chat.
+- **FR-3.4** Advisory meetings are not Book-only.
 
-### FR-4 — Academy is LMS + `course` listings
+### FR-4 — Meeting Notes (R5)
 
-- **FR-4.1** A “Founder Academy” is a curated set of `course` listings tagged with `BUSINESS_STAGES`, not a new product.
-- **FR-4.2** Enrolment and certificates stay in the People domain.
-- **FR-4.3** Paid courses use existing `courseCheckouts`. Free courses are price 0.
+- **FR-4.1** An agent produces structured minutes from an advisory meeting.
+- **FR-4.2** Minutes use the standup three-section Markdown contract (no parser fork).
+- **FR-4.3** Marketplace listing of that agent is optional P1, not P0.
 
-### FR-5 — Toolkit is a `pack`
+### FR-5 — One pull path (R6)
 
-- **FR-5.1** Ship one default pack per `BUSINESS_STAGES` value (idea, mvp, early_revenue, growth, scale) containing playbooks/templates/tools that already exist or are authored as knowledge → canvas objects.
-- **FR-5.2** The SCORE template list (business plan, forecast, marketing, checklists) is the **acceptance content** of the idea + mvp packs, not a parallel file dump.
+- **FR-5.1** One generalised pull accepts standup and advisory minutes.
+- **FR-5.2** Advisory minutes reach the board without a standup meeting.
+- **FR-5.3** Standup minutes still work. No parallel advisory-only board pipeline.
 
-### FR-6 — Engagement (ongoing mentoring)
+### FR-6 — Explicit split (R2)
 
-- **FR-6.1** After the first completed reservation, offer **Continue with this advisor**. That writes an engagement object (kernel `objects` row, kind `mentoringEngagement` or reuse an existing relation — decide in implementation; **prefer a column/relation over a new table**).
-- **FR-6.2** The engagement is the home of the confidential thread and the next slots. It is not a listing.
-
-### FR-7 — Confidentiality
-
-- **FR-7.1** Mentoring threads, notes, and transcripts default `restricted`.
-- **FR-7.2** They must not cross `guest`, `share`, `publicMedia`, or `aiContext` without an explicit founder act (existing `confidentialityAtMost` table).
-- **FR-7.3** The advisor’s **public** listing (bio, expertise, rate, free/paid) stays public. Only the work product of a session is restricted.
-
-### FR-8 — AI seats remain the always-on mentor
-
-- **FR-8.1** Hiring a human advisor does not remove the CFO/CRO/… seat from the roster.
-- **FR-8.2** The seat agent may sit in the same engagement thread as a **participant**, with `aiContext` ceiling respected (FR-7.2). Default: agent is out of the restricted thread until the founder invites it.
+- **FR-6.1** A2–A5, `/marketplace?family=talent` Book bind, and restricted Brain are **#2545**, worded as owned by **#2545**, not as later work in 26.
 
 ---
 
-## 6. Out of scope
+## 6. Explicit split — epic #2545 owns the rest
 
-- Volunteer background checks, SBA affiliation, 501(c)(3) operations.
-- Chapter legal entities, local office hours in physical space.
-- A dedicated Advisor destination, rail item, or marketing site parallel to Marketplace.
-- New launch modes or listing kinds for humans.
-- Building an LMS (it exists).
-- Building a calendar (it exists).
-- Building checkout (Marketplace V2 / Stripe path exists).
-- In-person SCORE-style workshops as a logistics product.
+The following were previously documented in this file as PRD 26. They are **not** #2522 delivery. They are **not** “later in 26”. They belong to epic **#2545**.
 
----
+| Item | What it is | Owner |
+|---|---|---|
+| **A0 · Bind** | Talent `person` listing ↔ `booking_services`; Book CTA on `/marketplace?family=talent`. Recommended bind: `booking_hosts.host_ref` = talent userId (composition notes / **#2593**). Do **not** add `advisor` to `MARKETPLACE_LISTING_KINDS`. | **#2545** |
+| **A1 · Session** | Reservation → meeting + calendar + **restricted Brain thread** (confidentiality default `restricted`; not in `aiContext` unless the founder invites) | **#2545** |
+| **A2 · Group** | Workshops as `one_to_many` (capacity counted; no `/webinars` page) | **#2545** |
+| **A3 · Academy** | Stage-tagged `course` listings + LMS enrolment | **#2545** |
+| **A4 · Toolkit** | One `pack` per `BUSINESS_STAGES` | **#2545** |
+| **A5 · Engagement** | Continue-with-this-advisor (prefer a relation, not a new table) | **#2545** |
 
-## 7. Sequence
+**#2545**’s own Spec field may still point at this path. After this revision, **#2545 must not treat this file as its product contract.** Its board description (A0–A5 acceptance) remains the checklist until #2545 has its own spec. **This ticket does not create that spec** and does not rewrite #2545 beyond this pointer.
 
-| Track | What ships | Proof form | Kill condition |
-|---|---|---|---|
-| **A0 · Bind** | Talent listing ↔ `booking_services`; Book CTA on `/marketplace?family=talent` | clickable-prototype | A founder cannot reserve a 1:1 from a listing without leaving the storefront |
-| **A1 · Session** | Reservation → meeting + calendar + restricted Brain thread | smoke-test | The thread is readable on a shared board or appears in `aiContext` by default |
-| **A2 · Group** | `one_to_many` join from the same listing | smoke-test | Two founders can occupy the same slot past `capacity` |
-| **A3 · Academy** | Stage-tagged course listings + enrolment | live-system | Enrolment does not write `course_enrollments` |
-| **A4 · Toolkit** | One pack per `BUSINESS_STAGES` | live-system | Install does not land playbook/template objects on the founder board |
-| **A5 · Engagement** | Continue-with-this-advisor | poc | A second booking cannot find the first thread |
-
-**A0 is the only track that unblocks the SCORE checklist.** A1–A5 are additive. Do not start A3–A5 before A0 is measurable.
-
-Read and Prove spend no run budget; only Build does. Each proof names the kill condition above.
+Kill conditions that still apply to **#2545** (not to #2522): a reviewer can kill #2545 if it requires a `/advisors` page, a new listing family, or a volunteer/chapter table. Those constraints remain good hygiene for #2522 as well (see §9) but they are not #2522’s acceptance.
 
 ---
 
-## 8. Acceptance (epic)
+## 7. Children (not re-parented by #2604)
 
-A founder whose company has `seeking: mentorship` and `business_stage: mvp` can, on Marketplace, without a new destination:
+Existing children stay under **#2522**. After this rewrite they follow **this** PRD. A later coordinator may re-align titles/section cites (`§4.2` / `§8` / `§9` on the old research artifact are void). Do not invent a third product.
 
-1. See human advisors ranked by expertise/stage, including Free (`price = 0`).
-2. Book a 1:1 into a real `booking_reservations` row that refuses overlap.
-3. Land in a restricted thread + calendar event with that advisor.
-4. Join a future `one_to_many` slot (workshop) from the same family.
-5. Enrol in a stage-tagged course and install the mvp toolkit pack.
-6. Hire a seat agent without dropping the human advisor.
+| Child | Follows this PRD |
+|---|---|
+| **#2527** | FR-2 Advisors filter / listing mode on talent (not a second user type) |
+| **#2532** | FR-3 kind `advisory` + allowed public token-book origin (not family=talent Book bind) |
+| **#2536** | Register `advisory` in meeting KINDS only; not `TEAM_CEREMONY_KINDS` |
+| **#2538** | FR-4 agent + FR-5 generalised pull; marketplace `agent` listing optional P1 |
 
-A reviewer can kill the epic if any of those six requires a `/advisors` page, a new listing family, or a volunteer/chapter table.
-
----
-
-## 9. Open decisions — operator, not engineering
-
-1. **Default price.** Seed listings at $0 (SCORE-like) or leave empty until advisors set a rate? Recommendation: allow 0; do not force 0.
-2. **Engagement object.** New kernel kind vs a relation on `objects`. Recommendation: relation, no new table.
-3. **Geo.** Ship “Near me” in A0 or defer? Recommendation: defer. Global-first.
-4. **Invite the seat agent into the restricted thread.** Default off (FR-8.2) vs default on. Recommendation: off.
+Siblings **#2605** (unshipped routes as done) and **#2606** (real module names) stay out of this rewrite.
 
 ---
 
-## 10. Claim-to-proof
+## 8. Acceptance (epic #2522)
 
-Public copy may say we **compose mentoring, workshops, courses and templates on the marketplace**. It may not say we are a SCORE alternative, an SBA partner, or that mentoring is free unless a live listing is actually priced 0. No accounting or LMS claim that has not run against production data.
+A reviewer closes **#2522** against this file when all of the following are true:
+
+1. Talent can be filtered to Advisors (`category=advisors`) and the user can start the advisory-meeting flow from that list. Advisors is not a new listing family and not `/advisors`.
+2. Meetings can be created, listed, and completed with kind `advisory`. Standup still exists as its own kind. Advisory does not default-link team chat.
+3. A Meeting Notes agent produces structured minutes from an advisory meeting using the standup three-section Markdown contract.
+4. Those minutes reach the board through the **same** generalised pull path as standup minutes. Standup minutes still work. There is no parallel advisory-only board pipeline.
+5. Closing #2522 did **not** require shipping A2–A5, `/marketplace?family=talent` Book bind, or a restricted Brain thread.
+6. Implementation notes, if present, do not specify product behaviour absent from this file.
+
+A reviewer **rejects** a #2522 child that treats this PRD as a licence to build workshops, academy, packs, family=talent Book bind, or restricted Brain.
+
+---
+
+## 9. Out of scope / non-goals (R9)
+
+- Building or restating epic **#2545** in this file beyond the pointer in §6.
+- New meeting kinds other than `advisory`.
+- Changing standup except for sharing the pull path.
+- Pipeline, billing, or talent-category work unrelated to Advisors.
+- Rewriting implementation notes so that #2522 would ship marketplace / A0–A5 / restricted Brain.
+- Absorbing sibling gaps **#2605** and **#2606**.
+- A volunteer/SBA/chapter network, U.S.-only eligibility, SCORE branding, in-person venue logistics.
+- Adding `advisor` to `MARKETPLACE_LISTING_KINDS` or a sixth canvas launch mode.
+- A dedicated Advisor destination or rail item parallel to Marketplace.
+
+---
+
+## 10. Follow-ons (not this rewrite)
+
+- Mirror `advisory` in the frontend meeting-kind list (`ScheduleMeetingPanel` or equivalent) if it duplicates server KINDS.
+- README index blurb for doc 26 (still SCORE-class / marketplace-flavoured) should match this file after merge; **#2604** does not edit README.
+- **#2545** needs its own spec path so its Spec field does not keep pointing at a #2522 PRD.
+- Notes alignment (**R7**) when `26-implementation-notes-advisor-platform.md` is on the tree (**#2593** / do not merge PR **#829** as-is).
+- Stage chips on `?category=advisors` (`freelancer_profiles.stages` tokens `start|grow|exit`, query key `stage`) are **#2586** / **#2637**, not this rewrite.
+
+---
+
+## 11. Claim-to-proof
+
+Public copy may say founders can **find Advisors, meet them, and land notes on the board**. It may not say we are a SCORE alternative, an SBA partner, that mentoring is free unless a live listing is priced 0, or that Marketplace family Book / Academy / packs shipped as this epic.

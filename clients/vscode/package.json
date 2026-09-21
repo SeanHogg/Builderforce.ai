@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.9.79",
+  "version": "2026.9.83",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -205,6 +205,21 @@
         "icon": "$(trash)"
       },
       {
+        "command": "builderforce.archiveSession",
+        "title": "%command.archiveSession%",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "builderforce.unarchiveSession",
+        "title": "%command.unarchiveSession%",
+        "icon": "$(unarchive)"
+      },
+      {
+        "command": "builderforce.toggleShowArchived",
+        "title": "%command.toggleShowArchived%",
+        "icon": "$(archive)"
+      },
+      {
         "command": "builderforce.selectProject",
         "title": "%command.selectProject%",
         "icon": "$(folder)"
@@ -224,6 +239,12 @@
         "title": "%command.registerMcpServer%",
         "category": "BuilderForce",
         "icon": "$(plug)"
+      },
+      {
+        "command": "builderforce.manageByoConnections",
+        "title": "%command.manageByoConnections%",
+        "category": "BuilderForce",
+        "icon": "$(key)"
       },
       {
         "command": "builderforce.refreshProjects",
@@ -463,6 +484,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "builderforce.toggleShowArchived",
+          "when": "view == builderforce.sessions",
+          "group": "navigation@4"
+        },
+        {
           "command": "builderforce.pickModel",
           "when": "view == builderforce.sessions",
           "group": "overflow@1"
@@ -623,6 +649,16 @@
           "command": "builderforce.deleteSession",
           "when": "view == builderforce.sessions && viewItem == builderforceSession",
           "group": "inline@2"
+        },
+        {
+          "command": "builderforce.archiveSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline@3"
+        },
+        {
+          "command": "builderforce.unarchiveSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline@4"
         },
         {
           "command": "builderforce.runTask",

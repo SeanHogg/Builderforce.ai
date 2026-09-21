@@ -30,6 +30,23 @@ export interface FreelancerProfile {
   discipline: string | null;
   skills: string[];
   hourlyRateCents: number | null;
+  /**
+   * Session price in CENTS — the pro-bono source of truth (#2528,
+   * `freelancer_profiles.session_price_cents`).
+   *
+   * Three states, and they are NOT interchangeable:
+   *   `0`       — volunteer / complimentary. This is what puts the Pro bono badge
+   *               on a card; see `isProBonoSession`.
+   *   `null`    — the advisor has not set a session price; no badge, no price row.
+   *   absent    — the field is not on this payload at all (a deploy predating the
+   *               #2528 migration, or an endpoint that does not select it). Optional
+   *               for exactly that reason: the badge fails closed rather than
+   *               forcing every caller to invent a value.
+   *
+   * Never coerce this (`?? 0` turns "unknown" into "free"). Never substitute
+   * `hourlyRateCents` — an advisor can bill hourly and still take unpaid sessions.
+   */
+  sessionPriceCents?: number | null;
   currency: string;
   visibility: 'public' | 'private';
   availability: 'open' | 'limited' | 'unavailable';
@@ -69,6 +86,27 @@ export interface FreelancerProfile {
   updatedAt?: string | null;
   /** True when this person hosts an active booking_service (marketplace Book). */
   bookable?: boolean;
+}
+
+/**
+ * Is this listing's session unpaid — the ONE definition of pro-bono (#2584).
+ *
+ * Strict `=== 0` against the JSON number, and deliberately nothing else. Every
+ * other input is a hide:
+ *
+ *   `null` / `undefined` / absent  — unknown, not free
+ *   any positive or negative int   — priced (a negative is a stale row; still hide)
+ *   `NaN`, `""`, `"0"`, `"free"`   — not the number 0
+ *
+ * The asymmetry is the point: showing "Pro bono" on an advisor who charges is a
+ * broken promise a seeker acts on, whereas omitting it on a genuine volunteer is
+ * merely a missed signal. So the predicate fails CLOSED — no coercion, no `??`,
+ * no `Number(...)`, no truthiness. A single exported function rather than an
+ * inline check at each call site, so all card surfaces provably agree and this
+ * rule can be tested once.
+ */
+export function isProBonoSession(sessionPriceCents: number | null | undefined): boolean {
+  return sessionPriceCents === 0;
 }
 
 /** Reputation numbers shown on a for-hire profile (server-computed + cached). */

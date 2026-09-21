@@ -569,6 +569,7 @@ describe('POST /provider-keys/:provider/test', () => {
     mocks.llmProxyForPlan.mockReturnValue({
       complete: vi.fn(async () => ({
         response: new Response(JSON.stringify({ error: { message: 'invalid x-api-key' } }), { status: 401 }),
+        resolvedVendor: 'anthropic',
       })),
     });
     const req = new Request('http://test.local/provider-keys/anthropic/test', {
@@ -580,7 +581,7 @@ describe('POST /provider-keys/:provider/test', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       ok: false,
-      status: 'failed',
+      status: 'needs_attention',
       code: 'provider_test_failed',
       error: 'anthropic connection test failed: invalid x-api-key',
       details: { provider: 'anthropic', model: 'claude-sonnet-5', upstreamStatus: 401 },
