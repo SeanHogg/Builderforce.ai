@@ -40,6 +40,7 @@ import {
   personaModalityOf,
   personaModel,
   personaSystemPrompt,
+  type TicketTag,
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
@@ -89,7 +90,7 @@ import {
   type DirectedRecipient,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, tasksApi, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
 import { captureDiagnosticsBlock } from './captureDiagnostics';
 import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
 import { useChatModelOptions, useLlmModels } from '@/lib/useLlmModels';
@@ -441,6 +442,26 @@ export function BrainPanel({
   // for a not-yet-scoped chat. Resolve the name from the loaded projects list when
   // available; the id is what the tools actually need.
   const ctxProjectId = chats.activeChat?.projectId ?? viewingProjectId ?? pinnedProjectId;
+  // #ticket autocomplete — tickets available to tag in the composer.
+  const [ticketables, setTicketables] = useState<TicketTag[]>([]);
+  const ticketProjectId = chats.activeChat?.projectId ?? viewingProjectId ?? pinnedProjectId;
+  useEffect(() => {
+    if (ticketProjectId == null) { setTicketables([]); return; }
+    let live = true;
+    tasksApi.list(ticketProjectId).then((tasks) => {
+      if (!live) return;
+      setTicketables(tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, key: t.key, ref: `#${t.id}` })));
+    }).catch(() => { if (live) setTicketables([]); });
+    return () => { live = false; };
+  }, [ticketProjectId]);
+
+  // Handle a ticket tagged in the composer — link it to the active chat.
+  const handleTicketTag = useCallback((t: TicketTag) => {
+    if (chats.activeChatId == null) return;
+    brain.linkChatTicket(chats.activeChatId, { kind: 'task', ref: String(t.id) })
+      .then(() => dispatchBrainDataChanged({ domain: 'brain', method: 'link' }))
+      .catch(() => { /* global error surface */ });
+  }, [chats.activeChatId]);
   // Cross-surface "what's live / what needs me" — decorates each chat row with a
   // status dot (running / needs-answer) that stays live even when another chat is
   // focused. Scoped when a project is in context, tenant-wide on the Brain Storm page.
@@ -1389,6 +1410,8 @@ export function BrainPanel({
       onRemoveAttachment={conv.removeAttachment}
       mentionables={participants}
       onMention={chooseRecipient}
+      ticketables={ticketables}
+      onTicketTag={handleTicketTag}
       focusToken={composerFocusToken}
       contextControls={<>
         {/* "Acting as" and "To" are the shared brain-ui pickers — the SAME controls the
