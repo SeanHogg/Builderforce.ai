@@ -17,3 +17,5 @@ test-integration/**
 out-integration/**
 vitest.config.ts
 out/harness.cjs
+.git/**
+.env*
