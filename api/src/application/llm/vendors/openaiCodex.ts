@@ -1,5 +1,5 @@
 import { parseSseDataFrames } from '../sseFrames';
-import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, throwWithUpstreamDiagnostic, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
 import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
@@ -150,74 +150,80 @@ async function codexFetch(params: VendorCallParams): Promise<Response> {
   });
   if (!response.ok) {
     const message = (await response.text()).slice(0, 500);
-    // AUTH class (401/403) is FATAL FOR THIS VENDOR, not a transient blip.
-    //
-    // A 403 here is the entitlement case: the ChatGPT account authenticated fine
-    // (the bearer token is live) but is not entitled to Codex — a lapsed plan, a
-    // plan without Codex access, or a stale `accountId` from a workspace the user
-    // left. Retrying is guaranteed to 403 again until the OPERATOR reconnects the
-    // account, so this must not look like an outage the cascade can outwait.
-    //
-    // We still raise a RETRYABLE error rather than `VendorFatalError`, because
-    // "fatal for this vendor" ≠ "fatal for the run": the dispatcher rethrows a
-    // VendorFatalError outside 400/422 and would kill an otherwise-servable
-    // request just because one connected BYO account lost entitlement. Raising it
-    // retryable lets the cascade advance to the tenant's other accounts / the plan
-    // pool, while `cooldownStore.classifyFailure` maps 401/403 to the `auth` class
-    // — which trips a 30-minute VENDOR-level cooldown on a single strike, i.e. this
-    // vendor genuinely stands down instead of being re-probed every request.
-    //
-    // The marker below is what makes the failure OBSERVABLE: it rides the attempt's
-    // `error` text through `kindForStatus` → `kind: 'auth'` → `FailoverEvent.detail`,
-    // where `providerAuthAlerts` picks it up and turns it into a "reconnect your
-    // ChatGPT account" prompt on Settings ▸ API Keys. Before this, an unentitled
-    // account was indistinguishable from a 502 and the operator was never told.
-    if (AUTH_STATUSES.has(response.status)) {
-      console.error(
-        `[vendors] openai-codex/${params.model} auth ${response.status} — connected ChatGPT account is ${response.status === 403 ? 'authenticated but NOT entitled to Codex (lapsed plan / no Codex access / stale accountId)' : 'unauthenticated (token expired or revoked)'}; reconnect it in Settings ▸ API Keys. Failing over to the next model.`,
-        message.slice(0, 200),
-      );
-      // ── DECISION: a dead Codex account stands the VENDOR down, never the RUN. ──
-      //
-      // The question this settles: should a 401/403 be a `VendorFatalError` (which the
-      // dispatcher rethrows, killing the request) instead of a retryable one?
-      //
-      // NO, and the reasoning is about blast radius. This status says ONE tenant's
-      // ChatGPT account is not entitled to Codex — a fact about a credential, not
-      // about the request. Making it fatal means a workspace with four connected
-      // providers has every request killed by the one that lapsed, including requests
-      // that three healthy accounts could have served. The failure mode we would be
-      // choosing is strictly worse than the one we would be preventing.
-      //
-      // Both regimes already behave correctly under the retryable classification:
-      //   • BYO-STRICT (the tenant declared BYO execution) — `premiumFallback` is
-      //     empty, so there is no platform-funded fallback to degrade onto. If every
-      //     connected account fails, the cascade surfaces `byo_unavailable` and NAMES
-      //     the providers and their reasons. An honest failure, not a silent one.
-      //   • NON-STRICT — the run is served from another route, which is the whole
-      //     point of a cascade.
-      //
-      // The thing that WAS missing is not fatality, it is visibility and cost: the
-      // account used to keep LEADING the seed and burn an upstream attempt on every
-      // single request. `providerAuthAlerts` records the verdict per tenant+provider,
-      // and routing now demotes an alerted vendor out of the lead
-      // (`byoAlertedVendors` → `demotedVendors`), so a broken account costs ONE
-      // wasted attempt in total rather than one per run — while the operator gets the
-      // "reconnect your ChatGPT account" prompt that closes it for good.
-      //
-      // Revisit only if someone can name a case where killing a servable request is
-      // better than serving it from a route the tenant also connected.
-      throw new VendorRetryableError(
-        'openai-codex',
-        params.model,
-        response.status,
-        `${CODEX_AUTH_MARKER} (upstream ${response.status}): ${message.slice(0, 200)}`,
-      );
-    }
-    if (response.status === 400 || response.status === 422) throw new VendorFatalError('openai-codex', response.status, message);
-    throw new VendorRetryableError('openai-codex', params.model, response.status, message);
+    throwWithUpstreamDiagnostic(ENDPOINT, response, message, () => classifyCodexFailure(params.model, response.status, message));
   }
   return response;
+}
+
+/** The Codex backend's failure ladder, raised through {@link throwWithUpstreamDiagnostic}
+ *  so every branch carries the redacted trace an operator attaches to a support ticket. */
+function classifyCodexFailure(model: string, status: number, message: string): never {
+  // AUTH class (401/403) is FATAL FOR THIS VENDOR, not a transient blip.
+  //
+  // A 403 here is the entitlement case: the ChatGPT account authenticated fine
+  // (the bearer token is live) but is not entitled to Codex — a lapsed plan, a
+  // plan without Codex access, or a stale `accountId` from a workspace the user
+  // left. Retrying is guaranteed to 403 again until the OPERATOR reconnects the
+  // account, so this must not look like an outage the cascade can outwait.
+  //
+  // We still raise a RETRYABLE error rather than `VendorFatalError`, because
+  // "fatal for this vendor" ≠ "fatal for the run": the dispatcher rethrows a
+  // VendorFatalError outside 400/422 and would kill an otherwise-servable
+  // request just because one connected BYO account lost entitlement. Raising it
+  // retryable lets the cascade advance to the tenant's other accounts / the plan
+  // pool, while `cooldownStore.classifyFailure` maps 401/403 to the `auth` class
+  // — which trips a 30-minute VENDOR-level cooldown on a single strike, i.e. this
+  // vendor genuinely stands down instead of being re-probed every request.
+  //
+  // The marker below is what makes the failure OBSERVABLE: it rides the attempt's
+  // `error` text through `kindForStatus` → `kind: 'auth'` → `FailoverEvent.detail`,
+  // where `providerAuthAlerts` picks it up and turns it into a "reconnect your
+  // ChatGPT account" prompt on Settings ▸ API Keys. Before this, an unentitled
+  // account was indistinguishable from a 502 and the operator was never told.
+  if (AUTH_STATUSES.has(status)) {
+    console.error(
+      `[vendors] openai-codex/${model} auth ${status} — connected ChatGPT account is ${status === 403 ? 'authenticated but NOT entitled to Codex (lapsed plan / no Codex access / stale accountId)' : 'unauthenticated (token expired or revoked)'}; reconnect it in Settings ▸ API Keys. Failing over to the next model.`,
+      message.slice(0, 200),
+    );
+    // ── DECISION: a dead Codex account stands the VENDOR down, never the RUN. ──
+    //
+    // The question this settles: should a 401/403 be a `VendorFatalError` (which the
+    // dispatcher rethrows, killing the request) instead of a retryable one?
+    //
+    // NO, and the reasoning is about blast radius. This status says ONE tenant's
+    // ChatGPT account is not entitled to Codex — a fact about a credential, not
+    // about the request. Making it fatal means a workspace with four connected
+    // providers has every request killed by the one that lapsed, including requests
+    // that three healthy accounts could have served. The failure mode we would be
+    // choosing is strictly worse than the one we would be preventing.
+    //
+    // Both regimes already behave correctly under the retryable classification:
+    //   • BYO-STRICT (the tenant declared BYO execution) — `premiumFallback` is
+    //     empty, so there is no platform-funded fallback to degrade onto. If every
+    //     connected account fails, the cascade surfaces `byo_unavailable` and NAMES
+    //     the providers and their reasons. An honest failure, not a silent one.
+    //   • NON-STRICT — the run is served from another route, which is the whole
+    //     point of a cascade.
+    //
+    // The thing that WAS missing is not fatality, it is visibility and cost: the
+    // account used to keep LEADING the seed and burn an upstream attempt on every
+    // single request. `providerAuthAlerts` records the verdict per tenant+provider,
+    // and routing now demotes an alerted vendor out of the lead
+    // (`byoAlertedVendors` → `demotedVendors`), so a broken account costs ONE
+    // wasted attempt in total rather than one per run — while the operator gets the
+    // "reconnect your ChatGPT account" prompt that closes it for good.
+    //
+    // Revisit only if someone can name a case where killing a servable request is
+    // better than serving it from a route the tenant also connected.
+    throw new VendorRetryableError(
+      'openai-codex',
+      model,
+      status,
+      `${CODEX_AUTH_MARKER} (upstream ${status}): ${message.slice(0, 200)}`,
+    );
+  }
+  if (status === 400 || status === 422) throw new VendorFatalError('openai-codex', status, message);
+  throw new VendorRetryableError('openai-codex', model, status, message);
 }
 
 async function callResponses(params: VendorCallParams): Promise<VendorCallResult> {

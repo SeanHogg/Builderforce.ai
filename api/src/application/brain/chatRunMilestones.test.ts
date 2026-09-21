@@ -13,8 +13,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * the ask_human question surfacing in the paused line, and the never-throws contract.
  */
 
-const { broadcasts } = vi.hoisted(() => ({
+const { broadcasts, chatMembers, joins } = vi.hoisted(() => ({
   broadcasts: [] as Array<{ tenantId: number; chatId: number }>,
+  /** scopeId (chat id) → agent refs already participating. */
+  chatMembers: new Map<string, string[]>(),
+  joins: [] as Array<{ agentRef: string; scope: string; scopeId: string; role: string }>,
+}));
+vi.mock('../agent/AgentAssignmentService', () => ({
+  AgentAssignmentService: class {
+    async list(_tenantId: number, _scope: string, scopeId: string) {
+      return (chatMembers.get(scopeId) ?? []).map((agentRef) => ({ agentRef }));
+    }
+    async assign(_tenantId: number, a: { agentRef: string; scope: string; scopeId: string; role: string }) {
+      joins.push({ agentRef: a.agentRef, scope: a.scope, scopeId: a.scopeId, role: a.role });
+      return a;
+    }
+  },
 }));
 vi.mock('../../infrastructure/relay/broadcastRoom', () => ({
   broadcastBrainChatChanged: vi.fn(async (_room: unknown, tenantId: number, chatId: number) => {
@@ -72,6 +86,8 @@ beforeEach(() => {
   linkedChats = [];
   inserted = [];
   broadcasts.length = 0;
+  chatMembers.clear();
+  joins.length = 0;
   insertConflicts = false;
 });
 
@@ -141,6 +157,28 @@ describe('postRunMilestone → linked Brain chats', () => {
     });
     expect(inserted[0]!.content).toContain('failed');
     expect(inserted[0]!.content).toContain('Execution timed out');
+  });
+
+  it('joins the RUNNING agent to every linked chat it narrates into (lane-staffed ≠ ticket owner)', async () => {
+    linkedChats = [chatRow(11), chatRow(12)];
+    chatMembers.set('12', ['bob']);
+    await makeService().postRunMilestone(1, {
+      kind: 'epic', ref: '2570', phase: 'started', executionId: 42, agentRef: 'bob', agentName: 'Bob Developer',
+    });
+    // Chat 11 gains Bob as a participant; chat 12 already had him — no duplicate.
+    expect(joins).toEqual([{ agentRef: 'bob', scope: 'chat', scopeId: '11', role: 'participant' }]);
+    // Joined silently: the milestone is the only line posted per chat.
+    expect(inserted.map((r) => r.chatId).sort()).toEqual([11, 12]);
+    expect(inserted.every((r) => r.content.includes('started working on epic #2570'))).toBe(true);
+  });
+
+  it('joins nobody when the milestone carries no agent ref', async () => {
+    linkedChats = [chatRow(11)];
+    await makeService().postRunMilestone(1, {
+      kind: 'task', ref: '7', phase: 'failed', executionId: 42, agentName: 'The agent',
+    });
+    expect(joins).toHaveLength(0);
+    expect(inserted).toHaveLength(1);
   });
 
   it('does nothing for an unlinked ticket or an invalid kind', async () => {

@@ -140,18 +140,36 @@
  * 360px — and the answer to it is this stack, not the absence of a board.
  */
 .board {
+  display: flex;
+  flex-direction: column;
   height: auto;
-  max-height: min(52vh, 420px);
+  max-height: min(58vh, 460px);
+  overflow: hidden;
+}
+
+/*
+ * The scrolling half of the stacked board. The session bar above and the
+ * composer tray below are fixed bands; only what is BETWEEN them — the seeded
+ * objects and the always-on roster — moves. That is the whole mobile contract:
+ * the prompt is always on screen, the options scroll to it.
+ * Above 900px the board is a plane and every child is absolutely positioned, so
+ * this wrapper dissolves into `display: contents` and changes nothing.
+ */
+.boardScroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* ── Session bar: live dot, what this board is, who is on it ── */
+/* A FIXED band at the top of the stacked board: it is the first flex child and
+   never enters `.boardScroll`, so it stays put while the options move. */
 .chrome {
-  position: sticky;
-  top: 0;
-  inset: auto;
+  flex: none;
+  position: relative;
   z-index: 3;
   display: flex;
   align-items: center;
@@ -220,7 +238,6 @@
      end — on a phone the whole point is that the C-suite is reachable. */
   overflow-x: auto;
   overflow-y: hidden;
-  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 .teamLabel {
   flex: none;
@@ -456,12 +473,30 @@
 .promptWrap {
   position: relative;
   z-index: 10;
-  width: min(600px, calc(100% - 24px));
-  margin: 0 auto 12px;
+  flex: none;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  background: var(--surface-sunken);
+}
+
+/* On a phone the prompt STAYS FIXED at the bottom while the cards scroll above.
+   The prompt band is the last flex child so it anchors the bottom edge; making
+   it sticky keeps it in view at every scroll position. The options panel (the
+   PromptUseCasePicker) escapes the board's overflow via its own 899px media
+   query — it becomes a viewport-anchored bottom sheet that scrolls inside. */
+@media (max-width: 899px) {
+  .promptWrap {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+  }
 }
 .prompt {
   width: 100%;
@@ -513,6 +548,12 @@
     overflow: visible;
   }
 
+  /* The plane positions every band absolutely, so the stacked board's scrolling
+     wrapper dissolves — its children become direct layout participants again. */
+  .boardScroll {
+    display: contents;
+  }
+
   .chrome {
     position: absolute;
     inset: 0 0 auto;
@@ -523,6 +564,7 @@
     position: absolute;
     inset: auto 0 0;
     overflow: hidden;
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   }
 
   .field {
@@ -554,6 +596,12 @@
     transform: translateX(-50%);
     width: min(600px, calc(100% - 40px));
     margin: 0;
+    /* The tray chrome belongs to the stacked layout only — on the plane the
+       composer floats on the board ground with no band of its own. */
+    padding: 0;
+    border-top: 0;
+    border-radius: 0;
+    background: transparent;
   }
 }
 

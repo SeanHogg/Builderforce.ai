@@ -20,6 +20,9 @@
   "command.openSession": "BuilderForce : Ouvrir la conversation",
   "command.renameSession": "BuilderForce : Renommer la conversation",
   "command.deleteSession": "BuilderForce : Supprimer la conversation",
+  "command.archiveSession": "BuilderForce : Archiver la conversation",
+  "command.unarchiveSession": "BuilderForce : Désarchiver la conversation",
+  "command.toggleShowArchived": "BuilderForce : Afficher les archivés",
   "command.selectProject": "BuilderForce : Sélectionner un projet",
   "command.createProject": "BuilderForce : Nouveau projet",
   "command.createWorkspace": "BuilderForce : Créer / changer d'espace de travail",
@@ -82,5 +85,6 @@
   "view.changes": "Modifications",
   "command.refreshChanges": "BuilderForce : Actualiser les modifications",
   "command.openChange": "BuilderForce : Ouvrir la modification",
-  "command.openSourceControl": "BuilderForce : Ouvrir le contrôle de code source"
+  "command.openSourceControl": "BuilderForce : Ouvrir le contrôle de code source",
+  "command.manageByoConnections": "BuilderForce : Gérer les connexions de modèle"
 }

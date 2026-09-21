@@ -37,6 +37,7 @@ import { readProxyChoice } from '../../application/llm/LlmProxyService';
 import { MODALITIES } from '../../application/compile';
 import { failResponse } from '../middleware/errorResponse';
 import { parseBody, z, zOptionalString, zPositiveInt } from './requestBody';
+import { composeDispatcherLabel } from '../../application/runtime/dispatcherLabel';
 
 const SOURCE = 'presentation/routes/compileRoutes.ts';
 
@@ -120,7 +121,7 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
           params.payload,
           humanDirected(c.get('userId'), 'Compile/deploy started from the compile surface.'),
         ),
-        submittedBy: `user:${c.get('userId') ?? 'compile'}`,
+        submittedBy: composeDispatcherLabel('user', c.get('userId') ?? 'compile'),
         // A person clicked Compile/Deploy — the same explicit override Run-now uses,
         // so the failure breaker and re-run cooldown do not apply.
         force: true,

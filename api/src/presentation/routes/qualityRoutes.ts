@@ -44,6 +44,7 @@ import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { parseBody, parseOptionalBody, z } from './requestBody';
+import { composeDispatcherLabel } from '../../application/runtime/dispatcherLabel';
 
 // Request bodies. Every field the handler answers its own "X is required" /
 // "must be one of" message for stays optional so that message still wins.
@@ -777,7 +778,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
           undefined,
           humanDirected(userId, `Fix-with-agent on error group ${id}.`),
         ),
-        submittedBy: `quality:${userId ?? 'system'}`,
+        submittedBy: composeDispatcherLabel('quality', userId ?? 'system'),
         force: true,
       },
     );
@@ -792,7 +793,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       tenantId,
       projectId:   group.projectId,
       taskId:      task.id as unknown as number,
-      submittedBy: `quality:${userId ?? 'system'}`,
+      submittedBy: composeDispatcherLabel('quality', userId ?? 'system'),
     }));
 
     // The ticket is real either way — this route's job is "open a fix ticket and run

@@ -37,6 +37,28 @@ describe('xAI SuperGrok OAuth vendor', () => {
     expect((thrown as VendorRetryableError).message).toContain(CAPACITY_LIMIT_MARKER);
   });
 
+  // The SuperGrok card read "Connection test failed: failed." with no Copy-trace button:
+  // this hand-rolled vendor threw bare errors, so the probe had no diagnostic to offer.
+  it('carries the redacted upstream diagnostic on a refused call', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ code: 'forbidden', error: 'The caller does not have permission to execute the specified operation' }),
+      { status: 403, headers: { 'content-type': 'application/json', 'x-request-id': 'xai-req-1' } },
+    )));
+    let thrown: unknown;
+    try {
+      await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.6', messages: [{ role: 'user', content: 'Reply OK.' }] });
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as VendorRetryableError).diagnostic).toMatchObject({
+      endpoint: 'https://api.x.ai/v1/responses',
+      status: 403,
+      edgeBlocked: false,
+      providerMessage: 'The caller does not have permission to execute the specified operation',
+      headers: { 'x-request-id': 'xai-req-1' },
+    });
+  });
+
   /** Regression: this vendor used to drop `toolChoice` entirely, so a pinned tool
    *  silently ran as `auto` on Grok and the turn could come back as prose. */
   it('forwards a pinned tool in the Responses (flattened) tool_choice shape', async () => {

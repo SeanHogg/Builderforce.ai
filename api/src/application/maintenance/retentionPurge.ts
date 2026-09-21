@@ -44,13 +44,25 @@ export interface RetentionOptions {
   pressure?: number;
 }
 
-/** The window a table is purged on at this pressure level, never below its floor and
- *  never below one day. A table with no `pressureFloorDays` is not compressible. */
-export function compressedWindow(table: { retentionDays: number; pressureFloorDays?: number }, pressure: number | undefined): number {
-  if (pressure == null || table.pressureFloorDays == null) return table.retentionDays;
+/**
+ * A window shortened for storage pressure: interpolated from `days` toward `floorDays`,
+ * never below the floor and never below one day. No floor = not compressible, and no
+ * pressure = the declared window untouched.
+ *
+ * ONE interpolation for every kind of window — a row purge and a payload redaction are
+ * both "keep N days", and two copies of this arithmetic would be two chances for a
+ * floor to be honoured in one and not the other.
+ */
+export function compressDays(days: number, floorDays: number | undefined, pressure: number | undefined): number {
+  if (pressure == null || floorDays == null) return days;
   const clamped = Math.min(1, Math.max(0, pressure));
-  const floor = Math.min(table.pressureFloorDays, table.retentionDays);
-  return Math.max(1, Math.round(table.retentionDays - (table.retentionDays - floor) * clamped));
+  const floor = Math.min(floorDays, days);
+  return Math.max(1, Math.round(days - (days - floor) * clamped));
+}
+
+/** The row-level window a table is purged on at this pressure level. */
+export function compressedWindow(table: { retentionDays: number; pressureFloorDays?: number }, pressure: number | undefined): number {
+  return compressDays(table.retentionDays, table.pressureFloorDays, pressure);
 }
 
 /**
@@ -93,7 +105,7 @@ export async function runRetentionPurge(
     ...SWEPT_TABLES.flatMap((table) => (table.redact
       ? table.connections.map((connection) => ({
         name: `${table.relation}.payload@${connection}`,
-        run: () => table.redact!.run(dbFor(connection), cutoff(now, table.redact!.afterDays)),
+        run: () => table.redact!.run(dbFor(connection), cutoff(now, compressDays(table.redact!.afterDays, table.redact!.pressureFloorDays, options.pressure))),
       }))
       : [])),
     // Lapsed agent memories (0371). NOT an age-based purge like the rest, and

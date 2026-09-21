@@ -39,6 +39,7 @@ import {
 } from './LlmProxyService';
 import { byoModelsFor } from './byoModelRouting';
 import { buildHostEgress } from './hostEgress';
+import { alertHealthStatus } from './providerKeyHealth';
 import { CASCADE_STATUSES, type UpstreamDiagnostic } from './vendors/types';
 import {
   connectionModelRef,
@@ -108,7 +109,7 @@ export interface ByoProbeResult {
    *  `local_egress_required` (this provider is only reachable from the tenant's OWN
    *  machine and none is connected — the credential was never even presented, so it is
    *  emphatically NOT a verdict on the key), or `failed`. */
-  status: 'ready' | 'not_connected' | 'no_test_model' | 'upstream_error' | 'local_egress_required' | 'failed' | ByoUnresolvedReason;
+  status: 'ready' | 'not_connected' | 'no_test_model' | 'upstream_error' | 'local_egress_required' | 'capacity' | 'needs_attention' | 'failed' | ByoUnresolvedReason;
   /** The model the probe pinned (absent when it never got that far). */
   model?: string;
   /** Upstream HTTP status, when a request was actually made. */
@@ -308,6 +309,18 @@ function isTransientProbeStatus(status: number): boolean {
 }
 
 /**
+ * The status a FAILED dispatch reports: a transient is `upstream_error`, a classified
+ * owner-actionable failure reads exactly as the card's own alert does
+ * ({@link alertHealthStatus}), and only a failure that is neither stays `failed`.
+ */
+function probeFailureStatus<A extends { reason: ProviderAuthAlert['reason'] }>(
+  outcome: Pick<ProbeDispatch<A>, 'retryable' | 'alert'>,
+): 'upstream_error' | 'capacity' | 'needs_attention' | 'failed' {
+  if (outcome.retryable) return 'upstream_error';
+  return outcome.alert ? alertHealthStatus(outcome.alert) : 'failed';
+}
+
+/**
  * The model this account actually LEADS with — the same seed BYO flagship routing picks,
  * on the route its auth type dispatches through. Falls back to any catalog model served by
  * the provider's vendor so a provider with no designated flagship is still testable.
@@ -411,7 +424,7 @@ export async function probeByoProvider(
   // the owner should hear about it the moment anything notices — the Test button included.
   if (outcome.alert) await raise(outcome.alert, outcome.error ?? '');
   return {
-    provider, ok: false, status: outcome.retryable ? 'upstream_error' : 'failed', model,
+    provider, ok: false, status: probeFailureStatus(outcome), model,
     upstreamStatus: outcome.upstreamStatus,
     ...(outcome.error ? { error: outcome.error } : {}),
     ...(outcome.alert ? { alert: outcome.alert } : {}),
@@ -441,7 +454,7 @@ export interface OpenRouterConnectionProbeResult {
    *  `upstream_error` — the key WORKED: OpenRouter accepted it and the model provider then
    *  errored (a 502 from Moonshot, say). Nothing about the registration is wrong, so calling
    *  this "failed" sends the owner to re-enter a key that is fine. */
-  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
+  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'capacity' | 'needs_attention' | 'failed';
   /** The bare OpenRouter id the probe pinned (absent when it never got that far). */
   model?: string;
   /** Models OpenRouter refused for a model/account usage limit while another selected
@@ -560,7 +573,7 @@ export async function probeOpenRouterConnection(
     if (outcome.alert) {
       await raise(outcome.alert, outcome.error ?? '');
       return {
-        connectionId, ok: false, status: 'failed', model: bare, ownKey,
+        connectionId, ok: false, status: alertHealthStatus(outcome.alert), model: bare, ownKey,
         upstreamStatus: outcome.upstreamStatus,
         ...(outcome.error ? { error: outcome.error } : {}),
         alert: outcome.alert,
@@ -579,7 +592,7 @@ export async function probeOpenRouterConnection(
   }
   return {
     connectionId, ok: false,
-    status: allModelsLimited ? 'failed' : 'upstream_error',
+    status: allModelsLimited ? probeFailureStatus(failed.outcome) : 'upstream_error',
     model: failed.bare, ownKey, upstreamStatus: failed.outcome.upstreamStatus,
     ...(limitedModels.length ? { limitedModels } : {}),
     ...(failed.outcome.error ? { error: failed.outcome.error } : {}),

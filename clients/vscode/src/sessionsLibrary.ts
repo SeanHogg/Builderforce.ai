@@ -46,7 +46,7 @@ export interface SessionsLibraryRow extends CreationLibraryEntry {
 }
 
 /** The facets the tree offers as groups. `all` is the whole list, not a filter. */
-export type SessionsLibraryGroup = "all" | "pinned" | "shared" | "running";
+export type SessionsLibraryGroup = "all" | "pinned" | "shared" | "running" | "archived";
 
 export interface SessionsLibraryInput {
   sessions: readonly BfCreationSessionSummary[];
@@ -113,9 +113,10 @@ export function sessionsLibraryGroup(
   /** How many rows "all" shows before the list stops being a sidebar. */
   recentLimit = 20,
 ): SessionsLibraryRow[] {
-  if (group === "pinned") return rows.filter((row) => row.pinned);
-  if (group === "shared") return rows.filter((row) => row.shared);
-  if (group === "running") return rows.filter((row) => row.running);
+  if (group === "pinned") return [...rows].filter((row) => row.pinned);
+  if (group === "shared") return [...rows].filter((row) => row.shared);
+  if (group === "running") return [...rows].filter((row) => row.running);
+  if (group === "archived") return [...rows]; // already filtered by the tree
   return rows.slice(0, recentLimit);
 }
 
