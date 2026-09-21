@@ -4,8 +4,8 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelOptions, type ChatModelSelection, type ModelIdentityContext, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
-import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, useTicketAutocomplete, type ChatModelOptions, type ChatModelSelection, type ModelIdentityContext, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { effortProfile, type DirectedRecipient, type TicketTag } from '@seanhogg/builderforce-brain-embedded';
 import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
 import { PlanBadge } from '@/components/PlanBadge';
 import { Icon } from '@/components/ui/Icon';
@@ -134,6 +134,14 @@ export interface ChatInputProps {
   mentionables?: DirectedRecipient[];
   /** Called when a participant is picked from the @-mention typeahead. */
   onMention?: (recipient: DirectedRecipient) => void;
+  /**
+   * Available tickets that can be #tagged. When non-empty the composer gets
+   * a #tag typeahead: typing `#` opens a picker; choosing one calls
+   * {@link onTicketTag} and clears the `#query`.
+   */
+  ticketables?: TicketTag[];
+  /** Called when a ticket is picked from the #tag typeahead. */
+  onTicketTag?: (ticket: TicketTag) => void;
   /** Context selectors rendered first in the canonical action row. */
   contextControls?: React.ReactNode;
   /** Host-specific modes rendered after the shared mode/model controls. */
@@ -336,6 +344,8 @@ export function ChatInput({
   secondaryContent,
   mentionables,
   onMention,
+  ticketables,
+  onTicketTag,
   contextControls,
   modeControls,
   className,
@@ -479,6 +489,19 @@ export function ChatInput({
     labels: { title: t('mentionTitle'), agent: t('mentionAgent'), human: t('mentionHuman') },
   });
 
+  // #-ticket typeahead — active when ticketables are provided. Picking one replaces
+  // "#query" with the ticket ref and calls onTicketTag.
+  const noopTicket = useCallback(() => {}, []);
+  const ticket = useTicketAutocomplete({
+    textareaRef,
+    value,
+    setValue: onChange,
+    tickets: ticketables ?? [],
+    onPick: onTicketTag ?? noopTicket,
+    disabled,
+    labels: { title: t('ticketTagTitle') ?? 'Tag ticket', status: t('ticketTagStatus'), noMatches: t('ticketTagNoMatches') },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (canSubmit) onSubmit();
@@ -487,6 +510,8 @@ export function ChatInput({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // The @-mention picker gets first refusal on nav/select/escape keys.
     if (mention.onKeyDown(e)) return;
+    // The #ticket picker gets next refusal.
+    if (ticket.onKeyDown(e)) return;
     if (submitOnEnter && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (canSubmit) onSubmit();
@@ -601,7 +626,7 @@ export function ChatInput({
         active={active}
         onDrop={onAttach ? handleDrop : undefined}
         onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
-        overlay={mention.popup}
+        overlay={ticket.open ? ticket.popup : mention.popup}
         status={pendingAttachments.length > 0 && onRemoveAttachment ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {pendingAttachments.map((a) => (
@@ -619,7 +644,7 @@ export function ChatInput({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            onSelect={mention.onSelect}
+            onSelect={() => { mention.onSelect(); ticket.onSelect(); }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             onPaste={onAttach ? handlePaste : undefined}
