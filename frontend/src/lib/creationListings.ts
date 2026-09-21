@@ -222,12 +222,24 @@ export const creationListingApi = {
 };
 
 export const publicListingApi = {
-  browse: (query: { q?: string; kind?: string; page?: number; limit?: number } = {}) => {
+  /**
+   * The public feed, optionally scoped to ONE seller.
+   *
+   * `sellerRef` is the same value that comes back on every card's `sellerRef`, so a
+   * profile surface asks for "everything by this seller" with the identifier it
+   * already holds. It narrows the public catalogue and never widens it — a draft or
+   * withdrawn listing is not reachable through it — and an unknown ref answers an
+   * empty page rather than an error.
+   */
+  browse: (
+    query: { q?: string; kind?: string; page?: number; limit?: number; sellerRef?: string } = {},
+  ) => {
     const params = new URLSearchParams();
     if (query.q) params.set('q', query.q);
     if (query.kind) params.set('kind', query.kind);
     if (query.page) params.set('page', String(query.page));
     if (query.limit) params.set('limit', String(query.limit));
+    if (query.sellerRef) params.set('sellerRef', query.sellerRef);
     const qs = params.toString();
     return apiRequest<{ listings: CreationListing[]; total: number }>(
       `${PUBLIC}${qs ? `?${qs}` : ''}`,

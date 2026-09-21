@@ -18,6 +18,30 @@ export interface BrowseQuery {
   kind?: string;
   page?: number;
   limit?: number;
+  /**
+   * Scope the feed to ONE seller — the `publisherRef` behind the `sellerRef` every
+   * listing view already publishes, so a caller filters by exactly the value it
+   * reads back off a card rather than by a second identifier it has to look up.
+   *
+   * This is what lets a profile surface show "everything by this advisor" without a
+   * private endpoint: it narrows the SAME public predicate (`visibility = 'public'`
+   * and published) rather than relaxing it, so an unpublished or withdrawn listing
+   * stays invisible no matter whose ref is asked for. `sellerListings` remains the
+   * seller's own management view — it is tenant-scoped and shows drafts, which is
+   * precisely why it cannot serve this.
+   */
+  sellerRef?: string;
+}
+
+/** Bound on an untrusted ref. `publisher_ref` holds a user id; anything longer is
+ *  not one, and truncating rather than rejecting keeps the feed answering — an
+ *  over-long ref simply matches nothing, which is the honest result. */
+const MAX_SELLER_REF = 128;
+
+/** The seller ref as it will be matched, or '' when absent/unusable. Exported so the
+ *  route and the tests agree on what normalisation happened without restating it. */
+export function normalizeSellerRef(raw: string | undefined | null): string {
+  return (raw ?? '').trim().slice(0, MAX_SELLER_REF);
 }
 
 /** The public feed. Cached behind the version token; every publish bumps it. */
@@ -30,8 +54,15 @@ export async function browseCreationListings(
   const page = Math.max(1, Math.round(query.page ?? 1));
   const q = (query.q ?? '').trim().slice(0, 80);
   const kind = isListingKind(query.kind) ? query.kind : '';
+  const sellerRef = normalizeSellerRef(query.sellerRef);
   const version = await getCacheVersion(env, LISTINGS_VERSION_KEY);
-  const key = `${LISTINGS_VERSION_KEY}:${version}:${kind}:${q}:${page}:${limit}`;
+  // `sellerRef` is part of the KEY, not just the predicate. Leaving it out is how a
+  // seller-scoped page and the unscoped feed collide on one entry and each serves
+  // the other's rows — the scoped read is a different question, so it is a
+  // different key. It goes last so every previously-cached unscoped key keeps its
+  // shape, and it is the normalised value rather than the raw query so two spellings
+  // of the same ref cannot occupy two entries.
+  const key = `${LISTINGS_VERSION_KEY}:${version}:${kind}:${q}:${page}:${limit}:${sellerRef}`;
 
   return getOrSetCached(env, key, async () => {
     const where = [eq(catalogItems.visibility, 'public'), isNotNull(catalogItems.publishedAt)];
@@ -44,6 +75,13 @@ export async function browseCreationListings(
     if (q) {
       where.push(sql`(${catalogItems.name} ILIKE ${`%${q}%`} OR ${catalogItems.summary} ILIKE ${`%${q}%`})`);
     }
+    // Seller scoping NARROWS the public predicate — it is pushed alongside
+    // `visibility = 'public'`, never in place of it, so asking for a seller's ref
+    // can only ever return the subset of the feed that was already visible. An
+    // unknown ref is not an error: it matches nothing and answers an empty page,
+    // which is the same thing the shop window says about a seller with no listings
+    // and avoids turning this endpoint into a probe for which user ids exist.
+    if (sellerRef) where.push(eq(catalogItems.publisherRef, sellerRef));
     // The shop window. Cross-tenant by definition — `visibility = 'public'` is the
     // access predicate, not the shopper's own workspace. The call is inlined at
     // both statements rather than hoisted into a local: `where` already carries
