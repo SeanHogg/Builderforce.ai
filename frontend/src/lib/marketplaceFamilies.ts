@@ -135,6 +135,10 @@ const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
   // (`users.available_for_hire`) lives on their own profile. The skill form's
   // slug/version/repo fields describe nothing about a person.
   'talent:person': { href: '/freelancer/profile', requiresAuth: true },
+  // An advisor is a bookable person, and becoming bookable is done on the same
+  // profile that owns the for-hire opt-in — there is no separate "publish an
+  // advisor" form, so the chip points at the profile rather than the skill form.
+  'talent:advisor': { href: '/freelancer/profile', requiresAuth: true },
   // A startup is listed from the founder's own company — the Listing tab of the
   // investor panel, opened straight into its wizard. Not a form on the storefront,
   // because the listing is a FACET of a company the workspace owns.
@@ -175,7 +179,13 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     publishKey: 'publishTalent',
     flow: 'listing',
     hueVar: '--seat-manager',
-    kinds: ['person', 'gig'],
+    // `advisor` is NOT a fifth family and NOT a `MARKETPLACE_LISTING_KINDS` id —
+    // it is a FILTER over the same person inventory: the subset of published
+    // talent who are bookable (an active `booking_hosts.host_ref`). It sits
+    // beside `person` rather than under it because a visitor looking to book an
+    // hour and a visitor looking to hire a contractor are asking different
+    // questions of the same rows, and one chip cannot answer both.
+    kinds: ['person', 'advisor', 'gig'],
     noteKey: 'note.talent',
   },
   company: {
@@ -231,6 +241,12 @@ export function isFamilyId(value: string): value is FamilyId {
 const LEGACY_CATEGORY: Record<string, { family: FamilyId; kind?: string }> = {
   all: { family: 'talent' },
   talent: { family: 'talent', kind: 'person' },
+  // The public advisors browse. `advisors` is an ALIAS onto the talent family's
+  // advisor chip, not a family of its own: the inventory is the same person
+  // rows narrowed to the bookable ones, and the profile behind every card is
+  // the same `/talent/{userId}`. Without this row the unknown category fell
+  // through `resolveFamily` to Agents, which is the wrong grid entirely.
+  advisors: { family: 'talent', kind: 'advisor' },
   gigs: { family: 'talent', kind: 'gig' },
   workforce: { family: 'agent', kind: 'community' },
   agents: { family: 'agent', kind: 'community' },
