@@ -269,7 +269,7 @@ describe('tenant isolation', () => {
     expect(h.parent).toEqual({ kind: 'epic', ref: '2527', label: 'Parent epic' });
     // The grandparent 2522 is NOT resolved and does NOT appear anywhere
     expect(h.parent!.ref).not.toBe('2522');
-    expect((h as Record<string, unknown>).grandparent).toBeUndefined();
+    expect((h as unknown as Record<string, unknown>).grandparent).toBeUndefined();
   });
 });
 
