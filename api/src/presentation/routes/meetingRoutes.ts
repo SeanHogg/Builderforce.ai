@@ -43,7 +43,7 @@ import { iceServers } from '../../application/meetings/iceServers';
 import { boundedIntParam } from './queryParams';
 import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
 
-const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
+const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review', 'advisory']);
 /** Team ceremonies default to being backed by a team chat — "the meeting IS the
  *  team chat": joining opens it, and absentees still post their update there. */
 const TEAM_CEREMONY_KINDS = new Set(['standup', 'planning', 'retrospective', 'review']);

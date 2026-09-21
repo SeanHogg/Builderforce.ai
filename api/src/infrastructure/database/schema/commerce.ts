@@ -260,6 +260,10 @@ export const freelancerProfiles = pgTable('freelancer_profiles', {
   workMode:               varchar('work_mode', { length: 10 }),    // remote|hybrid|onsite
   noticePeriodDays:       integer('notice_period_days'),
   openToRelocation:       boolean('open_to_relocation').notNull().default(false),
+  /** Advisor platform: opt-in to appear in `?category=advisors` marketplace filter.
+   *  When enabled, the talent listing shows under the Advisors filter and can receive
+   *  advisory meetings. Off by default — explicit opt-in required. */
+  isAdvisor:              boolean('is_advisor').notNull().default(false),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({

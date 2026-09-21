@@ -114,6 +114,7 @@ const profileColumns = {
   work_mode: freelancerProfiles.workMode,
   notice_period_days: freelancerProfiles.noticePeriodDays,
   open_to_relocation: freelancerProfiles.openToRelocation,
+  is_advisor: freelancerProfiles.isAdvisor,
   created_at: freelancerProfiles.createdAt,
   updated_at: freelancerProfiles.updatedAt,
 } as const;
@@ -541,6 +542,7 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
 /** The browse criteria, normalised from the query string. */
 interface TalentFilters {
   q?: string; discipline?: string; skill?: string; minRate?: number; maxRate?: number;
+  category?: string;  // 'advisors' filters to opted-in advisors
   sort: 'recent' | 'rate_asc' | 'rate_desc' | 'rating'; page: number; pageSize: number;
 }
 
@@ -554,6 +556,7 @@ function parseTalentFilters(q: Record<string, string | undefined>): TalentFilter
     ...(q.skill ? { skill: q.skill } : {}),
     ...(num(q.minRate) != null ? { minRate: num(q.minRate) } : {}),
     ...(num(q.maxRate) != null ? { maxRate: num(q.maxRate) } : {}),
+    ...(q.category ? { category: q.category } : {}),
     sort,
     page: Math.max(1, Number(q.page) || 1),
     pageSize: Math.min(TALENT_PAGE_MAX, Math.max(1, Number(q.pageSize) || 24)),
@@ -576,6 +579,7 @@ function talentFilterConditions(f: TalentFilters) {
   if (f.skill) conds.push(sql`lower(${freelancerProfiles.skills}) like ${'%"' + f.skill.toLowerCase().replace(/[%_\\]/g, '\\$&') + '"%'}`);
   if (f.minRate != null) conds.push(gte(freelancerProfiles.hourlyRateCents, f.minRate));
   if (f.maxRate != null) conds.push(lte(freelancerProfiles.hourlyRateCents, f.maxRate));
+  if (f.category === 'advisors') conds.push(eq(freelancerProfiles.isAdvisor, true));
   if (f.q) {
     const needle = `%${f.q.replace(/[%_\\]/g, '\\$&')}%`;
     conds.push(or(ilike(users.displayName, needle), ilike(freelancerProfiles.headline, needle), ilike(freelancerProfiles.skills, needle)));
