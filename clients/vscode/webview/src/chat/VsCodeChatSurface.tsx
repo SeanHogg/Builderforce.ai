@@ -61,7 +61,9 @@ import {
   mergeRecoveredTrace,
   projectMemoryHooks,
   lastServedModel,
+  chatRosterFromParticipants,
   type ChatMode,
+  type ChatRosterAgent,
   type Effort,
   type BrainChat,
   type DirectedRecipient,
@@ -74,10 +76,10 @@ import { authedFetch } from '../authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, useChatParticipants, useChatActivitySignal,
   RecipientPicker, PersonaPicker, useRecipientChoice,
-  useMentionAutocomplete, ChatErrorBanner,
+  useMentionAutocomplete, useTicketAutocomplete, ChatErrorBanner,
   PromptPanel, PromptOptionsMenu,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
-  chatSwitcherLabel,
+  chatSwitcherLabel, chatDiagnosticsReads,
   type ChatModelSelection,
 } from '@seanhogg/builderforce-brain-ui';
 import { loadComposerModels, type ComposerModelSurface } from '../modelOptions';
@@ -575,6 +577,22 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Gate the recall hook on the per-chat switch — off ⇒ no recall this chat.
   const gatedEvermind = memoryEnabled ? evermind : undefined;
 
+  /**
+   * The roster the RUN is told about, mirrored into state.
+   *
+   * The web panel hands `chatRoster` straight to `useBrainConversation`, because there
+   * the participants resolve from the adapter alone. Here they cannot: this surface's
+   * refresh signal includes `useChatActivitySignal(conv.messages)`, so a run milestone
+   * that joins an agent to the chat re-reads the Agents list — which makes `participants`
+   * depend on `conv`, and `conv` cannot then depend on `participants`.
+   *
+   * Mirroring breaks the cycle without giving up that live re-read. The one render of lag
+   * costs nothing: the roster is only ever read when a run STARTS, and by then the effect
+   * (beside `participants` below) has flushed. `participants` is memoised on its own
+   * inputs, so the set→render→memo cycle settles rather than looping.
+   */
+  const [chatRoster, setChatRoster] = useState<ChatRosterAgent[]>([]);
+
   const conv = useBrainConversation({
     chatId,
     modality: 'ide',
@@ -602,6 +620,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     // `chatModeDirective`, identical to the web Brain. Without this the loop's absent-
     // mode fallback made every IDE turn a Work turn regardless of the chat's row.
     chatMode,
+    // WHO IS IN THIS CHAT. A non-empty roster makes the invited agents the default owners
+    // of work-mode work instead of this session (see `chatMode.ts`) — and names them in
+    // the prompt, so dispatching costs no discovery call. This matters most HERE: the IDE
+    // session holds the workspace tools, so without the roster the do-it-here rule had it
+    // make every change itself while the chat's agents sat idle.
+    chatRoster,
   });
 
   // Trace rehydrate (parity with the web app): on chat open, load the persisted
@@ -740,6 +764,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const activitySignal = useChatActivitySignal(conv.messages);
   const railRefresh = ticketRefresh + activitySignal;
   const participants = useChatParticipants(ticketAdapter, chatId, railRefresh);
+
+  // Keep the mirrored roster (declared above `conv`) in step with the live participants.
+  useEffect(() => { setChatRoster(chatRosterFromParticipants(participants)); }, [participants]);
+
   // The effective target (shared with the web composer): an explicit BRAIN pick wins;
   // else an explicit participant; else a leading @mention; else the BRAIN (null). The
   // pick resets on a chat switch and drops a participant who has since left.
@@ -761,6 +789,52 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       title: t('app.mentionTitle', 'Direct to'),
       agent: t('app.mentionAgent', 'Agent'),
       human: t('app.mentionHuman', 'Person'),
+    },
+  });
+
+  // #-ticket typeahead: typing `#` in the composer opens a picker of the chat's
+  // linked tickets; choosing one tags it in the message (e.g., "#123").
+  // Transform TicketLinkVM to ChatTicket format expected by useTicketAutocomplete.
+  const [chatTickets, setChatTickets] = useState<{ id: number; title: string; status?: string; key?: string }[]>([]);
+  useEffect(() => {
+    let live = true;
+    ticketAdapter.listTickets(chatId).then((tickets) => {
+      if (!live) return;
+      // Transform TicketLinkVM to ChatTicket: use ref as key, parse id from ref or use linkId
+      setChatTickets(tickets.map((t) => ({
+        id: parseInt(t.ref) || t.linkId,
+        title: t.label,
+        status: t.status,
+        key: t.ref,
+      })));
+    }).catch(() => { if (live) setChatTickets([]); });
+    return () => { live = false; };
+  }, [chatId, ticketAdapter, ticketRefresh]);
+
+  // Handle a ticket tagged in the composer — link it to the active chat.
+  const handleTicketTag = useCallback(
+    async (ticket: { id: number; title: string; status?: string; key?: string }) => {
+      try {
+        // Link the ticket to the chat using the adapter
+        const ref = ticket.key ?? String(ticket.id);
+        await ticketAdapter.linkTicket(chatId, { kind: 'task', ref, linkType: 'linked' });
+        setTicketRefresh((n) => n + 1);
+      } catch { /* linking is best-effort — a failed link never blocks the chat */ }
+    },
+    [chatId, ticketAdapter],
+  );
+
+  const ticket = useTicketAutocomplete({
+    textareaRef: inputRef,
+    value: input,
+    setValue: setInput,
+    tickets: chatTickets,
+    onPick: handleTicketTag,
+    disabled: conv.sending,
+    labels: {
+      title: t('app.ticketTagTitle', 'Tag ticket'),
+      status: t('app.ticketTagStatus'),
+      noMatches: t('app.ticketTagNoMatches', 'No tickets found'),
     },
   });
 
@@ -1017,8 +1091,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         // Whether this machine can run the POSIX git scripts, resolved by the host.
         posixShell: init.posixShell ?? null,
         baseUrl: init.baseUrl ?? null,
-        readAgents: () => (chatId != null ? ticketAdapter.listAgents(chatId) : Promise.resolve([])),
-        readTickets: () => (chatId != null ? ticketAdapter.listTickets(chatId) : Promise.resolve([])),
+        // The chat-scoped reads (agents, tickets, runs) come from ONE shared wiring over
+        // the adapter — the web panel spreads the identical call. Hand-wiring them per
+        // host is how the two surfaces ended up reading the same endpoints through two
+        // different clients; a new chat-scoped read now lands in that file alone.
+        ...chatDiagnosticsReads(ticketAdapter, chatId),
         readEvermind: () =>
           pid != null
             ? apiReq<{ version: number; mode: string; inferenceEnabled: boolean; teacherModel: string | null; contributions: number; pending: number; lastLearnedAt: string | null }>(
@@ -1400,7 +1477,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); attachFiles(e.dataTransfer.files); }}
-        overlay={mention.popup}
+        overlay={mention.popup || ticket.popup}
         status={(conv.pendingAttachments.length > 0 || messageQueue.length > 0) ? <>
         {conv.pendingAttachments.length > 0 && (
           <div className="bf-attachments">
@@ -1441,10 +1518,12 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             onPaste={onPaste}
-            onSelect={mention.onSelect}
+            onSelect={() => { mention.onSelect(); ticket.onSelect(); }}
             onKeyDown={(e) => {
               // The @-mention picker consumes nav/select/escape first.
               if (mention.onKeyDown(e)) return;
+              // Then the #-ticket picker.
+              if (ticket.onKeyDown(e)) return;
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
             }}
           />
