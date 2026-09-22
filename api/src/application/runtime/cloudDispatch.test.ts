@@ -163,7 +163,7 @@ describe('resolveCloudSurface', () => {
     expect(resolveCloudSurface(undefined, true, FREE)).toBe('container');
   });
 
-  it('honors the agent's chosen surface when no host is pinned', () => {
+  it("honors the agent's chosen surface when no host is pinned", () => {
     expect(resolveCloudSurface('container', false, PAID)).toBe('container');
     expect(resolveCloudSurface('durable', false, PAID)).toBe('durable');
     expect(resolveCloudSurface('github_actions', false, FREE)).toBe('github_actions');

@@ -3405,6 +3405,7 @@
     "bestHost": "远程（agentHost）",
     "surface": "运行时载体",
     "surfaceLabel": {
+      "auto": "自动（推荐）—— 根据你的套餐选择",
       "durable": "持久（云端、按需无服务器）",
       "container": "长时运行的 Cloudflare 容器（用于超长任务）",
       "github_actions": "GitHub Actions（在你仓库的运行器上执行）"
@@ -3459,7 +3460,9 @@
     "errSaveFailed": "保存失败",
     "errDeleteFailed": "删除失败",
     "surfaceUnavailableOption": "{surface} — 此项目不可用",
-    "errSurfaceBlocked": "{surface} 在此项目不可用——请选择其他运行环境。"
+    "errSurfaceBlocked": "{surface} 在此项目不可用——请选择其他运行环境。",
+    "errSurfaceBlockedPlan": "{surface} 需要付费套餐——请选择其他运行环境。",
+    "surfaceContainerLocked": "长期运行的容器属于计费算力，需要付费套餐。你的工作区将在 Durable（无服务器）环境中运行——代理仍然会执行，只是通过 git API 而非 shell 编辑文件。"
   },
   "personalitySummary": {
     "title": "性格",

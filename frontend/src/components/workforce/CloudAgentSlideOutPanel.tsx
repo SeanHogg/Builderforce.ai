@@ -31,7 +31,7 @@ import {
   labelStyle,
   type CloudAgentFormState,
 } from './CloudAgentFormFields';
-import { useRuntimeSurfaceBlocked } from './RuntimeSurfaceSelect';
+import { useRuntimeSurfaceRefusal } from './RuntimeSurfaceSelect';
 import { faultText } from '@/lib/apiClient';
 /**
  * Manage an existing cloud agent in a right-side drawer (matches the remote
@@ -83,7 +83,9 @@ function formFromAgent(a: PublishedAgent): CloudAgentFormState {
     baseModel: a.base_model === 'builderforce-default' ? '' : a.base_model,
     runtimeSupport: a.runtime_support ?? 'cloud',
     preferredRuntime: (a.preferred_runtime as 'cloud' | 'host') ?? 'cloud',
-    runtimeSurface: a.runtime_surface ?? 'durable',
+    // NULL is 'Automatic', not 'durable': an existing agent that never chose a surface
+    // must keep meaning "let the server pick", or opening the panel would silently pin it.
+    runtimeSurface: a.runtime_surface ?? '',
     psychometric: a.psychometric ?? undefined,
   };
 }
@@ -173,12 +175,12 @@ export function CloudAgentSlideOutPanel({
     return () => { cancelled = true; };
   }, [open, owner, activeTab, agent.id]);
 
-  // Same cached readiness the picker disables on, so the save cannot disagree
-  // with what the option said. Only a hard `false` blocks; unknown never does.
-  const surfaceBlocked = useRuntimeSurfaceBlocked(form.runtimeSurface);
+  // Same cached readiness/entitlement the picker disables on, so the save cannot
+  // disagree with what the option said. Null unless it is a hard refusal.
+  const surfaceRefusal = useRuntimeSurfaceRefusal(form.runtimeSurface);
   const saveDetails = useCallback(async () => {
     if (!form.name.trim()) { setError(t('errNameRequired')); return; }
-    if (surfaceBlocked) { setError(t('errSurfaceBlocked', { surface: t(`surfaceLabel.${form.runtimeSurface}` as 'surfaceLabel.durable') })); return; }
+    if (surfaceRefusal) { setError(surfaceRefusal); return; }
     setSaving(true); setError('');
     try {
       await updateAgent(agent.id, cloudAgentFormToInput(form));
@@ -188,7 +190,7 @@ export function CloudAgentSlideOutPanel({
     } finally {
       setSaving(false);
     }
-  }, [agent.id, form, onSaved, surfaceBlocked, t]);
+  }, [agent.id, form, onSaved, surfaceRefusal, t]);
 
   const savePricing = useCallback(async (publish: boolean) => {
     setSaving(true); setError('');
@@ -226,7 +228,7 @@ export function CloudAgentSlideOutPanel({
   const patchForm = useCallback((patch: Partial<CloudAgentFormState>) => setForm((f) => ({ ...f, ...patch })), []);
   const saveFooter = (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
-      <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim() || surfaceBlocked} style={btnPrimary}>
+      <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim() || !!surfaceRefusal} style={btnPrimary}>
         {saving ? t('saving') : t('save')}
       </button>
     </div>

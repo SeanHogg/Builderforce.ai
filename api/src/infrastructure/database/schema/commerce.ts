@@ -228,6 +228,18 @@ export const freelancerProfiles = pgTable('freelancer_profiles', {
   discipline:             varchar('discipline', { length: 60 }),  // developer|dba|designer|... (card role)
   skills:                 text('skills'),                          // JSON string[]
   hourlyRateCents:        integer('hourly_rate_cents'),
+  /** Advisory session price in CENTS — the pro-bono source of truth (1183).
+   *
+   *  Three states that are NOT interchangeable: `0` is a volunteer / complimentary
+   *  session and is what puts the Pro bono badge on a card; `null` means no session
+   *  price is set; anything positive is priced. Nullable on purpose — defaulting to
+   *  0 would advertise every existing advisor as free.
+   *
+   *  Separate from `hourlyRateCents` because an advisor can bill hourly for project
+   *  work and still take unpaid sessions; folding them would make two different
+   *  claims into one. Deliberately not a boolean beside a price — see the migration
+   *  for why one nullable integer cannot contradict itself. */
+  sessionPriceCents:      integer('session_price_cents'),
   currency:               varchar('currency', { length: 3 }).notNull().default('USD'),
   visibility:             varchar('visibility', { length: 10 }).notNull().default('private'), // public|private
   published:              boolean('published').notNull().default(false),

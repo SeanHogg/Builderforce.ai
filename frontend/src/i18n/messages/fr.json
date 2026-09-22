@@ -3405,6 +3405,7 @@
     "bestHost": "Distant (agentHost)",
     "surface": "Surface d'exécution",
     "surfaceLabel": {
+      "auto": "Automatique (recommandé) — choisi selon votre forfait",
       "durable": "Durable (cloud, sans serveur à la demande)",
       "container": "Conteneur Cloudflare longue durée (pour les exécutions très longues)",
       "github_actions": "GitHub Actions (s'exécute sur les runners de votre dépôt)"
@@ -3459,7 +3460,9 @@
     "errSaveFailed": "Échec de l'enregistrement",
     "errDeleteFailed": "Échec de la suppression",
     "surfaceUnavailableOption": "{surface} — indisponible pour ce projet",
-    "errSurfaceBlocked": "{surface} n’est pas disponible pour ce projet : choisissez une autre surface d’exécution."
+    "errSurfaceBlocked": "{surface} n’est pas disponible pour ce projet : choisissez une autre surface d’exécution.",
+    "errSurfaceBlockedPlan": "{surface} nécessite un forfait payant — choisissez une autre surface d’exécution.",
+    "surfaceContainerLocked": "Un Container de longue durée est du calcul facturé et nécessite un forfait payant. Votre espace de travail s’exécute sur la surface Durable (sans serveur) : les agents fonctionnent toujours, ils modifient simplement via l’API git plutôt que par un shell."
   },
   "personalitySummary": {
     "title": "Personnalité",

@@ -4,11 +4,11 @@ import { useTranslations } from 'next-intl';
 
 import { Select } from '@/components/Select';
 
-import type { AgentRuntimeSupport, AgentRuntimeSurface } from '@/lib/api';
+import type { AgentRuntimeSupport } from '@/lib/api';
 import { ModelSelect } from '@/components/llm/ModelSelect';
 import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import PsychometricEditor from '@/components/PsychometricEditor';
-import { RuntimeSurfaceSelect } from '@/components/workforce/RuntimeSurfaceSelect';
+import { RuntimeSurfaceSelect, type RuntimeSurfaceChoice } from '@/components/workforce/RuntimeSurfaceSelect';
 import type { PsychometricProfile } from '@/lib/psychometric';
 
 /**
@@ -33,10 +33,11 @@ export interface CloudAgentFormState {
   baseModel: string;
   runtimeSupport: AgentRuntimeSupport;
   preferredRuntime: 'cloud' | 'host';
-  /** Cloud execution surface — durable DO, long-lived node, or the repo's own
-   *  GitHub Actions runners. (The engine is not user-selectable: every agent runs
-   *  the current engine version.) */
-  runtimeSurface: AgentRuntimeSurface;
+  /** Cloud execution surface — durable DO, long-lived container, or the repo's own
+   *  GitHub Actions runners. `''` is AUTOMATIC: leave it unset and the server picks per
+   *  plan at dispatch time. (The engine is not user-selectable: every agent runs the
+   *  current engine version.) */
+  runtimeSurface: RuntimeSurfaceChoice;
   /** This agent's OWN personality (Pro). Compiled at run time into prompt directives,
    *  sampling temperature, and limbic setpoints. Undefined = no personality set. */
   psychometric?: PsychometricProfile;
@@ -44,7 +45,10 @@ export interface CloudAgentFormState {
 
 export const EMPTY_CLOUD_AGENT_FORM: CloudAgentFormState = {
   name: '', title: '', bio: '', skills: '', baseModel: '', runtimeSupport: 'cloud', preferredRuntime: 'cloud',
-  runtimeSurface: 'durable',
+  // AUTOMATIC, not 'durable'. Hard-coding a surface here pinned every agent created in
+  // the UI to the shell-less one forever — including on a paid workspace entitled to a
+  // container, and including after an upgrade.
+  runtimeSurface: '',
 };
 
 /**
@@ -132,10 +136,11 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           </Select>
         </div>
       )}
-      {/* The surface picker is a component, not a <Select> here: `github_actions`
-          is only runnable on a project whose repo carries the agent workflow, and
-          the option DISABLES itself when it is not. It resolves its own readiness,
-          so there is no canX boolean for this form to compute or get stale. */}
+      {/* The surface picker is a component, not a <Select> here: `github_actions` is only
+          runnable on a project whose repo carries the agent workflow, and `container` only
+          on a plan that covers billable compute. Each option DISABLES itself when it is
+          not available — it resolves its own readiness and entitlement, so there is no
+          canX boolean for this form to compute or get stale. */}
       <RuntimeSurfaceSelect
         value={form.runtimeSurface}
         onChange={(runtimeSurface) => onChange({ runtimeSurface })}
@@ -203,7 +208,9 @@ export function cloudAgentFormToInput(form: CloudAgentFormState) {
     runtimeSupport: form.runtimeSupport,
     preferredRuntime: form.runtimeSupport === 'both' ? form.preferredRuntime : null,
     // The engine is not sent — the server always runs the current engine version.
-    runtimeSurface: form.runtimeSurface,
+    // '' (Automatic) is omitted rather than sent: the route treats an unrecognised value
+    // as unset, and omitting says the same thing without relying on that.
+    runtimeSurface: form.runtimeSurface || undefined,
     // null explicitly clears a previously-set personality; undefined omits the field.
     psychometric: form.psychometric ?? null,
   };

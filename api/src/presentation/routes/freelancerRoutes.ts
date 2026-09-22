@@ -96,6 +96,10 @@ const profileColumns = {
   discipline: freelancerProfiles.discipline,
   skills: freelancerProfiles.skills,
   hourly_rate_cents: freelancerProfiles.hourlyRateCents,
+  // Advisory session price (1183). In the ONE projection every profile surface reads,
+  // for the same reason career intent is: the browse card, the detail page and the
+  // tools must not be able to disagree about whether someone takes unpaid sessions.
+  session_price_cents: freelancerProfiles.sessionPriceCents,
   currency: freelancerProfiles.currency,
   visibility: freelancerProfiles.visibility,
   published: freelancerProfiles.published,
@@ -322,6 +326,7 @@ const ProfilePatchBody = z.object({
   discipline: z.string().nullable().optional(),
   skills: z.array(z.string()).nullable().optional(),
   hourlyRateCents: z.number().nullable().optional(),
+  sessionPriceCents: z.number().nullable().optional(),
   currency: z.string().nullable().optional(),
   visibility: z.enum(VISIBILITIES).nullable().optional(),
   availability: z.enum(AVAILABILITIES).nullable().optional(),
@@ -503,6 +508,9 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
     discipline: row.discipline ?? null,
     skills: parseJsonArray<string>(row.skills),
     hourlyRateCents: row.hourly_rate_cents == null ? null : Number(row.hourly_rate_cents),
+    // Advisory session price (1183). `0` must survive this mapping intact: it is the
+    // pro-bono signal, and a `||` or a `??  0` here would either erase it or invent it.
+    sessionPriceCents: row.session_price_cents == null ? null : Number(row.session_price_cents),
     currency: row.currency ?? 'USD',
     visibility: row.visibility ?? 'private',
     availability: row.availability ?? 'open',
@@ -696,6 +704,12 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
     const desiredSalaryMinCents = cents(b.desiredSalaryMinCents);
     const desiredSalaryMaxCents = cents(b.desiredSalaryMaxCents);
+    // Advisory session price (1183) through the SAME `cents` normaliser as every other
+    // money field, which is what makes the pro-bono case work: it keeps a literal `0`
+    // as `0` and turns a negative, a NaN or a non-number into `null`. A bespoke check
+    // here (`>= 0 ? ... : null` copied from the rate above) would be a second money
+    // rule to keep in step with the first.
+    const sessionPriceCents = cents(b.sessionPriceCents);
     const noticePeriodDays = typeof b.noticePeriodDays === 'number' && Number.isFinite(b.noticePeriodDays) && b.noticePeriodDays >= 0
       ? Math.min(365, Math.round(b.noticePeriodDays))
       : null;
@@ -725,7 +739,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
 
     await db.insert(freelancerProfiles).values({
       userId, headline, bio, discipline, skills,
-      hourlyRateCents: rate, currency, visibility, availability, published, location, timezone,
+      hourlyRateCents: rate, sessionPriceCents, currency, visibility, availability, published, location, timezone,
       seeking, targetRoles, seniority, desiredSalaryMinCents, desiredSalaryMaxCents,
       workMode, noticePeriodDays, openToRelocation,
       updatedAt: sql`NOW()`,
@@ -733,7 +747,8 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       target: freelancerProfiles.userId,
       set: {
         headline: sql`EXCLUDED.headline`, bio: sql`EXCLUDED.bio`, discipline: sql`EXCLUDED.discipline`,
-        skills: sql`EXCLUDED.skills`, hourlyRateCents: sql`EXCLUDED.hourly_rate_cents`, currency: sql`EXCLUDED.currency`,
+        skills: sql`EXCLUDED.skills`, hourlyRateCents: sql`EXCLUDED.hourly_rate_cents`,
+        sessionPriceCents: sql`EXCLUDED.session_price_cents`, currency: sql`EXCLUDED.currency`,
         visibility: sql`EXCLUDED.visibility`, availability: sql`EXCLUDED.availability`, published: sql`EXCLUDED.published`,
         location: sql`EXCLUDED.location`, timezone: sql`EXCLUDED.timezone`,
         seeking: sql`EXCLUDED.seeking`, targetRoles: sql`EXCLUDED.target_roles`, seniority: sql`EXCLUDED.seniority`,

@@ -3405,6 +3405,7 @@
     "bestHost": "Remote (agentHost)",
     "surface": "Laufzeitumgebung",
     "surfaceLabel": {
+      "auto": "Automatisch (empfohlen) – passend zu Ihrem Tarif",
       "durable": "Durable (Cloud, serverlos auf Abruf)",
       "container": "Langlebiger Cloudflare-Container (für sehr lange Läufe)",
       "github_actions": "GitHub Actions (läuft auf den Runnern deines Repos)"
@@ -3459,7 +3460,9 @@
     "errSaveFailed": "Speichern fehlgeschlagen",
     "errDeleteFailed": "Löschen fehlgeschlagen",
     "surfaceUnavailableOption": "{surface} – für dieses Projekt nicht verfügbar",
-    "errSurfaceBlocked": "{surface} ist für dieses Projekt nicht verfügbar – wählen Sie eine andere Laufzeitumgebung."
+    "errSurfaceBlocked": "{surface} ist für dieses Projekt nicht verfügbar – wählen Sie eine andere Laufzeitumgebung.",
+    "errSurfaceBlockedPlan": "{surface} erfordert einen bezahlten Tarif – wählen Sie eine andere Laufzeitumgebung.",
+    "surfaceContainerLocked": "Ein langlebiger Container ist kostenpflichtige Rechenleistung und erfordert einen bezahlten Tarif. Ihr Workspace läuft auf der Durable-Umgebung (serverlos) – Agenten laufen weiterhin, sie bearbeiten Dateien nur über die git-API statt über eine Shell."
   },
   "personalitySummary": {
     "title": "Persönlichkeit",

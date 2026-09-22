@@ -1,9 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';
-import { RuntimeSurfaceSelect, useRuntimeSurfaceBlocked } from './RuntimeSurfaceSelect';
+import { RuntimeSurfaceSelect, useRuntimeSurfaceBlocked, useRuntimeSurfaceRefusal } from './RuntimeSurfaceSelect';
 import { reposApi, type GithubActionsStatus } from '@/lib/builderforceApi';
 import { invalidateClientCache } from '@/infrastructure/http/readThrough';
 import * as scope from '@/lib/ProjectScopeContext';
+
+/**
+ * The container surface is gated on the PLAN, not on the project, and the answer rides
+ * on the shared consumption snapshot. Mocked at the hook rather than at the endpoint so
+ * a test can state the entitlement directly — including the `null` "not known yet",
+ * which is the case the component must not lock on.
+ */
+const snapshot = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock('@/lib/useConsumption', () => ({
+  useConsumption: () => snapshot.current,
+  fetchConsumptionSnapshot: async () => snapshot.current,
+  invalidateConsumption: () => {},
+}));
+function entitledToContainers(value: boolean | null) {
+  snapshot.current = value == null ? null : { features: { entitled: { containerRuntime: value } } };
+}
 
 import en from '@/i18n/messages/en.json';
 import zh from '@/i18n/messages/zh.json';
@@ -176,4 +192,92 @@ describe('localization', () => {
       }
     });
   }
+});
+
+describe('RuntimeSurfaceSelect — the container surface is a PLAN gate', () => {
+  beforeEach(() => { inProject(4); freshReadiness(); entitledToContainers(null); });
+  afterEach(() => { vi.restoreAllMocks(); freshReadiness(); entitledToContainers(null); });
+
+  it('offers AUTOMATIC first — an unset surface is resolved per plan by the server', async () => {
+    // The form used to hard-code 'durable', which pinned every agent created in the UI to
+    // the shell-less surface forever — including on a workspace entitled to a container,
+    // and including after an upgrade. Automatic is the absence of that choice.
+    vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status({ ready: true }));
+    const { findByRole, findAllByRole } = render(<RuntimeSurfaceSelect value="" onChange={() => {}} />);
+    const options = await openOptions(findByRole, findAllByRole);
+    expect(options[0]?.textContent).toContain('cloudAgentForm.surfaceLabel.auto');
+    expect(options[0]?.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('disables the container option for a workspace whose plan does not cover it', async () => {
+    // A container is billable Cloudflare compute held open for the length of a run. A free
+    // workspace runs on the free (durable) infrastructure, and the server DEMOTES an
+    // explicit container anyway — so offering it here would be the same after-the-fact
+    // degrade this component exists to stop.
+    entitledToContainers(false);
+    vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status({ ready: true }));
+    const { findByRole, findAllByRole } = render(<RuntimeSurfaceSelect value="" onChange={() => {}} />);
+    const option = optionFor(await openOptions(findByRole, findAllByRole), 'container');
+    expect(option.getAttribute('aria-disabled')).toBe('true');
+    expect(option.textContent).toContain('cloudAgentForm.surfaceUnavailableOption');
+    expect(await findByRole('status')).toHaveTextContent('cloudAgentForm.surfaceContainerLocked');
+  });
+
+  it('leaves it selectable for an entitled workspace', async () => {
+    entitledToContainers(true);
+    vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status({ ready: true }));
+    const { findByRole, findAllByRole, queryByRole } = render(<RuntimeSurfaceSelect value="" onChange={() => {}} />);
+    const option = optionFor(await openOptions(findByRole, findAllByRole), 'container');
+    expect(option.getAttribute('aria-disabled')).not.toBe('true');
+    await waitFor(() => expect(queryByRole('status')).toBeNull());
+  });
+
+  it('UNKNOWN IS NOT NO — no snapshot yet must not lock the option', async () => {
+    // Same rule as the Actions readiness: a slow or failed consumption read would
+    // otherwise make a configuration the workspace pays for unreachable.
+    entitledToContainers(null);
+    vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status({ ready: true }));
+    const { findByRole, findAllByRole } = render(<RuntimeSurfaceSelect value="" onChange={() => {}} />);
+    const option = optionFor(await openOptions(findByRole, findAllByRole), 'container');
+    expect(option.getAttribute('aria-disabled')).not.toBe('true');
+  });
+});
+
+describe('useRuntimeSurfaceRefusal — WHICH refusal, not just whether', () => {
+  beforeEach(() => { inProject(4); freshReadiness(); entitledToContainers(null); });
+  afterEach(() => { vi.restoreAllMocks(); freshReadiness(); entitledToContainers(null); });
+
+  function Probe({ surface }: { surface: string }) {
+    return <span data-testid="why">{String(useRuntimeSurfaceRefusal(surface))}</span>;
+  }
+
+  it('names the PLAN for a container and the PROJECT for Actions', async () => {
+    // Both submit paths used to rebuild this sentence from the surface key, which forced
+    // one generic "not available for this project" wording onto a plan refusal — telling
+    // a free workspace to go fix its repo.
+    entitledToContainers(false);
+    vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status());
+    const { findByTestId, unmount } = render(<Probe surface="container" />);
+    expect(await findByTestId('why')).toHaveTextContent('cloudAgentForm.errSurfaceBlockedPlan');
+    unmount();
+    const second = render(<Probe surface="github_actions" />);
+    await waitFor(async () => expect(await second.findByTestId('why')).toHaveTextContent('cloudAgentForm.errSurfaceBlocked'));
+  });
+
+  it('is null for Automatic and for an entitled container — nothing to refuse', async () => {
+    entitledToContainers(true);
+    vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status({ ready: true }));
+    const { findByTestId } = render(<Probe surface="" />);
+    expect(await findByTestId('why')).toHaveTextContent('null');
+    const second = render(<Probe surface="container" />);
+    expect(await second.findByTestId('why')).toHaveTextContent('null');
+  });
+
+  it('still answers the boolean form for a disabled state with no copy', async () => {
+    entitledToContainers(false);
+    vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status({ ready: true }));
+    function Bool() { return <span data-testid="blocked">{String(useRuntimeSurfaceBlocked('container'))}</span>; }
+    const { findByTestId } = render(<Bool />);
+    expect(await findByTestId('blocked')).toHaveTextContent('true');
+  });
 });

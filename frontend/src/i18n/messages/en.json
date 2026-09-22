@@ -3405,6 +3405,7 @@
     "bestHost": "Remote (agentHost)",
     "surface": "Runtime surface",
     "surfaceLabel": {
+      "auto": "Automatic (recommended) — chosen for your plan",
       "durable": "Durable (cloud, on-demand serverless)",
       "container": "Long-lived Cloudflare Container (for very long runs)",
       "github_actions": "GitHub Actions (runs on your repo's runners)"
@@ -3459,7 +3460,9 @@
     "errSaveFailed": "Save failed",
     "errDeleteFailed": "Delete failed",
     "surfaceUnavailableOption": "{surface} — not available for this project",
-    "errSurfaceBlocked": "{surface} is not available for this project — pick another runtime surface."
+    "errSurfaceBlocked": "{surface} is not available for this project — pick another runtime surface.",
+    "errSurfaceBlockedPlan": "{surface} needs a paid plan — pick another runtime surface.",
+    "surfaceContainerLocked": "A long-lived Container is billable compute and needs a paid plan. Your workspace runs on the Durable (serverless) surface — agents still run, they just edit over the git API instead of through a shell."
   },
   "personalitySummary": {
     "title": "Personality",

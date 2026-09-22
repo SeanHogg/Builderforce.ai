@@ -589,6 +589,21 @@ export async function startDispatchedExecution(
   const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null, { containerAllowed });
   const typeLabel = cloudAgentTypeLabel(surface);
 
+  // A plan demotion must SAY SO. The agent explicitly asked for the container and the
+  // workspace is not entitled to billable compute, so the run is about to behave nothing
+  // like what was configured — no shell, no clone, no build. The picker already disables
+  // the option, but an agent configured before the gate existed (or written through the
+  // API) reaches here, and a silent degrade explained by nothing is the exact failure this
+  // whole pass is about. The run still proceeds: the work gets done on the free surface.
+  if (agent.runtimeSurface === 'container' && !containerAllowed) {
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+      toolName: 'runtime.route', category: 'planning',
+      detail: { reason: 'plan does not include containerRuntime', requested: 'container', ranOn: surface },
+      result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is set to the long-lived Container surface, which needs a paid plan — running on the Durable (serverless) surface instead. Edits go through the git API rather than a shell, so this run cannot build or test in place.`,
+    }).catch((error) => reportCaughtError(error, { source: "application/runtime/dispatchCloudRun.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] surface demotion telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
+  }
+
   // Dispatch to an On-Prem host when one is explicitly pinned AND the agent's
   // declared `runtime_support` permits host execution (an agent marked cloud-only
   // is never delivered to a pinned host — it falls through to the cloud executor).

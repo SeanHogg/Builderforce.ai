@@ -77,22 +77,56 @@ export function reportRenderCrash(
   details: { boundary: string; componentStack?: string | null },
 ): void {
   if (typeof window === 'undefined') return;
-  void sendProductError(
-    {
-      source: 'render-crash',
-      title: error.name || 'RenderCrash',
-      message: error.message || 'React render crash with no message',
-      url: window.location.href,
-      level: 'fatal',
-      context: {
-        boundary: details.boundary,
-        stack: error.stack,
-        componentStack: details.componentStack ?? undefined,
-        page: window.location.pathname,
-      },
+  void reportBackgroundFailure({
+    source: 'render-crash',
+    title: error.name || 'RenderCrash',
+    message: error.message || 'React render crash with no message',
+    url: window.location.href,
+    level: 'fatal',
+    context: {
+      boundary: details.boundary,
+      stack: error.stack,
+      componentStack: details.componentStack ?? undefined,
+      page: window.location.pathname,
     },
-    QUALITY_INGEST_ENDPOINT,
-  ).catch(() => { /* reporting a crash must never raise out of a boundary */ });
+  });
+}
+
+/**
+ * Report a failure from a path that must not be failed BY the report — the ONE
+ * place the ingest's own rejection is allowed to stop.
+ *
+ * Background reporters share a shape: a render boundary, a fire-and-forget store,
+ * anything whose user-visible outcome has already happened. Each one needs the
+ * report attempted and none of them can do anything useful if attempting it
+ * throws, so each one used to end in its own discarding `.catch(() => {})`. That
+ * is the same terminal decision written once per caller, which is how a codebase
+ * accumulates silent catches that are individually defensible and collectively
+ * a blind spot.
+ *
+ * So the decision lives here, once, and it RESOLVES rather than discards: the
+ * boolean says whether the report landed. A caller that has somewhere better to
+ * put that answer can read it; a caller that genuinely has nowhere — a boundary
+ * that is already the last line of defence — ignores it with `void` and cannot
+ * raise a second error out of the first.
+ *
+ * Deliberately never rethrows and never retries. A retry loop in a crash path is
+ * how one unreachable API becomes a request storm, which is also why the send
+ * treats ambient transport failures as expected.
+ */
+export async function reportBackgroundFailure(
+  input: ReportErrorInput & {
+    context?: Record<string, unknown>;
+    source?: 'manual' | 'api-client' | 'render-crash';
+  },
+): Promise<boolean> {
+  try {
+    const { source = 'api-client', ...rest } = input;
+    await sendProductError({ ...rest, source }, QUALITY_INGEST_ENDPOINT);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

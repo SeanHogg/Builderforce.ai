@@ -1,4 +1,4 @@
--- 0457_mailbox_connect_never_sends.sql
+-- 1182_mailbox_connect_never_sends.sql
 --
 -- Connect success never sends or spends.
 --

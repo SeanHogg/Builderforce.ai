@@ -49,11 +49,19 @@ import type { AgentRuntimeSurface } from '@/lib/api';
  * Entitlement comes from the server's resolved feature set, never from the plan name.
  */
 
-/** Every cloud surface, in the order the picker offers them. */
-export const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container', 'github_actions'];
+/**
+ * What the picker offers. `''` is AUTOMATIC — it leaves `ide_agents.runtime_surface`
+ * unset, and the server resolves the surface per plan at dispatch time (container on a
+ * paid workspace, durable on a free one). It is first and it is the default for a new
+ * agent, because the form used to hard-code `'durable'`: every agent created in the UI
+ * pinned itself to the shell-less surface forever, which is a large part of why the
+ * container surface was never reached. Choosing a concrete surface here still means
+ * "this one, always" — including after an upgrade.
+ */
+export type RuntimeSurfaceChoice = AgentRuntimeSurface | '';
 
-/** Surfaces whose availability is a fact about the project or the plan, not a constant. */
-const CONDITIONAL_SURFACES = new Set<AgentRuntimeSurface>(['github_actions', 'container']);
+/** Every choice, in the order the picker offers them. */
+export const RUNTIME_SURFACE_KEYS: RuntimeSurfaceChoice[] = ['', 'durable', 'container', 'github_actions'];
 
 /**
  * Is the billable container surface covered by this workspace's plan?
@@ -70,27 +78,42 @@ function useContainerRuntimeEntitled(): boolean | null {
 }
 
 /**
- * Is this surface selection blocked for the project in scope?
+ * Why this surface selection is refused, localized — or null when it is fine.
  *
  * Exported so a form's SUBMIT can refuse the combination rather than merely
- * discouraging it. It reads the same cached readiness the picker does, so using
- * it costs no extra request and cannot disagree with what the picker rendered —
- * which is exactly what a `canX` boolean passed down from a parent could not
- * promise.
+ * discouraging it. It reads the same cached readiness and entitlement the picker
+ * disables on, so using it costs no extra request and cannot disagree with what the
+ * picker rendered — which is exactly what a `canX` boolean passed down from a parent
+ * could not promise.
  *
- * Only ever true on a hard `false` readiness; unknown never blocks a save.
+ * It returns the MESSAGE, not a boolean, because the two refusals are different facts
+ * and read differently ("this project cannot run it" vs "your plan does not cover it").
+ * Both submit paths were each rebuilding that sentence from the surface key, which meant
+ * one generic wording for both — and a new reason would have had to be added twice.
+ *
+ * Only ever non-null on a hard `false`; unknown never blocks a save.
  */
-export function useRuntimeSurfaceBlocked(surface: AgentRuntimeSurface | string): boolean {
+export function useRuntimeSurfaceRefusal(surface: RuntimeSurfaceChoice | string): string | null {
+  const t = useTranslations('cloudAgentForm');
   const supported = useGithubActionsSupported();
   const containerEntitled = useContainerRuntimeEntitled();
-  if (surface === 'github_actions') return supported === false;
-  if (surface === 'container') return containerEntitled === false;
-  return false;
+  if (surface === 'github_actions' && supported === false) {
+    return t('errSurfaceBlocked', { surface: t('surfaceLabel.github_actions') });
+  }
+  if (surface === 'container' && containerEntitled === false) {
+    return t('errSurfaceBlockedPlan', { surface: t('surfaceLabel.container') });
+  }
+  return null;
+}
+
+/** Boolean form of {@link useRuntimeSurfaceRefusal}, for a disabled state with no copy. */
+export function useRuntimeSurfaceBlocked(surface: RuntimeSurfaceChoice | string): boolean {
+  return useRuntimeSurfaceRefusal(surface) !== null;
 }
 
 export interface RuntimeSurfaceSelectProps {
-  value: AgentRuntimeSurface;
-  onChange: (surface: AgentRuntimeSurface) => void;
+  value: RuntimeSurfaceChoice;
+  onChange: (surface: RuntimeSurfaceChoice) => void;
   /** Styling for the underlying control, so the picker inherits its form's look. */
   style?: React.CSSProperties;
   /** Styling for the field label. */
@@ -102,15 +125,15 @@ export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: Run
   const actionsSupported = useGithubActionsSupported();
   const containerEntitled = useContainerRuntimeEntitled();
   const reasonId = useId();
+  const containerReasonId = `${reasonId}-container`;
 
   /** A surface this project or plan provably cannot run. `null` (unknown) never disables. */
-  const unavailable = (surface: AgentRuntimeSurface): boolean => {
+  const unavailable = (surface: RuntimeSurfaceChoice): boolean => {
     if (surface === 'github_actions') return actionsSupported === false;
     if (surface === 'container') return containerEntitled === false;
     return false;
   };
 
-  const anyUnavailable = RUNTIME_SURFACE_KEYS.some(unavailable);
   const containerLocked = unavailable('container');
 
   return (
@@ -122,14 +145,19 @@ export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: Run
         value={value}
         // `aria-describedby` only when the description is actually rendered —
         // pointing at a missing id is a worse experience than pointing at nothing.
-        aria-describedby={anyUnavailable ? reasonId : undefined}
+        aria-describedby={[
+          actionsSupported === false ? reasonId : null,
+          containerLocked ? containerReasonId : null,
+        ].filter(Boolean).join(' ') || undefined}
         onChange={(e) => onChange(e.target.value as AgentRuntimeSurface)}
       >
         {RUNTIME_SURFACE_KEYS.map((rs) => (
-          <option key={rs} value={rs} disabled={unavailable(rs)}>
+          <option key={rs || 'auto'} value={rs} disabled={unavailable(rs)}>
             {/* The short reason rides in the option's own text: a screen reader
                 announces the option, never the prose beside the select. */}
-            {unavailable(rs) ? t('surfaceUnavailableOption', { surface: t(`surfaceLabel.${rs}`) }) : t(`surfaceLabel.${rs}`)}
+            {rs === ''
+              ? t('surfaceLabel.auto')
+              : unavailable(rs) ? t('surfaceUnavailableOption', { surface: t(`surfaceLabel.${rs}`) }) : t(`surfaceLabel.${rs}`)}
           </option>
         ))}
       </Select>
@@ -138,7 +166,7 @@ export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: Run
           the two fixes applies (connect a GitHub repo vs commit the workflow). */}
       <GithubActionsUnavailableReason id={reasonId} />
       {containerLocked ? (
-        <p id={reasonId} role="status" style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>
+        <p id={containerReasonId} role="status" style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>
           {t('surfaceContainerLocked')}
         </p>
       ) : null}

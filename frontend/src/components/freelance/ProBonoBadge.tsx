@@ -48,8 +48,13 @@ export function ProBonoBadge({ sessionPriceCents, size = 'md' }: {
         fontWeight: 700,
         padding: pad,
         borderRadius: 'var(--radius-full)',
-        background: 'rgba(20,184,166,0.12)',
-        color: 'var(--teal-bright, rgba(13,148,136,0.95))',
+        // Wash and ink derive from the SAME token, which is the whole point. An
+        // `rgba()` wash is a fixed hue: mixed under a theme-aware label it kept the
+        // dark palette's teal on paper while the text flipped with the theme, so the
+        // chip read as two different colours. `color-mix` against `--teal-bright`
+        // cannot drift from the label above it, in either theme.
+        background: 'color-mix(in srgb, var(--teal-bright) 12%, transparent)',
+        color: 'var(--teal-bright)',
         whiteSpace: 'nowrap',
       }}
     >
