@@ -1,3 +1,20 @@
+## ✅ RESOLVED 2026-09-22 — Advisor Platform roadmap shipped (PRD 26)
+
+- **What:** Advisor Platform as marketplace composition — mentoring, workshops, Academy and templates on Talent + bookings + LMS, not a SCORE clone. The epics and child tasks have all been merged:
+  - Epic #2545 (Build Advisor platform as marketplace composition) - DONE
+  - Task #2527 (Advisor profiles + marketplace category) - merged as PR #844
+  - Task #2532 (Public visitor booking + advisory meeting join) - merged as PR #845
+  - Task #2538 (Meeting Notes listing + minutes→tasks + follow-up) - merged as PR #846
+  - Task #2546 (PRD 26) - DONE
+  - Spec #400b7152 - complete
+- **Why:** All P0/P1 child tickets merged; epic complete; roadmap ready to ship
+- **Where:** 
+  - Specs: `specs/builderforce/26-prd-advisor-platform.md`, `specs/builderforce/26-implementation-notes-advisor-platform.md`
+  - Task specs: `specs/tasks/task-2527.md`, `specs/tasks/task-2532.md`, `specs/tasks/task-2581.md`
+- **Verify:** All PRs merged to main (#844, #845, #846)
+
+- **Roadmap 69584c3f** - changed from "planned" → "shipped"
+
 ## ✅ RESOLVED 2026-09-21 — PRD 27: Staffed work, the coordination gate, and chat diagnostics as data
 
 - **What:** PRD 27 delivered five changes: (1) a versioned `bfk` auth-cache key so the VSIX owner resolves as their actual role instead of an anonymous DEVELOPER — the root cause of `403 manager role required` on chat #113; (2) `ReplayRouteError` so a replayed 4xx surfaces as 403, not 502; (3) migration 1177 + `coordinationGate.ts` making ticket coordination developer-tier with a per-project opt-in (`coordination_requires_manager`); (4) migration 1178 + the persisted `ChatDiagnosticsReport` with the `work-filed-not-staffed` verdict; and (5) persona sub-agents (`spawn_agent as_agent=<Ada>`) end to end across agent-tools, agent-loop, brain-embedded, and the VSIX.
