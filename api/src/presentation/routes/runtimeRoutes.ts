@@ -13,7 +13,7 @@ import { liveExecution } from '../../application/rehearsal/executionMode';
 import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
-  resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
+  chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
   isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { verifyContainerRunToken } from '../../application/runtime/containerRunToken';

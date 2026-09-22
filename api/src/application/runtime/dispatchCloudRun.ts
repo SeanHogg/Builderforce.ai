@@ -21,6 +21,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { dispatchGithubActionsRun, githubActionsAvailable } from './githubActionsDispatch';
 import { RuntimeService } from './RuntimeService';
+import { tenantHasFeature } from '../tenant/featureEntitlements';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
   isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, withDefaultModel, withExecutor,
@@ -576,7 +577,16 @@ export async function startDispatchedExecution(
   //     the AGENT_HOST_RELAY. It is ALSO a long-lived runtime (equivalent to a
   //     container) and runs the SAME V2 Agent (Claude-Agent-SDK) the cloud surfaces
   //     do, so a V2 agent pinned to a host executes ON the machine — no engine fork.
-  const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null);
+  //
+  // WHICH of the two cloud surfaces is a PLAN decision: a container is billable
+  // Cloudflare compute for the length of the run, the Durable Object is effectively
+  // free, so a workspace that is not paying runs on the free infrastructure. Keyed on
+  // the TENANT, not on whoever pressed Run — the spend belongs to the workspace, and a
+  // board-auto run has no human at all, so keying on the caller would hand one tenant
+  // two different surfaces depending on the pathway. Served from the cached plan
+  // snapshot (L1 + KV), so this is not a per-run round trip.
+  const containerAllowed = await tenantHasFeature(env as Env, tenantId, undefined, 'containerRuntime');
+  const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null, { containerAllowed });
   const typeLabel = cloudAgentTypeLabel(surface);
 
   // Dispatch to an On-Prem host when one is explicitly pinned AND the agent's

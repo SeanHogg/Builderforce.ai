@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { GithubActionsUnavailableReason } from '@/components/repos/githubActionsSurface';
 import { useGithubActionsSupported } from '@/lib/useGithubActionsReadiness';
+import { useConsumption } from '@/lib/useConsumption';
 import type { AgentRuntimeSurface } from '@/lib/api';
 
 /**
@@ -38,13 +39,35 @@ import type { AgentRuntimeSurface } from '@/lib/api';
  * project in scope / still loading / the read failed". Only a hard `false`
  * disables anything — disabling on an unknown would make a perfectly good
  * configuration unreachable whenever an unrelated endpoint has a bad minute.
+ *
+ * TWO CONDITIONAL SURFACES, ONE RULE. `container` is conditional for a different
+ * reason than `github_actions`: not "this project cannot run it" but "this plan does
+ * not cover it". A container is billable Cloudflare compute held open for the length
+ * of a run, so a free workspace runs on the durable (serverless) surface, and the
+ * server DEMOTES an explicit `container` it is not entitled to. Offering the option
+ * anyway would be the same after-the-fact degrade this component was written to stop.
+ * Entitlement comes from the server's resolved feature set, never from the plan name.
  */
 
 /** Every cloud surface, in the order the picker offers them. */
 export const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container', 'github_actions'];
 
-/** Surfaces whose availability is a fact about the project, not a constant. */
-const CONDITIONAL_SURFACES = new Set<AgentRuntimeSurface>(['github_actions']);
+/** Surfaces whose availability is a fact about the project or the plan, not a constant. */
+const CONDITIONAL_SURFACES = new Set<AgentRuntimeSurface>(['github_actions', 'container']);
+
+/**
+ * Is the billable container surface covered by this workspace's plan?
+ *
+ * Tri-state like the Actions readiness above: `null` until the consumption snapshot
+ * (which carries the SERVER's resolved entitlements) arrives, so a slow or failed read
+ * never locks a configuration the workspace is entitled to. Served from the same cached
+ * snapshot the meters and navigation already read — no extra request.
+ */
+function useContainerRuntimeEntitled(): boolean | null {
+  const features = useConsumption()?.features;
+  const entitled = features?.entitled?.containerRuntime;
+  return entitled ?? null;
+}
 
 /**
  * Is this surface selection blocked for the project in scope?
@@ -59,8 +82,10 @@ const CONDITIONAL_SURFACES = new Set<AgentRuntimeSurface>(['github_actions']);
  */
 export function useRuntimeSurfaceBlocked(surface: AgentRuntimeSurface | string): boolean {
   const supported = useGithubActionsSupported();
-  if (!CONDITIONAL_SURFACES.has(surface as AgentRuntimeSurface)) return false;
-  return supported === false;
+  const containerEntitled = useContainerRuntimeEntitled();
+  if (surface === 'github_actions') return supported === false;
+  if (surface === 'container') return containerEntitled === false;
+  return false;
 }
 
 export interface RuntimeSurfaceSelectProps {
@@ -75,13 +100,18 @@ export interface RuntimeSurfaceSelectProps {
 export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: RuntimeSurfaceSelectProps) {
   const t = useTranslations('cloudAgentForm');
   const actionsSupported = useGithubActionsSupported();
+  const containerEntitled = useContainerRuntimeEntitled();
   const reasonId = useId();
 
-  /** A surface the project provably cannot run. `null` (unknown) never disables. */
-  const unavailable = (surface: AgentRuntimeSurface): boolean =>
-    CONDITIONAL_SURFACES.has(surface) && actionsSupported === false;
+  /** A surface this project or plan provably cannot run. `null` (unknown) never disables. */
+  const unavailable = (surface: AgentRuntimeSurface): boolean => {
+    if (surface === 'github_actions') return actionsSupported === false;
+    if (surface === 'container') return containerEntitled === false;
+    return false;
+  };
 
   const anyUnavailable = RUNTIME_SURFACE_KEYS.some(unavailable);
+  const containerLocked = unavailable('container');
 
   return (
     <div>
@@ -107,6 +137,11 @@ export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: Run
       {/* Self-gating: renders only on a positive "not enabled", and says which of
           the two fixes applies (connect a GitHub repo vs commit the workflow). */}
       <GithubActionsUnavailableReason id={reasonId} />
+      {containerLocked ? (
+        <p id={reasonId} role="status" style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>
+          {t('surfaceContainerLocked')}
+        </p>
+      ) : null}
     </div>
   );
 }

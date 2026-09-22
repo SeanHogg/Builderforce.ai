@@ -2421,7 +2421,6 @@ const CATALOG: BuiltinTool[] = [
         bio: a.bio != null ? str(a.bio) : '',
         skills: JSON.stringify(Array.isArray(a.skills) ? a.skills : []),
         baseModel: a.baseModel != null ? str(a.baseModel) : 'builderforce-default',
-        runtimeSurface: 'durable',
         ...(typeof a.published === 'boolean' ? { published: a.published } : {}),
       }).returning();
       return row;

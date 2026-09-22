@@ -589,8 +589,12 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const pricingModel = (PRICING_MODELS as readonly string[]).includes(body.pricingModel ?? '')
       ? body.pricingModel! : 'flat_fee';
     // Which execution surface the agent runs on (durable DO vs long-lived node).
+    // UNSET when the caller did not choose, never a hard-coded 'durable': the default
+    // surface is a plan decision resolved at dispatch time (`resolveCloudSurface`), so an
+    // agent created on Free moves to the container the moment the workspace upgrades,
+    // without anyone editing it. Writing a concrete value here froze that choice forever.
     const runtimeSurface = (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface ?? '')
-      ? body.runtimeSurface! : 'durable';
+      ? body.runtimeSurface! : null;
     // preferred_runtime only meaningful when both are supported
     const preferredRuntime = runtimeSupport === 'both' ? (body.preferredRuntime ?? null) : null;
     // Per-agent personality is a Pro feature — store none for free plans (rather than
@@ -655,7 +659,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const pricingModel = body.pricingModel != null && (PRICING_MODELS as readonly string[]).includes(body.pricingModel)
       ? body.pricingModel : existing.pricing_model;
     const runtimeSurface = body.runtimeSurface != null && (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface)
-      ? body.runtimeSurface : (existing.runtime_surface ?? 'durable');
+      ? body.runtimeSurface : (existing.runtime_surface ?? null);
     const preferredRuntime = runtimeSupport === 'both'
       ? (body.preferredRuntime !== undefined ? body.preferredRuntime : existing.preferred_runtime)
       : null;

@@ -1,12 +1,50 @@
 /**
- * Where a V2 cloud agent executes — its "runtime surface". BOTH run the full task
- * in the cloud (everything is Cloudflare — no local/hybrid agent):
+ * Where a V2 cloud agent executes — its "runtime surface". All of them run the full
+ * task in the cloud (everything is Cloudflare — no local/hybrid agent):
+ *   • 'container' — a long-lived Cloudflare Container: a real Linux process with a
+ *     SHELL and a local clone. It greps through the shell, edits files in the clone,
+ *     and runs real build / type-check / lint / tests before finishing. **The default.**
  *   • 'durable'   — a Durable Object (CloudRunnerDO), one LLM step per alarm tick.
- *     On-demand serverless; no always-on compute. The default.
- *   • 'container' — a long-lived Cloudflare Container runtime, for very long /
- *     continuous tasks that want a persistent process + shell. (Container infra is
- *     a future build; until then a 'container' run falls back to the durable DO so
- *     it still executes in the cloud.)
+ *     On-demand serverless and shell-LESS: it edits surgically over the git API and
+ *     provably cannot run a build. Still the fallback whenever no container is live,
+ *     and still selectable explicitly for work that does not need a toolchain.
+ *   • 'github_actions' — the tenant's own runners, opted into per agent.
+ *
+ * ── WHICH SURFACE AN UNCONFIGURED AGENT GETS ──────────────────────────────
+ * It depends on whether the tenant pays, and the two halves of that are deliberate.
+ *
+ * PAID → 'container'. The product statement is that a cloud agent should "clone the repo
+ * and interact with it just like the VSIX agent is opened into the directory where the
+ * code is cloned". That is exactly the container surface, and it had been built for some
+ * time — but every default in the system said 'durable', so an agent whose
+ * `runtime_surface` was never set (most of them: the column is nullable with no DB
+ * default) landed on the shell-less surface. The capability existed and nothing reached
+ * it, which is why a dispatched cloud agent behaved nothing like the editor one.
+ *
+ * FREE → 'durable'. A container holds a Linux process open for the length of a run
+ * against a fixed `max_instances` budget: real Cloudflare spend, per run. The Durable
+ * Object is on-demand serverless and effectively free to us. A workspace that is not
+ * paying runs on the free infrastructure — it still runs, and it still finishes; it just
+ * edits over the git API instead of through a shell. That is the whole cost difference
+ * between the two surfaces, so it is the one place the plan belongs.
+ *
+ * The entitlement is `planFeatures.containerRuntime`, resolved OUTSIDE this module (see
+ * `cloudSurfaceEntitlement.ts`) and passed in, so this stays pure and exhaustively
+ * testable. Superadmin and comped tenants clear it like any other feature.
+ *
+ * An explicit 'container' is DEMOTED when the tenant is not entitled. A gate that only
+ * moved the default would be bypassable by writing one column — and `runtime_surface` is
+ * writable from the workforce API and the MCP tool. Demotion never fails the run: the
+ * work still executes, on the surface the plan covers.
+ *
+ * An agent that explicitly chose 'durable' KEEPS it on every plan. That distinction did
+ * not exist before — an explicit 'durable' and an unset column both fell through the same
+ * `else`, so there was no way to say "serverless on purpose", and flipping the default
+ * without separating them would have silently overridden a real choice.
+ *
+ * Preferring the container also costs nothing when there isn't one: {@link chooseCloudExecutor}
+ * only picks it when the binding exists AND a `/health` probe proves the image is live,
+ * and falls through to 'durable' otherwise.
  *
  * Single source of truth for the routing decision so dispatch (runtime) and the
  * test agree on which surface a run targets.
@@ -27,18 +65,60 @@ export type CloudSurface = 'durable' | 'container' | 'github_actions';
 export const CLOUD_SURFACES = ['durable', 'container', 'github_actions'] as const;
 
 /**
- * Resolve the surface a run targets. An explicitly-pinned host is a long-lived
- * runtime (reached via the relay), so it maps to 'container'; otherwise honor the
- * agent's chosen surface, defaulting to 'durable' (on-demand, no always-on infra).
+ * The surface an agent that never chose one runs on, per entitlement. Named rather than
+ * inlined so each default is ONE fact: {@link defaultCloudSurface} applies them, the
+ * tests assert them, and a future change cannot land in only one of those places.
  *
- * An explicit host still wins over a 'github_actions' preference: pinning a host
- * means "run on THAT machine", which an ephemeral GitHub runner cannot satisfy.
+ * These were previously spread across four files — the agent resolver, both workforce
+ * write paths and the MCP create tool each hard-coded `'durable'`, which is why flipping
+ * the default here alone changed nothing. Those sites now leave the column UNSET, so an
+ * agent created on Free and later upgraded moves to the container without being edited.
  */
-export function resolveCloudSurface(agentSurface: string | undefined | null, hasExplicitHost: boolean): CloudSurface {
+export const PAID_DEFAULT_CLOUD_SURFACE: CloudSurface = 'container';
+export const FREE_DEFAULT_CLOUD_SURFACE: CloudSurface = 'durable';
+
+/** The default surface for a tenant, given its container entitlement. */
+export function defaultCloudSurface(containerAllowed: boolean): CloudSurface {
+  return containerAllowed ? PAID_DEFAULT_CLOUD_SURFACE : FREE_DEFAULT_CLOUD_SURFACE;
+}
+
+/** What {@link resolveCloudSurface} needs to know about the tenant. */
+export interface CloudSurfaceEntitlement {
+  /**
+   * The tenant may run on billable container compute (`planFeatures.containerRuntime`,
+   * or a superadmin / comped override). False → free Cloudflare infrastructure only.
+   */
+  containerAllowed: boolean;
+}
+
+/**
+ * Resolve the surface a run targets.
+ *
+ * An explicitly-pinned host is a long-lived runtime reached via the relay, so it maps to
+ * 'container' on EVERY plan: that is the customer's own machine, and it costs us nothing
+ * to run there — the entitlement is about our compute, not theirs. An explicit host also
+ * wins over a 'github_actions' preference, because pinning a host means "run on THAT
+ * machine", which an ephemeral GitHub runner cannot satisfy.
+ *
+ * Otherwise the agent's own choice is honored, except that 'container' is demoted for an
+ * unentitled tenant; an unset/unrecognised value takes {@link defaultCloudSurface}.
+ *
+ * An UNRECOGNISED value resolves to the default rather than being rejected: the column is
+ * a plain varchar, and a row written by a client ahead of the server must degrade to the
+ * ordinary surface rather than failing a dispatch.
+ */
+export function resolveCloudSurface(
+  agentSurface: string | undefined | null,
+  hasExplicitHost: boolean,
+  entitlement: CloudSurfaceEntitlement,
+): CloudSurface {
   if (hasExplicitHost) return 'container';
-  if (agentSurface === 'container') return 'container';
+  const fallback = defaultCloudSurface(entitlement.containerAllowed);
+  // Explicit choices, including the deliberate opt-OUT to serverless.
+  if (agentSurface === 'container') return entitlement.containerAllowed ? 'container' : FREE_DEFAULT_CLOUD_SURFACE;
   if (agentSurface === 'github_actions') return 'github_actions';
-  return 'durable';
+  if (agentSurface === 'durable') return 'durable';
+  return fallback;
 }
 
 /**

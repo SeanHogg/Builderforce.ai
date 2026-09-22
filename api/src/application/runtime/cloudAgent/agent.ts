@@ -25,7 +25,13 @@ export interface ResolvedCloudAgent {
   engine: string;
   label?: string;
   ref?: string;
-  runtimeSurface: string;
+  /**
+   * The agent's CHOSEN surface, or null when it never chose one. Deliberately NOT
+   * defaulted here: the default depends on the tenant's plan (a container is billable
+   * compute), which this resolver does not know. Collapsing null to 'durable' here is
+   * what made `resolveCloudSurface`'s default unreachable — it never saw an unset value.
+   */
+  runtimeSurface: string | null;
   /** The agent's own gateway model, or undefined to use the default. A V2 cloud
    *  agent must execute AS this model so a run is never silently attributed to the
    *  v1 gateway default. */
@@ -66,7 +72,7 @@ export async function resolveCloudAgent(
 ): Promise<ResolvedCloudAgent> {
   // The engine is ALWAYS the current version (a code constant) — never read from the
   // DB. A run is the current engine regardless of any legacy `engine` value on the row.
-  const DEFAULT: ResolvedCloudAgent = { engine: CURRENT_ENGINE_ID, ref, runtimeSurface: 'durable' };
+  const DEFAULT: ResolvedCloudAgent = { engine: CURRENT_ENGINE_ID, ref, runtimeSurface: null };
   if (!ref) return DEFAULT;
   const db = buildDatabase(env);
   const rows = await db
@@ -83,7 +89,7 @@ export async function resolveCloudAgent(
     .limit(1);
   const engine = CURRENT_ENGINE_ID;
   const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
-  const runtimeSurface = rows[0]?.runtimeSurface === 'container' ? 'container' : 'durable';
+  const runtimeSurface = rows[0]?.runtimeSurface ?? null;
   const rawModel = typeof rows[0]?.baseModel === 'string' ? rows[0].baseModel.trim() : '';
   const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
   const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;

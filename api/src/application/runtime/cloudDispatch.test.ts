@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, isTerminalExecutionStatus,
+  resolveCloudSurface, defaultCloudSurface, PAID_DEFAULT_CLOUD_SURFACE, FREE_DEFAULT_CLOUD_SURFACE,
+  chooseCloudExecutor, probeContainerHealth, isTerminalExecutionStatus,
   parseFollowUp, buildFollowUpPayload,
   parseModel, parseCloudAgentRef, parseRepoId, parseRemediation,
   markReaperRequeued, wasReaperRequeued, withDefaultModel,
@@ -134,21 +135,84 @@ describe('buildFollowUpPayload', () => {
   });
 });
 
+const PAID = { containerAllowed: true };
+const FREE = { containerAllowed: false };
+
+describe('defaultCloudSurface', () => {
+  /**
+   * The cost decision, on its own. A container holds a Linux process open for the length
+   * of a run against a fixed `max_instances` budget — billable Cloudflare compute, per
+   * run. The Durable Object is on-demand serverless and effectively free. So a workspace
+   * that is not paying runs on the free infrastructure; it still runs, it just edits over
+   * the git API instead of through a shell.
+   */
+  it('gives a paying workspace the shell, and a free one the free infrastructure', () => {
+    expect(defaultCloudSurface(true)).toBe('container');
+    expect(defaultCloudSurface(false)).toBe('durable');
+    expect(PAID_DEFAULT_CLOUD_SURFACE).toBe('container');
+    expect(FREE_DEFAULT_CLOUD_SURFACE).toBe('durable');
+  });
+});
+
 describe('resolveCloudSurface', () => {
-  it('an explicitly-pinned host is a long-lived (container/relay) runtime', () => {
-    expect(resolveCloudSurface('durable', true)).toBe('container');
-    expect(resolveCloudSurface(undefined, true)).toBe('container');
+  it('an explicitly-pinned host is a long-lived (container/relay) runtime on EVERY plan', () => {
+    // A pinned host is the CUSTOMER's machine, reached via the relay. It costs us
+    // nothing, so the entitlement — which is about our compute — does not apply.
+    expect(resolveCloudSurface('durable', true, PAID)).toBe('container');
+    expect(resolveCloudSurface(undefined, true, PAID)).toBe('container');
+    expect(resolveCloudSurface(undefined, true, FREE)).toBe('container');
   });
 
-  it('honors the agent\'s chosen surface when no host is pinned', () => {
-    expect(resolveCloudSurface('container', false)).toBe('container');
-    expect(resolveCloudSurface('durable', false)).toBe('durable');
+  it('honors the agent's chosen surface when no host is pinned', () => {
+    expect(resolveCloudSurface('container', false, PAID)).toBe('container');
+    expect(resolveCloudSurface('durable', false, PAID)).toBe('durable');
+    expect(resolveCloudSurface('github_actions', false, FREE)).toBe('github_actions');
   });
 
-  it('defaults to durable for an unset/unknown surface (on-demand, no always-on infra)', () => {
-    expect(resolveCloudSurface(undefined, false)).toBe('durable');
-    expect(resolveCloudSurface(null, false)).toBe('durable');
-    expect(resolveCloudSurface('something-else', false)).toBe('durable');
+  /**
+   * An agent that never chose a surface gets the one a cloud agent is supposed to have —
+   * a clone and a real shell — IF the workspace pays for it. The old default was `durable`
+   * on every plan, and because `runtime_surface` is nullable with no DB default that is
+   * what almost every agent silently got: the capability to run builds in a clone existed
+   * and nothing reached it.
+   */
+  it('defaults an unset/unknown surface per plan', () => {
+    expect(resolveCloudSurface(undefined, false, PAID)).toBe('container');
+    expect(resolveCloudSurface(null, false, PAID)).toBe('container');
+    expect(resolveCloudSurface(undefined, false, FREE)).toBe('durable');
+    // A value written by a client ahead of the server degrades to the default rather
+    // than failing the dispatch.
+    expect(resolveCloudSurface('something-else', false, PAID)).toBe('container');
+    expect(resolveCloudSurface('something-else', false, FREE)).toBe('durable');
+  });
+
+  it('DEMOTES an explicit container when the workspace is not entitled', () => {
+    // Otherwise the paid gate is bypassable by writing one varchar column — and
+    // `runtime_surface` is writable from the workforce API and the MCP tool. Demotion
+    // never fails the run: the work still executes, on the surface the plan covers.
+    expect(resolveCloudSurface('container', false, FREE)).toBe('durable');
+  });
+
+  it('keeps an EXPLICIT durable choice on every plan — opting out is a real answer', () => {
+    // Before the default became plan-aware, an explicit 'durable' and an unset column
+    // fell through the same branch, so "serverless on purpose" could not be expressed.
+    expect(resolveCloudSurface('durable', false, PAID)).toBe('durable');
+    expect(resolveCloudSurface('durable', false, FREE)).toBe('durable');
+  });
+
+  it('never strands a run when no container is live — the executor demotes', () => {
+    // The second half of what keeps this cheap: preferring the container is only a
+    // preference. `chooseCloudExecutor` requires the binding AND a passing health probe,
+    // so on an account with no Containers every run lands exactly where it did before.
+    expect(chooseCloudExecutor({
+      wantsContainer: true, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: true,
+    })).toBe('durable');
+    expect(chooseCloudExecutor({
+      wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: true,
+    })).toBe('durable');
+    expect(chooseCloudExecutor({
+      wantsContainer: true, hasContainerBinding: true, containerHealthy: true, hasCloudRunner: true,
+    })).toBe('container');
   });
 });
 

@@ -3,6 +3,7 @@ import type { Env, HonoEnv } from '../../env';
 import { TenantPlan } from '../../domain/shared/types';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
+import { toTenantPlan } from '../../application/tenant/featureEntitlements';
 import {
   CANVAS_CAPABILITY_FEATURES,
   evaluateFeatureEntitlement,
@@ -32,13 +33,6 @@ import { upgradeRequiredBody, type UpgradeRequiredBody } from '../../domain/tena
  * a higher plan) and names the exact feature + the plan that unlocks it.
  */
 
-/** Map the gateway's string effectivePlan to the plan enum. */
-function toTenantPlan(ep: 'free' | 'pro' | 'teams'): TenantPlan {
-  if (ep === 'pro') return TenantPlan.PRO;
-  if (ep === 'teams') return TenantPlan.TEAMS;
-  return TenantPlan.FREE;
-}
-
 const PLAN_LABEL: Record<TenantPlan, string> = {
   [TenantPlan.FREE]: 'Free',
   [TenantPlan.PRO]: 'Pro',
@@ -46,40 +40,11 @@ const PLAN_LABEL: Record<TenantPlan, string> = {
 };
 
 /**
- * Resolve a caller's entitlement to `feature`. `userId` optional — when absent the
- * superadmin dimension is simply skipped (machine callers can't be superadmins).
+ * The entitlement composition itself lives in the application layer — cloud dispatch
+ * needs it to pick a run's surface, and there is no route handler in scope there.
+ * Re-exported so route handlers keep importing their gates from ONE module.
  */
-export async function resolveFeatureEntitlement(
-  env: Env,
-  tenantId: number,
-  userId: string | undefined | null,
-  feature: PlanFeature,
-): Promise<FeatureEntitlement> {
-  const [access, isSuperadmin] = await Promise.all([
-    resolveTenantPlan(env, tenantId),
-    resolveIsSuperadmin(env, userId),
-  ]);
-  return evaluateFeatureEntitlement({
-    feature,
-    effectivePlan: toTenantPlan(access.effectivePlan),
-    premiumOverride: access.premiumOverride,
-    isSuperadmin,
-  });
-}
-
-/**
- * Boolean convenience for decision sites that ATTACH a paid feature rather than
- * error on it (e.g. "store the psychometric profile only if entitled"). Superadmin-
- * and premium-override-aware, same as the erroring gate.
- */
-export async function tenantHasFeature(
-  env: Env,
-  tenantId: number,
-  userId: string | undefined | null,
-  feature: PlanFeature,
-): Promise<boolean> {
-  return (await resolveFeatureEntitlement(env, tenantId, userId, feature)).entitled;
-}
+export { resolveFeatureEntitlement, tenantHasFeature } from '../../application/tenant/featureEntitlements';
 
 /**
  * The CANVAS CAPABILITIES this caller holds — the set the object palette filters by.

@@ -3331,7 +3331,8 @@ export interface MeterSnapshot {
 export type PlanFeatureKey =
   | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
   | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
-  | 'voiceCloning' | 'advancedInsights';
+  | 'voiceCloning' | 'advancedInsights' | 'evermindTraining' | 'livePreview'
+  | 'containerRuntime';
 
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };

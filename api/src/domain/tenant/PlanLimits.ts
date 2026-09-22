@@ -157,6 +157,27 @@ export interface PlanLimits {
    * paid plan — the capacity guard, not the plan tier, is what bounds the spend.
    */
   livePreview: boolean;
+  /**
+   * Whether a cloud run may execute on the CONTAINER surface — a long-lived Cloudflare
+   * Container with a real shell and a local clone, which is the surface that behaves
+   * like the editor agent (grep, edit, build, type-check, test before finishing).
+   *
+   * Paid because it is the difference between free and billable Cloudflare compute. The
+   * `durable` surface (CloudRunnerDO) is on-demand serverless and shell-LESS: it edits
+   * surgically over the git API and costs us next to nothing, so it is what a free
+   * workspace runs on. A container holds a Linux process open for the length of a run
+   * against the fixed `max_instances` budget in `wrangler.toml`, and that is real money
+   * per run — spend a free workspace has not paid for.
+   *
+   * This gate decides the DEFAULT surface for an agent that never chose one, and it also
+   * DEMOTES an explicit `runtime_surface = 'container'`, because otherwise the gate would
+   * be bypassable by writing one column. See `resolveCloudSurface`. It never blocks the
+   * run — an unentitled tenant still executes, on `durable`.
+   *
+   * Sibling of {@link livePreview}: same resource, different hold. A preview pins an
+   * instance for as long as a tab is open; this is the instance the run itself uses.
+   */
+  containerRuntime: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -192,6 +213,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     advancedInsights: false,
     evermindTraining: false,
     livePreview: false,
+    containerRuntime: false,
   },
   [TenantPlan.PRO]: {
     maxCreationSessions: 500,
@@ -225,6 +247,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     advancedInsights: true,
     evermindTraining: true,
     livePreview: true,
+    containerRuntime: true,
   },
   [TenantPlan.TEAMS]: {
     maxCreationSessions: -1,
@@ -258,6 +281,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     advancedInsights: true,
     evermindTraining: true,
     livePreview: true,
+    containerRuntime: true,
   },
 };
 

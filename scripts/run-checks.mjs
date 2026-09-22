@@ -20,7 +20,7 @@
  * contract.
  */
 import { spawn } from 'node:child_process';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -43,10 +43,29 @@ if (!Array.isArray(GUARDS) || GUARDS.length === 0) {
 // memory and disk, not CPU. Leave a core for the parent and cap the rest.
 const LIMIT = Math.max(2, Math.min(8, availableParallelism() - 1));
 
+/**
+ * Heap ceiling for each guard, in MB.
+ *
+ * `tsc --noEmit` over the api tree dies on the default heap — "FATAL ERROR: Ineffective
+ * mark-compacts near heap limit … JavaScript heap out of memory", ~144s in, on a machine
+ * with memory to spare. That failure is indistinguishable from a real type error at the
+ * exit code, so `pnpm --filter builderforce-api type-check` reported RED for a tree that
+ * typechecks clean (the same run's `tsgo` passed in 29s, and `tsc` with a raised heap
+ * exits 0). A guard that cannot finish is worse than a slow one: it trains everyone to
+ * ignore it.
+ *
+ * This is a CEILING, not a reservation — V8 grows into it only as needed, so raising it
+ * costs nothing on the guards that never approach it. Scaled to the machine so a smaller
+ * one is not told to promise memory it does not have, and skipped entirely when the
+ * caller has set NODE_OPTIONS, which would otherwise be silently overridden.
+ */
+const HEAP_MB = Math.min(8192, Math.max(4096, Math.floor(totalmem() / 2 / 1024 / 1024)));
+const HEAP_ARGS = process.env.NODE_OPTIONS ? [] : [`--max-old-space-size=${HEAP_MB}`];
+
 function runGuard([name, file, ...args]) {
   return new Promise((done) => {
     const startedAt = Date.now();
-    const child = spawn(process.execPath, [resolve(manifestDir, file), ...args], {
+    const child = spawn(process.execPath, [...HEAP_ARGS, resolve(manifestDir, file), ...args], {
       cwd: process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });

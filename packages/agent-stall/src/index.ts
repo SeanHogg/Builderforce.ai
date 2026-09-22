@@ -355,6 +355,18 @@ export function isEmptyTurn(input: StalledTurnInput): boolean {
  * carries a first-person verb that `announcesUntakenAction` will match, and correcting it
  * as a broken promise ("you said you would call a tool and did not") describes a turn that
  * did not happen — it promised nothing, it asked.
+ *
+ * `asked-permission` also outranks `handed-off`, which is the one ordering here that is a
+ * JUDGEMENT rather than a containment. A reply can satisfy both: the measured chat-#115
+ * turn closed on an offer menu, and one line of its Recommendations ("Someone needs to
+ * push these branches and open PRs") reads as a handoff — on the strength of a SCRIPT_NOUN
+ * alone, with no command quoted and no runner named anywhere in the reply. Two things
+ * decide it. The offer is the SIGN-OFF, so it is what actually ended the run; and the
+ * permission correction is the more general of the two — "the answer is yes, do it, and
+ * use `ask_user` if something really is my call" also covers running the commands, whereas
+ * "run the commands you listed" says nothing about the offer left hanging under it. A
+ * reply that hands off commands and offers nothing still lands on `handed-off`, because
+ * the permission gate needs an offer to fire at all.
  */
 export type StallShape = 'empty' | 'handed-off' | 'asked-permission' | 'announced' | 'missing-data';
 
@@ -369,8 +381,8 @@ export type StallShape = 'empty' | 'handed-off' | 'asked-permission' | 'announce
 export function stallShape(input: StalledTurnInput): StallShape | null {
   if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
   if (isEmptyTurn(input)) return 'empty';
-  if (delegatesExecutableWork(input.text, input)) return 'handed-off';
   if (asksPermissionForRequestedWork(input.text, input)) return 'asked-permission';
+  if (delegatesExecutableWork(input.text, input)) return 'handed-off';
   if (announcesUntakenAction(input.text)) return 'announced';
   if (claimsMissingToolData(input.text)) return 'missing-data';
   return null;

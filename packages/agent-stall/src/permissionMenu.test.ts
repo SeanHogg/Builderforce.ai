@@ -127,19 +127,22 @@ describe('asksPermissionForRequestedWork', () => {
     })).toBe(false);
   });
 
+  // `asksForChange` is verb-led: "deploy the migration" does NOT trip it (no `deploy` in
+  // CHANGE_VERB, and `\bmigrate\b` does not match "migration"), so a request phrased that
+  // way would make these two pass for the wrong reason. "apply" is in the list.
+  const AMBIGUOUS = 'I can point this at either database. Did you mean staging or production? Shall I proceed with staging?';
+
   it('does NOT fire on a genuine question the surface has no better channel for', () => {
-    const text = 'I can point this at either database. Did you mean staging or production? Shall I proceed with staging?';
-    expect(asksPermissionForRequestedWork(text, {
+    expect(asksPermissionForRequestedWork(AMBIGUOUS, {
       availableToolNames: IDE_TOOLS,
-      requestText: 'deploy the migration',
+      requestText: 'apply the pending migration',
     })).toBe(false);
   });
 
   it('DOES fire on that same question where `ask_user` exists — prose is the wrong channel there', () => {
-    const text = 'I can point this at either database. Did you mean staging or production? Shall I proceed with staging?';
-    expect(asksPermissionForRequestedWork(text, {
+    expect(asksPermissionForRequestedWork(AMBIGUOUS, {
       availableToolNames: IDE_TOOLS_WITH_ASK,
-      requestText: 'deploy the migration',
+      requestText: 'apply the pending migration',
     })).toBe(true);
   });
 
@@ -183,9 +186,17 @@ describe('stallShape — the permission menu as a shared gate', () => {
     expect(stallShape({ ...base, toolCallCount: 1 })).toBe(null);
   });
 
-  it('HANDOFF still wins when the reply both offers and assigns commands', () => {
+  it('outranks HANDOFF when the reply both assigns commands and ends on an offer', () => {
+    // The offer is the sign-off, so it is what ended the run — and "the answer is yes,
+    // do it" covers running the commands too, where "run the commands you listed" says
+    // nothing about the offer left hanging under them.
     const both = 'I have staged the change. Now run `pnpm type-check` and commit it. Would you like me to open the PR?';
-    expect(stallShape({ ...base, text: both })).toBe('handed-off');
+    expect(stallShape({ ...base, text: both })).toBe('asked-permission');
+  });
+
+  it('leaves a pure handoff — commands assigned, nothing offered — as handed-off', () => {
+    const handoff = 'I applied the fix to `boardRoutes.ts`. Now run `pnpm --filter builderforce-api type-check`, then commit and push.';
+    expect(stallShape({ ...base, text: handoff })).toBe('handed-off');
   });
 
   it('beats ANNOUNCED, so the correction describes what actually happened', () => {

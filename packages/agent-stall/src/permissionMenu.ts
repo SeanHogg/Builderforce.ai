@@ -71,7 +71,7 @@ const TAIL_CHARS = 900;
  * none of those words appear there.
  */
 const ACTION_VERB =
-  '(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)';
+  '(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)';
 
 /**
  * The offer itself. Every alternative is a request for the user's GO-AHEAD; none of
@@ -90,7 +90,9 @@ const OFFER = new RegExp(
     `\\bwant\\s+(?:me|us)\\s+to\\b`,
     // "Let me know if you'd like me to…" · "Let me know which of these to do"
     // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
-    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what)\\b`,
+    // "how" earns its place: "let me know how you'd like to proceed" is the single most
+    // common way this pause is phrased, and it names no option at all.
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
     `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
     `\\bsay the word\\b`,
     // "I can open the PRs if you'd like." · "I could cancel them if you want."
@@ -100,8 +102,11 @@ const OFFER = new RegExp(
     `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
     // "Which would you like me to do first?" · "Which of these should I start with?"
     `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
-    // "Your call." · "Up to you." · "Let me know how you'd like to proceed."
-    `\\b(?:your call|up to you|it'?s your call|how (?:would|do) you (?:want|like) (?:me )?to proceed)\\b`,
+    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
+    // declarative order the same sentence takes inside a clause, "…how you would like
+    // to proceed", which the interrogative-only form used to miss.
+    `\\b(?:your call|up to you|it'?s your call)\\b`,
+    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`,
   ].join('|'),
   'gi',
 );
