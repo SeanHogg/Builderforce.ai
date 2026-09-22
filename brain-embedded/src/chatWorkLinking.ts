@@ -116,6 +116,15 @@ const READ_ONLY_PLATFORM_SUFFIXES: readonly string[] = [
   '_list_templates', '_list_purchased', '_list_directories', '_list_error_groups',
   '_list_pull_requests', '_get_session', '_get_stats', '_get_user', '_get_config',
   '_get_access', '_get_error_group',
+  // The BOARD-SURVEY reads. All three are `mutates: false` and all three are expensive —
+  // `tickets.pending_changes` compares every ticket branch against its base, and the
+  // stall census walks every non-terminal ticket. Their absence here is what let VS Code
+  // chat #115 (2026-09-20) call `builtin_tickets_pending_changes` twice with BYTE-
+  // IDENTICAL arguments, six seconds and 19 KB apiece, for an answer already in its
+  // context. Safe to dedupe only because a `git_push` / `open_pull_request` now forgets
+  // platform reads (see `REPO_PUBLISH_TOOLS`) — these read branch state, so a run that
+  // pushes between two surveys must see the second one for real.
+  '_pending_changes', '_stalled_tickets', '_census',
 ];
 
 /**

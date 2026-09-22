@@ -797,6 +797,14 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Transform TicketLinkVM to ChatTicket format expected by useTicketAutocomplete.
   const [chatTickets, setChatTickets] = useState<{ id: number; title: string; status?: string; key?: string }[]>([]);
   useEffect(() => {
+    // A chat that does not exist yet has no tickets. This used to call
+    // `listTickets(null)`, which spelled `/api/brain/chats/null/tickets`, failed, and was
+    // swallowed by the catch below — a failing request on the open of every new chat,
+    // invisible because the empty result it produced was also the correct one. It
+    // type-checked only because the shared package was resolving as `any` (its published
+    // `.d.ts` was missing from `dist`), which is the same trap the brain-ui stale-dist
+    // gotcha describes.
+    if (chatId == null) { setChatTickets([]); return; }
     let live = true;
     ticketAdapter.listTickets(chatId).then((tickets) => {
       if (!live) return;
@@ -815,13 +823,17 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const handleTicketTag = useCallback(
     async (ticket: { id: number; title: string; status?: string; key?: string }) => {
       try {
-        // Link the ticket to the chat using the adapter
+        // CREATE the chat first if it has none. Tagging a ticket in a brand-new chat used
+        // to call `linkTicket(null, …)`, which 404'd into the catch below — so the pill
+        // appeared in the composer and the link was silently never made. `ensureChatId` is
+        // the same guard every other write on this surface goes through.
+        const id = await ensureChatId();
         const ref = ticket.key ?? String(ticket.id);
-        await ticketAdapter.linkTicket(chatId, { kind: 'task', ref, linkType: 'linked' });
+        await ticketAdapter.linkTicket(id, { kind: 'task', ref, linkType: 'linked' });
         setTicketRefresh((n) => n + 1);
       } catch { /* linking is best-effort — a failed link never blocks the chat */ }
     },
-    [chatId, ticketAdapter],
+    [ensureChatId, ticketAdapter],
   );
 
   const ticket = useTicketAutocomplete({
@@ -833,7 +845,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     disabled: conv.sending,
     labels: {
       title: t('app.ticketTagTitle', 'Tag ticket'),
-      status: t('app.ticketTagStatus'),
+      status: t('app.ticketTagStatus', 'Status'),
       noMatches: t('app.ticketTagNoMatches', 'No tickets found'),
     },
   });

@@ -17,6 +17,8 @@
  *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
  *   4. the BLANK TURN — nothing at all: no call, no words.
  *   5. the HANDOFF — `"Now run `pnpm type-check`, then commit and push."` (`handoff.ts`)
+ *   6. the PERMISSION MENU — `"Would you like me to: open PRs? cancel the tickets?"`
+ *      (`permissionMenu.ts`)
  *
  * The third is the one that reads like an answer, and it is why the manager's
  * accountability chat shipped "I have no data" to a person asking it to account for a
@@ -29,12 +31,26 @@
  * writes out the verification and the commit for the user to run. Every other detector
  * here is first-person by construction and scores it a clean finish.
  *
+ * The sixth is the one that reads like GOOD MANNERS. It does the reading, writes a
+ * correct report, and closes by offering to do the work — so the user, who asked for
+ * that work one message earlier, spends a turn granting permission that was implicit in
+ * the request. It defeats every detector above at once: too long to be empty, too
+ * deferential to be a promise, too well-sourced to be a missing-data claim, and it names
+ * platform actions rather than shell commands so the handoff gate's "is a command within
+ * reach" test never fires.
+ *
  * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
  * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
  * while the on-prem + cloud agent loop imports it into Node and the Worker.
  */
 
 import { delegatesExecutableWork, handoffRecoveryNudge, type HandoffContext } from './handoff.js';
+import {
+  asksPermissionForRequestedWork,
+  askUserAdvertised,
+  permissionRecoveryNudge,
+  type PermissionMenuContext,
+} from './permissionMenu.js';
 
 /**
  * First-person commitment to act. REQUIRED — this is the discriminator that makes a
@@ -255,10 +271,22 @@ export const MAX_ANNOUNCEMENT_RECOVERIES = 3;
  * @param lastChance the caller has exhausted {@link MAX_ANNOUNCEMENT_RECOVERIES} —
  * escalate, because after this turn the reply is shown to the user as-is.
  */
-export function stallRecoveryNudge(lastChance: boolean, shape?: StallShape | null): string {
+export function stallRecoveryNudge(
+  lastChance: boolean,
+  shape?: StallShape | null,
+  ctx?: PermissionMenuContext,
+): string {
   // The HANDOFF shape gets its own correction — see `handoffRecoveryNudge` for why the
   // wording below is actively counterproductive against it.
   if (shape === 'handed-off') return handoffRecoveryNudge(lastChance);
+  // …and so does the PERMISSION MENU, for the same reason and one more: which correction
+  // is right depends on whether this surface HAS `ask_user`. Told to ask through a tool
+  // it was never advertised, a model narrates the call instead of making it — turning a
+  // polite stall into shape #2. `ctx` is optional so a caller that has not adopted it
+  // gets the no-tool branch, which is correct wherever the tool is genuinely absent.
+  if (shape === 'asked-permission') {
+    return permissionRecoveryNudge(lastChance, askUserAdvertised(ctx?.availableToolNames));
+  }
   return (
     // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
     // ("the required tools have not returned results"). The second wording matters —
@@ -279,7 +307,7 @@ export function stallRecoveryNudge(lastChance: boolean, shape?: StallShape | nul
 }
 
 /** The facts a loop knows about the turn it just finished. */
-export interface StalledTurnInput extends HandoffContext {
+export interface StalledTurnInput extends HandoffContext, PermissionMenuContext {
   /** Text the assistant produced this turn. */
   text: string;
   /** Tool calls the assistant made this turn. Non-empty means it acted — never a stall. */
@@ -322,9 +350,13 @@ export function isEmptyTurn(input: StalledTurnInput): boolean {
  * {@link stallRecoveryNudge} and the notices so the correction fits what happened.
  *
  * Ordered by specificity: `handed-off` is checked before `announced` because a closing
- * "Then run the build" satisfies both readings and only one of them is useful.
+ * "Then run the build" satisfies both readings and only one of them is useful. The same
+ * reasoning puts `asked-permission` above `announced`: "I can rebase these if you'd like"
+ * carries a first-person verb that `announcesUntakenAction` will match, and correcting it
+ * as a broken promise ("you said you would call a tool and did not") describes a turn that
+ * did not happen — it promised nothing, it asked.
  */
-export type StallShape = 'empty' | 'handed-off' | 'announced' | 'missing-data';
+export type StallShape = 'empty' | 'handed-off' | 'asked-permission' | 'announced' | 'missing-data';
 
 /**
  * Is this turn a stall at all — tools were offered, none were called, and the model
@@ -338,6 +370,7 @@ export function stallShape(input: StalledTurnInput): StallShape | null {
   if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
   if (isEmptyTurn(input)) return 'empty';
   if (delegatesExecutableWork(input.text, input)) return 'handed-off';
+  if (asksPermissionForRequestedWork(input.text, input)) return 'asked-permission';
   if (announcesUntakenAction(input.text)) return 'announced';
   if (claimsMissingToolData(input.text)) return 'missing-data';
   return null;
@@ -401,6 +434,8 @@ function whatItDid(shape: StallShape): string {
       return `returned an empty turn — no tool call and no words — ${rounds}`;
     case 'handed-off':
       return `handed the remaining work back to you as commands to run yourself, ${rounds}, rather than running them with the tools it holds`;
+    case 'asked-permission':
+      return `asked your permission to carry out work you had already asked for, ${rounds}, rather than carrying it out`;
     case 'missing-data':
       return `reported that tool results were missing without ever calling a tool, ${rounds}`;
     default:
@@ -415,6 +450,8 @@ function whatYouGot(shape: StallShape): string {
       return 'there is no answer above to show you.';
     case 'handed-off':
       return 'the steps above are still yours to run — treat the change as UNVERIFIED.';
+    case 'asked-permission':
+      return 'the work you asked for has NOT been started — the answer above is an offer to start it.';
     default:
       return 'the answer above is only a description of intended actions.';
   }
@@ -662,3 +699,16 @@ export {
   EXECUTION_TOOLS,
   type HandoffContext,
 } from './handoff.js';
+
+// The PERMISSION-MENU shape — the turn that ends by asking whether to do the work it was
+// asked to do. Its own module for the same reason as the two above, and re-exported so
+// consumers keep one import; `stallShape` folds it into the shared gate.
+export {
+  offersMenuInsteadOfActing,
+  pausesOnUsersOwnChoice,
+  asksPermissionForRequestedWork,
+  permissionRecoveryNudge,
+  askUserAdvertised,
+  ASK_USER_TOOL_NAME,
+  type PermissionMenuContext,
+} from './permissionMenu.js';

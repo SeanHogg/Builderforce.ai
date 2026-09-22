@@ -372,8 +372,9 @@ export {
   chatModeDirective,
   chatConversationDirective,
   chatWorkDirective,
+  chatRosterFromParticipants,
 } from './chatMode';
-export type { ChatMode } from './chatMode';
+export type { ChatMode, ChatRosterAgent, ChatWorkDirectiveOptions } from './chatMode';
 
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
@@ -538,7 +539,7 @@ export {
   TOOL_ROUTER_INVOKE,
   type ToolCatalogMatch,
 } from './toolRouter';
-export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter, AllowanceState } from './chatDiagnostics';
+export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter, ChatDiagnosticsRun, ChatDiagnosticsRuns, AllowanceState } from './chatDiagnostics';
 export type { ChatDiagnosticsSources, ChatDiagnosticsPlanSnapshot, ChatDiagnosticsModelSurface, ChatDiagnosticsEvermindHead, ChatDiagnosticsMessageLike } from './gatherChatDiagnostics';
 // WHERE a linked work item opens — the ONE routing table shared by the web host's
 // `router.push` and the VS Code host's external-URL open, so "Open" cannot mean two

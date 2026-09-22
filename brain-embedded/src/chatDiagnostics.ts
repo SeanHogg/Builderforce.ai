@@ -16,6 +16,38 @@
  * and calls this ONE renderer, so the copied report is identical on web and in VS Code.
  */
 
+/**
+ * One execution started against a ticket this chat links. Mirrors the API's
+ * `ChatRunRecord` (`application/brain/chatRunHistory.ts`) — kept structural here so the
+ * serializer stays pure and host-agnostic, exactly like every other field it renders.
+ */
+export interface ChatDiagnosticsRun {
+  executionId: number;
+  taskId: number;
+  taskTitle?: string | null;
+  agentRef?: string | null;
+  agentName?: string | null;
+  status: string;
+  /** `user:<id>` | `system:lane-auto` | `system:coordinator` | … — WHICH pathway started it. */
+  submittedBy: string;
+  source?: string;
+  /** Did the finished run leave a commit / PR / merge / lane move behind? Null = not judged. */
+  produced?: boolean | null;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+}
+
+/** The chat's execution history, as gathered. */
+export interface ChatDiagnosticsRuns {
+  /** How many runnable tickets this chat links — the denominator for "nothing ran". */
+  linkedRunnableTickets: number;
+  runs: ChatDiagnosticsRun[];
+  /** Distinct `submittedBy` labels across those runs. */
+  dispatchers: string[];
+}
+
 /** The project Evermind head/activity snapshot, as the panel reads it. */
 export interface ChatDiagnosticsEvermind {
   version: number;
@@ -147,7 +179,30 @@ export interface ChatDiagnosticsData {
   evermind?: ChatDiagnosticsEvermind | null;
   /** The server learn-gate outcome for the most recent assistant turn, if known. */
   lastLearn?: { learned: boolean; version: number; reason?: string | null } | null;
-  agents?: Array<{ agentRef: string; role: string }>;
+  /**
+   * The agents invited into this chat.
+   *
+   * `name` is optional only because a client can be talking to an API that predates it;
+   * where it is present it is what gets printed. It used to be absent entirely, and the
+   * report rendered the raw `agentRef` — so a chat staffed with Bob, John and the
+   * Manager copied out as three uuids, and the one question the line exists to answer
+   * ("who is on this?") could not be answered from the report at all.
+   */
+  agents?: Array<{ agentRef: string; role: string; name?: string; builtinKind?: string | null }>;
+  /**
+   * What has actually RUN for this chat — the pathway half of the report.
+   *
+   * Invited agents and linked tickets describe INTENT; this describes EXECUTION, and
+   * the gap between them is the single most common thing a reader is trying to see. A
+   * chat with agents, tickets and no runs has a staffing failure; the same chat with
+   * runs that all failed has a runtime one; the same chat with runs started by
+   * `system:lane-auto` was never driven from the conversation. None of those were
+   * distinguishable before this section existed.
+   *
+   * Absent means NOT GATHERED (an older surface, a failed read) and is reported as such
+   * — never as "nothing ran", which is a different and much stronger claim.
+   */
+  runs?: ChatDiagnosticsRuns | null;
   tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>;
   /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
   account?: ChatDiagnosticsAccount | null;
@@ -317,8 +372,41 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
       `⚠️ Last turn's learn step evaluated v${d.lastLearn.version} but the chat's project head is v${ev.version} — BEHIND it. A queued learn only moves a head forward, so the learn step and the panel are resolving DIFFERENT projects/heads.`,
     );
   }
-  if ((d.agents?.length ?? 0) === 0) {
+  const agentCount = d.agents?.length ?? 0;
+  if (agentCount === 0) {
     out.push('ℹ️ No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.');
+  }
+
+  // THE STAFFING GAP. Agents were invited, tickets were linked, and nothing ever ran —
+  // which from inside the transcript is indistinguishable from a chat whose agents are
+  // working on it. This is the signal that makes chat #103 legible on the first read:
+  // three agents present, seven tickets linked, every code change made by the local
+  // session, and no line anywhere saying so.
+  const runs = d.runs;
+  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
+    const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(', ');
+    out.push(
+      `⚠️ ${agentCount} agent(s) are in this chat (${names}) and ZERO runs have ever been started against its ${runs.linkedRunnableTickets} runnable ticket(s).`
+        + ' The work was filed and staffed on paper; nobody was dispatched. Anything that got done was done by this session itself.'
+        + ' Start one with the ▶ control on a linked ticket, or ask in-chat for the agent to be dispatched.',
+    );
+  }
+  // Runs exist but none came from a person in this conversation — the work is moving,
+  // just not because anyone asked here. Worth saying, because "it is running" and "it is
+  // running for an unrelated reason" lead to different next actions.
+  if (runs && runs.runs.length > 0 && !runs.dispatchers.some((dsp) => dsp.startsWith('user:'))) {
+    out.push(
+      `ℹ️ Every run on this chat's tickets was started by ${runs.dispatchers.join(', ')} — none by a person pressing Run. This conversation has not dispatched anything itself.`,
+    );
+  }
+  // Completed runs that left nothing behind. The status says success; `produced` says
+  // the branch, the PR and the lane are all untouched. Counting only FAILED runs is how
+  // a board reached thousands of green executions against three finished tickets.
+  const hollow = (runs?.runs ?? []).filter((r) => r.produced === false && r.status === 'completed');
+  if (hollow.length > 0) {
+    out.push(
+      `⚠️ ${hollow.length} run(s) on this chat COMPLETED without producing anything — no commit, PR, merge or lane move (runs ${hollow.slice(0, 5).map((r) => `#${r.executionId}`).join(', ')}). A green run that shipped nothing is not progress; read those runs' output before dispatching the same work again.`,
+    );
   }
 
   // Tool availability outranks most other causes: with no tools the model CANNOT
@@ -380,6 +468,83 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
     if ((acct.byoProviders?.length ?? 0) === 0 && free) {
       out.push('ℹ️ No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.');
     }
+  }
+  return out;
+}
+
+/** How many runs the report prints in full before it summarises the rest. */
+const MAX_RUNS_LISTED = 10;
+
+/**
+ * Plain-English gloss for a `submitted_by` label — WHICH pathway started a run.
+ *
+ * The raw label is kept beside the gloss, never replaced by it: `system:lane-auto` and
+ * `user:22c5fd96…` are the facts, and a reader who knows the vocabulary should not have
+ * to trust a translation. The gloss is there for the reader who does not.
+ */
+function dispatcherGloss(submittedBy: string): string {
+  if (submittedBy.startsWith('user:')) return 'a human pressed Run';
+  if (submittedBy.startsWith('system:lane-auto')) return 'board autonomy, not this conversation';
+  if (submittedBy.startsWith('system:coordinator')) return "the manager's coordination pass";
+  if (submittedBy.startsWith('manager:')) return 'the manager';
+  if (submittedBy.includes('lane-approver')) return 'a lane approver';
+  return 'unrecognised dispatcher';
+}
+
+/** `2026-09-21T03:45:34.121Z` → `2026-09-21 03:45` — a timestamp a person can scan. */
+function shortTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return iso.length >= 16 ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso;
+}
+
+/**
+ * The EXECUTION HISTORY section: what actually ran for this chat, and who started it.
+ *
+ * Three outcomes, and they are deliberately worded so they cannot be confused:
+ *  - NOT GATHERED   — the surface did not read it. Says so; claims nothing.
+ *  - nothing to run — the chat links no runnable ticket, so an empty history is
+ *                     arithmetic rather than evidence.
+ *  - zero runs      — the chat HAS runnable tickets and none was ever dispatched. This
+ *                     is the finding, and it is the one a report could not state before:
+ *                     the transcript of a chat whose work was done by the local session
+ *                     is indistinguishable from one whose agents are working on it.
+ */
+function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined): string[] {
+  if (!runs) {
+    return ['- Execution history: not gathered (this surface did not read the chat\'s runs — absent is NOT the same as "nothing ran")'];
+  }
+  if (runs.linkedRunnableTickets === 0) {
+    return ['- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run.'];
+  }
+  if (runs.runs.length === 0) {
+    return [
+      `- Execution history: ZERO runs against ${runs.linkedRunnableTickets} linked runnable ticket(s).`
+        + ' No cloud agent has ever been dispatched for this chat — any code that changed was changed by the session itself.',
+    ];
+  }
+  const out: string[] = [];
+  out.push(
+    `- Execution history (${runs.runs.length} run(s) over ${runs.linkedRunnableTickets} linked runnable ticket(s), newest first)`
+      + ` · started by: ${runs.dispatchers.map((dsp) => `${dsp} (${dispatcherGloss(dsp)})`).join(', ')}`,
+  );
+  for (const run of runs.runs.slice(0, MAX_RUNS_LISTED)) {
+    const who = run.agentName?.trim() || run.agentRef || 'no agent recorded';
+    const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ''}`;
+    // `produced` is the run's own verdict on whether it left anything behind. A COMPLETED
+    // run that produced nothing is the failure mode the autonomy breaker exists for, and
+    // it reads as success everywhere that only prints the status.
+    const produced = run.produced === true ? ' · produced output'
+      : run.produced === false ? ' · produced NOTHING'
+      : '';
+    const failed = run.errorMessage ? ` · ${run.errorMessage}` : '';
+    out.push(
+      `  - run #${run.executionId} · ${who} · ${ticket} · ${run.status}${produced}`
+        + ` · by ${run.submittedBy}${run.source ? ` via ${run.source}` : ''}`
+        + ` · ${shortTime(run.createdAt)}${run.completedAt ? ` → ${shortTime(run.completedAt)}` : ''}${failed}`,
+    );
+  }
+  if (runs.runs.length > MAX_RUNS_LISTED) {
+    out.push(`  - …and ${runs.runs.length - MAX_RUNS_LISTED} earlier run(s) not listed.`);
   }
   return out;
 }
@@ -551,8 +716,23 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     lines.push('- Last turn learn gate: unknown (no assistant turn carried a learn outcome)');
   }
 
+  // NAME first, ref in brackets. The ref still has to be here — it is what
+  // `chats.dispatch_agent` takes and what an execution row records — but a report whose
+  // roster line is three uuids cannot tell its reader who is on the work, which was the
+  // whole reason to print the line.
   const agents = d.agents ?? [];
-  lines.push(`- Agents in chat (${agents.length})${agents.length ? ': ' + agents.map((a) => `${a.agentRef} (${a.role})`).join(', ') : ''}`);
+  lines.push(
+    `- Agents in chat (${agents.length})`
+      + (agents.length
+        ? ': ' + agents.map((a) => {
+            const name = a.name?.trim();
+            const kind = a.builtinKind ? `, built-in ${a.builtinKind}` : '';
+            return name && name !== a.agentRef
+              ? `${name} [${a.agentRef}] (${a.role}${kind})`
+              : `${a.agentRef} (${a.role}${kind})`;
+          }).join(', ')
+        : ''),
+  );
 
   const tickets = d.tickets ?? [];
   if (tickets.length) {
@@ -563,6 +743,8 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   } else {
     lines.push('- Linked tickets (0)');
   }
+
+  lines.push(...runHistoryLines(d.runs));
 
   const signals = diagnosticsSignals(d);
   if (signals.length) {

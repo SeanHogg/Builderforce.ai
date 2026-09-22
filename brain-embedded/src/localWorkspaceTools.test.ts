@@ -3,6 +3,7 @@ import {
   isCodeChangeTool,
   isLocalWorkspaceTool,
   isUnscopedMutationTool,
+  isRepoPublishTool,
   canChangeCodeHere,
   canShipHere,
   localToolsIn,
@@ -93,5 +94,19 @@ describe('the local workspace toolset', () => {
     expect(isUnscopedMutationTool('git_push')).toBe(false);
     expect(isUnscopedMutationTool('edit_file')).toBe(false);
     expect(LOCAL_WORKSPACE_TOOLS.has('run_command')).toBe(true);
+  });
+});
+
+describe('isRepoPublishTool', () => {
+  it('names the tools that move platform-visible repository state', () => {
+    for (const t of ['git_commit', 'git_push', 'open_pull_request', 'git_cleanup_merged']) {
+      expect(isRepoPublishTool(t), t).toBe(true);
+    }
+  });
+
+  it('excludes the tools that only OBSERVE the repository', () => {
+    for (const t of ['git_status', 'git_diff', 'git_history', 'read_file', 'search_code']) {
+      expect(isRepoPublishTool(t), t).toBe(false);
+    }
   });
 });

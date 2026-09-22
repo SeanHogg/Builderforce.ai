@@ -22,7 +22,7 @@
  * a webview, a Next.js client component and a Node CLI.
  */
 
-import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter } from './chatDiagnostics';
+import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, type ChatDiagnosticsRuns } from './chatDiagnostics';
 import { toolExposureInTrace, type BrainTraceEvent } from './brainTriage';
 
 /** The `/api/consumption` snapshot, structurally — each host has its own named type
@@ -122,8 +122,16 @@ export interface ChatDiagnosticsSources {
    *  UI surfaces read it from a loaded project list; the headless probe has none).
    *  Wins over the static `projectName` above when it answers. */
   readProjectName?: () => Promise<string | null>;
-  readAgents?: () => Promise<Array<{ agentRef: string; role: string }>>;
+  readAgents?: () => Promise<Array<{ agentRef: string; role: string; name?: string; builtinKind?: string | null }>>;
   readTickets?: () => Promise<Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>>;
+  /**
+   * The chat's EXECUTION HISTORY — what actually ran, and who started it.
+   *
+   * Optional, and its absence is reported as "not gathered" rather than "nothing ran":
+   * those are opposite findings, and a surface that has not adopted the read must not
+   * be able to assert the stronger one by omission.
+   */
+  readRuns?: () => Promise<ChatDiagnosticsRuns | null>;
   readEvermind?: () => Promise<ChatDiagnosticsEvermindHead | null>;
   readPlan?: () => Promise<ChatDiagnosticsPlanSnapshot | null>;
   /** Resolve the deployed API version — bounded + session-cached by
@@ -162,10 +170,11 @@ function toEvermind(head: ChatDiagnosticsEvermindHead | null): ChatDiagnosticsEv
  * only ever produce a worse report.
  */
 export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promise<ChatDiagnosticsData> {
-  const [projectName, agents, tickets, head, plan, apiVersion] = await Promise.all([
+  const [projectName, agents, tickets, runs, head, plan, apiVersion] = await Promise.all([
     safely(src.readProjectName, null as string | null),
-    safely(src.readAgents, [] as Array<{ agentRef: string; role: string }>),
+    safely(src.readAgents, [] as Array<{ agentRef: string; role: string; name?: string; builtinKind?: string | null }>),
     safely(src.readTickets, [] as Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>),
+    safely(src.readRuns, null as ChatDiagnosticsRuns | null),
     safely(src.readEvermind, null as ChatDiagnosticsEvermindHead | null),
     safely(src.readPlan, null as ChatDiagnosticsPlanSnapshot | null),
     safely(src.readApiVersion, null as string | null),
@@ -216,7 +225,13 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     userId: src.userId ?? null,
     evermind: toEvermind(head),
     lastLearn,
-    agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
+    agents: agents.map((a) => ({
+      agentRef: a.agentRef,
+      role: a.role,
+      ...(a.name ? { name: a.name } : {}),
+      ...(a.builtinKind != null ? { builtinKind: a.builtinKind } : {}),
+    })),
+    runs,
     tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     tools: src.tools

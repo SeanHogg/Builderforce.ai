@@ -8,6 +8,7 @@ import {
   chatModeDirective,
   chatConversationDirective,
   chatWorkDirective,
+  chatRosterFromParticipants,
 } from './chatMode';
 
 describe('chat mode vocabulary', () => {
@@ -119,6 +120,92 @@ describe('chatModeDirective', () => {
     it('tells the model to read a refusal rather than retry it', () => {
       // The measured turn retried the identical dispatch after a refusal, twice.
       expect(chatWorkDirective(7)).toMatch(/do not retry the same dispatch/i);
+    });
+  });
+
+  /**
+   * Chat #103: three agents (Bob, John, the Manager) were invited into an IDE chat and
+   * the session made every code change itself — staffing summary `1 ticket filed ·
+   * 0 dispatched`, with ZERO dispatch ATTEMPTS. Not a refusal: the model never asked,
+   * because `canEditHere` told it to do the work here and nothing told it there was
+   * anybody to hand it to.
+   *
+   * An invited agent is a human's statement about who owns the work, so it outranks a
+   * rule about what this session is capable of.
+   */
+  describe('a chat that has been STAFFED', () => {
+    const roster = [
+      { ref: 'd02ff7ee-9cf2-4c44-8558-c89104f6278f', name: 'Bob', role: 'participant' },
+      { ref: '658608ba-59ab-4ec3-873d-211a89ea000f', name: 'John' },
+    ];
+
+    it('names the agents AND their refs, so dispatching costs no discovery call', () => {
+      const d = chatWorkDirective(7, { roster });
+      expect(d).toContain('THE AGENTS IN THIS CHAT');
+      expect(d).toContain('Bob');
+      expect(d).toContain('John');
+      // The name is what the model reads; the ref is what dispatch_agent takes. Printing
+      // one without the other leaves it guessing at the argument.
+      expect(d).toContain('d02ff7ee-9cf2-4c44-8558-c89104f6278f');
+      expect(d).toContain('658608ba-59ab-4ec3-873d-211a89ea000f');
+      expect(d).toContain('participant');
+    });
+
+    it('INVERTS the do-it-here ordering when the surface also holds file tools', () => {
+      // This is the chat #103 configuration exactly: an IDE session with the workspace
+      // AND agents in the chat. Before, the do-it-here bullet won unconditionally.
+      const d = chatWorkDirective(7, { canEditHere: true, roster });
+      expect(d).toContain('DISPATCH TO THEM');
+      expect(d).not.toMatch(/DO IT HERE WHEN YOU CAN/);
+      expect(d).toMatch(/not a fallback/i);
+      // The file tools are not taken away — they are re-aimed at what dispatch cannot do.
+      expect(d).toMatch(/keep them for what dispatch cannot cover/i);
+    });
+
+    it('keeps do-it-here for an IDE chat nobody has staffed — the case it was written for', () => {
+      const d = chatWorkDirective(7, { canEditHere: true, roster: [] });
+      expect(d).toMatch(/DO IT HERE WHEN YOU CAN/);
+      expect(d).not.toContain('DISPATCH TO THEM');
+      // And it says WHY, so the rule does not read as a preference for working alone.
+      expect(d).toMatch(/No agent has been invited into this chat/i);
+    });
+
+    it('points the model at what already ran before it claims work is under way', () => {
+      // The transcript records what was SAID about the work. Only the run history records
+      // what executed, and the two are routinely different.
+      expect(chatWorkDirective(7)).toContain('builtin_chats_runs');
+      expect(chatWorkDirective(7)).toMatch(/nothing was ever dispatched/i);
+    });
+  });
+
+  /**
+   * One roster, derived from the participants the composer already renders — so the
+   * agents a user can @-mention are exactly the agents the run is told it may dispatch
+   * to. Two derivations is how those two lists come to disagree.
+   */
+  describe('chatRosterFromParticipants', () => {
+    it('keeps the agents and drops the humans', () => {
+      expect(chatRosterFromParticipants([
+        { kind: 'agent', ref: 'a1', name: 'Bob' },
+        { kind: 'human', ref: 'u1', name: 'Sean' },
+        { kind: 'agent', ref: 'manager-t1', name: 'Manager' },
+      ])).toEqual([
+        { ref: 'a1', name: 'Bob' },
+        { ref: 'manager-t1', name: 'Manager' },
+      ]);
+    });
+
+    it('falls back to the ref rather than rendering a nameless agent', () => {
+      expect(chatRosterFromParticipants([{ kind: 'agent', ref: 'a1', name: '' }]))
+        .toEqual([{ ref: 'a1', name: 'a1' }]);
+    });
+
+    it('treats an unresolved roster as nobody named, not as an empty team', () => {
+      // A host that has not loaded participants yet must not be able to assert there are
+      // no agents — that assertion flips the whole ordering above.
+      expect(chatRosterFromParticipants(undefined)).toEqual([]);
+      expect(chatWorkDirective(7, { canEditHere: true, roster: chatRosterFromParticipants(undefined) }))
+        .toMatch(/DO IT HERE WHEN YOU CAN/);
     });
   });
 

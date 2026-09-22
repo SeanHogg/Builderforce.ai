@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, TicketTag, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
 /**
@@ -1060,6 +1060,48 @@ interface ChatAgentVM {
     id: string;
     agentRef: string;
     role: string;
+    /**
+     * The name a human knows this agent by, resolved server-side.
+     *
+     * Optional only for the wire: a client can be talking to an API that predates it, and
+     * `undefined` there must degrade to the old pool lookup rather than render blank.
+     * Every surface that prints an agent reads this first — before it existed, the
+     * diagnostics report and the Work directive both printed raw uuids because neither
+     * had the browser-side agent pool the picker was cross-referencing.
+     */
+    name?: string;
+    /** `ide_agents.builtin_kind` — 'manager' | 'validator' | … ; null for a user agent. */
+    builtinKind?: string | null;
+}
+/**
+ * One execution started against a ticket this chat links.
+ *
+ * Mirrors the API's `ChatRunRecord`. The field that matters most is `submittedBy`: it
+ * names WHICH pathway started the run (`user:<id>` = a human pressed Run,
+ * `system:lane-auto` = board autonomy, `system:coordinator` = the manager's pass), and
+ * a chat whose runs were all started by autonomy was never actually driven from the
+ * conversation — a distinction no other field can make.
+ */
+interface ChatRunVM {
+    executionId: number;
+    taskId: number;
+    taskTitle: string | null;
+    agentRef: string | null;
+    agentName: string | null;
+    status: string;
+    submittedBy: string;
+    source: string;
+    produced: boolean | null;
+    errorMessage: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    createdAt: string;
+}
+/** What has actually RUN for a chat, and how much there was to run. */
+interface ChatRunHistoryVM {
+    linkedRunnableTickets: number;
+    runs: ChatRunVM[];
+    dispatchers: string[];
 }
 /** A human participant of the chat (shared access / audience, migration 0288). */
 interface ChatMemberVM {
@@ -1123,6 +1165,12 @@ interface ChatTicketsAdapter {
     listTicketChats(kind: TicketKind, ref: string): Promise<LineageVM[]>;
     consolidate(targetChatId: number, sourceChatIds: number[]): Promise<void>;
     listAgents(chatId: number): Promise<ChatAgentVM[]>;
+    /**
+     * Every run started against a ticket this chat links — the half of "is anything
+     * happening?" that the ticket list cannot answer. Read by the diagnostics capture, so
+     * a report can state what EXECUTED rather than only what was filed and who was invited.
+     */
+    listRuns(chatId: number): Promise<ChatRunHistoryVM>;
     inviteAgent(chatId: number, input: {
         agentRef: string;
         agentKind: string;
@@ -1466,9 +1514,9 @@ interface UseTicketAutocompleteOptions {
     /** Setter for the composer text (same one the textarea's onChange calls). */
     setValue: (v: string) => void;
     /** The available tickets to choose from. */
-    tickets: TicketTag[];
+    tickets: ChatTicket[];
     /** Called with the ticket the user picked. */
-    onPick: (t: TicketTag) => void;
+    onPick: (t: ChatTicket) => void;
     labels?: TicketAutocompleteLabels;
     /** Suppress the picker entirely (e.g. while a run is streaming). */
     disabled?: boolean;
@@ -1488,6 +1536,41 @@ interface TicketAutocomplete {
     open: boolean;
 }
 declare function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): TicketAutocomplete;
+
+/**
+ * chatDiagnosticsReads — the chat-scoped half of a diagnostics capture, wired ONCE.
+ *
+ * `gatherChatDiagnostics` is already the one assembler: every surface hands it the same
+ * named readers and it produces the same report. What was NOT shared is how each host
+ * produced those readers. The VS Code webview satisfied them from the chat-tickets REST
+ * adapter; the web Brain panel satisfied the same three endpoints from a SECOND client
+ * (`builderforceApi.listChatAgents` / `listChatTickets`). One assembler, two hand-wired
+ * source sets over identical routes.
+ *
+ * That is not a cosmetic duplication. It is why adding the execution-history read meant
+ * editing two hosts, and it is the shape a field-by-field drift takes: the moment one
+ * host's client returns a field the other's does not, two "identical" reports quietly
+ * describe different things — which is exactly the failure `gatherChatDiagnostics` was
+ * extracted to end, stopped one layer short.
+ *
+ * So the reads live here, over the adapter both surfaces already build. A host keeps
+ * only what genuinely differs between surfaces — its name, its build stamps, its plan
+ * and Evermind readers — and a FOURTH chat-scoped read is added in this file alone.
+ *
+ * `chatId === null` is a real state (a chat that has not been created yet), and every
+ * reader answers it with the empty shape rather than a throw the capture would have to
+ * catch: a report about no chat is still a report.
+ */
+
+/** The reads this module owns — exactly the chat-scoped ones. */
+type ChatDiagnosticsChatReads = Pick<ChatDiagnosticsSources, 'readAgents' | 'readTickets' | 'readRuns'>;
+/** Only the adapter methods these reads use, so a caller can pass a narrower object. */
+type ChatDiagnosticsReadAdapter = Pick<ChatTicketsAdapter, 'listAgents' | 'listTickets' | 'listRuns'>;
+/**
+ * The chat-scoped readers for a diagnostics capture, over the adapter the host already
+ * has. Spread into `gatherChatDiagnostics({ ...chatDiagnosticsReads(adapter, chatId) })`.
+ */
+declare function chatDiagnosticsReads(adapter: ChatDiagnosticsReadAdapter, chatId: number | null): ChatDiagnosticsChatReads;
 
 /**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the
@@ -2611,4 +2694,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, healthRingColor, initialsOf, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatDiagnosticsReads, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, healthRingColor, initialsOf, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete };

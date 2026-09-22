@@ -45,7 +45,7 @@
  */
 
 import { activityTarget, visitTarget, VISIT_QUESTION_SEPARATOR } from './runActivity';
-import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool } from './localWorkspaceTools';
+import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool, isRepoPublishTool } from './localWorkspaceTools';
 import { isReadOnlyShellCommand } from './readOnlyShell';
 import { stableStringify } from './stableStringify';
 
@@ -355,8 +355,13 @@ export class ReadCoverage {
    *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
    *   whole tally on every non-read call is what once let one CSS file be read 14 times
    *   with the advisory firing on neither it nor its component.
-   * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
-   *   a read observes, so they forget nothing.
+   * - A local tool that PUBLISHES work (`git_commit`, `git_push`, `open_pull_request`)
+   *   changes no byte a FILE read would see — but it does change what a PLATFORM read of
+   *   branch / pull-request state returns, so it forgets the platform reads and keeps the
+   *   file reads. See {@link isRepoPublishTool}: without this, a run that surveys the
+   *   board, pushes the branches and surveys again is served its own pre-push answer.
+   * - The remaining local tools (`git_status`, `git_diff`, …) change nothing a read
+   *   observes, so they forget nothing.
    * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
    *   returns (a ticket update changes the ticket list), so target-less platform reads
    *   are forgotten; file reads are not, because a ticket write does not edit source.
@@ -384,7 +389,9 @@ export class ReadCoverage {
       }
       return;
     }
-    if (isLocalWorkspaceTool(tool)) return;
+    // A publish is a local tool that nonetheless moves platform-visible state, so it
+    // falls THROUGH to the platform-forgetting sweep below instead of returning here.
+    if (isLocalWorkspaceTool(tool) && !isRepoPublishTool(tool)) return;
     for (const [key, read] of [...this.exact.entries()]) {
       if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }

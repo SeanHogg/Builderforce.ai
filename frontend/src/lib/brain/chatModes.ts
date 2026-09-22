@@ -24,8 +24,8 @@
  * ids are stable, non-translatable keys.
  */
 
-export { CHAT_MODES, NEW_CHAT_MODE, RESTING_CHAT_MODE, CHAT_MODE_ICON, isChatMode, normalizeChatMode } from '@seanhogg/builderforce-brain-embedded';
-export type { ChatMode } from '@seanhogg/builderforce-brain-embedded';
+export { CHAT_MODES, NEW_CHAT_MODE, RESTING_CHAT_MODE, CHAT_MODE_ICON, isChatMode, normalizeChatMode, chatRosterFromParticipants } from '@seanhogg/builderforce-brain-embedded';
+export type { ChatMode, ChatRosterAgent } from '@seanhogg/builderforce-brain-embedded';
 
 /**
  * A job a user can hand over in Work mode. `id` keys the localized label, hint and

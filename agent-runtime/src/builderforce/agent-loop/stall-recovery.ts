@@ -108,7 +108,7 @@ export function resolveStallOutcome(input: StallDecisionInput): StallOutcome {
     const recoveriesUsed = input.recoveriesUsed + 1;
     return {
       kind: "nudge",
-      nudge: stallRecoveryNudge(recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES, shape),
+      nudge: stallRecoveryNudge(recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES, shape, stallInput),
       recoveriesUsed,
       shape,
     };
@@ -141,7 +141,7 @@ export function resolveStallOutcome(input: StallDecisionInput): StallOutcome {
       notice: modelFailoverNotice(activeRef, next, shape),
       // The incoming model starts with a full stall budget — the outgoing one's failures
       // say nothing about it, and carrying the count over would give it no chance.
-      nudge: stallRecoveryNudge(false, shape),
+      nudge: stallRecoveryNudge(false, shape, stallInput),
       failoversUsed: input.failoversUsed + 1,
       shape,
     };

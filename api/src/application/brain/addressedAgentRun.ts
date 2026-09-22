@@ -27,16 +27,13 @@
  */
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { chatTicketLinks, executions, tasks } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { executions } from '../../infrastructure/database/schema';
+import { linkedRunnableTickets, type LinkedRunnableTicket } from './chatLinkedTickets';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { isTerminalExecutionStatus, parseCloudAgentRef } from '../runtime/cloudDispatch';
 import { isLifecycleManagedTask } from '../kanban/managedExecutionGuard';
 import { advertisedName } from '../llm/toolNaming';
 import { replayRoute, type BuiltinCtx } from '../llm/builtinToolContext';
-
-/** Ticket kinds that can be RUN (the same set `chats.dispatch_agent` accepts). */
-const RUNNABLE_TICKET_KINDS = ['task', 'epic', 'gap'] as const;
 
 export interface AgentRunCandidate {
   id: number;
@@ -47,10 +44,12 @@ export interface AgentRunCandidate {
   createdAt: Date;
 }
 
-export interface LinkedTaskCandidate {
-  id: number;
-  assignedAgentRef: string | null;
-}
+/**
+ * A runnable ticket this chat links. One shape, owned by {@link ./chatLinkedTickets}:
+ * the name is kept because this module's own vocabulary is "task", and two
+ * structurally-identical interfaces is how the query and its consumer drift apart.
+ */
+export type LinkedTaskCandidate = LinkedRunnableTicket;
 
 /** Who ran a run: the stamped column, else the ref pinned on its payload. */
 function runAgentRef(run: AgentRunCandidate): string | undefined {
@@ -107,22 +106,7 @@ export interface AddressedAgentRunDeps {
 
 export function addressedAgentRunDeps(ctx: BuiltinCtx): AddressedAgentRunDeps {
   return {
-    async linkedRunnableTasks(chatId) {
-      const links = await ctx.db
-        .select({ ref: chatTicketLinks.ticketRef })
-        .from(chatTicketLinks)
-        .where(and(
-          eq(chatTicketLinks.tenantId, ctx.tenantId),
-          eq(chatTicketLinks.chatId, chatId),
-          inArray(chatTicketLinks.ticketKind, [...RUNNABLE_TICKET_KINDS]),
-        ));
-      const ids = links.map((l) => Number(l.ref)).filter((n) => Number.isSafeInteger(n) && n > 0);
-      if (ids.length === 0) return [];
-      return ctx.db
-        .select({ id: tasks.id, assignedAgentRef: tasks.assignedAgentRef })
-        .from(tasks)
-        .where(scopedToTenant(tasks, ctx.tenantId, inArray(tasks.id, ids)));
-    },
+    linkedRunnableTasks: (chatId) => linkedRunnableTickets(ctx.db, ctx.tenantId, chatId),
     async runsForTasks(taskIds) {
       if (taskIds.length === 0) return [];
       return ctx.db

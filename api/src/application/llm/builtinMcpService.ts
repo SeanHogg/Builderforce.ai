@@ -61,7 +61,7 @@ import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/
 import { parseJsonObject } from '../../domain/shared/json';
 import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { publicAgentScope } from '../marketplace/publicAgentScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
@@ -88,6 +88,7 @@ import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVe
 import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
+import { readChatRunHistoryForCaller } from '../brain/chatRunHistory';
 import { BrainService } from '../brain/BrainService';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
@@ -229,6 +230,15 @@ const N = { type: 'number' } as const;
 const B = { type: 'boolean' } as const;
 const obj = (properties: Json, required: string[] = []): Json => ({ type: 'object', properties, required });
 const num = (v: unknown): number => Number(v);
+
+/**
+ * The spec lifecycle, read off the COLUMN. `specs.patch` advertises these as its
+ * `status` enum and rejects anything else before the write, so a model can neither guess
+ * a value nor learn about the mistake from a Postgres error wrapped in a 502 — which is
+ * how `"shipped"` (a roadmap status; specs do not have one) reached the database and
+ * killed a turn on VS Code chat #115, 2026-09-20.
+ */
+const SPEC_STATUSES = specStatusEnum.enumValues;
 const str = (v: unknown): string => String(v ?? '');
 /** Coerce an ISO date string arg to a Date for a timestamp column (undefined when absent/invalid). */
 const dt = (v: unknown): Date | undefined => {
@@ -1810,13 +1820,38 @@ const CATALOG: BuiltinTool[] = [
   // specs is segment-scoped (tenant_id + segment_id). specs.get/list/create/delete already exist above.
   {
     tool: 'specs.patch', mutates: true,
-    description: 'Update a spec / PRD (goal/status/prd).',
-    parameters: obj({ id: S, goal: S, status: S, prd: S }, ['id']),
+    // The status values are DECLARED, not described. Left as a bare string this took
+    // whatever the model guessed, handed it to Postgres, and surfaced the rejection as a
+    // 502: `invalid input value for enum spec_status: "shipped"` (VS Code chat #115,
+    // 2026-09-20). "shipped" is a perfectly good ROADMAP status and the model had no way
+    // to know a spec does not have one — the schema never said. `approvals.decide`
+    // directly below has always enumerated its three, and has never failed this way.
+    // Taken from `specStatusEnum` itself rather than retyped, so the schema the model is
+    // shown, the guard in `run` and the column can never disagree: a migration that
+    // changes the enum changes all three at once.
+    description: `Update a spec / PRD (goal/status/prd). status is one of ${SPEC_STATUSES.join(' | ')} — a spec has no "shipped" or "done" state; a spec whose work has landed is \`complete\`.`,
+    parameters: obj(
+      { id: S, goal: S, status: { type: 'string', enum: [...SPEC_STATUSES] }, prd: S },
+      ['id'],
+    ),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.goal != null) patch.goal = str(a.goal);
-      if (a.status != null) patch.status = str(a.status);
+      if (a.status != null) {
+        // Rejected HERE rather than by the column, so the model is told what it may say.
+        // Postgres answers an out-of-range enum with `invalid input value for enum
+        // spec_status: "shipped"` wrapped in a 502 — a message that names the bad value
+        // and not one of the good ones, so a model reading it can only guess again.
+        const status = str(a.status).trim().toLowerCase();
+        if (!SPEC_STATUSES.includes(status as (typeof SPEC_STATUSES)[number])) {
+          throw new Error(
+            `status must be one of ${SPEC_STATUSES.join(' | ')} — got "${str(a.status)}". `
+            + 'A spec has no "shipped" or "done" state; use `complete` for a spec whose work has landed.',
+          );
+        }
+        patch.status = status;
+      }
       if (a.prd != null) patch.prd = str(a.prd);
       const [row] = await ctx.db.update(specs).set(patch).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId), eq(specs.segmentId, seg))).returning();
       if (!row) throw new Error('spec not found');
@@ -1947,7 +1982,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'chats.unlink_ticket', mutates: true, description: 'Remove a chat ↔ ticket link.', parameters: obj({ chatId: N, kind: S, ref: S }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.unlinkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, str(a.kind), str(a.ref)); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.ticket_lineage', mutates: false, description: 'List every Brain chat that references a work item — the lineage (which conversations shaped it, and which SPAWNED it). kind/ref identify the ticket.', parameters: obj({ kind: S, ref: S }, ['kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); return svc.listChatsForTicket(ctx.tenantId, str(a.kind), str(a.ref)); } },
   { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => num(x)) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: num(a.targetChatId), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },
-  { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat, each with the name a human would recognise. These are the people this chat\'s work belongs to — dispatch to them by their agentRef rather than doing their work yourself.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.runs', mutates: false, description: "Every execution started against a ticket this chat links, newest first — the agent that actually RAN it, the run status, whether it produced anything, and `submittedBy`: WHICH pathway started it (`user:<id>` = a human pressed Run, `system:lane-auto` = board autonomy, `system:coordinator` = the manager's pass). Use it to tell 'the work is running' from 'the work was filed and nobody started it' — an empty result on a chat that has agents and linked tickets means nothing was ever dispatched, not that the runtime failed.", parameters: obj({ chatId: N, limit: N }, ['chatId']), run: async (ctx, a) => { const r = await readChatRunHistoryForCaller(ctx.db, ctx.tenantId, num(a.chatId), ctx.userId ?? null, a.limit != null ? num(a.limit) : undefined); if (!r) throw new Error('Chat not found'); return r; } },
   {
     tool: 'chats.post_to_brain', mutates: true,
     description: 'Post a concise progress update, blocker, or final result back into the Brain chat that launched this cloud run. The originating chat is supplied by the runtime and cannot be changed by the agent.',

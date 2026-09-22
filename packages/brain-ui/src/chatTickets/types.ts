@@ -81,6 +81,50 @@ export interface ChatAgentVM {
   id: string;
   agentRef: string;
   role: string;
+  /**
+   * The name a human knows this agent by, resolved server-side.
+   *
+   * Optional only for the wire: a client can be talking to an API that predates it, and
+   * `undefined` there must degrade to the old pool lookup rather than render blank.
+   * Every surface that prints an agent reads this first — before it existed, the
+   * diagnostics report and the Work directive both printed raw uuids because neither
+   * had the browser-side agent pool the picker was cross-referencing.
+   */
+  name?: string;
+  /** `ide_agents.builtin_kind` — 'manager' | 'validator' | … ; null for a user agent. */
+  builtinKind?: string | null;
+}
+
+/**
+ * One execution started against a ticket this chat links.
+ *
+ * Mirrors the API's `ChatRunRecord`. The field that matters most is `submittedBy`: it
+ * names WHICH pathway started the run (`user:<id>` = a human pressed Run,
+ * `system:lane-auto` = board autonomy, `system:coordinator` = the manager's pass), and
+ * a chat whose runs were all started by autonomy was never actually driven from the
+ * conversation — a distinction no other field can make.
+ */
+export interface ChatRunVM {
+  executionId: number;
+  taskId: number;
+  taskTitle: string | null;
+  agentRef: string | null;
+  agentName: string | null;
+  status: string;
+  submittedBy: string;
+  source: string;
+  produced: boolean | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+/** What has actually RUN for a chat, and how much there was to run. */
+export interface ChatRunHistoryVM {
+  linkedRunnableTickets: number;
+  runs: ChatRunVM[];
+  dispatchers: string[];
 }
 
 /** A human participant of the chat (shared access / audience, migration 0288). */
@@ -146,6 +190,12 @@ export interface ChatTicketsAdapter {
   listTicketChats(kind: TicketKind, ref: string): Promise<LineageVM[]>;
   consolidate(targetChatId: number, sourceChatIds: number[]): Promise<void>;
   listAgents(chatId: number): Promise<ChatAgentVM[]>;
+  /**
+   * Every run started against a ticket this chat links — the half of "is anything
+   * happening?" that the ticket list cannot answer. Read by the diagnostics capture, so
+   * a report can state what EXECUTED rather than only what was filed and who was invited.
+   */
+  listRuns(chatId: number): Promise<ChatRunHistoryVM>;
   inviteAgent(chatId: number, input: { agentRef: string; agentKind: string }): Promise<void>;
   removeAgent(chatId: number, assignmentId: string): Promise<void>;
   loadAgentPool(): Promise<AgentOptionVM[]>;

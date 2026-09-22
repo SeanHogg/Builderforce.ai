@@ -23,6 +23,7 @@ import { RUNNABLE_KINDS } from './types';
 import type {
   AgentOptionVM,
   ChatQuestionVM,
+  ChatRunHistoryVM,
   ChatTicketsAdapter,
   LineageVM,
   TicketLinkVM,
@@ -95,6 +96,14 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
         `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
         { method: 'DELETE' },
       ).then(() => undefined),
+
+    listRuns: (chatId) =>
+      req<ChatRunHistoryVM>(`/api/brain/chats/${chatId}/runs`)
+        // A chat with no runnable links, or an API that predates the endpoint, is not a
+        // failure of the capture that reads this — it is "nothing has run", which is the
+        // answer. Degrading to an empty history keeps a diagnostics copy from failing on
+        // the one read whose whole point is to be reassuring when it comes back empty.
+        .catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [] })),
 
     listTicketChats: (kind, ref) =>
       req<{ chats: LineageVM[] }>(

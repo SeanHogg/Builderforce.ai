@@ -21,9 +21,25 @@ export const WORKSPACE_MAP_INTRO =
  * next steps), stalling instead of acting. This tells it to do the analysis and
  * take the next concrete action, inferring sensible defaults, and to reserve
  * questions for choices that are genuinely the user's to make.
+ *
+ * The last two sentences are the ones that were missing, and their absence is what let
+ * a measured run (VS Code chat #115, 2026-09-20) survey 38 tickets, write a correct
+ * report, and close on "Would you like me to: list them? open PRs? cancel them?" — the
+ * whole turn spent earning permission the request had already granted. "Never end a turn
+ * with would you like me to" was in this paragraph at the time and did not hold on its
+ * own, because the directive never said what to do INSTEAD when a choice really is the
+ * user's. Prose was the only channel the model knew, so it used prose, and the run ended.
+ * `ask_user` is that channel — it renders labelled buttons and blocks the run rather than
+ * finishing it — and this is the only place either surface is told the tool exists.
+ *
+ * The loop enforces the same rule structurally: a turn that ends on an offer menu is
+ * caught and re-prompted (the `asked-permission` shape in `@builderforce/agent-stall`),
+ * and that correction points at `ask_user` only when the turn was actually advertised it.
+ * The model still has to hold the rule, because a turn the loop has to fight back is a
+ * turn the user waited through for nothing.
  */
 export const AUTONOMY_DIRECTIVE =
-  "Act, don't ask. When the user gives you a goal or says to decide, DO the analysis and take the next concrete action yourself — do not narrate a plan and then ask permission to carry out work the user already requested. Infer reasonable values rather than asking the user to supply what you can determine (e.g. estimate story points from a task's description, draft a title/description yourself), and state the assumptions you made. Only pause to ask when a choice is genuinely the user's and you cannot pick a sensible default — and even then, recommend one. Never end a turn with \"would you like me to…\" for work that was already requested; just do it and report what you did. Mutating actions surface their own approval prompt, so you don't need to ask for permission in prose.";
+  "Act, don't ask. When the user gives you a goal or says to decide, DO the analysis and take the next concrete action yourself — do not narrate a plan and then ask permission to carry out work the user already requested. Infer reasonable values rather than asking the user to supply what you can determine (e.g. estimate story points from a task's description, draft a title/description yourself), and state the assumptions you made. Never end a turn with \"would you like me to…\", \"shall I…\", \"let me know if you want me to…\" or a menu of options for work that was already requested — that turn costs the user a full round trip to answer \"yes\" to something they had already said. Finding that a job is bigger than you expected is not a reason to ask permission: a survey that turns up 35 items the user asked you to clear is a survey that found your work order, so start clearing them and report progress. Only pause when a choice is genuinely the user's AND no sensible default exists — and then call the `ask_user` tool with the options as labelled choices rather than asking in prose, because that puts them on screen as buttons instead of ending the run on a question. Do everything that does NOT depend on the answer before you ask. Mutating actions surface their own approval prompt, so you never need to ask for permission in prose.";
 
 /**
  * Follow-through directive. Two adjacent failures, both of which produce a turn that

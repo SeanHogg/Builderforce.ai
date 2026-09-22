@@ -1489,7 +1489,7 @@ export class BrainService {
             convo.push({ role: 'assistant', content });
             convo.push({
               role: 'user',
-              content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape),
+              content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape, stallInput),
             });
             return { action: 'continue' };
           }
@@ -1528,7 +1528,7 @@ export class BrainService {
               announcementRecoveries = 0;
               forceToolChoice = stallRecoveryToolChoice(stallInput);
               convo.push({ role: 'assistant', content });
-              convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
+              convo.push({ role: 'user', content: stallRecoveryNudge(false, shape, stallInput) });
               return { action: 'continue' };
             }
             // A blank turn leaves no `content` to lead with, so the notice IS the reply —

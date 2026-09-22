@@ -99,8 +99,10 @@ export {
   CHAT_MODE_ICON,
   isChatMode,
   normalizeChatMode,
+  chatRosterFromParticipants,
   workOptions,
   type ChatMode,
+  type ChatRosterAgent,
   type WorkOptionId,
   type WorkOptionDef,
 } from './chatModes';

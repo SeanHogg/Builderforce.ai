@@ -128,6 +128,40 @@ export const UNSCOPED_MUTATION_TOOLS: ReadonlySet<string> = new Set([
  */
 export const PROJECT_MEMORY_TOOLS: ReadonlySet<string> = new Set(['recall_facts', 'remember_fact']);
 
+/**
+ * Local tools that publish work OUT of the checkout — they change no byte a file read
+ * would see (which is why they are correctly absent from {@link UNSCOPED_MUTATION_TOOLS}),
+ * but they do change what a PLATFORM read of branch and pull-request state returns.
+ *
+ * The distinction did not exist when `readCoverage` was written, and the comment above
+ * still records the assumption it shipped with: "`git_commit` / `git_push` /
+ * `open_pull_request` … move work out of the tree without changing a byte a read would
+ * see." True of `read_file`; false of `tickets.pending_changes` and
+ * `manager.stalled_tickets`, which answer "which ticket branches are ahead of base, and
+ * which have a PR?" by reading exactly the state a push just changed. Without this set, a
+ * run that surveyed the board, pushed thirty branches and surveyed again would be served
+ * the PRE-PUSH answer from the read cache — a stale picture presented as current, which
+ * is worse than the re-read it saved.
+ */
+export const REPO_PUBLISH_TOOLS: ReadonlySet<string> = new Set([
+  'git_commit',
+  'git_push',
+  'open_pull_request',
+  // Cleanup deletes the merged branch locally and on origin, so the branch inventory a
+  // platform read returns is different after it. It is ALSO an unscoped mutation (it
+  // checks out and fast-forwards the base), and that set already clears everything —
+  // listing it here states the second reason rather than relying on the first.
+  'git_cleanup_merged',
+]);
+
+/**
+ * Does this local tool change repository state that a PLATFORM read observes (branches
+ * ahead of base, open pull requests)? See {@link REPO_PUBLISH_TOOLS}.
+ */
+export function isRepoPublishTool(name: string): boolean {
+  return REPO_PUBLISH_TOOLS.has(name);
+}
+
 export function isLocalWorkspaceTool(name: string): boolean {
   return LOCAL_WORKSPACE_TOOLS.has(name);
 }

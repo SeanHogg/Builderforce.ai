@@ -251,6 +251,13 @@ function buildLabels(): Record<string, string> {
     "app.mentionTitle": t("Direct to"),
     "app.mentionAgent": t("Agent"),
     "app.mentionHuman": t("Person"),
+    // The `#`-ticket typeahead beside the `@`-mention one above. These three were the
+    // only composer labels the webview asked for that the host never supplied, so they
+    // fell through to their hardcoded English fallbacks in every locale — invisible,
+    // because a fallback renders exactly like a translation nobody has checked.
+    "app.ticketTagTitle": t("Tag ticket"),
+    "app.ticketTagStatus": t("Status"),
+    "app.ticketTagNoMatches": t("No tickets found"),
     "app.actingAs": t("Acting as"),
     "app.personaTitle": t("Brain agent or persona"),
     "app.defaultBrain": t("Default Brain"),

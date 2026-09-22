@@ -594,5 +594,7 @@
   "Mobile": "Móvil",
   "Web + Mobile": "Web + Móvil",
   "Fine-tune": "Ajuste fino",
-  "Voice": "Voz"
+  "Voice": "Voz",
+  "Tag ticket": "Etiquetar ticket",
+  "No tickets found": "No se encontraron tickets"
 }

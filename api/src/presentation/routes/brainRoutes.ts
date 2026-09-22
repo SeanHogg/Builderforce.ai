@@ -19,6 +19,7 @@ import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/
 import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
+import { readChatRunHistoryForCaller } from '../../application/brain/chatRunHistory';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
@@ -630,6 +631,21 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const result = await svc.listAgents(c.get('tenantId') as number, id, c.get('userId') as string);
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json({ agents: result });
+  });
+
+  // GET /chats/:id/runs — every execution started against a ticket this chat links,
+  // newest first, each naming the agent that ran it AND the dispatcher that started it.
+  // This is the half of "is anything actually happening?" that `/tickets` and `/agents`
+  // could never answer: a chat can show three agents and seven tickets with zero runs
+  // behind them, and from the transcript those look the same.
+  router.get('/chats/:id/runs', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const history = await readChatRunHistoryForCaller(
+      db, c.get('tenantId') as number, id, c.get('userId') as string,
+    );
+    if (!history) return c.json({ error: 'Chat not found' }, 404);
+    return c.json(history);
   });
 
   // POST /chats/:id/agents — invite an agent into this chat. { agentRef, agentKind?, role? }

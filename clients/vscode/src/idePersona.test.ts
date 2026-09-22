@@ -99,3 +99,26 @@ describe("NO_HANDOFF_DIRECTIVE", () => {
     expect(NO_HANDOFF_DIRECTIVE).toMatch(/name that step/i);
   });
 });
+
+describe("AUTONOMY_DIRECTIVE", () => {
+  it("forbids the offer menu that ended a run on a question", () => {
+    // VS Code chat #115 (2026-09-20): the agent surveyed 38 tickets, wrote a correct
+    // report, and closed on "Would you like me to: list them? open PRs? cancel them?" —
+    // for work the user had asked for one message earlier.
+    expect(AUTONOMY_DIRECTIVE).toMatch(/would you like me to/i);
+    expect(AUTONOMY_DIRECTIVE).toMatch(/shall I/i);
+    expect(AUTONOMY_DIRECTIVE).toMatch(/menu of options/i);
+  });
+
+  it("names `ask_user` — the channel that was missing, not just the ban", () => {
+    // Told only "never ask in prose", with no tool named, the model kept using prose.
+    // This is the only place either chat surface learns the tool exists.
+    expect(AUTONOMY_DIRECTIVE).toContain("`ask_user`");
+    expect(ideSystemPromptBase(true)).toContain("`ask_user`");
+    expect(ideSystemPromptBase(false)).toContain("`ask_user`");
+  });
+
+  it("says a big job is a work order, not a reason to check back", () => {
+    expect(AUTONOMY_DIRECTIVE).toMatch(/not a reason to ask permission/i);
+  });
+});

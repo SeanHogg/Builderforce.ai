@@ -5,6 +5,7 @@ import {
   codeChangeFile,
   workItemLinkFromCreate,
   linkedTicketsToAdvance,
+  isReadOnlyPlatformTool,
 } from './chatWorkLinking';
 
 describe('chatWorkLinkingDirective', () => {
@@ -143,5 +144,38 @@ describe('codeChangeFile', () => {
     expect(codeChangeFile({})).toBeNull();
     expect(codeChangeFile(null)).toBeNull();
     expect(codeChangeFile('nope')).toBeNull();
+  });
+});
+
+describe('isReadOnlyPlatformTool · the board-survey reads', () => {
+  it('covers the expensive surveys a run repeats verbatim', () => {
+    // VS Code chat #115 (2026-09-20) called `builtin_tickets_pending_changes` twice with
+    // byte-identical arguments — six seconds and ~19 KB apiece for an answer already in
+    // its context — because none of these three suffixes was in the dedupe set.
+    expect(isReadOnlyPlatformTool('builtin_tickets_pending_changes')).toBe(true);
+    expect(isReadOnlyPlatformTool('builtin_manager_stalled_tickets')).toBe(true);
+    expect(isReadOnlyPlatformTool('builtin_manager_census')).toBe(true);
+  });
+
+  it('still covers the listings it always did', () => {
+    expect(isReadOnlyPlatformTool('builtin_tasks_list')).toBe(true);
+    expect(isReadOnlyPlatformTool('builtin_chats_list_tickets')).toBe(true);
+  });
+
+  it('never claims a WRITE is a read — a stubbed mutation would silently not happen', () => {
+    for (const w of [
+      'builtin_tasks_update',
+      'builtin_tasks_create',
+      'builtin_specs_patch',
+      'builtin_tickets_from_delta',
+      'builtin_chats_link_ticket',
+    ]) {
+      expect(isReadOnlyPlatformTool(w), w).toBe(false);
+    }
+  });
+
+  it('is limited to platform tools — local file tools are the caller’s own set', () => {
+    expect(isReadOnlyPlatformTool('read_file')).toBe(false);
+    expect(isReadOnlyPlatformTool('review_ticket_branches')).toBe(false);
   });
 });

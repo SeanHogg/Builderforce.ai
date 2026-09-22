@@ -29,7 +29,6 @@ import {
   portfolios,
   roadmapItems,
   specs,
-  ideAgents,
   pokerSessions,
   pokerStories,
   retrospectives,
@@ -43,6 +42,7 @@ import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveChatAccess } from './chatAccess';
+import { resolveAgentDisplayName, resolveAgentIdentities } from './agentDisplayNames';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { broadcastBrainChatChanged } from '../../infrastructure/relay/broadcastRoom';
@@ -947,10 +947,33 @@ export class ChatTicketService {
 
   // ── agent invites into a chat (reuse agent_assignments, scope='chat') ──────
 
+  /**
+   * The agents invited into a chat, each carrying the NAME a human would recognise.
+   *
+   * The assignment row holds only `agentRef` (a uuid, or `manager-t<tenant>`), and for a
+   * long time that is all this returned — so the chat's Agents list resolved names by
+   * cross-referencing a separately fetched agent POOL in the browser, and every consumer
+   * that had no pool (the diagnostics report, the Work directive's roster) printed raw
+   * uuids. A support report that says `d02ff7ee-9cf2-… (participant)` cannot tell its
+   * reader that Bob is in the chat, which is the one thing it was asked.
+   *
+   * Names are resolved in ONE batched query ({@link resolveAgentIdentities}) — the pool
+   * fetch this replaces was three HTTP calls, and the naive per-ref select it could have
+   * been is an N+1.
+   */
   async listAgents(tenantId: number, chatId: number, userId: string | null) {
     const chat = await this.ownedChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
-    return this.assignments.list(tenantId, CHAT_SCOPE, String(chatId));
+    const rows = await this.assignments.list(tenantId, CHAT_SCOPE, String(chatId));
+    const identities = await resolveAgentIdentities(this.db, tenantId, rows.map((r) => r.agentRef));
+    return rows.map((row) => {
+      const identity = identities.get(row.agentRef);
+      return {
+        ...row,
+        name: identity?.name ?? row.agentRef,
+        builtinKind: identity?.builtinKind ?? null,
+      };
+    });
   }
 
   async inviteAgent(tenantId: number, chatId: number, userId: string | null, input: { agentKind?: string; agentRef: string; role?: string }) {
@@ -989,12 +1012,7 @@ export class ChatTicketService {
 
   /** Display name for a cloud agent (falls back to the ref when unknown). */
   private async agentDisplayName(tenantId: number, agentRef: string): Promise<string> {
-    const [row] = await this.db
-      .select({ name: ideAgents.name })
-      .from(ideAgents)
-      .where(and(eq(ideAgents.id, agentRef), eq(ideAgents.tenantId, tenantId)))
-      .limit(1);
-    return row?.name ?? agentRef;
+    return resolveAgentDisplayName(this.db, tenantId, agentRef);
   }
 
   /** Append a system-authored assistant line to a chat (dispatch notices + run milestones).

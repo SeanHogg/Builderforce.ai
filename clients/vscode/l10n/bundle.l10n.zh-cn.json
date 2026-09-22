@@ -594,5 +594,7 @@
   "Mobile": "移动端",
   "Web + Mobile": "网页 + 移动端",
   "Fine-tune": "微调",
-  "Voice": "语音"
+  "Voice": "语音",
+  "Tag ticket": "标记工单",
+  "No tickets found": "未找到工单"
 }

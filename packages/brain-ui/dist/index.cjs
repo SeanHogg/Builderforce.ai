@@ -78,6 +78,7 @@ __export(src_exports, {
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
   byoVendorLabel: () => import_builderforce_brain_embedded13.byoVendorLabel,
+  chatDiagnosticsReads: () => chatDiagnosticsReads,
   chatSwitcherLabel: () => chatSwitcherLabel,
   commandOf: () => commandOf,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
@@ -3139,6 +3140,7 @@ function createChatTicketsRestAdapter(opts) {
       `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
       { method: "DELETE" }
     ).then(() => void 0),
+    listRuns: (chatId) => req(`/api/brain/chats/${chatId}/runs`).catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [] })),
     listTicketChats: (kind, ref) => req(
       `/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`
     ).then((r) => r.chats.map((c) => ({
@@ -3267,10 +3269,16 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   }, [adapter, chatId, refreshSignal]);
   return (0, import_react11.useMemo)(
     () => [
+      // The NAME comes off the invited row, which the server resolves in one batched
+      // query. The pool lookup behind it is the legacy path, kept only for a client
+      // talking to an API that predates the named roster: an agent that has since left
+      // the pool (unhired, archived) still has to render as something a human can read,
+      // and a raw uuid in the recipient picker is how a chat's participants became
+      // unreadable in the first place.
       ...invited.map((a) => ({
         kind: "agent",
         ref: a.agentRef,
-        name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef
+        name: a.name || pool.find((p) => p.ref === a.agentRef)?.name || a.agentRef
       })),
       // Active human members are addressable too (kind='human', ref=user id).
       ...members.filter((m) => m.status === "active" && m.userId).map((m) => ({ kind: "human", ref: m.userId, name: m.name }))
@@ -3440,7 +3448,7 @@ function useTicketAutocomplete(opts) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded12.activeHashtagToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded12.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
@@ -3449,7 +3457,7 @@ function useTicketAutocomplete(opts) {
   }, [value, recompute]);
   const choose = (0, import_react14.useCallback)((t) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded12.activeHashtagToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded12.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       const ref = t.key ?? String(t.id);
       let after = value.slice(tk.end);
@@ -3575,6 +3583,19 @@ var POP2 = {
     background: active ? T2.active : "transparent"
   })
 };
+
+// src/chatTickets/chatDiagnosticsReads.ts
+function chatDiagnosticsReads(adapter, chatId) {
+  return {
+    readAgents: () => chatId != null ? adapter.listAgents(chatId) : Promise.resolve([]),
+    readTickets: () => chatId != null ? adapter.listTickets(chatId) : Promise.resolve([]),
+    // WHAT ACTUALLY RAN. The two reads above describe INTENT — who was invited, what was
+    // filed — and a chat can have both while nothing has ever executed. `null` means the
+    // read did not happen, which the report states as "not gathered"; it must never be
+    // confused with an empty history, which is the much stronger claim that nothing ran.
+    readRuns: () => chatId != null ? adapter.listRuns(chatId) : Promise.resolve(null)
+  };
+}
 
 // src/evermind/EvermindConsole.tsx
 var import_react20 = require("react");
@@ -6050,6 +6071,7 @@ function Row2({ item, onAction }) {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  chatDiagnosticsReads,
   chatSwitcherLabel,
   commandOf,
   createChatTicketsRestAdapter,

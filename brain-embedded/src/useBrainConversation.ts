@@ -40,7 +40,7 @@ import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { BrainRunActivity } from './runActivity';
 import { ratedTurnContext } from './turnRating';
 import type { ChatErrorAction } from './chatError';
-import type { ChatMode } from './chatMode';
+import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
   startRun,
   stopRun,
@@ -138,6 +138,14 @@ export interface UseBrainConversationOptions {
    * always-execute behaviour.
    */
   chatMode?: ChatMode;
+  /**
+   * The agents invited into the active chat. The host already holds this roster to
+   * render the recipient picker and the @-mention typeahead; passing it through means
+   * the RUN knows who is in the conversation too, instead of the model having to
+   * discover it. A non-empty roster makes the invited agents the default owners of
+   * work-mode work — see `chatMode.ts`. Omit when the host has not resolved it.
+   */
+  chatRoster?: readonly ChatRosterAgent[];
 }
 
 export interface UseBrainConversation {
@@ -281,6 +289,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     evermind,
     augmentSystemPrompt,
     chatMode,
+    chatRoster,
   } = options;
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
@@ -437,8 +446,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       userTurn,
       projectId,
       chatMode,
+      chatRoster,
     }),
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode],
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
   const send = useCallback(

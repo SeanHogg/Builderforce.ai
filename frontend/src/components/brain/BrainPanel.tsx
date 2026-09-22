@@ -17,7 +17,7 @@ import type { Formatter } from '@/i18n/format';
 import { useFormat } from '@/i18n/useFormat';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import Link from 'next/link';
-import { BrainTimeline, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId, PersonaPicker, RecipientPicker, useRecipientChoice, chatSwitcherLabel } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId, PersonaPicker, RecipientPicker, useRecipientChoice, chatSwitcherLabel, chatDiagnosticsReads, createChatTicketsRestAdapter, useChatParticipants } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import {
   consolidationMarkerContent,
@@ -78,6 +78,7 @@ import {
   isStepMessage,
   getBrainCapability,
   normalizeChatMode,
+  chatRosterFromParticipants,
   useQueuedTurns,
   NEW_CHAT_MODE,
   type ChatMode,
@@ -87,10 +88,9 @@ import {
   type SuggestedAction,
   type BrainModality,
   type BrainEffort,
-  type DirectedRecipient,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, runtimeApi, brain, tasksApi, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, tasksApi, type AgentAssignment, type ProjectRepository, type TicketKind } from '@/lib/builderforceApi';
 import { captureDiagnosticsBlock } from './captureDiagnostics';
 import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
 import { useChatModelOptions, useLlmModels } from '@/lib/useLlmModels';
@@ -107,7 +107,7 @@ import { fetchLimbicBlock } from '@/lib/personalityApi';
 import { accountBrainPreferencesApi } from '@/lib/accountBrainPreferencesApi';
 import { AssigneeProfilesProvider } from '../workforce/AssigneeProfilesContext';
 import AssigneeHovercard from '../workforce/AssigneeHovercard';
-import { faultText } from '@/lib/apiClient';
+import { apiRequest, faultText } from '@/lib/apiClient';
 import { useAssistantGate } from '@/lib/academic/useAssistantGate';
 /**
  * Clock time for a message sent today, calendar date for anything older.
@@ -619,6 +619,29 @@ export function BrainPanel({
     [llmModels],
   );
 
+  const activeChatId = chats.activeChat?.id ?? null;
+
+  /**
+   * The ONE chat-scoped REST client this panel uses — the same factory the VS Code
+   * webview and the tickets panel build. It backs the participant roster AND the
+   * diagnostics capture's chat reads, so both read the endpoints exactly one way.
+   * Its agent-pool fetch is lazy and memoised for the adapter's lifetime.
+   */
+  const ticketAdapter = useMemo(() => createChatTicketsRestAdapter({ request: apiRequest }), []);
+
+  // Multi-party chat: the invited participants of the active chat as addressable
+  // recipients — so a message can be sent to a teammate instead of the BRAIN. Bumped on
+  // invite/remove.
+  //
+  // This used to be ~25 lines of state + effect + memo here, a transcription of the
+  // SHARED `useChatParticipants` the VS Code webview already called. Same two fetches,
+  // same pool cross-reference, same shape out — through a different client, which meant
+  // "who is in this chat" had two implementations that only happened to agree. The hook
+  // now resolves an agent's name from the invited row the server names, so the pool
+  // lookup this copy depended on is not even needed.
+  const [participantsRefresh, setParticipantsRefresh] = useState(0);
+  const participants = useChatParticipants(ticketAdapter, activeChatId, participantsRefresh);
+
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
     modality,
@@ -640,6 +663,12 @@ export function BrainPanel({
     evermind: gatedEvermind,
     augmentSystemPrompt,
     chatMode,
+    // WHO IS IN THIS CHAT. A non-empty roster makes the invited agents the default
+    // owners of work-mode work instead of this session (see `chatMode.ts`) — and names
+    // them in the prompt, so dispatching costs no discovery call. Derived from the
+    // participants the composer already renders, so the agents a user can @-mention are
+    // exactly the agents the run is told it may dispatch to.
+    chatRoster: chatRosterFromParticipants(participants),
   });
 
   const { pendingConfirm, resolveConfirm } = conv;
@@ -756,34 +785,6 @@ export function BrainPanel({
     return subscribeRun(cid, onChange);
   }, [chats.activeChatId]);
 
-  // Multi-party chat: the invited participants of the active chat, resolved to
-  // display names via the (already-loaded, cached) agent pool — so a message can
-  // be addressed to a teammate instead of the BRAIN. Bumped on invite/remove.
-  const activeChatId = chats.activeChat?.id ?? null;
-  const [invitedAgents, setInvitedAgents] = useState<ChatAgentInvite[]>([]);
-  const [chatMembers, setChatMembers] = useState<ChatMemberInfo[]>([]);
-  const [participantsRefresh, setParticipantsRefresh] = useState(0);
-  useEffect(() => {
-    if (activeChatId == null) { setInvitedAgents([]); setChatMembers([]); return; }
-    let live = true;
-    brain.listChatAgents(activeChatId).then((a) => { if (live) setInvitedAgents(a); }).catch(() => { if (live) setInvitedAgents([]); });
-    brain.listChatMembers(activeChatId).then((m) => { if (live) setChatMembers(m); }).catch(() => { if (live) setChatMembers([]); });
-    return () => { live = false; };
-  }, [activeChatId, participantsRefresh]);
-  const participants = useMemo<DirectedRecipient[]>(
-    () => [
-      ...invitedAgents.map((a) => ({
-        kind: 'agent' as const,
-        ref: a.agentRef,
-        name: agentPool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
-      })),
-      // Human members are addressable too (kind='human', ref = user id).
-      ...chatMembers
-        .filter((m) => m.status === 'active' && m.userId)
-        .map((m) => ({ kind: 'human' as const, ref: m.userId as string, name: m.name })),
-    ],
-    [invitedAgents, chatMembers, agentPool],
-  );
   // Who the next message goes to — the shared composer state the editor uses too:
   // reset when switching chats, drops a pick that has since left the roster, and
   // follows a leading @mention when nothing was picked explicitly.
@@ -1116,8 +1117,12 @@ export function BrainPanel({
         // Which build produced this capture — without it, a dump taken just before a
         // deploy is indistinguishable from one taken after.
         uiVersion: APP_VERSION,
-        readAgents: () => (chatId != null ? brain.listChatAgents(chatId) : Promise.resolve([])),
-        readTickets: () => (chatId != null ? brain.listChatTickets(chatId) : Promise.resolve([])),
+        // The chat-scoped reads (agents, tickets, runs) come from ONE shared wiring over
+        // the chat-tickets adapter — the VS Code webview spreads the identical call. This
+        // panel used to satisfy the same endpoints through a SECOND client
+        // (`brain.listChatAgents` / `listChatTickets`), which is how one assembler ended
+        // up with two hand-wired source sets and why a new read had to be added twice.
+        ...chatDiagnosticsReads(ticketAdapter, chatId),
         readEvermind: () => (chatProjectId != null ? getProjectEvermindContributions(chatProjectId) : Promise.resolve(null)),
         // Plan + month-to-date allowance. A free/card-less tenant's report must SAY so
         // rather than read as an unexplained capability failure. Shared cached snapshot
@@ -1143,7 +1148,7 @@ export function BrainPanel({
       });
       return `${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}\n\n${jsonBlock}`;
     });
-  }, [capture, conv, personaLabel, selectedModel, personaModelId, llmModels, toolSpecs, timelineTrace, chatMode, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+  }, [capture, conv, personaLabel, selectedModel, personaModelId, llmModels, toolSpecs, timelineTrace, chatMode, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId, ticketAdapter]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (

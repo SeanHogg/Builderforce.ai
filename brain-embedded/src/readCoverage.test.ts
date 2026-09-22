@@ -194,15 +194,34 @@ describe('ReadCoverage · the exact-repeat guard', () => {
     expect(cov.isRepeat('read_file', { path: CSS })).toBe(true);
   });
 
-  it('a git status / diff / commit changes nothing a read would see, so forgets nothing', () => {
+  it('a git status / diff observes without changing anything, so forgets nothing', () => {
     const cov = new ReadCoverage();
     cov.record('read_file', { path: CSS });
     cov.record('builtin_tasks_list', { projectId: 11 });
-    for (const tool of ['git_status', 'git_diff', 'git_commit', 'git_push', 'open_pull_request']) {
+    for (const tool of ['git_status', 'git_diff', 'git_history']) {
       cov.invalidate(tool, { repo: 'Builderforce.ai' });
     }
     expect(cov.isRepeat('read_file', { path: CSS })).toBe(true);
     expect(cov.isRepeat('builtin_tasks_list', { projectId: 11 })).toBe(true);
+  });
+
+  it('a PUBLISH forgets the platform reads — branch state is exactly what it changed', () => {
+    // `git_commit` / `git_push` / `open_pull_request` touch no byte a FILE read returns,
+    // which is why they are not unscoped mutations. But `tickets.pending_changes` and
+    // `manager.stalled_tickets` answer "which branches are ahead of base, and which have
+    // a PR?" — the very state a push moves. Serving the pre-push answer afterwards from
+    // the dedupe cache would be a stale picture presented as current.
+    for (const tool of ['git_commit', 'git_push', 'open_pull_request', 'git_cleanup_merged']) {
+      const cov = new ReadCoverage();
+      cov.record('read_file', { path: CSS });
+      cov.record('builtin_tickets_pending_changes', { projectId: 11 });
+      cov.invalidate(tool, { repo: 'Builderforce.ai' });
+      expect(cov.isRepeat('builtin_tickets_pending_changes', { projectId: 11 }), tool).toBe(false);
+      // …and keeps the file reads: a push edits no source, so re-reading it buys nothing.
+      // `git_cleanup_merged` is the exception — it is ALSO an unscoped mutation (it checks
+      // out and fast-forwards the base), so it clears everything.
+      expect(cov.isRepeat('read_file', { path: CSS }), tool).toBe(tool !== 'git_cleanup_merged');
+    }
   });
 
   it('a shell command or a tree-rewriting git verb forgets everything', () => {

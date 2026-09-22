@@ -58,7 +58,7 @@ import { createComposingActivity, toolCallArgBytes } from './composingActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
 import { FailureTally, failureReason, repeatedFailureAdvisory } from './repeatedFailure';
 import { trimToolResult } from './toolResultBudget';
-import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
+import { chatModeDirective, normalizeChatMode, type ChatMode, type ChatRosterAgent } from './chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 import {
   shouldRecoverStalledTurn,
@@ -288,6 +288,16 @@ export interface BrainRunRequest {
    * than silently losing their ticket lineage.
    */
   chatMode?: ChatMode;
+  /**
+   * The agents INVITED INTO this chat, which is the platform's record of who the human
+   * wants on this work. Folded into the WORK directive: naming them saves the model a
+   * discovery call it had no reason to spend, and a non-empty roster inverts the
+   * do-it-here ordering so the invited agents get dispatched rather than watched
+   * (see `chatMode.ts`). Absent or empty leaves the prior behaviour exactly as it was —
+   * a host that does not know the roster must not accidentally assert there is none, so
+   * an UNRESOLVED roster and an EMPTY one are both simply "nobody named here".
+   */
+  chatRoster?: readonly ChatRosterAgent[];
   /**
    * Report a settled code-changing run's outcome to learned routing (the host POSTs it
    * to `/llm/v1/run-outcome`). Omit and nothing is reported. Best-effort: a rejection is
@@ -1626,7 +1636,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // capability separately — and a host that gains or loses the file tools stays
   // consistent with the post-run backstop, which reads the same set.
   const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent') })}\n\n${turnOptimizationDirective()}`;
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), roster: req.chatRoster })}\n\n${turnOptimizationDirective()}`;
   // A session that can commit AND push holds the only copy of its change — nobody else
   // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
   // Rides both modes: it only binds a turn that changes code.
@@ -2134,7 +2144,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // One recovery turn: force a structured call so Grok cannot answer the nudge
         // with another prose promise. Cleared after the next complete().
         forceToolChoice = stallRecoveryToolChoice(stallInput);
-        await requeueWithNudge(stallRecoveryNudge(lastChance, shape));
+        // `stallInput` rides along as the nudge's context: the PERMISSION-MENU correction
+        // only points at `ask_user` when this turn was actually offered it (see
+        // `permissionMenu.ts`) — telling a model to call a tool it was never advertised
+        // just turns one stall shape into another.
+        await requeueWithNudge(stallRecoveryNudge(lastChance, shape, stallInput));
         // Durable: "the loop caught this and re-prompted" is a fact a triage report must
         // still carry after a reload. Live-only, a reopened chat showed nine narrating
         // turns and no sign the loop had ever fought back. The SHAPE rides along, because
@@ -2216,7 +2230,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           // nothing about this one, and carrying the count over would give it no chance.
           announcementRecoveries = 0;
           forceToolChoice = stallRecoveryToolChoice(stallInput);
-          convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
+          convo.push({ role: 'user', content: stallRecoveryNudge(false, shape, stallInput) });
           c.streamingText = '';
           emit(c);
           return { action: 'continue' };

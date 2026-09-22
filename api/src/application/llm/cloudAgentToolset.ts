@@ -177,6 +177,11 @@ export const CHAT_SCOPED_AGENT_TOOLS: readonly string[] = [
   // Why the LAST run on this chat did not finish. Read-only, and the whole point is
   // that it is consulted BEFORE the failed attempt is repeated.
   'chats.diagnostics',
+  // What has already RUN on this chat's tickets, and who started it. An addressed agent
+  // asked "have you started?" was answering from the transcript, which records what was
+  // said about the work and not what executed — so a chat whose tickets had never been
+  // dispatched read exactly like one whose runs were in flight.
+  'chats.runs',
   // The addressed agent's hands. This reply runs on the Worker with no working tree;
   // the agent's clone, shell and git live in its RUNTIME. This is how an instruction
   // that needs them ("merge and push", "run the tests") reaches that runtime — it

@@ -9,10 +9,10 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  activeHashtagToken,
+  activeTicketToken,
   filterTicketCandidates,
-  type TicketTag,
-  type MentionToken,
+  type ChatTicket as TicketTag,
+  type TicketToken as MentionToken,
 } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TicketAutocompleteLabels {
@@ -70,7 +70,7 @@ export function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): Ticke
   const recompute = useCallback(() => {
     const el = textareaRef.current;
     if (!el || disabled || tickets.length === 0) { setToken(null); return; }
-    const next = activeHashtagToken(el.value, el.selectionStart ?? el.value.length);
+    const next = activeTicketToken(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
@@ -80,7 +80,7 @@ export function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): Ticke
 
   const choose = useCallback((t: TicketTag) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? activeHashtagToken(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? activeTicketToken(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       // Replace "#query" with "#key" (e.g., "#ABC-123") or "#id" (e.g., "#123")
       const ref = t.key ?? String(t.id);

@@ -1956,14 +1956,26 @@ function normalizeChatMode(value) {
 function chatConversationDirective() {
   return "MODE: CHAT. This conversation is a conversation. Your job is to understand the question and answer it.\n\u2022 Read, search, inspect and reason as much as the question needs \u2014 every read-only tool is available to you and using them is encouraged. Ground the answer in what you actually looked up.\n\u2022 Do NOT create, staff, re-status, or dispatch board work as a side effect of answering. Identifying that something ought to be done is part of a good answer; opening a ticket about it is not.\n\u2022 If the work plainly ought to be tracked, END the answer with one short line naming it and telling the user they can switch this conversation to Work mode to have it opened and run. Offer it once; do not repeat the offer on later turns.\n\u2022 The single exception: if the user explicitly asks you to create, assign, schedule or run something in THIS message, do it. An explicit instruction outranks the mode.";
 }
+function chatRosterFromParticipants(participants) {
+  return (participants ?? []).filter((p) => p.kind === "agent" && p.ref).map((p) => ({ ref: p.ref, name: p.name || p.ref }));
+}
+function describeRoster(roster) {
+  return roster.map((a) => `${a.name} (agentRef ${a.ref}${a.role ? `, ${a.role}` : ""})`).join("; ");
+}
 function chatWorkDirective(chatId, opts) {
   const throughThem = opts?.canDelegate ? " When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns." : "";
-  const doItHere = opts?.canEditHere ? `\u2022 DO IT HERE WHEN YOU CAN. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.
+  const roster = opts?.roster ?? [];
+  const staffed = roster.length > 0;
+  const whoIsHere = staffed ? `\u2022 THE AGENTS IN THIS CHAT are ${describeRoster(roster)}. A human put them here: that is this platform's way of saying these are the people this work belongs to.
+` : "";
+  const ordering = staffed ? `\u2022 DISPATCH TO THEM. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work: assign the ticket and start the run with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the ref above>, taskId=<the ticket>), then say who picked it up. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation, and a session that quietly does its agents' work leaves them idle and leaves the user unable to see who did what.${opts?.canEditHere ? " You DO hold the workspace file tools; keep them for what dispatch cannot cover \u2014 reading and locating the code so the directive you hand an agent is specific, checking what a run came back with, and an edit the user asks YOU for in this message." : ""}
+` : opts?.canEditHere ? `\u2022 DO IT HERE WHEN YOU CAN. No agent has been invited into this chat, so there is nobody to hand it to. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.
 ` : "";
   return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.
 ${chatWorkLinkingDirective(chatId)}
-` + doItHere + `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
+` + whoIsHere + ordering + `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? "one of the agents above, or " : ""}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
 \u2022 STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. When you file tickets, assign and dispatch the agent whose role fits each one \u2014 never leave a ticket with no agent on it.${throughThem}
+\u2022 builtin_chats_runs (chatId=${chatId}) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.
 \u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason, do not retry the same dispatch hoping for a different answer, and if the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
 }
 function chatModeDirective(mode, chatId, opts) {
@@ -2664,6 +2676,74 @@ function handoffRecoveryNudge(lastChance) {
   return "Your last turn ended by telling the USER to run commands. You are the one holding the tools \u2014 `run_command` for shell steps, the git tools to commit and push \u2014 so those steps are yours, not theirs. Carry them out NOW in this turn: run the commands you just listed, read their output, and fix anything that fails before you answer. Verification you hand to the user is verification nobody does. Only leave a step to the user when you genuinely cannot do it here \u2014 it needs a credential, a browser, or a decision that is theirs \u2014 and then say which step and why." + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either run the commands now or state plainly, at the top of your reply, that the change is UNVERIFIED and exactly which steps were never run." : "");
 }
 
+// ../packages/agent-stall/src/permissionMenu.ts
+var TAIL_CHARS2 = 900;
+var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
+var OFFER = new RegExp(
+  [
+    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
+    // · "Would you like me to proceed?"
+    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
+    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
+    // · "May I go ahead?"
+    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
+    // "Want me to push these?" — the subjectless form.
+    `\\bwant\\s+(?:me|us)\\s+to\\b`,
+    // "Let me know if you'd like me to…" · "Let me know which of these to do"
+    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what)\\b`,
+    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
+    `\\bsay the word\\b`,
+    // "I can open the PRs if you'd like." · "I could cancel them if you want."
+    // · "I'm happy to merge these if that's what you want."
+    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
+    // "Confirm and I'll proceed." · "Approve and I'll merge them."
+    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
+    // "Which would you like me to do first?" · "Which of these should I start with?"
+    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
+    // "Your call." · "Up to you." · "Let me know how you'd like to proceed."
+    `\\b(?:your call|up to you|it'?s your call|how (?:would|do) you (?:want|like) (?:me )?to proceed)\\b`
+  ].join("|"),
+  "gi"
+);
+var WINDOW_AFTER2 = 400;
+var WINDOW_BEFORE2 = 120;
+var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
+var USERS_OWN_CHOICE = /\b(?:did you mean|do you mean|what did you (?:mean|intend)|which did you mean|prefer(?:ence|red)?\b|intended behaviou?r|by design|is that (?:right|correct|intended|what you)|am i (?:right|correct) (?:that|in)|credential|password|api ?key|secret|which account|whose|budget|deadline|priorit(?:y|ise|ize))\b/i;
+function offersMenuInsteadOfActing(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  const scanned = t.slice(-TAIL_CHARS2);
+  OFFER.lastIndex = 0;
+  for (let m = OFFER.exec(scanned); m; m = OFFER.exec(scanned)) {
+    const window2 = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE2),
+      m.index + m[0].length + WINDOW_AFTER2
+    );
+    if (!ACTION_NEARBY.test(window2)) continue;
+    OFFER.lastIndex = 0;
+    return true;
+  }
+  return false;
+}
+function pausesOnUsersOwnChoice(text) {
+  return USERS_OWN_CHOICE.test((text ?? "").slice(-TAIL_CHARS2));
+}
+var ASK_USER_TOOL_NAME = "ask_user";
+function canAskUser(toolNames) {
+  return (toolNames ?? []).some((n) => n.toLowerCase() === ASK_USER_TOOL_NAME);
+}
+function asksPermissionForRequestedWork(text, ctx) {
+  if (!asksForChange(ctx.requestText)) return false;
+  if (!offersMenuInsteadOfActing(text)) return false;
+  if (pausesOnUsersOwnChoice(text) && !canAskUser(ctx.availableToolNames)) return false;
+  return true;
+}
+function permissionRecoveryNudge(lastChance, askUserAvailable = false) {
+  const askBranch = askUserAvailable ? ` If some part of it genuinely IS the user's decision \u2014 two defensible options with no sensible default, something only they know \u2014 call \`${ASK_USER_TOOL_NAME}\` with the options as labelled choices instead of listing them in prose. That puts them on screen as buttons; a question in prose ends the run and costs a full round trip to answer. Do the parts that are NOT in question first, then ask about the rest.` : ` If some part of it genuinely IS the user's decision, say which single question you need answered, state which option you recommend and why, and carry out everything that does NOT depend on the answer before you stop.`;
+  return "Your last turn ended by asking the user whether to do work they had ALREADY asked for. You hold the tools to do it, so the answer is yes and it is yours to carry out: pick the sensible default for anything you offered as an option, and DO IT NOW in this turn. Report what you did afterwards \u2014 do not re-state the offer." + askBranch + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either start the work now or state plainly, at the top of your reply, exactly what you did NOT do and the one decision you are blocked on." : "");
+}
+
 // ../packages/agent-stall/src/index.ts
 var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
 var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
@@ -2698,11 +2778,11 @@ var ANNOUNCED_ACTION = new RegExp(
   ].join("|"),
   "i"
 );
-var TAIL_CHARS2 = 240;
+var TAIL_CHARS3 = 240;
 function announcesUntakenAction(text) {
   const t = text.trim();
   if (!t) return false;
-  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS2));
+  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS3));
 }
 var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
 var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
@@ -2740,8 +2820,11 @@ function claimsMissingToolData(text) {
   return UNCALLED_TOOL_CLAIM.test(t);
 }
 var MAX_ANNOUNCEMENT_RECOVERIES = 3;
-function stallRecoveryNudge(lastChance, shape) {
+function stallRecoveryNudge(lastChance, shape, ctx) {
   if (shape === "handed-off") return handoffRecoveryNudge(lastChance);
+  if (shape === "asked-permission") {
+    return permissionRecoveryNudge(lastChance, canAskUser(ctx?.availableToolNames));
+  }
   return (
     // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
     // ("the required tools have not returned results"). The second wording matters —
@@ -2757,6 +2840,7 @@ function stallShape(input) {
   if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
   if (isEmptyTurn(input)) return "empty";
   if (delegatesExecutableWork(input.text, input)) return "handed-off";
+  if (asksPermissionForRequestedWork(input.text, input)) return "asked-permission";
   if (announcesUntakenAction(input.text)) return "announced";
   if (claimsMissingToolData(input.text)) return "missing-data";
   return null;
@@ -2782,6 +2866,8 @@ function whatItDid(shape) {
       return `returned an empty turn \u2014 no tool call and no words \u2014 ${rounds}`;
     case "handed-off":
       return `handed the remaining work back to you as commands to run yourself, ${rounds}, rather than running them with the tools it holds`;
+    case "asked-permission":
+      return `asked your permission to carry out work you had already asked for, ${rounds}, rather than carrying it out`;
     case "missing-data":
       return `reported that tool results were missing without ever calling a tool, ${rounds}`;
     default:
@@ -2794,6 +2880,8 @@ function whatYouGot(shape) {
       return "there is no answer above to show you.";
     case "handed-off":
       return "the steps above are still yours to run \u2014 treat the change as UNVERIFIED.";
+    case "asked-permission":
+      return "the work you asked for has NOT been started \u2014 the answer above is an offer to start it.";
     default:
       return "the answer above is only a description of intended actions.";
   }
@@ -7132,8 +7220,8 @@ function canonicalTurnText(text) {
 async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC] : toolSpecs;
+  const canAskUser2 = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const catalog = canAskUser2 ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const brokenModels = /* @__PURE__ */ new Set();
@@ -7224,7 +7312,7 @@ ${extra}`;
   const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}
 
-${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent") })}
+${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), roster: req.chatRoster })}
 
 ${turnOptimizationDirective()}`;
   const canShip = canShipHere(catalogToolNames);
@@ -7279,7 +7367,7 @@ ${continuationDirective()}`;
     // Asking the user is never off-topic: it is how the run stops when it cannot
     // proceed, so relevance against the request must not be what decides whether the
     // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
-    ...canAskUser ? [ASK_USER_TOOL] : []
+    ...canAskUser2 ? [ASK_USER_TOOL] : []
   ];
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
@@ -7540,7 +7628,7 @@ ${revisit}` : covered.note;
         announcementRecoveries += 1;
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
         forceToolChoice = stallRecoveryToolChoice(stallInput);
-        await requeueWithNudge(stallRecoveryNudge(lastChance, shape));
+        await requeueWithNudge(stallRecoveryNudge(lastChance, shape, stallInput));
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "message",
@@ -7593,7 +7681,7 @@ ${revisit}` : covered.note;
           activeModel = next;
           announcementRecoveries = 0;
           forceToolChoice = stallRecoveryToolChoice(stallInput);
-          convo.push({ role: "user", content: stallRecoveryNudge(false, shape) });
+          convo.push({ role: "user", content: stallRecoveryNudge(false, shape, stallInput) });
           c.streamingText = "";
           emit(c);
           return { action: "continue" };
@@ -8024,7 +8112,8 @@ function useBrainConversation(options) {
     onFirstUserTurn,
     evermind,
     augmentSystemPrompt,
-    chatMode
+    chatMode,
+    chatRoster
   } = options;
   const [messages, setMessages] = useState6([]);
   const [loadingMessages, setLoadingMessages] = useState6(false);
@@ -8131,9 +8220,10 @@ ${extraSystem}` : resolvedSystemPrompt;
       priorResearch,
       userTurn,
       projectId,
-      chatMode
+      chatMode,
+      chatRoster
     }),
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode]
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const send = useCallback5(
     async (text, opts) => {
@@ -9093,8 +9183,27 @@ function diagnosticsSignals(d) {
       `\u26A0\uFE0F Last turn's learn step evaluated v${d.lastLearn.version} but the chat's project head is v${ev.version} \u2014 BEHIND it. A queued learn only moves a head forward, so the learn step and the panel are resolving DIFFERENT projects/heads.`
     );
   }
-  if ((d.agents?.length ?? 0) === 0) {
+  const agentCount = d.agents?.length ?? 0;
+  if (agentCount === 0) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
+  }
+  const runs = d.runs;
+  if (runs && agentCount > 0 && runs.linkedRunnableTickets > 0 && runs.runs.length === 0) {
+    const names = (d.agents ?? []).map((a) => a.name?.trim() || a.agentRef).join(", ");
+    out.push(
+      `\u26A0\uFE0F ${agentCount} agent(s) are in this chat (${names}) and ZERO runs have ever been started against its ${runs.linkedRunnableTickets} runnable ticket(s). The work was filed and staffed on paper; nobody was dispatched. Anything that got done was done by this session itself. Start one with the \u25B6 control on a linked ticket, or ask in-chat for the agent to be dispatched.`
+    );
+  }
+  if (runs && runs.runs.length > 0 && !runs.dispatchers.some((dsp) => dsp.startsWith("user:"))) {
+    out.push(
+      `\u2139\uFE0F Every run on this chat's tickets was started by ${runs.dispatchers.join(", ")} \u2014 none by a person pressing Run. This conversation has not dispatched anything itself.`
+    );
+  }
+  const hollow = (runs?.runs ?? []).filter((r) => r.produced === false && r.status === "completed");
+  if (hollow.length > 0) {
+    out.push(
+      `\u26A0\uFE0F ${hollow.length} run(s) on this chat COMPLETED without producing anything \u2014 no commit, PR, merge or lane move (runs ${hollow.slice(0, 5).map((r) => `#${r.executionId}`).join(", ")}). A green run that shipped nothing is not progress; read those runs' output before dispatching the same work again.`
+    );
   }
   const tools = d.tools;
   if (tools && !tools.loading) {
@@ -9145,6 +9254,49 @@ function diagnosticsSignals(d) {
     if ((acct.byoProviders?.length ?? 0) === 0 && free) {
       out.push("\u2139\uFE0F No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.");
     }
+  }
+  return out;
+}
+var MAX_RUNS_LISTED = 10;
+function dispatcherGloss(submittedBy) {
+  if (submittedBy.startsWith("user:")) return "a human pressed Run";
+  if (submittedBy.startsWith("system:lane-auto")) return "board autonomy, not this conversation";
+  if (submittedBy.startsWith("system:coordinator")) return "the manager's coordination pass";
+  if (submittedBy.startsWith("manager:")) return "the manager";
+  if (submittedBy.includes("lane-approver")) return "a lane approver";
+  return "unrecognised dispatcher";
+}
+function shortTime(iso) {
+  if (!iso) return "\u2014";
+  return iso.length >= 16 ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso;
+}
+function runHistoryLines(runs) {
+  if (!runs) {
+    return [`- Execution history: not gathered (this surface did not read the chat's runs \u2014 absent is NOT the same as "nothing ran")`];
+  }
+  if (runs.linkedRunnableTickets === 0) {
+    return ["- Execution history: no runnable ticket (task/epic/gap) is linked to this chat, so there is nothing here that could have been run."];
+  }
+  if (runs.runs.length === 0) {
+    return [
+      `- Execution history: ZERO runs against ${runs.linkedRunnableTickets} linked runnable ticket(s). No cloud agent has ever been dispatched for this chat \u2014 any code that changed was changed by the session itself.`
+    ];
+  }
+  const out = [];
+  out.push(
+    `- Execution history (${runs.runs.length} run(s) over ${runs.linkedRunnableTickets} linked runnable ticket(s), newest first) \xB7 started by: ${runs.dispatchers.map((dsp) => `${dsp} (${dispatcherGloss(dsp)})`).join(", ")}`
+  );
+  for (const run of runs.runs.slice(0, MAX_RUNS_LISTED)) {
+    const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
+    const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
+    const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
+    const failed = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
+    out.push(
+      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed}`
+    );
+  }
+  if (runs.runs.length > MAX_RUNS_LISTED) {
+    out.push(`  - \u2026and ${runs.runs.length - MAX_RUNS_LISTED} earlier run(s) not listed.`);
   }
   return out;
 }
@@ -9240,7 +9392,13 @@ function formatChatDiagnostics(d) {
     lines.push("- Last turn learn gate: unknown (no assistant turn carried a learn outcome)");
   }
   const agents = d.agents ?? [];
-  lines.push(`- Agents in chat (${agents.length})${agents.length ? ": " + agents.map((a) => `${a.agentRef} (${a.role})`).join(", ") : ""}`);
+  lines.push(
+    `- Agents in chat (${agents.length})` + (agents.length ? ": " + agents.map((a) => {
+      const name = a.name?.trim();
+      const kind = a.builtinKind ? `, built-in ${a.builtinKind}` : "";
+      return name && name !== a.agentRef ? `${name} [${a.agentRef}] (${a.role}${kind})` : `${a.agentRef} (${a.role}${kind})`;
+    }).join(", ") : "")
+  );
   const tickets = d.tickets ?? [];
   if (tickets.length) {
     lines.push(`- Linked tickets (${tickets.length}):`);
@@ -9250,6 +9408,7 @@ function formatChatDiagnostics(d) {
   } else {
     lines.push("- Linked tickets (0)");
   }
+  lines.push(...runHistoryLines(d.runs));
   const signals = diagnosticsSignals(d);
   if (signals.length) {
     lines.push("", "### Signals");
@@ -9280,10 +9439,11 @@ function toEvermind(head) {
   };
 }
 async function gatherChatDiagnostics(src) {
-  const [projectName, agents, tickets, head, plan, apiVersion] = await Promise.all([
+  const [projectName, agents, tickets, runs, head, plan, apiVersion] = await Promise.all([
     safely(src.readProjectName, null),
     safely(src.readAgents, []),
     safely(src.readTickets, []),
+    safely(src.readRuns, null),
     safely(src.readEvermind, null),
     safely(src.readPlan, null),
     safely(src.readApiVersion, null)
@@ -9328,7 +9488,13 @@ async function gatherChatDiagnostics(src) {
     userId: src.userId ?? null,
     evermind: toEvermind(head),
     lastLearn,
-    agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
+    agents: agents.map((a) => ({
+      agentRef: a.agentRef,
+      role: a.role,
+      ...a.name ? { name: a.name } : {},
+      ...a.builtinKind != null ? { builtinKind: a.builtinKind } : {}
+    })),
+    runs,
     tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
     tools: src.tools ? {
@@ -9606,6 +9772,7 @@ export {
   chatConversationDirective,
   chatErrorAction,
   chatModeDirective,
+  chatRosterFromParticipants,
   chatWorkDirective,
   chatWorkLinkingDirective,
   claimsMissingToolData,

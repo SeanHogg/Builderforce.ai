@@ -143,6 +143,8 @@ export type { MentionAutocomplete, MentionLabels, UseMentionAutocompleteOptions 
 export { useTicketAutocomplete } from './mention/TicketAutocomplete';
 export type { TicketAutocomplete, TicketAutocompleteLabels, UseTicketAutocompleteOptions } from './mention/TicketAutocomplete';
 export { DEFAULT_CHAT_TICKETS_LABELS, TICKET_KINDS, RUNNABLE_KINDS } from './chatTickets/types';
+export { chatDiagnosticsReads } from './chatTickets/chatDiagnosticsReads';
+export type { ChatDiagnosticsChatReads, ChatDiagnosticsReadAdapter } from './chatTickets/chatDiagnosticsReads';
 export type {
   ChatTicketsAdapter,
   ChatTicketsLabels,
@@ -152,6 +154,8 @@ export type {
   TicketParentVM,
   LineageVM,
   ChatAgentVM,
+  ChatRunVM,
+  ChatRunHistoryVM,
   AgentOptionVM,
   TicketOptionVM,
   ChatOptionVM,

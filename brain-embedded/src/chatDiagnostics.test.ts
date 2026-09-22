@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatChatDiagnostics, classifyModelFunding, type ChatDiagnosticsData } from './chatDiagnostics';
+import { formatChatDiagnostics, classifyModelFunding, type ChatDiagnosticsData, type ChatDiagnosticsRun } from './chatDiagnostics';
 
 /** A healthy, fully-gathered chat — each test perturbs only the field under test. */
 function baseline(over: Partial<ChatDiagnosticsData> = {}): ChatDiagnosticsData {
@@ -206,5 +206,130 @@ describe('chat mode', () => {
 
   it('omits the line entirely when the surface did not report a mode', () => {
     expect(formatChatDiagnostics(baseline()).some((l) => l.startsWith('- Mode:'))).toBe(false);
+  });
+});
+
+/**
+ * WHO is in the chat, and WHAT actually ran.
+ *
+ * Chat #103 is the motivating capture: three agents invited, seven tickets linked, every
+ * code change made by the local session — and a report that printed three uuids and said
+ * nothing at all about executions. The reader could not answer "who is on this?" or "did
+ * anything run?", which are the first two questions anybody asks.
+ */
+describe('formatChatDiagnostics — the dispatch pathway', () => {
+  const staffed = (over: Partial<ChatDiagnosticsData> = {}): ChatDiagnosticsData => baseline({
+    agents: [
+      { agentRef: 'd02ff7ee-9cf2-4c44-8558-c89104f6278f', role: 'participant', name: 'Bob' },
+      { agentRef: 'manager-t1', role: 'participant', name: 'Manager', builtinKind: 'manager' },
+    ],
+    tickets: [{ kind: 'task', ref: '2466', label: 'Code change', linkType: 'created', status: 'done' }],
+    ...over,
+  });
+
+  it('prints the agent NAMES, keeping the ref for the reader who needs it', () => {
+    const out = formatChatDiagnostics(staffed()).join('\n');
+    expect(out).toContain('Bob [d02ff7ee-9cf2-4c44-8558-c89104f6278f] (participant)');
+    // A built-in is marked, because "Manager" could otherwise be an agent somebody named
+    // Manager — and those have different remedies when nothing runs.
+    expect(out).toContain('Manager [manager-t1] (participant, built-in manager)');
+  });
+
+  it('still renders an agent the API could not name', () => {
+    const out = formatChatDiagnostics(staffed({ agents: [{ agentRef: 'raw-ref', role: 'participant' }] })).join('\n');
+    expect(out).toContain('raw-ref (participant)');
+  });
+
+  it('separates "not gathered" from "nothing ran"', () => {
+    // These are opposite findings. A surface that did not read the runs must not be able
+    // to assert the stronger one by omission.
+    expect(formatChatDiagnostics(staffed({ runs: undefined })).join('\n'))
+      .toMatch(/Execution history: not gathered/);
+    expect(formatChatDiagnostics(staffed({ runs: { linkedRunnableTickets: 3, runs: [], dispatchers: [] } })).join('\n'))
+      .toMatch(/ZERO runs against 3 linked runnable ticket\(s\)/);
+  });
+
+  it('does not call an empty history a finding when there was nothing to run', () => {
+    const out = formatChatDiagnostics(staffed({ runs: { linkedRunnableTickets: 0, runs: [], dispatchers: [] } })).join('\n');
+    expect(out).toMatch(/no runnable ticket .* is linked to this chat/);
+    expect(out).not.toMatch(/ZERO runs/);
+  });
+
+  it('RAISES the staffing gap — agents present, tickets linked, nothing dispatched', () => {
+    // The chat #103 signal. Without it the capture reads clean: green tool steps, tickets
+    // created, agents listed, and no line saying nobody was ever asked to run anything.
+    const out = formatChatDiagnostics(staffed({ runs: { linkedRunnableTickets: 7, runs: [], dispatchers: [] } })).join('\n');
+    expect(out).toMatch(/2 agent\(s\) are in this chat \(Bob, Manager\) and ZERO runs have ever been started/);
+    expect(out).toMatch(/done by this session itself/);
+  });
+
+  it('does NOT raise it when nobody was staffed — that is a different chat', () => {
+    const out = formatChatDiagnostics(staffed({
+      agents: [],
+      runs: { linkedRunnableTickets: 7, runs: [], dispatchers: [] },
+    })).join('\n');
+    expect(out).not.toMatch(/ZERO runs have ever been started/);
+  });
+
+  const run = (over: Partial<ChatDiagnosticsRun> & { executionId: number }): ChatDiagnosticsRun => ({
+    taskId: 2466,
+    taskTitle: 'Code change',
+    agentRef: 'bob-1',
+    agentName: 'Bob',
+    status: 'completed',
+    submittedBy: 'user:22c5fd96',
+    source: 'vscode',
+    produced: true,
+    errorMessage: null,
+    startedAt: null,
+    completedAt: '2026-09-21T03:59:00.000Z',
+    createdAt: '2026-09-21T03:45:34.121Z',
+    ...over,
+  });
+
+  it('lists each run with who ran it and which pathway started it', () => {
+    const out = formatChatDiagnostics(staffed({
+      runs: { linkedRunnableTickets: 2, runs: [run({ executionId: 91 })], dispatchers: ['user:22c5fd96'] },
+    })).join('\n');
+    expect(out).toContain('run #91 · Bob · #2466 "Code change" · completed');
+    expect(out).toContain('by user:22c5fd96 via vscode');
+    // The gloss rides ALONGSIDE the raw label, never replacing it.
+    expect(out).toContain('user:22c5fd96 (a human pressed Run)');
+  });
+
+  it('names a conversation whose runs all came from somewhere else', () => {
+    const out = formatChatDiagnostics(staffed({
+      runs: {
+        linkedRunnableTickets: 2,
+        runs: [run({ executionId: 92, submittedBy: 'system:lane-auto' })],
+        dispatchers: ['system:lane-auto'],
+      },
+    })).join('\n');
+    expect(out).toContain('system:lane-auto (board autonomy, not this conversation)');
+    expect(out).toMatch(/none by a person pressing Run/);
+  });
+
+  it('flags a COMPLETED run that shipped nothing', () => {
+    // A green run that left no commit, PR, merge or lane move is not progress, and every
+    // surface that prints only the status reads it as success.
+    const out = formatChatDiagnostics(staffed({
+      runs: {
+        linkedRunnableTickets: 2,
+        runs: [run({ executionId: 93, produced: false })],
+        dispatchers: ['user:22c5fd96'],
+      },
+    })).join('\n');
+    expect(out).toContain('produced NOTHING');
+    expect(out).toMatch(/1 run\(s\) on this chat COMPLETED without producing anything/);
+  });
+
+  it('caps the listing rather than pasting a hundred runs into a support report', () => {
+    const many = Array.from({ length: 14 }, (_, i) => run({ executionId: 200 + i }));
+    const out = formatChatDiagnostics(staffed({
+      runs: { linkedRunnableTickets: 2, runs: many, dispatchers: ['user:22c5fd96'] },
+    })).join('\n');
+    expect(out).toContain('run #209');
+    expect(out).not.toContain('run #210');
+    expect(out).toContain('and 4 earlier run(s) not listed');
   });
 });
