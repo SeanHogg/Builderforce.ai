@@ -3729,8 +3729,13 @@ declare class ReadCoverage {
      *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
      *   whole tally on every non-read call is what once let one CSS file be read 14 times
      *   with the advisory firing on neither it nor its component.
-     * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
-     *   a read observes, so they forget nothing.
+     * - A local tool that PUBLISHES work (`git_commit`, `git_push`, `open_pull_request`)
+     *   changes no byte a FILE read would see — but it does change what a PLATFORM read of
+     *   branch / pull-request state returns, so it forgets the platform reads and keeps the
+     *   file reads. See {@link isRepoPublishTool}: without this, a run that surveys the
+     *   board, pushes the branches and surveys again is served its own pre-push answer.
+     * - The remaining local tools (`git_status`, `git_diff`, …) change nothing a read
+     *   observes, so they forget nothing.
      * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
      *   returns (a ticket update changes the ticket list), so target-less platform reads
      *   are forgotten; file reads are not, because a ticket write does not edit source.
@@ -5325,6 +5330,16 @@ interface ChatDiagnosticsRun {
     /** `user:<id>` | `system:lane-auto` | `system:coordinator` | … — WHICH pathway started it. */
     submittedBy: string;
     source?: string;
+    /**
+     * WHERE it executed: 'container' (real shell + local clone) | 'durable' (shell-LESS,
+     * git-API edits) | 'github_actions'. Reported because the two cloud executors differ in
+     * what the run was CAPABLE of — only one of them can compile what it wrote — and from
+     * inside the transcript they are indistinguishable.
+     */
+    executor?: string | null;
+    /** The on-prem machine this run was delivered to, when it was one. */
+    hostId?: number | null;
+    hostName?: string | null;
     /** Did the finished run leave a commit / PR / merge / lane move behind? Null = not judged. */
     produced?: boolean | null;
     errorMessage?: string | null;
@@ -5339,6 +5354,8 @@ interface ChatDiagnosticsRuns {
     runs: ChatDiagnosticsRun[];
     /** Distinct `submittedBy` labels across those runs. */
     dispatchers: string[];
+    /** Distinct executors across those runs ('container' | 'durable' | 'on-prem' | …). */
+    executors?: string[];
 }
 /** The project Evermind head/activity snapshot, as the panel reads it. */
 interface ChatDiagnosticsEvermind {
@@ -5395,6 +5412,17 @@ interface ChatDiagnosticsAccount {
     modelFunding?: string | null;
     /** Whether the plan entitles the tenant to premium/frontier models. */
     canUsePremiumModels?: boolean;
+    /**
+     * Whether the plan covers the CONTAINER execution surface — a real shell and a local
+     * clone. Free workspaces run on the durable (serverless) surface, which is free
+     * Cloudflare infrastructure and provably cannot run a build, and a cloud agent
+     * explicitly set to `container` is DEMOTED at dispatch rather than refused.
+     *
+     * Stated explicitly because that demotion is correct, cheap and completely invisible:
+     * a free workspace whose agent "ran fine" and produced a diff nothing compiled reads
+     * exactly like a paid one that ran the full toolchain.
+     */
+    containerRuntime?: boolean;
     /** How many models the plan pool currently offers. */
     planModelCount?: number;
     /** Connected bring-your-own provider keys (empty ⇒ every turn is plan-funded). */
@@ -5615,6 +5643,15 @@ interface ChatDiagnosticsPlanSnapshot {
         billingStatus: string;
     };
     meters: ChatDiagnosticsMeter[];
+    /**
+     * Plan features as the SERVER resolved them — the same set the nav and the surface
+     * picker gate on. Read rather than re-derived from `plan.effective`, which would be a
+     * second evaluator that disagrees the first time a flag moves between plans. Optional:
+     * an older API sends no features, and "not known" must not render as "not entitled".
+     */
+    features?: {
+        entitled?: Record<string, boolean | undefined>;
+    };
 }
 /** The `/llm/v1/models` surface, structurally — enough to classify funding and to
  *  count what the plan pool offers. */

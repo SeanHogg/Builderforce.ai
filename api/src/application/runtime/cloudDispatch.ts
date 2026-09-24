@@ -122,8 +122,10 @@ export function resolveCloudSurface(
 }
 
 /**
- * The executors a cloud run can actually land on. There are exactly TWO, and both are
- * long-lived: the alarm-ticked `durable` CloudRunnerDO and the `container` runtime.
+ * The executors a cloud run can actually land on: the alarm-ticked `durable`
+ * CloudRunnerDO, the `container` runtime, and the repo's own `github_actions` runners.
+ * The first two are long-lived and heartbeat per alarm tick; Actions is dispatched and
+ * then polled, which is why it carries its own (longer) silence ceiling.
  * There is no in-request Worker executor — a `waitUntil` background loop cannot
  * outlast the ~30s serverless wall, so {@link chooseCloudExecutor} fails fast to
  * `unavailable` rather than starting a run that provably cannot finish.
@@ -519,18 +521,29 @@ export function parseRemediation(payload: string | undefined): RemediationContex
 
 /**
  * The cloud executor a run actually landed on, parsed off its execution payload
- * (stamped by dispatch once {@link chooseCloudExecutor} decides). The orphan
- * detectors read this to pick the silence ceiling: BOTH surviving executors are
- * long-lived and heartbeat once per alarm tick, and a tick legitimately spans one
- * whole (possibly slow) LLM step, so neither may be reaped at the serverless wall.
+ * (stamped by dispatch once {@link chooseCloudExecutor} decides). It must round-trip
+ * every value {@link withExecutor} can stamp — all THREE of them.
+ *
+ * It recognised only two for a long time, and both of the things that read the third
+ * were silently dead as a result:
+ *   • `githubActionsReconcile` SQL-prefilters on `"executor":"github_actions"` and then
+ *     filters the rows through this function, described there as "what actually decides".
+ *     It threw every candidate away, so the Actions reconcile sweep returned zero rows
+ *     on every pass and an Actions run that never started was never reconciled.
+ *   • `cloudSilenceCeilingMs` has an explicit `'github_actions'` branch giving that
+ *     surface a 20-minute ceiling instead of the long-lived 5 minutes, precisely because
+ *     a queued GitHub runner can legitimately sit silent for minutes before it starts.
+ *     Falling through to `undefined` gave those runs the 5-minute ceiling, so the reaper
+ *     could orphan a healthy queued run.
+ *
  * An unrecognized value — including `'worker'` on a payload stamped before the
- * in-request Worker executor was removed — parses as undefined, which the ceiling
+ * in-request Worker executor was removed — still parses as undefined, which the ceiling
  * helper treats as long-lived, so a live run is never reaped prematurely. */
 export function parseExecutor(payload: string | null | undefined): CloudExecutor | undefined {
   if (!payload) return undefined;
   try {
     const e = (JSON.parse(payload) as { executor?: unknown }).executor;
-    return e === 'durable' || e === 'container' ? e : undefined;
+    return e === 'durable' || e === 'container' || e === 'github_actions' ? e : undefined;
   } catch {
     return undefined;
   }

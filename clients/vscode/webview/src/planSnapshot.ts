@@ -10,15 +10,20 @@
  */
 
 import type { AuthedFetch } from './authedFetch';
-import type { ChatDiagnosticsMeter } from '@seanhogg/builderforce-brain-embedded';
+import type { ChatDiagnosticsPlanSnapshot } from '@seanhogg/builderforce-brain-embedded';
 
-/** `GET /api/consumption` — plan + month-to-date allowance per metered resource.
- *  Open to any tenant-scoped JWT (no role gate), so the VSIX token can read it. */
-export interface PlanSnapshot {
-  period: { start: string; resetsAt: string };
-  plan: { effective: string; billingStatus: string };
-  meters: ChatDiagnosticsMeter[];
-}
+/**
+ * `GET /api/consumption` — plan, month-to-date allowance per metered resource, and the
+ * server-resolved plan FEATURES. Open to any tenant-scoped JWT (no role gate), so the
+ * VSIX token can read it.
+ *
+ * It is the shared diagnostics type, not a copy of it. This was a hand-maintained
+ * duplicate that had already drifted: the response carries `features` (which decides,
+ * among other things, whether a cloud run gets a container with a shell), the shape here
+ * did not declare it, so the field was fetched, typed away, and never reported — the
+ * value was on the wire the whole time. The alias makes that class of drift impossible.
+ */
+export type PlanSnapshot = ChatDiagnosticsPlanSnapshot;
 
 /**
  * Read-through cache for the plan snapshot. Every mounted surface (the header

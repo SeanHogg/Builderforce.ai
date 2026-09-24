@@ -227,8 +227,15 @@ describe('executor stamping (per-surface orphan ceiling)', () => {
     expect(parseExecutor(withExecutor(stamped, 'container'))).toBe('container');
   });
 
-  it('parseExecutor round-trips a stamped executor and rejects unknown/garbage', () => {
-    for (const e of ['durable', 'container'] as const) {
+  it('parseExecutor round-trips EVERY stamped executor and rejects unknown/garbage', () => {
+    // REGRESSION: it recognised only the first two, and both readers of the third were
+    // silently dead because of it — `githubActionsReconcile` SQL-prefilters on
+    // `"executor":"github_actions"` and then filters through this function, so its sweep
+    // returned ZERO rows on every pass; and `cloudSilenceCeilingMs`'s explicit
+    // 'github_actions' branch (20 min, because a queued runner sits silent for minutes)
+    // never fired, so healthy queued Actions runs were measured against 5 minutes.
+    // Whatever `withExecutor` can stamp, this must read back.
+    for (const e of ['durable', 'container', 'github_actions'] as const) {
       expect(parseExecutor(withExecutor(undefined, e))).toBe(e);
     }
     expect(parseExecutor('{"executor":"bogus"}')).toBeUndefined();

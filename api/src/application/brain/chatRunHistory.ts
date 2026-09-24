@@ -19,6 +19,20 @@
  * one. Those have different fixes, so the history reports the raw label and lets the
  * reader see it rather than collapsing every start into "started".
  *
+ * ── WHERE IT RAN IS THE OTHER HALF ─────────────────────────────────────
+ * "A run happened" does not say what the run could DO. The two cloud executors are not
+ * interchangeable: `container` is a Linux process with a shell and a local clone, so it
+ * can grep, build, type-check and test before finishing; `durable` is shell-LESS and
+ * edits surgically over the git API, so it provably cannot run a build. A chat whose
+ * every run landed on `durable` and produced a plausible-looking diff that was never
+ * compiled reads, from the transcript alone, exactly like one that ran the full
+ * toolchain. So the history reports `executor` (stamped on the payload at dispatch) and
+ * the on-prem `agent_host_id` — the three places a run can execute, named.
+ *
+ * This matters more since the surface became a PLAN decision: a workspace without the
+ * `containerRuntime` entitlement is DEMOTED to `durable` at dispatch, which is correct
+ * and cheap and completely invisible from inside the conversation.
+ *
  * Read-only and bounded. It is NOT read-through cached, on purpose: its callers are the
  * diagnostics capture (one fetch per "Copy diagnostics" click) and the `chats.runs`
  * tool, and every field it returns — status, `produced`, `completedAt` — is live run
@@ -32,7 +46,8 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { linkedRunnableTickets } from './chatLinkedTickets';
 import { resolveAgentIdentities } from './agentDisplayNames';
 import { resolveChatAccess } from './chatAccess';
-import { parseCloudAgentRef } from '../runtime/cloudDispatch';
+import { parseCloudAgentRef, parseExecutor } from '../runtime/cloudDispatch';
+import { agentHosts } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
 /** How many runs one history read returns. Newest first — an old run explains less. */
@@ -74,6 +89,19 @@ export interface ChatRunRecord {
   submittedBy: string;
   /** The initiating surface ('agent' | 'vscode' | …), governed by the tenant kill switch. */
   source: string;
+  /**
+   * WHERE it executed: 'container' (real shell + local clone) | 'durable' (shell-less,
+   * git-API edits) | 'github_actions'. Null for a run dispatched before the executor was
+   * stamped, or one delivered to an on-prem host — see {@link ChatRunRecord.hostName}.
+   *
+   * Reported because `durable` and `container` differ in what the run was CAPABLE of, not
+   * merely in where it sat: only one of them can compile what it wrote.
+   */
+  executor: string | null;
+  /** The on-prem machine this run was delivered to, when it was one. */
+  hostId: number | null;
+  /** That machine's name — the id alone is as unreadable as a raw agent uuid was. */
+  hostName: string | null;
   /** Did the finished run leave anything behind (commit / PR / merge / lane move)? Null = not judged. */
   produced: boolean | null;
   /** First line of the failure, when there was one — capped, so a history stays readable. */
@@ -95,6 +123,11 @@ export interface ChatRunHistory {
    * re-deriving it from the list.
    */
   dispatchers: string[];
+  /**
+   * Distinct executors across the returned runs, so a caller can state "every run here
+   * was durable — none of them could build what it wrote" without walking the list.
+   */
+  executors: string[];
 }
 
 /**
@@ -110,6 +143,7 @@ export interface ChatRunRow {
   submittedBy: string;
   source: string;
   cloudAgentRef: string | null;
+  agentHostId: number | null;
   payload: string | null;
   produced: boolean | null;
   errorMessage: string | null;
@@ -154,6 +188,7 @@ export function toChatRunRecords(
   rows: readonly ChatRunRow[],
   titles: ReadonlyMap<number, string | null>,
   names: ReadonlyMap<string, string>,
+  hostNames: ReadonlyMap<number, string> = new Map(),
 ): ChatRunRecord[] {
   return rows.map((row) => {
     const agentRef = runAgentRefOf(row);
@@ -166,6 +201,12 @@ export function toChatRunRecords(
       status: row.status,
       submittedBy: row.submittedBy,
       source: row.source,
+      // `parseExecutor` rejects anything not in the known set, so a payload stamped by an
+      // older build (the in-request Worker executor, now removed) reads as "unknown"
+      // rather than asserting a surface that no longer exists.
+      executor: parseExecutor(row.payload ?? undefined) ?? null,
+      hostId: row.agentHostId ?? null,
+      hostName: row.agentHostId != null ? hostNames.get(row.agentHostId) ?? null : null,
       produced: row.produced ?? null,
       errorMessage: firstLine(row.errorMessage),
       startedAt: iso(row.startedAt),
@@ -178,9 +219,10 @@ export function toChatRunRecords(
 /**
  * Every run started against a ticket this chat links, newest first.
  *
- * Four bounded queries, never N+1: the chat's runnable tickets (two, shared with the
+ * Bounded queries, never N+1: the chat's runnable tickets (two, shared with the
  * addressed-agent hand-off), the executions for them in one `IN`, their titles in one
- * `IN`, and every distinct agent name in one `IN`.
+ * `IN`, every distinct agent name in one `IN`, and — only when some run went to a
+ * machine — every distinct on-prem host name in one `IN`.
  */
 export async function readChatRunHistory(
   db: Db,
@@ -189,7 +231,7 @@ export async function readChatRunHistory(
   limit: number = CHAT_RUN_HISTORY_LIMIT,
 ): Promise<ChatRunHistory> {
   const linked = await linkedRunnableTickets(db, tenantId, chatId);
-  if (linked.length === 0) return { linkedRunnableTickets: 0, runs: [], dispatchers: [] };
+  if (linked.length === 0) return { linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] };
   const taskIds = linked.map((t) => t.id);
 
   const rows = await db
@@ -200,6 +242,7 @@ export async function readChatRunHistory(
       submittedBy: executions.submittedBy,
       source: executions.source,
       cloudAgentRef: executions.cloudAgentRef,
+      agentHostId: executions.agentHostId,
       payload: executions.payload,
       produced: executions.produced,
       errorMessage: executions.errorMessage,
@@ -213,7 +256,7 @@ export async function readChatRunHistory(
     .limit(clampChatRunHistoryLimit(limit));
 
   if (rows.length === 0) {
-    return { linkedRunnableTickets: linked.length, runs: [], dispatchers: [] };
+    return { linkedRunnableTickets: linked.length, runs: [], dispatchers: [], executors: [] };
   }
 
   // Titles for the tickets that actually appear in the returned runs — not for every
@@ -232,12 +275,26 @@ export async function readChatRunHistory(
   );
   const names = new Map([...identities].map(([ref, id]) => [ref, id.name] as const));
 
-  const runs = toChatRunRecords(rows, titles, names);
+  // On-prem machine names, in ONE bounded `IN` — and only when a run actually went to a
+  // host, which is the uncommon case. An id alone would be as unreadable here as the raw
+  // agent uuids this report used to print.
+  const hostIds = [...new Set(rows.map((r) => r.agentHostId).filter((h): h is number => h != null))];
+  const hostNames = new Map<number, string>();
+  if (hostIds.length > 0) {
+    const hostRows = await db
+      .select({ id: agentHosts.id, name: agentHosts.name })
+      .from(agentHosts)
+      .where(scopedToTenant(agentHosts, tenantId, inArray(agentHosts.id, hostIds)));
+    for (const h of hostRows) hostNames.set(h.id, h.name);
+  }
+
+  const runs = toChatRunRecords(rows, titles, names, hostNames);
 
   return {
     linkedRunnableTickets: linked.length,
     runs,
     dispatchers: [...new Set(runs.map((r) => r.submittedBy))],
+    executors: [...new Set(runs.map((r) => r.executor ?? (r.hostId != null ? 'on-prem' : 'unknown')))],
   };
 }
 

@@ -267,8 +267,9 @@ describe('useRuntimeSurfaceRefusal — WHICH refusal, not just whether', () => {
   it('is null for Automatic and for an entitled container — nothing to refuse', async () => {
     entitledToContainers(true);
     vi.spyOn(reposApi, 'githubActionsStatus').mockResolvedValue(status({ ready: true }));
-    const { findByTestId } = render(<Probe surface="" />);
+    const { findByTestId, unmount } = render(<Probe surface="" />);
     expect(await findByTestId('why')).toHaveTextContent('null');
+    unmount();
     const second = render(<Probe surface="container" />);
     expect(await second.findByTestId('why')).toHaveTextContent('null');
   });

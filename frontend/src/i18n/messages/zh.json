@@ -313,7 +313,10 @@
     "categoryLocal": "在此设备上",
     "localDetail": "通过 {runtime} 在本机运行 —— 不消耗套餐额度，可离线使用。",
     "assessmentClosedBook": "闭卷考核进行中 — 结束前助手不可用。",
-    "assessmentAssisted": "辅助考核 — 助手的每一轮回复都会记录在诚信记录中。"
+    "assessmentAssisted": "辅助考核 — 助手的每一轮回复都会记录在诚信记录中。",
+    "ticketTagTitle": "标记工单",
+    "ticketTagStatus": "状态",
+    "ticketTagNoMatches": "没有匹配的工单"
   },
   "repoContext": {
     "title": "添加仓库上下文",
@@ -12611,7 +12614,9 @@
       "noticePeriod": "离职通知期（天）",
       "salaryMin": "期望薪资（最低）",
       "salaryMax": "期望薪资（最高）",
-      "openToRelocation": "可接受搬迁"
+      "openToRelocation": "可接受搬迁",
+      "sessionPrice": "咨询价格",
+      "sessionPriceHint": "单次咨询的价格。填 0 表示提供公益咨询；留空表示不设咨询价格。"
     },
     "resume": {
       "title": "简历",
@@ -12908,6 +12913,7 @@
       "kindLabel": "类型",
       "kind": {
         "person": "个人",
+        "advisor": "顾问",
         "gig": "零工",
         "business": "企业",
         "storefront": "店铺",
@@ -32021,5 +32027,9 @@
       "installPrompt": "尚未安装 KPI 仪表板。安装适合你所在行业的仪表板，查看同行关注的指标。",
       "installCta": "从应用市场安装"
     }
+  },
+  "proBonoBadge": {
+    "label": "公益",
+    "accessibleName": "无偿——这位顾问提供公益咨询"
   }
 }

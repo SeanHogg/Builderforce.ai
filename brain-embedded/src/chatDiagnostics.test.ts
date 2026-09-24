@@ -279,6 +279,9 @@ describe('formatChatDiagnostics — the dispatch pathway', () => {
     status: 'completed',
     submittedBy: 'user:22c5fd96',
     source: 'vscode',
+    executor: 'container',
+    hostId: null,
+    hostName: null,
     produced: true,
     errorMessage: null,
     startedAt: null,
@@ -289,7 +292,7 @@ describe('formatChatDiagnostics — the dispatch pathway', () => {
 
   it('lists each run with who ran it and which pathway started it', () => {
     const out = formatChatDiagnostics(staffed({
-      runs: { linkedRunnableTickets: 2, runs: [run({ executionId: 91 })], dispatchers: ['user:22c5fd96'] },
+      runs: { linkedRunnableTickets: 2, runs: [run({ executionId: 91 })], dispatchers: ['user:22c5fd96'], executors: ['container'] },
     })).join('\n');
     expect(out).toContain('run #91 · Bob · #2466 "Code change" · completed');
     expect(out).toContain('by user:22c5fd96 via vscode');
@@ -331,5 +334,116 @@ describe('formatChatDiagnostics — the dispatch pathway', () => {
     expect(out).toContain('run #209');
     expect(out).not.toContain('run #210');
     expect(out).toContain('and 4 earlier run(s) not listed');
+  });
+});
+
+describe('formatChatDiagnostics — WHERE the work ran', () => {
+  /**
+   * "A run happened" does not say what the run could DO. `durable` is not a smaller
+   * container: it has no shell, so it edits over the git API and never compiled,
+   * type-checked or tested a line of what it wrote. From the transcript the two are
+   * indistinguishable, and the first person to notice is whoever pulls the branch.
+   */
+  const base = (): ChatDiagnosticsData => ({
+    chatId: 103,
+    agents: [{ agentRef: 'bob-1', role: 'participant', name: 'Bob' }],
+    tickets: [],
+  });
+  const aRun = (over: Partial<ChatDiagnosticsRun> & { executionId: number }): ChatDiagnosticsRun => ({
+    taskId: 2466, taskTitle: 'Code change', agentRef: 'bob-1', agentName: 'Bob',
+    status: 'completed', submittedBy: 'user:1', source: 'vscode',
+    executor: 'durable', hostId: null, hostName: null, produced: true,
+    errorMessage: null, startedAt: null, completedAt: null, createdAt: '2026-09-21T03:45:34.121Z',
+    ...over,
+  });
+
+  it('names the executor on every run line and summarises the set', () => {
+    const out = formatChatDiagnostics({
+      ...base(),
+      runs: {
+        linkedRunnableTickets: 2,
+        runs: [aRun({ executionId: 91, executor: 'container' }), aRun({ executionId: 92 })],
+        dispatchers: ['user:1'],
+        executors: ['container', 'durable'],
+      },
+    }).join('\n');
+    expect(out).toContain('run #91 · Bob · #2466 "Code change" · completed · produced output · on container');
+    expect(out).toContain('· on durable');
+    // The summary spells out the CAPABILITY difference, because 'durable' vs 'container'
+    // tells a reader nothing on its own.
+    expect(out).toMatch(/ran on: container \(real shell \+ local clone/);
+    expect(out).toMatch(/durable \(serverless, NO shell/);
+  });
+
+  it('names the on-prem MACHINE when the run went to one', () => {
+    const out = formatChatDiagnostics({
+      ...base(),
+      runs: {
+        linkedRunnableTickets: 1,
+        runs: [aRun({ executionId: 93, executor: null, hostId: 7, hostName: 'studio-mac-mini' })],
+        dispatchers: ['user:1'],
+        executors: ['on-prem'],
+      },
+    }).join('\n');
+    expect(out).toContain('on on-prem "studio-mac-mini"');
+    // A host run has a shell, so it must NOT trip the shell-less warning.
+    expect(out).not.toMatch(/executed on the DURABLE surface/);
+  });
+
+  it('WARNS when every run was shell-less, and blames the PLAN when that is the cause', () => {
+    const out = formatChatDiagnostics({
+      ...base(),
+      account: { plan: 'free', billingStatus: 'none', containerRuntime: false },
+      runs: {
+        linkedRunnableTickets: 2,
+        runs: [aRun({ executionId: 94 }), aRun({ executionId: 95 })],
+        dispatchers: ['user:1'],
+        executors: ['durable'],
+      },
+    }).join('\n');
+    expect(out).toMatch(/All 2 run\(s\) on this chat executed on the DURABLE surface, which has no shell/);
+    expect(out).toMatch(/plan does not include the container surface/);
+    // And the plan line states the entitlement directly, so the reader does not have to
+    // infer it from the executors.
+    expect(out).toContain('container runtime NOT entitled');
+  });
+
+  it('points at the AGENT, not the plan, when the workspace IS entitled', () => {
+    // Same symptom, opposite fix: an entitled workspace landing on durable means either
+    // no agent here asks for a container or none was live and the run was demoted.
+    const out = formatChatDiagnostics({
+      ...base(),
+      account: { plan: 'pro', billingStatus: 'active', containerRuntime: true },
+      runs: {
+        linkedRunnableTickets: 1,
+        runs: [aRun({ executionId: 96 })],
+        dispatchers: ['user:1'],
+        executors: ['durable'],
+      },
+    }).join('\n');
+    expect(out).toMatch(/no container was live and the run was demoted/);
+    expect(out).toContain('container runtime entitled');
+  });
+
+  it('says nothing about the entitlement when the API did not report one', () => {
+    // Absent is not "no". An older gateway sends no feature set, and a report that
+    // rendered that as NOT entitled would send the reader to the billing page.
+    const out = formatChatDiagnostics({ ...base(), account: { plan: 'pro', billingStatus: 'active' } }).join('\n');
+    expect(out).not.toMatch(/container runtime/);
+  });
+
+  it('is honest when no run recorded where it ran', () => {
+    const out = formatChatDiagnostics({
+      ...base(),
+      runs: {
+        linkedRunnableTickets: 1,
+        runs: [aRun({ executionId: 97, executor: null })],
+        dispatchers: ['user:1'],
+        executors: ['unknown'],
+      },
+    }).join('\n');
+    expect(out).toMatch(/No run on this chat recorded WHERE it executed/);
+    // ...and it must NOT claim they were shell-less, which is a different, stronger claim.
+    expect(out).not.toMatch(/executed on the DURABLE surface/);
   });
 });

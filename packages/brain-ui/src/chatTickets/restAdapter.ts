@@ -103,7 +103,7 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
         // failure of the capture that reads this — it is "nothing has run", which is the
         // answer. Degrading to an empty history keeps a diagnostics copy from failing on
         // the one read whose whole point is to be reassuring when it comes back empty.
-        .catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [] })),
+        .catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] })),
 
     listTicketChats: (kind, ref) =>
       req<{ chats: LineageVM[] }>(

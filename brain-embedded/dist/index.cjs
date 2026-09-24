@@ -2266,7 +2266,18 @@ var READ_ONLY_PLATFORM_SUFFIXES = [
   "_get_user",
   "_get_config",
   "_get_access",
-  "_get_error_group"
+  "_get_error_group",
+  // The BOARD-SURVEY reads. All three are `mutates: false` and all three are expensive —
+  // `tickets.pending_changes` compares every ticket branch against its base, and the
+  // stall census walks every non-terminal ticket. Their absence here is what let VS Code
+  // chat #115 (2026-09-20) call `builtin_tickets_pending_changes` twice with BYTE-
+  // IDENTICAL arguments, six seconds and 19 KB apiece, for an answer already in its
+  // context. Safe to dedupe only because a `git_push` / `open_pull_request` now forgets
+  // platform reads (see `REPO_PUBLISH_TOOLS`) — these read branch state, so a run that
+  // pushes between two surveys must see the second one for real.
+  "_pending_changes",
+  "_stalled_tickets",
+  "_census"
 ];
 function isReadOnlyPlatformTool(name) {
   if (!name.startsWith("builtin_")) return false;
@@ -3059,7 +3070,7 @@ function handoffRecoveryNudge(lastChance) {
 
 // ../packages/agent-stall/src/permissionMenu.ts
 var TAIL_CHARS2 = 900;
-var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
+var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
 var OFFER = new RegExp(
   [
     // "Would you like me to open the PRs?" · "Do you want me to merge these?"
@@ -3072,7 +3083,9 @@ var OFFER = new RegExp(
     `\\bwant\\s+(?:me|us)\\s+to\\b`,
     // "Let me know if you'd like me to…" · "Let me know which of these to do"
     // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
-    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what)\\b`,
+    // "how" earns its place: "let me know how you'd like to proceed" is the single most
+    // common way this pause is phrased, and it names no option at all.
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
     `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
     `\\bsay the word\\b`,
     // "I can open the PRs if you'd like." · "I could cancel them if you want."
@@ -3082,8 +3095,11 @@ var OFFER = new RegExp(
     `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
     // "Which would you like me to do first?" · "Which of these should I start with?"
     `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
-    // "Your call." · "Up to you." · "Let me know how you'd like to proceed."
-    `\\b(?:your call|up to you|it'?s your call|how (?:would|do) you (?:want|like) (?:me )?to proceed)\\b`
+    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
+    // declarative order the same sentence takes inside a clause, "…how you would like
+    // to proceed", which the interrogative-only form used to miss.
+    `\\b(?:your call|up to you|it'?s your call)\\b`,
+    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
   ].join("|"),
   "gi"
 );
@@ -3111,13 +3127,13 @@ function pausesOnUsersOwnChoice(text) {
   return USERS_OWN_CHOICE.test((text ?? "").slice(-TAIL_CHARS2));
 }
 var ASK_USER_TOOL_NAME = "ask_user";
-function canAskUser(toolNames) {
+function askUserAdvertised(toolNames) {
   return (toolNames ?? []).some((n) => n.toLowerCase() === ASK_USER_TOOL_NAME);
 }
 function asksPermissionForRequestedWork(text, ctx) {
   if (!asksForChange(ctx.requestText)) return false;
   if (!offersMenuInsteadOfActing(text)) return false;
-  if (pausesOnUsersOwnChoice(text) && !canAskUser(ctx.availableToolNames)) return false;
+  if (pausesOnUsersOwnChoice(text) && !askUserAdvertised(ctx.availableToolNames)) return false;
   return true;
 }
 function permissionRecoveryNudge(lastChance, askUserAvailable = false) {
@@ -3204,7 +3220,7 @@ var MAX_ANNOUNCEMENT_RECOVERIES = 3;
 function stallRecoveryNudge(lastChance, shape, ctx) {
   if (shape === "handed-off") return handoffRecoveryNudge(lastChance);
   if (shape === "asked-permission") {
-    return permissionRecoveryNudge(lastChance, canAskUser(ctx?.availableToolNames));
+    return permissionRecoveryNudge(lastChance, askUserAdvertised(ctx?.availableToolNames));
   }
   return (
     // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
@@ -3220,8 +3236,8 @@ function isEmptyTurn(input) {
 function stallShape(input) {
   if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
   if (isEmptyTurn(input)) return "empty";
-  if (delegatesExecutableWork(input.text, input)) return "handed-off";
   if (asksPermissionForRequestedWork(input.text, input)) return "asked-permission";
+  if (delegatesExecutableWork(input.text, input)) return "handed-off";
   if (announcesUntakenAction(input.text)) return "announced";
   if (claimsMissingToolData(input.text)) return "missing-data";
   return null;
@@ -3372,6 +3388,19 @@ var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set([
   "git_cleanup_merged"
 ]);
 var PROJECT_MEMORY_TOOLS = /* @__PURE__ */ new Set(["recall_facts", "remember_fact"]);
+var REPO_PUBLISH_TOOLS = /* @__PURE__ */ new Set([
+  "git_commit",
+  "git_push",
+  "open_pull_request",
+  // Cleanup deletes the merged branch locally and on origin, so the branch inventory a
+  // platform read returns is different after it. It is ALSO an unscoped mutation (it
+  // checks out and fast-forwards the base), and that set already clears everything —
+  // listing it here states the second reason rather than relying on the first.
+  "git_cleanup_merged"
+]);
+function isRepoPublishTool(name) {
+  return REPO_PUBLISH_TOOLS.has(name);
+}
 function isLocalWorkspaceTool(name) {
   return LOCAL_WORKSPACE_TOOLS.has(name);
 }
@@ -4264,8 +4293,13 @@ var ReadCoverage = class _ReadCoverage {
    *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
    *   whole tally on every non-read call is what once let one CSS file be read 14 times
    *   with the advisory firing on neither it nor its component.
-   * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
-   *   a read observes, so they forget nothing.
+   * - A local tool that PUBLISHES work (`git_commit`, `git_push`, `open_pull_request`)
+   *   changes no byte a FILE read would see — but it does change what a PLATFORM read of
+   *   branch / pull-request state returns, so it forgets the platform reads and keeps the
+   *   file reads. See {@link isRepoPublishTool}: without this, a run that surveys the
+   *   board, pushes the branches and surveys again is served its own pre-push answer.
+   * - The remaining local tools (`git_status`, `git_diff`, …) change nothing a read
+   *   observes, so they forget nothing.
    * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
    *   returns (a ticket update changes the ticket list), so target-less platform reads
    *   are forgotten; file reads are not, because a ticket write does not edit source.
@@ -4287,7 +4321,7 @@ var ReadCoverage = class _ReadCoverage {
       }
       return;
     }
-    if (isLocalWorkspaceTool(tool)) return;
+    if (isLocalWorkspaceTool(tool) && !isRepoPublishTool(tool)) return;
     for (const [key, read] of [...this.exact.entries()]) {
       if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }
@@ -7601,8 +7635,8 @@ function canonicalTurnText(text) {
 async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const canAskUser2 = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  const catalog = canAskUser2 ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC] : toolSpecs;
+  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const brokenModels = /* @__PURE__ */ new Set();
@@ -7748,7 +7782,7 @@ ${continuationDirective()}`;
     // Asking the user is never off-topic: it is how the run stops when it cannot
     // proceed, so relevance against the request must not be what decides whether the
     // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
-    ...canAskUser2 ? [ASK_USER_TOOL] : []
+    ...canAskUser ? [ASK_USER_TOOL] : []
   ];
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
@@ -9580,6 +9614,26 @@ function diagnosticsSignals(d) {
       `\u2139\uFE0F Every run on this chat's tickets was started by ${runs.dispatchers.join(", ")} \u2014 none by a person pressing Run. This conversation has not dispatched anything itself.`
     );
   }
+  const ran = runs?.runs ?? [];
+  if (ran.length > 0) {
+    const shellless = ran.filter((r) => executorHasShell(r.executor) === false);
+    if (shellless.length === ran.length) {
+      const why = d.account?.containerRuntime === false ? " This workspace's plan does not include the container surface, so every cloud run is routed there by design \u2014 upgrade, or run the work in the editor/on-prem where there IS a shell." : " The container surface was not used \u2014 either no agent here is set to it, or no container was live and the run was demoted. Check the agent's runtime surface.";
+      out.push(
+        `\u26A0\uFE0F All ${ran.length} run(s) on this chat executed on the DURABLE surface, which has no shell: none of them could build, type-check or test the code they wrote.${why}`
+      );
+    } else if (shellless.length > 0) {
+      out.push(
+        `\u2139\uFE0F ${shellless.length} of ${ran.length} run(s) executed on the shell-less durable surface and could not build or test their own output (runs ${shellless.slice(0, 5).map((r) => `#${r.executionId}`).join(", ")}).`
+      );
+    }
+    const unknown = ran.filter((r) => r.executor == null && r.hostId == null);
+    if (unknown.length === ran.length) {
+      out.push(
+        `\u2139\uFE0F No run on this chat recorded WHERE it executed. These predate the executor stamp, so "did it have a shell?" is unanswerable from here \u2014 read the runs' own tool audit.`
+      );
+    }
+  }
   const hollow = (runs?.runs ?? []).filter((r) => r.produced === false && r.status === "completed");
   if (hollow.length > 0) {
     out.push(
@@ -9647,6 +9701,18 @@ function dispatcherGloss(submittedBy) {
   if (submittedBy.includes("lane-approver")) return "a lane approver";
   return "unrecognised dispatcher";
 }
+function executorGloss(executor) {
+  if (executor === "on-prem") return "on-prem machine (real shell, the machine's own clone)";
+  if (executor === "container") return "container (real shell + local clone \u2014 can build, type-check and test)";
+  if (executor === "durable") return "durable (serverless, NO shell \u2014 edits over the git API; cannot build or test)";
+  if (executor === "github_actions") return "GitHub Actions (the repo's own runners)";
+  return "executor not recorded";
+}
+function executorHasShell(executor) {
+  if (executor === "durable") return false;
+  if (executor === "container" || executor === "on-prem" || executor === "github_actions") return true;
+  return null;
+}
 function shortTime(iso) {
   if (!iso) return "\u2014";
   return iso.length >= 16 ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso;
@@ -9667,13 +9733,18 @@ function runHistoryLines(runs) {
   out.push(
     `- Execution history (${runs.runs.length} run(s) over ${runs.linkedRunnableTickets} linked runnable ticket(s), newest first) \xB7 started by: ${runs.dispatchers.map((dsp) => `${dsp} (${dispatcherGloss(dsp)})`).join(", ")}`
   );
+  const executors = runs.executors ?? [];
+  if (executors.length > 0) {
+    out.push(`  - ran on: ${executors.map(executorGloss).join("; ")}`);
+  }
   for (const run of runs.runs.slice(0, MAX_RUNS_LISTED)) {
     const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
     const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
     const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
     const failed = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
+    const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}` : " \xB7 on ? (executor not recorded)";
     out.push(
-      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed}`
+      `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed}`
     );
   }
   if (runs.runs.length > MAX_RUNS_LISTED) {
@@ -9695,7 +9766,7 @@ function fmtAdvertised(tools) {
 }
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
-  if (d.surface) lines.push(`- Surface: ${d.surface}`);
+  if (d.surface) lines.push(`- Surface (where this CONVERSATION runs): ${d.surface}`);
   if (d.versions && (d.versions.ui || d.versions.api || d.versions.uiBuildId)) {
     const buildId = d.versions.uiBuildId;
     const client = `${d.versions.ui ?? "unknown"}${buildId ? `+${buildId}` : ""}` + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== "dev" ? ` (built ${d.versions.uiBuiltAt})` : "");
@@ -9731,7 +9802,7 @@ function formatChatDiagnostics(d) {
   const acct = d.account;
   if (acct) {
     lines.push(
-      `- Plan: ${acct.plan ?? "unknown"} \xB7 billing ${acct.billingStatus ?? "none"}${acct.billingStatus === "none" || acct.billingStatus == null ? " (no payment method on file)" : ""}${acct.canUsePremiumModels != null ? ` \xB7 premium models ${acct.canUsePremiumModels ? "entitled" : "NOT entitled"}` : ""}`
+      `- Plan: ${acct.plan ?? "unknown"} \xB7 billing ${acct.billingStatus ?? "none"}${acct.billingStatus === "none" || acct.billingStatus == null ? " (no payment method on file)" : ""}${acct.canUsePremiumModels != null ? ` \xB7 premium models ${acct.canUsePremiumModels ? "entitled" : "NOT entitled"}` : ""}${acct.containerRuntime != null ? ` \xB7 container runtime ${acct.containerRuntime ? "entitled (cloud runs get a real shell + clone)" : "NOT entitled (cloud runs are routed to the shell-less durable surface)"}` : ""}`
     );
     lines.push(
       `- Model: ${acct.model ?? "auto (gateway routes per turn)"}${acct.modelFunding ? ` \xB7 funded by ${acct.modelFunding}` : ""}${acct.planModelCount != null ? ` \xB7 ${acct.planModelCount} models in plan pool` : ""} \xB7 BYO accounts: ${acct.byoProviders?.length ? acct.byoProviders.join(", ") : "none"}`
@@ -9850,6 +9921,10 @@ async function gatherChatDiagnostics(src) {
     // probe report could look clean about a chat whose model the plan cannot fund.
     modelFunding: src.modelSurface ? classifyModelFunding(src.model, src.modelSurface) : null,
     ...src.modelSurface?.canUsePremiumModels != null ? { canUsePremiumModels: src.modelSurface.canUsePremiumModels } : {},
+    // Spread-if-present, like every other optional above: an API that sends no feature
+    // set leaves the key ABSENT, and the report omits the line rather than claiming the
+    // workspace is not entitled. "Unknown" and "no" are different findings.
+    ...plan?.features?.entitled?.containerRuntime != null ? { containerRuntime: plan.features.entitled.containerRuntime } : {},
     ...src.modelSurface?.data ? { planModelCount: src.modelSurface.data.length } : {},
     byoProviders: src.modelSurface?.byo?.providers ?? [],
     extensionVersion: src.uiVersion ?? null,

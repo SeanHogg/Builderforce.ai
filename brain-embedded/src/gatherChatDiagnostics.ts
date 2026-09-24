@@ -31,6 +31,13 @@ export interface ChatDiagnosticsPlanSnapshot {
   period: { start: string; resetsAt: string };
   plan: { effective: string; billingStatus: string };
   meters: ChatDiagnosticsMeter[];
+  /**
+   * Plan features as the SERVER resolved them — the same set the nav and the surface
+   * picker gate on. Read rather than re-derived from `plan.effective`, which would be a
+   * second evaluator that disagrees the first time a flag moves between plans. Optional:
+   * an older API sends no features, and "not known" must not render as "not entitled".
+   */
+  features?: { entitled?: Record<string, boolean | undefined> };
 }
 
 /** The `/llm/v1/models` surface, structurally — enough to classify funding and to
@@ -205,6 +212,12 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     // probe report could look clean about a chat whose model the plan cannot fund.
     modelFunding: src.modelSurface ? classifyModelFunding(src.model, src.modelSurface) : null,
     ...(src.modelSurface?.canUsePremiumModels != null ? { canUsePremiumModels: src.modelSurface.canUsePremiumModels } : {}),
+    // Spread-if-present, like every other optional above: an API that sends no feature
+    // set leaves the key ABSENT, and the report omits the line rather than claiming the
+    // workspace is not entitled. "Unknown" and "no" are different findings.
+    ...(plan?.features?.entitled?.containerRuntime != null
+      ? { containerRuntime: plan.features.entitled.containerRuntime }
+      : {}),
     ...(src.modelSurface?.data ? { planModelCount: src.modelSurface.data.length } : {}),
     byoProviders: src.modelSurface?.byo?.providers ?? [],
     extensionVersion: src.uiVersion ?? null,

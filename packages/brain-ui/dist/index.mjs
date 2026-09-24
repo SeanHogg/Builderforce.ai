@@ -3070,7 +3070,7 @@ function createChatTicketsRestAdapter(opts) {
       `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
       { method: "DELETE" }
     ).then(() => void 0),
-    listRuns: (chatId) => req(`/api/brain/chats/${chatId}/runs`).catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [] })),
+    listRuns: (chatId) => req(`/api/brain/chats/${chatId}/runs`).catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] })),
     listTicketChats: (kind, ref) => req(
       `/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`
     ).then((r) => r.chats.map((c) => ({
@@ -3166,17 +3166,6 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   const [invited, setInvited] = useState10([]);
   const [members, setMembers] = useState10([]);
   useEffect6(() => {
-    let ok = true;
-    adapter.loadAgentPool().then((p) => {
-      if (ok) setPool(p);
-    }).catch(() => {
-      if (ok) setPool([]);
-    });
-    return () => {
-      ok = false;
-    };
-  }, [adapter]);
-  useEffect6(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -3197,6 +3186,19 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, chatId, refreshSignal]);
+  const needsPool = invited.some((a) => !a.name);
+  useEffect6(() => {
+    if (!needsPool) return;
+    let ok = true;
+    adapter.loadAgentPool().then((p) => {
+      if (ok) setPool(p);
+    }).catch(() => {
+      if (ok) setPool([]);
+    });
+    return () => {
+      ok = false;
+    };
+  }, [adapter, needsPool]);
   return useMemo7(
     () => [
       // The NAME comes off the invited row, which the server resolves in one batched

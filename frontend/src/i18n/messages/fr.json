@@ -313,7 +313,10 @@
     "categoryLocal": "Sur cet appareil",
     "localDetail": "S’exécute sur cette machine via {runtime} — sans consommer le forfait, et fonctionne hors ligne.",
     "assessmentClosedBook": "Une évaluation sans documents est en cours — l'assistant est indisponible jusqu'à sa clôture.",
-    "assessmentAssisted": "Évaluation assistée — chaque réponse de l'assistant est consignée dans le registre d'intégrité."
+    "assessmentAssisted": "Évaluation assistée — chaque réponse de l'assistant est consignée dans le registre d'intégrité.",
+    "ticketTagTitle": "Associer un ticket",
+    "ticketTagStatus": "Statut",
+    "ticketTagNoMatches": "Aucun ticket correspondant"
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",
@@ -12611,7 +12614,9 @@
       "noticePeriod": "Préavis (jours)",
       "salaryMin": "Salaire souhaité (minimum)",
       "salaryMax": "Salaire souhaité (maximum)",
-      "openToRelocation": "Ouvert à la mobilité"
+      "openToRelocation": "Ouvert à la mobilité",
+      "sessionPrice": "Prix de la session",
+      "sessionPriceHint": "Prix d’une session de conseil. Saisissez 0 pour les proposer bénévolement ; laissez vide si vous n’avez pas de prix par session."
     },
     "resume": {
       "title": "CV",
@@ -12908,6 +12913,7 @@
       "kindLabel": "Type",
       "kind": {
         "person": "Personnes",
+        "advisor": "Conseillers",
         "gig": "Missions",
         "business": "Entreprises",
         "storefront": "Boutiques",
@@ -32021,5 +32027,9 @@
       "installPrompt": "Aucun tableau de bord KPI installé. Installez celui conçu pour votre secteur pour voir les indicateurs suivis par vos pairs.",
       "installCta": "Installer depuis la Marketplace"
     }
+  },
+  "proBonoBadge": {
+    "label": "Bénévole",
+    "accessibleName": "Gratuit — cette personne propose des sessions bénévoles"
   }
 }

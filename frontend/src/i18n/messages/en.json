@@ -313,7 +313,10 @@
     "categoryLocal": "On this device",
     "localDetail": "Runs on this machine via {runtime} — no plan usage, works offline.",
     "assessmentClosedBook": "A closed-book assessment is live — the assistant is unavailable until it closes.",
-    "assessmentAssisted": "Assisted assessment — every assistant turn is recorded on the integrity ledger."
+    "assessmentAssisted": "Assisted assessment — every assistant turn is recorded on the integrity ledger.",
+    "ticketTagTitle": "Tag a ticket",
+    "ticketTagStatus": "Status",
+    "ticketTagNoMatches": "No matching tickets"
   },
   "repoContext": {
     "title": "Add repository context",
@@ -12611,7 +12614,9 @@
       "noticePeriod": "Notice period (days)",
       "salaryMin": "Salary expectation (min)",
       "salaryMax": "Salary expectation (max)",
-      "openToRelocation": "Open to relocation"
+      "openToRelocation": "Open to relocation",
+      "sessionPrice": "Session price",
+      "sessionPriceHint": "Price of one advisory session. Enter 0 to offer sessions pro bono; leave empty for no session price."
     },
     "resume": {
       "title": "Résumé",
@@ -12908,6 +12913,7 @@
       "kindLabel": "Type",
       "kind": {
         "person": "People",
+        "advisor": "Advisors",
         "gig": "Gigs",
         "business": "Businesses",
         "storefront": "Storefronts",
@@ -32021,5 +32027,9 @@
       "installPrompt": "No KPI dashboard installed yet. Install the one built for your vertical to see the metrics your peers track.",
       "installCta": "Install from Marketplace"
     }
+  },
+  "proBonoBadge": {
+    "label": "Pro bono",
+    "accessibleName": "Unpaid — this advisor offers volunteer sessions"
   }
 }

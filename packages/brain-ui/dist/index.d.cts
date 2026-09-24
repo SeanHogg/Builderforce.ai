@@ -1091,6 +1091,16 @@ interface ChatRunVM {
     status: string;
     submittedBy: string;
     source: string;
+    /**
+     * WHERE it executed: 'container' (real shell + local clone) | 'durable' (shell-LESS,
+     * git-API edits) | 'github_actions'. The two cloud executors differ in what the run was
+     * CAPABLE of — only one can compile what it wrote — and nothing else in a transcript
+     * distinguishes them.
+     */
+    executor: string | null;
+    /** The on-prem machine this run was delivered to, when it was one. */
+    hostId: number | null;
+    hostName: string | null;
     produced: boolean | null;
     errorMessage: string | null;
     startedAt: string | null;
@@ -1102,6 +1112,8 @@ interface ChatRunHistoryVM {
     linkedRunnableTickets: number;
     runs: ChatRunVM[];
     dispatchers: string[];
+    /** Distinct executors across those runs ('container' | 'durable' | 'on-prem' | …). */
+    executors: string[];
 }
 /** A human participant of the chat (shared access / audience, migration 0288). */
 interface ChatMemberVM {

@@ -313,7 +313,10 @@
     "categoryLocal": "Auf diesem Gerät",
     "localDetail": "Läuft über {runtime} auf diesem Rechner — kein Verbrauch des Kontingents, funktioniert offline.",
     "assessmentClosedBook": "Eine Prüfung ohne Hilfsmittel läuft – der Assistent ist bis zu ihrem Ende nicht verfügbar.",
-    "assessmentAssisted": "Unterstützte Prüfung – jede Antwort des Assistenten wird im Integritätsprotokoll festgehalten."
+    "assessmentAssisted": "Unterstützte Prüfung – jede Antwort des Assistenten wird im Integritätsprotokoll festgehalten.",
+    "ticketTagTitle": "Ticket verknüpfen",
+    "ticketTagStatus": "Status",
+    "ticketTagNoMatches": "Keine passenden Tickets"
   },
   "repoContext": {
     "title": "Repository-Kontext hinzufügen",
@@ -12611,7 +12614,9 @@
       "noticePeriod": "Kündigungsfrist (Tage)",
       "salaryMin": "Gehaltsvorstellung (Minimum)",
       "salaryMax": "Gehaltsvorstellung (Maximum)",
-      "openToRelocation": "Umzugsbereit"
+      "openToRelocation": "Umzugsbereit",
+      "sessionPrice": "Preis pro Sitzung",
+      "sessionPriceHint": "Preis einer Beratungssitzung. Geben Sie 0 ein, um sie unentgeltlich anzubieten; leer lassen, wenn es keinen Sitzungspreis gibt."
     },
     "resume": {
       "title": "Lebenslauf",
@@ -12908,6 +12913,7 @@
       "kindLabel": "Typ",
       "kind": {
         "person": "Personen",
+        "advisor": "Berater",
         "gig": "Aufträge",
         "business": "Betriebe",
         "storefront": "Shops",
@@ -32021,5 +32027,9 @@
       "installPrompt": "Noch kein KPI-Dashboard installiert. Installieren Sie das Dashboard für Ihre Branche, um die Kennzahlen Ihrer Vergleichsgruppe zu sehen.",
       "installCta": "Aus dem Marktplatz installieren"
     }
+  },
+  "proBonoBadge": {
+    "label": "Pro bono",
+    "accessibleName": "Unentgeltlich – diese Person bietet ehrenamtliche Sitzungen an"
   }
 }

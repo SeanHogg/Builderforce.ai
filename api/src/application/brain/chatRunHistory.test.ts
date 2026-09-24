@@ -24,6 +24,7 @@ const row = (p: Partial<ChatRunRow> & { id: number }): ChatRunRow => ({
   status: 'completed',
   submittedBy: 'user:22c5fd96',
   source: 'vscode',
+  agentHostId: null,
   cloudAgentRef: null,
   payload: null,
   produced: null,
@@ -140,5 +141,59 @@ describe('toChatRunRecords', () => {
   it('leaves a ticket with no title null rather than inventing one', () => {
     const rec = toChatRunRecords([row({ id: 101, taskId: 9999 })], titles, names)[0]!;
     expect(rec.taskTitle).toBeNull();
+  });
+});
+
+describe('toChatRunRecords — WHERE the run executed', () => {
+  /**
+   * The two cloud executors are not two sizes of the same thing. `container` is a Linux
+   * process with a shell and a local clone, so it can build, type-check and test before
+   * finishing; `durable` is shell-LESS and edits over the git API, so it provably cannot.
+   * A green run on each produces an identical-looking transcript.
+   */
+  it('reads the executor the dispatcher stamped on the payload', () => {
+    const recs = toChatRunRecords(
+      [
+        row({ id: 200, payload: JSON.stringify({ executor: 'container' }) }),
+        row({ id: 201, payload: JSON.stringify({ executor: 'durable' }) }),
+        row({ id: 202, payload: JSON.stringify({ executor: 'github_actions' }) }),
+      ],
+      titles,
+      names,
+    );
+    expect(recs.map((r) => r.executor)).toEqual(['container', 'durable', 'github_actions']);
+  });
+
+  it('is null — not a guess — for a run with no stamp or an executor that no longer exists', () => {
+    // The in-request Worker executor was removed. A payload stamped by that build must
+    // read as "not recorded", never be asserted as a surface the platform no longer has.
+    const recs = toChatRunRecords(
+      [row({ id: 203 }), row({ id: 204, payload: 'not json' }), row({ id: 205, payload: JSON.stringify({ executor: 'worker' }) })],
+      titles,
+      names,
+    );
+    expect(recs.map((r) => r.executor)).toEqual([null, null, null]);
+  });
+
+  it('names the on-prem MACHINE, and degrades to its id rather than to blank', () => {
+    // Same rule the agent names follow: an id alone is as unreadable in a report about
+    // where work ran as the raw agent uuids this history used to print.
+    const hosts = new Map<number, string>([[7, 'studio-mac-mini']]);
+    const [named, unknown] = toChatRunRecords(
+      [row({ id: 206, agentHostId: 7 }), row({ id: 207, agentHostId: 9 })],
+      titles,
+      names,
+      hosts,
+    );
+    expect(named!.hostId).toBe(7);
+    expect(named!.hostName).toBe('studio-mac-mini');
+    expect(unknown!.hostId).toBe(9);
+    expect(unknown!.hostName).toBeNull();
+  });
+
+  it('leaves hostName null for an ordinary cloud run', () => {
+    const rec = toChatRunRecords([row({ id: 208, payload: JSON.stringify({ executor: 'durable' }) })], titles, names)[0]!;
+    expect(rec.hostId).toBeNull();
+    expect(rec.hostName).toBeNull();
   });
 });

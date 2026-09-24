@@ -3,7 +3,7 @@ import type { Env, HonoEnv } from '../../env';
 import { TenantPlan } from '../../domain/shared/types';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
-import { toTenantPlan } from '../../application/tenant/featureEntitlements';
+import { resolveFeatureEntitlement, toTenantPlan } from '../../application/tenant/featureEntitlements';
 import {
   CANVAS_CAPABILITY_FEATURES,
   evaluateFeatureEntitlement,
@@ -44,7 +44,8 @@ const PLAN_LABEL: Record<TenantPlan, string> = {
  * needs it to pick a run's surface, and there is no route handler in scope there.
  * Re-exported so route handlers keep importing their gates from ONE module.
  */
-export { resolveFeatureEntitlement, tenantHasFeature } from '../../application/tenant/featureEntitlements';
+export { tenantHasFeature } from '../../application/tenant/featureEntitlements';
+export { resolveFeatureEntitlement };
 
 /**
  * The CANVAS CAPABILITIES this caller holds — the set the object palette filters by.

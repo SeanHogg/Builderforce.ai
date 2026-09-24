@@ -14,7 +14,7 @@ function adapter(over: Partial<ChatDiagnosticsReadAdapter> = {}): ChatDiagnostic
   return {
     listAgents: vi.fn().mockResolvedValue([{ id: 'x', agentRef: 'bob-1', role: 'participant', name: 'Bob' }]),
     listTickets: vi.fn().mockResolvedValue([]),
-    listRuns: vi.fn().mockResolvedValue({ linkedRunnableTickets: 2, runs: [], dispatchers: [] }),
+    listRuns: vi.fn().mockResolvedValue({ linkedRunnableTickets: 2, runs: [], dispatchers: [], executors: [] }),
     ...over,
   } as ChatDiagnosticsReadAdapter;
 }
