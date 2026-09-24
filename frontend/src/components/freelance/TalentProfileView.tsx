@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
+import { ProBonoBadge } from '@/components/freelance/ProBonoBadge';
 import { ProfileAvatar } from '@/components/profile/ProfileIdentityCard';
 import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelance/talentProfile';
@@ -80,6 +81,7 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
             <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <RatingStars rating={profile.rating} count={profile.ratingCount} size={15} />
               {profile.stats && <TrustBadge badge={profile.stats.badge} jss={profile.stats.jss} />}
+              <ProBonoBadge sessionPriceCents={profile.sessionPriceCents} />
             </div>
             <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
               {profile.hourlyRateCents != null && <span>{t('rate')}: <strong style={{ color: 'var(--coral-bright)' }}>{formatCents(profile.hourlyRateCents, { currency: profile.currency, maximumFractionDigits: 0 })}{t('perHour')}</strong></span>}

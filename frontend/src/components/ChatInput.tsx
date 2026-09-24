@@ -499,7 +499,7 @@ export function ChatInput({
     tickets: ticketables ?? [],
     onPick: onTicketTag ?? noopTicket,
     disabled,
-    labels: { title: t('ticketTagTitle') ?? 'Tag ticket', status: t('ticketTagStatus'), noMatches: t('ticketTagNoMatches') },
+    labels: { title: t('ticketTagTitle'), status: t('ticketTagStatus'), noMatches: t('ticketTagNoMatches') },
   });
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -48,6 +48,7 @@ import { SkillTags } from '@/components/SkillTags';
 import { listFreelancers, type FreelancerProfile } from '@/lib/freelance/talentProfile';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
+import { ProBonoBadge } from '@/components/freelance/ProBonoBadge';
 import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, publishActionFor, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';
 import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 import { SkeletonGrid } from './SkeletonGrid';
@@ -912,6 +913,7 @@ export default function MarketplacePageClient() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
                         <RatingStars rating={f.rating} count={f.ratingCount} />
                         <TrustBadge badge={f.badge ?? null} jss={f.jss} size="sm" showJss={false} />
+                        <ProBonoBadge sessionPriceCents={f.sessionPriceCents} size="sm" />
                       </div>
                     </div>
                   </div>

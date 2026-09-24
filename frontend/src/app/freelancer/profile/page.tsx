@@ -36,6 +36,10 @@ export default function FreelancerProfilePage() {
   const [nameText, setNameText] = useState('');
   const [skillsText, setSkillsText] = useState('');
   const [rateDollars, setRateDollars] = useState('');
+  // Advisory session price, held as a STRING while editing for the same reason the
+  // salary fields are: '' (not set) and '0' (pro bono) are different answers, and a
+  // number state cannot hold the difference — `0` and "cleared" would both be falsy.
+  const [sessionPriceDollars, setSessionPriceDollars] = useState('');
   const [slugText, setSlugText] = useState('');
   // Career intent — free-text fields kept as strings while editing so a half-typed
   // comma list or salary never round-trips through the number/array shape mid-keystroke.
@@ -58,6 +62,7 @@ export default function FreelancerProfilePage() {
       setNameText(p.displayName ?? '');
       setSkillsText((p.skills ?? []).join(', '));
       setRateDollars(p.hourlyRateCents != null ? (p.hourlyRateCents / 100).toString() : '');
+      setSessionPriceDollars(p.sessionPriceCents != null ? (p.sessionPriceCents / 100).toString() : '');
       setSlugText(p.slug ?? '');
       setTargetRolesText((p.targetRoles ?? []).join(', '));
       setSalaryMinText(p.desiredSalaryMinCents != null ? (p.desiredSalaryMinCents / 100).toString() : '');
@@ -95,13 +100,20 @@ export default function FreelancerProfilePage() {
   const save = async () => {
     if (!profile) return;
     const hourlyRateCents = rateDollars ? Math.round(parseFloat(rateDollars) * 100) : undefined;
+    // NOT `sessionPriceDollars ? ... : undefined` — '0' is a non-empty string but the
+    // parsed 0 is the pro-bono signal, and the truthiness shortcut the rate above can
+    // afford would send `undefined` and silently clear it. Emptiness is the only thing
+    // that means "not set"; a value that does not parse is left to the server's
+    // normaliser rather than guessed at here.
+    const parsedSession = sessionPriceDollars.trim() === '' ? null : Math.round(parseFloat(sessionPriceDollars) * 100);
+    const sessionPriceCents = parsedSession != null && Number.isFinite(parsedSession) ? parsedSession : undefined;
     const trimmedSlug = slugText.trim();
     // `.then(() => true)`: the write resolves to void, and `undefined` is how the task
     // reports a failure.
     const saved = await taskRun(() => updateMyFreelancerProfile({
         displayName: nameText.trim(),
         headline: profile.headline, bio: profile.bio, discipline: profile.discipline,
-        skills: currentSkills, hourlyRateCents, currency: profile.currency, visibility: profile.visibility,
+        skills: currentSkills, hourlyRateCents, sessionPriceCents, currency: profile.currency, visibility: profile.visibility,
         availability: profile.availability, published: profile.published, location: profile.location, timezone: profile.timezone,
         // Career intent — the same listing, offered to employment demand as well as
         // project demand. PATCH replaces the row, so these travel with every save.
@@ -149,11 +161,15 @@ export default function FreelancerProfilePage() {
       slug: slugText.trim() || null,
       skills: currentSkills,
       hourlyRateCents: rateDollars ? Math.round(parseFloat(rateDollars) * 100) : null,
+      // Same emptiness-not-truthiness rule as the save above: an unsaved '0' has to
+      // reach the preview as `0` or the Pro bono chip the editor is about to publish
+      // would be missing from the one surface meant to show what a visitor will see.
+      sessionPriceCents: sessionPriceDollars.trim() === '' ? null : Math.round(parseFloat(sessionPriceDollars) * 100),
       // The preview must show the same résumé a visitor sees, so hand the editor's
       // loaded family through as the public projection.
       publicResume: myResume ? { title: myResume.title, family: myResume.family } : profile.publicResume,
     };
-  }, [profile, nameText, slugText, currentSkills, rateDollars, myResume]);
+  }, [profile, nameText, slugText, currentSkills, rateDollars, sessionPriceDollars, myResume]);
 
   if (loading) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--text-muted)' }}>{t('loading')}</p></PageContainer>;
   if (!profile) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--coral-bright)' }}>{task.error ?? t('loadFailed')}</p></PageContainer>;
@@ -308,11 +324,20 @@ export default function FreelancerProfilePage() {
               </div>
             )}
           </fieldset>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: 12 }}>
             <div>
               <label className="ui-field__label">{t('profile.rate')}</label>
               <input className="ui-input" type="number" min={0} step="1" value={rateDollars}
                 onChange={(e) => setRateDollars(e.target.value)} placeholder="150" />
+            </div>
+            <div>
+              <label className="ui-field__label" htmlFor="session-price">{t('profile.sessionPrice')}</label>
+              <input id="session-price" className="ui-input" type="number" min={0} step="1" value={sessionPriceDollars}
+                onChange={(e) => setSessionPriceDollars(e.target.value)} placeholder="0"
+                aria-describedby="session-price-hint" />
+              <p id="session-price-hint" style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                {t('profile.sessionPriceHint')}
+              </p>
             </div>
             <div>
               <label className="ui-field__label">{t('profile.currency')}</label>
