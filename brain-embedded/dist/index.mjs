@@ -9385,7 +9385,7 @@ function fmtAdvertised(tools) {
 }
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
-  if (d.surface) lines.push(`- Surface (where this CONVERSATION runs): ${d.surface}`);
+  if (d.surface) lines.push(`- Surface: ${d.surface} (where this CONVERSATION runs; where each dispatched RUN ran is under Execution history)`);
   if (d.versions && (d.versions.ui || d.versions.api || d.versions.uiBuildId)) {
     const buildId = d.versions.uiBuildId;
     const client = `${d.versions.ui ?? "unknown"}${buildId ? `+${buildId}` : ""}` + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== "dev" ? ` (built ${d.versions.uiBuiltAt})` : "");
