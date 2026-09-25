@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { isProBonoSession } from '@/lib/freelance/talentProfile';
 import { Icon } from '@/components/ui/Icon';
