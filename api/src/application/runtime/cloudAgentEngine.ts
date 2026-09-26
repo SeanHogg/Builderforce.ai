@@ -1,6 +1,7 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { splitVendorReasoning, type ChoiceMessageLike } from '@builderforce/agent-loop';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { getLatestBlueprint } from '../blueprint/blueprintDetection';
 // The engine's identity and model-routing slices now live in their own modules —
 // see cloudAgent/agent.ts for why the original 4,117-line file was broken up.
 // Re-exported below because existing importers reference them through this module.
@@ -730,8 +731,10 @@ function buildCloudProvider(args: {
   frozenReadRef?: string;
   principalId?: string;
   repositoryDelegationId?: string;
+  /** The project's detected blueprint (services, databases, env vars). */
+  blueprint: Awaited<ReturnType<typeof getLatestBlueprint>>;
 }): CapabilityProvider {
-  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
+  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths, blueprint } = args;
   // Read/list against the ticket branch only once it exists (created on the first
   // commit). Before any write, the branch ref 404s — read from `base` instead, so
   // the agent sees the real codebase rather than mistaking the missing branch for
@@ -856,7 +859,7 @@ function buildCloudProvider(args: {
         // agent that emits LF against a CRLF-committed file still edits it instead of
         // failing with "old_string not found" and giving up.
         const edit = applyStringEdit(rf.content, oldString, newString, replaceAll);
-        if (!edit.ok || edit.content == null) return { ok: false, error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
+        if (!edit.ok || edit.content == null) return { ok: false, error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}`, ...(edit.nearest ? { nearest: edit.nearest } : {}) };
         const updated = edit.content;
         const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content: updated });
         if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
@@ -867,7 +870,7 @@ function buildCloudProvider(args: {
         await recordRepoWrite(db, tenantId, taskRow.id, target);
         await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
-        return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: edit.replaced };
+        return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: edit.replaced, ...(edit.region ? { region: edit.region } : {}) };
       },
       async deleteFile(path, reason) {
         if (!repoCtx) return { ok: false, error: noRepo() };
@@ -1258,6 +1261,13 @@ async function runCloudToolLoop(
   const cancelChannel = startCancelWatcher(isCancelled);
   const abortController = cancelChannel.controller;
 
+  // W6: Retrieve the project's blueprint for this run
+  // This provides the agent with information about the project's services, databases, etc.
+  const blueprint = await getLatestBlueprint(env, projectId).catch((error) => {
+    reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'getLatestBlueprint', context: { logMessage: '[cloud-run] failed to load blueprint', projectId } });
+    return null;
+  });
+
   // The surface's capability backing + the tool context handed to every dispatch.
   // The provider closes over the LIVE `writtenPaths` set + `repoCtx`, so write/delete
   // bookkeeping and the base→branch read switch stay correct as the run progresses.
@@ -1267,6 +1277,7 @@ async function runCloudToolLoop(
     principalId: runIdentity.principalId,
     ...(repositoryDelegationId ? { repositoryDelegationId } : {}),
     ...(opts?.frozenReadRef ? { frozenReadRef: opts.frozenReadRef } : {}),
+    blueprint,
   });
   // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
   // passes nothing and uses the provider as built.

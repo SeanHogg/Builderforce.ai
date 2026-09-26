@@ -1628,6 +1628,26 @@ export const projectSecrets = pgTable('project_secrets', {
 ]);
 
 /**
+ * W2: AppBlueprint storage.
+ * 
+ * Stores detected app blueprints per project + commit. This is the
+ * "one blueprint, many targets" principle from PRD 31 - detected once,
+ * read by Run loop (W1), Provision (W4), Deploy (W6), Marketplace (W7).
+ */
+export const projectAppBlueprints = pgTable('project_app_blueprints', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  commitSha:      varchar('commit_sha', { length: 40 }).notNull(),
+  blueprint:      jsonb('blueprint').notNull(),
+  detectedAt:     timestamp('detected_at').notNull().defaultNow(),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_project_app_blueprints_project_commit').on(t.projectId, t.commitSha),
+  index('idx_project_app_blueprints_project').on(t.projectId),
+  index('idx_project_app_blueprints_commit').on(t.commitSha),
+]);
+
+/**
  * Where a project's SERVER-SIDE half runs. One row per project.
  *
  * `strategy` names a BackendHostingStrategy (application/backend/hostingStrategy):

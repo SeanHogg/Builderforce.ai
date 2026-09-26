@@ -4373,6 +4373,7 @@
       "whatHappensDetail": "Nothing on the board moves and nothing is copied. The project is the app — there is no second thing to create.",
       "sectionAddress": "Address",
       "sectionRuntime": "Runtime",
+      "sectionPreview": "Preview",
       "sectionOwn": "What you own",
       "sectionData": "Data",
       "sectionPeople": "People",
@@ -4396,6 +4397,7 @@
       "runtimeNoChoice": "There is no host to choose and no server to keep running. Publishing is the only step.",
       "runtimeServing": "Serving build {version} · {size}.",
       "runtimeNothingServed": "Nothing is published yet.",
+      "previewStatement": "See it running before you publish.",
       "ownStatement": "A backlog, an agent workforce, releases and an address.",
       "ownDetail": "Open the project to assign work, watch it run and roll a release back.",
       "openProject": "Open the project",
@@ -16267,6 +16269,7 @@
     "tabLogs": "Logs",
     "tabTimeline": "Timeline",
     "tabPullRequest": "Pull Request",
+    "tabPreview": "Preview",
     "agentWorking": "Agent is working… output will stream here.",
     "noOutput": "No output.",
     "agent": "Agent",
@@ -25807,12 +25810,26 @@
       "cancelled": "Cancelled"
     }
   },
+  "livePreview": {
+    "title": "Live preview",
+    "loading": "Starting the preview…",
+    "unavailable": "No live preview is running.",
+    "unavailableHint": "Start a run to see the app here.",
+    "serviceApp": "App",
+    "reload": "Reload",
+    "restart": "Restart",
+    "open": "Open",
+    "starting": "Starting…",
+    "expoQrLabel": "QR code for the Expo preview",
+    "expoQr": "Open this preview in Expo Go on your phone."
+  },
   "connectors": {
     "category": {
       "communication": "Communication",
       "crm": "CRM & sales",
       "productivity": "Productivity",
       "devtools": "Developer tools",
+      "cloud": "Cloud",
       "finance": "Finance & billing",
       "marketing": "Marketing",
       "support": "Customer support",

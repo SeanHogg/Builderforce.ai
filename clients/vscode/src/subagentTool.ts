@@ -23,6 +23,7 @@
 
 import { runSubagent, SUBAGENT_MAX_STEPS } from "@builderforce/agent-loop";
 import { spawnAgentTool } from "@builderforce/agent-tools";
+import { trimToolResult } from "@seanhogg/builderforce-brain-embedded";
 import type { BrainStreamFn, BrainToolSpec, ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import type { ChildWriteDecision } from "./childWriteGate";
 import type { ToolDef } from "./fileTools";
@@ -53,6 +54,18 @@ export interface SubagentToolDeps {
    * workspace. `null` from this reader means "no such agent", not "reader failed".
    */
   personaBrief?(agent: string): Promise<{ ref: string; name: string; brief: string } | null>;
+  /** Get the parent's abort signal — called at tool execution time, not catalog creation.
+   *  When the user presses Stop, children must stop too. */
+  getSignal?(): AbortSignal | undefined;
+  /**
+   * Route child tool calls through the parent's tracking: ticket check, session notes,
+   * Changes refresh, timeline. Called at tool execution time. Absent ⇒ child calls go
+   * direct (the old buggy behavior).
+   */
+  getRunTool?(): ((name: string, args: Record<string, unknown>) => Promise<unknown>) | undefined;
+  /** Get parent's model to use for the child — prevents a child ending up on a different model.
+   *  Called at tool execution time. */
+  getModel?(): { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } | undefined;
 }
 
 /**
@@ -142,6 +155,15 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
           ? "This host cannot raise an approval prompt, so the sub-agent ran read-only. The findings below are an investigation — make any change yourself."
           : undefined;
 
+      // The role parameter picks a model suited to the work. When provided, it informs
+      // the child's model selection. Default to 'explore' for read-only, 'code' for writable.
+      const role = str(args.role) || (writable ? "code" : "explore");
+
+      // Get dynamic values at execution time (not catalog creation time).
+      const signal = deps.getSignal?.();
+      const runTool = deps.getRunTool?.();
+      const modelInfo = deps.getModel?.() ?? {};
+
       try {
         const stream = await deps.stream();
         const run = await runSubagent<BrainToolSpec>({
@@ -151,10 +173,16 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
           // The kernel owns what a persona DOES to the child's system prompt
           // (`subagentSystemPrompt`), so both surfaces get one answer; this only names who.
           ...(persona ? { persona } : {}),
+          // Thread the parent's abort signal so children stop when the user presses Stop.
+          ...(signal ? { signal } : {}),
           complete: async ({ messages, tools }) => {
             const result = await stream({
               messages: messages as unknown as ChatCompletionMessage[],
               ...(tools.length ? { tools, tool_choice: "auto" as const } : {}),
+              // Use the parent's model settings so the child doesn't end up on a different model.
+              ...(modelInfo.model ? { model: modelInfo.model } : {}),
+              ...(modelInfo.modelStrict != null ? { modelStrict: modelInfo.modelStrict } : {}),
+              ...(modelInfo.routingMode ? { routingMode: modelInfo.routingMode } : {}),
             });
             return {
               content: result.text,
@@ -178,10 +206,21 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
               if (!decision.ok) return { data: { ok: false, error: decision.reason }, isError: true };
             }
             try {
-              // Local executors hand back an already-serialized payload; the loop's
-              // codec serializes what it is given, so parse first or the child reads
-              // its own tool results as an escaped string instead of an object.
-              return { data: parsePayload(await def.execute(call.args, root)) };
+              let raw: unknown;
+              // Route through parent's runTool when available: this ensures the child's
+              // writes are visible to ticket tracking, session notes, Changes refresh, and
+              // the timeline — exactly as if the parent had made the call itself.
+              if (runTool) {
+                raw = await runTool(call.name, call.args);
+              } else {
+                // Fallback to direct execution (the old buggy behavior, preserved for
+                // backward compatibility when runTool is not provided).
+                raw = await def.execute(call.args, root);
+              }
+              // Apply the same trimming the parent applies, so a large file read doesn't
+              // overwhelm the child's context window any more than it would the parent's.
+              const trimmed = trimToolResult(call.name, raw);
+              return { data: parsePayload(trimmed.content), truncated: trimmed.truncated };
             } catch (e) {
               return { data: { ok: false, error: e instanceof Error ? e.message : String(e) }, isError: true };
             }
@@ -197,6 +236,8 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
           // Echoed back so the parent can SAY which agent did this slice — and so the
           // staffing summary can count it as work somebody owns.
           ...(asAgent ? { asAgent } : {}),
+          // The role that was used (either explicitly passed or defaulted).
+          role,
           ...(run.truncated ? { truncated: true, note: "The sub-agent ran out of turns — treat this as partial." } : {}),
           ...(declinedWrite ? { writeDeclined: declinedWrite } : {}),
           ...(run.ok ? {} : { error: run.cancelled ? "the run was stopped while this sub-agent was working" : "the sub-agent stopped without an answer" }),

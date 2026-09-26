@@ -12,6 +12,7 @@ import {
   isWorkerForFiles,
   type RequestOptions,
 } from './apiClient';
+import { isPlanLimitError } from './planLimitError';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { readSseData } from '@/lib/sseFrames';
 import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
@@ -334,22 +335,59 @@ export async function fetchSite(projectId: number | string): Promise<SiteInfo | 
  * preview, the container died), because the caller's fallback is the same in all of
  * them: show the published build instead.
  */
+export interface LivePreviewService {
+  id: string;
+  label: string;
+  url: string;
+}
+
 export interface LivePreviewLink {
   url: string;
   expiresInSeconds: number;
   /** `starting` = the dev server is booting; the link works as soon as it answers. */
   status: 'live' | 'starting';
+  /** Extra processes (API, Expo) when a run boots more than one service. */
+  services?: LivePreviewService[];
 }
 
+/**
+ * Fetch the live-preview ticket. Rethrows {@link PlanLimitError} so a panel can
+ * render an upgrade gate; every other miss (no run, 404, 429) is `null`.
+ */
+export async function loadLivePreview(opts: {
+  projectId?: number | string;
+  executionId?: number | null;
+}): Promise<LivePreviewLink | null> {
+  const path = opts.executionId != null
+    ? `/api/runtime/executions/${opts.executionId}/preview-url`
+    : `/api/runtime/projects/${opts.projectId}/preview-url`;
+  if (opts.executionId == null && (opts.projectId == null || opts.projectId === '')) return null;
+  try {
+    const res = await apiRequest<{
+      available?: boolean;
+      url?: string;
+      expiresInSeconds?: number;
+      status?: 'live' | 'starting';
+      services?: LivePreviewService[];
+    }>(path, { expectedErrors: [404, 429] });
+    if (!res?.available || !res.url) return null;
+    return {
+      url: res.url,
+      expiresInSeconds: res.expiresInSeconds ?? 0,
+      status: res.status ?? 'live',
+      services: res.services,
+    };
+  } catch (e) {
+    if (isPlanLimitError(e)) throw e;
+    return null;
+  }
+}
+
+/** Same as {@link loadLivePreview} but swallows a 402 — the published-build fallback. */
 export async function fetchLivePreviewUrl(projectId: number | string): Promise<LivePreviewLink | null> {
   try {
-    const res = await apiRequest<{ available?: boolean; url?: string; expiresInSeconds?: number; status?: 'live' | 'starting' }>(
-      `/api/runtime/projects/${projectId}/preview-url`,
-    );
-    if (!res?.available || !res.url) return null;
-    return { url: res.url, expiresInSeconds: res.expiresInSeconds ?? 0, status: res.status ?? 'live' };
+    return await loadLivePreview({ projectId });
   } catch {
-    // 404 (feature off) / 402 (plan) / 429 (at capacity) are all "no live preview".
     return null;
   }
 }

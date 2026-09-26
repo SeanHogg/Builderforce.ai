@@ -23,6 +23,7 @@ import {
   type TaskRepoStatus,
 } from '@/lib/builderforceApi';
 import { unifiedDiff } from '@/lib/unifiedDiff';
+import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { RunAgentControl } from '../task/RunAgentControl';
@@ -138,7 +139,7 @@ function runProvenance(toolEvents: ExecutionTraceToolEvent[]): {
   return { dispatch, models: [...models.entries()].map(([m, n]) => `${m} ×${n}`), repo };
 }
 
-type SubTab = 'output' | 'changes' | 'tools' | 'thinking' | 'model' | 'logs' | 'timeline' | 'pull-request';
+type SubTab = 'output' | 'changes' | 'tools' | 'thinking' | 'model' | 'logs' | 'timeline' | 'pull-request' | 'preview';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
 /**
@@ -863,7 +864,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', t('tabOutput')], ['changes', `${t('tabChanges')}${changeCount ? ` (${changeCount})` : ''}`], ['tools', `${t('tabTools')}${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['thinking', `${t('tabThinking')}${thoughts.length ? ` (${thoughts.length})` : ''}`], ['model', `${t('tabModelTurns')}${llmTurns.length ? ` (${llmTurns.length})` : ''}`], ['logs', t('tabLogs')], ['timeline', t('tabTimeline')]]; if (prUrl) base.push(['pull-request', t('tabPullRequest')]); return base; })().map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', t('tabOutput')], ['changes', `${t('tabChanges')}${changeCount ? ` (${changeCount})` : ''}`], ['tools', `${t('tabTools')}${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['thinking', `${t('tabThinking')}${thoughts.length ? ` (${thoughts.length})` : ''}`], ['model', `${t('tabModelTurns')}${llmTurns.length ? ` (${llmTurns.length})` : ''}`], ['logs', t('tabLogs')], ['timeline', t('tabTimeline')], ['preview', t('tabPreview')]]; if (prUrl) base.push(['pull-request', t('tabPullRequest')]); return base; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -1083,6 +1084,12 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               when the task has a PR is enough. */}
           {subTab === 'pull-request' && (
             <PullRequestPanel taskId={task.id} onMerged={() => onTaskChanged?.()} />
+          )}
+
+          {subTab === 'preview' && (
+            <div style={{ height: 360, minWidth: 0 }}>
+              <LivePreviewPanel projectId={task.projectId} executionId={selectedId} />
+            </div>
           )}
         </div>
       )}

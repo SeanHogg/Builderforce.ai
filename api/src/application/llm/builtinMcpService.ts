@@ -30,6 +30,7 @@ import { CAREER_TOOLS } from './careerToolCatalog';
 import { DELIVERY_TOOLS } from './deliveryToolCatalog';
 import { CHAT_DIAGNOSTICS_TOOLS } from './chatDiagnosticsToolCatalog';
 import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
+import { APP_BLUEPRINT_TOOLS } from './appBlueprintToolCatalog';
 import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
 import { decideTicketPendingChanges } from '../task/ticketPendingChanges';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -4113,6 +4114,10 @@ const CATALOG: BuiltinTool[] = [
   // Pairs with `spawn_agent { as_agent }`: a model checks what an agent brings
   // before handing it a slice, and a wrong name comes back with the right ones.
   ...AGENT_PERSONA_TOOLS,
+  // ---- App Blueprint detection and management -------------------------------
+  // Tools for detecting, reading, and overriding project blueprints. These enable
+  // the agent to understand the project's structure (framework, databases, services).
+  ...APP_BLUEPRINT_TOOLS,
 ];
 
 

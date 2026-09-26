@@ -32,6 +32,12 @@ export async function brainToolCatalog(
    *  `spawn_agent` is still advertised, because a read-only child is the DEFAULT and is
    *  most of what delegation is for. */
   confirmWrite?: SubagentToolDeps["confirmWrite"],
+  /** Get the parent's abort signal at tool execution time. */
+  getSignal?: SubagentToolDeps["getSignal"],
+  /** Get the parent's runTool at tool execution time for child write tracking. */
+  getRunTool?: SubagentToolDeps["getRunTool"],
+  /** Get the parent's model settings at tool execution time. */
+  getModel?: SubagentToolDeps["getModel"],
 ): Promise<ToolDef[]> {
   const cognitionTools = projectId != null ? cognitionToolDefs(secrets, projectId) : [];
   const platformTools = await listPlatformTools(secrets);
@@ -49,6 +55,9 @@ export async function brainToolCatalog(
           catalog: () => [...localTools, ...cognitionTools, ...platformTools],
           ...(confirmWrite ? { confirmWrite } : {}),
           personaBrief: (agent) => resolvePersonaBrief(platformTools, agent, root),
+          ...(getSignal ? { getSignal } : {}),
+          ...(getRunTool ? { getRunTool } : {}),
+          ...(getModel ? { getModel } : {}),
         })]
       : [];
   return [...localTools, ...cognitionTools, ...platformTools, ...delegation];

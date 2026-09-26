@@ -44,26 +44,44 @@ describe('buildPreviewDevServerStep', () => {
     expect(step.files.some((f) => f.path.startsWith('metro.config'))).toBe(true);
   });
 
-  it('always has a start candidate, and puts Expo ahead of the generic dev script', () => {
+  it('always has a start candidate, and puts Wrangler ahead of the generic dev script', () => {
     expect(step.candidates.length).toBeGreaterThan(1);
-    expect(step.candidates[0]?.when).toBe('app.json');
+    // Wrangler is first (for Cloudflare Workers), then Expo, then Vite/Next, then fallback
+    expect(step.candidates[0]?.when).toBe('wrangler.toml');
     // The last candidate must match unconditionally, or a project with no marker file
     // would produce no command at all.
     expect(step.candidates[step.candidates.length - 1]?.when).toBeUndefined();
+  });
+
+  it('includes an install command to run before starting the dev server', () => {
+    expect(step.installCommand).toBeTruthy();
+    expect(step.installCommand).toContain('npm install');
+  });
+
+  it('includes Wrangler as a start candidate for Cloudflare Workers', () => {
+    const wranglerCandidate = step.candidates.find((c) => c.when === 'wrangler.toml');
+    expect(wranglerCandidate).toBeTruthy();
+    expect(wranglerCandidate?.command).toContain('wrangler');
   });
 });
 
 describe('previewStepForRun', () => {
   const container = {} as Env['AGENT_CONTAINER'];
 
-  it('is inert until the flag AND the container binding are both present', () => {
-    expect(previewStepForRun({ AGENT_CONTAINER: container } as Env)).toBeNull();
-    expect(previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true' } as Env)).toBeNull();
-    expect(previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'false', AGENT_CONTAINER: container } as Env)).toBeNull();
+  it('is inert until the flag AND the container binding are both present', async () => {
+    // Mock db and secrets - should return null when feature is off
+    const mockDb = {} as any;
+    expect(await previewStepForRun({ AGENT_CONTAINER: container } as Env, mockDb, 1, 1)).toBeNull();
+    expect(await previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true' } as Env, mockDb, 1, 1)).toBeNull();
+    expect(await previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'false', AGENT_CONTAINER: container } as Env, mockDb, 1, 1)).toBeNull();
   });
 
-  it('produces the step once the operator turns it on', () => {
-    const step = previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true', AGENT_CONTAINER: container } as Env);
+  it('produces the step once the operator turns it on', async () => {
+    // Mock db that returns empty secrets
+    const mockDb = {
+      select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+    } as any;
+    const step = await previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true', AGENT_CONTAINER: container } as Env, mockDb, 1, 1);
     expect(step?.port).toBe(PREVIEW_PORT);
   });
 });

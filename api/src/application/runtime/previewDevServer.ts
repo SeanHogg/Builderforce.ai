@@ -37,6 +37,7 @@ import {
   projectIdForExecution,
   type PreviewCapacityVerdict,
 } from './previewSessions';
+import { loadProjectSecretValues } from '../secrets/projectSecrets';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -79,6 +80,8 @@ export interface PreviewDevServerStep {
   files: PreviewConfigFile[];
   /** Merged into the dev server's environment. */
   env: Record<string, string>;
+  /** Install command to run before starting the dev server (e.g., "npm install"). */
+  installCommand: string | null;
   /** Ordered start candidates — first match wins. */
   candidates: PreviewStartCandidate[];
   /** How the step decides the server is UP (the API re-runs the same probe itself). */
@@ -186,8 +189,14 @@ module.exports = {
  * Build the step. Pure — no IO — so the command/config contract is unit-testable and the
  * SAME description is what gets handed to the runner, recorded on the lease, and shown
  * in diagnostics.
+ * 
+ * @param port - The port to run the dev server on
+ * @param secrets - Optional project secrets to inject into the environment
  */
-export function buildPreviewDevServerStep(port: number = PREVIEW_PORT): PreviewDevServerStep {
+export function buildPreviewDevServerStep(
+  port: number = PREVIEW_PORT,
+  secrets: Record<string, string> = {},
+): PreviewDevServerStep {
   return {
     port,
     publicOrigin: PREVIEW_PUBLIC_ORIGIN,
@@ -205,9 +214,15 @@ export function buildPreviewDevServerStep(port: number = PREVIEW_PORT): PreviewD
       NEXT_PUBLIC_PREVIEW_ORIGIN: PREVIEW_PUBLIC_ORIGIN,
       BROWSER: 'none',
       CI: '1',
+      // Project secrets (W1 - secrets handling)
+      ...secrets,
     },
+    // Install dependencies before starting the dev server (W1)
+    installCommand: 'npm install --prefer-offline',
     candidates: [
-      // Expo first: an Expo project ALSO has a package.json `dev` script, so a generic
+      // Wrangler/Cloudflare Worker first - check for wrangler.toml
+      { when: 'wrangler.toml', command: `npx wrangler dev --port ${port} --local` },
+      // Expo: an Expo project ALSO has a package.json `dev` script, so a generic
       // match would start the wrong server.
       { when: 'app.json', requiresScript: 'start', command: `npx expo start --port ${port} --host lan` },
       { when: 'vite.config.builderforce-preview.mjs', requiresScript: 'dev', command: `npx vite --config vite.config.builderforce-preview.mjs --port ${port} --host 0.0.0.0` },
@@ -226,9 +241,24 @@ export function previewEnabled(env: Env): boolean {
 /**
  * The preview step for a run, or null when the feature is off. This is what a launcher
  * puts on the wire: while the flag is unset every run is launched EXACTLY as before.
+ * 
+ * @param env - Environment variables
+ * @param db - Database connection
+ * @param tenantId - Tenant ID for loading secrets
+ * @param projectId - Project ID for loading secrets
  */
-export function previewStepForRun(env: Env): PreviewDevServerStep | null {
-  return previewEnabled(env) ? buildPreviewDevServerStep() : null;
+export async function previewStepForRun(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<PreviewDevServerStep | null> {
+  if (!previewEnabled(env)) return null;
+  
+  // Load project secrets (W1 - secrets handling)
+  const secrets = await loadProjectSecretValues(db, env, tenantId, projectId);
+  
+  return buildPreviewDevServerStep(PREVIEW_PORT, secrets);
 }
 
 export interface PreviewProbe {
