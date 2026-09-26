@@ -811,7 +811,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       // Transform TicketLinkVM to ChatTicket: use ref as key, parse id from ref or use linkId
       setChatTickets(tickets.map((t) => ({
         id: parseInt(t.ref) || t.linkId,
-        title: t.label,
+        title: t.label || t.ref,  // Fallback to ref if label is empty
         status: t.status,
         key: t.ref,
       })));
