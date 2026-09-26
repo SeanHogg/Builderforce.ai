@@ -47,8 +47,12 @@ import { STOPPED_TURN_STEP, stoppedTurnMetadata } from './stoppedTurn';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
-import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { isTicketRecordingTool, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
 import { isCodeChangeTool, canChangeCodeHere, canShipHere, localToolsIn, memoryToolsIn } from './localWorkspaceTools';
+import { codeChangesOf, isDelegationTool } from './codeChanges';
+import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from './placeholderGuard';
+import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory, PlaceholderLedger } from './completionGuard';
+import { isRestatedReply, previousReplyText, restatedReplyNudge } from './restatedReply';
 import { hasCallMarkup } from './xmlToolCalls';
 import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcomeReport';
 import { shippedToBaseBranch } from './shipVerification';
@@ -134,7 +138,7 @@ function provenanceMetadata(result: StreamChatResult, requested?: string): strin
  *  `isDedupableRead` set. Deliberately narrow — only tools that observe and can't mutate,
  *  so a stubbed repeat never hides a real change (a mutation clears the dedupe set anyway;
  *  see {@link runLoop}). */
-const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline']);
+const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline', 'semantic_search', 'repo_map']);
 
 /** A tool whose identical-args repeat within a run is safe to suppress: a local file/search
  *  tool OR a read-only platform tool. This is the fix for the "Brain re-checks the same
@@ -894,6 +898,19 @@ export function subscribeRun(chatId: number, listener: () => void): () => void {
   };
 }
 
+/**
+ * The cancel signal of a chat's IN-FLIGHT run, or undefined when nothing is running.
+ *
+ * Exists for the same reason {@link requestRunConfirm} is callable from outside the
+ * cell: work the run starts that is not the loop itself — a delegated sub-agent running
+ * its own nested loop inside one tool call — must stop when the user presses Stop, and
+ * the controller is created by {@link startRun}, after the host has already assembled the
+ * catalog that carries that tool. So the tool reads it at CALL time, by chat.
+ */
+export function runAbortSignal(chatId: number): AbortSignal | undefined {
+  return cells.get(chatId)?.abort?.signal;
+}
+
 /** Current snapshot (referentially stable until something changes). */
 export function getRunSnapshot(chatId: number | null): BrainRunSnapshot {
   if (chatId == null) return EMPTY_SNAPSHOT;
@@ -1636,7 +1653,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // capability separately — and a host that gains or loses the file tools stays
   // consistent with the post-run backstop, which reads the same set.
   const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), roster: req.chatRoster })}\n\n${turnOptimizationDirective()}`;
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes('spawn_agent'), canFanOut: catalogToolNames.includes('spawn_agents'), roster: req.chatRoster })}\n\n${turnOptimizationDirective()}`;
   // A session that can commit AND push holds the only copy of its change — nobody else
   // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
   // Rides both modes: it only binds a turn that changes code.
@@ -1685,6 +1702,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // gone. The first retry stays free; from the second the model reads the count and the
   // error it already has, and the moves that remain.
   const failures = new FailureTally();
+  // Placeholders this run wrote and has not removed — read when a ticket is marked done
+  // (see `completionGuard.ts`).
+  const placeholderLedger = new PlaceholderLedger();
   /**
    * Record a failed call and return the advisory the MODEL should read with it, or null
    * while a retry is still reasonable. The intervention is its own trace step — exactly
@@ -1723,6 +1743,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // One, not a budget: the second time the model stops short it has read the contract
   // twice, and its answer — including "I cannot ship this because…" — is the answer.
   let shipRecoveryUsed = false;
+  // One re-prompt per run for a final reply that repeats the previous turn's answer
+  // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
+  const priorReply = previousReplyText(convo);
+  let restateRecoveryUsed = false;
   // The model this run is CURRENTLY talking to, and every model it has already tried.
   // Both change when a model burns its whole stall budget without emitting a single
   // tool call: re-prompting such a model is spent, so the run fails over to another
@@ -2194,6 +2218,24 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         return { action: 'continue' };
       }
 
+      // The reply is the previous turn's status again. The user already has it, so it is
+      // sent back once to act on the next unfinished item instead (chat #126: the same
+      // "not complete" summary, turn after turn, each rebuilt from a full re-read).
+      if (runTool && !restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
+        restateRecoveryUsed = true;
+        await requeueWithNudge(restatedReplyNudge());
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'loop.recover_restated_reply',
+          args: { step: iter },
+          result: 'Final reply repeated the previous turn\'s answer — re-prompted to act on the next unfinished item instead of restating it.',
+        });
+        c.streamingText = '';
+        emit(c);
+        return { action: 'continue' };
+      }
+
       // Final text — record in the transcript, persist, broadcast to mounted views.
       const finalText = result.text.trim() || 'No response.';
       const assistantMsg = await settleReply(finalText, result, requested);
@@ -2614,12 +2656,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // Backstop bookkeeping (see startRun's finally): a successful workspace
       // file-change marks the run as code-changing (and remembers the file), while
       // the model recording its own delta/link/review clears the need for the
-      // auto-capture. A failed call above returned out, so this counts successes.
-      if (isCodeChangeTool(call.name)) {
+      // auto-capture. `codeChangesOf` is the ONE reading of "what did this call
+      // change" — a direct write names its path, a delegated child's writes arrive
+      // as the `spawn_agent` result's `changedFiles` — and a failed direct write yields none.
+      const changed = codeChangesOf(call.name, args, out);
+      if (changed) {
         const first = !c.codeChanged;
         c.codeChanged = true;
-        const f = codeChangeFile(args);
-        if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
         // OPEN THE TICKET NOW, on the first edit — not in the `finally`, which a
         // Stop skips and a closed/reloaded surface never reaches. One call per run,
         // and from here on the work is on the board and linked to this chat whatever
@@ -2658,6 +2702,35 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       } else {
         // It worked — earlier failures of this exact call were transient after all.
         failures.clear(call.name, args);
+        // A write that SUCCEEDED can still be unfinished work: a stub, a TODO, the
+        // model's own reasoning left in the source. Said on the result it reads — the
+        // only moment it can still finish — and recorded for the diagnostics.
+        const placeholders = placeholdersWritten(call.name, args);
+        if (placeholders.length) {
+          pushTrace(c, placeholderTraceEvent(call.name, placeholders, nowIso()));
+          advisory = placeholderAdvisory(placeholders);
+        }
+        if (isCodeChangeTool(call.name)) placeholderLedger.record(call.name, args, placeholders);
+        if (isDelegationTool(call.name)) placeholderLedger.add(delegationPlaceholders(out));
+        // A ticket marked done while this run's placeholders are still in the code: said
+        // at the moment the claim is made (chat #126 set #2747 done over a "For now" stub).
+        // Also check that code is on the base branch before allowing completion.
+        if (isTicketCompletion(call.name, args)) {
+          // First check: are there outstanding placeholders?
+          const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
+          // Second check: is code on the base branch?
+          const events = c.trace;
+          const isOnBaseBranch = shippedToBaseBranch(events);
+          const canComplete = canCompleteTicket(isOnBaseBranch, false); // userDeclinedShipping defaults to false
+          if (!canComplete) {
+            const said = notOnBaseBranchAdvisory();
+            pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, isOnBaseBranch }, result: said });
+            advisory = said;
+          } else if (placeholderWarning) {
+            pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.completion_guard', args: { tool: call.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
+            advisory = placeholderWarning;
+          }
+        }
         if (isReadTool) {
           // Recording a SUCCESSFUL read is also what arms the exact-repeat stub for it;
           // a failed read is not recorded, so it can be retried.
