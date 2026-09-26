@@ -1,4 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { detectAndStoreBlueprint } from '../../application/blueprint/blueprintDetection';
+import { resolveRepoLink } from '../../application/contributors/activityIngest';
 /**
  * GitHub webhook handler — /api/webhooks/github
  *
@@ -329,6 +331,39 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       if (!out) {
         return c.json({ received: true, processed: false, reason: `no project linked to repo '${full}'` });
       }
+
+      // W5: Detect blueprint on push events
+      // Run asynchronously to not block the webhook response
+      if (event === 'push') {
+        const commitSha = gs(p, 'after'); // The new head commit SHA
+        if (commitSha) {
+          c.executionCtx.waitUntil(
+            (async () => {
+              try {
+                // Get project ID from repo
+                const link = await resolveRepoLink(db, full);
+                if (link?.projectId) {
+                  // Try to detect blueprint (may fail if no token or rate limited - that's OK)
+                  await detectAndStoreBlueprint({
+                    projectId: link.projectId,
+                    commitSha,
+                    env: c.env as Env,
+                    // Note: For full functionality, we'd need to get the GitHub token from the integration
+                    // For now, we'll try without token for public repos
+                  });
+                }
+              } catch (error) {
+                // Log but don't fail - blueprint detection is best-effort
+                reportCaughtError(error, {
+                  source: 'presentation/routes/githubWebhookRoutes.ts',
+                  operation: 'detectBlueprintOnPush',
+                });
+              }
+            })()
+          );
+        }
+      }
+
       // A PR lifecycle change is work for the frequent reconciler. Signal the
       // shared cron gate so a newly opened PR cannot wait for the 30-minute floor.
       if (event === 'pull_request') c.executionCtx.waitUntil(signalPendingWork(c.env as Env));

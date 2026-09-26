@@ -16,19 +16,32 @@ import type { Env } from '../../env';
 export interface DetectBlueprintOptions {
   projectId: number;
   commitSha: string;
-  repoDir: string; // Path to the repo on disk
+  repoDir?: string; // Path to the repo on disk (for local dev)
   env: Env; // For database access
+  /** GitHub token for reading files via API (for cloud deployment) */
+  githubToken?: string;
+  /** GitHub owner/repo (e.g., "owner/repo") for remote reading */
+  githubRepo?: string;
 }
 
 /**
  * Detect and store an app blueprint for a project at a specific commit.
  */
 export async function detectAndStoreBlueprint(options: DetectBlueprintOptions): Promise<AppBlueprint> {
-  const { projectId, commitSha, repoDir, env } = options;
+  const { projectId, commitSha, repoDir, env, githubToken, githubRepo } = options;
   const db = buildDatabase(env);
   
-  // 1. Read files from the repo
-  const files = await readRepoFiles(repoDir);
+  // 1. Read files from the repo (local or remote)
+  let files: Map<string, string>;
+  if (githubToken && githubRepo) {
+    // Read from GitHub API
+    files = await readRepoFilesFromGitHub(githubToken, githubRepo, commitSha);
+  } else if (repoDir) {
+    // Read from local filesystem
+    files = await readRepoFiles(repoDir);
+  } else {
+    throw new Error('Either repoDir or (githubToken + githubRepo) must be provided');
+  }
   
   // 2. Run detectors
   const partial = runDetectors(files);
@@ -131,6 +144,96 @@ async function readRepoFiles(repoDir: string): Promise<Map<string, string>> {
     // No workflows directory
   }
   
+  return files;
+}
+
+/**
+ * Read relevant files from the repo via GitHub API.
+ */
+async function readRepoFilesFromGitHub(
+  token: string,
+  repo: string, // "owner/repo"
+  ref: string // commit SHA or branch
+): Promise<Map<string, string>> {
+  const files = new Map<string, string>();
+  
+  const filesToRead = [
+    'package.json',
+    'wrangler.toml',
+    'wrangler.jsonc',
+    'vite.config.ts',
+    'vite.config.js',
+    'next.config.js',
+    'next.config.mjs',
+    'app.json',
+    'capacitor.config.ts',
+    'drizzle.config.ts',
+    'schema.prisma',
+    'Dockerfile',
+    '.env.example',
+    'builderforce.json',
+  ];
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'BuilderForce-Blueprint/1.0',
+  };
+
+  const [owner, repoName] = repo.split('/');
+  if (!owner || !repoName) {
+    throw new Error(`Invalid repo format: ${repo}. Expected "owner/repo"`);
+  }
+
+  for (const file of filesToRead) {
+    try {
+      const url = `https://api.github.com/repos/${owner}/${repoName}/contents/${file}?ref=${ref}`;
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        if (response.status !== 404) {
+          console.warn(`Failed to fetch ${file}: ${response.status}`);
+        }
+        continue;
+      }
+      const data = await response.json() as { content?: string; encoding?: string };
+      if (data.content && data.encoding === 'base64') {
+        const content = atob(data.content.replace(/\n/g, ''));
+        files.set(file, content);
+      }
+    } catch {
+      // Skip file on error
+    }
+  }
+
+  // Also look for GitHub workflows
+  try {
+    const workflowUrl = `https://api.github.com/repos/${owner}/${repoName}/contents/.github/workflows?ref=${ref}`;
+    const workflowResponse = await fetch(workflowUrl, { headers });
+    if (workflowResponse.ok) {
+      const workflowData = await workflowResponse.json() as Array<{ name: string; content?: string; encoding?: string }>;
+      for (const file of workflowData) {
+        if (file.name.endsWith('.yml') || file.name.endsWith('.yaml')) {
+          try {
+            // Need to fetch each workflow file content separately
+            const fileUrl = `https://api.github.com/repos/${owner}/${repoName}/contents/.github/workflows/${file.name}?ref=${ref}`;
+            const fileResponse = await fetch(fileUrl, { headers });
+            if (fileResponse.ok) {
+              const fileData = await fileResponse.json() as { content?: string; encoding?: string };
+              if (fileData.content && fileData.encoding === 'base64') {
+                const content = atob(fileData.content.replace(/\n/g, ''));
+                files.set(`.github/workflows/${file.name}`, content);
+              }
+            }
+          } catch {
+            // Skip on error
+          }
+        }
+      }
+    }
+  } catch {
+    // No workflows directory
+  }
+
   return files;
 }
 
