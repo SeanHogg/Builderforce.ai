@@ -213,13 +213,14 @@ const vercel: ConnectorManifest = {
 const cloudflare: ConnectorManifest = {
   key: 'cloudflare',
   name: 'Cloudflare',
-  description: 'Manage zones, DNS records and cache on Cloudflare.',
+  description: 'Manage zones, DNS, cache, Workers, R2, KV, D1 and Queues on Cloudflare.',
   category: 'devtools',
   icon: '🟠',
   baseUrl: 'https://api.cloudflare.com/client/v4',
   docsUrl: 'https://developers.cloudflare.com/api/',
   auth: { kind: 'bearer', fields: [{ key: 'token', label: 'API token', secret: true, required: true, help: 'Cloudflare → My Profile → API Tokens' }] },
   actions: [
+    // Zones & DNS
     {
       key: 'list_zones', label: 'List zones', description: 'List the zones the token can see.',
       method: 'GET', path: '/zones', mutates: false, resultPath: 'result',
@@ -235,7 +236,205 @@ const cloudflare: ConnectorManifest = {
       method: 'GET', path: '/zones/{zone_id}/dns_records', mutates: false, required: ['zone_id'], resultPath: 'result',
       params: { zone_id: p('Zone id'), type: q('Record type, e.g. A or CNAME'), name: q('Filter by record name') },
     },
+    {
+      key: 'create_dns_record', label: 'Create DNS record', description: 'Create a DNS record in a zone.',
+      method: 'POST', path: '/zones/{zone_id}/dns_records', mutates: true, required: ['zone_id', 'type', 'name', 'content'],
+      params: { zone_id: p('Zone id'), type: b('Record type, e.g. A, CNAME, TXT'), name: b('Record name'), content: b('Record content'), priority: q('Priority (MX only)') },
+    },
+    // Workers
+    {
+      key: 'list_workers_scripts', label: 'List Workers', description: 'List Workers scripts in the account.',
+      method: 'GET', path: '/accounts/{account_id}/workers/scripts', mutates: false, required: ['account_id'], resultPath: 'result',
+      params: { account_id: p('Account id') },
+    },
+    {
+      key: 'get_worker_script', label: 'Get Worker', description: 'Get a Worker script content.',
+      method: 'GET', path: '/accounts/{account_id}/workers/scripts/{script_name}', mutates: false, required: ['account_id', 'script_name'],
+      params: { account_id: p('Account id'), script_name: p('Worker script name') },
+    },
+    {
+      key: 'upload_worker_script', label: 'Upload Worker', description: 'Upload or update a Worker script.',
+      method: 'PUT', path: '/accounts/{account_id}/workers/scripts/{script_name}', mutates: true, required: ['account_id', 'script_name'],
+      params: { account_id: p('Account id'), script_name: p('Worker script name'), body: b('Worker script content') },
+    },
+    // R2
+    {
+      key: 'list_r2_buckets', label: 'List R2 buckets', description: 'List R2 storage buckets.',
+      method: 'GET', path: '/accounts/{account_id}/r2/buckets', mutates: false, required: ['account_id'], resultPath: 'result',
+      params: { account_id: p('Account id') },
+    },
+    {
+      key: 'create_r2_bucket', label: 'Create R2 bucket', description: 'Create an R2 storage bucket.',
+      method: 'POST', path: '/accounts/{account_id}/r2/buckets', mutates: true, required: ['account_id', 'name'],
+      params: { account_id: p('Account id'), name: b('Bucket name') },
+    },
+    // KV
+    {
+      key: 'list_kv_namespaces', label: 'List KV namespaces', description: 'List KV namespaces.',
+      method: 'GET', path: '/accounts/{account_id}/storage/kv/namespaces', mutates: false, required: ['account_id'], resultPath: 'result',
+      params: { account_id: p('Account id') },
+    },
+    {
+      key: 'list_kv_keys', label: 'List KV keys', description: 'List keys in a KV namespace.',
+      method: 'GET', path: '/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/keys', mutates: false, required: ['account_id', 'namespace_id'], resultPath: 'result',
+      params: { account_id: p('Account id'), namespace_id: p('Namespace id'), limit: qn('Max keys') },
+    },
+    {
+      key: 'get_kv_value', label: 'Get KV value', description: 'Get a value from KV.',
+      method: 'GET', path: '/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/values/{key}', mutates: false, required: ['account_id', 'namespace_id', 'key'],
+      params: { account_id: p('Account id'), namespace_id: p('Namespace id'), key: p('Key name') },
+    },
+    {
+      key: 'put_kv_value', label: 'Put KV value', description: 'Put a value into KV.',
+      method: 'PUT', path: '/accounts/{account_id}/storage/kv/namespaces/{namespace_id}/values/{key}', mutates: true, required: ['account_id', 'namespace_id', 'key', 'value'],
+      params: { account_id: p('Account id'), namespace_id: p('Namespace id'), key: p('Key name'), value: b('Value'), expiration_ttl: q('TTL in seconds') },
+    },
+    // D1
+    {
+      key: 'list_d1_databases', label: 'List D1 databases', description: 'List D1 databases.',
+      method: 'GET', path: '/accounts/{account_id}/d1/databases', mutates: false, required: ['account_id'], resultPath: 'result',
+      params: { account_id: p('Account id') },
+    },
+    {
+      key: 'query_d1_database', label: 'Query D1', description: 'Execute SQL query on a D1 database.',
+      method: 'POST', path: '/accounts/{account_id}/d1/databases/{database_id}/query', mutates: false, required: ['account_id', 'database_id'],
+      params: { account_id: p('Account id'), database_id: p('Database id'), sql: b('SQL query') },
+    },
+    // Queues
+    {
+      key: 'list_queues', label: 'List Queues', description: 'List Queues.',
+      method: 'GET', path: '/accounts/{account_id}/workers/queues', mutates: false, required: ['account_id'], resultPath: 'result',
+      params: { account_id: p('Account id') },
+    },
+    {
+      key: 'list_queue_messages', label: 'List queue messages', description: 'List messages in a queue.',
+      method: 'GET', path: '/accounts/{account_id}/workers/queues/{queue_name}/messages', mutates: false, required: ['account_id', 'queue_name'],
+      params: { account_id: p('Account id'), queue_name: p('Queue name'), limit: qn('Max messages') },
+    },
   ],
 };
 
-export const DEVTOOLS_CONNECTORS: readonly ConnectorManifest[] = [github, gitlab, linear, jira, sentry, vercel, cloudflare];
+// GCP Connector
+const gcp: ConnectorManifest = {
+  key: 'gcp',
+  name: 'Google Cloud',
+  description: 'Manage GCP projects, Cloud Run, Cloud Functions, and storage buckets.',
+  category: 'devtools',
+  icon: '☁️',
+  baseUrl: 'https://cloudfunctions.googleapis.com/v2',
+  docsUrl: 'https://cloud.google.com/docs',
+  auth: { kind: 'bearer', fields: [{ key: 'access_token', label: 'Access token', secret: true, required: true, help: 'Generate via gcloud auth print-access-token' }] },
+  actions: [
+    {
+      key: 'list_projects', label: 'List projects', description: 'List GCP projects the user has access to.',
+      method: 'GET', path: 'https://cloudresourcemanager.googleapis.com/v1/projects', mutates: false, resultPath: 'projects',
+      params: {},
+    },
+    {
+      key: 'list_run_services', label: 'List Cloud Run services', description: 'List Cloud Run services in a region.',
+      method: 'GET', path: 'https://run.googleapis.com/v1/projects/{project}/locations/{location}/services', mutates: false, required: ['project', 'location'], resultPath: 'items',
+      params: { project: p('Project id'), location: p('Region, e.g. us-central1') },
+    },
+    {
+      key: 'get_run_service', label: 'Get Cloud Run service', description: 'Get a Cloud Run service status.',
+      method: 'GET', path: 'https://run.googleapis.com/v1/projects/{project}/locations/{location}/services/{name}', mutates: false, required: ['project', 'location', 'name'],
+      params: { project: p('Project id'), location: p('Region'), name: p('Service name') },
+    },
+    {
+      key: 'list_functions', label: 'List Cloud Functions', description: 'List Cloud Functions in a region.',
+      method: 'GET', path: 'https://cloudfunctions.googleapis.com/v2/projects/{project}/locations/{location}/functions', mutates: false, required: ['project', 'location'], resultPath: 'functions',
+      params: { project: p('Project id'), location: p('Region') },
+    },
+    {
+      key: 'list_storage_buckets', label: 'List GCS buckets', description: 'List Cloud Storage buckets.',
+      method: 'GET', path: 'https://storage.googleapis.com/storage/v1/b', mutates: false, resultPath: 'items',
+      params: { project: q('Project id') },
+    },
+  ],
+};
+
+// Azure Connector
+const azure: ConnectorManifest = {
+  key: 'azure',
+  name: 'Microsoft Azure',
+  description: 'Manage Azure resources - App Service, Functions, Storage, and more.',
+  category: 'devtools',
+  icon: '🔷',
+  baseUrl: 'https://management.azure.com',
+  docsUrl: 'https://learn.microsoft.com/en-us/rest/api/azure/',
+  auth: { kind: 'bearer', fields: [{ key: 'token', label: 'Access token', secret: true, required: true, help: 'Generate via az account get-access-token' }] },
+  actions: [
+    {
+      key: 'list_resource_groups', label: 'List resource groups', description: 'List resource groups in a subscription.',
+      method: 'GET', path: '/subscriptions/{subscription_id}/resourcegroups', mutates: false, required: ['subscription_id'], resultPath: 'value',
+      params: { subscription_id: p('Subscription id') },
+    },
+    {
+      key: 'list_web_apps', label: 'List App Services', description: 'List Azure App Service web apps.',
+      method: 'GET', path: '/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites', mutates: false, required: ['subscription_id', 'resource_group'], resultPath: 'value',
+      params: { subscription_id: p('Subscription id'), resource_group: p('Resource group name') },
+    },
+    {
+      key: 'get_web_app', label: 'Get App Service', description: 'Get an App Service status.',
+      method: 'GET', path: '/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites/{name}', mutates: false, required: ['subscription_id', 'resource_group', 'name'],
+      params: { subscription_id: p('Subscription id'), resource_group: p('Resource group'), name: p('App name') },
+    },
+    {
+      key: 'list_functions', label: 'List Functions', description: 'List Azure Functions.',
+      method: 'GET', path: '/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites/{name}/functions', mutates: false, required: ['subscription_id', 'resource_group', 'name'], resultPath: 'value',
+      params: { subscription_id: p('Subscription id'), resource_group: p('Resource group'), name: p('Function app name') },
+    },
+    {
+      key: 'list_storage_accounts', label: 'List Storage accounts', description: 'List Azure Storage accounts.',
+      method: 'GET', path: '/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts', mutates: false, required: ['subscription_id'], resultPath: 'value',
+      params: { subscription_id: p('Subscription id') },
+    },
+  ],
+};
+
+// AWS Connector
+const aws: ConnectorManifest = {
+  key: 'aws',
+  name: 'Amazon Web Services',
+  description: 'Manage AWS resources - Lambda, EC2, S3, ECS, and more.',
+  category: 'devtools',
+  icon: '📦',
+  baseUrl: 'https://{service}.{region}.amazonaws.com',
+  docsUrl: 'https://docs.aws.amazon.com/',
+  auth: { kind: 'api_key', in: 'header', name: 'Authorization',
+    fields: [
+      { key: 'access_key_id', label: 'Access Key ID', secret: false, required: true },
+      { key: 'secret_access_key', label: 'Secret Access Key', secret: true, required: true },
+      { key: 'region', label: 'Default Region', secret: false, required: true, placeholder: 'us-east-1' },
+    ]
+  },
+  actions: [
+    {
+      key: 'list_lambda_functions', label: 'List Lambda functions', description: 'List Lambda functions in the region.',
+      method: 'GET', path: 'https://lambda.{region}.amazonaws.com/2015-03-31/functions', mutates: false, resultPath: 'Functions',
+      params: { region: p('AWS region') },
+    },
+    {
+      key: 'get_lambda_function', label: 'Get Lambda function', description: 'Get a Lambda function configuration.',
+      method: 'GET', path: 'https://lambda.{region}.amazonaws.com/2015-03-31/functions/{FunctionName}', mutates: false, required: ['region', 'FunctionName'],
+      params: { region: p('AWS region'), FunctionName: p('Function name') },
+    },
+    {
+      key: 'list_s3_buckets', label: 'List S3 buckets', description: 'List S3 buckets.',
+      method: 'GET', path: 'https://s3.amazonaws.com/', mutates: false, resultPath: 'Buckets',
+      params: {},
+    },
+    {
+      key: 'list_ec2_instances', label: 'List EC2 instances', description: 'List EC2 instances.',
+      method: 'GET', path: 'https://ec2.{region}.amazonaws.com/', mutates: false, resultPath: 'Reservations',
+      params: { region: p('AWS region') },
+    },
+    {
+      key: 'list_ecs_clusters', label: 'List ECS clusters', description: 'List ECS clusters.',
+      method: 'GET', path: 'https://ecs.{region}.amazonaws.com/', mutates: false, resultPath: 'clusterArns',
+      params: { region: p('AWS region') },
+    },
+  ],
+};
+
+export const DEVTOOLS_CONNECTORS: readonly ConnectorManifest[] = [github, gitlab, linear, jira, sentry, vercel, cloudflare, gcp, azure, aws];
