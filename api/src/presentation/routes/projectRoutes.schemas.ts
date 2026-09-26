@@ -40,6 +40,8 @@ export const CreateProjectBody = z.object({
   origin: z.string().nullish(),
   /** The kanban template `provisionProject` seeds the board from. */
   kanbanTemplateId: z.string().nullish(),
+  /** Create the project directly under a company (W8). */
+  companyId: z.number().nullish(),
 });
 
 export const UpsertProjectBody = z.object({

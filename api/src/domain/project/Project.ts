@@ -32,6 +32,8 @@ export interface ProjectProps {
   dueDate:         Date | null;
   /** Explicit PM-set start (0942), or null when the start is derived from tasks. */
   startDate:       Date | null;
+  /** The company this project belongs to (W8 - company → project in one step). */
+  companyId:       number | null;
   createdAt:       Date;
   updatedAt:       Date;
 }
@@ -55,8 +57,8 @@ export class Project {
    * Enforces domain invariants before the object can exist.
    */
   static create(
-    props: Omit<ProjectProps, 'id' | 'createdAt' | 'updatedAt' | 'publicId' | 'initiativeId' | 'dueDate' | 'startDate'>
-      & { publicId?: string; initiativeId?: string | null; dueDate?: Date | null; startDate?: Date | null },
+    props: Omit<ProjectProps, 'id' | 'createdAt' | 'updatedAt' | 'publicId' | 'initiativeId' | 'dueDate' | 'startDate' | 'companyId'>
+      & { publicId?: string; initiativeId?: string | null; dueDate?: Date | null; startDate?: Date | null; companyId?: number | null },
   ): Project {
     if (!props.key.trim()) throw new ValidationError('Project key is required');
     if (!props.name.trim()) throw new ValidationError('Project name is required');
@@ -68,6 +70,7 @@ export class Project {
       initiativeId: props.initiativeId ?? null,
       dueDate: props.dueDate ?? null,
       startDate: props.startDate ?? null,
+      companyId: props.companyId ?? null,
       id: 0 as ProjectId,
       publicId: props.publicId ?? '',
       key: props.key.trim().toUpperCase(),
@@ -107,6 +110,7 @@ export class Project {
   get initiativeId(): string | null { return this.props.initiativeId ?? null; }
   get dueDate(): Date | null { return this.props.dueDate ?? null; }
   get startDate(): Date | null { return this.props.startDate ?? null; }
+  get companyId(): number | null { return this.props.companyId; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
 
@@ -135,6 +139,7 @@ export class Project {
         | 'modality'
         | 'dueDate'
         | 'startDate'
+        | 'companyId'
       >
     >,
   ): Project {

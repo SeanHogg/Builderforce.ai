@@ -24,6 +24,8 @@ export interface CreateProjectDto {
   governance?:    string | null;
   modality?:      string | null;
   origin?:        string | null;
+  /** Create the project directly under a company (W8). */
+  companyId?:     number | null;
 }
 
 export interface UpdateProjectDto {
@@ -145,6 +147,7 @@ export class ProjectService {
       governance: dto.governance ?? null,
       modality: dto.modality ?? 'designer',
       origin: dto.origin ?? null,
+      companyId: dto.companyId ?? null,
     });
 
     return this.projects.save(project);

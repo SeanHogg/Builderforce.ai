@@ -720,6 +720,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       governance: body.governance ?? null,
       modality: body.modality ?? null,
       origin: body.origin ?? null,
+      companyId: body.companyId ?? null,
       tenantId,
     });
     await provisionProject(c.env as Env, db, tenantId, project, {
@@ -789,6 +790,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoFullName: assignment.value.sourceControlRepoFullName,
       sourceControlRepoUrl: assignment.value.sourceControlRepoUrl,
       githubRepoUrl: assignment.value.githubRepoUrl,
+      companyId: body.companyId ?? null,
     });
 
     await provisionProject(c.env as Env, db, tenantId, created);
@@ -884,6 +886,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
           name,
           description,
           rootWorkingDirectory,
+          companyId: body.companyId ?? null,
         });
 
     // Newly scaffolded (non-repo, default designer) projects get the full starter
