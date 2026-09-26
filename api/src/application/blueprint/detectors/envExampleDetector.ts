@@ -38,9 +38,9 @@ export const envExampleDetector: BlueprintDetector = {
 
         // Parse KEY=VALUE or KEY= (empty value)
         const match = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-        if (match) {
+        if (match && match[1]) {
           const key = match[1];
-          const defaultValue = match[2];
+          const defaultValue = match[2] ?? '';
 
           // Check if it's a secret (contains SECRET, KEY, PASSWORD, TOKEN, etc.)
           const isSecret = /SECRET|KEY|PASSWORD|TOKEN|PRIVATE|CREDENTIAL/i.test(key);

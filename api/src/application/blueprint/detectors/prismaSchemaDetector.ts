@@ -4,7 +4,7 @@
  * Detects Prisma ORM configuration and database setup.
  */
 
-import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
+import type { BlueprintDetector, DatabaseEngine } from '@builderforce/creation-canvas-contract';
 import { DATABASE_ENGINES } from '@builderforce/creation-canvas-contract';
 
 export const prismaSchemaDetector: BlueprintDetector = {
@@ -23,13 +23,13 @@ export const prismaSchemaDetector: BlueprintDetector = {
       result.sources.prismaSchema = true;
 
       // Detect the database engine
-      let engine = DATABASE_ENGINES.POSTGRES;
+      let engine: DatabaseEngine = DATABASE_ENGINES.POSTGRES;
       if (schemaPrisma.includes('provider = "mysql"') || schemaPrisma.includes('provider = "mysql2"')) {
-        engine = DATABASE_ENGINES.MYSQL;
+        engine = DATABASE_ENGINES.MYSQL as DatabaseEngine;
       } else if (schemaPrisma.includes('provider = "mongodb"')) {
-        engine = DATABASE_ENGINES.MONGODB;
+        engine = DATABASE_ENGINES.MONGODB as DatabaseEngine;
       } else if (schemaPrisma.includes('provider = "sqlite"')) {
-        engine = DATABASE_ENGINES.SQLITE; // Wait, we don't have SQLITE in DATABASE_ENGINES
+        engine = DATABASE_ENGINES.SQLITE as DatabaseEngine;
       }
 
       result.database = {

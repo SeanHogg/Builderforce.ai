@@ -1,10 +1,10 @@
 /**
  * W2: Drizzle ORM Configuration Detector
- * 
+ *
  * Detects Drizzle ORM configuration and database setup.
  */
 
-import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
+import type { BlueprintDetector, DatabaseEngine } from '@builderforce/creation-canvas-contract';
 import { DATABASE_ENGINES } from '@builderforce/creation-canvas-contract';
 
 export const drizzleConfigDetector: BlueprintDetector = {
@@ -27,21 +27,21 @@ export const drizzleConfigDetector: BlueprintDetector = {
       const configContent = drizzleConfigTs || drizzleConfigJs || drizzleConfigMts || '';
 
       // Detect the database engine
-      let engine = DATABASE_ENGINES.POSTGRES;
+      let engine: DatabaseEngine = DATABASE_ENGINES.POSTGRES;
       if (configContent.includes('neon') || configContent.includes('@neondatabase')) {
-        engine = DATABASE_ENGINES.NEON;
+        engine = DATABASE_ENGINES.NEON as DatabaseEngine;
       } else if (configContent.includes('@libsql') || configContent.includes('turso')) {
-        engine = DATABASE_ENGINES.TURSO;
+        engine = DATABASE_ENGINES.TURSO as DatabaseEngine;
       } else if (configContent.includes('mysql2') || configContent.includes('mysql')) {
-        engine = DATABASE_ENGINES.MYSQL;
+        engine = DATABASE_ENGINES.MYSQL as DatabaseEngine;
       }
 
       // Detect migrations path
       let migrationsPath = 'drizzle';
-      const schemaMatch = configContent.match(/schema:\s*['"`]([^'"`]+)['"`]/);
-      const outMatch = configContent.match(/out:\s*['"`]([^'"`]+)['"`]/);
-      
-      if (outMatch) {
+      const schemaMatch = configContent.match(/schema:\s*['\"`]([^'\"`]+)['\"`]/);
+      const outMatch = configContent.match(/out:\s*['\"`]([^'\"`]+)['\"`]/);
+
+      if (outMatch && outMatch[1]) {
         migrationsPath = outMatch[1];
       }
 

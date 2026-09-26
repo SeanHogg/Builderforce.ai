@@ -10,8 +10,6 @@
  * This is the "one blueprint, many targets" principle from PRD 31.
  */
 
-import { z } from 'zod';
-
 /** The kind of runtime service detected in the project. */
 export const SERVICE_KINDS = {
   WORKER: 'worker',       // Cloudflare Worker (Hono, Fastify, etc.)
@@ -20,6 +18,13 @@ export const SERVICE_KINDS = {
   CONTAINER: 'container', // Docker container
   MOBILE_EXPO: 'mobile-expo', // Expo React Native
   MOBILE_CAPACITOR: 'mobile-capacitor', // Capacitor (Ionic, etc.)
+  // Framework-specific kinds (map to runtime kinds internally)
+  NEXTJS: 'nextjs',      // Next.js (SSR or static)
+  VITE_REACT: 'vite-react', // Vite + React
+  VITE_VUE: 'vite-vue',   // Vite + Vue
+  SVELTEKIT: 'sveltekit', // SvelteKit
+  REMIX: 'remix',         // Remix
+  ASTRO: 'astro',         // Astro
 } as const;
 
 export type ServiceKind = typeof SERVICE_KINDS[keyof typeof SERVICE_KINDS];
@@ -93,6 +98,7 @@ export const DATABASE_ENGINES = {
   POSTGRES: 'postgres',
   MYSQL: 'mysql',
   MONGODB: 'mongodb',
+  SQLITE: 'sqlite',
 } as const;
 
 export type DatabaseEngine = typeof DATABASE_ENGINES[keyof typeof DATABASE_ENGINES];
@@ -201,79 +207,6 @@ export interface BlueprintSourceFlags {
   githubWorkflows: boolean;
   builderforceJson: boolean;
 }
-
-/** Zod schema for validating AppBlueprint JSON. */
-export const AppBlueprintSchema = z.object({
-  id: z.string(),
-  projectId: z.number(),
-  commitSha: z.string(),
-  detectedAt: z.string().datetime(),
-  services: z.array(z.object({
-    id: z.string(),
-    kind: z.enum(Object.values(SERVICE_KINDS)),
-    rootDir: z.string(),
-    packageManager: z.enum(['npm', 'pnpm', 'yarn', 'bun']),
-    installCommand: z.string(),
-    devCommand: z.string(),
-    buildCommand: z.string(),
-    startCommand: z.string(),
-    verifyCommand: z.string().nullable(),
-    outputDir: z.string().nullable(),
-    ports: z.array(z.number()),
-    envVars: z.array(z.string()),
-    isPrimary: z.boolean(),
-  })),
-  bindings: z.array(z.object({
-    name: z.string(),
-    kind: z.enum(Object.values(BINDING_KINDS)),
-    className: z.string().optional(),
-    cron: z.string().optional(),
-    migrations: z.array(z.string()).optional(),
-    required: z.boolean(),
-  })),
-  database: z.object({
-    engine: z.enum(Object.values(DATABASE_ENGINES)),
-    migrationCommand: z.string(),
-    seedCommand: z.string().nullable(),
-    migrationsPath: z.string(),
-    connectionSecretName: z.string(),
-  }).nullable(),
-  secrets: z.array(z.object({
-    name: z.string(),
-    required: z.boolean(),
-    description: z.string().optional(),
-  })),
-  vars: z.array(z.object({
-    name: z.string(),
-    defaultValue: z.string().optional(),
-    description: z.string().optional(),
-  })),
-  domains: z.array(z.object({
-    domain: z.string(),
-    zoneId: z.string().optional(),
-    isProduction: z.boolean(),
-  })),
-  sources: z.object({
-    wranglerToml: z.boolean(),
-    packageJson: z.boolean(),
-    viteConfig: z.boolean(),
-    nextConfig: z.boolean(),
-    expoConfig: z.boolean(),
-    capacitorConfig: z.boolean(),
-    drizzleConfig: z.boolean(),
-    prismaSchema: z.boolean(),
-    dockerfile: z.boolean(),
-    envExample: z.boolean(),
-    githubWorkflows: z.boolean(),
-    builderforceJson: z.boolean(),
-  }),
-  overrides: z.any().nullable(),
-  isMonorepo: z.boolean(),
-  workspaces: z.array(z.object({
-    path: z.string(),
-    services: z.array(z.string()),
-  })),
-});
 
 /** Detect an AppBlueprint from a repo's files. */
 export interface BlueprintDetector {

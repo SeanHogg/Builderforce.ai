@@ -1,6 +1,6 @@
 /**
  * W2: Wrangler.toml detector
- * 
+ *
  * Detects Cloudflare Worker configuration from wrangler.toml/wrangler.jsonc
  * - Service kind (worker)
  * - Bindings (Durable Objects, R2, KV, D1, Queues, AI, etc.)
@@ -39,42 +39,44 @@ export function detectFromWrangler(content: string): Partial<AppBlueprint> {
   // Detect bindings from kv_namespaces
   const kvMatches = content.matchAll(/kv_namespaces\s*=\s*\[([\s\S]*?)\]/g);
   for (const match of kvMatches) {
-    const bindings = parseBindings(match[1], BINDING_KINDS.KV);
+    const bindings = parseBindings(match[1] || '', BINDING_KINDS.KV);
     result.bindings = [...(result.bindings || []), ...bindings];
   }
 
   // Detect R2 buckets
   const r2Matches = content.matchAll(/r2_buckets\s*=\s*\[([\s\S]*?)\]/g);
   for (const match of r2Matches) {
-    const bindings = parseBindings(match[1], BINDING_KINDS.R2);
+    const bindings = parseBindings(match[1] || '', BINDING_KINDS.R2);
     result.bindings = [...(result.bindings || []), ...bindings];
   }
 
   // Detect D1 databases
   const d1Matches = content.matchAll(/d1_databases\s*=\s*\[([\s\S]*?)\]/g);
   for (const match of d1Matches) {
-    const bindings = parseBindings(match[1], BINDING_KINDS.D1);
+    const bindings = parseBindings(match[1] || '', BINDING_KINDS.D1);
     result.bindings = [...(result.bindings || []), ...bindings];
   }
 
   // Detect Durable Objects
   const doMatches = content.matchAll(/durable_objects\s*=\s*\{[\s\S]*?bindings\s*=\s*\[([\s\S]*?)\]/g);
   for (const match of doMatches) {
-    const classMatches = match[1].matchAll(/class\s*=\s*["']([^"']+)["']/g);
+    const classMatches = (match[1] || '').matchAll(/class\s*=\s*["']([^"']+)["']/g);
     for (const classMatch of classMatches) {
-      result.bindings?.push({
-        name: classMatch[1],
-        kind: BINDING_KINDS.DURABLE_OBJECT,
-        className: classMatch[1],
-        required: true,
-      });
+      if (classMatch[1]) {
+        result.bindings?.push({
+          name: classMatch[1],
+          kind: BINDING_KINDS.DURABLE_OBJECT,
+          className: classMatch[1],
+          required: true,
+        });
+      }
     }
   }
 
   // Detect queues
   const queueMatches = content.matchAll(/queues\s*=\s*\[([\s\S]*?)\]/g);
   for (const match of queueMatches) {
-    const bindings = parseBindings(match[1], BINDING_KINDS.QUEUE);
+    const bindings = parseBindings(match[1] || '', BINDING_KINDS.QUEUE);
     result.bindings = [...(result.bindings || []), ...bindings];
   }
 
@@ -98,7 +100,7 @@ export function detectFromWrangler(content: string): Partial<AppBlueprint> {
 
   // Detect cron triggers
   const cronMatch = content.match(/triggers\s*=\s*\{[\s\S]*?crons\s*=\s*\[([^\]]+)\]/);
-  if (cronMatch) {
+  if (cronMatch && cronMatch[1]) {
     const cronExpr = cronMatch[1].trim().replace(/["']/g, '');
     result.bindings?.push({
       name: 'CRON',
@@ -110,25 +112,29 @@ export function detectFromWrangler(content: string): Partial<AppBlueprint> {
 
   // Detect vars (non-secret environment variables)
   const varsMatch = content.match(/vars\s*=\s*\{([\s\S]*?)\}/);
-  if (varsMatch) {
+  if (varsMatch && varsMatch[1]) {
     const varMatches = varsMatch[1].matchAll(/(\w+)\s*=\s*["']([^"']*)["']/g);
     for (const varMatch of varMatches) {
-      result.vars = result.vars || [];
-      result.vars.push({
-        name: varMatch[1],
-        defaultValue: varMatch[2],
-      });
+      if (varMatch[1]) {
+        result.vars = result.vars || [];
+        result.vars.push({
+          name: varMatch[1],
+          defaultValue: varMatch[2] || '',
+        });
+      }
     }
   }
 
   // Detect secrets from [[kv_namespaces]] comments or explicit secret declarations
   const secretMatches = content.matchAll(/#\s*secret\s+(\w+)/g);
   for (const match of secretMatches) {
-    result.secrets = result.secrets || [];
-    result.secrets.push({
-      name: match[1],
-      required: true,
-    });
+    if (match[1]) {
+      result.secrets = result.secrets || [];
+      result.secrets.push({
+        name: match[1],
+        required: true,
+      });
+    }
   }
 
   // If main service has any bindings, include it
@@ -143,11 +149,13 @@ function parseBindings(content: string, kind: string): AppBinding[] {
   const bindings: AppBinding[] = [];
   const idMatches = content.matchAll(/id\s*=\s*["']([^"']+)["']/g);
   for (const match of idMatches) {
-    bindings.push({
-      name: match[1],
-      kind: kind as any,
-      required: true,
-    });
+    if (match[1]) {
+      bindings.push({
+        name: match[1],
+        kind: kind as any,
+        required: true,
+      });
+    }
   }
   return bindings;
 }
@@ -160,7 +168,7 @@ export const wranglerDetector: BlueprintDetector = {
   detect: (files: Map<string, string>) => {
     const wranglerToml = files.get('wrangler.toml');
     const wranglerJsonc = files.get('wrangler.jsonc');
-    
+
     if (wranglerToml) {
       return detectFromWrangler(wranglerToml);
     }

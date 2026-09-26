@@ -30,7 +30,7 @@ export const viteConfigDetector: BlueprintDetector = {
       // Detect the port from config
       let ports = [5173]; // Vite default
       const portMatch = configContent.match(/port\s*:\s*(\d+)/);
-      if (portMatch) {
+      if (portMatch && portMatch[1]) {
         ports = [parseInt(portMatch[1], 10)];
       }
 

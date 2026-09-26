@@ -5,24 +5,27 @@
  * This is the main entry point for blueprint detection.
  */
 
-import { db } from '../../infrastructure/database/postgres';
-import { projectAppBlueprints } from '../../infrastructure/database/schema/delivery';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { projectAppBlueprints } from '../../infrastructure/database/schema';
 import { eq, and } from 'drizzle-orm';
 import { runDetectors } from './detectors';
 import type { AppBlueprint } from '@builderforce/creation-canvas-contract';
 import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
+import type { Env } from '../../env';
 
 export interface DetectBlueprintOptions {
   projectId: number;
   commitSha: string;
   repoDir: string; // Path to the repo on disk
+  env: Env; // For database access
 }
 
 /**
  * Detect and store an app blueprint for a project at a specific commit.
  */
 export async function detectAndStoreBlueprint(options: DetectBlueprintOptions): Promise<AppBlueprint> {
-  const { projectId, commitSha, repoDir } = options;
+  const { projectId, commitSha, repoDir, env } = options;
+  const db = buildDatabase(env);
   
   // 1. Read files from the repo
   const files = await readRepoFiles(repoDir);
@@ -34,7 +37,7 @@ export async function detectAndStoreBlueprint(options: DetectBlueprintOptions): 
   const blueprint = buildBlueprint(partial, projectId, commitSha);
   
   // 4. Store in database
-  await storeBlueprint(projectId, commitSha, blueprint);
+  await storeBlueprint(db, projectId, commitSha, blueprint);
   
   return blueprint;
 }
@@ -42,7 +45,8 @@ export async function detectAndStoreBlueprint(options: DetectBlueprintOptions): 
 /**
  * Get a stored blueprint for a project at a specific commit.
  */
-export async function getBlueprint(projectId: number, commitSha: string): Promise<AppBlueprint | null> {
+export async function getBlueprint(env: Env, projectId: number, commitSha: string): Promise<AppBlueprint | null> {
+  const db = buildDatabase(env);
   const row = await db
     .select()
     .from(projectAppBlueprints)
@@ -62,7 +66,8 @@ export async function getBlueprint(projectId: number, commitSha: string): Promis
 /**
  * Get the latest blueprint for a project.
  */
-export async function getLatestBlueprint(projectId: number): Promise<AppBlueprint | null> {
+export async function getLatestBlueprint(env: Env, projectId: number): Promise<AppBlueprint | null> {
+  const db = buildDatabase(env);
   const row = await db
     .select()
     .from(projectAppBlueprints)
@@ -182,6 +187,7 @@ function buildBlueprint(partial: any, projectId: number, commitSha: string): App
  * Store a blueprint in the database.
  */
 async function storeBlueprint(
+  db: Db,
   projectId: number,
   commitSha: string,
   blueprint: AppBlueprint

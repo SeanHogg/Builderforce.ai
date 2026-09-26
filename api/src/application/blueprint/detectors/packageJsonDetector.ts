@@ -8,7 +8,7 @@
  * - Workspaces for monorepos
  */
 
-import type { AppBlueprint, AppService } from '@builderforce/creation-canvas-contract';
+import type { AppBlueprint, AppService, ServiceKind } from '@builderforce/creation-canvas-contract';
 import type { BlueprintDetector } from '@builderforce/creation-canvas-contract';
 import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
 
@@ -23,6 +23,7 @@ interface PackageJson {
   type?: string;
   main?: string;
   module?: string;
+  exports?: Record<string, { import?: string; require?: string }>;
 }
 
 /** Detect from package.json content. */
@@ -36,11 +37,11 @@ export function detectFromPackageJson(content: string): Partial<AppBlueprint> {
   const services: AppService[] = [];
 
   // Determine package manager
-  let packageManager = 'npm';
+  let packageManager: 'bun' | 'npm' | 'pnpm' | 'yarn' = 'npm';
   if (pkg.packageManager) {
     const pm = pkg.packageManager.split('@')[0];
-    if (pm === 'yarn' || pm === 'pnpm') {
-      packageManager = pm;
+    if (pm === 'yarn' || pm === 'pnpm' || pm === 'bun' || pm === 'npm') {
+      packageManager = pm as 'bun' | 'npm' | 'pnpm' | 'yarn';
     }
   }
 
@@ -96,40 +97,40 @@ export function detectFromPackageJson(content: string): Partial<AppBlueprint> {
   return result;
 }
 
-function detectFramework(deps: Record<string, string>): { kind: string; framework: string } {
+function detectFramework(deps: Record<string, string>): { kind: ServiceKind; framework: string } {
   // Check for frameworks in order of specificity
   if (deps['next'] || deps['react']) {
     if (deps['next']) {
-      return { kind: SERVICE_KINDS.NEXTJS, framework: 'Next.js' };
+      return { kind: SERVICE_KINDS.NEXTJS as ServiceKind, framework: 'Next.js' };
     }
-    return { kind: SERVICE_KINDS.VITE_REACT, framework: 'React (Vite)' };
+    return { kind: SERVICE_KINDS.VITE_REACT as ServiceKind, framework: 'React (Vite)' };
   }
   
   if (deps['@sveltejs/kit'] || deps.svelte) {
-    return { kind: SERVICE_KINDS.SVELTEKIT, framework: 'SvelteKit' };
+    return { kind: SERVICE_KINDS.SVELTEKIT as ServiceKind, framework: 'SvelteKit' };
   }
   
   if (deps['@remix-run/react'] || deps['@remix-run/dev']) {
-    return { kind: SERVICE_KINDS.REMIX, framework: 'Remix' };
+    return { kind: SERVICE_KINDS.REMIX as ServiceKind, framework: 'Remix' };
   }
   
   if (deps['vue'] || deps['@vitejs/plugin-vue']) {
-    return { kind: SERVICE_KINDS.VITE_VUE, framework: 'Vue (Vite)' };
+    return { kind: SERVICE_KINDS.VITE_VUE as ServiceKind, framework: 'Vue (Vite)' };
   }
   
   if (deps['wrangler']) {
-    return { kind: SERVICE_KINDS.WORKER, framework: 'Cloudflare Worker' };
+    return { kind: SERVICE_KINDS.WORKER as ServiceKind, framework: 'Cloudflare Worker' };
   }
   
   if (deps['@astrojs/core'] || deps.astro) {
-    return { kind: SERVICE_KINDS.ASTRO, framework: 'Astro' };
+    return { kind: SERVICE_KINDS.ASTRO as ServiceKind, framework: 'Astro' };
   }
 
   // Default to generic node
-  return { kind: SERVICE_KINDS.NODE, framework: 'Node.js' };
+  return { kind: SERVICE_KINDS.NODE as ServiceKind, framework: 'Node.js' };
 }
 
-function detectOutputDir(pkg: PackageJson, kind: string): string {
+function detectOutputDir(pkg: PackageJson, kind: ServiceKind): string {
   // Check common output directories based on framework
   if (kind === SERVICE_KINDS.NEXTJS) {
     return '.next';

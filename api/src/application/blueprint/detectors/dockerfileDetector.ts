@@ -30,7 +30,7 @@ export const dockerfileDetector: BlueprintDetector = {
       
       // Detect the port
       const portMatch = content.match(/EXPOSE\s+(\d+)/);
-      const port = portMatch ? parseInt(portMatch[1], 10) : 3000;
+      const port = portMatch && portMatch[1] ? parseInt(portMatch[1], 10) : 3000;
 
       if (isNode) {
         result.services = result.services || [];
