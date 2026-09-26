@@ -14,6 +14,11 @@ vi.mock('@/lib/embeddedApps', async (importOriginal) => ({
   embeddedAppsApi: api,
 }));
 
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api')>()),
+  loadLivePreview: vi.fn().mockResolvedValue(null),
+}));
+
 const { ProjectAppPanel } = await import('./ProjectAppPanel');
 
 const SITE = {

@@ -1,0 +1,93 @@
+/*
+ * Live preview chrome — the 360px execution-panel drawer is the tightest host,
+ * so every row wraps and nothing has a min-width that would clip the iframe.
+ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 240px;
+  height: 100%;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tab,
+.tabActive,
+.action {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.tabActive {
+  border-color: var(--coral-bright);
+  color: var(--coral-bright);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.frame {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.empty,
+.hint {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hint {
+  padding-top: 0;
+  font-size: 12px;
+}
+
+.expo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  min-width: 0;
+}

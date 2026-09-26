@@ -59,6 +59,7 @@ import {
   type AddressAvailability,
   type SessionAppState,
 } from '@/lib/embeddedApps';
+import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
 import { AppAddressField } from './AppAddressField';
 import { AppAddress, AppStatement } from './AppStatement';
 import styles from './appPanels.module.css';
@@ -199,6 +200,15 @@ export function CanvasAppPanel({ sessionId, onOpenChange }: CanvasAppPanelProps)
                 statement={t('runtimeStatement')}
                 detail={t('runtimeNoChoice')}
               />
+
+              <AppStatement
+                title={t('sectionPreview')}
+                statement={t('previewStatement')}
+              >
+                <div className={styles.previewHost}>
+                  <LivePreviewPanel projectId={app.projectId} />
+                </div>
+              </AppStatement>
 
               <AppStatement
                 title={t('sectionOwn')}

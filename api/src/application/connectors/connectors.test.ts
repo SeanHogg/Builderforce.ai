@@ -76,6 +76,19 @@ describe('built-in connector catalog', () => {
       expect(byKey.get(key)?.actions.some((action) => !action.mutates && (action.required ?? []).length === 0), `${key} has a safe one-click connection test`).toBe(true);
     }
   });
+
+  it('ships the clouds the customer app actually runs on', () => {
+    const byKey = new Map(BUILTIN_CONNECTOR_LIST.map((manifest) => [manifest.key, manifest]));
+    const cloudKeys = [
+      'cloudflare', 'gcp', 'azure', 'aws', 'vercel', 'netlify', 'fly', 'render',
+      'digitalocean', 'heroku', 'supabase', 'neon',
+    ];
+    expect([...byKey.keys()]).toEqual(expect.arrayContaining(cloudKeys));
+    for (const key of cloudKeys) {
+      expect(byKey.get(key)?.category, key).toBe('cloud');
+      expect(byKey.get(key)?.actions.some((action) => !action.mutates && (action.required ?? []).length === 0), `${key} has a safe one-click connection test`).toBe(true);
+    }
+  });
 });
 
 describe('parseConnectorManifest', () => {

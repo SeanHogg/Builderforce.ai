@@ -40,6 +40,10 @@ export const CONNECTOR_CATEGORIES = [
   'crm',
   'productivity',
   'devtools',
+  // Cloud hosts the customer's app actually runs on. Its own category rather than
+  // `devtools` (which is where GitHub/GitLab land) because connecting a cloud account
+  // is an ops job, not a source-control job, and the catalog is browsed by category.
+  'cloud',
   'finance',
   'marketing',
   'support',

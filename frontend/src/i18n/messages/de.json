@@ -4373,6 +4373,7 @@
       "whatHappensDetail": "Auf dem Board wird nichts verschoben und nichts kopiert. Das Projekt IST die App – es gibt nichts Zweites anzulegen.",
       "sectionAddress": "Adresse",
       "sectionRuntime": "Laufzeit",
+      "sectionPreview": "Vorschau",
       "sectionOwn": "Was dir gehört",
       "sectionData": "Daten",
       "sectionPeople": "Menschen",
@@ -4396,6 +4397,7 @@
       "runtimeNoChoice": "Es gibt keinen Host zu wählen und keinen Server zu betreiben. Veröffentlichen ist der einzige Schritt.",
       "runtimeServing": "Liefert Build {version} · {size} aus.",
       "runtimeNothingServed": "Es ist noch nichts veröffentlicht.",
+      "previewStatement": "Sieh es laufen, bevor du veröffentlichst.",
       "ownStatement": "Ein Backlog, ein Agenten-Team, Releases und eine Adresse.",
       "ownDetail": "Öffne das Projekt, um Arbeit zu verteilen, sie laufen zu sehen und ein Release zurückzurollen.",
       "openProject": "Projekt öffnen",
@@ -16267,6 +16269,7 @@
     "tabLogs": "Protokolle",
     "tabTimeline": "Zeitleiste",
     "tabPullRequest": "Pull Request",
+    "tabPreview": "Vorschau",
     "agentWorking": "Der Agent arbeitet… die Ausgabe wird hier live angezeigt.",
     "noOutput": "Keine Ausgabe.",
     "agent": "Agent",
@@ -25807,12 +25810,26 @@
       "cancelled": "Abgebrochen"
     }
   },
+  "livePreview": {
+    "title": "Live-Vorschau",
+    "loading": "Vorschau wird gestartet…",
+    "unavailable": "Es läuft keine Live-Vorschau.",
+    "unavailableHint": "Starte einen Lauf, um die App hier zu sehen.",
+    "serviceApp": "App",
+    "reload": "Neu laden",
+    "restart": "Neu starten",
+    "open": "Öffnen",
+    "starting": "Startet…",
+    "expoQrLabel": "QR-Code für die Expo-Vorschau",
+    "expoQr": "Öffne diese Vorschau in Expo Go auf dem Handy."
+  },
   "connectors": {
     "category": {
       "communication": "Kommunikation",
       "crm": "CRM & Vertrieb",
       "productivity": "Produktivität",
       "devtools": "Entwicklerwerkzeuge",
+      "cloud": "Cloud",
       "finance": "Finanzen & Abrechnung",
       "marketing": "Marketing",
       "support": "Kundensupport",

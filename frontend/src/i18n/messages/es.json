@@ -4373,6 +4373,7 @@
       "whatHappensDetail": "Nada del tablero se mueve ni se copia. El proyecto es la aplicación: no hay una segunda cosa que crear.",
       "sectionAddress": "Dirección",
       "sectionRuntime": "Entorno de ejecución",
+      "sectionPreview": "Vista previa",
       "sectionOwn": "Lo que tienes",
       "sectionData": "Datos",
       "sectionPeople": "Personas",
@@ -4396,6 +4397,7 @@
       "runtimeNoChoice": "No hay servidor que elegir ni que mantener encendido. Publicar es el único paso.",
       "runtimeServing": "Sirviendo la compilación {version} · {size}.",
       "runtimeNothingServed": "Todavía no se ha publicado nada.",
+      "previewStatement": "Míralo en ejecución antes de publicar.",
       "ownStatement": "Un backlog, un equipo de agentes, versiones y una dirección.",
       "ownDetail": "Abre el proyecto para asignar trabajo, verlo ejecutarse y revertir una versión.",
       "openProject": "Abrir el proyecto",
@@ -16267,6 +16269,7 @@
     "tabLogs": "Registros",
     "tabTimeline": "Cronología",
     "tabPullRequest": "Pull Request",
+    "tabPreview": "Vista previa",
     "agentWorking": "El agente está trabajando… la salida aparecerá aquí en tiempo real.",
     "noOutput": "Sin salida.",
     "agent": "Agente",
@@ -25807,12 +25810,26 @@
       "cancelled": "Cancelada"
     }
   },
+  "livePreview": {
+    "title": "Vista previa en vivo",
+    "loading": "Iniciando la vista previa…",
+    "unavailable": "No hay ninguna vista previa en vivo en ejecución.",
+    "unavailableHint": "Inicia una ejecución para ver la aplicación aquí.",
+    "serviceApp": "Aplicación",
+    "reload": "Recargar",
+    "restart": "Reiniciar",
+    "open": "Abrir",
+    "starting": "Iniciando…",
+    "expoQrLabel": "Código QR de la vista previa de Expo",
+    "expoQr": "Abre esta vista previa en Expo Go en el teléfono."
+  },
   "connectors": {
     "category": {
       "communication": "Comunicación",
       "crm": "CRM y ventas",
       "productivity": "Productividad",
       "devtools": "Herramientas de desarrollo",
+      "cloud": "Nube",
       "finance": "Finanzas y facturación",
       "marketing": "Marketing",
       "support": "Atención al cliente",

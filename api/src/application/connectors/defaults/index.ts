@@ -42,6 +42,9 @@ import { BANKING_CONNECTORS } from './banking';
 // on this platform still goes through the built-in signature engine — see the
 // file's header on why the two doors are different rather than interchangeable.
 import { ESIGNATURE_CONNECTORS } from './esignature';
+// The cloud the customer's app actually runs on. Distinct from `devtools` (source
+// control) because connecting a cloud account is an ops job, not a git job.
+import { CLOUD_CONNECTORS } from './cloud';
 
 const ALL: readonly ConnectorManifest[] = [
   ...COMMUNICATION_CONNECTORS,
@@ -60,6 +63,7 @@ const ALL: readonly ConnectorManifest[] = [
   ...HRMS_CONNECTORS,
   ...BANKING_CONNECTORS,
   ...ESIGNATURE_CONNECTORS,
+  ...CLOUD_CONNECTORS,
 ];
 
 /** Built-in manifests, keyed for O(1) resolution. */

@@ -4373,6 +4373,7 @@
       "whatHappensDetail": "Rien n’est déplacé ni copié sur le tableau. Le projet EST l’application : il n’y a pas de seconde chose à créer.",
       "sectionAddress": "Adresse",
       "sectionRuntime": "Exécution",
+      "sectionPreview": "Aperçu",
       "sectionOwn": "Ce que vous possédez",
       "sectionData": "Données",
       "sectionPeople": "Personnes",
@@ -4396,6 +4397,7 @@
       "runtimeNoChoice": "Aucun hébergeur à choisir, aucun serveur à maintenir. Publier est la seule étape.",
       "runtimeServing": "Sert la version {version} · {size}.",
       "runtimeNothingServed": "Rien n’est encore publié.",
+      "previewStatement": "Voyez-la tourner avant de publier.",
       "ownStatement": "Un backlog, une équipe d’agents, des versions et une adresse.",
       "ownDetail": "Ouvrez le projet pour attribuer le travail, le voir s’exécuter et restaurer une version.",
       "openProject": "Ouvrir le projet",
@@ -16267,6 +16269,7 @@
     "tabLogs": "Journaux",
     "tabTimeline": "Chronologie",
     "tabPullRequest": "Pull Request",
+    "tabPreview": "Aperçu",
     "agentWorking": "L'agent travaille… la sortie s'affichera ici en temps réel.",
     "noOutput": "Aucune sortie.",
     "agent": "Agent",
@@ -25807,12 +25810,26 @@
       "cancelled": "Annulé"
     }
   },
+  "livePreview": {
+    "title": "Aperçu en direct",
+    "loading": "Démarrage de l’aperçu…",
+    "unavailable": "Aucun aperçu en direct n’est en cours.",
+    "unavailableHint": "Lancez une exécution pour voir l’application ici.",
+    "serviceApp": "Application",
+    "reload": "Recharger",
+    "restart": "Redémarrer",
+    "open": "Ouvrir",
+    "starting": "Démarrage…",
+    "expoQrLabel": "QR code de l’aperçu Expo",
+    "expoQr": "Ouvrez cet aperçu dans Expo Go sur votre téléphone."
+  },
   "connectors": {
     "category": {
       "communication": "Communication",
       "crm": "CRM et ventes",
       "productivity": "Productivité",
       "devtools": "Outils de développement",
+      "cloud": "Cloud",
       "finance": "Finance et facturation",
       "marketing": "Marketing",
       "support": "Support client",

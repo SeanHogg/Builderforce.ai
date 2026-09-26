@@ -33,8 +33,8 @@ import { useFormat } from "@/i18n/useFormat";
  */
 
 const CATEGORY_ORDER = [
-  'communication', 'crm', 'productivity', 'devtools',
-  'finance', 'marketing', 'support', 'storage', 'data', 'other',
+  'communication', 'crm', 'productivity', 'devtools', 'cloud',
+  'finance', 'marketing', 'support', 'storage', 'data', 'hiring', 'other',
 ] as const;
 
 const cardGrid: React.CSSProperties = {

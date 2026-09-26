@@ -22,6 +22,12 @@
   min-width: 0;
 }
 
+.previewHost {
+  height: 360px;
+  min-width: 0;
+  min-height: 240px;
+}
+
 .lede {
   margin: 0;
   color: var(--text-secondary);

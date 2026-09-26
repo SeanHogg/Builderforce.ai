@@ -38,6 +38,7 @@ import {
   embeddedAppsApi,
   type AppOverview,
 } from '@/lib/embeddedApps';
+import { LivePreviewPanel } from '@/components/preview/LivePreviewPanel';
 import { AppAddress, AppCounts, AppStatement } from './AppStatement';
 import styles from './appPanels.module.css';
 
@@ -92,6 +93,15 @@ export function ProjectAppPanel({ projectId }: ProjectAppPanelProps) {
             ? t('runtimeServing', { version: site.versionToken, size: formatBytes(site.totalBytes) })
             : t('runtimeNothingServed')}
         </p>
+      </AppStatement>
+
+      <AppStatement
+        title={t('sectionPreview')}
+        statement={t('previewStatement')}
+      >
+        <div className={styles.previewHost}>
+          <LivePreviewPanel projectId={projectId} />
+        </div>
       </AppStatement>
 
       <AppStatement

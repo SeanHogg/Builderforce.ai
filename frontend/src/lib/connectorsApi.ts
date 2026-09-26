@@ -13,8 +13,8 @@
 import { apiRequest } from './apiClient';
 
 export type ConnectorCategory =
-  | 'communication' | 'crm' | 'productivity' | 'devtools'
-  | 'finance' | 'marketing' | 'support' | 'storage' | 'data' | 'other';
+  | 'communication' | 'crm' | 'productivity' | 'devtools' | 'cloud'
+  | 'finance' | 'marketing' | 'support' | 'storage' | 'data' | 'hiring' | 'other';
 
 export type ConnectorAuthKind = 'none' | 'api_key' | 'bearer' | 'basic' | 'oauth2';
 export type ConnectorMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
