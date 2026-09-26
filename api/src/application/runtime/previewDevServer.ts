@@ -79,6 +79,8 @@ export interface PreviewDevServerStep {
   files: PreviewConfigFile[];
   /** Merged into the dev server's environment. */
   env: Record<string, string>;
+  /** Install command to run before starting the dev server (e.g., "npm install"). */
+  installCommand: string | null;
   /** Ordered start candidates — first match wins. */
   candidates: PreviewStartCandidate[];
   /** How the step decides the server is UP (the API re-runs the same probe itself). */
@@ -206,8 +208,12 @@ export function buildPreviewDevServerStep(port: number = PREVIEW_PORT): PreviewD
       BROWSER: 'none',
       CI: '1',
     },
+    // Install dependencies before starting the dev server (W1)
+    installCommand: 'npm install --prefer-offline',
     candidates: [
-      // Expo first: an Expo project ALSO has a package.json `dev` script, so a generic
+      // Wrangler/Cloudflare Worker first - check for wrangler.toml
+      { when: 'wrangler.toml', command: `npx wrangler dev --port ${port} --local` },
+      // Expo: an Expo project ALSO has a package.json `dev` script, so a generic
       // match would start the wrong server.
       { when: 'app.json', requiresScript: 'start', command: `npx expo start --port ${port} --host lan` },
       { when: 'vite.config.builderforce-preview.mjs', requiresScript: 'dev', command: `npx vite --config vite.config.builderforce-preview.mjs --port ${port} --host 0.0.0.0` },

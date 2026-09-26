@@ -44,12 +44,24 @@ describe('buildPreviewDevServerStep', () => {
     expect(step.files.some((f) => f.path.startsWith('metro.config'))).toBe(true);
   });
 
-  it('always has a start candidate, and puts Expo ahead of the generic dev script', () => {
+  it('always has a start candidate, and puts Wrangler ahead of the generic dev script', () => {
     expect(step.candidates.length).toBeGreaterThan(1);
-    expect(step.candidates[0]?.when).toBe('app.json');
+    // Wrangler is first (for Cloudflare Workers), then Expo, then Vite/Next, then fallback
+    expect(step.candidates[0]?.when).toBe('wrangler.toml');
     // The last candidate must match unconditionally, or a project with no marker file
     // would produce no command at all.
     expect(step.candidates[step.candidates.length - 1]?.when).toBeUndefined();
+  });
+
+  it('includes an install command to run before starting the dev server', () => {
+    expect(step.installCommand).toBeTruthy();
+    expect(step.installCommand).toContain('npm install');
+  });
+
+  it('includes Wrangler as a start candidate for Cloudflare Workers', () => {
+    const wranglerCandidate = step.candidates.find((c) => c.when === 'wrangler.toml');
+    expect(wranglerCandidate).toBeTruthy();
+    expect(wranglerCandidate?.command).toContain('wrangler');
   });
 });
 
