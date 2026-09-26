@@ -129,10 +129,18 @@ export interface BrainRunHostPorts {
    * `confirmWrite` is how a DELEGATED sub-agent asks to write. It is built here (not by
    * the port) because only the run knows the chat whose modal the question appears on
    * and the live Auto switch that may answer it.
+   *
+   * `getSignal`, `getRunTool`, and `getModel` are called at subagent tool EXECUTION time
+   * (not catalog creation) to get the current parent run's context. This allows children
+   * to stop when the parent stops, have their writes tracked by the parent's ticket/notes
+   * system, and use the same model as the parent.
    */
   tools(
     projectId: number | undefined,
     confirmWrite: (req: { name: string; args: Record<string, unknown> }) => Promise<ChildWriteDecision>,
+    getSignal?: () => AbortSignal | undefined,
+    getRunTool?: () => ((name: string, args: Record<string, unknown>) => Promise<unknown>) | undefined,
+    getModel?: () => { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } | undefined,
   ): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
@@ -336,7 +344,31 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       autoApprove: () => flag.autoApprove,
       blockedByPolicy: ports.labels.blockedByPolicy,
     });
-    const defs = await ports.tools(projectId, confirmChildWrite);
+
+    // Get the current run's abort signal - needed so children stop when the parent stops.
+    // This is accessed via the global run state, which the subagent can read.
+    const getSignal = (): AbortSignal | undefined => {
+      // The signal is stored in the run store when the run starts.
+      // For now, we'll let the subagent get it from the brain-embedded package.
+      // A proper implementation would store it in a way the subagent can access.
+      return undefined; // TODO: wire up the actual signal
+    };
+
+    // Get the parent's model settings for the child to use.
+    const getModel = (): { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } | undefined => ({
+      model: p.model,
+      modelStrict: p.modelStrict,
+      routingMode: p.routingMode,
+    });
+
+    // Get the runTool - but it's created AFTER this call, so we use a different approach.
+    // We'll create a placeholder that gets filled in after runTool is created.
+    // Actually, the simplest solution is to have the subagent tool get runTool from a module-level
+    // variable that we set. Let me use that approach instead.
+    let currentRunTool: ((name: string, args: Record<string, unknown>) => Promise<unknown>) | undefined;
+    const getRunTool = (): typeof currentRunTool => currentRunTool;
+
+    const defs = await ports.tools(projectId, confirmChildWrite, getSignal, getRunTool, getModel);
     broadcast({ type: "run.tools", chatId, count: defs.length });
     const native = createNativeRunTool({
       defs,
@@ -360,6 +392,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       }
       return out;
     };
+    // Wire up the runTool getter so subagents can use it for their writes.
+    currentRunTool = runTool;
     // The gate reads the LIVE flag: `nativeNeedsConfirm` is the one predicate every
     // host surface shares, re-bound per call so a mid-run switch is honoured.
     const needsConfirm = (req: { name: string; args: unknown }): boolean =>

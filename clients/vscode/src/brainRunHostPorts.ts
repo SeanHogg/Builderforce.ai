@@ -42,8 +42,10 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   return createBrainRunHost({
     // `confirmWrite` comes from the RUN (it knows the chat and the live Auto switch),
     // so it is passed straight through rather than rebuilt here.
-    tools: (projectId, confirmWrite) =>
-      brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, streamForRoute, confirmWrite),
+    // The getSignal, getRunTool, and getModel functions are passed through to the subagent
+    // tool so children can access the parent's context (abort signal, write tracking, model).
+    tools: (projectId, confirmWrite, getSignal, getRunTool, getModel) =>
+      brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, streamForRoute, confirmWrite, getSignal, getRunTool, getModel),
     workspaceRoot,
     // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
     // on-device route can all change between turns, and a local credential can expire.
