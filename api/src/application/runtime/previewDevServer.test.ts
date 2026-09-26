@@ -68,14 +68,20 @@ describe('buildPreviewDevServerStep', () => {
 describe('previewStepForRun', () => {
   const container = {} as Env['AGENT_CONTAINER'];
 
-  it('is inert until the flag AND the container binding are both present', () => {
-    expect(previewStepForRun({ AGENT_CONTAINER: container } as Env)).toBeNull();
-    expect(previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true' } as Env)).toBeNull();
-    expect(previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'false', AGENT_CONTAINER: container } as Env)).toBeNull();
+  it('is inert until the flag AND the container binding are both present', async () => {
+    // Mock db and secrets - should return null when feature is off
+    const mockDb = {} as any;
+    expect(await previewStepForRun({ AGENT_CONTAINER: container } as Env, mockDb, 1, 1)).toBeNull();
+    expect(await previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true' } as Env, mockDb, 1, 1)).toBeNull();
+    expect(await previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'false', AGENT_CONTAINER: container } as Env, mockDb, 1, 1)).toBeNull();
   });
 
-  it('produces the step once the operator turns it on', () => {
-    const step = previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true', AGENT_CONTAINER: container } as Env);
+  it('produces the step once the operator turns it on', async () => {
+    // Mock db that returns empty secrets
+    const mockDb = {
+      select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+    } as any;
+    const step = await previewStepForRun({ PREVIEW_INGRESS_ENABLED: 'true', AGENT_CONTAINER: container } as Env, mockDb, 1, 1);
     expect(step?.port).toBe(PREVIEW_PORT);
   });
 });

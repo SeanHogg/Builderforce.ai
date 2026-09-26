@@ -93,7 +93,8 @@ export async function launchContainerRun(
     // pointing at the public origin, Metro's packager host), the env, and the ordered
     // start candidates. `null` while PREVIEW_INGRESS_ENABLED is unset, and omitted from
     // the body entirely in that case, so an existing run is launched byte-identically.
-    const preview = previewStepForRun(env);
+    // Includes project secrets (W1 - secrets handling)
+    const preview = await previewStepForRun(env, db, args.tenantId, args.taskRow.projectId);
     const res = await stub.fetch('https://agent-container/run', {
       method: 'POST',
       body: JSON.stringify({
