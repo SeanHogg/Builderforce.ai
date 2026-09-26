@@ -19,6 +19,7 @@ import { cognitionToolDefs } from "./cognition";
 import { listPlatformTools } from "./platformTools";
 import { subagentToolDef, type SubagentToolDeps } from "./subagentTool";
 import { ticketBranchReviewToolDef } from "./ticketBranchTool";
+import { desktopBackedTools } from "./desktopContext";
 
 export async function brainToolCatalog(
   secrets: vscode.SecretStorage,
@@ -43,7 +44,11 @@ export async function brainToolCatalog(
   const platformTools = await listPlatformTools(secrets);
   // The ticket branch review needs both halves: the project's tickets AND a checkout to
   // compare their branches in.
-  const localTools = root ? [...TOOL_DEFS, ...(projectId != null ? [ticketBranchReviewToolDef(secrets, projectId)] : [])] : [];
+  // `semantic_search` / `repo_map` stay only while Builderforce Desktop answers — a run
+  // never sees a tool whose only backing is a service that is not running.
+  const localTools = root
+    ? await desktopBackedTools([...TOOL_DEFS, ...(projectId != null ? [ticketBranchReviewToolDef(secrets, projectId)] : [])])
+    : [];
   // Delegation needs a workspace to explore AND a model to run the child on. Built
   // last so its `catalog()` can hand the child the tools assembled above — the child's
   // read-only subset is derived from the parent's catalog, never a second list that

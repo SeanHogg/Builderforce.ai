@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Builderforce Desktop",
+  "identifier": "ai.builderforce.desktop",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Builderforce Desktop",
+        "width": 880,
+        "height": 640,
+        "minWidth": 380,
+        "minHeight": 480,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Local code context and memory for every AI tool",
+    "longDescription": "Builderforce Desktop indexes your repositories on your own machine — definitions, a reference-ranked repo map, keyword and local-embedding search — and serves that context to the Builderforce VS Code extension, Claude Code, Cursor and any MCP client. Nothing leaves the machine.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -229,7 +229,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Feature routes — associated blog content shown on each logged-out feature
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
-  ide: ['vs-code-command-center-for-your-agentic-workforce', 'choose-who-answers-not-just-who-you-ask', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
+  ide: ['one-local-index-for-every-ai-tool', 'vs-code-command-center-for-your-agentic-workforce', 'choose-who-answers-not-just-who-you-ask', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
   training: ['webgpu-lora-explained', 'local-first-ai-webgpu-in-the-browser', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices', 'how-to-launch-a-course-and-upload-scorm-on-hired-video', 'how-to-run-a-classroom-cohort-as-an-educator', 'how-to-earn-a-verifiable-certificate-on-hired-video'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
@@ -242,7 +242,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   soc2: ['cobit-governance-readiness-for-agentic-it', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
   contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
   dashboard: ['system-of-record-for-agentic-work', 'real-time-collaboration-humans-and-agents', 'every-role-operating-picture'],
-  agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
+  agents: ['one-local-index-for-every-ai-tool', 'builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
   diagnostics: ['ai-development-maturity-diagnostic', 'cobit-governance-readiness-for-agentic-it', 'system-of-record-for-agentic-work'],
   // Newer enterprise surfaces.

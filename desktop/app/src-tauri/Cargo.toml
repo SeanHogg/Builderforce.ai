@@ -1,0 +1,22 @@
+[package]
+name = "builderforce-desktop"
+description = "Builderforce Desktop — local code context and memory for every AI tool on this machine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+bf-context = { path = "../../crates/bf-context" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ureq.workspace = true
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+sys-locale = "0.3"

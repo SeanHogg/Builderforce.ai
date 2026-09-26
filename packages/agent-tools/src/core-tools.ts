@@ -42,6 +42,7 @@ import { GIT_TOOLS } from "./git-tools.js";
 // Code navigation (`find_symbol` / `file_outline`) likewise lives in its own module and
 // is gated on `repo.symbols`, so only a surface with a definition index advertises it.
 import { SYMBOL_TOOLS } from "./symbol-tools.js";
+import { SEMANTIC_TOOLS } from "./semantic-tools.js";
 
 export const listFilesTool: ToolDefinition = defineTool({
   name: "list_files",
@@ -625,6 +626,7 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   searchCodeTool,
   readFileTool,
   ...SYMBOL_TOOLS,
+  ...SEMANTIC_TOOLS,
   writeFileTool,
   editFileTool,
   deleteFileTool,

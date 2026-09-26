@@ -84,7 +84,7 @@ export function canonicalReadArgs(tool: string, args: unknown): Record<string, u
  * lookup over a tree. An edit to any file can change them, so a code change forgets their
  * cached answers (it still forgets only its own target from the visit tally).
  */
-const TREE_WIDE_READ_TOOLS = new Set(['search_code', 'find_symbol', 'list_files']);
+const TREE_WIDE_READ_TOOLS = new Set(['search_code', 'find_symbol', 'list_files', 'semantic_search', 'repo_map']);
 
 /**
  * Was this visit ABOUT `target` — the target itself, or a question asked of it (a search

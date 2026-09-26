@@ -11162,6 +11162,10 @@
       "design-the-room-you-meet-in": {
         "title": "Gestalte den Raum, in dem du dich triffst — und geh hindurch",
         "description": "Der Raum auf deinem Board war früher ein einziger Raum. Jetzt ist er ein Konferenzraum, eine Büroküche oder ein Großraumbüro — oder ein Raum, den du Stück für Stück einrichtest, wie in einem Spiel begehst, im Marketplace verkaufst und in dem du deinen Roblox-Ort spielst."
+      },
+      "one-local-index-for-every-ai-tool": {
+        "title": "Ein lokaler Index für jedes KI-Werkzeug auf Ihrem Rechner",
+        "description": "Builderforce Desktop indiziert Ihre Repositorys auf Ihrem eigenen Computer – jede Definition, eine Karte nach Abhängigkeiten geordnet, Suche nach Bedeutung – und gibt diesen Kontext gleichermaßen an den VS-Code-Agenten, Claude Code und Cursor. Erinnerungen, die inzwischen gelöschten Code nennen, werden markiert statt befolgt. Nichts wird hochgeladen."
       }
     }
   },
@@ -32048,5 +32052,17 @@
   "proBonoBadge": {
     "label": "Pro bono",
     "accessibleName": "Unentgeltlich – diese Person bietet ehrenamtliche Sitzungen an"
+  },
+  "desktopApp": {
+    "heading": "Builderforce Desktop",
+    "intro": "Eine App in der Taskleiste, die pro Repository einen Code-Index auf Ihrem eigenen Rechner führt – und diesen Kontext jedem KI-Werkzeug gibt, das Sie nutzen.",
+    "points": [
+      "Agenten starten orientiert: eine Karte des Repositorys, geordnet nach dem, wovon der Code abhängt, plus Suche nach Bedeutung (`semantic_search`).",
+      "Ein Index für den Builderforce-Agenten in VS Code, Claude Code, Cursor und jeden MCP-Client.",
+      "Abgerufene Erinnerungen, die inzwischen gelöschten Code nennen, werden als möglicherweise veraltet markiert, statt befolgt zu werden."
+    ],
+    "privacy": "Indizierung und Embeddings laufen lokal. Ihr Code wird nie hochgeladen.",
+    "download": "Für Windows, macOS oder Linux herunterladen",
+    "readMore": "So funktioniert es"
   }
 }

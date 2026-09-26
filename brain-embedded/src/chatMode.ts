@@ -145,6 +145,8 @@ export interface ChatWorkDirectiveOptions {
   canEditHere?: boolean;
   /** Does the catalog carry `spawn_agent`, so persona delegation may be named? */
   canDelegate?: boolean;
+  /** Does the catalog carry `spawn_agents`, so fan-out delegation may be named? */
+  canFanOut?: boolean;
   /** The agents invited into this chat. Non-empty INVERTS the do-it-here ordering. */
   roster?: readonly ChatRosterAgent[];
 }

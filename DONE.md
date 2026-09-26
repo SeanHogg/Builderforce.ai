@@ -1,3 +1,25 @@
+## ✅ RESOLVED 2026-09-26 — Builderforce Desktop: one local code index for every AI tool (phase 1)
+
+- **Gap.** Every agent oriented itself in a repository by grepping and paging through files, from nothing, and each AI tool did so separately. VS Code search was ripgrep only; the workspace digest was one fact per sub-project; Evermind embedded memories but not code; and a recalled memory naming deleted code was obeyed. Nothing flagged it.
+- **Rust workspace `desktop/`.**
+  - `crates/bf-index`: tree-sitter chunking at definition boundaries (Rust, TS/TSX, JS, Python, Go, Java; line windows for everything else), symbols, a reference-ranked repo map, identifier-aware FTS5 BM25, local fastembed embeddings fused by reciprocal rank, a debounced file watcher, and `check_references` (which code paths and symbols in a text no longer exist). One SQLite file per workspace under `~/.builderforce/desktop`, never in the repo.
+  - `crates/bf-context`: a workspace registry, ONE operation surface (`api::dispatch`), a loopback HTTP server (per-start bearer token, browser `Origin` refused, discovery file at `~/.builderforce/desktop.json`), an MCP stdio server for Claude Code / Cursor (it forwards to the running app's warm index, or serves in-process), and the headless `bf-context` binary.
+  - `app/`: the Tauri 2 tray app. It shows workspaces and progress, gives connect instructions for Claude Code and Cursor, and shows an update notice. The UI is localized in en/de/es/fr/zh and follows the light/dark theme. `builderforce-desktop mcp` is the same executable acting as the MCP server.
+- **Shared tools.** `semantic_search` and `repo_map` are defined once in `@builderforce/agent-tools` (`semantic-tools.ts`) behind a new `repo.semantic` capability. No cloud surface backs it.
+- **VS Code.**
+  - `desktopContext.ts` is the one client: discovery, a cached probe, the `repo.semantic` capability, `desktopBackedTools` (the two tools are withheld per run while the app is not running), `registerWorkspace` on folder open, and `checkReferences`.
+  - The repo map joins every turn's grounding (`grounding.ts`, used by both chat surfaces).
+  - `memoryStaleness.ts` flags recalled memories whose references are gone. It covers both `recall_facts` (`possiblyStale`) and the Evermind recall block (`withWorkspaceStaleness`, host run and native participant).
+  - The two tools are pinned in `LOCAL_WORKSPACE_TOOLS` and are in the read-dedupe and tree-wide read sets.
+- **Distribution.** `.github/workflows/desktop-release.yml` (tag `desktop-v*` or manual) tests the service crates, builds installers for Windows, macOS arm64/x64 and Linux with `tauri-action`, signs when the secrets exist, and uploads `bf-context-<target>` binaries.
+- **Launch.**
+  - The `/agents` page has a `DesktopAppDownload` section; the backtick renderer was extracted to `components/marketing/inlineCode.tsx` and the page migrated to it.
+  - Blog post `one-local-index-for-every-ai-tool` in five languages.
+  - Release note migration `1185`.
+- **Tests:** `bf-index` unit tests (terms, chunking, fusion, repo map, refs, index end to end), `bf-context/tests/api.rs` (dispatch plus HTTP auth/origin/discovery), `agent-tools/semantic-tools.test.ts`, VS Code `desktopContext.test.ts`, `memoryStaleness.test.ts`, and the pin case in `localToolsAdvertised.test.ts`.
+- **Versions:** desktop 2026.9.26, agent-tools 2026.9.26, brain-embedded 2026.9.37, VSIX 2026.9.91, frontend 2026.9.37.
+- **Still open** (ROADMAP → Builderforce Desktop): signing and in-place updater (credentials), the measured with/without eval (live runs), on-prem `repo.semantic`, local model serving, and the local browser/VM host.
+
 ## ✅ RESOLVED 2026-09-24 — The execution surface is a plan decision, and the diagnostic says which one ran
 
 - **What:** A cloud run's surface is now decided by what the workspace pays for. **Free → `durable`** (Cloudflare's on-demand serverless Durable Object — free infrastructure, shell-LESS, edits surgically over the git API). **Paid → `container`** (a long-lived Cloudflare Container with a real shell and a local clone, which is what "a cloud agent should clone the repo and work like the editor agent opened into that directory" actually means). New paid flag `planFeatures.containerRuntime` — sibling of `livePreview`, same resource, different hold. `resolveCloudSurface(surface, hasExplicitHost, { containerAllowed })` applies it and DEMOTES an explicit `runtime_surface = 'container'` for an unentitled workspace, because a gate that only moved the default would be bypassable by writing one varchar. An explicit `'durable'` is preserved on every plan — "serverless on purpose" was previously inexpressible, since an explicit choice and an unset column fell through the same `else`. A pinned on-prem host stays `container` on every plan: that is the customer's own machine, and the entitlement is about OUR compute.

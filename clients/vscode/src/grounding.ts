@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { readRecentSessionNotes } from "./sessionNotes";
+import { desktopRepoMapSection } from "./desktopContext";
 
 /** Single source of truth for the current workspace grounding summary, shared by the
  *  chat panels and the native chat participant (so none holds its own copy). */
@@ -18,17 +19,18 @@ export function setGroundingSummary(summary: string | undefined): void {
  * files of the runs before it, so the surface gets better the more it is used, which is
  * the behaviour the on-prem runtime has always had and the editor did not.
  *
- * Async and best-effort: an unreadable (or absent) memory tree degrades to the map alone,
- * never to a failed turn.
+ * With Builderforce Desktop running, the reference-ranked repo map from its live index
+ * joins them — the codebase's shape by what the code actually depends on, current to the
+ * last save rather than the last rescan.
+ *
+ * Async and best-effort: an unreadable (or absent) memory tree or desktop service
+ * degrades to what remains, never to a failed turn.
  */
 export async function getGroundingWithHistory(root: string | undefined): Promise<string | undefined> {
   const map = groundingSummary;
   if (!root) return map;
-  const notes = await readRecentSessionNotes(root);
-  if (!notes) return map;
-  const history = `## Recent activity in this workspace
-${notes}`;
-  return map ? `${map}
-
-${history}` : history;
+  const [notes, repoMap] = await Promise.all([readRecentSessionNotes(root), desktopRepoMapSection(root)]);
+  const history = notes ? `## Recent activity in this workspace\n${notes}` : "";
+  const sections = [map, repoMap, history].filter((s): s is string => !!s);
+  return sections.length ? sections.join("\n\n") : undefined;
 }

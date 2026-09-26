@@ -1,0 +1,33 @@
+[package]
+name = "bf-context"
+description = "Builderforce local context service: workspace registry, loopback HTTP API and MCP server over bf-index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "bf_context"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bf-context"
+path = "src/main.rs"
+
+[features]
+default = ["embeddings"]
+embeddings = ["bf-index/embeddings"]
+
+[dependencies]
+bf-index = { path = "../bf-index", default-features = false }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+tiny_http.workspace = true
+ureq.workspace = true
+dirs.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

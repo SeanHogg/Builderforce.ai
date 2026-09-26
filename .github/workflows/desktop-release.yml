@@ -1,0 +1,181 @@
+# Builderforce Desktop — builds the installers and the headless `bf-context` binary and
+# publishes them as a GitHub release. Release-only on purpose: it runs on a
+# `desktop-v*` tag or by hand, never on every push (the push pipeline stays the single
+# release.yml; a three-OS native build on every commit would cost more than it proves).
+#
+# Signing: the jobs sign when the secrets exist and ship unsigned when they do not, so a
+# release never fails for a missing certificate.
+#   macOS  — APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (Developer ID + notarization)
+#   Windows — WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD
+# Unsigned builds work but SmartScreen / Gatekeeper warn on first launch.
+name: Desktop Release
+
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create (desktop-vYYYY.M.D) — defaults to desktop-v<workspace version>'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      # The service crates carry the logic; the app crate is exercised by the build below.
+      - run: cargo test -p bf-index -p bf-context --no-default-features
+
+  tag:
+    runs-on: ubuntu-22.04
+    needs: test
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+      version: ${{ steps.t.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: t
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '^version' desktop/Cargo.toml | sed -E 's/.*"(.*)"/\1/')
+          if [[ "${GITHUB_REF}" == refs/tags/desktop-v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="desktop-v${version}"
+          fi
+          # The tag and the built version must agree, or the in-app update check lies.
+          if [[ "${tag#desktop-v}" != "${version}" ]]; then
+            echo "::error::tag ${tag} does not match desktop/Cargo.toml version ${version}"
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  app:
+    needs: tag
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ''
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ''
+    runs-on: ${{ matrix.os }}
+    env:
+      # A step's `if` cannot read secrets directly; this job-level flag carries the answer.
+      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+          key: ${{ matrix.target }}
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force)
+          # Tauri signs with the certificate whose thumbprint is in the bundle config.
+          $conf = 'desktop/app/src-tauri/tauri.conf.json'
+          $json = Get-Content $conf -Raw | ConvertFrom-Json
+          $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } -Force
+          $json | ConvertTo-Json -Depth 20 | Set-Content $conf
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: desktop/app
+          tagName: ${{ needs.tag.outputs.tag }}
+          releaseName: 'Builderforce Desktop ${{ needs.tag.outputs.version }}'
+          releaseBody: 'Local code context and memory for every AI tool on this machine. Download the installer for your platform below. The `bf-context-*` files are the headless service for servers and CI.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  cli:
+    needs: [tag, app]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            exe: bf-context.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            exe: bf-context
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            exe: bf-context
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+          key: cli-${{ matrix.target }}
+      - name: Build bf-context
+        working-directory: desktop
+        run: cargo build --release -p bf-context --target ${{ matrix.target }}
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          src="desktop/target/${{ matrix.target }}/release/${{ matrix.exe }}"
+          ext=""; [[ "${{ matrix.exe }}" == *.exe ]] && ext=".exe"
+          dest="bf-context-${{ matrix.target }}${ext}"
+          cp "$src" "$dest"
+          gh release upload "${{ needs.tag.outputs.tag }}" "$dest" --clobber

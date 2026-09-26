@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = ["crates/bf-index", "crates/bf-context", "app/src-tauri"]
+
+[workspace.package]
+version = "2026.9.26"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/SeanHogg/Builderforce.ai"
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+ignore = "0.4"
+notify = "6.1"
+notify-debouncer-mini = "0.4"
+tree-sitter = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-java = "0.23"
+fastembed = "4"
+tiny_http = "0.12"
+ureq = { version = "2", features = ["json"] }
+dirs = "5"
+rand = "0.8"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

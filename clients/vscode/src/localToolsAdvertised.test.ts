@@ -53,6 +53,15 @@ describe("the local workspace tools are always advertised", () => {
     }
   });
 
+  it("pins the semantic tools so a question phrased in words still reaches them", () => {
+    // "how do refunds reach the ledger?" shares no stem with `semantic_search` — the turn
+    // that most needs it is the one relevance would trim it from.
+    for (const name of ["semantic_search", "repo_map"]) {
+      expect(LOCAL_WORKSPACE_TOOLS.has(name)).toBe(true);
+      expect(coreNames.has(name)).toBe(true);
+    }
+  });
+
   it("pins the publish tools the persona now routes shipping through", () => {
     // The persona used to say "use run_command for git/gh to commit, push and open a
     // PR" — advice with no tool behind it, which is how a one-line change ended up

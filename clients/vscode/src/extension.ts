@@ -24,6 +24,7 @@ import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
+import { registerWorkspace } from "./desktopContext";
 import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
@@ -1405,6 +1406,9 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
 async function maybeScan(context: vscode.ExtensionContext, force: boolean): Promise<void> {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) return;
+  // Hand the folder to Builderforce Desktop (when it runs) so its index starts building
+  // now — before any sign-in gate, because the local index needs no account.
+  void registerWorkspace(root);
   const key = await context.secrets.get(SECRET_KEY);
   // The SAME route the chat participant runs on, rather than a second reading of
   // `builderforce.defaultModel`: that divergence meant pinning an on-device model left

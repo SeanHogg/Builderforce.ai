@@ -27,3 +27,4 @@ export * from "./subagent-tools.js";
 export * from "./git-tools.js";
 export * from "./symbols.js";
 export * from "./symbol-tools.js";
+export * from "./semantic-tools.js";

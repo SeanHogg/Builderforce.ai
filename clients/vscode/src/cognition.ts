@@ -12,6 +12,7 @@
 import * as vscode from "vscode";
 import { recallProjectFacts, rememberProjectFact } from "./bfApi";
 import type { ToolDef } from "./fileTools";
+import { staleNote, staleReferences } from "./memoryStaleness";
 
 /** Facts a single `recall_facts` call hands back by default. */
 const RECALL_DEFAULT_LIMIT = 5;
@@ -47,17 +48,23 @@ export function cognitionToolDefs(secrets: vscode.SecretStorage, projectId: numb
         required: ["query"],
       },
       mutating: false,
-      execute: async (args) => {
+      execute: async (args, root) => {
         if (!projectId) return JSON.stringify({ ok: false, error: "Select a project first — memory is scoped to the active project." });
         const query = String(args.query ?? "").trim();
         const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : RECALL_DEFAULT_LIMIT;
         const limit = Math.min(RECALL_MAX_LIMIT, Math.max(1, requested));
         const facts = await recallProjectFacts(secrets, projectId, query || undefined, limit);
+        // A fact naming code the workspace no longer has is flagged, not obeyed.
+        const missing = await staleReferences(root || undefined, facts.map((f) => f.content));
         return JSON.stringify({
           ok: true,
           query,
           total: facts.length,
-          facts: facts.map((f) => ({ key: f.key, content: f.content })),
+          facts: facts.map((f, i) => ({
+            key: f.key,
+            content: f.content,
+            ...(missing[i]?.length ? { possiblyStale: staleNote(missing[i]!) } : {}),
+          })),
           ...(facts.length === 0
             ? { note: "No remembered facts match this query — nothing has been recorded about it yet. Work it out from the code, then remember_fact the durable result under a stable key so the next run recalls it instead of re-deriving it." }
             : {}),

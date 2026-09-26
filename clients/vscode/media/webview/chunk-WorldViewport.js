@@ -1,4 +1,4 @@
-import{e0 as wU,b9 as yU,bZ as RI,r as CA,j as lA,e1 as up,_ as Rp,bb as fp,bm as GU,v as kU,e2 as Yp,e as Be}from"./index.js";import{A as qp}from"./chunk-Avatar.js";/**
+import{e1 as wU,b9 as yU,bZ as RI,r as CA,j as lA,e2 as up,_ as Rp,bb as fp,bm as GU,v as kU,e3 as Yp,e as Be}from"./index.js";import{A as qp}from"./chunk-Avatar.js";/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT

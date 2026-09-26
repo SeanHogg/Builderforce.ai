@@ -17,6 +17,7 @@ import { appendSessionNote } from "./sessionNotes";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { resolveRunPolicyGates } from "./policyGates";
+import { withWorkspaceStaleness } from "./memoryStaleness";
 
 /** The Sessions-tree overlay source for host-owned runs (one bucket, not per panel). */
 const RUNS_SOURCE = "brain-host";
@@ -73,7 +74,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     persistTrace: (chatId, events) => postBrainTrace(secrets, chatId, events),
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(secrets, outcome),
-    evermind: (projectId) => projectEvermindHooks(secrets, projectId),
+    evermind: (projectId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId), workspaceRoot() || undefined),
     // The ONE api `ContextSource` the native participant and the cloud engine read.
     // Continuity-scoped to the chat (a real server chat only — an unlinked run has a
     // negative id and no history to measure a delta against).

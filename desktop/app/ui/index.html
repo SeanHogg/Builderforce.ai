@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Builderforce Desktop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <strong>Builderforce Desktop</strong>
+        <span class="muted" id="version"></span>
+      </div>
+      <span class="pill" id="embeddings"></span>
+    </header>
+
+    <div class="banner" id="update" hidden>
+      <span id="update-text"></span>
+      <button class="link" id="update-open" data-i18n="update.open"></button>
+    </div>
+
+    <main>
+      <section class="card">
+        <div class="row between">
+          <div>
+            <h2 data-i18n="workspaces.title"></h2>
+            <p class="muted" data-i18n="workspaces.intro"></p>
+          </div>
+          <button class="primary" id="add" data-i18n="workspaces.add"></button>
+        </div>
+        <p class="error" id="error" role="alert" hidden></p>
+        <ul class="list" id="workspaces"></ul>
+        <p class="muted empty" id="empty" data-i18n="workspaces.empty" hidden></p>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="connect.title"></h2>
+        <p class="muted" data-i18n="connect.intro"></p>
+        <div class="connect">
+          <h3 data-i18n="connect.vscode"></h3>
+          <p class="muted" data-i18n="connect.vscodeBody"></p>
+        </div>
+        <div class="connect">
+          <div class="row between">
+            <h3 data-i18n="connect.claude"></h3>
+            <button class="ghost" data-copy="claude" data-i18n="connect.copy"></button>
+          </div>
+          <pre class="code" id="claude"></pre>
+        </div>
+        <div class="connect">
+          <div class="row between">
+            <h3 data-i18n="connect.cursor"></h3>
+            <button class="ghost" data-copy="mcp" data-i18n="connect.copy"></button>
+          </div>
+          <pre class="code" id="mcp"></pre>
+        </div>
+        <p class="muted small" data-i18n="connect.privacy"></p>
+      </section>
+    </main>
+
+    <template id="row">
+      <li class="ws">
+        <div class="ws-head">
+          <span class="path"></span>
+          <span class="pill phase"></span>
+        </div>
+        <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+        <div class="row between wrap">
+          <span class="muted small stats"></span>
+          <span class="actions">
+            <button class="ghost rescan" data-i18n="workspaces.rescan"></button>
+            <button class="ghost danger remove" data-i18n="workspaces.remove"></button>
+          </span>
+        </div>
+      </li>
+    </template>
+
+    <script src="i18n.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -95,6 +95,7 @@ import signMeasurePlugIn from '@/content/blog/sign-measure-and-plug-in-inside-th
 import chooseWhoAnswers from '@/content/blog/choose-who-answers-not-just-who-you-ask.md';
 import importYourRecords from '@/content/blog/import-your-records.md';
 import shipFromTheEditor from '@/content/blog/ship-from-the-editor-commit-branch-pull-request.md';
+import oneLocalIndex from '@/content/blog/one-local-index-for-every-ai-tool.md';
 import seeWhatTheAgentChanged from '@/content/blog/see-what-the-agent-changed-before-you-commit.md';
 import canvasChromeRedesign from '@/content/blog/the-canvas-gave-the-screen-back-to-the-board.md';
 import build3dWorld from '@/content/blog/build-a-3d-world-in-the-browser.md';
@@ -257,6 +258,7 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('one-local-index-for-every-ai-tool', oneLocalIndex),
   buildPost('list-your-startup-and-meet-investors', listYourStartup),
   buildPost('choose-who-answers-not-just-who-you-ask', chooseWhoAnswers),
   buildPost('sign-measure-and-plug-in-inside-the-room', signMeasurePlugIn),

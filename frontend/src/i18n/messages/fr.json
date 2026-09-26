@@ -11162,6 +11162,10 @@
       "design-the-room-you-meet-in": {
         "title": "Aménagez la salle où vous vous réunissez — puis parcourez-la",
         "description": "La salle de votre board était autrefois une seule salle. Elle est désormais une salle du conseil, une cuisine de bureau ou un open space de bureaux — ou une salle que vous aménagez pièce par pièce, parcourez comme un jeu, vendez sur la marketplace, et où vous jouez à votre lieu Roblox."
+      },
+      "one-local-index-for-every-ai-tool": {
+        "title": "Un index local pour chaque outil d'IA de votre machine",
+        "description": "Builderforce Desktop indexe vos dépôts sur votre propre ordinateur — chaque définition, une carte classée par dépendances, une recherche par le sens — et fournit ce contexte aussi bien à l'agent VS Code qu'à Claude Code et Cursor. Les souvenirs qui citent du code supprimé depuis sont signalés au lieu d'être suivis. Rien n'est envoyé."
       }
     }
   },
@@ -32048,5 +32052,17 @@
   "proBonoBadge": {
     "label": "Bénévole",
     "accessibleName": "Gratuit — cette personne propose des sessions bénévoles"
+  },
+  "desktopApp": {
+    "heading": "Builderforce Desktop",
+    "intro": "Une application de la barre système qui tient un index de code par dépôt sur votre propre machine — et fournit ce contexte à chaque outil d'IA que vous utilisez.",
+    "points": [
+      "Les agents démarrent orientés : une carte du dépôt classée selon ce dont le code dépend, plus une recherche par le sens (`semantic_search`).",
+      "Un seul index pour l'agent Builderforce dans VS Code, Claude Code, Cursor et tout client MCP.",
+      "Les souvenirs rappelés qui citent du code supprimé depuis sont signalés comme peut-être obsolètes au lieu d’être suivis."
+    ],
+    "privacy": "L'indexation et les embeddings s'exécutent localement. Votre code n'est jamais envoyé.",
+    "download": "Télécharger pour Windows, macOS ou Linux",
+    "readMore": "Comment ça marche"
   }
 }

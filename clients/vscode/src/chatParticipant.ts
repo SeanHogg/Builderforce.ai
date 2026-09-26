@@ -22,6 +22,7 @@ import { buildSystemMessages } from "./prompt";
 import type { ToolDef } from "./fileTools";
 import type { PolicyGate } from "./policy";
 import { brainToolCatalog } from "./brainToolCatalog";
+import { withWorkspaceStaleness } from "./memoryStaleness";
 import { runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nativeBrainRun";
 
 const PARTICIPANT_ID = "builderforce.agent";
@@ -221,7 +222,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       ...(activeProject && brainChatId != null ? { projectId: activeProject.id } : {}),
       // Memory, by contrast, is scoped to the PROJECT and needs no chat: a turn that
       // could not create a conversation can still be answered from memory for free.
-      ...(activeProject ? { evermind: projectEvermindHooks(ctx.secrets, activeProject.id) } : {}),
+      ...(activeProject ? { evermind: withWorkspaceStaleness(projectEvermindHooks(ctx.secrets, activeProject.id), root) } : {}),
       ...(brainChatId == null ? { chatMode: "chat" as const } : {}),
       ...(modelChoice.model ? { model: modelChoice.model } : {}),
       modelStrict: modelChoice.modelStrict,

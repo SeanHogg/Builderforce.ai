@@ -132,6 +132,7 @@ __export(src_exports, {
   classifyModelFunding: () => classifyModelFunding,
   clearRunError: () => clearRunError,
   codeChangeFile: () => codeChangeFile,
+  codeChangesOf: () => codeChangesOf,
   coerceAskUserPayload: () => coerceAskUserPayload,
   composeEvermindHooks: () => composeEvermindHooks,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
@@ -247,6 +248,8 @@ __export(src_exports, {
   personaModel: () => personaModel,
   personaOverlay: () => personaOverlay,
   personaSystemPrompt: () => personaSystemPrompt,
+  placeholderAdvisory: () => placeholderAdvisory,
+  placeholdersWritten: () => placeholdersWritten,
   pmoFocusDomId: () => pmoFocusDomId,
   pmoFocusValue: () => pmoFocusValue,
   poolAgentsFrom: () => poolAgentsFrom,
@@ -3339,6 +3342,12 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   // and paging through files — the pattern these two tools exist to replace.
   "find_symbol",
   "file_outline",
+  // The semantic index (Builderforce Desktop). Pinned for the same reason and more so:
+  // its whole purpose is the question phrased in words — "how do refunds reach the
+  // ledger?" — which is exactly the turn whose text shares no stem with the tool name.
+  // Inert where the host does not advertise them (desktop app not running, web Brain).
+  "semantic_search",
+  "repo_map",
   "write_file",
   "edit_file",
   "delete_file",
@@ -4151,7 +4160,7 @@ function canonicalReadArgs(tool, args) {
   if (tool === "read_file" && (out.offset === 1 || out.offset === 0)) delete out.offset;
   return out;
 }
-var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files"]);
+var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map"]);
 function visitedScopeIs(visited, target) {
   return visited === target || (visited?.startsWith(`${target}${VISIT_QUESTION_SEPARATOR}`) ?? false);
 }
@@ -5430,6 +5439,211 @@ function withObservedModel(chatId, tool, args) {
   return { ...supplied, model: observed };
 }
 
+// src/codeChanges.ts
+var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
+function isDelegationTool(name) {
+  return DELEGATION_TOOLS.has(name);
+}
+function codeChangesOf(name, args, out) {
+  if (isCodeChangeTool(name)) {
+    if (isFailedToolResult(out)) return null;
+    const file = codeChangeFile(args);
+    return file ? [file] : [];
+  }
+  if (isDelegationTool(name)) {
+    const files = out?.changedFiles;
+    if (!Array.isArray(files)) return null;
+    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
+    return named.length ? named : null;
+  }
+  return null;
+}
+
+// src/placeholderGuard.ts
+var PLACEHOLDER_GUARD_LABEL = "tools.placeholder_guard";
+var SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|cs|rb|php|sql|sh|ps1|vue|svelte)$/i;
+var COMMENT_MARKERS = [
+  /\bTODO\b/,
+  /\bFIXME\b/,
+  /\bXXX\b/,
+  /\bfor now\b/i,
+  /\b(?:a|the) (?:proper|real|full) implementation (?:would|should|will)\b/i,
+  /\bnot (?:yet )?(?:implemented|wired)\b/i,
+  // The model's own reasoning left in the source — it was talking to itself, not
+  // documenting the code.
+  /\blet me\b/i,
+  /\bI'll\b/
+];
+var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/i;
+function commentOf(line) {
+  const t = line.trim();
+  if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
+  const slash = line.indexOf("//");
+  if (slash > 0 && line[slash - 1] !== ":") return line.slice(slash);
+  return null;
+}
+function markedLines(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    const comment = commentOf(line);
+    if (comment && COMMENT_MARKERS.some((re) => re.test(comment)) || STUB_THROW.test(line)) {
+      out.push(line.trim().slice(0, 160));
+    }
+  }
+  return out;
+}
+function placeholdersWritten(tool, args) {
+  const a = args ?? {};
+  const path = typeof a.path === "string" ? a.path : "";
+  if (!path || !SOURCE_FILE.test(path)) return [];
+  const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
+  if (typeof added !== "string" || !added) return [];
+  const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
+  return markedLines(added).filter((text) => !before.has(text)).map((text) => ({ path, text }));
+}
+function placeholderAdvisory(hits) {
+  if (!hits.length) return null;
+  const shown = hits.slice(0, 3).map((h) => `\`${h.text}\``).join(", ");
+  return `PLACEHOLDER WRITTEN in ${hits[0].path}: ${shown}${hits.length > 3 ? ` (+${hits.length - 3} more)` : ""}. This is unfinished work, and comments that narrate your own reasoning do not belong in the source. Finish it in this run \u2014 or, if it is genuinely blocked, say so plainly in your reply and name the blocker. Never report work that contains a placeholder as done or fixed.`;
+}
+function placeholderTraceEvent(tool, hits, ts) {
+  return {
+    ts,
+    category: "message",
+    label: PLACEHOLDER_GUARD_LABEL,
+    args: { tool, hits },
+    result: placeholderAdvisory(hits) ?? ""
+  };
+}
+function delegationPlaceholders(result) {
+  return asHits(resultField(result, "placeholders"));
+}
+function asHits(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((x) => {
+    const hit = x;
+    return typeof hit.path === "string" && typeof hit.text === "string" ? [{ path: hit.path, text: hit.text }] : [];
+  });
+}
+function resultField(result, key) {
+  let obj = result;
+  if (typeof obj === "string") {
+    try {
+      obj = JSON.parse(obj);
+    } catch {
+      return void 0;
+    }
+  }
+  return obj && typeof obj === "object" ? obj[key] : void 0;
+}
+
+// src/completionGuard.ts
+var TICKET_UPDATE = /tasks[._]update/i;
+var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
+function isTicketCompletion(tool, args) {
+  if (!TICKET_UPDATE.test(tool)) return false;
+  const status2 = args?.status;
+  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
+}
+function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
+  if (isOnBaseBranch) return true;
+  if (userDeclinedShipping) return true;
+  return false;
+}
+function notOnBaseBranchAdvisory() {
+  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
+}
+var PlaceholderLedger = class {
+  open = /* @__PURE__ */ new Map();
+  /** Account for ONE successful write, given the hits the guard found in it. */
+  record(tool, args, hits) {
+    const a = args ?? {};
+    const path = typeof a.path === "string" ? a.path : "";
+    if (!path) return;
+    if (tool === "write_file") {
+      this.set(path, hits.map((h) => h.text));
+      return;
+    }
+    if (tool === "edit_file") {
+      const current = new Set(this.open.get(path) ?? []);
+      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
+      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
+      for (const text of removed) if (!kept.has(text)) current.delete(text);
+      for (const h of hits) current.add(h.text);
+      this.set(path, [...current]);
+      return;
+    }
+    if (tool === "delete_file") this.open.delete(path);
+  }
+  /** Placeholders a delegated child reported writing. The parent never saw those edits,
+   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
+  add(hits) {
+    for (const h of hits) {
+      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
+      texts.add(h.text);
+      this.open.set(h.path, texts);
+    }
+  }
+  outstanding() {
+    return [...this.open.entries()].flatMap(([path, texts]) => [...texts].map((text) => ({ path, text })));
+  }
+  set(path, texts) {
+    if (texts.length) this.open.set(path, new Set(texts));
+    else this.open.delete(path);
+  }
+};
+function completionAdvisory(open) {
+  if (!open.length) return null;
+  const shown = open.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
+  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
+}
+
+// src/restatedReply.ts
+var RESTATED_MIN_WORDS = 40;
+var RESTATED_CONTAINMENT = 0.6;
+function textOf(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
+  }
+  return "";
+}
+function previousReplyText(convo) {
+  let i = convo.length - 1;
+  while (i >= 0 && convo[i].role !== "user") i--;
+  for (i -= 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return "";
+    if (m.role === "assistant") {
+      const text = textOf(m.content).trim();
+      if (text) return text;
+    }
+  }
+  return "";
+}
+function shingles(text) {
+  const words2 = text.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
+  const out = /* @__PURE__ */ new Set();
+  for (let i = 0; i + 2 < words2.length; i++) out.add(`${words2[i]} ${words2[i + 1]} ${words2[i + 2]}`);
+  return out;
+}
+function isRestatedReply(current, previous) {
+  const now = shingles(current);
+  if (now.size + 2 < RESTATED_MIN_WORDS || !previous.trim()) return false;
+  const before = shingles(previous);
+  let seen = 0;
+  for (const s of now) if (before.has(s)) seen += 1;
+  return seen / now.size >= RESTATED_CONTAINMENT;
+}
+function restatedReplyNudge() {
+  return [
+    "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
+    "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
+    "If the remaining items are not yet tickets, file one ticket per item (builtin_tasks_create, linked to this chat) so the status lives on the board instead of in a repeated summary.",
+    "End with only what CHANGED this turn."
+  ].join("\n");
+}
+
 // src/runOutcomeReport.ts
 function runOutcomeId(chatId, startedAtMs) {
   return `ide:${chatId}:${startedAtMs}`;
@@ -6438,6 +6652,72 @@ var fileOutlineTool = defineTool({
 });
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
+// ../packages/agent-tools/src/semantic-tools.ts
+var SEARCH_DEFAULT_LIMIT = 8;
+var SEARCH_MAX_LIMIT = 25;
+var MAP_DEFAULT_TOKENS = 1500;
+var MAP_MAX_TOKENS = 8e3;
+var semanticSearchTool = defineTool({
+  name: "semantic_search",
+  description: `Find code by MEANING or by name in one call \u2014 returns whole functions/classes (path, line range, symbol, snippet) ranked by identifier-aware keyword match (resolveMembership matches "membership") plus local embeddings. Use it FIRST for questions phrased in words \u2014 "where is X handled", "how does Y work", "what validates Z" \u2014 where search_code needs an exact substring you do not know yet. Then read_file only the hit you will edit, at its line range. For exact strings, usages and config values use search_code; for a known symbol's definition use find_symbol.`,
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: 'What you are looking for, in words or identifiers, e.g. "stripe webhook to ledger".' },
+      path: { type: "string", description: 'Optional repo-relative subdirectory to restrict to, e.g. "api/src".' },
+      limit: { type: "number", description: `Max results (default ${SEARCH_DEFAULT_LIMIT}, max ${SEARCH_MAX_LIMIT}).` }
+    },
+    required: ["query"]
+  },
+  requires: ["repo.semantic"],
+  async execute(args, ctx) {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) return { data: { ok: false, error: "query is required" } };
+    const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : void 0;
+    const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : SEARCH_DEFAULT_LIMIT;
+    const limit = Math.min(SEARCH_MAX_LIMIT, Math.max(1, requested));
+    const r = await ctx.caps.semantic.search(query, { scope, limit });
+    if (!r.ok) return { data: r };
+    const results = (r.results ?? []).map((h) => ({
+      at: `${h.path}:${h.startLine}-${h.endLine}`,
+      symbol: h.symbol ?? void 0,
+      kind: h.kind,
+      via: h.source,
+      snippet: h.snippet
+    }));
+    const data = { ok: true, query, total: results.length, results };
+    if (r.indexing) {
+      data.note = "The index is still being built \u2014 these results cover only the files scanned so far. A miss is not proof of absence yet; fall back to search_code if needed.";
+    } else if (results.length === 0) {
+      data.note = `Nothing matched "${query}"${scope ? ` under "${scope}"` : ""}. Rephrase with likely identifier words, drop \`path\`, or use search_code for an exact string.`;
+    }
+    return { data };
+  }
+});
+var repoMapTool = defineTool({
+  name: "repo_map",
+  description: "The repository's SHAPE in one call: files ordered by how much the rest of the code depends on them, each with its most-referenced definitions as `line: signature`. Call it once at the start of unfamiliar work instead of exploring with list_files and reads; pass `focus` (paths you are working in) to rank that area first.",
+  parameters: {
+    type: "object",
+    properties: {
+      focus: { type: "array", items: { type: "string" }, description: 'Optional repo-relative paths to rank first, e.g. ["api/src/billing"].' },
+      maxTokens: { type: "number", description: `Budget for the map (default ${MAP_DEFAULT_TOKENS}, max ${MAP_MAX_TOKENS}).` }
+    }
+  },
+  requires: ["repo.semantic"],
+  async execute(args, ctx) {
+    const focus = Array.isArray(args.focus) ? args.focus.filter((f) => typeof f === "string" && f.trim() !== "") : [];
+    const requested = typeof args.maxTokens === "number" && Number.isFinite(args.maxTokens) ? Math.floor(args.maxTokens) : MAP_DEFAULT_TOKENS;
+    const maxTokens = Math.min(MAP_MAX_TOKENS, Math.max(200, requested));
+    const r = await ctx.caps.semantic.repoMap({ maxTokens, focus });
+    if (!r.ok) return { data: r };
+    const data = { ok: true, map: r.map ?? "" };
+    if (r.indexing) data.note = "The index is still being built \u2014 the map covers only the files scanned so far.";
+    return { data };
+  }
+});
+var SEMANTIC_TOOLS = [semanticSearchTool, repoMapTool];
+
 // ../packages/agent-tools/src/core-tools.ts
 var listFilesTool = defineTool({
   name: "list_files",
@@ -6915,6 +7195,7 @@ var CORE_TOOLS = [
   searchCodeTool,
   readFileTool,
   ...SYMBOL_TOOLS,
+  ...SEMANTIC_TOOLS,
   writeFileTool,
   editFileTool,
   deleteFileTool,
@@ -7058,7 +7339,7 @@ function provenanceMetadata(result, requested) {
     ...asked ? { requestedModel: asked } : {}
   });
 }
-var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline"]);
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
 function accrueByoUnresolved(c, raw) {
   if (!raw) return;
@@ -7727,7 +8008,7 @@ ${extra}`;
   const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}
 
-${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), roster: req.chatRoster })}
+${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
 
 ${turnOptimizationDirective()}`;
   const canShip = canShipHere(catalogToolNames);
@@ -7751,6 +8032,7 @@ ${continuationDirective()}`;
   }
   const readCoverage = new ReadCoverage();
   const failures = new FailureTally();
+  const placeholderLedger = new PlaceholderLedger();
   const failureAdvisoryFor = (name, args, out, step) => {
     const attempts = failures.record(name, args);
     const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
@@ -7769,6 +8051,8 @@ ${continuationDirective()}`;
   let announcementRecoveries = 0;
   let phase = c.codeChanged ? "code" : "plan";
   let shipRecoveryUsed = false;
+  const priorReply = previousReplyText(convo);
+  let restateRecoveryUsed = false;
   let activeModel = model;
   const triedModels = [];
   let modelFailovers = 0;
@@ -8069,6 +8353,20 @@ ${revisit}` : covered.note;
           label: "loop.recover_unshipped_change",
           args: { step: iter, files: c.touchedFiles.slice(0, 20) },
           result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)."
+        });
+        c.streamingText = "";
+        emit(c);
+        return { action: "continue" };
+      }
+      if (runTool && !restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
+        restateRecoveryUsed = true;
+        await requeueWithNudge(restatedReplyNudge());
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "message",
+          label: "loop.recover_restated_reply",
+          args: { step: iter },
+          result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it."
         });
         c.streamingText = "";
         emit(c);
@@ -8380,11 +8678,11 @@ ${revisit}` : covered.note;
         pendingRun = { out, toolStart, isReadTool, threw: true };
         return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
       }
-      if (isCodeChangeTool(call.name)) {
+      const changed = codeChangesOf(call.name, args, out);
+      if (changed) {
         const first = !c.codeChanged;
         c.codeChanged = true;
-        const f = codeChangeFile(args);
-        if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
         if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
           await recordCodeChangeTicket(chatId, c, req, "open").catch(() => {
           });
@@ -8397,6 +8695,27 @@ ${revisit}` : covered.note;
         advisory = failureAdvisoryFor(call.name, args, out, iter);
       } else {
         failures.clear(call.name, args);
+        const placeholders = placeholdersWritten(call.name, args);
+        if (placeholders.length) {
+          pushTrace(c, placeholderTraceEvent(call.name, placeholders, nowIso()));
+          advisory = placeholderAdvisory(placeholders);
+        }
+        if (isCodeChangeTool(call.name)) placeholderLedger.record(call.name, args, placeholders);
+        if (isDelegationTool(call.name)) placeholderLedger.add(delegationPlaceholders(out));
+        if (isTicketCompletion(call.name, args)) {
+          const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
+          const events = c.trace;
+          const isOnBaseBranch = shippedToBaseBranch(events);
+          const canComplete = canCompleteTicket(isOnBaseBranch, false);
+          if (!canComplete) {
+            const said = notOnBaseBranchAdvisory();
+            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call.name, isOnBaseBranch }, result: said });
+            advisory = said;
+          } else if (placeholderWarning) {
+            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
+            advisory = placeholderWarning;
+          }
+        }
         if (isReadTool) {
           const visit = readCoverage.record(call.name, args);
           const target = visit ? visitTarget(args) : void 0;
@@ -10236,6 +10555,7 @@ function PromptInput({
   classifyModelFunding,
   clearRunError,
   codeChangeFile,
+  codeChangesOf,
   coerceAskUserPayload,
   composeEvermindHooks,
   computeBrainDiagnostics,
@@ -10351,6 +10671,8 @@ function PromptInput({
   personaModel,
   personaOverlay,
   personaSystemPrompt,
+  placeholderAdvisory,
+  placeholdersWritten,
   pmoFocusDomId,
   pmoFocusValue,
   poolAgentsFrom,

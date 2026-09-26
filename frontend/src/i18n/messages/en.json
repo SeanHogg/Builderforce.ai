@@ -11162,6 +11162,10 @@
       "design-the-room-you-meet-in": {
         "title": "Design the room you meet in — then walk it",
         "description": "The room on your board used to be one room. Now it is a boardroom, an office kitchen or an open floor of desks — or a room you lay out piece by piece, walk through like a game, sell in the marketplace, and play your Roblox place inside."
+      },
+      "one-local-index-for-every-ai-tool": {
+        "title": "One local index for every AI tool on your machine",
+        "description": "Builderforce Desktop indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded."
       }
     }
   },
@@ -32048,5 +32052,17 @@
   "proBonoBadge": {
     "label": "Pro bono",
     "accessibleName": "Unpaid — this advisor offers volunteer sessions"
+  },
+  "desktopApp": {
+    "heading": "Builderforce Desktop",
+    "intro": "A tray app that keeps one code index per repository on your own machine — and hands that context to every AI tool you use.",
+    "points": [
+      "Agents start oriented: a map of the repository ranked by what the code depends on, plus search by meaning (`semantic_search`).",
+      "One index for the Builderforce VS Code agent, Claude Code, Cursor and any MCP client.",
+      "Recalled memories that name code you have since deleted are flagged as possibly stale instead of obeyed."
+    ],
+    "privacy": "Indexing and embeddings run locally. Your code is never uploaded.",
+    "download": "Download for Windows, macOS or Linux",
+    "readMore": "How it works"
   }
 }

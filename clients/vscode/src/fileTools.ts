@@ -98,6 +98,10 @@ export function describeTool(name: string, args: Record<string, unknown>): strin
       return `find symbol ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
     case "file_outline":
       return `outline ${p}`;
+    case "semantic_search":
+      return `semantic search ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
+    case "repo_map":
+      return `repo map${Array.isArray(args.focus) && args.focus.length ? ` of ${args.focus.slice(0, 2).join(", ")}` : ""}`;
     case "review_ticket_branches":
       return `review ticket branches${typeof args.repo === "string" ? ` in ${args.repo}` : ""}`;
     // The project-memory pair (cognition.ts): named by what is being recalled/kept, so

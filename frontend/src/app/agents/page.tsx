@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 import QuickStart from '@/components/QuickStart';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import MarketingFaq from '@/components/marketing/MarketingFaq';
+import DesktopAppDownload from '@/components/marketing/DesktopAppDownload';
+import { renderInlineCode } from '@/components/marketing/inlineCode';
 import FeatureCard from './FeatureCard';
 import NewsletterForm from './NewsletterForm';
 import { CAPABILITY_ICONS } from './capabilityIcons';
@@ -28,20 +29,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 type Capability = { title: string; description: string };
 type AgentFaq = { question: string; answer: string };
-
-/**
- * Render a capability description (a plain string in the catalog source of
- * truth) into a ReactNode, turning `backtick`-wrapped tokens into inline <code>
- * so the data can stay JSX-free while preserving the original styling.
- */
-function renderDescription(text: string): ReactNode {
-  if (!text.includes('`')) return text;
-  return text.split(/(`[^`]+`)/).map((part, i) =>
-    part.startsWith('`') && part.endsWith('`')
-      ? <code key={i}>{part.slice(1, -1)}</code>
-      : part,
-  );
-}
 
 // Visible copy from the `agents` catalog (localized in all 5 locales).
 // content/product.ts AGENT_CAPABILITIES supplies stable iconKey + href, paired with the
@@ -81,6 +68,8 @@ export default async function AgentsHome() {
 
         <QuickStart />
 
+        <DesktopAppDownload />
+
         <section className="cc-section">
           <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> {t('agents.whatItDoes')}</h2>
           <div className="cc-features-grid">
@@ -89,7 +78,7 @@ export default async function AgentsHome() {
                 key={f.title}
                 href={AGENT_CAPABILITIES[i]?.href ?? '#'}
                 title={f.title}
-                description={renderDescription(f.description)}
+                description={renderInlineCode(f.description)}
                 icon={CAPABILITY_ICONS[AGENT_CAPABILITIES[i]?.iconKey]}
               />
             ))}
@@ -101,7 +90,7 @@ export default async function AgentsHome() {
           <p className="cc-prose">{t('agents.whyIntro')}</p>
           <ul className="cc-prose-list">
             {(t.raw('agents.whyList') as string[]).map((item, i) => (
-              <li key={i}>{renderDescription(item)}</li>
+              <li key={i}>{renderInlineCode(item)}</li>
             ))}
           </ul>
           <p className="cc-prose">

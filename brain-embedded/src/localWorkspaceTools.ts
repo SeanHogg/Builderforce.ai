@@ -47,6 +47,12 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   // and paging through files — the pattern these two tools exist to replace.
   'find_symbol',
   'file_outline',
+  // The semantic index (Builderforce Desktop). Pinned for the same reason and more so:
+  // its whole purpose is the question phrased in words — "how do refunds reach the
+  // ledger?" — which is exactly the turn whose text shares no stem with the tool name.
+  // Inert where the host does not advertise them (desktop app not running, web Brain).
+  'semantic_search',
+  'repo_map',
   'write_file',
   'edit_file',
   'delete_file',

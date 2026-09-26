@@ -28,6 +28,10 @@ import type { BrainStreamFn, BrainToolSpec, ChatCompletionMessage } from "@seanh
 import type { ChildWriteDecision } from "./childWriteGate";
 import type { ToolDef } from "./fileTools";
 
+/** Message returned when a writable subagent was requested but this host cannot prompt. */
+export const WRITE_DECLINED =
+  "This host cannot raise an approval prompt, so the sub-agent ran read-only. The findings below are an investigation — make any change yourself.";
+
 /** What the local `spawn_agent` needs from the host: a model route and the catalog the
  *  parent is running with. Both are resolved per call — a run can outlive a model
  *  switch, and the catalog depends on whether a workspace is open. */

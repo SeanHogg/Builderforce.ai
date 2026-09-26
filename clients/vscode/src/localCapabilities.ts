@@ -34,7 +34,8 @@ import type {
   ShellResult,
 } from "@builderforce/agent-tools";
 
-import type { RepoSymbolsCapability } from "@builderforce/agent-tools";
+import type { RepoSemanticCapability, RepoSymbolsCapability } from "@builderforce/agent-tools";
+import { desktopSemanticCapability } from "./desktopContext";
 import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
 import { SKIP_DIRS, searchWorkspace } from "./workspaceSearch";
 import { workspaceSymbolIndex } from "./workspaceSymbols";
@@ -72,6 +73,10 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // The definition index behind `find_symbol` / `file_outline` (see workspaceSymbols.ts):
   // "where is X defined" in one call, and a file's map before paging through it.
   "repo.symbols",
+  // The semantic index behind `semantic_search` / `repo_map`, served by Builderforce
+  // Desktop (see desktopContext.ts). Declared here so the tools are built; each run's
+  // catalog then withholds them while the desktop service is not running.
+  "repo.semantic",
   // Publishing (commit / push / open a pull request). Backed HERE and on no cloud
   // surface: those already publish by a different mechanism (a write IS a commit, and
   // the engine opens the PR at finish), whereas the editor could change a working tree
@@ -152,6 +157,8 @@ export interface LocalProviderOptions {
   ripgrep?: () => Promise<string | null>;
   /** The definition index. Defaults to the workspace's shared one; a test can pin its own. */
   symbols?: RepoSymbolsCapability & { markDirty(path: string): void };
+  /** The semantic index. Defaults to Builderforce Desktop's; a test can pin its own. */
+  semantic?: RepoSemanticCapability;
 }
 
 /** Build the editor's local-disk capability provider rooted at the open folder. */
@@ -311,5 +318,6 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
     },
   };
 
-  return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, shell };
+  const semantic = options.semantic ?? desktopSemanticCapability(rootResolved);
+  return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, semantic, shell };
 }
