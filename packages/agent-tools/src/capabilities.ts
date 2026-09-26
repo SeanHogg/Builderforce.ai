@@ -46,6 +46,11 @@ export type Capability =
    *  (a surface on a real disk keeps one warm; a git-over-HTTP surface has none), and a
    *  surface that cannot back it must not advertise tools that promise "one instant call". */
   | "repo.symbols"
+  /** Semantic code search and repo mapping — powered by a local embeddings index (a warm
+   *  local index: Builderforce Desktop). Distinct from `repo.search` because it answers
+   *  questions phrased in words ("where do we enforce plan limits?") by meaning, not
+   *  exact substring. */
+  | "repo.semantic"
   /** Create / update whole files in the working tree (committed or on disk). */
   | "repo.write"
   /** Surgical in-place string edits. Separate from write so a surface can offer whole
@@ -143,6 +148,18 @@ export interface RepoSymbolsCapability {
   /** Definitions whose name matches `query` (case-insensitive; exact matches first).
    *  `scope` narrows to a repo-relative subdirectory, `kind` to one {@link SymbolKind}. */
   find(query: string, opts?: { scope?: string; kind?: SymbolKind; limit?: number }): Promise<SymbolFindResult>;
+}
+
+/** Semantic code search and repo mapping (capability `repo.semantic`). Powered by a local
+ *  embeddings index — the surface owns the index and its persistence; the tool only asks it.
+ *  Distinct from `repo.search` because it answers questions phrased in words by meaning. */
+export interface RepoSemanticCapability {
+  /** Search code by MEANING, not exact substring. Returns whole functions/classes ranked
+   *  by identifier-aware keyword match plus local embeddings. */
+  search(query: string, opts?: { scope?: string; limit?: number }): Promise<SemanticSearchResult>;
+  /** Get the repository's shape: files ordered by how much the rest of the code depends on
+   *  them, each with its most-referenced definitions. */
+  repoMap(opts?: { focus?: string[]; maxTokens?: number }): Promise<RepoMapResult>;
 }
 
 /** Mutate the working tree. The provider owns the side effects of a write —
@@ -423,6 +440,7 @@ export interface CapabilityProvider {
   readonly repoRead?: RepoReadCapability;
   readonly repoWrite?: RepoWriteCapability;
   readonly symbols?: RepoSymbolsCapability;
+  readonly semantic?: RepoSemanticCapability;
   readonly shell?: ShellCapability;
   readonly staticCheck?: StaticCheckCapability;
   readonly human?: HumanCapability;
@@ -522,6 +540,37 @@ export interface RepoEditResult {
   note?: string;
   error?: string;
 }
+
+/** One semantic search hit — a function/class that matched the query by meaning. */
+export interface SemanticSearchHit {
+  path: string;
+  startLine: number;
+  endLine: number;
+  symbol?: string;
+  kind?: string;
+  snippet: string;
+  source: "embedding" | "keyword" | "hybrid";
+}
+
+export interface SemanticSearchResult {
+  ok: boolean;
+  query?: string;
+  total?: number;
+  results?: SemanticSearchHit[];
+  /** True when the index is still being built — results may be incomplete. */
+  indexing?: boolean;
+  error?: string;
+}
+
+export interface RepoMapResult {
+  ok: boolean;
+  /** The map string, present only when ok is true. */
+  map?: string;
+  /** True when the index is still being built — the map may be incomplete. */
+  indexing?: boolean;
+  error?: string;
+}
+
 export interface ShellResult {
   ok: boolean;
   stdout?: string;

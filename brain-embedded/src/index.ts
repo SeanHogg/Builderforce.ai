@@ -169,6 +169,10 @@ export { isCoderReask } from './roleHandoff';
 // The run-driver seam: a host whose UI process is disposable (the VS Code webview)
 // executes runs in a longer-lived process and mirrors them back with `applyRemoteRun`.
 export { applyRemoteRun } from './brainRunStore';
+// Code change tracking — what files a tool call changed, and placeholder annotations.
+export { codeChangesOf } from './codeChanges';
+export { placeholderAdvisory, placeholdersWritten } from './placeholderGuard';
+export type { PlaceholderHit } from './placeholderGuard';
 export { installRunDriver, getRunDriver, type BrainRunDriver } from './runDriver';
 
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.

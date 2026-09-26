@@ -23,9 +23,22 @@
 import { runAgentLoop } from "./loop.js";
 import { openAiChatCodec } from "./openaiCodec.js";
 import type { LoopDispatchResult, LoopPorts, LoopTurnResult, ParsedToolCall } from "./types.js";
+import type { ToolRowSerializer } from "./openaiCodec.js";
 
 /** Steps a child may take before it is cut off and its last word returned as partial. */
 export const SUBAGENT_MAX_STEPS = 8;
+
+/** Steps a writable child may take — larger because it does real work, not just investigation. */
+export const SUBAGENT_WRITE_MAX_STEPS = 40;
+
+/**
+ * Get the step budget for a subagent based on whether it is writable.
+ * Read-only children are capped at SUBAGENT_MAX_STEPS (investigation only).
+ * Writable children get SUBAGENT_WRITE_MAX_STEPS (real work).
+ */
+export function subagentStepBudget(writable: boolean): number {
+  return writable ? SUBAGENT_WRITE_MAX_STEPS : SUBAGENT_MAX_STEPS;
+}
 
 /**
  * How much of the child's answer reaches the parent. A child that rambles must not be
@@ -100,6 +113,8 @@ export interface SubagentRunArgs<T> {
   signal?: AbortSignal;
   maxSteps?: number;
   outputChars?: number;
+  /** Serialize a tool result to the row format the child's transcript expects. */
+  serialize?: ToolRowSerializer;
 }
 
 export interface SubagentRunResult {
