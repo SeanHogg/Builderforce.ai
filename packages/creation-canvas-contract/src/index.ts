@@ -107,6 +107,11 @@ export * from './resourceRef';
 // open) and all three were sectioning it differently; see creationLibrary.ts.
 export * from './creationLibrary';
 
+// The APP BLUEPRINT contract — a declarative description of what an app IS,
+// detected once per project + commit, used by Run loop (W1), Provision (W4),
+// Deploy (W6), and Marketplace (W7). See appBlueprint.ts.
+export * from './appBlueprint';
+
 export * from './slug';
 // Least squares and the trailing mean — the arithmetic every forecast shares.
 export * from './series';
