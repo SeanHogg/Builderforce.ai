@@ -242,7 +242,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   soc2: ['cobit-governance-readiness-for-agentic-it', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
   contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
   dashboard: ['system-of-record-for-agentic-work', 'real-time-collaboration-humans-and-agents', 'every-role-operating-picture'],
-  agents: ['teach-it-once-and-it-does-it-again', 'one-local-index-for-every-ai-tool', 'builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
+  agents: ['a-private-brain-on-your-desktop-that-hands-work-to-agents', 'teach-it-once-and-it-does-it-again', 'one-local-index-for-every-ai-tool', 'builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
   diagnostics: ['ai-development-maturity-diagnostic', 'cobit-governance-readiness-for-agentic-it', 'system-of-record-for-agentic-work'],
   // Newer enterprise surfaces.

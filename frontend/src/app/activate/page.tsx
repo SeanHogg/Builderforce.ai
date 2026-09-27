@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { getStoredWebToken, signInHref } from '@/lib/auth';
 import { ApiRequestError, apiRequest } from '@/lib/apiClient';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { deviceClientName, isDeviceClient } from '@builderforce/creation-canvas-contract';
 
 type Mode = 'device' | 'key';
 type Phase =
@@ -24,6 +25,9 @@ function ActivateInner() {
   const t = useTranslations('activate');
   const code = (searchParams.get('code') ?? '').trim();
   const mode: Mode = code ? 'device' : 'key';
+  // Which app asked (VS Code, Synapse) — named in the copy so the person checks the right window.
+  const client = searchParams.get('client');
+  const app = deviceClientName(client);
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState('');
@@ -38,12 +42,13 @@ function ActivateInner() {
     const token = getStoredWebToken();
     if (!token) {
       setPhase('redirecting');
-      const back = mode === 'device' ? `/activate?code=${encodeURIComponent(code)}` : '/activate';
+      const clientParam = isDeviceClient(client) ? `&client=${client}` : '';
+      const back = mode === 'device' ? `/activate?code=${encodeURIComponent(code)}${clientParam}` : '/activate';
       router.replace(signInHref(back));
       return;
     }
     setPhase(mode === 'device' ? 'confirm' : 'loading');
-  }, [mode, code, router]);
+  }, [mode, code, client, router]);
 
   function humanError(errCode: string | undefined, status: number, decision?: 'approve' | 'deny'): string {
     if (errCode === 'no_tenant') return t('errorNoTenant');
@@ -122,7 +127,7 @@ function ActivateInner() {
 
         {phase === 'confirm' && (
           <>
-            <p style={styles.muted}>{t('confirmIntro')}</p>
+            <p style={styles.muted}>{t('confirmIntro', { app })}</p>
             <div style={styles.code}>{code}</div>
             <div style={styles.row}>
               <button style={styles.primary} onClick={() => decide('approve')}>{t('approve')}</button>
@@ -131,12 +136,12 @@ function ActivateInner() {
           </>
         )}
 
-        {phase === 'approved' && <p style={styles.ok}>{t('approved')}</p>}
+        {phase === 'approved' && <p style={styles.ok}>{t('approved', { app })}</p>}
         {phase === 'denied' && <p style={styles.muted}>{t('denied')}</p>}
 
         {phase === 'key-ready' && (
           <>
-            <p style={styles.muted}>{t('keyIntro')}</p>
+            <p style={styles.muted}>{t('keyIntro', { app })}</p>
             <div style={styles.keyBox}>
               <code style={styles.keyText}>{key}</code>
             </div>

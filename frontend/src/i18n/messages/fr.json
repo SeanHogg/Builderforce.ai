@@ -11163,6 +11163,10 @@
         "title": "Aménagez la salle où vous vous réunissez — puis parcourez-la",
         "description": "La salle de votre board était autrefois une seule salle. Elle est désormais une salle du conseil, une cuisine de bureau ou un open space de bureaux — ou une salle que vous aménagez pièce par pièce, parcourez comme un jeu, vendez sur la marketplace, et où vous jouez à votre lieu Roblox."
       },
+      "a-private-brain-on-your-desktop-that-hands-work-to-agents": {
+        "title": "Un cerveau privé sur votre bureau, qui confie le travail à vos agents",
+        "description": "Synapse se connecte désormais à Builderforce et amène vos discussions sur le bureau. Interrogez le Brain : il répond avec ce que votre Evermind privé a appris sur votre machine ; assignez un agent, adressez-vous à lui avec @, et il fait le travail avec ses propres outils. Un cerveau vivant dans la barre latérale montre ce que vous savez, ce que vous avez fait et ce qu’il apprend en ce moment."
+      },
       "teach-it-once-and-it-does-it-again": {
         "title": "Montrez-le une fois, il le refera",
         "description": "Synapse apprend désormais une tâche en vous regardant la faire une fois dans n’importe quel programme Windows, en fait une compétence qui demande de nouvelles valeurs à chaque fois, l’exécute à la demande ou selon un horaire, s’arrête pour votre accord avant tout ce qui est irréversible — et apprend la procédure à votre Evermind privé. Facultatif, local et oubliable."

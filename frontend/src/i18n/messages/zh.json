@@ -11163,6 +11163,10 @@
         "title": "设计你开会的房间——然后在里面走动",
         "description": "你看板上的房间以前只有一个。现在它可以是董事会会议室、办公室茶水间或开放式办公区——或者一个你逐件布置、像游戏一样走动、在市场中出售、并能在里面游玩 Roblox 场景的房间。"
       },
+      "a-private-brain-on-your-desktop-that-hands-work-to-agents": {
+        "title": "桌面上的私有大脑，把工作交给你的代理",
+        "description": "Synapse 现在可以登录 Builderforce，把你的聊天带到桌面。向 Brain 提问，它会结合你的私有 Evermind 在你电脑上学到的内容来回答；指派一个代理并用 @ 指定它，它就用自己的工具完成工作。侧边栏里实时的大脑显示你知道什么、做过什么，以及它此刻正在学习什么。"
+      },
       "teach-it-once-and-it-does-it-again": {
         "title": "教一次，它就能一直做下去",
         "description": "Synapse 现在只需看你在任意 Windows 程序里做一次，就能学会这项任务，把它变成每次都会询问新值的技能，按需或按计划运行，在任何不可撤销的操作前停下等你确认——并把这套流程教给你的私有 Evermind。自愿开启、本地运行、随时可忘。"

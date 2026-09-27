@@ -5,6 +5,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { mintTenantApiKey } from '../llm/tenantApiKeyService';
+import { deviceClientName, isDeviceClient } from '@builderforce/creation-canvas-contract';
 
 const DEVICE_TTL_SECS = 600;
 const POLL_INTERVAL_SECS = 5;
@@ -63,11 +64,13 @@ export class DeviceAuthService {
     });
 
     const verifyBase = `${appUrl.replace(/\/$/, '')}/activate`;
+    // A known client rides along so /activate names the app the person is signing in to.
+    const clientParam = isDeviceClient(client) ? `&client=${client}` : '';
     return {
       device_code: deviceCode,
       user_code: userCode,
       verification_uri: verifyBase,
-      verification_uri_complete: `${verifyBase}?code=${encodeURIComponent(userCode)}`,
+      verification_uri_complete: `${verifyBase}?code=${encodeURIComponent(userCode)}${clientParam}`,
       interval: POLL_INTERVAL_SECS,
       expires_in: DEVICE_TTL_SECS,
     };
@@ -92,12 +95,14 @@ export class DeviceAuthService {
   async mintEditorKey(opts: {
     userId: string;
     tenantId?: number;
+    /** The device client that asked (`vscode`, `synapse`); names the key after the app. */
+    client?: string | null;
   }): Promise<{ ok: true; key: string; tenantId: number } | { ok: false; error: string }> {
     const tenantId = await this.resolveTenant(opts.userId, opts.tenantId);
     if (!tenantId) return { ok: false, error: 'no_tenant' };
     const minted = await mintTenantApiKey(this.db, {
       tenantId,
-      name: 'VS Code',
+      name: deviceClientName(opts.client),
       createdByUserId: opts.userId,
     });
     return { ok: true, key: minted.key, tenantId };
@@ -121,7 +126,7 @@ export class DeviceAuthService {
     if (row.status !== 'pending') return { ok: false, error: 'already_resolved' };
     if (row.expiresAt <= new Date()) return { ok: false, error: 'expired' };
 
-    const minted = await this.mintEditorKey({ userId: opts.userId, tenantId: opts.tenantId });
+    const minted = await this.mintEditorKey({ userId: opts.userId, tenantId: opts.tenantId, client: row.client });
     if (!minted.ok) return { ok: false, error: minted.error };
     // M2: seal the issued gateway key under the dedicated credential secret (caller
     // passes credentialSecret(env) as envSecret), per-tenant-bound (v2). Legacy rows

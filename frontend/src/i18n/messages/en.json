@@ -11163,6 +11163,10 @@
         "title": "Design the room you meet in — then walk it",
         "description": "The room on your board used to be one room. Now it is a boardroom, an office kitchen or an open floor of desks — or a room you lay out piece by piece, walk through like a game, sell in the marketplace, and play your Roblox place inside."
       },
+      "a-private-brain-on-your-desktop-that-hands-work-to-agents": {
+        "title": "A private brain on your desktop that hands the work to your agents",
+        "description": "Synapse now signs in to Builderforce and brings your chats to the desktop. Ask the Brain and it answers with what your private Evermind has learned on your machine; assign an agent and address it with @, and it does the work with its own tools. A live brain in the sidebar shows what you know, what you have done, and what it is learning right now."
+      },
       "teach-it-once-and-it-does-it-again": {
         "title": "Teach it once, and it does it again",
         "description": "Synapse can now learn a task by watching you do it once in any Windows program, turn it into a skill that asks for new values each time, run it on request or on a schedule, stop for your OK before anything irreversible — and teach your private Evermind the procedure. Opt-in, local, and forgettable."
