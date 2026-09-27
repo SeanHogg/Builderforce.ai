@@ -5,6 +5,7 @@
 //! MCP stdio server for Claude Code / Cursor. The desktop app embeds this crate; the
 //! `bf-context` binary runs it headless.
 
+pub mod activity;
 pub mod api;
 pub mod client;
 pub mod discovery;

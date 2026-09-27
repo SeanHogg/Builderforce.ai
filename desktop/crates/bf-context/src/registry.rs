@@ -2,6 +2,7 @@
 //! background embed pass and a file watch. The list persists, so the service resumes
 //! every workspace after a restart without the client having to re-register it.
 
+use crate::activity::Activity;
 use crate::embedder::{EmbedderState, LazyEmbedder};
 use crate::paths;
 use anyhow::{anyhow, Result};
@@ -21,6 +22,8 @@ pub struct Registry {
     data_dir: PathBuf,
     embedder: Arc<LazyEmbedder>,
     workspaces: Mutex<BTreeMap<PathBuf, Entry>>,
+    /// What outside clients asked of this service — see `api::dispatch_from`.
+    pub activity: Activity,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,7 +39,7 @@ pub struct Health {
 impl Registry {
     pub fn new(data_dir: PathBuf) -> Arc<Self> {
         let embedder = LazyEmbedder::new(paths::model_cache(&data_dir));
-        Arc::new(Self { data_dir, embedder, workspaces: Mutex::new(BTreeMap::new()) })
+        Arc::new(Self { data_dir, embedder, workspaces: Mutex::new(BTreeMap::new()), activity: Activity::default() })
     }
 
     /// Warm the embedder and resume every persisted workspace, off the caller's thread.

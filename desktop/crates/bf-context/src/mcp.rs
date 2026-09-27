@@ -14,7 +14,7 @@ use std::path::PathBuf;
 const PROTOCOL_VERSION: &str = "2025-06-18";
 
 pub fn run_stdio(root: PathBuf) -> Result<()> {
-    let client = Client::connect();
+    let client = Client::connect("mcp");
     // Start indexing now so the first tool call does not pay for the whole scan.
     let _ = client.call(ops::ENSURE, json!({ "root": root }));
     let stdin = std::io::stdin();

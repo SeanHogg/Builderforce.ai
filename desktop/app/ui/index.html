@@ -7,76 +7,57 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="bar">
-      <div class="brand">
-        <strong>Builderforce Desktop</strong>
-        <span class="muted" id="version"></span>
-      </div>
-      <span class="pill" id="embeddings"></span>
-    </header>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="logo.png" alt="" width="32" height="32" />
+          <div class="brand-text">
+            <strong>Builderforce</strong>
+            <span data-i18n="brand.sub"></span>
+          </div>
+        </div>
 
-    <div class="banner" id="update" hidden>
-      <span id="update-text"></span>
-      <button class="link" id="update-open" data-i18n="update.open"></button>
+        <nav class="nav" aria-label="Builderforce Desktop">
+          <a href="#/workspaces" data-nav="workspaces">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+            <span data-i18n="nav.workspaces"></span>
+            <span class="count" id="nav-count" hidden></span>
+          </a>
+          <a href="#/search" data-nav="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+            <span data-i18n="nav.search"></span>
+          </a>
+          <a href="#/activity" data-nav="activity">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4" /></svg>
+            <span data-i18n="nav.activity"></span>
+          </a>
+          <a href="#/connect" data-nav="connect">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5" /></svg>
+            <span data-i18n="nav.connect"></span>
+          </a>
+        </nav>
+
+        <div class="sidebar-foot">
+          <a class="update" id="update" href="#" hidden>
+            <span id="update-text"></span>
+            <strong data-i18n="update.open"></strong>
+          </a>
+          <div class="status" id="status">
+            <span class="dot" id="status-dot"></span>
+            <span id="status-text"></span>
+          </div>
+          <div class="muted small">
+            <span data-i18n="status.local"></span> · <span id="version"></span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <p class="error" id="error" role="alert" hidden></p>
+        <div id="view"></div>
+      </main>
     </div>
 
-    <main>
-      <section class="card">
-        <div class="row between">
-          <div>
-            <h2 data-i18n="workspaces.title"></h2>
-            <p class="muted" data-i18n="workspaces.intro"></p>
-          </div>
-          <button class="primary" id="add" data-i18n="workspaces.add"></button>
-        </div>
-        <p class="error" id="error" role="alert" hidden></p>
-        <ul class="list" id="workspaces"></ul>
-        <p class="muted empty" id="empty" data-i18n="workspaces.empty" hidden></p>
-      </section>
-
-      <section class="card">
-        <h2 data-i18n="connect.title"></h2>
-        <p class="muted" data-i18n="connect.intro"></p>
-        <div class="connect">
-          <h3 data-i18n="connect.vscode"></h3>
-          <p class="muted" data-i18n="connect.vscodeBody"></p>
-        </div>
-        <div class="connect">
-          <div class="row between">
-            <h3 data-i18n="connect.claude"></h3>
-            <button class="ghost" data-copy="claude" data-i18n="connect.copy"></button>
-          </div>
-          <pre class="code" id="claude"></pre>
-        </div>
-        <div class="connect">
-          <div class="row between">
-            <h3 data-i18n="connect.cursor"></h3>
-            <button class="ghost" data-copy="mcp" data-i18n="connect.copy"></button>
-          </div>
-          <pre class="code" id="mcp"></pre>
-        </div>
-        <p class="muted small" data-i18n="connect.privacy"></p>
-      </section>
-    </main>
-
-    <template id="row">
-      <li class="ws">
-        <div class="ws-head">
-          <span class="path"></span>
-          <span class="pill phase"></span>
-        </div>
-        <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100"><span></span></div>
-        <div class="row between wrap">
-          <span class="muted small stats"></span>
-          <span class="actions">
-            <button class="ghost rescan" data-i18n="workspaces.rescan"></button>
-            <button class="ghost danger remove" data-i18n="workspaces.remove"></button>
-          </span>
-        </div>
-      </li>
-    </template>
-
-    <script src="i18n.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="js/shell.js"></script>
   </body>
 </html>

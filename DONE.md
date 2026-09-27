@@ -17,7 +17,7 @@
 - **Rust workspace `desktop/`.**
   - `crates/bf-index`: tree-sitter chunking at definition boundaries (Rust, TS/TSX, JS, Python, Go, Java; line windows for everything else), symbols, a reference-ranked repo map, identifier-aware FTS5 BM25, local fastembed embeddings fused by reciprocal rank, a debounced file watcher, and `check_references` (which code paths and symbols in a text no longer exist). One SQLite file per workspace under `~/.builderforce/desktop`, never in the repo.
   - `crates/bf-context`: a workspace registry, ONE operation surface (`api::dispatch`), a loopback HTTP server (per-start bearer token, browser `Origin` refused, discovery file at `~/.builderforce/desktop.json`), an MCP stdio server for Claude Code / Cursor (it forwards to the running app's warm index, or serves in-process), and the headless `bf-context` binary.
-  - `app/`: the Tauri 2 tray app. It shows workspaces and progress, gives connect instructions for Claude Code and Cursor, and shows an update notice. The UI is localized in en/de/es/fr/zh and follows the light/dark theme. `builderforce-desktop mcp` is the same executable acting as the MCP server.
+  - `app/`: the Tauri 2 tray app, in the builderforce.ai design language (brand tokens, logo, light/dark from the OS, sidebar that becomes a top bar in a narrow window). It has four views. **Workspaces** shows live cards and, per workspace, stat tiles and the repo map an agent sees, at a chosen token size. **Search** runs the same query an agent would, and each hit shows whether it matched by keyword, meaning or both. **Activity** shows what VS Code and MCP clients asked, from an in-memory log (`bf-context/src/activity.rs`); clients name themselves with `X-Builderforce-Client`, and the window's own polling is not recorded. **Connect** shows when each tool last made a request. The UI is ES modules (`ui/js/`: shell, store, bridge, views/*), localized in en/de/es/fr/zh. `builderforce-desktop mcp` is the same executable acting as the MCP server.
 - **Shared tools.** `semantic_search` and `repo_map` are defined once in `@builderforce/agent-tools` (`semantic-tools.ts`) behind a new `repo.semantic` capability. No cloud surface backs it.
 - **VS Code.**
   - `desktopContext.ts` is the one client: discovery, a cached probe, the `repo.semantic` capability, `desktopBackedTools` (the two tools are withheld per run while the app is not running), `registerWorkspace` on folder open, and `checkReferences`.
@@ -30,7 +30,7 @@
   - Blog post `one-local-index-for-every-ai-tool` in five languages.
   - Release note migration `1185`.
 - **Tests:** `bf-index` unit tests (terms, chunking, fusion, repo map, refs, index end to end), `bf-context/tests/api.rs` (dispatch plus HTTP auth/origin/discovery), `agent-tools/semantic-tools.test.ts`, VS Code `desktopContext.test.ts`, `memoryStaleness.test.ts`, and the pin case in `localToolsAdvertised.test.ts`.
-- **Versions:** desktop 2026.9.26, agent-tools 2026.9.26, brain-embedded 2026.9.37, VSIX 2026.9.91, frontend 2026.9.37.
+- **Versions:** desktop 2026.9.27, agent-tools 2026.9.26, brain-embedded 2026.9.37, VSIX 2026.9.92, frontend 2026.9.37.
 - **Still open** (ROADMAP → Builderforce Desktop): signing and in-place updater (credentials), the measured with/without eval (live runs), on-prem `repo.semantic`, local model serving, and the local browser/VM host.
 
 ## ✅ RESOLVED 2026-09-24 — The execution surface is a plan decision, and the diagnostic says which one ran

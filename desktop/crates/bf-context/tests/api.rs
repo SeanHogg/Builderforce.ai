@@ -80,3 +80,35 @@ fn http_requires_token_and_refuses_browser_origins() {
     running.stop();
     assert!(bf_context::discovery::read().is_none(), "stop withdraws the discovery file");
 }
+
+#[test]
+fn outside_calls_land_in_activity_and_the_window_polling_does_not() {
+    let ws = workspace();
+    let data = tempfile::tempdir().unwrap();
+    let reg = Registry::new(data.path().to_path_buf());
+    wait_ready(&reg, ws.path());
+
+    // The window's own calls (plain `dispatch`) are not activity.
+    api::dispatch(&reg, ops::SEARCH, json!({ "root": ws.path(), "query": "ledger" })).unwrap();
+    // Health probes from a client are not activity either.
+    api::dispatch_from(&reg, "vscode", ops::HEALTH, Value::Null).unwrap();
+    api::dispatch_from(&reg, "mcp", ops::SEARCH, json!({ "root": ws.path(), "query": "stripe webhook" })).unwrap();
+    api::dispatch_from(
+        &reg,
+        "vscode",
+        ops::CHECK_REFERENCES,
+        json!({ "root": ws.path(), "texts": ["Use `retiredHelperFn()`.", "Calls `applyStripeWebhook()`."] }),
+    )
+    .unwrap();
+
+    let entries = api::dispatch(&reg, ops::ACTIVITY, Value::Null).unwrap()["entries"].clone();
+    let entries = entries.as_array().unwrap();
+    assert_eq!(entries.len(), 2, "{entries:?}");
+    assert_eq!(entries[0]["client"], "vscode");
+    assert_eq!(entries[0]["op"], "check-references");
+    assert_eq!(entries[0]["count"], 1);
+    assert_eq!(entries[1]["client"], "mcp");
+    assert_eq!(entries[1]["detail"], "stripe webhook");
+    assert_eq!(entries[1]["count"], 1);
+    assert_eq!(entries[1]["ok"], true);
+}

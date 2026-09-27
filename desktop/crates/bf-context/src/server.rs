@@ -15,6 +15,8 @@ use std::sync::Arc;
 use tiny_http::{Header, Method, Response, Server};
 
 const MAX_BODY_BYTES: u64 = 2 * 1024 * 1024;
+/// The header a client names itself with (`vscode`, `mcp`, …) for "Recent activity".
+pub const CLIENT_HEADER: &str = "X-Builderforce-Client";
 
 pub struct Running {
     pub discovery: Discovery,
@@ -82,7 +84,10 @@ fn handle(reg: Arc<Registry>, token: &str, mut req: tiny_http::Request) {
         }
         _ => return respond(req, 405, json!({ "error": "method not allowed" })),
     };
-    match api::dispatch(&reg, &op, body) {
+    // Who is asking, for the activity log. Self-declared and display-only — the token,
+    // not this header, is what authorizes the call.
+    let client = header(&req, CLIENT_HEADER).unwrap_or_else(|| "http".into());
+    match api::dispatch_from(&reg, &client, &op, body) {
         Ok(v) => respond(req, 200, v),
         Err(e) => respond(req, 400, json!({ "error": format!("{e:#}") })),
     }

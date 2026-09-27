@@ -76,6 +76,11 @@ async function readDiscovery(): Promise<DesktopDiscovery | null> {
   }
 }
 
+/** Auth plus the name this client shows under in the app's "Recent activity". */
+function serviceHeaders(d: DesktopDiscovery): Record<string, string> {
+  return { Authorization: `Bearer ${d.token}`, "X-Builderforce-Client": "vscode" };
+}
+
 /** The running desktop service, or null. Cached for {@link PROBE_TTL_MS} either way. */
 export async function liveDesktop(): Promise<DesktopDiscovery | null> {
   if (probe && Date.now() - probe.at < PROBE_TTL_MS) return probe.live;
@@ -84,7 +89,7 @@ export async function liveDesktop(): Promise<DesktopDiscovery | null> {
   if (d) {
     try {
       const res = await fetchImpl(`http://127.0.0.1:${d.port}/v1/health`, {
-        headers: { Authorization: `Bearer ${d.token}` },
+        headers: serviceHeaders(d),
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       });
       live = res.ok ? d : null;
@@ -108,7 +113,7 @@ async function call<T>(op: string, body: Record<string, unknown>): Promise<T | n
   try {
     res = await fetchImpl(`http://127.0.0.1:${d.port}/v1/${op}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${d.token}`, "Content-Type": "application/json" },
+      headers: { ...serviceHeaders(d), "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });

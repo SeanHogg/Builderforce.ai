@@ -74,7 +74,7 @@ pub mod local {
             super::LOCAL_MODEL_FINGERPRINT.into()
         }
         fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-            Ok(self.model.embed(texts.to_vec(), Some(32))?)
+            self.model.embed(texts.to_vec(), Some(32))
         }
     }
 }

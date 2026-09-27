@@ -352,7 +352,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bf-context"
-version = "2026.9.26"
+version = "2026.9.27"
 dependencies = [
  "anyhow",
  "bf-index",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "bf-index"
-version = "2026.9.26"
+version = "2026.9.27"
 dependencies = [
  "anyhow",
  "blake3",
@@ -520,7 +520,7 @@ dependencies = [
 
 [[package]]
 name = "builderforce-desktop"
-version = "2026.9.26"
+version = "2026.9.27"
 dependencies = [
  "anyhow",
  "bf-context",

@@ -22,7 +22,7 @@ fn main() -> Result<()> {
         Some("search") => {
             let root = args.get(1).ok_or_else(|| anyhow!("usage: bf-context search <dir> <query>"))?;
             let query = args[2..].join(" ");
-            let out = Client::connect().call(ops::SEARCH, json!({ "root": root, "query": query }))?;
+            let out = Client::connect("cli").call(ops::SEARCH, json!({ "root": root, "query": query }))?;
             println!("{}", serde_json::to_string_pretty(&out)?);
             Ok(())
         }
