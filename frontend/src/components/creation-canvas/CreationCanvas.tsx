@@ -211,11 +211,11 @@ import { sheetFormulaGuidance } from '@/lib/canvasSheet';
 import { deadlineBearingKinds, isSpecObjectKind, makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
 import { parseRosterCsv, type RosterRow } from '@/lib/academic/roster';
 import { FORMULA_FUNCTIONS } from '@/lib/canvasFormula';
-import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import { projectMemoryHooks, type BrainAction, type BrainMessage, type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
-import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
+import { getProjectEvermindContributions, getProjectEvermindHead, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution, type WorkflowApprovalMode, type WorkflowDefinitionGraph } from '@/lib/builderforceApi';
 import { hiringApi } from '@/lib/hiringApi';
 import { screenCandidates } from '@/lib/canvasResumeScreening';
@@ -455,7 +455,7 @@ import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteThemeFrom } from './websiteWysiwyg';
 import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import { useFormat } from "@/i18n/useFormat";
-import { faultMessage, faultText } from '@/lib/apiClient';
+import { apiRequest, faultMessage, faultText } from '@/lib/apiClient';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { useErrorText } from '@/i18n/useErrorMessage';
 const Canvas3DView = dynamic(
@@ -9770,7 +9770,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           // one would return prose where an artifact was asked for. Recall still
           // grounds it; contribution still happens.
           ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
-            recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
+            // The Brain's one server-backed recall (same route, same contract, never throws).
+            recall: projectMemoryHooks(evermindProjectId, apiRequest).recall,
             learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
           } } : {}),
           onTrace: (event) => {

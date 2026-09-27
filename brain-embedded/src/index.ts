@@ -73,19 +73,12 @@ export { prepareImageDataUrl } from './imagePrep';
 export type { PreparedImage } from './imagePrep';
 
 // Project-Evermind memory hooks for the run loop (recall → learn → reconcile).
-export {
-  formatEvermindMemoryBlock,
-  countReconciledMemories,
-  projectMemoryHooks,
-  EVERMIND_LEARN_MIN_CHARS,
-} from './evermindMemory';
-export type {
-  EvermindRunHooks,
-  EvermindRecallResult,
-  EvermindRecallItem,
-  MemoryFirstAnswer,
-  ProjectMemoryRequest,
-} from './evermindMemory';
+export { projectMemoryHooks } from './evermindMemory';
+export type { EvermindRunHooks, MemoryFirstAnswer, ProjectMemoryRequest } from './evermindMemory';
+// The recall contract + memory block + reconcile rule are the Evermind module's; the
+// Brain re-exports them so every host reaches the chat's memory surface in one place.
+export { formatEvermindMemoryBlock, countReconciledMemories } from '@seanhogg/builderforce-memory/evermind';
+export type { EvermindRecallResult, EvermindRecallItem } from '@seanhogg/builderforce-memory/evermind';
 
 // The ON-DEVICE memory tier + the layering that puts it in front of the server one.
 export { onDeviceMemoryHooks, composeEvermindHooks, ON_DEVICE_ANSWER_THRESHOLD } from './onDeviceMemory';

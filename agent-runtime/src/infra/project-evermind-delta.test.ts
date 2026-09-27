@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  adaptAndDiff,
+  buildDeltaLearnPayload,
+  decodeDeltaPayload,
+  parseDeltaLearnPayload,
+  MAX_DELTA_B64_CHARS,
+} from "@seanhogg/builderforce-memory-engine";
+import {
   buildDeltaPayload,
   contributeProjectEvermindFromDelta,
-  encodeDeltaB64,
   type DeltaEngine,
   type EvermindBase,
 } from "./project-evermind-delta.js";
@@ -33,11 +37,10 @@ const RUN_TEXT = "Created retry.ts and edited handler.ts; wired exponential back
 const TICKET = "Implement a resilient retry path for the webhook handler with exponential backoff.";
 
 // ── A synthetic engine ────────────────────────────────────────────────────────
-// Structurally the real one, over plain Float32 buffers: `loadLM` hands out a private
-// copy of the base weights, the "trainer" perturbs the rows a real WSLA update would,
-// and `diffCheckpoints` emits the element-sparse encoding the gateway decodes. Nothing
-// here stands in for the CONTRACT under test — the payload shape, the base-version
-// pinning and the stale-base recovery are all the module's own.
+// The model side is synthetic (plain Float32 buffers, no GPU): `adaptAndDiff` perturbs
+// the rows a real WSLA update would and emits (index, value) pairs. The WIRE side is the
+// REAL engine — `buildDeltaLearnPayload` and the size cap — so the payload under test is
+// exactly what the coordinator's `parseDeltaLearnPayload` receives.
 
 /** A checkpoint: `[marker, ...weights]`, mirroring "same-config buffers only". */
 function checkpoint(values: number[]): ArrayBuffer {
@@ -50,40 +53,26 @@ function fakeEngine(opts: { modelType?: string; touchedRows?: number } = {}): De
   return {
     EvermindModelPackage: {
       fromBlob(blob: ArrayBuffer) {
-        return {
-          checkpoint: blob,
-          manifest: { modelType },
-          loadLM() {
-            const weights = Float32Array.from(new Float32Array(blob));
-            return { exportWeights: () => weights.buffer };
-          },
-        };
+        return { checkpoint: blob, manifest: { modelType } } as { checkpoint: ArrayBuffer; manifest: { modelType: string } };
       },
     },
-    EvermindLMTrainer: class {
-      constructor(private readonly lm: { exportWeights(): ArrayBuffer }) {}
-      fit(seqs: number[][]): number[] {
-        const w = new Float32Array(this.lm.exportWeights());
-        for (let i = 0; i < Math.min(touched, w.length); i++) w[i] = (w[i] ?? 0) + seqs.length;
-        return [0.5];
-      }
-    } as unknown as DeltaEngine["EvermindLMTrainer"],
     BPETokenizer: class {
       loadFromObjects(): void {}
       encode(text: string): number[] {
-        // One id per character keeps window counts deterministic and >= 2 per window.
         return [...text].map((c) => c.charCodeAt(0) % 97);
       }
-    } as unknown as DeltaEngine["BPETokenizer"],
-    diffCheckpoints(base: ArrayBuffer, current: ArrayBuffer): ArrayBuffer {
-      const b = new Float32Array(base);
-      const c = new Float32Array(current);
-      const idx: number[] = [];
-      for (let i = 0; i < b.length; i++) if (b[i] !== c[i]) idx.push(i);
-      const out = new Float32Array(idx.length * 2);
-      idx.forEach((i, n) => { out[n * 2] = i; out[n * 2 + 1] = c[i]!; });
-      return out.buffer;
     },
+    adaptAndDiff(pkg, tok, text) {
+      const ids = tok.encode(text);
+      if (ids.length < 2) return null;
+      const base = new Float32Array((pkg as unknown as { checkpoint: ArrayBuffer }).checkpoint);
+      const n = Math.min(touched, base.length);
+      const out = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) { out[i * 2] = i; out[i * 2 + 1] = (base[i] ?? 0) + 1; }
+      return { diff: out.buffer };
+    },
+    buildDeltaLearnPayload,
+    MAX_DELTA_B64_CHARS,
   };
 }
 
@@ -141,32 +130,16 @@ const learnCalls = (calls: Array<{ url: string; body?: Record<string, unknown> }
 
 const engineDeps = (engine: DeltaEngine) => ({ loadEngine: async () => engine });
 
-// ── The route's own parser ────────────────────────────────────────────────────
-
-/**
- * A verbatim transcription of the gateway's `learnCore` body validation
- * (api/src/presentation/routes/projectEvermindRoutes.ts). Kept here so the producer's
- * payload is asserted against the ACTUAL acceptance rule — an empty `diff` or a
- * non-integer `baseVersion` is a 400 — rather than against a shape this test invented.
- */
-function routeAccepts(body: Record<string, unknown>): boolean {
-  const diff = typeof body["diff"] === "string" ? (body["diff"] as string) : "";
-  const baseVersion = typeof body["baseVersion"] === "number" ? (body["baseVersion"] as number) : NaN;
-  return !!diff && Number.isInteger(baseVersion);
-}
+/** The gateway's own acceptance rule — the engine parser the route and coordinator run. */
+const routeAccepts = (body: Record<string, unknown>): boolean => parseDeltaLearnPayload(body).ok;
 
 describe("delta producer (synthetic checkpoints)", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("diffs an adapted checkpoint against its base and encodes it for the wire", () => {
-    const engine = fakeEngine();
-    const diff = adaptAndDiff(engine, BASE, RUN_TEXT);
-    expect(diff).not.toBeNull();
-    // Two touched rows → two (index, value) pairs.
-    expect(new Float32Array(diff!)).toHaveLength(4);
-    const b64 = encodeDeltaB64(diff!);
-    expect(b64.length).toBeGreaterThan(0);
-    expect(Buffer.from(b64, "base64").byteLength).toBe(diff!.byteLength);
+  it("adapts the pinned base and encodes the diff for the wire", () => {
+    const payload = buildDeltaPayload(fakeEngine(), BASE, RUN_TEXT, 0.7, TICKET)!;
+    // Two touched rows → two (index, value) pairs, round-tripping through base64.
+    expect(new Float32Array(decodeDeltaPayload(payload))).toHaveLength(4);
   });
 
   it("produces a payload the route's own parser accepts", () => {
@@ -174,11 +147,12 @@ describe("delta producer (synthetic checkpoints)", () => {
     expect(payload).not.toBeNull();
     expect(routeAccepts(payload as unknown as Record<string, unknown>)).toBe(true);
     expect(payload!.baseVersion).toBe(7);
+    expect(payload!.weight).toBe(0.7);
     expect(payload!.label).toBe(TICKET);
   });
 
   it("returns nothing to push when the head is not an evermind-lm", () => {
-    expect(adaptAndDiff(fakeEngine({ modelType: "evermind-video" }), BASE, RUN_TEXT)).toBeNull();
+    expect(buildDeltaPayload(fakeEngine({ modelType: "evermind-video" }), BASE, RUN_TEXT, 0.7)).toBeNull();
   });
 
   it("posts the delta to the agent learn door with host-key auth", async () => {
@@ -307,7 +281,7 @@ describe("delta path never costs a contribution", () => {
 
   it("never throws when the adapt itself blows up", async () => {
     const broken = fakeEngine();
-    broken.diffCheckpoints = () => { throw new Error("shape mismatch"); };
+    broken.adaptAndDiff = () => { throw new Error("shape mismatch"); };
     const { calls } = mockGateway();
     const res = await contributeProjectEvermindFromDelta(CFG, RUN_TEXT, TICKET, 0.7, engineDeps(broken));
     expect(res.fellBackToText).toBe(true);

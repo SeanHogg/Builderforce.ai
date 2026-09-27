@@ -67,7 +67,8 @@ import {
   generateDefaultEvermindBase,
 } from '../../application/llm/projectEvermind';
 import { projectInTenantCached } from '../../application/project/projectOwnership';
-import { MAX_DELTA_B64_CHARS, parseDeltaLearnRequest } from '../../application/llm/evermindDeltaLearn';
+import { MAX_DELTA_B64_CHARS, parseDeltaLearnPayload } from '@seanhogg/builderforce-memory-engine';
+import { deltaParseStatus } from '../../application/llm/evermindDeltaLearn';
 import { dispatchProjectEvermindLearn } from '../../application/llm/evermindDeltaDispatch';
 import { codingEvalFromReports, evermindQualifiesForCoding } from '../../application/llm/evermindCodingGate';
 import { recordProjectEvermindCodingEval } from '../../application/llm/evermindCodingEvalStore';
@@ -294,11 +295,11 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
   if (Number.isFinite(declared) && declared > MAX_DELTA_B64_CHARS + DELTA_ENVELOPE_BYTES) {
     return json({ error: `delta too large (max ${MAX_DELTA_B64_CHARS} base64 characters)` }, 413);
   }
-  // `parseDeltaLearnRequest` owns the delta contract (and reads an absent body as `{}`);
-  // the route only refuses a body that is not a JSON object.
-  const parsed = parseDeltaLearnRequest(await parseOptionalBody(c, zJsonObject));
-  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, parsed.request);
+  // The engine's `parseDeltaLearnPayload` owns the delta contract (and reads an absent
+  // body as `{}`); the route only refuses a body that is not a JSON object.
+  const parsed = parseDeltaLearnPayload(await parseOptionalBody(c, zJsonObject));
+  if (!parsed.ok) return json({ error: parsed.error }, deltaParseStatus(parsed.reason));
+  const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, parsed.payload);
   return json(result.body, result.status);
 }
 

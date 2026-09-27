@@ -21,9 +21,7 @@ import { brainChats, brainChatMessages } from '../../infrastructure/database/sch
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveEvermindTargets, resolveEffectiveEvermindProjectId, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
 import { stripReasoningScratchpad } from '@builderforce/agent-loop';
-
-/** A one-line assistant turn is not a teaching signal; require some substance. */
-const MIN_TEACH_CHARS = 40;
+import { EVERMIND_MIN_TEACH_CHARS } from '@seanhogg/builderforce-memory/evermind';
 
 interface TurnMessage { role: string; content: string }
 
@@ -86,7 +84,7 @@ export interface BrainLearnGate {
   projectId: number | null;
   /** Evermind-bearing projectIds that WILL receive the contribution (seeded + connected). */
   contributedProjectIds: number[];
-  /** The teachable assistant turn's content (≥ {@link MIN_TEACH_CHARS}), else null. */
+  /** The teachable assistant turn's content (≥ {@link EVERMIND_MIN_TEACH_CHARS}), else null. */
   assistant: string | null;
 }
 
@@ -138,7 +136,7 @@ export async function evaluateBrainLearnGate(
   // never happened. Same primitive on both sides keeps the gate's answer honest.
   const assistant = [...inserted].reverse()
     .map((m) => (m.role === 'assistant' && typeof m.content === 'string' ? stripReasoningScratchpad(m.content) : ''))
-    .find((answer) => answer.length >= MIN_TEACH_CHARS) ?? null;
+    .find((answer) => answer.length >= EVERMIND_MIN_TEACH_CHARS) ?? null;
   if (!assistant) return { outcome: { learned: false, version: 0, reason: 'too-short' }, projectId: null, contributedProjectIds: [], assistant: null };
 
   const [chat] = await db

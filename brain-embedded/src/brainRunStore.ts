@@ -83,13 +83,8 @@ import {
 } from '@builderforce/agent-stall';
 import { resolveToolAlias } from '@builderforce/agent-tools';
 import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
-import {
-  formatEvermindMemoryBlock,
-  countReconciledMemories,
-  type EvermindRunHooks,
-  type EvermindRecallResult,
-  type MemoryFirstAnswer,
-} from './evermindMemory';
+import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
+import type { EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, type CompactMemo } from './workingTranscript';
 
 /**

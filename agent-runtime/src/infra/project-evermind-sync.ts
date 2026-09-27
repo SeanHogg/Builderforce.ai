@@ -40,8 +40,18 @@ export interface ContributeResult {
   version?: number;
 }
 
-function authHeaders(cfg: ProjectEvermindSyncConfig): Record<string, string> {
+/** Host-key auth for the agent-side Evermind doors (text and delta alike). */
+export function authHeaders(cfg: ProjectEvermindSyncConfig): Record<string, string> {
   return { Authorization: `Bearer ${cfg.apiKey}`, "X-AgentHost-Id": String(cfg.agentHostId) };
+}
+
+/**
+ * The run-quality FedAvg weight both doors send: the caller's 0..1 signal, a neutral
+ * 0.6 when it has none, bounded 0.05..1 so it always clears the coordinator's
+ * `weight > 0` gate and stays comparable with the cloud finalize weights.
+ */
+export function clampLearnWeight(weight?: number): number {
+  return Math.max(0.05, Math.min(1, typeof weight === "number" && weight > 0 ? weight : 0.6));
 }
 
 /**
@@ -65,7 +75,7 @@ export async function contributeProjectEvermindFromText(
   const trimmed = (text ?? "").trim();
   if (trimmed.length < 20) return { ok: false, reason: "text too short" };
   const promptTrimmed = (prompt ?? "").trim();
-  const learnWeight = Math.max(0.05, Math.min(1, typeof weight === "number" && weight > 0 ? weight : 0.6));
+  const learnWeight = clampLearnWeight(weight);
   try {
     const res = await fetch(`${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/evermind/learn-text`, {
       method: "POST",

@@ -21,19 +21,26 @@ const mocks = vi.hoisted(() => ({
   merge: vi.fn(),
   fromBlob: vi.fn(),
   fromLM: vi.fn(),
-  deserializeRowDelta: vi.fn(),
-  verifyCrcTrailer: vi.fn(),
+  unusable: vi.fn((): string | null => null),
 }));
 
-vi.mock('@seanhogg/builderforce-memory-engine', () => ({
-  EvermindModelPackage: { fromBlob: mocks.fromBlob, fromLM: mocks.fromLM },
-  EvermindLMTrainer: class {},
-  BPETokenizer: class {},
-  diffCheckpoints: vi.fn(),
-  deserializeRowDelta: mocks.deserializeRowDelta,
-  verifyCrcTrailer: mocks.verifyCrcTrailer,
-}));
-vi.mock('../../application/llm/evermindMerge', () => ({ mergeCheckpointDiffs: mocks.merge }));
+// The engine's pure wire contract (parse/decode) runs for real; the model, the merge
+// and the per-delta structural check are stubbed so these tests stay about the DO.
+vi.mock('@seanhogg/builderforce-memory-engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@seanhogg/builderforce-memory-engine')>();
+  return {
+    parseDeltaLearnPayload: actual.parseDeltaLearnPayload,
+    decodeDeltaPayload: actual.decodeDeltaPayload,
+    base64ToBytes: actual.base64ToBytes,
+    bytesToBase64: actual.bytesToBase64,
+    EvermindModelPackage: { fromBlob: mocks.fromBlob, fromLM: mocks.fromLM },
+    BPETokenizer: class {},
+    adaptAndDiff: vi.fn(),
+    meanEvalLoss: vi.fn(),
+    mergeCheckpointDiffs: mocks.merge,
+    deltaUnusableReason: mocks.unusable,
+  };
+});
 vi.mock('../database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
 vi.mock('../../application/llm/projectEvermind', () => ({
   getProjectEvermindHead: mocks.head,
@@ -539,14 +546,13 @@ describe('/learn — the pre-diffed weight-delta door (on-prem runner) and its s
       loadLM: () => ({ loadWeights: vi.fn() }),
     });
     mocks.fromLM.mockReturnValue({ toBlob: () => new ArrayBuffer(0) });
-    mocks.verifyCrcTrailer.mockReturnValue({ body: new ArrayBuffer(16) }); // 4 f32 elements
     mocks.merge.mockReturnValue({ checkpoint: new ArrayBuffer(16), contributors: 1, mergedRows: 1, deltaNorm: 0.5 });
     return { doInstance, map };
   }
 
   it('merges a queued delta into the NEXT version, weighted, with its label as provenance', async () => {
     const { doInstance, map } = mergingDO();
-    mocks.deserializeRowDelta.mockReturnValue({ rowSize: 1, rows: [2], data: new Float32Array([0.25]) });
+    mocks.unusable.mockReturnValue(null);
 
     await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, weight: 0.7, label: 'ticket 12' }));
     const flushed = await doInstance.fetch(new Request('https://coordinator/flush', { method: 'POST' }));
@@ -564,10 +570,10 @@ describe('/learn — the pre-diffed weight-delta door (on-prem runner) and its s
 
   it('a malformed delta costs only itself — the rest of the batch still merges', async () => {
     const { doInstance, map } = mergingDO();
-    mocks.deserializeRowDelta
-      .mockImplementationOnce(() => { throw new Error('bad magic'); })
-      .mockReturnValueOnce({ rowSize: 1, rows: [99], data: new Float32Array([1]) }) // out of range
-      .mockReturnValue({ rowSize: 1, rows: [1], data: new Float32Array([0.5]) });
+    mocks.unusable
+      .mockReturnValueOnce('not a serialized RowDelta: bad magic')
+      .mockReturnValueOnce('row index 99 is outside the base checkpoint (4 elements)')
+      .mockReturnValue(null);
 
     for (const label of ['broken', 'out-of-range', 'good']) {
       await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, label }));

@@ -10,11 +10,13 @@
  * are preserved untouched on rewrite). Compaction replaces an ABSORBED entry's body with
  * a terse `[absorbed→Evermind vN] <first line>` stub, so the fact stops filling the
  * agent's context while a one-line pointer (and the model's learned copy) remain.
+ *
+ * The stub RULES (marker, pointer line, "never grow an entry") are the memory server's
+ * own (`@seanhogg/builderforce-memory-mcp/compaction`), so a stub written here and one
+ * written by the server's `memory_compact` tool are byte-identical and neither re-stubs
+ * the other. This file owns only the snapshot FILE format around them.
  */
-
-/** Marker that opens every compacted stub — also the idempotency guard (an entry whose
- *  content already starts with this is skipped, so re-import never double-stubs). */
-export const STUB_PREFIX = "[absorbed→Evermind";
+import { planCompaction } from "@seanhogg/builderforce-memory-mcp/compaction";
 
 /** A raw snapshot entry — an object bag; only `key` + a content field are load-bearing. */
 export type SnapshotEntry = Record<string, unknown>;
@@ -58,22 +60,6 @@ export function setSnapshotEntryContent(e: SnapshotEntry, next: string): void {
   else e.content = next;
 }
 
-/** True when a body is already a compaction stub (skip on import + on re-compact). */
-export function isStub(content: string): boolean {
-  return content.trimStart().startsWith(STUB_PREFIX);
-}
-
-/** The first non-empty line of a body, trimmed to `max` chars — the stub's pointer text. */
-export function firstLine(content: string, max = 140): string {
-  const line = content.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0) ?? "";
-  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
-}
-
-/** Build the terse stub that replaces an absorbed entry's body. */
-export function memoryStub(content: string, version: number): string {
-  return `${STUB_PREFIX} v${version}] ${firstLine(content)}`;
-}
-
 /** The result of compacting a snapshot's absorbed entries in place. */
 export interface SnapshotCompaction {
   /** The rewritten file text, ready to write. */
@@ -101,18 +87,12 @@ export function compactSnapshotText(
   const entries = parseSnapshotArray(text);
   if (!entries) return null;
   const absorbed = new Set(absorbedKeys);
-  let compacted = 0;
-  let bytesSaved = 0;
-  for (const e of entries) {
-    const key = snapshotEntryKey(e);
-    if (!absorbed.has(key)) continue;
-    const content = snapshotEntryContent(e);
-    if (!content || isStub(content)) continue;
-    const stub = memoryStub(content, version);
-    if (stub.length >= content.length) continue; // never grow an entry
-    setSnapshotEntryContent(e, stub);
-    compacted++;
-    bytesSaved += content.length - stub.length;
-  }
-  return { next: `${JSON.stringify(entries, null, 2)}\n`, compacted, bytesSaved };
+  const targets = entries.filter((e) => absorbed.has(snapshotEntryKey(e)));
+  // Planned by POSITION, not key, so two entries that share a key each get their own stub.
+  const plan = planCompaction(
+    targets.map((e, i) => ({ key: String(i), content: snapshotEntryContent(e) })),
+    { version },
+  );
+  for (const w of plan.writes) setSnapshotEntryContent(targets[Number(w.key)]!, w.content);
+  return { next: `${JSON.stringify(entries, null, 2)}\n`, compacted: plan.writes.length, bytesSaved: plan.bytesSaved };
 }

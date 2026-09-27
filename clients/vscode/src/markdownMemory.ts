@@ -30,7 +30,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { isStub, memoryStub } from "./memorySnapshot";
+import { isStub, memoryStub } from "@seanhogg/builderforce-memory-mcp/compaction";
 
 /** The index file at the root of a Claude Code memory directory. */
 export const MEMORY_INDEX_FILE = "MEMORY.md";

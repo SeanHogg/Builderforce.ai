@@ -39,7 +39,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { stripReasoningScratchpad } from '@builderforce/agent-loop';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
+import { rankEvermindRecall, hashRecallQuery, type RankedEvermindRecall } from '@seanhogg/builderforce-memory/evermind';
 import { tierRecallByChat } from './evermindChatTiering';
 import type { RecordedSkipReason } from './evermindTeacher';
 import type { EvermindCoherenceAssessment } from './evermindRuntime';
@@ -1349,7 +1349,7 @@ export async function getProjectEvermindContributions(
 }
 
 /** A scored recall match — a recent contribution plus its 0..1 relevance to a task. */
-export type ProjectEvermindValidateMatch = RankedRecall;
+export type ProjectEvermindValidateMatch = RankedEvermindRecall;
 
 /** How a Validate ranking was produced: the model's own SSM embedding (semantic recall,
  *  matching what inference actually retrieves) or a lexical TF-cosine fallback used when
@@ -1432,7 +1432,7 @@ export async function validateProjectEvermindRecall(
   const token = await getCacheVersion(env, versionKey(tenantId, projectId));
   return getOrSetCached(
     env,
-    `project_evermind:validate:${tenantId}:${projectId}:v:${token}:n${limit}:${hashRecallPrompt(clean)}`,
+    `project_evermind:validate:${tenantId}:${projectId}:v:${token}:n${limit}:${hashRecallQuery(clean)}`,
     async (): Promise<ProjectEvermindValidateResult> => {
       const contrib = await getProjectEvermindContributions(env, db, tenantId, projectId);
       const base = { prompt: clean, version: contrib.version, seeded: contrib.seeded };

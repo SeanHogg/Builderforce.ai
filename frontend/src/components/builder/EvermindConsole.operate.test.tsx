@@ -91,7 +91,7 @@ async function openTab(name: RegExp): Promise<void> {
  * `[0]` is the header, `[1]` the panel; both press the same action.
  */
 function copyButtons(): HTMLElement[] {
-  return screen.getAllByRole('button', { name: /Copy diagnostics/i });
+  return screen.getAllByRole('button', { name: /Copy full diagnostics/i });
 }
 
 describe('EvermindConsole — tabs', () => {

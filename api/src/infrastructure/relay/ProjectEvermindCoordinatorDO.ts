@@ -29,7 +29,19 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  * taken against a STALE base is dropped (the agent recomputes against the new
  * base on its next run) rather than corrupting the merge.
  */
-import { EvermindModelPackage, EvermindLMTrainer, BPETokenizer, diffCheckpoints, type EvermindLM } from '@seanhogg/builderforce-memory-engine';
+import {
+  EvermindModelPackage,
+  BPETokenizer,
+  adaptAndDiff,
+  mergeCheckpointDiffs,
+  meanEvalLoss,
+  parseDeltaLearnPayload,
+  decodeDeltaPayload,
+  deltaUnusableReason,
+  type EvalExample,
+  type EvermindLM,
+} from '@seanhogg/builderforce-memory-engine';
+import { cosineSimilarity } from '@seanhogg/builderforce-memory';
 import { buildDatabase, type Db } from '../database/connection';
 import {
   getProjectEvermindHead,
@@ -39,20 +51,13 @@ import {
   projectEvermindRef,
 } from '../../application/llm/projectEvermind';
 import { assessLMCoherence } from '../../application/llm/evermindRuntime';
-import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
 import { backfillEntryProvenance } from '../../application/llm/evermindProvenance';
 import type { EffectiveTeacher, RecordedSkipReason } from '../../application/llm/evermindTeacher';
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
-import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
-import { meanEvalLoss, type EvalExample } from '../../application/llm/evermindEval';
-import {
-  admitDeltaAgainstHead,
-  decodeDeltaB64,
-  deltaUnusableReason,
-  parseDeltaLearnRequest,
-} from '../../application/llm/evermindDeltaLearn';
+import { embedForRecall, packVec, unpackVec } from '../../application/llm/evermindEmbed';
+import { admitDeltaAgainstHead, deltaParseStatus } from '../../application/llm/evermindDeltaLearn';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
@@ -61,10 +66,6 @@ const DEBOUNCE_MS = 15_000;
 const MAX_PENDING = 512;
 /** Max accepted run-text length (chars) — a text-path push is capped up front. */
 const MAX_TEXT_CHARS = 8000;
-/** Chars of a text entry actually fed to one adaptation pass (rest is context). */
-const ADAPT_MAX_CHARS = 4000;
-/** Token window length for the adaptation training sequences. */
-const ADAPT_WINDOW_TOKENS = 64;
 /** Max text-path adaptations (fits) run in ONE alarm — bounds the DO's per-alarm
  *  CPU; any beyond this stay queued and fold into the next debounced merge. */
 const MAX_FITS_PER_ALARM = 8;
@@ -134,16 +135,6 @@ interface PendingEntry {
   /** The Brain chat this contribution came from. Carried through the queue so the
    *  merged memory keeps its provenance — see {@link RecentEntry.chatId}. */
   chatId?: number;
-}
-
-/** Chunk token ids into fixed-length training windows (min length 2). */
-function windows(ids: number[], size: number): number[][] {
-  const out: number[][] = [];
-  for (let i = 0; i + 1 < ids.length; i += size) {
-    const seq = ids.slice(i, i + size);
-    if (seq.length >= 2) out.push(seq);
-  }
-  return out;
 }
 
 interface CoordMeta {
@@ -658,12 +649,12 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (!model) return this.json({ matches: [], method: 'unavailable' });
     const { lm, tok } = model;
 
-    const qVec = embedTokens(lm, tok.encode(query).slice(0, EMBED_MAX_TOKENS));
+    const qVec = embedForRecall(lm, tok, query);
     const scored = textEntries
       .map((e) => {
-        const vec = e.emb ? unpackVec(e.emb) : embedTokens(lm, tok.encode(`${e.prompt ?? ''} ${e.text ?? ''}`.trim()).slice(0, EMBED_MAX_TOKENS));
+        const vec = e.emb ? unpackVec(e.emb) : embedForRecall(lm, tok, `${e.prompt ?? ''} ${e.text ?? ''}`.trim());
         if (vec.length === 0) return null;
-        const sim = cosineVec(qVec, vec); // -1..1; negatives are "unrelated", floor at 0
+        const sim = cosineSimilarity(qVec, vec); // -1..1; negatives are "unrelated", floor at 0
         return { id: e.id, score: Math.round(Math.max(0, sim) * 1000) / 1000 };
       })
       .filter((m): m is { id: number; score: number } => m != null && m.score > 0.05)
@@ -731,7 +722,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const next = batch.map((e) => {
       const source = `${e.prompt ?? ''} ${e.text ?? ''}`.trim();
       if (e.kind !== 'text' || !source) { skipped++; return e; }
-      const vec = embedTokens(model.lm, model.tok.encode(source).slice(0, EMBED_MAX_TOKENS));
+      const vec = embedForRecall(model.lm, model.tok, source);
       if (vec.length === 0) { skipped++; return e; }
       reindexed++;
       return { ...e, emb: packVec(vec) };
@@ -826,19 +817,19 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (!raw || typeof raw.tenantId !== 'number' || typeof raw.projectId !== 'number') {
       return this.json({ ok: false, error: 'tenantId, projectId, diff, baseVersion required' }, 400);
     }
-    const parsed = parseDeltaLearnRequest(raw);
-    if (!parsed.ok) return this.json({ ok: false, error: parsed.error }, parsed.status);
+    const parsed = parseDeltaLearnPayload(raw);
+    if (!parsed.ok) return this.json({ ok: false, error: parsed.error }, deltaParseStatus(parsed.reason));
     const tenantId = raw.tenantId;
     const projectId = raw.projectId;
 
     const head = await getProjectEvermindHead(this.env, this.db, tenantId, projectId);
-    const refusal = admitDeltaAgainstHead(parsed.request, head);
+    const refusal = admitDeltaAgainstHead(parsed.payload, head);
     if (refusal) return this.json(refusal.body, refusal.status);
 
     const { queued, dropped, contributionId } = await this.enqueue(tenantId, projectId, head.version, {
-      diffB64: parsed.request.diff,
-      ...(parsed.request.label ? { label: parsed.request.label } : {}),
-      weight: parsed.request.weight ?? 1,
+      diffB64: parsed.payload.diff,
+      ...(parsed.payload.label ? { label: parsed.payload.label } : {}),
+      weight: parsed.payload.weight ?? 1,
     });
     return this.json({ ok: true, queued, contributionId, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
   }
@@ -1004,7 +995,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // alarm already consumed — text fits included. A bad push costs only itself.
           let delta: ArrayBuffer;
           try {
-            delta = decodeDeltaB64(e.diffB64);
+            delta = decodeDeltaPayload({ diff: e.diffB64 });
           } catch (error) {
             this.reportError(error, {
               operation: 'dropped undecodable delta',
@@ -1042,17 +1033,16 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           const training = await buildEvermindTrainingText(
             this.env, tenantId, effectiveTeacher, e.text, { prompt: e.prompt ?? null },
           );
-          const ids = tok.encode(training.text.slice(0, ADAPT_MAX_CHARS));
-          const seqs = windows(ids, ADAPT_WINDOW_TOKENS);
-          if (seqs.length === 0) continue;
-          const lm = basePkg.loadLM();
-          const history = new EvermindLMTrainer(lm, { epochs: 1 }).fit(seqs);
-          // Record the trainer's real per-epoch mean loss (final epoch) so the map's
-          // training readout reflects measured convergence, not a stand-in.
-          const loss = history.length > 0 ? history[history.length - 1]! : 0;
+          // The SAME adaptation recipe the on-prem producer runs (engine `adaptAndDiff`),
+          // so a server-side fit and a pushed delta are the same size of update.
+          const adapted = adaptAndDiff(basePkg, tok, training.text);
+          if (!adapted) continue;
+          // Record the trainer's real final-epoch mean loss so the map's training
+          // readout reflects measured convergence, not a stand-in.
+          const loss = adapted.loss;
           if (Number.isFinite(loss) && loss > 0) { lossSum += loss; lossN++; }
-          seqTotal += seqs.length;
-          diffs.push(diffCheckpoints(basePkg.checkpoint, lm.exportWeights()));
+          seqTotal += adapted.sequences;
+          diffs.push(adapted.diff);
           weights.push(e.weight);
           textFits++;
           // Keep a readable snippet of WHAT was learned for the inspection ring. When a
@@ -1178,7 +1168,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           const src = `${m.prompt ?? ''} ${m.text ?? ''}`.trim();
           if (!src) continue;
           try {
-            m.emb = packVec(embedTokens(lm, tok.encode(src).slice(0, EMBED_MAX_TOKENS)));
+            m.emb = packVec(embedForRecall(lm, tok, src));
           } catch (error) { /* best-effort: a failed embed just falls back to lexical recall */ 
             this.reportError(error, { operation: "drain" });
           }

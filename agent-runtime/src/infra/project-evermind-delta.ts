@@ -27,18 +27,15 @@
  * Best-effort throughout, and a no-op (never a crash) when the optional engine package
  * is absent, the project is unseeded/frozen, or the head is not an `evermind-lm`.
  */
-import { contributeProjectEvermindFromText, type ContributeResult, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
+import type { DeltaLearnPayload } from "@seanhogg/builderforce-memory-engine";
+import {
+  authHeaders,
+  clampLearnWeight,
+  contributeProjectEvermindFromText,
+  type ContributeResult,
+  type ProjectEvermindSyncConfig,
+} from "./project-evermind-sync.js";
 
-/** Chars of run text actually fed to one adaptation pass. Mirrors the coordinator's
- *  own `ADAPT_MAX_CHARS`, so a locally-produced delta is the same size of update the
- *  server-side text path would have produced from the same run. */
-const ADAPT_MAX_CHARS = 4000;
-/** Token window length for the adaptation training sequences (mirrors the coordinator). */
-const ADAPT_WINDOW_TOKENS = 64;
-/** The gateway's own cap on the base64 delta field (`MAX_DIFF_BYTES`, ~8 MiB). Checked
- *  BEFORE the POST so an oversized push falls back to the text path instead of eating a
- *  413 and losing the contribution. */
-const MAX_DIFF_B64_CHARS = 8 * 1024 * 1024;
 /** Minimum run text worth adapting on — matches the gateway's own floor. */
 const MIN_TEXT_CHARS = 20;
 
@@ -46,18 +43,13 @@ const MIN_TEXT_CHARS = 20;
 // `@seanhogg/builderforce-memory-engine` is an OPTIONAL dependency of this package, so
 // it is loaded through an indirect import (the same guard `ssm-memory-service` uses):
 // a host that never installed it degrades to the text path rather than failing to boot.
-// The structural types below are the whole surface this module uses.
+// The adaptation recipe, the payload shape and the size cap are ALL the engine's
+// (`adaptAndDiff`, `buildDeltaLearnPayload`, `MAX_DELTA_B64_CHARS`) — the same ones the
+// coordinator runs and parses — so this producer cannot drift from the writer.
 
-/** A loaded Evermind language model — only its weight export is needed here. */
-export interface DeltaEngineLM {
-  exportWeights(): ArrayBuffer;
-}
-
-/** A parsed `.evermind` package: its raw checkpoint plus a loader for a private copy. */
+/** A parsed `.evermind` package (opaque here; the engine reads it). */
 export interface DeltaEnginePackage {
-  checkpoint: ArrayBuffer;
   manifest: { modelType?: string };
-  loadLM(): DeltaEngineLM;
 }
 
 /** The BPE tokenizer, restored from the version's published vocab + merges. */
@@ -67,21 +59,30 @@ export interface DeltaEngineTokenizer {
 }
 
 /** The subset of the engine this producer needs. Injectable so the diff→payload→route
- *  contract is testable over synthetic checkpoints without a GPU or a real model. */
+ *  contract is testable without a GPU or a real model. */
 export interface DeltaEngine {
   EvermindModelPackage: { fromBlob(blob: ArrayBuffer): DeltaEnginePackage };
-  EvermindLMTrainer: new (lm: DeltaEngineLM, opts: { epochs: number }) => { fit(seqs: number[][]): number[] };
   BPETokenizer: new () => DeltaEngineTokenizer;
-  diffCheckpoints(base: ArrayBuffer, current: ArrayBuffer): ArrayBuffer;
+  adaptAndDiff(pkg: DeltaEnginePackage, tokenizer: DeltaEngineTokenizer, text: string): { diff: ArrayBuffer } | null;
+  buildDeltaLearnPayload(diff: ArrayBuffer, baseVersion: number, weight?: number, label?: string): DeltaLearnPayload;
+  MAX_DELTA_B64_CHARS: number;
 }
 
-/** Load the optional engine package, or null when it is not installed. */
+/** Load the optional engine package, or null when it is not installed (or predates the seam). */
 export async function loadDeltaEngine(): Promise<DeltaEngine | null> {
   try {
     // Indirect import so TypeScript/bundlers never hard-resolve an optional peer.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
     const mod = (await (new Function("m", "return import(m)")("@seanhogg/builderforce-memory-engine") as Promise<unknown>)) as Partial<DeltaEngine>;
-    if (!mod?.EvermindModelPackage || !mod.EvermindLMTrainer || !mod.BPETokenizer || typeof mod.diffCheckpoints !== "function") return null;
+    if (
+      !mod?.EvermindModelPackage ||
+      !mod.BPETokenizer ||
+      typeof mod.adaptAndDiff !== "function" ||
+      typeof mod.buildDeltaLearnPayload !== "function" ||
+      typeof mod.MAX_DELTA_B64_CHARS !== "number"
+    ) {
+      return null;
+    }
     return mod as DeltaEngine;
   } catch {
     return null;
@@ -98,52 +99,11 @@ export interface EvermindBase {
   tokenizer: { vocab: Record<string, number>; merges: string[] };
 }
 
-/** Chunk token ids into fixed-length training windows (min length 2). Mirrors the
- *  coordinator's `windows` so a local fit and a server-side fit see the same batches. */
-function windows(ids: number[], size: number): number[][] {
-  const out: number[][] = [];
-  for (let i = 0; i + 1 < ids.length; i += size) {
-    const seq = ids.slice(i, i + size);
-    if (seq.length >= 2) out.push(seq);
-  }
-  return out;
-}
-
-/** Base64 a binary buffer (Node) — the wire encoding the `learn` door expects. */
-export function encodeDeltaB64(diff: ArrayBuffer): string {
-  return Buffer.from(new Uint8Array(diff)).toString("base64");
-}
-
 /**
- * Adapt a private copy of `base` on `text` and return the SPARSE checkpoint diff, or
- * null when there is nothing to contribute (not an `evermind-lm`, or the text yields no
- * trainable window). Pure with respect to the network, and pure with respect to `base`:
- * the fit runs on a freshly-loaded LM, so the caller's buffer is never mutated and the
- * diff is genuinely "this run's update" rather than an accumulation.
- */
-export function adaptAndDiff(engine: DeltaEngine, base: EvermindBase, text: string): ArrayBuffer | null {
-  const pkg = engine.EvermindModelPackage.fromBlob(base.model);
-  if (pkg.manifest.modelType !== "evermind-lm") return null;
-  const tok = new engine.BPETokenizer();
-  tok.loadFromObjects(base.tokenizer.vocab, base.tokenizer.merges);
-  const seqs = windows(tok.encode(text.slice(0, ADAPT_MAX_CHARS)), ADAPT_WINDOW_TOKENS);
-  if (seqs.length === 0) return null;
-  const lm = pkg.loadLM();
-  new engine.EvermindLMTrainer(lm, { epochs: 1 }).fit(seqs);
-  return engine.diffCheckpoints(pkg.checkpoint, lm.exportWeights());
-}
-
-/** The exact JSON body the `learn` door parses (`diff` base64, `baseVersion` integer). */
-export interface DeltaLearnPayload {
-  diff: string;
-  baseVersion: number;
-  weight: number;
-  label?: string;
-}
-
-/**
- * Build the wire payload for one adapted base. Returns null when nothing was learnable;
- * the size guard is the caller's, so it can choose the text fallback knowingly.
+ * Build the wire payload for one adapted base, or null when there is nothing to
+ * contribute (not an `evermind-lm`, or the text yields no trainable window). The fit
+ * runs on a freshly-loaded copy, so `base` is never mutated. The size guard is the
+ * caller's, so it can choose the text fallback knowingly.
  */
 export function buildDeltaPayload(
   engine: DeltaEngine,
@@ -152,22 +112,16 @@ export function buildDeltaPayload(
   weight: number,
   label?: string,
 ): DeltaLearnPayload | null {
-  const diff = adaptAndDiff(engine, base, text);
-  if (!diff) return null;
-  const trimmedLabel = (label ?? "").trim();
-  return {
-    diff: encodeDeltaB64(diff),
-    baseVersion: base.version,
-    weight,
-    ...(trimmedLabel ? { label: trimmedLabel.slice(0, 800) } : {}),
-  };
+  const pkg = engine.EvermindModelPackage.fromBlob(base.model);
+  if (pkg.manifest.modelType !== "evermind-lm") return null;
+  const tok = new engine.BPETokenizer();
+  tok.loadFromObjects(base.tokenizer.vocab, base.tokenizer.merges);
+  const adapted = engine.adaptAndDiff(pkg, tok, text);
+  if (!adapted) return null;
+  return engine.buildDeltaLearnPayload(adapted.diff, base.version, weight, label);
 }
 
 // ── Gateway transport ─────────────────────────────────────────────────────────
-
-function authHeaders(cfg: ProjectEvermindSyncConfig): Record<string, string> {
-  return { Authorization: `Bearer ${cfg.apiKey}`, "X-AgentHost-Id": String(cfg.agentHostId) };
-}
 
 function agentBase(cfg: ProjectEvermindSyncConfig): string {
   return `${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/evermind`;
@@ -289,7 +243,7 @@ export async function contributeProjectEvermindFromDelta(
 ): Promise<DeltaContributeResult> {
   const trimmed = (text ?? "").trim();
   if (trimmed.length < MIN_TEXT_CHARS) return { ok: false, reason: "text too short" };
-  const learnWeight = Math.max(0.05, Math.min(1, typeof weight === "number" && weight > 0 ? weight : 0.6));
+  const learnWeight = clampLearnWeight(weight);
   const toText = async (reason: string): Promise<DeltaContributeResult> => ({
     ...(await contributeProjectEvermindFromText(cfg, trimmed, prompt, learnWeight)),
     delta: false,
@@ -320,7 +274,7 @@ export async function contributeProjectEvermindFromDelta(
       return toText(`adapt failed: ${String(err)}`);
     }
     if (!payload) return toText("nothing trainable in this run");
-    if (payload.diff.length > MAX_DIFF_B64_CHARS) return toText("delta exceeds the gateway's size cap");
+    if (payload.diff.length > engine.MAX_DELTA_B64_CHARS) return toText("delta exceeds the gateway's size cap");
 
     const outcome = await pushDelta(cfg, payload);
     if (outcome.ok) {

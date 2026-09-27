@@ -18,9 +18,9 @@
  */
 
 import * as fs from "fs/promises";
+import { isStub } from "@seanhogg/builderforce-memory-mcp/compaction";
 import {
   compactSnapshotText,
-  isStub,
   parseSnapshotArray,
   snapshotEntryContent,
   snapshotEntryKey,

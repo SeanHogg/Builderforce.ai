@@ -20,7 +20,8 @@ import {
   readMemoryDirectory,
 } from './markdownMemory';
 import { compactMemoryFiles, compactionTargets, readMemorySource } from './memoryImport';
-import { STUB_PREFIX, isStub, parseSnapshotArray, snapshotEntryContent } from './memorySnapshot';
+import { STUB_PREFIX, isStub } from '@seanhogg/builderforce-memory-mcp/compaction';
+import { parseSnapshotArray, snapshotEntryContent } from './memorySnapshot';
 
 /** A real per-fact file, shaped exactly like the ones Claude Code writes. */
 const FACT = `---

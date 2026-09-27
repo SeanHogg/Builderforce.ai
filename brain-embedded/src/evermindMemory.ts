@@ -12,41 +12,12 @@
  * ({@link ./brainRunStore}) turns the result into the injected memory block plus
  * the recall/learn/reconcile trace events.
  *
- * Everything here is pure + transport-agnostic (no fetch, no DOM) so it is unit
- * testable and shared verbatim by the web app and the VS Code webview.
+ * The recall CONTRACT, the memory block and the reconcile rule are the Evermind
+ * module's (`@seanhogg/builderforce-memory/evermind`); what lives here is the Brain's
+ * own port — the hooks a host injects and the one server-backed implementation of them.
  */
 
-/** One learned memory the project's Evermind recalled for the current turn. */
-export interface EvermindRecallItem {
-  /** Which tier this memory came from: `chat` = contributed by THIS conversation,
-   *  `project` = the wider project. Absent from an older api. */
-  tier?: 'chat' | 'project';
-  /** Stable id of the learned memory (targets a specific contribution). */
-  id: number;
-  /** Readable snippet of the learned exemplar (or the task it answered). */
-  text: string;
-  /** Lexical relevance to the query, 0..1. */
-  score: number;
-}
-
-/**
- * What a recall returns: the project's learning posture (so the loop knows
- * whether the turn will also be CONTRIBUTED) plus the recalled memories. Mirrors
- * the api `recallProjectEvermindMemory` response.
- */
-export interface EvermindRecallResult {
-  /** How the returned memories split between THIS chat and the wider project.
-   *  Absent from an older api that predates chat-tiered recall. */
-  tiers?: { fromChat: number; fromProject: number };
-  /** True once the project has a base Evermind (version ≥ 1). */
-  seeded: boolean;
-  /** Current head version the recall ran against. */
-  version: number;
-  /** `connected` = runs/replies contribute back; `offline-frozen` = pinned, read-only. */
-  mode: 'connected' | 'offline-frozen';
-  /** Recalled memories, best-first. Empty when nothing lexically matched. */
-  items: EvermindRecallItem[];
-}
+import type { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 
 /**
  * A memory-first answer that lets the run loop SKIP the paid model entirely — either
@@ -154,86 +125,4 @@ export function projectMemoryHooks(
       }).catch(() => { /* best-effort: never fail a reply to remember it */ });
     },
   };
-}
-
-/**
- * Assistant text shorter than this isn't a teaching signal, so the server won't
- * contribute it. Mirrors `MIN_TEACH_CHARS` in the api's `brainEvermindLearning.ts`
- * so the "contributed to Evermind" step appears exactly when the server actually
- * contributes the turn — keep the two in sync.
- */
-export const EVERMIND_LEARN_MIN_CHARS = 40;
-
-/**
- * Fraction of a recalled memory's meaningful tokens the answer must restate for
- * the turn to count as RECONCILING (superseding) that memory. Write-Through
- * Cognition = an answer that re-states a prior learning updates it.
- */
-const RECONCILE_OVERLAP = 0.6;
-
-/** Tiny code+English stopword set — mirrors the api ranker so overlap keys on
- *  meaningful terms, not filler. */
-const STOP = new Set([
-  'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'with', 'is', 'are',
-  'be', 'as', 'at', 'by', 'it', 'this', 'that', 'from', 'you', 'your', 'i', 'we',
-  'they', 'he', 'she', 'can', 'will', 'how', 'do', 'does', 'what', 'why', 'when',
-  'which', 'use', 'using', 'used', 'please', 'need', 'want', 'me', 'my', 'so', 'if',
-]);
-
-/** Lowercase, split on non-word runs, drop stopwords + 1-char tokens (as the ranker does). */
-function tokenSet(s: string): Set<string> {
-  return new Set((s.toLowerCase().match(/[a-z0-9_]+/g) ?? []).filter((w) => w.length >= 2 && !STOP.has(w)));
-}
-
-/**
- * Build the `[Evermind Memory]` block injected into the system prompt — the part
- * that makes recall REAL (it changes what the model sees), not just a UI badge.
- * Numbered so the model can cite/correct a specific learning. Returns '' when
- * there is nothing to inject.
- */
-export function formatEvermindMemoryBlock(items: EvermindRecallItem[]): string {
-  if (items.length === 0) return '';
-  const lines = items
-    .map((it) => ({ it, text: it.text.replace(/\s+/g, ' ').trim() }))
-    .filter(({ text }) => text.length > 0)
-    .map(({ it, text }, i) => `${i + 1}. ${it.tier ? `${TIER_LABEL[it.tier]} ` : ''}${text}`);
-  if (lines.length === 0) return '';
-  return [
-    "[Evermind Memory — recalled from this project's self-learning model]",
-    // Recall always fills its budget from the whole project, so a NEW chat is handed
-    // eight other conversations' replies. Framed as "relevant … treat as grounding",
-    // chat #105 (grok-4.6) took them as its own agenda: asked to wire Room chat bubbles,
-    // it announced "closing out linked work" and "the roster collapse code" — another
-    // chat's task — for three turns and never touched the request.
-    'Prior learnings matched to this request automatically. The match is by similarity, so any of them may be unrelated: use one only where it bears on what the user asked in THIS conversation, and ignore the rest.',
-    `Memories marked ${TIER_LABEL.project} come from other conversations and runs — never resume, close out, or act on their work here.`,
-    'If one is outdated or wrong, correct it in your answer (this project learns write-through — your reply updates its memory).',
-    ...lines,
-  ].join('\n');
-}
-
-/** How each recall tier is marked in the block, so the model can tell this chat's own
- *  history from another conversation's. */
-const TIER_LABEL: Record<NonNullable<EvermindRecallItem['tier']>, string> = {
-  chat: '(this conversation)',
-  project: '(elsewhere in the project)',
-};
-
-/**
- * How many recalled memories this answer RECONCILES — restates enough of, that
- * the contributed turn supersedes them. Pure heuristic over token overlap; used
- * only to surface the reconcile step, never to gate learning.
- */
-export function countReconciledMemories(items: EvermindRecallItem[], answer: string): number {
-  const ans = tokenSet(answer);
-  if (ans.size === 0) return 0;
-  let n = 0;
-  for (const it of items) {
-    const mem = tokenSet(it.text);
-    if (mem.size === 0) continue;
-    let hit = 0;
-    for (const tok of mem) if (ans.has(tok)) hit++;
-    if (hit / mem.size >= RECONCILE_OVERLAP) n++;
-  }
-  return n;
 }

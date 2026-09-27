@@ -1,8 +1,8 @@
 /**
  * Dispatch a PRE-DIFFED weight delta to a project's coordinator (the single writer).
  *
- * The transport half of the delta door; the contract (shape, size cap, admission
- * rule) lives in {@link ./evermindDeltaLearn}. Kept out of `projectEvermind.ts` so
+ * The transport half of the delta door; the contract (shape, size cap) is the engine's
+ * `parseDeltaLearnPayload`, and the admission rule is {@link ./evermindDeltaLearn}. Kept out of `projectEvermind.ts` so
  * that file does not grow a second producer entry point — it already owns the text
  * door ({@link dispatchProjectEvermindLearnText}).
  *
@@ -13,13 +13,13 @@
  */
 import type { Env } from '../../env';
 import { coordinatorStub, type LearnDispatchResult } from './projectEvermind';
-import type { DeltaLearnRequest } from './evermindDeltaLearn';
+import type { DeltaLearnPayload } from '@seanhogg/builderforce-memory-engine';
 
 export async function dispatchProjectEvermindLearn(
   env: Env,
   tenantId: number,
   projectId: number,
-  request: DeltaLearnRequest,
+  request: DeltaLearnPayload,
 ): Promise<LearnDispatchResult> {
   const stub = coordinatorStub(env, tenantId, projectId);
   if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };

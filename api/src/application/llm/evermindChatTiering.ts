@@ -34,7 +34,7 @@
  */
 
 /** The minimum a candidate needs to be tiered. Structural, so both the lexical
- *  `RankedRecall` and any future ranked shape satisfy it without a conversion. */
+ *  `RankedEvermindRecall` and any future ranked shape satisfy it without a conversion. */
 export interface ChatTierable {
   /** The chat that contributed this memory; absent for project-wide memories. */
   chatId?: number;
