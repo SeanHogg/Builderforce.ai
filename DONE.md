@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-09-27 — The experience "already learned" ledger is tied to the adaptation that learned each procedure
+
+`memory-mcp/src/experience/train.ts` trusted the store's `learned` ledger for any `+expN` model, so rolling back by renaming `<model>.prev` over the current model left the discarded version's procedures marked as learned forever. Each ledger entry now records N of the `+expN` adaptation that learned it (same `Record<id, number>` shape, so Synapse's client is unaffected), and `pendingDocuments` trusts only entries at or below the loaded model's N: a rollback re-teaches exactly what was discarded, and a fresh base (N = 0) relearns everything. Covered by a rollback case in `tests/experience.test.mjs`; builderforce-memory engine/mcp suites and a stdio end-to-end smoke of Synapse's call sequence are green.
+
 ## ✅ RESOLVED 2026-09-27 — Experience review: owner-only HTTP exposure, scoped forget-all, atomic writes, step validation
 
 A review of the unreleased experience work (builderforce-memory `acf8c5a`) found five defects, all fixed in `8d39e1f` before any release:
