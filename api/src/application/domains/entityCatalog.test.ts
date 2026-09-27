@@ -275,7 +275,20 @@ describe('the entity catalog', () => {
     // before it. The writer is `application/brain/chatDiagnosticsStore.ts` (25-per-chat
     // retention, size clamp); a generic PATCH would be a false statement about a run
     // that already happened.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(29);
+    //
+    // Ceiling moved 28 → 29 (2026-09-26) with `project_app_blueprints` (migration 1184),
+    // adjudicated rather than counted: it lands on the NO TENANT TO REGISTER UNDER reason
+    // written above for `release_digest_runs` — the table has no `tenant_id` column at all,
+    // only `project_id`, and the catalog registers into the tenant-scoped `objects` table.
+    // It is also not an object on its own merits: one row per (project, commit) holding
+    // the blueprint DETECTION derived from that commit's files — a per-commit derived
+    // artifact, replaced on re-detection (upsert on the pair), with no title, no status and
+    // nothing a person opens. The single writer is `detectBlueprintForProject`; the
+    // readers are `getLatestBlueprint` (the cloud run loop) and the `app_blueprint.*`
+    // tools, which check tenant ownership of the project BEFORE touching the row. A
+    // generic PATCH would be a false statement about what a commit contains — the
+    // override path is the repo's own `builderforce.json`.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(30);
   });
 
   it('declares nothing that no migration creates', () => {
