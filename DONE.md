@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-09-27 — builderforce-memory 2026.9.29 reaches the MCP Registry again (2026.9.27 and 2026.9.28 never did)
+
+- **Gap.** The v2026.9.27 and v2026.9.28 release runs published to npm, then failed at "Publish to the MCP Registry": the registry rejects a `server.json` description longer than 100 characters (ours was 197). The registry listing stayed at the older version, and nothing checked the limit before publishing.
+- **Fix.** The description is shortened to 95 characters. `scripts/sync-mcp-registry.mjs` now fails `registry:check`, the CI gate that runs before npm publish, when the description is over 100 characters.
+- **Contents.** 2026.9.29 also ships the experience fixes (`8d39e1f`, `005116d`) and adaptation history plus the `experience_overview` tool (`9ccf503`).
+- **Verification (Sonnet, clean worktree at `c47119a`).** Engine 425/425, runtime 634/634, mcp 53/53; plugin and registry checks and tsgo clean; generated artifacts byte-identical. Release run 36357995369 is green: the first registry attempt raced npm propagation and passed on re-run. npm `latest` is 2026.9.29 for engine, runtime and mcp, and the MCP Registry lists 2026.9.29.
+
 ## ✅ RESOLVED 2026-09-27 — An Evermind on the board stands in the Room as a 3D brain with its learning centres
 
 - **Gap.** Switching from Board to Room with an Evermind on the canvas showed only the session diorama and the approval desk; the model's Knowledge Map existed only as a flat SVG on the card.
