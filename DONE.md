@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-09-27 — Experience review: owner-only HTTP exposure, scoped forget-all, atomic writes, step validation
+
+A review of the unreleased experience work (builderforce-memory `acf8c5a`) found five defects, all fixed in `8d39e1f` before any release:
+- **Open HTTP exposure.** With `BUILDERFORCE_MEMORY_EXPERIENCE=1` and no token, the HTTP bin (listening on all interfaces) served `experience_forget_all` and `experience_train` to anyone who could reach the port. Experience tools are now served only to a caller holding the owner's `BUILDERFORCE_MEMORY_TOKEN`, never in open mode or to a token-selected tenant. Synapse uses stdio, so it is unaffected.
+- **Forget-all deleted a user folder.** It removed `dirname(memoryFile)/episodes` recursively, which could be the user's own folder. It now removes only the folders of episodes the store knows.
+- **Non-atomic writes.** `SharedJsonFile` writes to a temp file and then renames it, so a crash no longer truncates `memory.json` or `experience.json` into an empty store that the next write persists. The trained model is staged and renamed the same way.
+- **One bad step broke training.** `episode_save` now checks every action field the corpus and replay read. A secret value is never stored, and `skill_schedule` drops values for secret parameters. An empty secret value is still accepted, as the Synapse recorder sends one.
+- **Unknown schema overwritten.** A snapshot in a newer schema is refused, and the file is left untouched.
+- Unconsumed experience exports were dropped from the memory-mcp and engine barrels.
+- **Verification (Sonnet).** Engine 422/422, runtime 634/634, mcp 53/53 (3 new regression tests), plugin and registry checks and tsgo all green.
+
 ## ✅ RESOLVED 2026-09-27 — "This chat's changes": the pending-changes pill scoped to the chat, without a cross-tenant read
 
 - **What was on the tree.** An uncommitted edit, carried over from `feat/app-blueprint-detection`, started scoping the VS Code "Changes (N)" pill to the files the active chat changed. As written it could not ship. `WorkDeltaService.getDeltasForChat` read `work_deltas` by `chat_id` alone, and the new `GET /api/brain/chats/:id/files` checked no chat access, so any signed-in user could list another tenant's changed files; `check:tenant-scope` failed (0 → 1) and blocked the API deploy. The webview read `window.__INIT_DATA__.baseUrl`, which does not exist, and its caller still passed one argument, so the VS Code build failed and the filter could never run. Its matching used `endsWith` in both directions without a path boundary, so `a.ts` claimed `data.ts`.
