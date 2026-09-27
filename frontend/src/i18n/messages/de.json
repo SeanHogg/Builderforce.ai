@@ -18182,12 +18182,12 @@
     "loading": "Wird geladen…",
     "working": "Wird bearbeitet…",
     "redirecting": "Weiterleitung zur Anmeldung…",
-    "confirmIntro": "Dein Editor fordert Zugriff an. Prüfe, ob dieser Code mit dem in VS Code angezeigten übereinstimmt:",
+    "confirmIntro": "Dein Editor fordert Zugriff an. Prüfe, ob dieser Code mit dem in {app} angezeigten übereinstimmt:",
     "approve": "Genehmigen",
     "deny": "Ablehnen",
-    "approved": "✓ Genehmigt. Kehre zu VS Code zurück – die Anmeldung wird automatisch abgeschlossen.",
+    "approved": "✓ Genehmigt. Kehre zu {app} zurück – die Anmeldung wird automatisch abgeschlossen.",
     "denied": "Anfrage abgelehnt. Du kannst diesen Tab schließen.",
-    "keyIntro": "Hier ist dein Editor-Schlüssel. Kopiere ihn und füge ihn in VS Code ein:",
+    "keyIntro": "Hier ist dein Editor-Schlüssel. Kopiere ihn und füge ihn in {app} ein:",
     "copyKey": "Schlüssel kopieren",
     "copied": "✓ Kopiert",
     "keyFine": "Halte diesen Schlüssel geheim. Du kannst ihn jederzeit unter Einstellungen → API-Schlüssel widerrufen.",
@@ -19358,6 +19358,12 @@
       "listLabel": "Quellen",
       "insert": "Zitat kopieren",
       "insertNamed": "Textzitat für {title} kopieren"
+    },
+    "evermind": {
+      "title": "Evermind",
+      "summaryLive": "{count, plural, =0 {Noch nichts gelernt} one {# Lerneintrag} other {# Lerneinträge}} · v{version}",
+      "summaryBlueprint": "Entwurf · lernt noch nicht",
+      "blueprintHint": "Dieses Evermind ist noch ein Entwurf, daher ruhen seine Lernzentren. Verknüpfen Sie es mit einem Projekt, um zu sehen, wie jedes Zentrum beim Lernen aufleuchtet."
     }
   },
   "creationCanvas": {

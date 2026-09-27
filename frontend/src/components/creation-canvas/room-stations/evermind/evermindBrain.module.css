@@ -1,0 +1,28 @@
+/* Names over the learning centres of the room's 3D brain. DOM over the canvas, so
+   they stay legible in either theme; the hue is the region's own token. */
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--region-hue, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface, #fff) 88%, transparent);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.count {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--region-hue, var(--text-muted));
+  color: var(--surface, #fff);
+  font-size: 10px;
+  text-align: center;
+}

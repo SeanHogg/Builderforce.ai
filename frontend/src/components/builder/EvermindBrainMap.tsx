@@ -37,7 +37,7 @@ import type {
   ProjectEvermindTrainingPoint,
   ProjectEvermindEvalPoint,
 } from '@/lib/projectEvermindApi';
-import { recentForRegion, type EvermindRegionKey } from '@/lib/evermindRegions';
+import { evermindRegionSignals, recentForRegion, type EvermindRegionKey } from '@/lib/evermindRegions';
 import { buildSparkline } from '@/lib/sparkline';
 import { useEvermindValidation } from './EvermindValidationContext';
 import { useFormat } from "@/i18n/useFormat";
@@ -170,72 +170,45 @@ export function EvermindBrainMap({
     const texts = recentForRegion(recent, 'hippocampus');
     const pending = data?.pending ?? 0;
     const version = data?.version ?? 0;
-    const dim = seeded ? 1 : 0.08;
-    const norm = (n: number, ceil: number) => clamp(n / ceil, 0, 1);
-
-    // Real affective (limbic) state from the shared runtime compiler (server-side).
+    // Charge / count / active come from the ONE derivation the room's 3D brain reads too.
+    const signals = evermindRegionSignals(data);
+    const st = data?.affect?.state;
     const affect = data?.affect;
-    const st = affect?.state;
-    const driveAvg = st ? (st.driveCuriosity + st.driveCaution + st.driveEffort + st.driveSocial) / 4 : 0;
-    const salience = st ? clamp(Math.abs(st.valence) * 0.5 + st.arousal, 0, 1) : 0;
 
     return REGIONS.map((meta): RegionState => {
+      const signal = signals[meta.key];
+      const base = { meta, charge: signal.charge, active: signal.active };
       switch (meta.key) {
         case 'neocortex': {
           const nodes = layoutRegionNodes(meta, fitted, freshCutoffAt);
           return {
-            meta, nodes, count: fitted.length, overflow: Math.max(0, fitted.length - nodes.length),
-            charge: seeded ? Math.max(0.3, norm(fitted.length, 12)) : dim,
-            active: learning,
+            ...base, nodes, count: fitted.length, overflow: Math.max(0, fitted.length - nodes.length),
             caption: fitted.length > 0 ? t('neocortexCaption', { count: fitted.length }) : t('neocortexRole'),
           };
         }
         case 'hippocampus': {
           const nodes = layoutRegionNodes(meta, texts, freshCutoffAt);
           return {
-            meta, nodes, count: texts.length, overflow: Math.max(0, texts.length - nodes.length),
-            charge: seeded ? Math.max(0.3, norm(texts.length + pending, 12)) : dim,
-            active: learning && (texts.length > 0 || pending > 0),
+            ...base, nodes, count: texts.length, overflow: Math.max(0, texts.length - nodes.length),
             caption: pending > 0 ? t('consolidating', { count: pending })
               : texts.length > 0 ? t('hippocampusCaption', { count: texts.length }) : t('hippocampusRole'),
           };
         }
         case 'personality':
-          return {
-            meta, nodes: [], count: 0, overflow: 0,
-            charge: seeded ? Math.max(0.5, norm(version, 8)) : dim,
-            active: false,
-            caption: seeded ? t('personalityCaption', { version }) : t('regionDormant'),
-          };
+          return { ...base, nodes: [], count: 0, overflow: 0, caption: seeded ? t('personalityCaption', { version }) : t('regionDormant') };
         // Limbic regions — driven by the REAL current affective state.
         case 'amygdala':
-          return {
-            meta, nodes: [], count: 0, overflow: 0,
-            charge: seeded ? Math.max(0.25, salience) : dim, active: learning,
-            caption: seeded && st ? t('amygdalaLive', { valence: r2(st.valence), arousal: r2(st.arousal) }) : t('amygdalaRole'),
-          };
+          return { ...base, nodes: [], count: 0, overflow: 0, caption: seeded && st ? t('amygdalaLive', { valence: r2(st.valence), arousal: r2(st.arousal) }) : t('amygdalaRole') };
         case 'hypothalamus':
-          return {
-            meta, nodes: [], count: 0, overflow: 0,
-            charge: seeded ? Math.max(0.25, driveAvg) : dim, active: learning,
-            caption: seeded && st ? t('hypothalamusLive', { curiosity: r2(st.driveCuriosity), effort: r2(st.driveEffort) }) : t('hypothalamusRole'),
-          };
+          return { ...base, nodes: [], count: 0, overflow: 0, caption: seeded && st ? t('hypothalamusLive', { curiosity: r2(st.driveCuriosity), effort: r2(st.driveEffort) }) : t('hypothalamusRole') };
         case 'thalamus':
-          return {
-            meta, nodes: [], count: 0, overflow: 0,
-            charge: seeded && affect ? Math.max(0.2, affect.attentionGain) : dim, active: learning,
-            caption: seeded && affect ? t('thalamusLive', { attention: pct(affect.attentionGain) }) : t('thalamusRole'),
-          };
+          return { ...base, nodes: [], count: 0, overflow: 0, caption: seeded && affect ? t('thalamusLive', { attention: pct(affect.attentionGain) }) : t('thalamusRole') };
         case 'basalGanglia':
         default:
-          return {
-            meta, nodes: [], count: 0, overflow: 0,
-            charge: seeded && affect ? Math.max(0.2, affect.exploreBias) : dim, active: learning,
-            caption: seeded && affect ? t('basalGangliaLive', { explore: pct(affect.exploreBias) }) : t('basalGangliaRole'),
-          };
+          return { ...base, nodes: [], count: 0, overflow: 0, caption: seeded && affect ? t('basalGangliaLive', { explore: pct(affect.exploreBias) }) : t('basalGangliaRole') };
       }
     });
-  }, [data, seeded, learning, t]);
+  }, [data, seeded, t]);
 
   const byKey = useMemo(() => {
     const m = {} as Record<RegionKey, RegionState>;

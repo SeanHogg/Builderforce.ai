@@ -55,7 +55,7 @@ function StationStand({ instance, index, sessionId, palette, openKey, onOpen, on
       palette={palette}
       title={model.title}
       hint={t('dragHint', { summary: model.summary })}
-      face={model.face}
+      look={model.body ? { body: model.body } : { face: model.face }}
       open={{
         label: t('open'),
         name: t('openNamed', { title: model.title }),

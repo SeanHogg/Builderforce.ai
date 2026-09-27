@@ -2,9 +2,9 @@
 
 /**
  * EvermindStudioCenter — the center stage of the `llm` build modality: the live
- * Knowledge Map beside the region-filterable Learnings list. It owns the ONE fetch
- * of the (server-cached) contributions payload and the selected-region state, then
- * hands both down — so the map and the list never double-fetch and always agree on
+ * Knowledge Map beside the region-filterable Learnings list. It owns the ONE read
+ * of the contributions payload (`useProjectEvermindActivity`) and the selected-region
+ * state, then hands both down — so the map and the list never double-fetch and always agree on
  * the filter. Clicking a region in the map (or a legend chip) filters the list; the
  * list's chip clears it. The `--ev-*` region hues are defined here on `.ev-studio`
  * so BOTH children (and the list's swatches) resolve them. Responsive: side-by-side
@@ -12,9 +12,8 @@
  */
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePolledResource } from '@/hooks/usePolledResource';
-import { getProjectEvermindContributions, type ProjectEvermindContributions } from '@/lib/projectEvermindApi';
+import { useEffect, useState } from 'react';
+import { useProjectEvermindActivity } from '@/hooks/useProjectEvermindActivity';
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
 // The live brain map is a 600-line force-directed render nobody sees until the
 // Studio's map tab is opened. Deferred so the Studio shell paints without it.
@@ -25,45 +24,22 @@ const EvermindBrainMap = dynamic(
 import { EvermindLearnings } from './EvermindLearnings';
 import { useEvermindValidation } from './EvermindValidationContext';
 
-export function EvermindStudioCenter({ projectId }: { projectId: number }) {
-  const [data, setData] = useState<ProjectEvermindContributions | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
+export function EvermindStudioCenter({ projectId }: { projectId: number | null }) {
+  const { data, loaded, error, reload } = useProjectEvermindActivity(projectId);
   const [selectedRegion, setSelectedRegion] = useState<EvermindRegionKey | null>(null);
-  const inFlight = useRef(false);
   const { highlight } = useEvermindValidation();
 
   // A Validate recall takes over both surfaces (map highlights matches, list shows
   // them ranked) — clear any region filter so it isn't dimming the recall view.
   useEffect(() => { if (highlight) setSelectedRegion(null); }, [highlight]);
-
-  const reload = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    try {
-      const d = await getProjectEvermindContributions(projectId);
-      setData(d);
-      setError(false);
-    } catch {
-      setError(true);
-    } finally {
-      inFlight.current = false;
-      setLoaded(true);
-    }
-  }, [projectId]);
-
-  useEffect(() => { setLoaded(false); setSelectedRegion(null); void reload(); }, [reload]);
-
-  // Light poll so the map + list stay live while runs/teaching/chat merge. The read
-  // endpoint is server-cached, so this is cheap.
-  usePolledResource(reload, { intervalMs: 20_000, immediate: false });
+  useEffect(() => { setSelectedRegion(null); }, [projectId]);
 
   return (
     <div className="ev-studio">
       <style>{EV_STUDIO_CSS}</style>
       <div className="ev-studio-map">
         <EvermindBrainMap
-          data={data} loaded={loaded} error={error} onReload={() => void reload()}
+          data={data} loaded={loaded} error={error} onReload={reload}
           selectedRegion={selectedRegion} onSelectRegion={setSelectedRegion}
         />
       </div>

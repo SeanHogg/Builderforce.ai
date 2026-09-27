@@ -77,6 +77,22 @@ export const ROOM_STATION_SPECS: readonly RoomStationSpec[] = [
         : [];
     }),
   },
+  // One brain per Evermind on the board — its learning centres, standing in the room
+  // in 3D. `resourceId` is the project it learns for, absent while it is a blueprint.
+  {
+    id: 'evermind',
+    instances: (objects) => objects.flatMap((object) => {
+      if (object.data.kind !== 'evermind') return [];
+      const projectId = evermindProjectOf(object.data.resourceId);
+      return [{
+        key: `evermind:${object.id}`,
+        station: 'evermind',
+        objectId: object.id,
+        title: titleOf(object.data),
+        ...(projectId ? { resourceId: projectId } : {}),
+      }];
+    }),
+  },
   // TEACHING AND SCHOLARSHIP. Each stands only once the board holds what it reads — a
   // gradebook board in a room with no gradebook is furniture, as the metrics board is.
   whenAnyKind('assessment', ['assignment']),
@@ -86,6 +102,12 @@ export const ROOM_STATION_SPECS: readonly RoomStationSpec[] = [
   { id: 'accessibility', instances: (objects) => (objects.some((object) => auditsKind(String(object.data.kind ?? ''))) ? [{ key: 'accessibility', station: 'accessibility' }] : []) },
   whenAnyKind('citations', ['citation', 'bibliography']),
 ];
+
+/** The project an Evermind object is attached to (`evermind:<projectId>`), or null. */
+function evermindProjectOf(resourceId: unknown): string | null {
+  const id = resourceIdOfType(resourceId, 'evermind');
+  return id && /^\d+$/.test(id) ? id : null;
+}
 
 /** A single-instance station that stands while any object of one of `kinds` is on the board. */
 function whenAnyKind(id: string, kinds: readonly string[]): RoomStationSpec {

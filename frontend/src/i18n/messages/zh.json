@@ -18182,12 +18182,12 @@
     "loading": "加载中…",
     "working": "处理中…",
     "redirecting": "正在跳转到登录…",
-    "confirmIntro": "你的编辑器正在请求访问权限。请确认此代码与 VS Code 中显示的一致：",
+    "confirmIntro": "你的编辑器正在请求访问权限。请确认此代码与 {app} 中显示的一致：",
     "approve": "批准",
     "deny": "拒绝",
-    "approved": "✓ 已批准。请返回 VS Code，它会自动完成登录。",
+    "approved": "✓ 已批准。请返回 {app}，它会自动完成登录。",
     "denied": "请求已拒绝。你可以关闭此标签页。",
-    "keyIntro": "这是你的编辑器密钥。请复制并粘贴到 VS Code 中：",
+    "keyIntro": "这是你的编辑器密钥。请复制并粘贴到 {app} 中：",
     "copyKey": "复制密钥",
     "copied": "✓ 已复制",
     "keyFine": "请妥善保管此密钥。你可以随时在“设置 → API 密钥”中撤销它。",
@@ -19358,6 +19358,12 @@
       "listLabel": "参考文献",
       "insert": "复制引文",
       "insertNamed": "复制 {title} 的文内引文"
+    },
+    "evermind": {
+      "title": "Evermind",
+      "summaryLive": "{count, plural, =0 {尚未学到任何内容} other {# 条学习}} · v{version}",
+      "summaryBlueprint": "蓝图 · 尚未开始学习",
+      "blueprintHint": "此 Evermind 仍是蓝图，因此其学习中枢处于休眠状态。将其关联到项目，即可看到每个中枢在学习时逐一点亮。"
     }
   },
   "creationCanvas": {

@@ -8,17 +8,28 @@ import type { RoomStationInstance } from '@/lib/canvas/roomStations';
  * null means "not for this viewer", and then nothing of the station renders anywhere:
  * not its stand, not its row in the room's list, not its panel.
  */
-export interface RoomStationModel {
+/**
+ * What a station LOOKS like in the room — one of two things, never both:
+ *  • a `face`: DOM content on a board on a post. Drawn through `SurfacePanel`, whose
+ *    content renders in a root with no React context, so it must not read a provider;
+ *  • a `body`: the station IS a thing, not a board — scene-graph content (R3F) that
+ *    stands on the post in the board's place. It must fit the board's box
+ *    ({@link ROOM_STATION_BODY_BOX}, centred on the origin) so the caption above it and
+ *    the drag around it behave the same as every other station.
+ */
+export type RoomStationLook =
+  | { face: ReactNode; body?: never }
+  | { body: ReactNode; face?: never };
+
+/** The box, in metres, a station's `body` must fit inside (width, height, depth). */
+export const ROOM_STATION_BODY_BOX = { width: 1.5, height: 1.0, depth: 1.2 } as const;
+
+export type RoomStationModel = RoomStationLook & {
   /** Its name, on the caption, the list row and the panel's title. */
   title: string;
   /** One line of state — "3 changes waiting" — beside the name. */
   summary: string;
-  /**
-   * What the stand's FACE shows. Pure DOM: it is drawn through `SurfacePanel`, whose
-   * content renders in a root with no React context, so it must not read a provider.
-   */
-  face: ReactNode;
-}
+};
 
 export interface RoomStationView {
   /**

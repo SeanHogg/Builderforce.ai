@@ -18182,12 +18182,12 @@
     "loading": "Chargement…",
     "working": "Traitement…",
     "redirecting": "Redirection vers la connexion…",
-    "confirmIntro": "Votre éditeur demande un accès. Vérifiez que ce code correspond à celui affiché dans VS Code :",
+    "confirmIntro": "Votre éditeur demande un accès. Vérifiez que ce code correspond à celui affiché dans {app} :",
     "approve": "Approuver",
     "deny": "Refuser",
-    "approved": "✓ Approuvé. Retournez dans VS Code : la connexion se terminera automatiquement.",
+    "approved": "✓ Approuvé. Retournez dans {app} : la connexion se terminera automatiquement.",
     "denied": "Demande refusée. Vous pouvez fermer cet onglet.",
-    "keyIntro": "Voici votre clé d’éditeur. Copiez-la et collez-la dans VS Code :",
+    "keyIntro": "Voici votre clé d’éditeur. Copiez-la et collez-la dans {app} :",
     "copyKey": "Copier la clé",
     "copied": "✓ Copiée",
     "keyFine": "Gardez cette clé secrète. Vous pouvez la révoquer à tout moment dans Paramètres → Clés API.",
@@ -19358,6 +19358,12 @@
       "listLabel": "Références",
       "insert": "Copier la citation",
       "insertNamed": "Copier la citation dans le texte pour {title}"
+    },
+    "evermind": {
+      "title": "Evermind",
+      "summaryLive": "{count, plural, =0 {Rien appris pour l’instant} one {# apprentissage} other {# apprentissages}} · v{version}",
+      "summaryBlueprint": "Ébauche · n’apprend pas encore",
+      "blueprintHint": "Cet Evermind n’est encore qu’une ébauche : ses centres d’apprentissage sont en sommeil. Rattachez-le à un projet pour voir chaque centre s’illuminer à mesure qu’il apprend."
     }
   },
   "creationCanvas": {

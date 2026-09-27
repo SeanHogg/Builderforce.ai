@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { recentForRegion, regionAccretes, type EvermindRegionKey } from './evermindRegions';
-import type { ProjectEvermindRecentEntry } from './projectEvermindApi';
+import { EVERMIND_REGION_KEYS, evermindRegionSignals, recentForRegion, regionAccretes, type EvermindRegionKey } from './evermindRegions';
+import type { ProjectEvermindContributions, ProjectEvermindRecentEntry } from './projectEvermindApi';
 
 const entry = (over: Partial<ProjectEvermindRecentEntry>): ProjectEvermindRecentEntry => ({
   id: 1, kind: 'text', version: 2, at: 1_700_000_000_000, weight: 1, ...over,
@@ -54,5 +54,42 @@ describe('recentForRegion', () => {
     }
     expect(regionAccretes('neocortex')).toBe(true);
     expect(regionAccretes('hippocampus')).toBe(true);
+  });
+});
+
+describe('evermindRegionSignals', () => {
+  const payload = (over: Partial<ProjectEvermindContributions>): ProjectEvermindContributions => ({
+    version: 3, seeded: true, mode: 'connected', contributions: 2, inferenceEnabled: true, teacherModel: null,
+    lastLearnedAt: null, pending: 0, recent: [], training: [], eval: null,
+    affect: {
+      state: { valence: 0.4, arousal: 0.5, driveCuriosity: 0.8, driveCaution: 0.2, driveEffort: 0.6, driveSocial: 0.4, attention: 0.5, exploration: 0.3 },
+      setpoints: { valence: 0, arousal: 0.3, driveCuriosity: 0.5, driveCaution: 0.5, driveEffort: 0.5, driveSocial: 0.5, attention: 0.5, exploration: 0.5 },
+      attentionGain: 0.7,
+      exploreBias: 0.35,
+    },
+    ...over,
+  });
+
+  it('stands a dormant brain for an Evermind with no project behind it', () => {
+    const signals = evermindRegionSignals(null);
+    for (const key of EVERMIND_REGION_KEYS) expect(signals[key]).toEqual({ charge: 0.08, count: 0, active: false });
+  });
+
+  it('counts memory regions from what was learned and drives the limbic ones from live affect', () => {
+    const signals = evermindRegionSignals(payload({ recent: [entry({ id: 1 }), entry({ id: 2, kind: 'delta' })] }));
+    expect(signals.neocortex.count).toBe(2);
+    expect(signals.hippocampus.count).toBe(1);
+    expect(signals.hippocampus.active).toBe(true);
+    expect(signals.thalamus.charge).toBeCloseTo(0.7);
+    expect(signals.basalGanglia.charge).toBeCloseTo(0.35);
+    expect(signals.hypothalamus.charge).toBeCloseTo(0.5);
+    expect(signals.amygdala.charge).toBeCloseTo(0.7);
+    expect(signals.personality.active).toBe(false);
+  });
+
+  it('keeps a frozen model lit but still', () => {
+    const signals = evermindRegionSignals(payload({ mode: 'offline-frozen' }));
+    expect(EVERMIND_REGION_KEYS.some((key) => signals[key].active)).toBe(false);
+    expect(signals.personality.charge).toBeGreaterThanOrEqual(0.5);
   });
 });

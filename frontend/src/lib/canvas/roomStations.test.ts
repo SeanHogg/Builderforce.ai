@@ -20,6 +20,20 @@ describe('roomStationInstances', () => {
   });
 });
 
+describe('the Evermind brain station', () => {
+  it('stands one brain per Evermind object, carrying the project it learns for once attached', () => {
+    const instances = roomStationInstances([
+      { id: 'e1', data: { kind: 'evermind', title: 'Training Setup', resourceId: 'evermind:42' } },
+      { id: 'e2', data: { kind: 'evermind', title: 'Blueprint' } },
+      { id: 'x', data: { kind: 'note', title: 'Not a brain', resourceId: 'evermind:7' } },
+    ]).filter((instance) => instance.station === 'evermind');
+    expect(instances).toEqual([
+      { key: 'evermind:e1', station: 'evermind', objectId: 'e1', title: 'Training Setup', resourceId: '42' },
+      { key: 'evermind:e2', station: 'evermind', objectId: 'e2', title: 'Blueprint' },
+    ]);
+  });
+});
+
 describe('station placement', () => {
   it('alternates the side walls, front to back', () => {
     expect(defaultRoomStationSpot(0).x).toBe(-ROOM_STATION_SIDE_X);

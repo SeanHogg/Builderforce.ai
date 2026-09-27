@@ -5,7 +5,7 @@
  * regions) AND the Learnings panel (which filters contributions to the clicked
  * region), so the two never drift.
  */
-import type { ProjectEvermindRecentEntry } from './projectEvermindApi';
+import type { ProjectEvermindContributions, ProjectEvermindRecentEntry } from './projectEvermindApi';
 
 export type EvermindRegionKey =
   | 'neocortex' | 'hippocampus'
@@ -13,6 +13,11 @@ export type EvermindRegionKey =
   | 'personality';
 
 export type EvermindRegionGroup = 'memory' | 'limbic' | 'trait';
+
+/** Every region, in the order a list of them reads: memory, trait, then limbic. */
+export const EVERMIND_REGION_KEYS: readonly EvermindRegionKey[] = [
+  'neocortex', 'hippocampus', 'personality', 'amygdala', 'hypothalamus', 'thalamus', 'basalGanglia',
+];
 
 /** CSS variable carrying each region's themed hue (defined in the Knowledge Map's
  *  scoped `<style>`; the same `.ev-brainmap` custom properties cascade to consumers). */
@@ -58,4 +63,53 @@ export function recentForRegion(
   if (key === 'hippocampus') return recent.filter((e) => e.kind === 'text');
   if (key === 'neocortex') return recent.filter((e) => e.fitted !== false);
   return [];
+}
+
+/** How lit one region is right now, from the real payload — nothing fabricated. */
+export interface EvermindRegionSignal {
+  /** 0..1 — how strongly the region is charged. */
+  charge: number;
+  /** Learnings attributed to the region (memory regions only; 0 elsewhere). */
+  count: number;
+  /** Whether the region is learning right now (animates). */
+  active: boolean;
+}
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+/**
+ * Every region's signal from the contributions payload — the ONE derivation behind the
+ * Studio's 2D Knowledge Map and the room's 3D brain, so the two readings of one model
+ * can never light different regions. `null` (no project attached yet) is a dormant
+ * brain: every region at the dormant charge, none active.
+ *
+ * Memory regions charge with what they hold; the limbic regions are driven by the
+ * server's real affective state (the same limbic compiler the runtime runs), and
+ * Personality by how many versions have settled its setpoints.
+ */
+export function evermindRegionSignals(
+  data: ProjectEvermindContributions | null,
+): Record<EvermindRegionKey, EvermindRegionSignal> {
+  const seeded = !!data?.seeded;
+  const learning = seeded && data?.mode === 'connected';
+  const recent = data?.recent ?? [];
+  const fitted = recentForRegion(recent, 'neocortex').length;
+  const texts = recentForRegion(recent, 'hippocampus').length;
+  const pending = data?.pending ?? 0;
+  const version = data?.version ?? 0;
+  const dim = seeded ? 1 : 0.08;
+  const affect = data?.affect;
+  const st = affect?.state;
+  const driveAvg = st ? (st.driveCuriosity + st.driveCaution + st.driveEffort + st.driveSocial) / 4 : 0;
+  const salience = st ? clamp01(Math.abs(st.valence) * 0.5 + st.arousal) : 0;
+  const limbic = (value: number, floor: number): EvermindRegionSignal => ({ charge: seeded ? Math.max(floor, value) : dim, count: 0, active: learning });
+  return {
+    neocortex: { charge: seeded ? Math.max(0.3, clamp01(fitted / 12)) : dim, count: fitted, active: learning },
+    hippocampus: { charge: seeded ? Math.max(0.3, clamp01((texts + pending) / 12)) : dim, count: texts, active: learning && (texts > 0 || pending > 0) },
+    personality: { charge: seeded ? Math.max(0.5, clamp01(version / 8)) : dim, count: 0, active: false },
+    amygdala: limbic(salience, 0.25),
+    hypothalamus: limbic(driveAvg, 0.25),
+    thalamus: affect ? limbic(affect.attentionGain, 0.2) : { charge: dim, count: 0, active: learning },
+    basalGanglia: affect ? limbic(affect.exploreBias, 0.2) : { charge: dim, count: 0, active: learning },
+  };
 }

@@ -18182,12 +18182,12 @@
     "loading": "Loading…",
     "working": "Working…",
     "redirecting": "Taking you to sign in…",
-    "confirmIntro": "Your editor is requesting access. Confirm this code matches what VS Code shows:",
+    "confirmIntro": "Your editor is requesting access. Confirm this code matches what {app} shows:",
     "approve": "Approve",
     "deny": "Deny",
-    "approved": "✓ Approved. Return to VS Code — it will finish signing in automatically.",
+    "approved": "✓ Approved. Return to {app} — it will finish signing in automatically.",
     "denied": "Request denied. You can close this tab.",
-    "keyIntro": "Here is your editor key. Copy it and paste it into VS Code:",
+    "keyIntro": "Here is your editor key. Copy it and paste it into {app}:",
     "copyKey": "Copy key",
     "copied": "✓ Copied",
     "keyFine": "Keep this key secret. You can revoke it anytime in Settings → API Keys.",
@@ -19358,6 +19358,12 @@
       "listLabel": "References",
       "insert": "Copy citation",
       "insertNamed": "Copy the in-text citation for {title}"
+    },
+    "evermind": {
+      "title": "Evermind",
+      "summaryLive": "{count, plural, =0 {Nothing learned yet} one {# learning} other {# learnings}} · v{version}",
+      "summaryBlueprint": "Blueprint · not learning yet",
+      "blueprintHint": "This Evermind is still a blueprint, so its learning centres are dormant. Attach it to a project to watch each centre light up as it learns."
     }
   },
   "creationCanvas": {

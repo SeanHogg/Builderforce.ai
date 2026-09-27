@@ -18182,12 +18182,12 @@
     "loading": "Cargando…",
     "working": "Procesando…",
     "redirecting": "Te llevamos al inicio de sesión…",
-    "confirmIntro": "Tu editor solicita acceso. Confirma que este código coincide con el que muestra VS Code:",
+    "confirmIntro": "Tu editor solicita acceso. Confirma que este código coincide con el que muestra {app}:",
     "approve": "Aprobar",
     "deny": "Denegar",
-    "approved": "✓ Aprobado. Vuelve a VS Code: terminará de iniciar sesión automáticamente.",
+    "approved": "✓ Aprobado. Vuelve a {app}: terminará de iniciar sesión automáticamente.",
     "denied": "Solicitud denegada. Puedes cerrar esta pestaña.",
-    "keyIntro": "Esta es tu clave de editor. Cópiala y pégala en VS Code:",
+    "keyIntro": "Esta es tu clave de editor. Cópiala y pégala en {app}:",
     "copyKey": "Copiar clave",
     "copied": "✓ Copiada",
     "keyFine": "Mantén esta clave en secreto. Puedes revocarla cuando quieras en Ajustes → Claves de API.",
@@ -19358,6 +19358,12 @@
       "listLabel": "Referencias",
       "insert": "Copiar cita",
       "insertNamed": "Copiar la cita en el texto de {title}"
+    },
+    "evermind": {
+      "title": "Evermind",
+      "summaryLive": "{count, plural, =0 {Aún no ha aprendido nada} one {# aprendizaje} other {# aprendizajes}} · v{version}",
+      "summaryBlueprint": "Borrador · aún no aprende",
+      "blueprintHint": "Este Evermind sigue siendo un borrador, así que sus centros de aprendizaje están inactivos. Vincúlalo a un proyecto para ver cómo cada centro se ilumina a medida que aprende."
     }
   },
   "creationCanvas": {

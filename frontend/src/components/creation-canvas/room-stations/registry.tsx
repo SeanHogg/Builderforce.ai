@@ -3,6 +3,7 @@ import { assessmentDeskView } from './academic/AssessmentDesk';
 import { citationsDeskView } from './academic/CitationsDesk';
 import { gradebookBoardView } from './academic/GradebookBoard';
 import { approvalDeskView } from './ApprovalDesk';
+import { evermindStationView } from './evermind/EvermindStation';
 import { metricsBoardView } from './MetricsBoard';
 import type { RoomStationView } from './types';
 import { widgetStandView } from './WidgetStand';
@@ -19,6 +20,7 @@ export const ROOM_STATION_VIEWS: Readonly<Record<string, RoomStationView>> = {
   approvals: approvalDeskView,
   metrics: metricsBoardView,
   widget: widgetStandView,
+  evermind: evermindStationView,
   assessment: assessmentDeskView,
   gradebook: gradebookBoardView,
   accessibility: accessibilityAuditView,
