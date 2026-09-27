@@ -68,13 +68,17 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
 /**
- * One vocabulary for the public page. Twelve keys, each translated once in the
- * frontend catalogs — a page cannot invent a thirteenth because it renders the
+ * One vocabulary for the public page. Every key is translated once in the
+ * frontend catalogs — a page cannot invent another because it renders the
  * key it is given.
  */
 export const INTEGRATION_CATEGORIES = [
   'work',
   'devtools',
+  // Cloud & hosting (AWS, Vercel, Cloudflare…). Not folded into `devtools`: connecting
+  // a cloud account is an ops job, not a source-control one, and the page is browsed
+  // by category — same reasoning `hiring` makes below.
+  'cloud',
   'incident',
   'communication',
   'crm',
@@ -164,6 +168,7 @@ const CONNECTOR_CATEGORY: Record<ConnectorCategory, IntegrationCategory> = {
   crm: 'crm',
   productivity: 'productivity',
   devtools: 'devtools',
+  cloud: 'cloud',
   finance: 'finance',
   marketing: 'marketing',
   support: 'support',

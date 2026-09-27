@@ -79,7 +79,7 @@ export function CredentialKeyForm({ providers, editing, saving, serverError, onS
 
   return (
     <div style={formPanel}>
-      <div style={{ fontSize: 13, fontWeight: 600 }}>
+      <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600 }}>
         {editing ? t('editKeyTitle', { provider: descriptor.label }) : t('addKeyTitle')}
       </div>
       <Select
@@ -95,7 +95,7 @@ export function CredentialKeyForm({ providers, editing, saving, serverError, onS
         ))}
       </Select>
       {descriptor.transport === 'tcp' && (
-        <div role="note" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+        <div role="note" style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
           {t('tcpTransportNote', { provider: descriptor.label })}
         </div>
       )}
@@ -132,11 +132,11 @@ export function CredentialKeyForm({ providers, editing, saving, serverError, onS
         );
       })}
       {editing && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
           {descriptor.credentialFields.length > 1 ? t('rotateHintMulti') : t('rotateHintSingle')}
         </div>
       )}
-      {shownError && <div role="alert" style={{ fontSize: 12, color: 'var(--danger)' }}>{shownError}</div>}
+      {shownError && <div role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--danger)' }}>{shownError}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" style={btnPrimary} disabled={saving} onClick={submit}>
           {saving ? tc('saving') : editing ? t('saveChanges') : t('saveKey')}

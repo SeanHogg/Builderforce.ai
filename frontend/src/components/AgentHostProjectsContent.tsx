@@ -85,8 +85,8 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
     }
   };
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('projects.loading')}</div>;
-  if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>{t('errorPrefix', { message: error })}</div>;
+  if (loading) return <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('projects.loading')}</div>;
+  if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)' }}>{t('errorPrefix', { message: error })}</div>;
 
   const assignedIds = new Set(associations.map((a) => a.projectId));
   const availableToAssign = allProjects.filter((p) => !assignedIds.has(p.id));
@@ -94,7 +94,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
           {t('projects.heading', { count: associations.length })}
         </div>
         {availableToAssign.length > 0 && (
@@ -103,7 +103,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
             onClick={() => setShowAssign(!showAssign)}
             style={{
               padding: '5px 12px',
-              fontSize: 12,
+              fontSize: 'var(--font-size-small)',
               fontWeight: 600,
               background: showAssign ? 'var(--bg-base)' : 'var(--surface-interactive)',
               color: 'var(--text-primary)',
@@ -118,7 +118,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
       </div>
 
       {actionError && (
-        <div role="alert" style={{ fontSize: 12, color: 'var(--coral-bright)' }}>{actionError}</div>
+        <div role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)' }}>{actionError}</div>
       )}
 
       {showAssign && (
@@ -129,7 +129,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
             style={{
               flex: 1,
               padding: '8px 10px',
-              fontSize: 13,
+              fontSize: 'var(--font-size-small)',
               background: 'var(--bg-elevated)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
@@ -147,7 +147,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
             disabled={!selectedProjectId || assigning}
             style={{
               padding: '8px 14px',
-              fontSize: 13,
+              fontSize: 'var(--font-size-small)',
               fontWeight: 600,
               background: 'var(--coral-bright)',
               color: 'var(--text-on-accent)',
@@ -163,7 +163,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
       )}
 
       {associations.length === 0 ? (
-        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+        <div style={{ ...cardStyle, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center' }}>
           {t('projects.empty')}
         </div>
       ) : (
@@ -172,13 +172,13 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
           return (
             <div key={assoc.projectId} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
                   {project?.name ?? t('projects.projectFallback', { id: assoc.projectId })}
                 </div>
                 {project?.description && (
                   <div
                     style={{
-                      fontSize: 11,
+                      fontSize: 'var(--font-size-eyebrow)',
                       color: 'var(--text-muted)',
                       marginTop: 3,
                       overflow: 'hidden',
@@ -190,7 +190,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                   </div>
                 )}
                 {assoc.role && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 2 }}>
                     {t('projects.role', { role: assoc.role })}
                   </div>
                 )}
@@ -198,7 +198,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
               {project?.status && (
                 <span
                   style={{
-                    fontSize: 10,
+                    fontSize: 'var(--font-size-field-label)',
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     padding: '3px 8px',
@@ -215,7 +215,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                 href={`/projects/${assoc.projectId}`}
                 style={{
                   padding: '4px 10px',
-                  fontSize: 11,
+                  fontSize: 'var(--font-size-eyebrow)',
                   fontWeight: 600,
                   background: 'var(--bg-elevated)',
                   color: 'var(--text-secondary)',
@@ -232,7 +232,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
                 onClick={() => handleUnassign(assoc.projectId)}
                 style={{
                   padding: '4px 10px',
-                  fontSize: 11,
+                  fontSize: 'var(--font-size-eyebrow)',
                   fontWeight: 600,
                   background: 'none',
                   color: 'var(--coral-bright)',

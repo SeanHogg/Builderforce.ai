@@ -125,26 +125,40 @@ export interface ActivitySource {
 export interface RepoLink { tenantId: number; projectId: number | null; }
 
 /**
- * Resolve a repo to its owning tenant + project WITHOUT a tenant context — for the
- * webhook, which only knows the repo full name. A repo normally belongs to one
- * tenant; if linked by more than one we take the first (documented edge).
+ * Every (tenant, project) that links a repo, WITHOUT a tenant context — for the
+ * webhook, which only knows the repo full name. `project_repositories` links come
+ * first, then any legacy `projects.source_control_repo_full_name` match not already
+ * present. De-duplicated, so a repo linked both ways counts once per project.
  */
-export async function resolveRepoLink(db: Db, repoFullName: string): Promise<RepoLink | null> {
+export async function resolveRepoLinks(db: Db, repoFullName: string): Promise<RepoLink[]> {
+  const links: RepoLink[] = [];
+  const add = (link: RepoLink) => {
+    if (!links.some((l) => l.tenantId === link.tenantId && l.projectId === link.projectId)) links.push(link);
+  };
   const parts = splitRepoFullName(repoFullName);
   if (parts) {
-    const [link] = await db
+    const rows = await db
       .select({ tenantId: projectRepositories.tenantId, projectId: projectRepositories.projectId })
       .from(projectRepositories)
-      .where(and(eq(projectRepositories.owner, parts.owner), eq(projectRepositories.repo, parts.repo)))
-      .limit(1);
-    if (link) return { tenantId: link.tenantId, projectId: link.projectId };
+      .where(and(eq(projectRepositories.owner, parts.owner), eq(projectRepositories.repo, parts.repo)));
+    for (const row of rows) add({ tenantId: row.tenantId, projectId: row.projectId });
   }
-  const [proj] = await db
+  const legacy = await db
     .select({ tenantId: projects.tenantId, id: projects.id })
     .from(projects)
-    .where(eq(projects.sourceControlRepoFullName, repoFullName))
-    .limit(1);
-  return proj ? { tenantId: proj.tenantId, projectId: proj.id } : null;
+    .where(eq(projects.sourceControlRepoFullName, repoFullName));
+  for (const row of legacy) add({ tenantId: row.tenantId, projectId: row.id });
+  return links;
+}
+
+/**
+ * The FIRST link of {@link resolveRepoLinks} — for activity ingest, which attributes
+ * a repo's events to one tenant. A repo linked by more than one tenant goes to the
+ * first (documented edge); blueprint detection iterates every link instead.
+ */
+export async function resolveRepoLink(db: Db, repoFullName: string): Promise<RepoLink | null> {
+  const links = await resolveRepoLinks(db, repoFullName);
+  return links[0] ?? null;
 }
 
 // ── author → contributor (auto-create on first sight) ─────────────────────────

@@ -139,7 +139,7 @@ describe("git_push", () => {
     // on the agent remembering a separate git_status call.
     const sh = recordingShell();
     await gitPushTool.execute({ allowBaseBranch: true }, sh as never);
-    const script = sh.scripts[0];
+    const script = sh.scripts[0] ?? "";
     expect(script).toContain("git status --short --branch 2>/dev/null || true");
     expect(script.indexOf("git status --short --branch")).toBeGreaterThan(script.indexOf("git push -u origin"));
   });

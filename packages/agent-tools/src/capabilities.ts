@@ -539,6 +539,10 @@ export interface RepoEditResult {
   /** Model-facing guidance on a SUCCESSFUL edit (see {@link RepoWriteResult.note}). */
   note?: string;
   error?: string;
+  /** On a "not found" failure: the most similar line and its ±3 neighbourhood (see `StringEditResult.nearest`). */
+  nearest?: { line: number; excerpt: string };
+  /** On success: the 1-based line span of the first replacement (see `StringEditResult.region`). */
+  region?: { startLine: number; endLine: number };
 }
 
 /** One semantic search hit — a function/class that matched the query by meaning. */

@@ -64,6 +64,7 @@ describe('ProjectService.updateProject re-keying', () => {
       modality: 'designer',
       origin: null,
       initiativeId: null,
+      companyId: null,
       dueDate: null,
       createdAt: now,
       updatedAt: now,

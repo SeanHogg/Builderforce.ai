@@ -28043,6 +28043,7 @@
     "category": {
       "work": "Work management",
       "devtools": "Developer tools",
+      "cloud": "Cloud & hosting",
       "incident": "Incidents & on-call",
       "communication": "Communication",
       "crm": "CRM & sales",

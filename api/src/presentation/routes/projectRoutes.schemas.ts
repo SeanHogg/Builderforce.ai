@@ -20,6 +20,11 @@ const sourceControlFields = {
   githubRepoUrl: z.string().nullish(),
 };
 
+const companyField = {
+  /** Create the project directly under a company (W8). */
+  companyId: z.number().nullish(),
+};
+
 export const ProjectCodeChangesBody = z.object({
   codeChanges: z.number().nullish(),
   executionId: z.number().nullish(),
@@ -40,8 +45,7 @@ export const CreateProjectBody = z.object({
   origin: z.string().nullish(),
   /** The kanban template `provisionProject` seeds the board from. */
   kanbanTemplateId: z.string().nullish(),
-  /** Create the project directly under a company (W8). */
-  companyId: z.number().nullish(),
+  ...companyField,
 });
 
 export const UpsertProjectBody = z.object({
@@ -50,6 +54,7 @@ export const UpsertProjectBody = z.object({
   rootWorkingDirectory: z.string().nullish(),
   ...sourceControlFields,
   governance: z.string().nullish(),
+  ...companyField,
 });
 
 /**
@@ -80,4 +85,5 @@ export const ScaffoldProjectBody = z.object({
   prompt: z.string().nullish(),
   rootWorkingDirectory: z.string().nullish(),
   agentHostId: z.number().nullish(),
+  ...companyField,
 });

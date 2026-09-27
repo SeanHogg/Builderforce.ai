@@ -1,4 +1,4 @@
-'use client';
+// No `'use client'`: this module exports functions, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 /**
  * Record what a logged-out visitor asked for — the ONE client-side capture point.

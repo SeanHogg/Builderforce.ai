@@ -1,4 +1,4 @@
-'use client';
+// No `'use client'`: this module exports functions, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 /**
  * Guest (logged-out) Brain chat — client-side session + usage.

@@ -109,11 +109,11 @@ describe("git_cleanup_merged", () => {
   it("scopes into a repo subdirectory, and refuses one that walks out of the workspace", async () => {
     const scoped = recordingShell();
     await gitCleanupMergedTool.execute({ branch: "x", repo: "Builderforce.ai" }, scoped as never);
-    expect(scoped.scripts[0].startsWith('cd "Builderforce.ai" || exit 1\n')).toBe(true);
+    expect(scoped.scripts[0]?.startsWith('cd "Builderforce.ai" || exit 1\n')).toBe(true);
 
     const escape = recordingShell();
     await gitCleanupMergedTool.execute({ branch: "x", repo: "../elsewhere" }, escape as never);
-    expect(escape.scripts[0].startsWith("cd ")).toBe(false);
+    expect(escape.scripts[0]?.startsWith("cd ")).toBe(false);
   });
 });
 

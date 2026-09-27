@@ -57,7 +57,7 @@ export default function ContentManagerRedirect() {
           color: 'var(--text-muted)',
         }}
       >
-        <p style={{ margin: 0, fontSize: '0.95rem' }}>
+        <p style={{ margin: 0, fontSize: 'var(--font-size-body)' }}>
           {status === 'migrating' ? t('migrate.moving') : t('migrate.done')}
         </p>
       </div>

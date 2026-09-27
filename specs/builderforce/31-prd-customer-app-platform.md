@@ -172,7 +172,7 @@ Each tool below is added to `builtinMcpService.ts` catalogs, grouped as data, no
 
 | Group | Tools |
 |---|---|
-| `app_blueprint.*` | `detect`, `get`, `write_override` |
+| `app_blueprint.*` | `detect`, `get` (overrides: repo-root `builderforce.json`, applied on detect) |
 | `runtime.*` | `start_preview`, `preview_status`, `preview_url`, `preview_logs`, `preview_restart`, `preview_screenshot`, `run_verify` |
 | `cloud_accounts.*` | `list`, `capabilities` (connect stays a human OAuth/token step) |
 | `infra.*` | `plan`, `apply` (confirm-gated), `destroy` (confirm-gated), `list_resources`, `drift` |

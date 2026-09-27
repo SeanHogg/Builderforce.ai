@@ -33,14 +33,14 @@ export function LateSteerNote({
   return (
     <div
       role="note"
-      style={{ alignSelf: 'flex-end', maxWidth: '85%', fontSize: 11, color: tone, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', marginTop: -6 }}
+      style={{ alignSelf: 'flex-end', maxWidth: '85%', fontSize: 'var(--font-size-eyebrow)', color: tone, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', marginTop: -6 }}
     >
       <span>{text}</span>
       {started && (
         <button
           type="button"
           onClick={() => onOpenRun(followUp.executionId as number)}
-          style={{ border: 'none', background: 'none', padding: 0, fontSize: 11, color: 'var(--coral-bright)', cursor: 'pointer', textDecoration: 'underline' }}
+          style={{ border: 'none', background: 'none', padding: 0, fontSize: 'var(--font-size-eyebrow)', color: 'var(--coral-bright)', cursor: 'pointer', textDecoration: 'underline' }}
         >
           {t('lateSteerOpenRun', { id: followUp.executionId as number })}
         </button>

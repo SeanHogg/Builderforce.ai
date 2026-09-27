@@ -24,10 +24,44 @@ export interface StringEditResult {
   replaced?: number;
   /** Failure reason — present only when `!ok`. */
   error?: string;
+  /** Only on the "not found" failure: where the file most likely holds what the agent
+   *  meant — the line matching `oldString`'s first non-empty line (1-based) and that
+   *  line ±3 as `n: text`, so the retry copies the real text instead of guessing again.
+   *  Absent when no line is similar; never on the "not unique" failure. */
+  nearest?: { line: number; excerpt: string };
+  /** Only on success: the 1-based line span the FIRST replacement occupies in the new
+   *  content, so the caller can point at (or re-read) exactly what changed. */
+  region?: { startLine: number; endLine: number };
 }
 
 const toLF = (s: string): string => s.replace(/\r\n/g, "\n");
 const toCRLF = (s: string): string => toLF(s).replace(/\n/g, "\r\n");
+const countNewlines = (s: string): number => s.split("\n").length - 1;
+
+/** Shortest needle the "contains" fallback of {@link findNearest} will try — shorter
+ *  text (`}`, `return;`) matches everywhere and would point at noise. */
+const MIN_CONTAINS_NEEDLE = 8;
+const EXCERPT_RADIUS = 3;
+
+/** The 1-based line span of a replacement at `offset` in `content`, `newS` being what was written there. */
+function regionAt(content: string, offset: number, newS: string): { startLine: number; endLine: number } {
+  const startLine = countNewlines(content.slice(0, offset)) + 1;
+  return { startLine, endLine: startLine + countNewlines(newS) };
+}
+
+/** Where `oldString` most likely lives when it did not match — see {@link StringEditResult.nearest}. */
+function findNearest(content: string, oldString: string): { line: number; excerpt: string } | undefined {
+  const needle = oldString.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0);
+  if (!needle) return undefined;
+  const lines = content.split(/\r?\n/);
+  let index = lines.findIndex((l) => l.trim() === needle);
+  if (index === -1 && needle.length >= MIN_CONTAINS_NEEDLE) index = lines.findIndex((l) => l.includes(needle));
+  if (index === -1) return undefined;
+  const from = Math.max(0, index - EXCERPT_RADIUS);
+  const to = Math.min(lines.length, index + EXCERPT_RADIUS + 1);
+  const excerpt = lines.slice(from, to).map((l, i) => `${from + i + 1}: ${l}`).join("\n");
+  return { line: index + 1, excerpt };
+}
 
 /**
  * Replace `oldString` with `newString` in `content`. Tries the literal text first, then
@@ -39,6 +73,10 @@ const toCRLF = (s: string): string => toLF(s).replace(/\n/g, "\r\n");
  * Uniqueness is enforced on the matched variant: without `replaceAll`, a non-unique
  * `oldString` is an error (the caller must add context) — identical to the native edit
  * tool semantics the other providers use.
+ *
+ * A success carries `region` (where the first replacement landed); a miss carries
+ * `nearest` (the most similar line and its neighbourhood) when one exists — the hint an
+ * agent needs to stop re-sending the same wrong `oldString`.
  */
 export function applyStringEdit(
   content: string,
@@ -79,10 +117,12 @@ export function applyStringEdit(
     }
     const next = replaceAll ? content.split(oldS).join(newS) : content.replace(oldS, newS);
     const replaced = replaceAll ? content.split(oldS).length - 1 : 1;
-    return { ok: true, content: next, replaced };
+    return { ok: true, content: next, replaced, region: regionAt(content, first, newS) };
   }
+  const nearest = findNearest(content, oldString);
   return {
     ok: false,
     error: "oldString not found in file — read_file and copy the exact text (including indentation)",
+    ...(nearest ? { nearest } : {}),
   };
 }

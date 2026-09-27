@@ -30,6 +30,18 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   1001 → 998 (`useClientFiles`, 2026-09-26) — a TIGHTENING, recorded because it
+ *   is why 1002 became 998 and not 1001. Four `lib/*.ts` modules dropped a directive
+ *   that marked nothing: `lib/appVersions.ts`, `lib/guestChatApi.ts`,
+ *   `lib/guestPromptCapture.ts` and `lib/visitorJourney.ts`. None is a component and
+ *   none holds a hook — they export functions and constants (a version fetch, the
+ *   guest-session transport, two fire-and-forget visitor recorders), exactly like
+ *   their directive-free siblings `apiClient`, `visitor` and `reportError`. That is
+ *   the `domainExtras.tsx` rule in the "980 → 997" entry, not the import-graph
+ *   argument the "808 → 868" entry forbids: a `'use client'` on a module that
+ *   exports no component declares nothing about a component. Each file states it
+ *   in its first line.
+ *
  *   998 → 1000 (`useClientFiles`, 2026-09-16) — two files that landed unrecorded and
  *   turned `Deploy frontend` red. Judged per file:
  *

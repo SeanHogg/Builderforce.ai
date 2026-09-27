@@ -28,6 +28,58 @@ export interface DefaultRepoRef {
   defaultBranch: string | null;
 }
 
+type ProjectRepoRow = {
+  id: string;
+  isDefault: boolean;
+  provider: string;
+  owner: string;
+  repo: string;
+  defaultBranch: string | null;
+  matchHints: string | null;
+};
+
+/** A project's repos, tenant-scoped, newest first — the one query both resolvers share. */
+async function loadProjectRepos(db: Db, tenantId: number, projectId: number): Promise<ProjectRepoRow[]> {
+  return db
+    .select({
+      id: projectRepositories.id,
+      isDefault: projectRepositories.isDefault,
+      provider: projectRepositories.provider,
+      owner: projectRepositories.owner,
+      repo: projectRepositories.repo,
+      defaultBranch: projectRepositories.defaultBranch,
+      matchHints: projectRepositories.matchHints,
+    })
+    .from(projectRepositories)
+    .where(and(eq(projectRepositories.projectId, projectId), eq(projectRepositories.tenantId, tenantId)))
+    .orderBy(desc(projectRepositories.createdAt));
+}
+
+function toRef(chosen: ProjectRepoRow): DefaultRepoRef {
+  return {
+    repoId: chosen.id,
+    provider: chosen.provider,
+    owner: chosen.owner,
+    repo: chosen.repo,
+    defaultBranch: chosen.defaultBranch,
+  };
+}
+
+/**
+ * The repo a PROJECT codes against when no task narrows it (e.g. blueprint detection
+ * on a project): its default repo, else the most recently linked one — the same
+ * legacy pick {@link resolveDefaultRepoForTask} falls back to.
+ */
+export async function resolveDefaultRepoForProject(
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<DefaultRepoRef | null> {
+  const repos = await loadProjectRepos(db, tenantId, projectId);
+  const chosen = repos.find((r) => r.isDefault) ?? repos[0];
+  return chosen ? toRef(chosen) : null;
+}
+
 export async function resolveDefaultRepoForTask(
   db: Db,
   tenantId: number,
@@ -44,19 +96,7 @@ export async function resolveDefaultRepoForTask(
     .limit(1);
   if (!task) return null;
 
-  const repos = await db
-    .select({
-      id: projectRepositories.id,
-      isDefault: projectRepositories.isDefault,
-      provider: projectRepositories.provider,
-      owner: projectRepositories.owner,
-      repo: projectRepositories.repo,
-      defaultBranch: projectRepositories.defaultBranch,
-      matchHints: projectRepositories.matchHints,
-    })
-    .from(projectRepositories)
-    .where(and(eq(projectRepositories.projectId, task.projectId), eq(projectRepositories.tenantId, tenantId)))
-    .orderBy(desc(projectRepositories.createdAt));
+  const repos = await loadProjectRepos(db, tenantId, task.projectId);
   if (repos.length === 0) return null;
 
   // explicit pin → inferred-by-hints → single default (pure, fail-closed on
@@ -71,11 +111,5 @@ export async function resolveDefaultRepoForTask(
   const chosen = (decided && repos.find((r) => r.id === decided.repoId))
     ?? repos.find((r) => r.isDefault)
     ?? repos[0]!;
-  return {
-    repoId: chosen.id,
-    provider: chosen.provider,
-    owner: chosen.owner,
-    repo: chosen.repo,
-    defaultBranch: chosen.defaultBranch,
-  };
+  return toRef(chosen);
 }

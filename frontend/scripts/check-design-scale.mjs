@@ -265,8 +265,20 @@ const BASELINE = {
    * its size from `<Icon size>`. The two byte-identical `/webcontainer/connect`
    * pages (three `fontSize: 14` each) became ONE `WebContainerConnect` leaf on
    * `--font-size-body`. Net of the one the integrations forms had added.
+   *
+   * 3459 → 3434 (2026-09-26): the tree had drifted to 3463 (+4) and turned the
+   * frontend deploy red. Seven files now name their roles instead: the integrations
+   * credential form (`CredentialKeyForm`, 4) and its shared `integrationStyles` (3),
+   * `LivePreviewPanel.module.css` (4), `LateSteerNote` (2), all fourteen in
+   * `AgentHostProjectsContent`, and the one `'0.95rem'` lede each in
+   * `ContentManagerRedirect` and `CanvasLibraryClient`. The same mapping every entry
+   * above records: 10 = field-label, 11 = eyebrow, 12 and 13 = small, 14 and 0.95rem =
+   * body. The `PersonasClient` / `SkillsClient` +21 / +12 against the pages' −21 / −12
+   * in the delta are the page-split MOVES of the "3,473 -> 3,470" entry again, not
+   * work. Net −29 below the drifted tally, −25 below the old floor, and the floor
+   * follows it down.
    */
-  offScaleFontSizes: 3459,
+  offScaleFontSizes: 3434,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

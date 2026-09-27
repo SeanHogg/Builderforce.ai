@@ -1,6 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
-import { detectAndStoreBlueprint } from '../../application/blueprint/blueprintDetection';
-import { resolveRepoLink } from '../../application/contributors/activityIngest';
+import { detectBlueprintForProject } from '../../application/blueprint/detectBlueprintForProject';
+import { resolveRepoLinks } from '../../application/contributors/activityIngest';
 /**
  * GitHub webhook handler — /api/webhooks/github
  *
@@ -332,28 +332,29 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
         return c.json({ received: true, processed: false, reason: `no project linked to repo '${full}'` });
       }
 
-      // W5: Detect blueprint on push events
-      // Run asynchronously to not block the webhook response
+      // W5: re-detect the blueprint at the pushed commit. Best-effort and off the
+      // response path: a repo with no linked credential is an expected miss, recorded
+      // as a warning; only an unexpected throw is an error.
       if (event === 'push') {
-        const commitSha = gs(p, 'after'); // The new head commit SHA
-        if (commitSha) {
+        const commitSha = gs(p, 'after'); // The new head commit SHA (all zeros on a branch delete)
+        if (commitSha && !/^0+$/.test(commitSha)) {
           c.executionCtx.waitUntil(
             (async () => {
               try {
-                // Get project ID from repo
-                const link = await resolveRepoLink(db, full);
-                if (link?.projectId) {
-                  // Try to detect blueprint (may fail if no token or rate limited - that's OK)
-                  await detectAndStoreBlueprint({
-                    projectId: link.projectId,
-                    commitSha,
-                    env: c.env as Env,
-                    // Note: For full functionality, we'd need to get the GitHub token from the integration
-                    // For now, we'll try without token for public repos
-                  });
+                // Every tenant that links this repo gets its own blueprint, one at a time.
+                for (const link of await resolveRepoLinks(db, full)) {
+                  if (!link.projectId) continue;
+                  const result = await detectBlueprintForProject(db, c.env as Env, { tenantId: link.tenantId, projectId: link.projectId, commitSha });
+                  if (!result.ok) {
+                    reportCaughtError(new Error(result.reason), {
+                      source: 'presentation/routes/githubWebhookRoutes.ts',
+                      operation: 'detectBlueprintOnPush',
+                      level: 'warning',
+                      context: { tenantId: link.tenantId, projectId: link.projectId, commitSha },
+                    });
+                  }
                 }
               } catch (error) {
-                // Log but don't fail - blueprint detection is best-effort
                 reportCaughtError(error, {
                   source: 'presentation/routes/githubWebhookRoutes.ts',
                   operation: 'detectBlueprintOnPush',

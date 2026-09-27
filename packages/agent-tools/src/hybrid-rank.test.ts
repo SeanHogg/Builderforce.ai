@@ -60,8 +60,8 @@ describe("fuseHybridArms", () => {
     });
     expect(out.map((r) => r.id)).toEqual(['b', 'a', 'c']);
     // b: .7*.8 + .3*.9 = .83 · a: .7*.9 = .63 · c: .3*1 = .3
-    expect(out[0].score).toBeCloseTo(0.83);
-    expect(out[2].score).toBeCloseTo(0.3);
+    expect(out[0]?.score).toBeCloseTo(0.83);
+    expect(out[2]?.score).toBeCloseTo(0.3);
   });
 
   it("keeps a candidate found by only one arm", () => {
@@ -73,6 +73,6 @@ describe("fuseHybridArms", () => {
       merge: (row, score) => ({ id: row.id, score }),
     });
     expect(out).toHaveLength(1);
-    expect(out[0].score).toBeCloseTo(0.15);
+    expect(out[0]?.score).toBeCloseTo(0.15);
   });
 });

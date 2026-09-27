@@ -5,7 +5,8 @@
  * Detectors are discovered and composed here.
  */
 
-import type { BlueprintDetector, AppBlueprint, BlueprintSourceFlags } from '@builderforce/creation-canvas-contract';
+import type { BlueprintDetector, AppBlueprint, AppService, BlueprintSourceFlags } from '@builderforce/creation-canvas-contract';
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { SERVICE_KINDS } from '@builderforce/creation-canvas-contract';
 
 // Import all detectors
@@ -20,6 +21,7 @@ import { prismaSchemaDetector } from './prismaSchemaDetector';
 import { dockerfileDetector } from './dockerfileDetector';
 import { envExampleDetector } from './envExampleDetector';
 import { githubWorkflowsDetector } from './githubWorkflowsDetector';
+import { builderforceJsonDetector } from './builderforceJsonDetector';
 
 /** All available detectors */
 export const DETECTORS: BlueprintDetector[] = [
@@ -34,6 +36,7 @@ export const DETECTORS: BlueprintDetector[] = [
   dockerfileDetector,
   envExampleDetector,
   githubWorkflowsDetector,
+  builderforceJsonDetector,
 ];
 
 /** Detector by ID */
@@ -105,8 +108,8 @@ export function runDetectors(files: Map<string, string>): Partial<AppBlueprint> 
         result.workspaces = detectorResult.workspaces;
       }
     } catch (error) {
-      console.error(`Detector ${detector.id} failed:`, error);
-      // Continue with other detectors
+      // One broken detector must not sink detection — report it and run the rest.
+      reportCaughtError(error, { source: 'application/blueprint/detectors/index.ts', operation: 'runDetectors', context: { detector: detector.id } });
     }
   }
 
@@ -130,7 +133,7 @@ function createEmptySources(): BlueprintSourceFlags {
   };
 }
 
-function mergeServices(existing: any[], incoming: any[]): any[] {
+function mergeServices(existing: AppService[], incoming: AppService[]): AppService[] {
   if (!existing || existing.length === 0) {
     return incoming;
   }

@@ -33,11 +33,11 @@ import { publicApiGet } from './publicApi';
  * question. `messages.test.ts` asserts every member has a label in all five catalogs.
  */
 export type IntegrationCategory =
-  | 'work' | 'devtools' | 'incident' | 'communication' | 'crm'
+  | 'work' | 'devtools' | 'cloud' | 'incident' | 'communication' | 'crm'
   | 'productivity' | 'finance' | 'marketing' | 'support' | 'storage' | 'data' | 'hiring' | 'other';
 
 export const INTEGRATION_CATEGORIES: readonly IntegrationCategory[] = [
-  'work', 'devtools', 'incident', 'communication', 'crm',
+  'work', 'devtools', 'cloud', 'incident', 'communication', 'crm',
   'productivity', 'finance', 'marketing', 'support', 'storage', 'data', 'hiring', 'other',
 ];
 

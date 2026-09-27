@@ -33,7 +33,7 @@
 .tabActive,
 .action {
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: 600;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -56,7 +56,7 @@
 }
 
 .status {
-  font-size: 12px;
+  font-size: var(--font-size-small);
   color: var(--text-muted);
 }
 
@@ -72,13 +72,13 @@
   padding: 16px;
   text-align: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
 }
 
 .hint {
   padding-top: 0;
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 .expo {

@@ -21,14 +21,14 @@ describe("semantic_search", () => {
       return {
         ok: true,
         results: [
-          { path: "api/src/billing.ts", startLine: 10, endLine: 32, symbol: "applyStripeWebhook", kind: "function_declaration", snippet: "export function applyStripeWebhook", score: 0.03, source: "both" },
+          { path: "api/src/billing.ts", startLine: 10, endLine: 32, symbol: "applyStripeWebhook", kind: "function_declaration", snippet: "export function applyStripeWebhook", score: 0.03, source: "hybrid" },
         ],
       };
     });
     const r = await semanticSearchTool.execute({ query: "stripe webhook", path: "api/src", limit: 900 }, { caps });
     expect(seen).toEqual({ scope: "api/src", limit: 25 });
     expect(r.data.results).toEqual([
-      { at: "api/src/billing.ts:10-32", symbol: "applyStripeWebhook", kind: "function_declaration", via: "both", snippet: "export function applyStripeWebhook" },
+      { at: "api/src/billing.ts:10-32", symbol: "applyStripeWebhook", kind: "function_declaration", via: "hybrid", snippet: "export function applyStripeWebhook" },
     ]);
   });
 

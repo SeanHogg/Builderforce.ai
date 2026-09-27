@@ -1,4 +1,4 @@
-'use client';
+// No `'use client'`: this module exports functions, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 /**
  * Build/deploy versions — the ONE source for "which code am I actually running?".

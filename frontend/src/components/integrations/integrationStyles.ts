@@ -24,7 +24,7 @@ export const formPanel: CSSProperties = {
 
 export const inputStyle: CSSProperties = {
   padding: '8px 12px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)',
@@ -34,13 +34,13 @@ export const inputStyle: CSSProperties = {
 };
 
 export const btnPrimary: CSSProperties = {
-  padding: '8px 14px', fontSize: 13, fontWeight: 600,
+  padding: '8px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600,
   background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
   border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 
 export const btnSubtle: CSSProperties = {
-  padding: '6px 10px', fontSize: 12, fontWeight: 600,
+  padding: '6px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600,
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
   border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };

@@ -48,7 +48,7 @@ export default function CanvasLibraryPage() {
     <main style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 'clamp(16px, 3vw, 28px)', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
       {!isAuthenticated && (
         <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '62ch' }}>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)', maxWidth: '62ch' }}>
             {t('signedOutSubtitle')}
           </p>
         </header>

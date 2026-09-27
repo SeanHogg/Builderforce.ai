@@ -20,8 +20,8 @@ const NODE_ONLY_MODULES = new Set(["node-path.ts", "node-symbols.ts"]);
 
 function sourceFiles(): string[] {
   return readdirSync(SRC)
-    .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
-    .filter((f) => !NODE_ONLY_MODULES.has(f));
+    .filter((f: string) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
+    .filter((f: string) => !NODE_ONLY_MODULES.has(f));
 }
 
 describe("worker safety", () => {

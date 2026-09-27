@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
+import { resolveDefaultRepoForProject, resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { tasks, projectRepositories } from '../../infrastructure/database/schema';
 
 type TableRef = typeof tasks | typeof projectRepositories;
@@ -69,5 +69,21 @@ describe('resolveDefaultRepoForTask — run-time repo selection wiring', () => {
       [projectRepositories, []],
     ]));
     expect(await resolveDefaultRepoForTask(db, 7, 23)).toBeNull();
+  });
+});
+
+describe('resolveDefaultRepoForProject — a project with no task to narrow it', () => {
+  it('picks the default repo over a newer one', async () => {
+    const db = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projectRepositories, [REPO('api'), REPO('site', { isDefault: true })]],
+    ]));
+    expect((await resolveDefaultRepoForProject(db, 7, 1))?.repoId).toBe('site');
+  });
+
+  it('falls back to the most recently linked repo, and null when there is none', async () => {
+    const one = makeFakeDb(new Map<TableRef, unknown[]>([[projectRepositories, [REPO('api'), REPO('site')]]]));
+    expect((await resolveDefaultRepoForProject(one, 7, 1))?.repoId).toBe('api');
+    const none = makeFakeDb(new Map<TableRef, unknown[]>([[projectRepositories, []]]));
+    expect(await resolveDefaultRepoForProject(none, 7, 1)).toBeNull();
   });
 });
