@@ -227,6 +227,7 @@ import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
 import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
 import { localCheckpointSummaries, readLocalCheckpoint, saveLocalCheckpoint, type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
+import { salvageUnrecognizedContent } from './unrecognizedContentSalvage';
 import { CREATION_OBJECT_REGISTRY, canvasEvidencePatch, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from '@/lib/templates/creationTemplates';
 import { expandTemplateWorkflows } from './expandTemplateWorkflows';
@@ -8761,13 +8762,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // The general form of the three rules above: an artifact whose only authored
       // field is its title is not a deliverable. Registry-driven, so every kind is
       // covered rather than the three that happened to get a bespoke branch.
+      // Before refusing, keep work the model DID write under names this kind does not
+      // declare as the card's content. Only a card that is truly title-only is refused.
+      let foldedFields: readonly string[] = [];
+      if (emptyShellProblem(args.kind, authored as Record<string, unknown>)) {
+        const salvage = salvageUnrecognizedContent(args.kind, args.fields, authored as Record<string, unknown>);
+        authored = salvage.authored as typeof authored;
+        foldedFields = salvage.folded;
+      }
       const shellProblem = emptyShellProblem(args.kind, authored as Record<string, unknown>);
       if (shellProblem) return { error: shellProblem };
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
       stage.addObject(`Add ${node.data.kind} “${node.data.title}”`, node);
-      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields, ...(roomToolNote(args.kind) ? { instruction: roomToolNote(args.kind) } : {}) };
+      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields, ...(foldedFields.length ? { note: `${args.kind} does not declare ${foldedFields.join(', ')}; that content was kept in content. Use the mutableFields names when updating this object.` } : {}), ...(roomToolNote(args.kind) ? { instruction: roomToolNote(args.kind) } : {}) };
     },
   }, {
     name: 'canvas_update_object',

@@ -711,6 +711,11 @@ const MUTABLE_FIELDS: Record<CreationObjectKind, readonly string[]> = {
 const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status', 'deliverables', 'altText'] as const;
 const SENSITIVE_MUTATION_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 
+/** Whether a patch key names a secret the canvas must never hold. */
+export function isSensitiveMutationKey(key: string): boolean {
+  return SENSITIVE_MUTATION_KEY.test(key);
+}
+
 /**
  * How deep an LLM-authored patch may nest before the rest is dropped.
  *
@@ -867,7 +872,7 @@ const ESSENTIAL_CONTENT_FIELDS: Partial<Record<CreationObjectKind, readonly stri
 
 /** Written, as opposed to present-but-blank. Shared by both checks below so "authored"
  *  means one thing. */
-function isAuthored(value: unknown): boolean {
+export function isAuthored(value: unknown): boolean {
   if (value == null) return false;
   if (typeof value === 'string') return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
