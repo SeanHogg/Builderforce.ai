@@ -33,7 +33,9 @@ export const expoConfigDetector: BlueprintDetector = {
           config = JSON.parse(appJson);
         }
       } catch {
-        // Ignore parse errors
+        // An unparsable app.json is still the platform's config file: the app is
+        // detected, with defaults in place of the details it would have given.
+        config = {};
       }
 
       // Detect the scheme for deep linking

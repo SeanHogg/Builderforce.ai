@@ -33,7 +33,9 @@ export const capacitorConfigDetector: BlueprintDetector = {
           config = JSON.parse(capacitorConfigJson);
         }
       } catch {
-        // Ignore parse errors
+        // An unparsable capacitor.config.json is still the platform's config file: the app is
+        // detected, with defaults in place of the details it would have given.
+        config = {};
       }
 
       // Build the service
