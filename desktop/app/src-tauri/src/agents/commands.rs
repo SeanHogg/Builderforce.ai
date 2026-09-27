@@ -9,23 +9,15 @@ use bf_teach::model::{new_id, now_ms, Episode, Skill};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::State;
 
-type Res<T> = Result<T, String>;
+pub(super) type Res<T> = Result<T, String>;
 
-/// Adapting a model on the CPU takes a while; it runs on its own server child.
-const TRAIN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-
-fn e(err: impl std::fmt::Display) -> String {
+pub(super) fn e(err: impl std::fmt::Display) -> String {
     format!("{err:#}")
 }
 
-/// Run `f` on the blocking pool with the agents.
-async fn blocking<T: Send + 'static>(agents: State<'_, Arc<Agents>>, f: impl FnOnce(&Agents) -> Res<T> + Send + 'static) -> Res<T> {
-    let agents = agents.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || f(&agents)).await.map_err(e)?
-}
+pub(super) use crate::pool::blocking;
 
 #[tauri::command]
 pub async fn agents_state(agents: State<'_, Arc<Agents>>) -> Res<Value> {
@@ -144,7 +136,7 @@ pub async fn teach_cancel(agents: State<'_, Arc<Agents>>) -> Res<()> {
 }
 
 /// Stop recording and throw the demonstration away, screenshots included.
-fn cancel_recording(a: &Agents) {
+pub(super) fn cancel_recording(a: &Agents) {
     if let Some(active) = a.recording.lock().unwrap().take() {
         active.recording.stop();
         remove_shots(a, &active.episode.id);
@@ -298,56 +290,6 @@ pub async fn run_get(agents: State<'_, Arc<Agents>>, id: String) -> Res<Value> {
         // The skill as it is now, so the audit trail can name each step (null if deleted).
         let skill = run.get("skillId").and_then(Value::as_str).and_then(|sid| a.mem.call("skill_get", json!({ "id": sid })).ok());
         Ok(json!({ "run": run, "skill": skill }))
-    })
-    .await
-}
-
-// ---- Evermind: facts and learning ----
-
-/// Everything Evermind knows as facts. memory-mcp deliberately has no "list all" tool (it
-/// would flood a model's context), so the window reads the shared snapshot directly —
-/// read-only; forgetting goes through the store.
-#[tauri::command]
-pub async fn facts_list(agents: State<'_, Arc<Agents>>) -> Res<Value> {
-    blocking(agents, |a| {
-        let file = &a.store_info().map_err(e)?.memory_file;
-        let facts: Value = match std::fs::read_to_string(file) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| json!([])),
-            Err(_) => json!([]),
-        };
-        Ok(json!({ "facts": facts, "file": file }))
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn fact_forget(agents: State<'_, Arc<Agents>>, key: String) -> Res<()> {
-    blocking(agents, move |a| a.mem.call("memory_forget", json!({ "key": key })).map(|_| ()).map_err(e)).await
-}
-
-/// Forget everything the agents learned — demonstrations, screenshots, skills, runs and
-/// their vault secrets. Facts and the model stay: other tools share them.
-#[tauri::command]
-pub async fn forget_everything(agents: State<'_, Arc<Agents>>) -> Res<()> {
-    blocking(agents, |a| {
-        a.runs.stop();
-        cancel_recording(a);
-        let skills: Vec<Skill> = a.mem.call_as("skill_list", json!({})).map_err(e)?;
-        for s in &skills {
-            delete_secrets(s);
-        }
-        a.mem.call("experience_forget_all", json!({ "confirm": true })).map(|_| ()).map_err(e)
-    })
-    .await
-}
-
-/// Teach the private model what the agents have learned since it last trained
-/// (`dry_run`: only count it).
-#[tauri::command]
-pub async fn evermind_train(agents: State<'_, Arc<Agents>>, dry_run: bool) -> Res<Value> {
-    blocking(agents, move |a| {
-        // Its own server child: training must not hold up a run's audit trail.
-        a.mem.sibling().call_with_timeout("experience_train", json!({ "dryRun": dry_run }), TRAIN_TIMEOUT).map_err(e)
     })
     .await
 }

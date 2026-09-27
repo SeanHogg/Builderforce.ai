@@ -1,9 +1,12 @@
-// Evermind: what this machine's Evermind knows and has learned. The facts every AI tool
-// here shares (read from the store; forgetting goes through it), the private model the
-// agents' experience trains, and the switch to forget everything the agents learned.
+// Evermind: what this machine's Evermind knows and has learned. The brain first (the
+// knowledge map and the learning charts), then the private model the agents' experience
+// trains, the facts every AI tool here shares (read from the store; forgetting goes
+// through it), and the switch to forget everything the agents learned.
 import { dialog, h, invoke, showError } from "../bridge.js";
 import { num, t } from "../i18n.js";
 import { refreshAgents, subscribeAgents } from "../agentStore.js";
+import { brainPanel } from "../brain/brainPanel.js";
+import { refreshBrain, setTraining } from "../brain/brainStore.js";
 
 function learning(state) {
   const result = h("p", { class: "muted small", attrs: { "aria-live": "polite" } });
@@ -20,6 +23,7 @@ function learning(state) {
   const train = async (btn) => {
     btn.disabled = true;
     result.textContent = t("evermind.training");
+    setTraining(true);
     try {
       const r = await invoke("evermind_train", { dryRun: false });
       result.textContent =
@@ -33,6 +37,7 @@ function learning(state) {
       showError(e);
     } finally {
       btn.disabled = false;
+      setTraining(false);
     }
   };
   const pending = h("span", { class: "muted small" });
@@ -93,6 +98,7 @@ function facts() {
     if (!ok) return;
     await invoke("fact_forget", { key }).catch(showError);
     load();
+    refreshBrain();
   };
   filter.addEventListener("input", paint);
   load();
@@ -105,6 +111,7 @@ function forgetAll() {
     if (!ok) return;
     await invoke("forget_everything").catch(showError);
     await refreshAgents();
+    refreshBrain();
   };
   return h(
     "section",
@@ -117,12 +124,17 @@ function forgetAll() {
 
 export function render(host) {
   const top = h("div");
-  host.append(h("header", { class: "page-head" }, h("div", {}, h("h1", { text: t("evermind.title") }), h("p", { class: "muted", text: t("evermind.intro") }))), top, facts(), forgetAll());
+  const brain = brainPanel();
+  host.append(h("header", { class: "page-head" }, h("div", {}, h("h1", { text: t("evermind.title") }), h("p", { class: "muted", text: t("evermind.intro") }))), brain.el, top, facts(), forgetAll());
   let model;
-  return subscribeAgents((s) => {
+  const stopAgents = subscribeAgents((s) => {
     // The learning card depends only on the chosen model; the poll must not reset it.
     if (s.modelFile === model && top.firstChild) return;
     model = s.modelFile;
     top.replaceChildren(learning(s));
   });
+  return () => {
+    stopAgents();
+    brain.stop();
+  };
 }

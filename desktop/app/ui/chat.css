@@ -1,0 +1,70 @@
+/* Signing in, the sidebar account line, and the Chat page. Theme tokens only (styles.css),
+   so both themes read; the two-column chat stacks on narrow windows. */
+
+/* ---------- account ---------- */
+.account-chip {
+  display: flex; align-items: center; gap: 8px; min-height: 34px;
+  padding: 6px 10px; margin: -8px 0 0; border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong); color: var(--muted); text-decoration: none; font-size: 13px;
+}
+.account-chip.signed-in { border-style: solid; border-color: var(--border); color: var(--text); background: var(--raised); }
+.account-chip:hover { border-color: var(--accent); color: var(--text); }
+.account-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sign-in { max-width: 560px; }
+.sign-in-code {
+  font-size: 28px; font-weight: 700; letter-spacing: 0.12em; text-align: center;
+  padding: 14px; border-radius: var(--radius-sm); background: var(--sunken); border: 1px solid var(--border);
+}
+.notice { padding: 8px 12px; border-radius: var(--radius-sm); background: var(--busy-soft); color: var(--text); }
+.workspace-picker select { min-height: 34px; max-width: 240px; }
+
+/* ---------- chat ---------- */
+.chat-layout { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 14px; align-items: start; }
+.chat-side { display: flex; flex-direction: column; gap: 10px; padding: 14px; max-height: calc(100vh - 170px); min-height: 0; }
+.chat-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.chat-item {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; min-height: 44px;
+  border-radius: var(--radius-sm); color: var(--text); text-decoration: none;
+}
+.chat-item:hover { background: var(--hover); }
+.chat-item.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.chat-item-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-empty { padding: 16px 8px; text-align: center; list-style: none; }
+
+.chat-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; height: calc(100vh - 170px); min-height: 380px; }
+.chat-head { flex: none; }
+.agents-bar { flex: none; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.agents-bar select { min-height: 32px; max-width: 220px; }
+.agent-chip { display: inline-flex; align-items: center; gap: 4px; }
+.chip-x {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1;
+  padding: 0 2px; min-width: 22px; min-height: 22px;
+}
+.chip-x:hover { color: var(--bad); }
+
+.transcript { list-style: none; margin: 0; padding: 0 2px; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.msg { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); max-width: 88%; }
+.msg-user { align-self: flex-end; background: var(--accent-soft); border-color: transparent; }
+.msg-agent { border-left: 3px solid var(--cyan); }
+.msg-pending .msg-body { font-style: italic; }
+.msg-error { align-self: center; background: var(--bad-soft); border-color: transparent; max-width: 100%; }
+.msg-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+.msg-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+
+.composer { flex: none; display: flex; flex-direction: column; gap: 6px; }
+.composer-to select { min-height: 32px; max-width: 240px; }
+.composer-main { align-items: stretch; }
+.composer textarea {
+  flex: 1; min-width: 0; resize: vertical; min-height: 44px; max-height: 200px;
+  padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text); font: inherit;
+}
+.composer textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+@media (max-width: 760px) {
+  .chat-layout { grid-template-columns: 1fr; }
+  .chat-side { max-height: 220px; }
+  .chat-main { height: auto; min-height: 60vh; }
+  .msg { max-width: 100%; }
+  .account-chip { margin: 0; }
+}

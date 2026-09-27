@@ -36,14 +36,3 @@ pub fn run_skill(_skill: &Skill, _values: &BTreeMap<String, String>, _hooks: &mu
     unsupported()
 }
 
-pub mod vault {
-    use anyhow::Result;
-
-    pub fn save(_skill_id: &str, _param: &str, _value: &str) -> Result<()> {
-        super::unsupported()
-    }
-    pub fn load(_skill_id: &str, _param: &str) -> Option<String> {
-        None
-    }
-    pub fn delete(_skill_id: &str, _param: &str) {}
-}

@@ -24,4 +24,3 @@ enigo = "0.6"
 xcap = "0.9"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
-keyring = { version = "3", features = ["windows-native"] }

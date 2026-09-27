@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Synapse</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="brain.css" />
+    <link rel="stylesheet" href="chat.css" />
   </head>
   <body>
     <div class="app">
@@ -16,8 +18,13 @@
             <span data-i18n="brand.sub"></span>
           </div>
         </div>
+        <div id="account"></div>
 
         <nav class="nav" aria-label="Synapse">
+          <a href="#/chat" data-nav="chat">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" /></svg>
+            <span data-i18n="nav.chat"></span>
+          </a>
           <a href="#/workspaces" data-nav="workspaces">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
             <span data-i18n="nav.workspaces"></span>

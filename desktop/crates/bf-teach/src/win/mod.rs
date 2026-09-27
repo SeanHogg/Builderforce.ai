@@ -7,7 +7,6 @@ pub mod recording;
 pub mod replay;
 pub(crate) mod shot;
 pub(crate) mod uia;
-pub mod vault;
 
 /// UI Automation, xcap and enigo errors all implement Debug; not all of them implement
 /// `std::error::Error + Send + Sync`, which `?` into anyhow needs.

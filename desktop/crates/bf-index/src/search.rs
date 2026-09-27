@@ -7,12 +7,15 @@ use std::collections::HashMap;
 const RRF_K: f32 = 60.0;
 const EXACT_SYMBOL_BOOST: f32 = 0.05;
 
+/// How a hit was found. Serialized in the shared contract's words
+/// (`SemanticSearchHit.source` in `@builderforce/agent-tools`): `keyword`, `embedding`,
+/// `hybrid` — the VS Code tool passes it through as `via` unchanged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
     Keyword,
-    Vector,
-    Both,
+    Embedding,
+    Hybrid,
 }
 
 #[derive(Debug, Clone)]
@@ -50,9 +53,9 @@ pub fn fuse(
                 }
             }
             let source = match (kw, vec) {
-                (true, true) => Source::Both,
+                (true, true) => Source::Hybrid,
                 (true, false) => Source::Keyword,
-                _ => Source::Vector,
+                _ => Source::Embedding,
             };
             Fused { id, score, source }
         })
@@ -71,10 +74,18 @@ mod tests {
         let vec = vec![3, 4];
         let fused = fuse(&kw, &vec, &[], |_| None);
         assert_eq!(fused[0].id, 3, "in both lists");
-        assert_eq!(fused[0].source, Source::Both);
+        assert_eq!(fused[0].source, Source::Hybrid);
 
         let words = vec!["planlimits".to_string()];
         let fused = fuse(&kw, &vec, &words, |id| (id == 2).then(|| "PlanLimits".to_string()));
         assert_eq!(fused[0].id, 2);
+    }
+
+    #[test]
+    fn source_serializes_in_the_shared_contract_vocabulary() {
+        let json = |s: Source| serde_json::to_string(&s).unwrap();
+        assert_eq!(json(Source::Keyword), "\"keyword\"");
+        assert_eq!(json(Source::Embedding), "\"embedding\"");
+        assert_eq!(json(Source::Hybrid), "\"hybrid\"");
     }
 }

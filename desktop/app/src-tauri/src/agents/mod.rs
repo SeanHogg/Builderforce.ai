@@ -8,6 +8,7 @@
 //! between them and the window — the one recording, the one run — and the scheduler.
 
 pub mod commands;
+pub mod evermind;
 mod runs;
 mod scheduler;
 mod secrets;

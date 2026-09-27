@@ -14,10 +14,13 @@ import * as review from "./views/review.js";
 import * as skills from "./views/skills.js";
 import * as runs from "./views/runs.js";
 import * as evermind from "./views/evermind.js";
+import * as chat from "./views/chat.js";
 import { mountApproval } from "./approval.js";
 import { refreshAgents } from "./agentStore.js";
+import { mountSidebarBrain } from "./brain/sidebarBrain.js";
+import { mountAccountChip } from "./cloud/accountPanel.js";
 
-const VIEWS = { workspaces, workspace, search, activity, connect, teach, review, skills, runs, evermind };
+const VIEWS = { chat, workspaces, workspace, search, activity, connect, teach, review, skills, runs, evermind };
 // The nav entry a view belongs under (a workspace's page sits under Workspaces).
 const NAV_OF = { workspace: "workspaces", review: "teach" };
 const $ = (id) => document.getElementById(id);
@@ -76,3 +79,7 @@ checkUpdate();
 // The approval prompt sits over every view; the agents' live state drives it.
 mountApproval();
 refreshAgents();
+// Learning, always in view: the brain sits at the foot of the sidebar.
+mountSidebarBrain(document.querySelector(".sidebar-foot"));
+// Signed in to builderforce.ai (or a way to sign in), under the brand.
+mountAccountChip(document.getElementById("account"));

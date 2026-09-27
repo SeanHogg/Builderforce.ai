@@ -23,6 +23,8 @@ pub struct ActiveRun {
     pub run_id: String,
     pub skill_id: String,
     pub skill_name: String,
+    /// `manual` or `routine` — what started it.
+    pub trigger: String,
     pub current: Option<usize>,
     /// The step waiting for the person's approval, and what it will do.
     pub pending_approval: Option<usize>,
@@ -80,6 +82,7 @@ impl Runs {
             run_id: run.id.clone(),
             skill_id: skill.id.clone(),
             skill_name: skill.name.clone(),
+            trigger: trigger.to_string(),
             current: None,
             pending_approval: None,
             pending_action: None,

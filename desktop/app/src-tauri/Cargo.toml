@@ -13,6 +13,8 @@ tauri-build = { version = "2", features = [] }
 bf-context = { path = "../../crates/bf-context" }
 bf-memory = { path = "../../crates/bf-memory" }
 bf-teach = { path = "../../crates/bf-teach" }
+bf-vault = { path = "../../crates/bf-vault" }
+bf-cloud = { path = "../../crates/bf-cloud" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

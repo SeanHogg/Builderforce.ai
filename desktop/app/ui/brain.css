@@ -1,0 +1,134 @@
+/* The brain: region hues, the sidebar brain, the knowledge map, the learning charts.
+   Region hues are the web Evermind's identities (frontend globals.css --ev-*), restated
+   here because this window is its own document; semantic memory is Synapse's addition. */
+:root {
+  --ev-neocortex: #3987e5;
+  --ev-hippocampus: #199e70;
+  --ev-amygdala: #e66767;
+  --ev-hypothalamus: #d95926;
+  --ev-thalamus: #c98500;
+  --ev-basal: #d55181;
+  --ev-semantic: #8b7cf6;
+  --br-hemi-left: rgba(57, 135, 229, 0.07);
+  --br-hemi-right: rgba(25, 158, 112, 0.07);
+  --br-line: rgba(136, 146, 176, 0.28);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --ev-neocortex: #2a78d6;
+    --ev-hippocampus: #1baf7a;
+    --ev-amygdala: #e34948;
+    --ev-hypothalamus: #eb6834;
+    --ev-thalamus: #b98200;
+    --ev-basal: #d9628f;
+    --ev-semantic: #5b4bd1;
+    --br-hemi-left: rgba(42, 120, 214, 0.06);
+    --br-hemi-right: rgba(27, 175, 122, 0.06);
+    --br-line: rgba(15, 23, 42, 0.16);
+  }
+}
+
+/* ---------- the brain itself ---------- */
+.brain { display: block; width: 100%; height: auto; overflow: visible; }
+.brain .br-hemi { stroke: var(--br-line); stroke-width: 1.2; }
+.brain .br-left { fill: var(--br-hemi-left); }
+.brain .br-right { fill: var(--br-hemi-right); }
+.brain .br-gyrus { fill: none; stroke: var(--br-line); stroke-width: 0.8; stroke-linecap: round; opacity: 0.55; }
+.brain .br-fissure { stroke: var(--br-line); stroke-width: 1; stroke-dasharray: 3 3; }
+.brain .br-core { fill: var(--accent); }
+.brain .br-core-halo { fill: var(--accent); opacity: 0.14; }
+.brain .br-core-label { fill: var(--accent-text); font-size: 5.2px; font-weight: 700; font-family: var(--font-sans); pointer-events: none; }
+.brain .br-label { fill: var(--text); font-size: 7.4px; font-weight: 650; font-family: var(--font-sans); pointer-events: none; }
+.brain .br-count { fill: var(--text); font-size: 7px; font-weight: 700; font-variant-numeric: tabular-nums; font-family: var(--font-sans); pointer-events: none; }
+.brain-full .br-region { cursor: pointer; transition: opacity 0.15s; }
+.brain-full .br-region:focus-visible { outline: none; }
+.brain-full .br-region:focus-visible > circle:not(.br-halo) { stroke-width: 2.6; }
+.brain .br-dim { opacity: 0.35; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .brain .br-live.br-edge { stroke-dasharray: 4 6; animation: br-flow 1.1s linear infinite; }
+  @keyframes br-flow { to { stroke-dashoffset: -20; } }
+  .brain .br-active .br-halo { animation: br-halo 2.2s ease-in-out infinite; }
+  @keyframes br-halo { 0%, 100% { fill-opacity: 0.1; } 50% { fill-opacity: 0.34; } }
+  .brain .br-core-halo { animation: br-breathe 3.6s ease-in-out infinite; }
+  .brain .br-core-halo.br-live { animation-duration: 1.4s; }
+  @keyframes br-breathe { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.28; } }
+  .brain .br-fresh { animation: br-pop 1.8s ease-out infinite; transform-origin: center; transform-box: fill-box; }
+  @keyframes br-pop { 0% { transform: scale(0.5); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+}
+
+/* ---------- the sidebar brain ---------- */
+.side-brain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--text);
+  text-decoration: none;
+}
+.side-brain:hover { border-color: var(--border-strong); box-shadow: var(--glow); }
+.side-brain .brain { max-height: 150px; }
+.side-brain-caps { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.side-brain-cap { display: flex; flex-direction: column; align-items: center; font-size: 11px; line-height: 1.3; }
+.side-brain-num { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.side-brain-status { font-size: 11px; color: var(--ok); text-align: center; }
+
+/* ---------- the Evermind page ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; min-width: 0; }
+.tile-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.tile-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.3; margin-top: 2px; }
+.brain-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.brain-stage { border-radius: var(--radius-sm); background: var(--sunken); padding: 8px; }
+.brain-stage .brain { max-height: 360px; margin: 0 auto; }
+
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; }
+.legend-tier { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.legend-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 2px; }
+.legend-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px;
+  padding: 4px 8px; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.legend-item:hover { background: var(--hover); }
+.legend-item.on { border-color: var(--border-strong); background: var(--hover); }
+.legend-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend-cap { color: var(--muted); font-variant-numeric: tabular-nums; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+
+.recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 440px; overflow-y: auto; }
+.recent-item { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.recent-item:last-child { border-bottom: 0; }
+.empty-recent { padding: 28px 8px; text-align: center; }
+.grow { flex: 1; }
+.break { overflow-wrap: anywhere; }
+.nowrap { white-space: nowrap; }
+
+/* ---------- charts ---------- */
+.chart-host { min-height: 90px; }
+.chart { display: block; width: 100%; height: 110px; overflow: visible; }
+.chart-line { fill: none; stroke: var(--ev-neocortex); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.chart-area { fill: var(--ev-neocortex); opacity: 0.1; stroke: none; }
+.chart-dot { fill: var(--ev-neocortex); }
+.chart-axis { stroke: var(--border-strong); stroke-width: 1; }
+.chart-bar.s-demo, .swatch.s-demo { fill: var(--ev-hippocampus); background: var(--ev-hippocampus); }
+.chart-bar.s-skill, .swatch.s-skill { fill: var(--ev-basal); background: var(--ev-basal); }
+.chart-bar.s-run, .swatch.s-run { fill: var(--ev-thalamus); background: var(--ev-thalamus); }
+.chart-bar.s-learned, .swatch.s-learned { fill: var(--ev-neocortex); background: var(--ev-neocortex); }
+.chart-bar.s-none { fill: var(--border); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.chart-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Narrow windows: the sidebar is a top bar, so its brain would crowd the nav. */
+@media (max-width: 760px) {
+  .side-brain { display: none; }
+}
+
+/* The sidebar gained the brain; a short window scrolls it rather than clipping the nav. */
+.sidebar { overflow-y: auto; }
+@media (max-height: 700px) {
+  .side-brain .brain { max-height: 96px; }
+}

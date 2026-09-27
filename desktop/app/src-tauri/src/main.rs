@@ -8,6 +8,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agents;
+mod cloud;
+mod pool;
 mod tray;
 mod update;
 
@@ -106,10 +108,26 @@ fn main() {
             agents::commands::run_get,
             agents::commands::skill_schedule,
             agents::commands::agents_set_model,
-            agents::commands::facts_list,
-            agents::commands::fact_forget,
-            agents::commands::forget_everything,
-            agents::commands::evermind_train,
+            agents::evermind::facts_list,
+            agents::evermind::evermind_overview,
+            agents::evermind::fact_forget,
+            agents::evermind::forget_everything,
+            agents::evermind::evermind_train,
+            cloud::account::account_state,
+            cloud::account::account_sign_in,
+            cloud::account::account_sign_in_cancel,
+            cloud::account::account_sign_out,
+            cloud::account::account_workspaces,
+            cloud::account::account_select_workspace,
+            cloud::account::account_open_web,
+            cloud::chat::chat_list,
+            cloud::chat::chat_create,
+            cloud::chat::chat_messages,
+            cloud::chat::chat_agents,
+            cloud::chat::chat_invite,
+            cloud::chat::chat_uninvite,
+            cloud::chat::agent_pool,
+            cloud::chat::chat_send,
         ])
         .setup(|app| {
             tray::install(app.handle())?;
@@ -123,6 +141,8 @@ fn main() {
                 let _ = handle.notification().builder().title("Synapse").body(tray::approval_body(skill)).show();
             });
             app.manage(agents);
+            // Signed in to builderforce.ai (or not) — resumed from the credential store.
+            app.manage(cloud::Cloud::open(&paths::data_dir()));
             Ok(())
         })
         .on_window_event(|window, event| {

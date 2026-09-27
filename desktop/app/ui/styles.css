@@ -214,8 +214,8 @@ select option { background: var(--raised); color: var(--text); }
 .pill.bad { color: var(--bad); background: var(--bad-soft); border-color: transparent; }
 .pill.idle { color: var(--muted); background: var(--sunken); border-color: transparent; }
 .pill.src-keyword { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
-.pill.src-vector { color: var(--cyan); background: var(--cyan-soft); border-color: transparent; }
-.pill.src-both { color: #fff; background: var(--brand-gradient); border-color: transparent; }
+.pill.src-embedding { color: var(--cyan); background: var(--cyan-soft); border-color: transparent; }
+.pill.src-hybrid { color: #fff; background: var(--brand-gradient); border-color: transparent; }
 .chip { font-size: 11px; padding: 1px 8px; border-radius: 6px; background: var(--sunken); border: 1px solid var(--border); color: var(--muted); }
 
 .meter { height: 6px; border-radius: 3px; background: var(--sunken); overflow: hidden; }

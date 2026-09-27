@@ -414,7 +414,7 @@ mod tests {
         let hits = idx.search("PlanLimits seats", 5, Some("src/limits")).unwrap();
         assert!(!hits.is_empty());
         assert!(hits.iter().all(|h| h.path == "src/limits.ts"));
-        assert!(hits.iter().any(|h| h.source == Source::Both));
+        assert!(hits.iter().any(|h| h.source == Source::Hybrid));
     }
 
     #[test]

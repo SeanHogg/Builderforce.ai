@@ -34,12 +34,12 @@ pub const TAKEOVER_KEY: &str = "Esc";
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
-pub use win::{recording::start_recording, recording::Recording, replay::run_skill, vault};
+pub use win::{recording::start_recording, recording::Recording, replay::run_skill};
 
 #[cfg(not(windows))]
 mod other;
 #[cfg(not(windows))]
-pub use other::{run_skill, start_recording, vault, Recording};
+pub use other::{run_skill, start_recording, Recording};
 
 /// Whether recording and replay work on this OS.
 pub fn supported() -> bool {
