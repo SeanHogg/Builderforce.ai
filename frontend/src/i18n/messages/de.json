@@ -11163,9 +11163,13 @@
         "title": "Gestalte den Raum, in dem du dich triffst — und geh hindurch",
         "description": "Der Raum auf deinem Board war früher ein einziger Raum. Jetzt ist er ein Konferenzraum, eine Büroküche oder ein Großraumbüro — oder ein Raum, den du Stück für Stück einrichtest, wie in einem Spiel begehst, im Marketplace verkaufst und in dem du deinen Roblox-Ort spielst."
       },
+      "teach-it-once-and-it-does-it-again": {
+        "title": "Einmal beibringen, dann erledigt es das immer wieder",
+        "description": "Synapse lernt jetzt eine Aufgabe, indem es Ihnen einmal in einem beliebigen Windows-Programm zusieht, macht daraus eine Fähigkeit, die jedes Mal nach neuen Werten fragt, führt sie auf Anfrage oder nach Zeitplan aus, hält vor allem Unumkehrbaren für Ihre Freigabe an – und bringt Ihrem privaten Evermind den Ablauf bei. Freiwillig, lokal und jederzeit vergessbar."
+      },
       "one-local-index-for-every-ai-tool": {
         "title": "Ein lokaler Index für jedes KI-Werkzeug auf Ihrem Rechner",
-        "description": "Builderforce Desktop indiziert Ihre Repositorys auf Ihrem eigenen Computer – jede Definition, eine Karte nach Abhängigkeiten geordnet, Suche nach Bedeutung – und gibt diesen Kontext gleichermaßen an den VS-Code-Agenten, Claude Code und Cursor. Erinnerungen, die inzwischen gelöschten Code nennen, werden markiert statt befolgt. Nichts wird hochgeladen."
+        "description": "Synapse indiziert Ihre Repositorys auf Ihrem eigenen Computer – jede Definition, eine Karte nach Abhängigkeiten geordnet, Suche nach Bedeutung – und gibt diesen Kontext gleichermaßen an den VS-Code-Agenten, Claude Code und Cursor. Erinnerungen, die inzwischen gelöschten Code nennen, werden markiert statt befolgt. Nichts wird hochgeladen."
       }
     }
   },
@@ -32055,7 +32059,7 @@
     "accessibleName": "Unentgeltlich – diese Person bietet ehrenamtliche Sitzungen an"
   },
   "desktopApp": {
-    "heading": "Builderforce Desktop",
+    "heading": "Synapse",
     "intro": "Eine App in der Taskleiste, die pro Repository einen Code-Index auf Ihrem eigenen Rechner führt – und diesen Kontext jedem KI-Werkzeug gibt, das Sie nutzen.",
     "points": [
       "Agenten starten orientiert: eine Karte des Repositorys, geordnet nach dem, wovon der Code abhängt, plus Suche nach Bedeutung (`semantic_search`).",

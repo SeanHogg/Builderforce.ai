@@ -1,7 +1,7 @@
 ---
 title: One local index for every AI tool on your machine
 date: 2026-09-26
-description: Builderforce Desktop indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded.
+description: Synapse indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded.
 tags: [vs-code, agents, evermind, privacy, product]
 author: Sean Hogg
 ---
@@ -16,9 +16,9 @@ Then you switch to a different tool and it does the whole thing again, because n
 
 That is the gap: **every AI tool you use starts from nothing, and each one starts from nothing separately.**
 
-## Builderforce Desktop
+## Synapse
 
-Builderforce Desktop is a small app that sits in your system tray and keeps one index per repository — on your machine, current to your last save.
+Synapse is a small app that sits in your system tray and keeps one index per repository — on your machine, current to your last save.
 
 ```bf-figure
 {
@@ -54,7 +54,7 @@ It also goes wrong in the worst possible way. A memory that says "entitlements g
   "title": "The same recalled memory, before and after",
   "columns": [
     { "title": "Without the index", "hue": "muted", "items": ["\"Use resolveMembership() for entitlements\"", "Agent searches for it", "Finds nothing, or an old copy", "Writes a new one beside the real code"] },
-    { "title": "With Builderforce Desktop", "hue": "make", "items": ["\"Use resolveMembership() for entitlements\"", "POSSIBLY STALE: resolveMembership no longer exists", "Agent checks the current code first", "Updates the memory instead of obeying it"] }
+    { "title": "With Synapse", "hue": "make", "items": ["\"Use resolveMembership() for entitlements\"", "POSSIBLY STALE: resolveMembership no longer exists", "Agent checks the current code first", "Updates the memory instead of obeying it"] }
   ],
   "caption": "Every recalled memory and project fact is checked against the live index. Only names that are unambiguously code — paths and identifiers — are checked, so ordinary prose is never flagged."
 }
@@ -69,7 +69,7 @@ Indexing, chunking and embeddings all run locally. The embedding model downloads
 ```bf-figure
 {
   "kind": "screen",
-  "frame": "Builderforce Desktop",
+  "frame": "Synapse",
   "ratio": 1.4,
   "regions": [
     { "label": "Indexed workspaces", "note": "Scan and embedding progress per repository; rescan or remove", "x": 4, "y": 8, "w": 92, "h": 44, "hue": "idea" },
@@ -86,7 +86,7 @@ That matters beyond comfort. Plenty of teams cannot send source code to a hosted
 
 Every piece of work on Builderforce runs the same inner loop: [Read, Prove, Build](/blog/read-prove-build-the-inner-loop). Read and Prove are free on purpose — they are how you decide whether the expensive act, Build, is worth doing.
 
-Builderforce Desktop is a **Read** feature, and Read is where agents were weakest. An agent that cannot read the codebase well does not skip reading; it reads badly, at Build prices — every orientation call billed like a build step, every re-read burning context the actual change needed. Making Read cheap and accurate is what makes the rest of the loop honest: Prove works from the real code, and Build starts from the right file.
+Synapse is a **Read** feature, and Read is where agents were weakest. An agent that cannot read the codebase well does not skip reading; it reads badly, at Build prices — every orientation call billed like a build step, every re-read burning context the actual change needed. Making Read cheap and accurate is what makes the rest of the loop honest: Prove works from the real code, and Build starts from the right file.
 
 The stale-memory check closes a quieter gap in the same act. Reading includes reading what you already know, and a memory is only knowledge while it is still true.
 
@@ -97,7 +97,7 @@ The stale-memory check closes a quieter gap in the same act. Reading includes re
 - **Trust recalled memory more** because the memory that has gone stale says so.
 - **Work on code that cannot leave the building** and still give the agent full knowledge of it.
 
-[Download Builderforce Desktop](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) for Windows, macOS or Linux, then open a folder in VS Code with the Builderforce extension.
+[Download Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) for Windows, macOS or Linux, then open a folder in VS Code with the Builderforce extension.
 
 ---
 

@@ -11163,9 +11163,13 @@
         "title": "Diseña la sala donde te reúnes — y recórrela",
         "description": "La sala de tu tablero solía ser una sola sala. Ahora es una sala de juntas, una cocina de oficina o una planta abierta de escritorios — o una sala que distribuyes pieza a pieza, recorres como en un juego, vendes en el marketplace y en la que juegas tu lugar de Roblox."
       },
+      "teach-it-once-and-it-does-it-again": {
+        "title": "Enséñalo una vez y lo repetirá",
+        "description": "Synapse ya puede aprender una tarea viéndote hacerla una vez en cualquier programa de Windows, convertirla en una habilidad que pide valores nuevos cada vez, ejecutarla cuando la pidas o según un horario, detenerse para tu visto bueno antes de algo irreversible y enseñar el procedimiento a tu Evermind privado. Opcional, local y olvidable."
+      },
       "one-local-index-for-every-ai-tool": {
         "title": "Un índice local para todas las herramientas de IA de tu equipo",
-        "description": "Builderforce Desktop indexa tus repositorios en tu propio ordenador —cada definición, un mapa ordenado por dependencias, búsqueda por significado— y entrega ese contexto por igual al agente de VS Code, a Claude Code y a Cursor. Los recuerdos que nombran código ya eliminado se marcan en lugar de obedecerse. No se sube nada."
+        "description": "Synapse indexa tus repositorios en tu propio ordenador —cada definición, un mapa ordenado por dependencias, búsqueda por significado— y entrega ese contexto por igual al agente de VS Code, a Claude Code y a Cursor. Los recuerdos que nombran código ya eliminado se marcan en lugar de obedecerse. No se sube nada."
       }
     }
   },
@@ -32055,7 +32059,7 @@
     "accessibleName": "Sin coste: esta persona asesora ofrece sesiones voluntarias"
   },
   "desktopApp": {
-    "heading": "Builderforce Desktop",
+    "heading": "Synapse",
     "intro": "Una aplicación de la bandeja del sistema que mantiene un índice de código por repositorio en tu propio equipo y entrega ese contexto a todas las herramientas de IA que usas.",
     "points": [
       "Los agentes empiezan orientados: un mapa del repositorio ordenado según lo que depende del código, más búsqueda por significado (`semantic_search`).",

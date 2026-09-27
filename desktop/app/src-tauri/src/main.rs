@@ -1,12 +1,13 @@
-//! Builderforce Desktop — the context service with a window and a tray.
+//! Synapse — the context service with a window and a tray.
 //!
 //! The service (bf-context) starts with the app and keeps running while the window is
-//! closed; the tray reopens or quits it. Launched as `builderforce-desktop mcp`, the same
+//! closed; the tray reopens or quits it. Launched as `synapse mcp`, the same
 //! executable is an MCP stdio server instead (what Claude Code / Cursor are pointed at),
 //! and it forwards to the running app's warm index when there is one.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agents;
 mod tray;
 mod update;
 
@@ -14,7 +15,8 @@ use bf_context::{api, paths, server, Registry};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tauri::{RunEvent, WindowEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
+use tauri_plugin_notification::NotificationExt;
 
 struct AppState {
     registry: Arc<Registry>,
@@ -44,10 +46,10 @@ struct ConnectInfo {
 fn connect_info() -> Result<ConnectInfo, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy().into_owned();
     let mcp_json = serde_json::to_string_pretty(&json!({
-        "mcpServers": { "builderforce-context": { "command": exe, "args": ["mcp"] } }
+        "mcpServers": { "synapse": { "command": exe, "args": ["mcp"] } }
     }))
     .map_err(|e| e.to_string())?;
-    Ok(ConnectInfo { claude_code: format!("claude mcp add builderforce-context -- \"{exe}\" mcp"), executable: exe, mcp_json })
+    Ok(ConnectInfo { claude_code: format!("claude mcp add synapse -- \"{exe}\" mcp"), executable: exe, mcp_json })
 }
 
 #[tauri::command]
@@ -72,16 +74,55 @@ fn main() {
     let registry = Registry::new(paths::data_dir());
     registry.start_background();
     // Without the loopback server the UI still works; only external clients lose it.
-    let running = server::start(registry.clone()).map_err(|e| eprintln!("builderforce-desktop: {e:#}")).ok();
+    let running = server::start(registry.clone()).map_err(|e| eprintln!("synapse: {e:#}")).ok();
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState { registry })
-        .invoke_handler(tauri::generate_handler![call, connect_info, check_update])
+        .invoke_handler(tauri::generate_handler![
+            call,
+            connect_info,
+            check_update,
+            agents::commands::agents_state,
+            agents::commands::agents_set_enabled,
+            agents::commands::teach_start,
+            agents::commands::teach_stop,
+            agents::commands::teach_cancel,
+            agents::commands::episodes_list,
+            agents::commands::episode_get,
+            agents::commands::episode_delete,
+            agents::commands::step_image,
+            agents::commands::skill_preview,
+            agents::commands::skill_compile,
+            agents::commands::skills_list,
+            agents::commands::skill_delete,
+            agents::commands::skill_run,
+            agents::commands::run_stop,
+            agents::commands::run_decide,
+            agents::commands::runs_list,
+            agents::commands::run_get,
+            agents::commands::skill_schedule,
+            agents::commands::agents_set_model,
+            agents::commands::facts_list,
+            agents::commands::fact_forget,
+            agents::commands::forget_everything,
+            agents::commands::evermind_train,
+        ])
         .setup(|app| {
             tray::install(app.handle())?;
+            // A step waiting for approval must be seen: bring the window forward and say so,
+            // even when Synapse is in the tray.
+            let handle = app.handle().clone();
+            // Synapse keeps only its opt-in here; what the agents learn lives in the
+            // shared Evermind store (memory-mcp).
+            let agents = agents::Agents::start(&paths::data_dir(), move |skill, _run| {
+                tray::show_main(&handle);
+                let _ = handle.notification().builder().title("Synapse").body(tray::approval_body(skill)).show();
+            });
+            app.manage(agents);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -92,7 +133,7 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build Builderforce Desktop");
+        .expect("failed to build Synapse");
 
     app.run(move |_handle, event| {
         if let RunEvent::Exit = event {

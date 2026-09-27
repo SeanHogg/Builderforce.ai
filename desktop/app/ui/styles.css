@@ -1,4 +1,4 @@
-/* Builderforce Desktop — the builderforce.ai design tokens (frontend/src/app/globals.css),
+/* Synapse — the builderforce.ai design tokens (frontend/src/app/globals.css),
    dark and light, following the OS theme. Every colour below is a token. */
 :root {
   color-scheme: dark;
@@ -280,6 +280,42 @@ select option { background: var(--raised); color: var(--text); }
 .tool h2 { font-size: 16px; }
 .privacy { text-align: center; }
 
+/* ---------- self-directed agents ---------- */
+.grow { flex: 1 1 auto; }
+.break { overflow-wrap: anywhere; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); min-width: 0; }
+.field > input, .field > select, .field > .row { color: var(--text); }
+.field > .row > input { flex: 1; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; min-height: 32px; }
+.check input { min-height: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.error-inline { color: var(--bad); background: var(--bad-soft); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0; }
+.rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rows > li { padding: 10px 0; border-top: 1px solid var(--border); }
+.rows > li:first-child { border-top: 0; }
+ul.stack, ol.stack { list-style: none; margin: 0; padding: 0; }
+.optin h2 { font-size: 18px; }
+.optin-points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.recording { border-color: var(--accent); box-shadow: var(--glow); display: flex; flex-direction: column; gap: 10px; }
+.dot.rec { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); animation: pulse 1.4s ease-in-out infinite; }
+.live-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.step-text { display: flex; flex-direction: column; gap: 2px; }
+.review-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.review-step { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.review-step.removed { opacity: 0.5; }
+.thumb { width: min(180px, 100%); aspect-ratio: 16 / 10; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--sunken); }
+.param-name { width: 180px; max-width: 100%; }
+.run-row { color: inherit; text-decoration: none; }
+.run-row:hover strong { color: var(--accent); }
+.audit > li { gap: 12px; }
+.modal-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.55); }
+.modal-overlay[hidden] { display: none; }
+.modal { width: min(480px, 100%); box-shadow: var(--glow); }
+.approval-step { padding: 12px; border-radius: var(--radius-sm); background: var(--busy-soft); border: 1px solid var(--busy); }
+.danger-zone { border-color: var(--bad-soft); }
+.fact { align-items: flex-start; }
+.fact-body { font-size: 13px; overflow-wrap: anywhere; white-space: pre-wrap; }
+
 /* ---------- narrow windows: the sidebar becomes a top bar ---------- */
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -293,4 +329,5 @@ select option { background: var(--raised); color: var(--text); }
   .sidebar-foot > .muted { display: none; }
   .search-form { grid-template-columns: 1fr; }
   .act-meta { display: none; }
+  .review-step .thumb { width: 100%; }
 }

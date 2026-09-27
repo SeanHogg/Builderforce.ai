@@ -7,7 +7,7 @@ const DESKTOP_RELEASES_URL = 'https://github.com/SeanHogg/Builderforce.ai/releas
 const DESKTOP_POST_PATH = '/blog/one-local-index-for-every-ai-tool';
 
 /**
- * The Builderforce Desktop download section — what the app does, where to get it, and
+ * The Synapse download section — what the app does, where to get it, and
  * that it stays local. Self-contained: it owns its copy (`desktopApp` catalog) and its
  * links, so any marketing surface can drop it in with no props.
  */

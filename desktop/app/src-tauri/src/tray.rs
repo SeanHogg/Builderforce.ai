@@ -11,15 +11,29 @@ struct Labels {
     tooltip: &'static str,
 }
 
-fn labels() -> Labels {
+fn lang() -> String {
     let locale = sys_locale::get_locale().unwrap_or_default().to_ascii_lowercase();
-    let lang = locale.split(['-', '_']).next().unwrap_or("en");
-    match lang {
-        "de" => Labels { open: "Öffnen", quit: "Beenden", tooltip: "Builderforce Desktop — indiziert lokal" },
-        "es" => Labels { open: "Abrir", quit: "Salir", tooltip: "Builderforce Desktop — indexa en local" },
-        "fr" => Labels { open: "Ouvrir", quit: "Quitter", tooltip: "Builderforce Desktop — indexation locale" },
-        "zh" => Labels { open: "打开", quit: "退出", tooltip: "Builderforce Desktop — 本地索引" },
-        _ => Labels { open: "Open", quit: "Quit", tooltip: "Builderforce Desktop — indexing locally" },
+    locale.split(['-', '_']).next().unwrap_or("en").to_string()
+}
+
+/// The notification when a running skill reaches a step that needs approval.
+pub fn approval_body(skill: &str) -> String {
+    match lang().as_str() {
+        "de" => format!("„{skill}“ wartet auf deine Freigabe."),
+        "es" => format!("«{skill}» espera tu aprobación."),
+        "fr" => format!("« {skill} » attend votre approbation."),
+        "zh" => format!("“{skill}”正在等待你的批准。"),
+        _ => format!("“{skill}” is waiting for your approval."),
+    }
+}
+
+fn labels() -> Labels {
+    match lang().as_str() {
+        "de" => Labels { open: "Öffnen", quit: "Beenden", tooltip: "Synapse — indiziert lokal" },
+        "es" => Labels { open: "Abrir", quit: "Salir", tooltip: "Synapse — indexa en local" },
+        "fr" => Labels { open: "Ouvrir", quit: "Quitter", tooltip: "Synapse — indexation locale" },
+        "zh" => Labels { open: "打开", quit: "退出", tooltip: "Synapse — 本地索引" },
+        _ => Labels { open: "Open", quit: "Quit", tooltip: "Synapse — indexing locally" },
     }
 }
 

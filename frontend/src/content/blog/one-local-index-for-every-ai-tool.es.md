@@ -6,9 +6,9 @@ Después cambias a otra herramienta y lo hace todo otra vez, porque nada de lo q
 
 Esa es la brecha: **cada herramienta de IA que usas empieza desde cero, y cada una empieza desde cero por separado.**
 
-## Builderforce Desktop
+## Synapse
 
-Builderforce Desktop es una pequeña aplicación que vive en la bandeja del sistema y mantiene un índice por repositorio: en tu equipo y actualizado hasta tu último guardado.
+Synapse es una pequeña aplicación que vive en la bandeja del sistema y mantiene un índice por repositorio: en tu equipo y actualizado hasta tu último guardado.
 
 ```bf-figure
 {
@@ -44,7 +44,7 @@ También puede fallar de la peor manera posible. Un recuerdo que dice «los perm
   "title": "El mismo recuerdo recuperado, antes y después",
   "columns": [
     { "title": "Sin el índice", "hue": "muted", "items": ["«Usa resolveMembership() para los permisos»", "El agente lo busca", "No encuentra nada, o una copia antigua", "Escribe una nueva junto al código real"] },
-    { "title": "Con Builderforce Desktop", "hue": "make", "items": ["«Usa resolveMembership() para los permisos»", "POSIBLEMENTE OBSOLETO: resolveMembership ya no existe", "El agente revisa primero el código actual", "Actualiza el recuerdo en lugar de obedecerlo"] }
+    { "title": "Con Synapse", "hue": "make", "items": ["«Usa resolveMembership() para los permisos»", "POSIBLEMENTE OBSOLETO: resolveMembership ya no existe", "El agente revisa primero el código actual", "Actualiza el recuerdo en lugar de obedecerlo"] }
   ],
   "caption": "Cada recuerdo y cada dato del proyecto recuperados se contrastan con el índice en vivo. Solo se comprueban nombres que son inequívocamente código —rutas e identificadores—, así que la prosa normal nunca se marca."
 }
@@ -59,7 +59,7 @@ La indexación, la fragmentación y los embeddings se ejecutan en local. El mode
 ```bf-figure
 {
   "kind": "screen",
-  "frame": "Builderforce Desktop",
+  "frame": "Synapse",
   "ratio": 1.4,
   "regions": [
     { "label": "Espacios de trabajo indexados", "note": "Progreso de escaneo y embeddings por repositorio; reescanear o quitar", "x": 4, "y": 8, "w": 92, "h": 44, "hue": "idea" },
@@ -76,7 +76,7 @@ Esto importa más allá de la comodidad. Muchos equipos no pueden enviar código
 
 Todo el trabajo en Builderforce sigue el mismo bucle interno: [Leer, Probar, Construir](/blog/read-prove-build-the-inner-loop). Leer y Probar son gratuitos a propósito: sirven para decidir si merece la pena el paso caro, Construir.
 
-Builderforce Desktop es una función de **Leer**, y leer era donde los agentes eran más débiles. Un agente que no sabe leer bien el código no se salta la lectura; lee mal, a precio de construcción: cada llamada de orientación se factura como un paso de construcción y cada relectura quema el contexto que necesitaba el cambio real. Hacer que Leer sea barato y preciso es lo que vuelve honesto el resto del bucle: Probar trabaja sobre el código real y Construir empieza en el archivo correcto.
+Synapse es una función de **Leer**, y leer era donde los agentes eran más débiles. Un agente que no sabe leer bien el código no se salta la lectura; lee mal, a precio de construcción: cada llamada de orientación se factura como un paso de construcción y cada relectura quema el contexto que necesitaba el cambio real. Hacer que Leer sea barato y preciso es lo que vuelve honesto el resto del bucle: Probar trabaja sobre el código real y Construir empieza en el archivo correcto.
 
 La comprobación de memoria obsoleta cierra una brecha más silenciosa en el mismo paso. Leer incluye leer lo que ya sabes, y un recuerdo solo es conocimiento mientras sigue siendo cierto.
 
@@ -87,7 +87,7 @@ La comprobación de memoria obsoleta cierra una brecha más silenciosa en el mis
 - **Confiar más en la memoria recuperada**, porque el recuerdo que se ha quedado obsoleto lo dice.
 - **Trabajar con código que no puede salir de la empresa** y aun así dar al agente pleno conocimiento de él.
 
-[Descarga Builderforce Desktop](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) para Windows, macOS o Linux y abre una carpeta en VS Code con la extensión de Builderforce.
+[Descarga Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) para Windows, macOS o Linux y abre una carpeta en VS Code con la extensión de Builderforce.
 
 ---
 

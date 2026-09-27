@@ -6,9 +6,9 @@ Dann wechseln Sie zu einem anderen Werkzeug, und es macht alles noch einmal – 
 
 Das ist die Lücke: **Jedes KI-Werkzeug, das Sie nutzen, fängt bei null an – und jedes fängt für sich allein bei null an.**
 
-## Builderforce Desktop
+## Synapse
 
-Builderforce Desktop ist eine kleine App in Ihrer Taskleiste, die einen Index pro Repository führt – auf Ihrem Rechner, aktuell bis zur letzten Speicherung.
+Synapse ist eine kleine App in Ihrer Taskleiste, die einen Index pro Repository führt – auf Ihrem Rechner, aktuell bis zur letzten Speicherung.
 
 ```bf-figure
 {
@@ -44,7 +44,7 @@ Es kann aber auch auf die schlimmstmögliche Weise falschliegen. Eine Erinnerung
   "title": "Dieselbe abgerufene Erinnerung, vorher und nachher",
   "columns": [
     { "title": "Ohne den Index", "hue": "muted", "items": ["„Nutze resolveMembership() für Berechtigungen“", "Der Agent sucht danach", "Findet nichts oder eine alte Kopie", "Schreibt eine neue neben den echten Code"] },
-    { "title": "Mit Builderforce Desktop", "hue": "make", "items": ["„Nutze resolveMembership() für Berechtigungen“", "MÖGLICHERWEISE VERALTET: resolveMembership existiert nicht mehr", "Der Agent prüft zuerst den aktuellen Code", "Aktualisiert die Erinnerung, statt ihr zu folgen"] }
+    { "title": "Mit Synapse", "hue": "make", "items": ["„Nutze resolveMembership() für Berechtigungen“", "MÖGLICHERWEISE VERALTET: resolveMembership existiert nicht mehr", "Der Agent prüft zuerst den aktuellen Code", "Aktualisiert die Erinnerung, statt ihr zu folgen"] }
   ],
   "caption": "Jede abgerufene Erinnerung und jeder Projektfakt wird gegen den Live-Index geprüft. Geprüft werden nur Namen, die eindeutig Code sind – Pfade und Bezeichner –, normale Prosa wird nie markiert."
 }
@@ -59,7 +59,7 @@ Indizierung, Zerlegung und Embeddings laufen vollständig lokal. Das Embedding-M
 ```bf-figure
 {
   "kind": "screen",
-  "frame": "Builderforce Desktop",
+  "frame": "Synapse",
   "ratio": 1.4,
   "regions": [
     { "label": "Indizierte Arbeitsbereiche", "note": "Scan- und Embedding-Fortschritt pro Repository; neu scannen oder entfernen", "x": 4, "y": 8, "w": 92, "h": 44, "hue": "idea" },
@@ -76,7 +76,7 @@ Das ist mehr als Komfort. Viele Teams dürfen Quellcode überhaupt nicht an eine
 
 Jede Arbeit auf Builderforce durchläuft dieselbe innere Schleife: [Lesen, Beweisen, Bauen](/blog/read-prove-build-the-inner-loop). Lesen und Beweisen sind absichtlich kostenlos – mit ihnen entscheiden Sie, ob sich der teure Schritt, das Bauen, lohnt.
 
-Builderforce Desktop ist eine **Lesen**-Funktion, und beim Lesen waren Agenten am schwächsten. Ein Agent, der die Codebasis nicht gut lesen kann, lässt das Lesen nicht aus; er liest schlecht, zu Bau-Preisen – jeder Orientierungsaufruf wird wie ein Bauschritt abgerechnet, jedes erneute Lesen verbrennt Kontext, den die eigentliche Änderung gebraucht hätte. Lesen günstig und genau zu machen, macht den Rest der Schleife ehrlich: Beweisen arbeitet mit dem echten Code, und Bauen beginnt in der richtigen Datei.
+Synapse ist eine **Lesen**-Funktion, und beim Lesen waren Agenten am schwächsten. Ein Agent, der die Codebasis nicht gut lesen kann, lässt das Lesen nicht aus; er liest schlecht, zu Bau-Preisen – jeder Orientierungsaufruf wird wie ein Bauschritt abgerechnet, jedes erneute Lesen verbrennt Kontext, den die eigentliche Änderung gebraucht hätte. Lesen günstig und genau zu machen, macht den Rest der Schleife ehrlich: Beweisen arbeitet mit dem echten Code, und Bauen beginnt in der richtigen Datei.
 
 Die Prüfung auf veraltetes Wissen schließt eine leisere Lücke im selben Schritt. Zum Lesen gehört auch, zu lesen, was man schon weiß – und eine Erinnerung ist nur so lange Wissen, wie sie noch stimmt.
 
@@ -87,7 +87,7 @@ Die Prüfung auf veraltetes Wissen schließt eine leisere Lücke im selben Schri
 - **Abgerufenen Erinnerungen mehr vertrauen**, weil eine veraltete Erinnerung es selbst sagt.
 - **An Code arbeiten, der das Haus nicht verlassen darf**, und dem Agenten trotzdem volles Wissen darüber geben.
 
-[Builderforce Desktop herunterladen](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) für Windows, macOS oder Linux, dann einen Ordner in VS Code mit der Builderforce-Erweiterung öffnen.
+[Synapse herunterladen](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) für Windows, macOS oder Linux, dann einen Ordner in VS Code mit der Builderforce-Erweiterung öffnen.
 
 ---
 

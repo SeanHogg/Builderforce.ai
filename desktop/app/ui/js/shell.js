@@ -9,10 +9,17 @@ import * as workspace from "./views/workspace.js";
 import * as search from "./views/search.js";
 import * as activity from "./views/activity.js";
 import * as connect from "./views/connect.js";
+import * as teach from "./views/teach.js";
+import * as review from "./views/review.js";
+import * as skills from "./views/skills.js";
+import * as runs from "./views/runs.js";
+import * as evermind from "./views/evermind.js";
+import { mountApproval } from "./approval.js";
+import { refreshAgents } from "./agentStore.js";
 
-const VIEWS = { workspaces, workspace, search, activity, connect };
+const VIEWS = { workspaces, workspace, search, activity, connect, teach, review, skills, runs, evermind };
 // The nav entry a view belongs under (a workspace's page sits under Workspaces).
-const NAV_OF = { workspace: "workspaces" };
+const NAV_OF = { workspace: "workspaces", review: "teach" };
 const $ = (id) => document.getElementById(id);
 
 let cleanup = null;
@@ -66,3 +73,6 @@ window.addEventListener("hashchange", mount);
 mount();
 refresh();
 checkUpdate();
+// The approval prompt sits over every view; the agents' live state drives it.
+mountApproval();
+refreshAgents();

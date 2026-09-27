@@ -1,12 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: app commands, the folder picker, the remove confirmation, and opening the download page.",
+  "description": "The main window: app commands, the folder picker and save dialog (training-data export), the remove confirmation, approval notifications, and opening the download page.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "dialog:allow-open",
     "dialog:allow-ask",
-    "opener:allow-open-url"
+    "opener:allow-open-url",
+    "dialog:allow-save",
+    "notification:default"
   ]
 }

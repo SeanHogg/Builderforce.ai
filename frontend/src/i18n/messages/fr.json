@@ -11163,9 +11163,13 @@
         "title": "Aménagez la salle où vous vous réunissez — puis parcourez-la",
         "description": "La salle de votre board était autrefois une seule salle. Elle est désormais une salle du conseil, une cuisine de bureau ou un open space de bureaux — ou une salle que vous aménagez pièce par pièce, parcourez comme un jeu, vendez sur la marketplace, et où vous jouez à votre lieu Roblox."
       },
+      "teach-it-once-and-it-does-it-again": {
+        "title": "Montrez-le une fois, il le refera",
+        "description": "Synapse apprend désormais une tâche en vous regardant la faire une fois dans n’importe quel programme Windows, en fait une compétence qui demande de nouvelles valeurs à chaque fois, l’exécute à la demande ou selon un horaire, s’arrête pour votre accord avant tout ce qui est irréversible — et apprend la procédure à votre Evermind privé. Facultatif, local et oubliable."
+      },
       "one-local-index-for-every-ai-tool": {
         "title": "Un index local pour chaque outil d'IA de votre machine",
-        "description": "Builderforce Desktop indexe vos dépôts sur votre propre ordinateur — chaque définition, une carte classée par dépendances, une recherche par le sens — et fournit ce contexte aussi bien à l'agent VS Code qu'à Claude Code et Cursor. Les souvenirs qui citent du code supprimé depuis sont signalés au lieu d'être suivis. Rien n'est envoyé."
+        "description": "Synapse indexe vos dépôts sur votre propre ordinateur — chaque définition, une carte classée par dépendances, une recherche par le sens — et fournit ce contexte aussi bien à l'agent VS Code qu'à Claude Code et Cursor. Les souvenirs qui citent du code supprimé depuis sont signalés au lieu d'être suivis. Rien n'est envoyé."
       }
     }
   },
@@ -32055,7 +32059,7 @@
     "accessibleName": "Gratuit — cette personne propose des sessions bénévoles"
   },
   "desktopApp": {
-    "heading": "Builderforce Desktop",
+    "heading": "Synapse",
     "intro": "Une application de la barre système qui tient un index de code par dépôt sur votre propre machine — et fournit ce contexte à chaque outil d'IA que vous utilisez.",
     "points": [
       "Les agents démarrent orientés : une carte du dépôt classée selon ce dont le code dépend, plus une recherche par le sens (`semantic_search`).",

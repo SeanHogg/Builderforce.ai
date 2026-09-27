@@ -1,6 +1,6 @@
 [package]
-name = "builderforce-desktop"
-description = "Builderforce Desktop — local code context and memory for every AI tool on this machine"
+name = "synapse"
+description = "Synapse — a private, local Evermind: code context for every AI tool, and Self-Directed Agents you teach once"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 bf-context = { path = "../../crates/bf-context" }
+bf-memory = { path = "../../crates/bf-memory" }
+bf-teach = { path = "../../crates/bf-teach" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -19,4 +21,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-notification = "2"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 sys-locale = "0.3"

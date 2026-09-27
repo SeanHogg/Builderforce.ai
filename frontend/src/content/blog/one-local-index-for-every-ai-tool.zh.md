@@ -6,9 +6,9 @@
 
 这就是缺口：**你用的每个 AI 工具都从零开始，而且各自从零开始。**
 
-## Builderforce Desktop
+## Synapse
 
-Builderforce Desktop 是一个驻留在系统托盘里的小应用，为每个代码仓库维护一个索引——就在你的电脑上，并且始终与你最近一次保存同步。
+Synapse 是一个驻留在系统托盘里的小应用，为每个代码仓库维护一个索引——就在你的电脑上，并且始终与你最近一次保存同步。
 
 ```bf-figure
 {
@@ -44,7 +44,7 @@ Evermind 会记住之前的运行对你的项目学到了什么：约定、根�
   "title": "同一条被召回的记忆，前后对比",
   "columns": [
     { "title": "没有索引时", "hue": "muted", "items": ["“权限校验用 resolveMembership()”", "智能体去找它", "什么也没找到，或找到一份旧副本", "在真实代码旁边又写了一个新的"] },
-    { "title": "有 Builderforce Desktop 时", "hue": "make", "items": ["“权限校验用 resolveMembership()”", "可能已过时：resolveMembership 已不存在", "智能体先检查当前代码", "更新这条记忆，而不是照着执行"] }
+    { "title": "有 Synapse 时", "hue": "make", "items": ["“权限校验用 resolveMembership()”", "可能已过时：resolveMembership 已不存在", "智能体先检查当前代码", "更新这条记忆，而不是照着执行"] }
   ],
   "caption": "每一条被召回的记忆和项目事实都会与实时索引核对。只检查明确属于代码的名称——路径和标识符——所以普通文字永远不会被标记。"
 }
@@ -59,7 +59,7 @@ Evermind 会记住之前的运行对你的项目学到了什么：约定、根�
 ```bf-figure
 {
   "kind": "screen",
-  "frame": "Builderforce Desktop",
+  "frame": "Synapse",
   "ratio": 1.4,
   "regions": [
     { "label": "已索引的工作区", "note": "每个仓库的扫描和向量化进度；重新扫描或移除", "x": 4, "y": 8, "w": 92, "h": 44, "hue": "idea" },
@@ -76,7 +76,7 @@ Evermind 会记住之前的运行对你的项目学到了什么：约定、根�
 
 Builderforce 上的每项工作都走同一个内循环：[阅读、验证、构建](/blog/read-prove-build-the-inner-loop)。阅读和验证是刻意免费的——它们用来判断昂贵的那一步，也就是构建，是否值得去做。
 
-Builderforce Desktop 是一项**阅读**功能，而阅读恰恰是智能体最薄弱的地方。读不好代码的智能体并不会跳过阅读；它只会读得很糟，而且按构建的价格付费——每次找方向的调用都按构建步骤计费，每次重读都在消耗真正修改所需要的上下文。让阅读既便宜又准确，才能让整个循环名副其实：验证基于真实的代码，构建从正确的文件开始。
+Synapse 是一项**阅读**功能，而阅读恰恰是智能体最薄弱的地方。读不好代码的智能体并不会跳过阅读；它只会读得很糟，而且按构建的价格付费——每次找方向的调用都按构建步骤计费，每次重读都在消耗真正修改所需要的上下文。让阅读既便宜又准确，才能让整个循环名副其实：验证基于真实的代码，构建从正确的文件开始。
 
 过时记忆检查在同一步里补上了一个更隐蔽的缺口。阅读也包括重读你已经知道的东西——而一条记忆只有在仍然正确时才算知识。
 
@@ -87,7 +87,7 @@ Builderforce Desktop 是一项**阅读**功能，而阅读恰恰是智能体最�
 - **更放心地使用召回的记忆**，因为过时的记忆会自己说出来。
 - **处理不能离开公司的代码**，同时仍让智能体完整了解这些代码。
 
-[下载 Builderforce Desktop](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true)（支持 Windows、macOS 和 Linux），然后在装有 Builderforce 扩展的 VS Code 中打开一个文件夹。
+[下载 Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true)（支持 Windows、macOS 和 Linux），然后在装有 Builderforce 扩展的 VS Code 中打开一个文件夹。
 
 ---
 

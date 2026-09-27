@@ -21,7 +21,7 @@ pub struct UpdateInfo {
 pub fn check() -> UpdateInfo {
     let current = env!("CARGO_PKG_VERSION").to_string();
     let latest = ureq::get(RELEASES_API)
-        .set("User-Agent", "builderforce-desktop")
+        .set("User-Agent", "synapse")
         .set("Accept", "application/vnd.github+json")
         .timeout(Duration::from_secs(8))
         .call()

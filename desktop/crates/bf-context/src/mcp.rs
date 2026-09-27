@@ -50,7 +50,7 @@ fn handle(client: &Client, root: &PathBuf, msg: &Value) -> Option<Value> {
         "initialize" => Ok(json!({
             "protocolVersion": params.get("protocolVersion").and_then(Value::as_str).unwrap_or(PROTOCOL_VERSION),
             "capabilities": { "tools": {} },
-            "serverInfo": { "name": "builderforce-context", "version": env!("CARGO_PKG_VERSION") },
+            "serverInfo": { "name": "synapse", "version": env!("CARGO_PKG_VERSION") },
             "instructions": "Local code index for this repository. Call repo_map once to see the codebase's shape, semantic_search to find code by meaning or name, and check_references to test whether names in a note or memory still exist."
         })),
         "ping" => Ok(json!({})),

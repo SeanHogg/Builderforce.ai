@@ -1,4 +1,4 @@
-//! bf-index — the local code index behind Builderforce Desktop.
+//! bf-index — the local code index behind Synapse.
 //!
 //! Structure (tree-sitter definitions, symbols, a reference-ranked repo map), keywords
 //! (identifier-aware BM25) and meaning (local embeddings) over one SQLite file per

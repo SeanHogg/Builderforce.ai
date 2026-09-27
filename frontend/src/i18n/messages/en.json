@@ -11163,9 +11163,13 @@
         "title": "Design the room you meet in — then walk it",
         "description": "The room on your board used to be one room. Now it is a boardroom, an office kitchen or an open floor of desks — or a room you lay out piece by piece, walk through like a game, sell in the marketplace, and play your Roblox place inside."
       },
+      "teach-it-once-and-it-does-it-again": {
+        "title": "Teach it once, and it does it again",
+        "description": "Synapse can now learn a task by watching you do it once in any Windows program, turn it into a skill that asks for new values each time, run it on request or on a schedule, stop for your OK before anything irreversible — and teach your private Evermind the procedure. Opt-in, local, and forgettable."
+      },
       "one-local-index-for-every-ai-tool": {
         "title": "One local index for every AI tool on your machine",
-        "description": "Builderforce Desktop indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded."
+        "description": "Synapse indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded."
       }
     }
   },
@@ -32055,7 +32059,7 @@
     "accessibleName": "Unpaid — this advisor offers volunteer sessions"
   },
   "desktopApp": {
-    "heading": "Builderforce Desktop",
+    "heading": "Synapse",
     "intro": "A tray app that keeps one code index per repository on your own machine — and hands that context to every AI tool you use.",
     "points": [
       "Agents start oriented: a map of the repository ranked by what the code depends on, plus search by meaning (`semantic_search`).",

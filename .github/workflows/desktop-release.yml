@@ -1,4 +1,4 @@
-# Builderforce Desktop — builds the installers and the headless `bf-context` binary and
+# Synapse — builds the installers and the headless `bf-context` binary and
 # publishes them as a GitHub release. Release-only on purpose: it runs on a
 # `desktop-v*` tag or by hand, never on every push (the push pipeline stays the single
 # release.yml; a three-OS native build on every commit would cost more than it proves).
@@ -41,7 +41,7 @@ jobs:
         with:
           workspaces: desktop
       # The service crates carry the logic; the app crate is exercised by the build below.
-      - run: cargo test -p bf-index -p bf-context --no-default-features
+      - run: cargo test -p bf-index -p bf-context -p bf-memory -p bf-teach --no-default-features
 
   tag:
     runs-on: ubuntu-22.04
@@ -134,7 +134,7 @@ jobs:
         with:
           projectPath: desktop/app
           tagName: ${{ needs.tag.outputs.tag }}
-          releaseName: 'Builderforce Desktop ${{ needs.tag.outputs.version }}'
+          releaseName: 'Synapse ${{ needs.tag.outputs.version }}'
           releaseBody: 'Local code context and memory for every AI tool on this machine. Download the installer for your platform below. The `bf-context-*` files are the headless service for servers and CI.'
           releaseDraft: false
           prerelease: false
