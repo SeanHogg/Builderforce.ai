@@ -34,6 +34,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
+import { chatChangedFiles } from '../../application/delta/chatChangedFiles';
 import { limitParam, offsetParam } from './queryParams';
 import { parseBody, parseOptionalBody } from './requestBody';
 import {
@@ -246,6 +247,17 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const result = await brainService.getMessages(id, c.get('tenantId') as number, c.get('userId') as string, limit);
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json({ messages: result });
+  });
+
+  // GET /chats/:id/files — the files this chat changed (its work deltas), so a host
+  // can scope its pending-changes list to the chat. Same access gate as the stream.
+  router.get('/chats/:id/files', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const tenantId = c.get('tenantId') as number;
+    const allowed = await brainService.canAccess(id, tenantId, c.get('userId'));
+    if (!allowed) return c.json({ error: 'Chat not found' }, 404);
+    return c.json({ files: await chatChangedFiles(db, tenantId, id) });
   });
 
   // POST /chats/:id/read — advance the caller's unread high-water mark. Body

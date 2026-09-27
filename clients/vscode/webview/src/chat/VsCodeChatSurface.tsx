@@ -87,6 +87,7 @@ import { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { adoptChatProject } from '../adoptChatProject';
 import { EvermindStatusBadge } from '../EvermindStatusBadge';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
+import { useChatChangedFiles } from '../useChatChangedFiles';
 import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from '../webviewBuildInfo';
 import { AccountStatusPanel, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from '../accountPlan';
 import {
@@ -680,7 +681,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
   // refreshes live (rings/links) rather than only on its own button actions.
   const [ticketRefresh, setTicketRefresh] = useState(0);
-  const pendingChangesExtension = usePendingChangesExtension(init.labels);
+  const chatFiles = useChatChangedFiles(apiReq, chatId, ticketRefresh);
+  const pendingChangesExtension = usePendingChangesExtension(init.labels, chatFiles);
 
   // Auto-link the work item that opened this chat (a task/epic/gap from the tree or
   // board, a roadmap/spec row from a project page) so the chat is tied to it and the

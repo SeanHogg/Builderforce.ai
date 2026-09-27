@@ -8,6 +8,7 @@ import {
   type PendingChangesLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { getPendingChanges, onPendingChanges, post, type LabelBundle, type PendingChangeSet } from './vscodeBridge';
+import { scopeChangesToChat } from './chatChangeScope';
 
 /**
  * The VS Code host's "Changes (N)" pill for the chat's ticket rail — the chat's own
@@ -26,25 +27,29 @@ import { getPendingChanges, onPendingChanges, post, type LabelBundle, type Pendi
  * the bridge to the SAME commands the Changes sidebar uses. Returns `null` on a clean
  * tree, so the rail shows no pill at all rather than "Changes (0)".
  */
-export function usePendingChangesExtension(labels: LabelBundle): ChatTicketsExtension | null {
+export function usePendingChangesExtension(labels: LabelBundle, chatFiles: readonly string[] | null): ChatTicketsExtension | null {
   const [set, setSet] = useState<PendingChangeSet | undefined>(getPendingChanges);
   useEffect(() => onPendingChanges(setSet), []);
 
   // Flatten repo groups to rows. The row DISPLAYS the repo-relative path, which two
   // repositories can share, so the ABSOLUTE path — the thing the host needs back to
-  // open a diff — rides along as the row's opaque `id`.
+  // open a diff — rides along as the row's opaque `id`. Then keep only this chat's
+  // files when the chat has recorded any (`scopeChangesToChat`).
   const changes = useMemo<PendingChangeVM[]>(
     () =>
-      (set?.repos ?? []).flatMap((repo) =>
-        repo.changes.map((change) => ({
-          id: change.path,
-          path: change.relativePath,
-          status: change.status,
-          staged: change.staged,
-          repo: repo.name,
-        })),
+      scopeChangesToChat(
+        (set?.repos ?? []).flatMap((repo) =>
+          repo.changes.map((change) => ({
+            id: change.path,
+            path: change.relativePath,
+            status: change.status,
+            staged: change.staged,
+            repo: repo.name,
+          })),
+        ),
+        chatFiles,
       ),
-    [set],
+    [set, chatFiles],
   );
 
   const listLabels = useMemo<PendingChangesLabels>(() => {
