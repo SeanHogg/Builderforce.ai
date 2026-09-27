@@ -1327,94 +1327,9 @@ function projectMemoryHooks(projectId, request, chatId) {
     }
   };
 }
-var EVERMIND_LEARN_MIN_CHARS = 40;
-var RECONCILE_OVERLAP = 0.6;
-var STOP = /* @__PURE__ */ new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "or",
-  "to",
-  "of",
-  "in",
-  "on",
-  "for",
-  "with",
-  "is",
-  "are",
-  "be",
-  "as",
-  "at",
-  "by",
-  "it",
-  "this",
-  "that",
-  "from",
-  "you",
-  "your",
-  "i",
-  "we",
-  "they",
-  "he",
-  "she",
-  "can",
-  "will",
-  "how",
-  "do",
-  "does",
-  "what",
-  "why",
-  "when",
-  "which",
-  "use",
-  "using",
-  "used",
-  "please",
-  "need",
-  "want",
-  "me",
-  "my",
-  "so",
-  "if"
-]);
-function tokenSet(s) {
-  return new Set((s.toLowerCase().match(/[a-z0-9_]+/g) ?? []).filter((w) => w.length >= 2 && !STOP.has(w)));
-}
-function formatEvermindMemoryBlock(items) {
-  if (items.length === 0) return "";
-  const lines = items.map((it) => ({ it, text: it.text.replace(/\s+/g, " ").trim() })).filter(({ text }) => text.length > 0).map(({ it, text }, i) => `${i + 1}. ${it.tier ? `${TIER_LABEL[it.tier]} ` : ""}${text}`);
-  if (lines.length === 0) return "";
-  return [
-    "[Evermind Memory \u2014 recalled from this project's self-learning model]",
-    // Recall always fills its budget from the whole project, so a NEW chat is handed
-    // eight other conversations' replies. Framed as "relevant … treat as grounding",
-    // chat #105 (grok-4.6) took them as its own agenda: asked to wire Room chat bubbles,
-    // it announced "closing out linked work" and "the roster collapse code" — another
-    // chat's task — for three turns and never touched the request.
-    "Prior learnings matched to this request automatically. The match is by similarity, so any of them may be unrelated: use one only where it bears on what the user asked in THIS conversation, and ignore the rest.",
-    `Memories marked ${TIER_LABEL.project} come from other conversations and runs \u2014 never resume, close out, or act on their work here.`,
-    "If one is outdated or wrong, correct it in your answer (this project learns write-through \u2014 your reply updates its memory).",
-    ...lines
-  ].join("\n");
-}
-var TIER_LABEL = {
-  chat: "(this conversation)",
-  project: "(elsewhere in the project)"
-};
-function countReconciledMemories(items, answer) {
-  const ans = tokenSet(answer);
-  if (ans.size === 0) return 0;
-  let n = 0;
-  for (const it of items) {
-    const mem = tokenSet(it.text);
-    if (mem.size === 0) continue;
-    let hit = 0;
-    for (const tok of mem) if (ans.has(tok)) hit++;
-    if (hit / mem.size >= RECONCILE_OVERLAP) n++;
-  }
-  return n;
-}
+
+// src/index.ts
+import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories as countReconciledMemories2 } from "@seanhogg/builderforce-memory/evermind";
 
 // src/onDeviceMemory.ts
 var ON_DEVICE_ANSWER_THRESHOLD = 0.985;
@@ -6944,6 +6859,7 @@ var spawnAgentTool = defineTool({
 });
 
 // src/brainRunStore.ts
+import { formatEvermindMemoryBlock, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
 function provenanceMetadata(result, requested) {
   const model = result.resolvedModel;
   if (!model) return void 0;
@@ -10087,7 +10003,6 @@ export {
   DEFAULT_PERSONA,
   DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
-  EVERMIND_LEARN_MIN_CHARS,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FailureTally,
@@ -10177,7 +10092,7 @@ export {
   computeRunProgress,
   consolidationMarkerContent,
   consolidationMetadata,
-  countReconciledMemories,
+  countReconciledMemories2 as countReconciledMemories,
   createBrainRestPersistence,
   createComposingActivity,
   createPayloadBudget,
@@ -10209,7 +10124,7 @@ export {
   formatChatDiagnosticsReportJson,
   formatDispatchRefusals,
   formatEvermindLearnStep,
-  formatEvermindMemoryBlock,
+  formatEvermindMemoryBlock2 as formatEvermindMemoryBlock,
   formatModelScorecard,
   formatModelTurnLog,
   formatRunProgress,
