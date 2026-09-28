@@ -21,6 +21,7 @@
 - **One derivation, one read.** `evermindRegionSignals` (`lib/evermindRegions.ts`) is the charge/count/active rule the Studio's `EvermindBrainMap` now uses too; `hooks/useProjectEvermindActivity.ts` is the ONE live read (server-cached endpoint, 20 s poll), migrated into `EvermindStudioCenter`. The station's panel is `EvermindStudioCenter` itself, so the room adds no third reading. A blueprint (local draft / unattached) stands dormant with a hint to attach it.
 - **i18n.** `roomStations.evermind.*` in all five catalogs; centre names reuse `creationCanvas.node.region*`.
 - **Verification (Sonnet).** `npm run typecheck` 2/2 guards; vitest evermindRegions, roomStations (lib + component), i18n catalog/messages parity — 129/129.
+- **Deploy fix.** The first push failed `check:design-scale` (hex fallbacks in the brain, `999px` radii and raw font sizes in its label CSS). Colours now come only from theme tokens, labels use `--radius-full` and the eyebrow/field-label size roles; `npm run check` 23/23.
 - **Version.** UI 2026.9.40.
 
 ## ✅ RESOLVED 2026-09-27 — The experience "already learned" ledger is tied to the adaptation that learned each procedure

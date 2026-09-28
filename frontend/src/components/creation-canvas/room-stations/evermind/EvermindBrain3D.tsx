@@ -51,21 +51,19 @@ export interface EvermindBrain3DProps {
 
 type Hues = Record<EvermindRegionKey | 'core' | 'tissue', string>;
 
-/** Dark-theme region identities — only used where no document exists to read. */
-const FALLBACK_HUES: Hues = {
-  neocortex: '#3987e5', hippocampus: '#199e70', amygdala: '#e66767', hypothalamus: '#d95926',
-  thalamus: '#c98500', basalGanglia: '#d55181', personality: '#8b5cf6', core: '#fb7185', tissue: '#94a3b8',
-};
-
+/**
+ * Every colour is the theme's own token. The brain only ever renders in the browser
+ * (the room is `ssr: false`) under the app shell, which declares them all; a token
+ * that somehow reads empty falls back to the neutral tissue token rather than to a
+ * literal that would look the same in both themes.
+ */
 function readHues(): Hues {
-  if (typeof document === 'undefined') return FALLBACK_HUES;
   const style = getComputedStyle(document.documentElement);
-  const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
-  const hues = { ...FALLBACK_HUES };
-  for (const key of EVERMIND_REGION_KEYS) hues[key] = read(REGION_HUE_VAR[key], FALLBACK_HUES[key]);
-  hues.core = read('--ev-core', FALLBACK_HUES.core);
-  hues.tissue = read('--text-muted', FALLBACK_HUES.tissue);
-  return hues;
+  const read = (name: string) => style.getPropertyValue(name).trim();
+  const tissue = read('--text-muted') || 'gray';
+  const hue = (name: string) => read(name) || tissue;
+  const regions = Object.fromEntries(EVERMIND_REGION_KEYS.map((key) => [key, hue(REGION_HUE_VAR[key])])) as Record<EvermindRegionKey, string>;
+  return { ...regions, core: hue('--ev-core'), tissue };
 }
 
 function prefersReducedMotion(): boolean {
