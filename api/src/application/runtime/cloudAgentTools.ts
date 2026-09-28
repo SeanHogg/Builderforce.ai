@@ -15,7 +15,6 @@
 
 import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS, stableStringify } from '@builderforce/agent-tools';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
-import { stableStringify } from '@builderforce/agent-tools';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
