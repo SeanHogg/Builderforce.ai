@@ -29,7 +29,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * alphabet across the candidate chain.
  */
 
-import { parseSseDataLine } from './sseFrames';
+import { parseSseDataLine } from '@seanhogg/builderforce-memory/wire';
 
 const DOT_SENTINEL    = '__DOT__';
 const ESCAPE_SENTINEL = '__DOT_ESC__';

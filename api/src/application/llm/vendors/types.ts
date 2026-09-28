@@ -14,7 +14,7 @@ import { reportCaughtError } from '../../observability/caughtErrorReporter';
 
 import { applyPromptCaching } from '../promptCaching';
 import type { ReasoningParamOpts } from '../reasoningCapability';
-import { parseSseDataLine } from '../sseFrames';
+import { parseSseDataLine, readUsageFields } from '@seanhogg/builderforce-memory/wire';
 
 import type { AgentExecParams } from '@builderforce/agent-tools';
 import { needsMessageShapeSanitizing, sanitizeMessageShape, type ChatMessageLike } from '../messageShapeSanitizer';
@@ -477,38 +477,18 @@ export function isEmptyChatResponse(result: VendorCallResult): boolean {
 // and Anthropic-style input_tokens/output_tokens vendors emit)
 // ---------------------------------------------------------------------------
 
+/** A vendor `usage` object of either wire shape in the gateway's snake_case form.
+ *  The reading (which field wins, absent vs zero, where cache reads hide) is the
+ *  package's `readUsageFields` — the one its bridges meter with. */
 export function pickUsage(u: unknown): VendorUsage {
+  const f = readUsageFields(u);
   const out: VendorUsage = {};
-  if (!u || typeof u !== 'object') return out;
-  const usage = u as Record<string, unknown>;
-  const prompt     = numOrUndef(usage['prompt_tokens']     ?? usage['input_tokens']);
-  const completion = numOrUndef(usage['completion_tokens'] ?? usage['output_tokens']);
-  const total      = numOrUndef(usage['total_tokens']);
-  if (prompt     !== undefined) out.prompt_tokens     = prompt;
-  if (completion !== undefined) out.completion_tokens = completion;
-  if (total      !== undefined) out.total_tokens      = total;
-
-  // Prompt-cache breakdown. Two shapes reach us:
-  //  - Anthropic-native: top-level `cache_read_input_tokens` / `cache_creation_input_tokens`
-  //  - OpenAI / OpenRouter-normalized: `prompt_tokens_details.cached_tokens` (reads only)
-  const details = usage['prompt_tokens_details'];
-  const cachedFromDetails = details && typeof details === 'object'
-    ? numOrUndef((details as Record<string, unknown>)['cached_tokens'])
-    : undefined;
-  const cacheRead = numOrUndef(usage['cache_read_input_tokens']) ?? cachedFromDetails;
-  const cacheCreation = numOrUndef(usage['cache_creation_input_tokens']);
-  if (cacheRead     !== undefined) out.cache_read_tokens     = cacheRead;
-  if (cacheCreation !== undefined) out.cache_creation_tokens = cacheCreation;
+  if (f.promptTokens        !== undefined) out.prompt_tokens         = f.promptTokens;
+  if (f.completionTokens    !== undefined) out.completion_tokens     = f.completionTokens;
+  if (f.totalTokens         !== undefined) out.total_tokens          = f.totalTokens;
+  if (f.cacheReadTokens     !== undefined) out.cache_read_tokens     = f.cacheReadTokens;
+  if (f.cacheCreationTokens !== undefined) out.cache_creation_tokens = f.cacheCreationTokens;
   return out;
-}
-
-/** Coerce an arbitrary value to a finite number, or `undefined` when it is
- *  null/undefined/non-numeric. Shared by `pickUsage` (here) and the Ollama
- *  vendor's native-usage parser so the "absent vs zero" boundary can't drift. */
-export function numOrUndef(v: unknown): number | undefined {
-  if (v === null || v === undefined) return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
 }
 
 // ---------------------------------------------------------------------------

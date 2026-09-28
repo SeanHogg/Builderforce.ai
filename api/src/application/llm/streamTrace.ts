@@ -20,7 +20,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * stream. Every callback is invoked inside a try/catch that reports and swallows,
  * chunks are enqueued before any parsing, and a malformed frame is skipped.
  */
-import { parseSseDataLine } from './sseFrames';
+import { parseSseDataLine } from '@seanhogg/builderforce-memory/wire';
 import { pickUsage } from './vendors';
 import type { LlmUsage } from './LlmProxyService';
 

@@ -15,7 +15,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * unit-testable without a live model.
  */
 
-import { parseSseDataLine } from './sseFrames';
+import { parseSseDataLine } from '@seanhogg/builderforce-memory/wire';
 
 // ---------------------------------------------------------------------------
 // Request: Anthropic Messages → OpenAI Chat Completions

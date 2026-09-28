@@ -40,7 +40,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { cosineSimilarity } from './vectorMath';
+import { cosineSimilarity } from '@seanhogg/builderforce-memory/retrieval';
 
 /** One stored association. `e` = embedding, `r` = response, `t` = stored-at ms. */
 interface SemanticEntry { e: number[]; r: string; t: number }

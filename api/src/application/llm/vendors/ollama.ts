@@ -9,10 +9,10 @@
  * orchestrator will skip this vendor when a streaming request is dispatched.
  */
 
+import { finiteNumber } from '@seanhogg/builderforce-memory/wire';
 import {
   executeChatCompletion,
   forwardCallOpts,
-  numOrUndef,
   type AiModelTier,
   type ResponseParser,
   type VendorCallParams,
@@ -47,10 +47,10 @@ export const parseOllamaResponse: ResponseParser = (raw) => {
   // Ollama's native token fields (`prompt_eval_count` / `eval_count`) don't match
   // the OpenAI/Anthropic aliases `pickUsage` reads, and it derives `total_tokens`
   // by summing the two — so this stays a bespoke assembly. Only the numeric
-  // coercion is shared (`numOrUndef`), keeping the "absent vs zero" boundary
+  // coercion is shared (`finiteNumber`), keeping the "absent vs zero" boundary
   // identical to the OpenAI-shape parser.
-  const promptTokens     = numOrUndef(r?.prompt_eval_count);
-  const completionTokens = numOrUndef(r?.eval_count);
+  const promptTokens     = finiteNumber(r?.prompt_eval_count);
+  const completionTokens = finiteNumber(r?.eval_count);
   const usage: VendorUsage = {};
   if (promptTokens     !== undefined) usage.prompt_tokens     = promptTokens;
   if (completionTokens !== undefined) usage.completion_tokens = completionTokens;

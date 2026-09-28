@@ -43,7 +43,7 @@
  * first-chunk sniff, so an upstream failure still raises a retryable vendor error
  * the cascade can act on instead of surfacing as an empty answer.
  */
-import { parseSseDataFrames, parseSseDataLine } from '../sseFrames';
+import { parseSseDataFrames, parseSseDataLine } from '@seanhogg/builderforce-memory/wire';
 import { pickUsage, VendorRetryableError, type VendorId } from './types';
 import {
   UPSTREAM_EVIDENCE_FIELD, asFunctionCallItem, functionCallArguments, upstreamTurnEvidence,

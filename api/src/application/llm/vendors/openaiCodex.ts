@@ -1,4 +1,4 @@
-import { parseSseDataFrames } from '../sseFrames';
+import { parseSseDataFrames } from '@seanhogg/builderforce-memory/wire';
 import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, throwWithUpstreamDiagnostic, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';

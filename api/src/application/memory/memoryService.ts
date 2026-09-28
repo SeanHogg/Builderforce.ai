@@ -55,7 +55,7 @@ import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrast
 import { QA_CACHE_SOURCE, deleteProjectFact, projectFactsVersion, recallProjectFacts, upsertProjectFact } from '../llm/projectFacts';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { fuseHybridArms } from '@builderforce/agent-tools';
+import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
 import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING_MODEL } from './memoryEmbedding';
 import { annRecallProject, annRecallScoped, type RecalledRow } from './memorySemanticRecall';
 import { reportCaughtError } from '../observability/caughtErrorReporter';

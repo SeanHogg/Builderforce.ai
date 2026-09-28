@@ -4,10 +4,10 @@
  * The register asks for `builderforce-memory`'s `CachingBridge` / `ResponseCache` to
  * be wired into the gateway and agent-runtime read paths. Those classes cannot run
  * here, and the reason is structural rather than incidental: `CachingBridge` decorates
- * a `TransformerBridge` (a `generate(prompt)` interface over a local model), the
- * gateway speaks OpenAI chat-completions with tools and multi-part content, and the
- * Worker bundle cannot pull that package's WebGPU engine at all — the same constraint
- * that made `semanticCache.ts` re-implement cosine similarity in `vectorMath`.
+ * a `TransformerBridge` (a `generate(prompt)` interface over a local model), while the
+ * gateway speaks OpenAI chat-completions with tools and multi-part content and has to
+ * dispatch and meter BEFORE deciding to store — a decorator over `generate` cannot
+ * express that order.
  *
  * So this is that BEHAVIOUR, implemented for this runtime: `buildCacheKey` over the
  * same fields (prompt, model, system, maxTokens, temperature, topP), a bounded

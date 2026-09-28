@@ -1,3 +1,9 @@
+import { bm25Idf, bm25LengthNorm, bm25TermScore } from '@seanhogg/builderforce-memory/retrieval';
+
+/** BM25 saturation for web documents — lower than the package default (1.5): a page
+ *  that repeats a term is usually padding, not more relevant. */
+const WEB_BM25_K1 = 1.2;
+
 const STOP = new Set('a an and are as at be been by for from had has have he her hers him his i in is it its of on or our she that the their them they this to was we were will with you your'.split(' '));
 
 function stem(term: string): string {
@@ -38,12 +44,11 @@ export function rankLexical(query: string, candidates: LexicalCandidate[], docum
   const queryTerms = new Set(tokenize(query));
   return candidates.map((candidate) => {
     let bm25 = 0;
-    const lengthNorm = 1 - 0.75 + 0.75 * Math.max(1, candidate.wordCount) / Math.max(1, averageLength);
+    const lengthNorm = bm25LengthNorm(Math.max(1, candidate.wordCount), Math.max(1, averageLength));
     for (const stat of candidate.terms) {
       if (!queryTerms.has(stat.term)) continue;
       const frequency = stat.titleFrequency * 3.5 + stat.headingFrequency * 2 + stat.bodyFrequency;
-      const idf = Math.log(1 + (Math.max(documentCount, 1) - stat.documentFrequency + 0.5) / (stat.documentFrequency + 0.5));
-      bm25 += idf * (frequency * 2.2) / (frequency + 1.2 * lengthNorm);
+      bm25 += bm25TermScore(frequency, bm25Idf(documentCount, stat.documentFrequency), lengthNorm, WEB_BM25_K1);
     }
     const phraseNeedle = query.trim().toLowerCase().replace(/\s+/g, ' ');
     const phrase = phraseNeedle.length > 2 && `${candidate.title ?? ''} ${candidate.headings.join(' ')} ${candidate.text}`.toLowerCase().includes(phraseNeedle) ? 0.75 : 0;

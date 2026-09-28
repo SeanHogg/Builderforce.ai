@@ -1,3 +1,4 @@
+import { rrfTerm } from '@seanhogg/builderforce-memory/retrieval';
 import { makeSnippet, rankLexical, tokenize } from '../../domain/webSearch/textIndex';
 import { normalizeWebUrl } from '../../domain/webSearch/urlPolicy';
 import type { SemanticIndex, WebSearchStore } from './ports';
@@ -26,7 +27,7 @@ export class InternetSearchService {
     const semanticMap = new Map(semantic.map((match) => [match.documentId, match.score]));
     const merged = ranked.map((result, index) => {
       const semanticScore = semanticMap.get(result.id) ?? 0;
-      const hybridScore = result.score + semanticScore * 0.8 + 1 / (60 + index + 1);
+      const hybridScore = result.score + semanticScore * 0.8 + rrfTerm(index);
       return { ...result, score: hybridScore, scoring: { ...result.scoring, semantic: semanticScore, hybrid: hybridScore } };
     }).sort((a, b) => b.score - a.score).slice(offset, offset + limit);
     return {

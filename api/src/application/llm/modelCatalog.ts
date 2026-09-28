@@ -11,7 +11,8 @@
 
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { catalogEntry, numOrUndef } from './vendors';
+import { finiteNumber } from '@seanhogg/builderforce-memory/wire';
+import { catalogEntry } from './vendors';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const CACHE_KEY = 'openrouter-catalog:v1';
@@ -78,9 +79,9 @@ function deriveProvider(model: OpenRouterModel): string {
 }
 
 // Coerce an OpenRouter pricing string to a finite number (0 when absent/unparseable)
-// via the shared `numOrUndef` coercer — the same finite-vs-absent boundary the
+// via the shared `finiteNumber` coercer — the same finite-vs-absent boundary the
 // vendor-usage parser uses — so pricing normalization isn't a second re-rolled copy.
-const num = (value: string | undefined): number => numOrUndef(value) ?? 0;
+const num = (value: string | undefined): number => finiteNumber(value) ?? 0;
 
 function normalize(model: OpenRouterModel): CatalogModel {
   const prompt = num(model.pricing?.prompt);

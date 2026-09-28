@@ -28,7 +28,7 @@
  * has to tolerate. Clients that do not know the field ignore it.
  */
 
-import { parseSseDataLine } from './sseFrames';
+import { parseSseDataLine } from '@seanhogg/builderforce-memory/wire';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** What the terminal frame carries. Mirrors the non-streaming envelope's fields so a
