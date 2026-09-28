@@ -132,3 +132,26 @@
 @media (max-height: 700px) {
   .side-brain .brain { max-height: 96px; }
 }
+
+/* ---------- which Evermind, and a workspace model's console ---------- */
+.source-picker { display: flex; flex-direction: column; gap: 6px; min-width: min(100%, 260px); }
+.source-picker select { min-height: 36px; max-width: 100%; }
+.source-hint a { color: var(--accent); }
+.side-brain-source { font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The shared console resolves every colour through --bf-ev-* first; map them to Synapse's
+   tokens so it reads as part of the window in both themes. */
+.ev-console {
+  --bf-ev-surface: var(--surface);
+  --bf-ev-surface-2: var(--sunken);
+  --bf-ev-border: var(--border);
+  --bf-ev-text: var(--text);
+  --bf-ev-text-2: var(--muted);
+  --bf-ev-accent: var(--accent);
+  --bf-ev-danger: var(--bad);
+  --bf-ev-ok: var(--ok);
+  --bf-warn-text: var(--text);
+  --bf-warn-bg: var(--busy-soft);
+  --bf-warn-border: var(--busy);
+  color: var(--text);
+  min-width: 0;
+}

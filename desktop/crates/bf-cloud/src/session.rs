@@ -125,10 +125,10 @@ impl Session {
         Ok((t.tenant_id, t.user_id.clone()))
     }
 
-    fn send(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value, CloudError> {
+    fn send(&self, method: &str, path: &str, body: Option<&Value>, timeout: Duration) -> Result<Value, CloudError> {
         let (token, _) = self.bearer()?;
         let req = ureq::request(method, &format!("{}{path}", self.base))
-            .timeout(TIMEOUT)
+            .timeout(timeout)
             .set("authorization", &format!("Bearer {token}"))
             .set("accept", "application/json");
         let res = match body {
@@ -142,10 +142,15 @@ impl Session {
 
     /// Call the platform API as the signed-in person. A 401 re-exchanges the token once.
     pub fn api(&self, method: &str, path: &str, body: Option<Value>) -> Result<Value, CloudError> {
-        match self.send(method, path, body.as_ref()) {
+        self.api_with_timeout(method, path, body, TIMEOUT)
+    }
+
+    /// [`Session::api`] for a call the platform takes longer over (training, audits).
+    pub fn api_with_timeout(&self, method: &str, path: &str, body: Option<Value>, timeout: Duration) -> Result<Value, CloudError> {
+        match self.send(method, path, body.as_ref(), timeout) {
             Err(e) if e.is_unauthorized() => {
                 *self.token.lock().unwrap() = None;
-                self.send(method, path, body.as_ref())
+                self.send(method, path, body.as_ref(), timeout)
             }
             other => other,
         }

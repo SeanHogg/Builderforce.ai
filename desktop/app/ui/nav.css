@@ -1,0 +1,65 @@
+/* The sidebar of chats and the Settings frame. Theme tokens only (styles.css), so both
+   themes read; on narrow windows the sidebar is a top bar and both navigations scroll
+   sideways instead of stacking. */
+
+.stack-tight { display: flex; flex-direction: column; gap: 4px; }
+
+/* ---------- sidebar: brand + new chat, account, chats, foot ---------- */
+.new-chat { margin-left: auto; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 34px; height: 34px; padding: 0; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--raised); color: var(--text); cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.side-section { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 2px 10px 4px; }
+.side-chats { flex: 1 1 auto; min-height: 96px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: -8px -4px 0; padding: 0 4px; }
+.side-chats-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.side-chat {
+  display: flex; flex-direction: column; gap: 1px; min-height: 42px; padding: 7px 10px;
+  border-radius: var(--radius-sm); color: var(--text); text-decoration: none;
+}
+.side-chat:hover { background: var(--hover); }
+.side-chat.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.side-chat-title { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-chat-when { font-size: 11.5px; }
+.side-chats-empty { padding: 6px 10px; }
+.foot-nav a { padding: 7px 10px; }
+
+/* ---------- Settings: its own navigation beside the page ---------- */
+.view:has(> .settings) { max-width: 1240px; }
+.settings { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; align-items: start; }
+.settings-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; }
+.settings-title { font-size: 20px; margin: 0; }
+.settings-nav { display: flex; flex-direction: column; gap: 14px; }
+.settings-group { display: flex; flex-direction: column; gap: 2px; }
+.settings-nav a {
+  display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 7px 10px;
+  border-radius: var(--radius-sm); color: var(--muted); text-decoration: none; font-weight: 500;
+}
+.settings-nav a:hover { background: var(--hover); color: var(--text); }
+.settings-nav a[aria-current="page"] { background: var(--accent-soft); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+.settings-nav svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.settings-nav a[aria-current="page"] svg { color: var(--accent); }
+.settings-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.account-card { max-width: 560px; }
+
+@media (max-width: 900px) {
+  .settings { grid-template-columns: 1fr; gap: 16px; }
+  .settings-side { position: static; }
+  .settings-nav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  .settings-group { flex-direction: row; gap: 4px; }
+  .settings-group .side-section { display: none; }
+  .settings-nav a { white-space: nowrap; }
+}
+
+@media (max-width: 760px) {
+  .side-chats { flex: 1 1 100%; order: 4; min-height: 0; flex-direction: row; align-items: center; overflow-x: auto; margin: 0; padding: 0; }
+  .side-chats > .side-section { display: none; }
+  .side-chats-list { flex-direction: row; }
+  .side-chat { min-width: 140px; max-width: 200px; }
+  .foot-nav { flex: none; order: 0; flex-direction: row; overflow: visible; }
+}

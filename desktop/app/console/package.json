@@ -1,0 +1,30 @@
+{
+  "name": "@builderforce/synapse-console",
+  "private": true,
+  "version": "2026.9.31",
+  "description": "The shared React surfaces Synapse renders from builderforce.ai's own packages — today the Evermind console (Teach, Test, Check, Maintain) — bundled into one ES module the window loads on demand. Output: ../ui/vendor/evermind.js (committed, like the VS Code webview bundle, and rebuilt by the desktop release).",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node ../../../scripts/ensure-linked-deps.mjs",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@seanhogg/builderforce-brain-embedded": "link:../../../brain-embedded",
+    "@seanhogg/builderforce-brain-ui": "link:../../../packages/brain-ui",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^6.0.3",
+    "vite": "^6.0.7",
+    "vitest": "^4.1.10"
+  }
+}

@@ -36,6 +36,9 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 /** 0..1: how full a region looks — logarithmic, so a hundred facts and three skills both read. */
 const charge = (count) => (count > 0 ? clamp(0.35 + Math.log10(count + 1) / 2.5, 0, 1) : 0.12);
+/** A region's fill: its own live charge when the view carries one (a workspace model's
+ *  limbic regions hold state, not items), else how full it is. */
+const fill = (rs) => (Number.isFinite(rs.charge) ? clamp(rs.charge, 0.12, 1) : charge(rs.count));
 
 function nodeLayout(region, r, nodes, max) {
   const away = Math.atan2(region.y - CORE.y, region.x - CORE.x);
@@ -49,7 +52,7 @@ function nodeLayout(region, r, nodes, max) {
 function regionGlyph(rs, s, mode, selected, dimmed, onSelect) {
   const { meta, count } = rs;
   const hue = `var(${meta.hue})`;
-  const c = charge(count);
+  const c = fill(rs);
   const r = meta.size * 0.55 + c * meta.size * 0.45;
   const label = t(`brain.region.${meta.key}`);
   const full = mode === "full";
@@ -92,7 +95,7 @@ function regionGlyph(rs, s, mode, selected, dimmed, onSelect) {
       }
     });
   }
-  g.append(title(`${label} — ${t(`brain.role.${meta.key}`)}`));
+  g.append(title(`${label} — ${t(`${s.view?.rolePrefix ?? "brain.role"}.${meta.key}`)}`));
   return g;
 }
 
@@ -107,7 +110,7 @@ export function createBrain(mode, onSelect) {
 
   function update(s, selected = null) {
     const states = regionStates(s);
-    const sig = JSON.stringify([selected, states.map((r) => [r.count, r.active, r.fresh, r.nodes.map((n) => n.id)])]);
+    const sig = JSON.stringify([selected, s.view?.kind, states.map((r) => [r.count, r.charge, r.active, r.fresh, r.nodes.map((n) => n.id)])]);
     if (sig === signature) return;
     signature = sig;
 
@@ -125,8 +128,8 @@ export function createBrain(mode, onSelect) {
     for (const rs of states) {
       kids.push(el("line", {
         x1: CORE.x, y1: CORE.y, x2: rs.meta.x, y2: rs.meta.y,
-        stroke: `var(${rs.meta.hue})`, "stroke-width": 0.9 + charge(rs.count) * 1.1,
-        "stroke-opacity": rs.count > 0 || rs.active ? 0.5 : 0.18, "stroke-linecap": "round",
+        stroke: `var(${rs.meta.hue})`, "stroke-width": 0.9 + fill(rs) * 1.1,
+        "stroke-opacity": rs.count > 0 || rs.active || rs.charge > 0.2 ? 0.5 : 0.18, "stroke-linecap": "round",
         class: rs.active ? "br-edge br-live" : "br-edge",
       }));
     }

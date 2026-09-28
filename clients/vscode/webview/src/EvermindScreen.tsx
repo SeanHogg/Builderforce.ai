@@ -1,9 +1,11 @@
 /**
  * EvermindScreen — the VS Code sidebar host of the shared <EvermindConsole> (the
  * SAME component the web app embeds in the IDE: one inspect-and-train surface, two
- * hosts). It wires the console's data + mutations to the gateway over the webview's
- * bearer fetch (CORS allows the `vscode-webview://` origin), and maps the host's
- * localized label bundle onto the console's labels.
+ * hosts). The gateway calls are the shared `createEvermindRestAdapter` over the webview's
+ * bearer fetch (CORS allows the `vscode-webview://` origin) — the same adapter Synapse
+ * uses — and the host's localized bundle maps onto the labels through the shared
+ * `evermindLabelsFromBundle`. What is this host's own: the clipboard and the memory
+ * files, which only the extension host can touch.
  *
  * A Project can group MANY IDE builds, and each LLM build is its OWN Evermind — the
  * model lives on the build's BACKING storage project (`storageProjectId`), which is
@@ -17,114 +19,22 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   EvermindConsole,
   DEFAULT_EVERMIND_LABELS,
+  createEvermindRestAdapter,
+  evermindLabelsFromBundle,
+  loadEvermindBuilds,
+  preferredEvermindBuild,
+  type EvermindBuild,
   type EvermindConsoleAdapter,
-  type EvermindConsoleLabels,
-  type EvermindTarget,
+  type PickedMemory,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from './authedFetch';
-import { fetchIsPaidPlan } from './accountPlan';
-import { getToken, onRefresh, refreshToken, request, type InitData, type LabelBundle } from './vscodeBridge';
-
-/** Host reply to `evermind.pickMemory` — the parsed, learnable entries (or null when the
- *  user cancels the picker).
- *
- *  Every entry carries its OWN `path`. A JSON snapshot yields one shared path (so the
- *  compaction below is exactly the single-file rewrite it always was); a Claude Code
- *  auto-memory FOLDER yields one path per fact, because each fact is its own `*.md` file
- *  and must be stubbed there. `path`/`fileName` describe the source the user picked — the
- *  file or the folder — and only label the result. */
-interface PickedMemory {
-  path: string;
-  fileName: string;
-  entries: Array<{ key: string; text: string; prompt?: string; path?: string }>;
-}
-/** Gateway reply from POST …/extract-memories. */
-interface ExtractResponse { absorbed: string[]; skipped: Array<{ key: string; reason: string }>; merged: number; version: number }
-
-interface TenantModelRow { slug?: string; name?: string; baseModel?: string | null }
-/** Only the coder catalog is read from this payload — the plan/tier fields it also
- *  carries are deliberately not consumed here (see `fetchIsPaidPlan`). */
-interface LlmModelsResponse { codingModels?: string[] }
-
-/** One row from GET /api/ide-projects — an IDE build. An LLM build's Evermind lives
- *  on its backing `storageProjectId`; `containerProjectId` is the Project it's grouped under. */
-interface IdeProjectRow {
-  id: number;
-  name: string;
-  modality: string;
-  storageProjectId: number;
-  containerProjectId: number | null;
-  containerName: string | null;
-}
-
-/** Read a localized string from the host bundle (`ev.*` keys), else the English default. */
-function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
-  const s = (key: string): string | undefined => labels[`ev.${key}`];
-  // Only map the static strings from the bundle; parametric ones keep their English
-  // defaults unless the host provides a template we interpolate below.
-  const out: Partial<EvermindConsoleLabels> = {};
-  const keys: string[] = [
-    'title', 'description', 'loading', 'managerOnlyHint', 'statusUnseeded', 'pickModelLabel',
-    'noModels', 'notSetUp', 'enableCta', 'working', 'versionLabel', 'contributionsLabel',
-    'pendingLabel', 'lastLearnedLabel', 'neverLearned', 'inferenceLabel', 'inferenceHint',
-    'learningLabel', 'learningHint', 'on', 'off', 'connected', 'frozen', 'teacherLabel',
-    'teacherHint', 'teacherNone', 'teacherPaidOnly', 'teachTitle', 'teachHint',
-    'teachPromptPlaceholder', 'teachTextPlaceholder', 'teachCta', 'teaching', 'taught',
-    'taughtDropped', 'taughtStillPending',
-    'flushCta', 'flushing', 'flushedNone', 'inspectTitle', 'inspectEmpty', 'kindText',
-    'kindDelta', 'deltaEntry', 'refresh', 'errorGeneric',
-    'importTitle', 'importHint', 'importCta', 'importing', 'importNothing',
-    'quarantinedBadge', 'targetsTitle', 'targetsHint', 'targetsEmpty', 'targetSelfBadge',
-    'targetBuildBadge', 'targetUnseeded', 'targetInferenceOn', 'targetConnected', 'targetFrozen',
-    // Test bench / maintenance / knowledge analyzer.
-    'testTitle', 'testHint', 'testPlaceholder', 'testRunCta', 'testReadinessCta', 'testRunning',
-    'testResultPrompt', 'testServable', 'testRefused', 'testEmptyOutput', 'testVerdictReady',
-    'testVerdictNotReady',
-    'maintenanceTitle', 'maintenanceHint', 'reseedLabel', 'reseedHint', 'reseedCta',
-    'reseedConfirm', 'reseedStarterOption', 'reindexLabel', 'reindexHint', 'reindexCta',
-    'cleanupLabel', 'cleanupHint', 'cleanupCta', 'cleanupConfirm',
-    'analyzeTitle', 'analyzeHint', 'analyzeCta', 'analyzing', 'analyzeCorrectionLabel',
-    'analyzeSelectAll', 'analyzeSelectNone', 'analyzeApplying',
-    // Tabs + the diagnostics export controls.
-    'tabsLabel', 'tabTeach', 'tabTest', 'tabCheck', 'tabMaintain',
-    'diagnosticsTitle', 'diagnosticsHint', 'diagnosticsCta', 'diagnosticsCopied',
-    'diagnosticsShow', 'diagnosticsHide', 'diagnosticsManualHint',
-  ];
-  for (const k of keys) {
-    const v = s(k);
-    if (v != null) (out as Record<string, unknown>)[k] = v;
-  }
-  // Parametric strings: interpolate the host template when present.
-  const seeded = s('statusSeeded');
-  if (seeded) out.statusSeeded = (version) => seeded.replace('{version}', String(version));
-  const flushedN = s('flushedN');
-  if (flushedN) out.flushedN = (merged, version) => flushedN.replace('{merged}', String(merged)).replace('{version}', String(version));
-  const importDone = s('importDone');
-  if (importDone) out.importDone = (absorbed, version, compacted, savedKb) =>
-    importDone.replace('{absorbed}', String(absorbed)).replace('{version}', String(version)).replace('{compacted}', String(compacted)).replace('{savedKb}', savedKb);
-  const quarantinedHint = s('quarantinedHint');
-  if (quarantinedHint) out.quarantinedHint = (reason) => quarantinedHint.replace('{reason}', reason);
-  const targetSeeded = s('targetSeeded');
-  if (targetSeeded) out.targetSeeded = (version) => targetSeeded.replace('{version}', String(version));
-  const targetProjectId = s('targetProjectId');
-  if (targetProjectId) out.targetProjectId = (id) => targetProjectId.replace('{id}', String(id));
-  // The resolved teach outcomes — what the contribution's merge actually did.
-  const taughtDistilled = s('taughtDistilled');
-  if (taughtDistilled) out.taughtDistilled = (model, version) =>
-    taughtDistilled.replace('{model}', model).replace('{version}', String(version));
-  const taughtSelf = s('taughtSelf');
-  if (taughtSelf) out.taughtSelf = (version) => taughtSelf.replace('{version}', String(version));
-  const taughtTeacherFault = s('taughtTeacherFault');
-  if (taughtTeacherFault) out.taughtTeacherFault = (model, reason) =>
-    taughtTeacherFault.replace('{model}', model).replace('{reason}', reason);
-  return out;
-}
+import { getToken, onRefresh, refreshToken, request, type InitData } from './vscodeBridge';
 
 export function EvermindScreen({ init }: { init: InitData }) {
-  const labels = useMemo(() => ({ ...DEFAULT_EVERMIND_LABELS, ...evLabels(init.labels) }), [init.labels]);
+  const labels = useMemo(() => ({ ...DEFAULT_EVERMIND_LABELS, ...evermindLabelsFromBundle(init.labels) }), [init.labels]);
 
   // The tenant's LLM builds — each is its own Evermind. null = still loading.
-  const [builds, setBuilds] = useState<IdeProjectRow[] | null>(null);
+  const [builds, setBuilds] = useState<EvermindBuild[] | null>(null);
   // The selected build's BACKING storage project id — the Evermind scope.
   const [storageId, setStorageId] = useState<number | null>(null);
   // Bumped by the view's title-bar refresh action (host → 'refresh' message). Re-runs
@@ -144,116 +54,33 @@ export function EvermindScreen({ init }: { init: InitData }) {
     const activeHead = activeProjectId == null
       ? Promise.resolve(null)
       : req<{ inheritedFromProjectId?: number }>(`/api/projects/${activeProjectId}/evermind/head`).catch(() => null);
-    Promise.all([req<IdeProjectRow[]>('/api/ide-projects'), activeHead])
-      .then(([rows, head]) => {
+    Promise.all([loadEvermindBuilds(req), activeHead])
+      .then(([evermindBuilds, head]) => {
         if (cancelled) return;
-        // Evermind builds: the `evermind` modality (plus legacy `llm`, the retired
-        // combined modality, which are Evermind projects).
-        const evermindBuilds = (rows ?? []).filter((r) => r.modality === 'evermind' || r.modality === 'llm');
         setBuilds(evermindBuilds);
-        setStorageId((cur) => {
-          // Keep a still-valid selection across refreshes; else the Evermind the server
-          // resolves for the active Project, then any build grouped under it, then the first.
-          if (cur != null && evermindBuilds.some((r) => r.storageProjectId === cur)) return cur;
-          const resolvedId = head?.inheritedFromProjectId ?? activeProjectId;
-          const preferred = evermindBuilds.find((r) => r.storageProjectId === resolvedId)
-            ?? evermindBuilds.find((r) => r.containerProjectId === activeProjectId)
-            ?? evermindBuilds[0];
-          return preferred?.storageProjectId ?? null;
-        });
+        // Keep a still-valid selection across refreshes; else the Evermind the server
+        // resolves for the active Project, then any build grouped under it, then the first.
+        setStorageId((cur) => preferredEvermindBuild(evermindBuilds, {
+          current: cur,
+          resolvedProjectId: head?.inheritedFromProjectId ?? null,
+          activeProjectId,
+        }));
       })
       .catch(() => { if (!cancelled) setBuilds([]); });
     return () => { cancelled = true; };
   }, [init.baseUrl, init.project?.id, refreshSignal]);
 
-  const adapter = useMemo<EvermindConsoleAdapter>(() => {
-    const req = authedFetch(init.baseUrl, getToken, () => refreshToken());
-    const base = `/api/projects/${storageId}/evermind`;
-    return {
-      loadData: () => req(`${base}/contributions`),
-      loadSeedModels: async () => {
-        const r = await req<{ models?: TenantModelRow[] }>('/api/llm/models');
-        return (r.models ?? [])
-          .filter((m): m is TenantModelRow & { slug: string } => typeof m.slug === 'string' && !!m.baseModel?.startsWith('evermind/'))
-          .map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
-      },
-      loadTeacherOptions: async () => {
-        // Models come from the gateway (it owns the coder catalog); the PAID verdict
-        // comes from the shared plan predicate, not from this payload — see
-        // `fetchIsPaidPlan` for why `premium`/`effectivePlan` here can't be trusted
-        // for that question.
-        const [r, isPaid] = await Promise.all([
-          req<LlmModelsResponse>('/llm/v1/models'),
-          fetchIsPaidPlan(req),
-        ]);
-        return { models: r.codingModels ?? [], isPaid };
-      },
-      seedFromModel: (slug) => req(`${base}/seed-from-model`, { method: 'POST', body: JSON.stringify({ slug }) }).then(() => undefined),
-      setInference: (enabled) => req(`${base}/inference`, { method: 'PATCH', body: JSON.stringify({ enabled }) }).then(() => undefined),
-      setMode: (mode) => req(`${base}/mode`, { method: 'PATCH', body: JSON.stringify({ mode }) }).then(() => undefined),
-      setTeacher: (model) => req(`${base}/teacher`, { method: 'PATCH', body: JSON.stringify({ model }) }).then(() => undefined),
-      // The POST only means "queued" — the teacher runs later in the coordinator's
-      // debounced merge — so hand the console the contribution id and let it poll the
-      // status door for what actually happened.
-      teach: (text, prompt) => req<{ contributionId?: number }>(`${base}/learn-text`, { method: 'POST', body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }) })
-        .then((r) => (r.contributionId ? { contributionId: r.contributionId } : {})),
-      teachStatus: (contributionId) => req(`${base}/contribution/${contributionId}`),
-      flush: () => req<{ merged?: number; version?: number }>(`${base}/flush`, { method: 'POST' }).then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
-      validate: (prompt) => req(`${base}/validate`, { method: 'POST', body: JSON.stringify({ prompt }) }),
-      // Read-only list of every Evermind under this project (self + IDE builds).
-      loadTargets: () => req<{ targets?: EvermindTarget[] }>(`${base}/targets`).then((r) => r.targets ?? []),
-      // Test bench: generate from the model and grade it — the sidebar gets the SAME
-      // "what will this actually produce?" answer as the web console, not a lesser one.
-      probe: (prompt) => req(`${base}/probe`, { method: 'POST', body: JSON.stringify(prompt ? { prompt } : {}) }),
-      // Maintenance: replace the weights / rebuild the recall index / clean up.
-      reseed: (slug) => req<{ version?: number }>(`${base}/reseed`, { method: 'POST', body: JSON.stringify(slug ? { slug } : {}) })
-        .then((r) => ({ version: r.version ?? 0 })),
-      reindex: () => req<{ reindexed?: number; skipped?: number; version?: number }>(`${base}/reindex`, { method: 'POST' })
-        .then((r) => ({ reindexed: r.reindexed ?? 0, skipped: r.skipped ?? 0, version: r.version ?? 0 })),
-      cleanup: () => req<{ discarded?: number; cachedAnswers?: number }>(`${base}/cleanup`, { method: 'POST' })
-        .then((r) => ({ discarded: r.discarded ?? 0, cachedAnswers: r.cachedAnswers ?? 0 })),
-      // Knowledge audit + repair.
-      analyze: () => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({}) }),
-      applyFindings: (findings) => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({ apply: true, findings }) }),
-      // Diagnostics export goes through the HOST clipboard: a webview is not reliably
-      // granted the Clipboard API, and the console's own fallback (reveal + select the
-      // report) is a worse experience than `vscode.env.clipboard`, which always works.
-      copyText: (text) => request<null>('evermind.copyText', { text }).then(() => undefined),
-      // Import: host reads the snapshot (fs) → gateway absorbs the entries → host compacts
-      // the absorbed ones to stubs. The three steps split by capability (fs on the host,
-      // authed fetch in the webview), so no single layer needs powers it lacks.
-      importMemory: async () => {
-        const picked = await request<PickedMemory | null>('evermind.pickMemory');
-        if (!picked || picked.entries.length === 0) return null;
-        const res = await req<ExtractResponse>(`${base}/extract-memories`, { method: 'POST', body: JSON.stringify({ entries: picked.entries }) });
-        // The gateway answers with absorbed KEYS; the host compacts FILES. Regroup the
-        // absorbed keys by the source path each entry came from — one group for a
-        // snapshot, one per fact file for a memory folder.
-        const absorbed = new Set(res.absorbed);
-        const byPath = new Map<string, string[]>();
-        for (const e of picked.entries) {
-          if (!absorbed.has(e.key)) continue;
-          const p = e.path ?? picked.path;
-          const keys = byPath.get(p) ?? [];
-          keys.push(e.key);
-          byPath.set(p, keys);
-        }
-        const files = [...byPath].map(([path, absorbedKeys]) => ({ path, absorbedKeys }));
-        const comp = await request<{ compacted: number; bytesSaved: number }>('evermind.compactMemory', {
-          files, version: res.version,
-        });
-        return {
-          fileName: picked.fileName,
-          absorbed: res.absorbed.length,
-          skipped: res.skipped.length,
-          merged: res.merged,
-          version: res.version,
-          compacted: comp.compacted,
-          bytesSaved: comp.bytesSaved,
-        };
-      },
-    };
-  }, [init.baseUrl, storageId]);
+  const adapter = useMemo<EvermindConsoleAdapter>(() => createEvermindRestAdapter({
+    request: authedFetch(init.baseUrl, getToken, () => refreshToken()),
+    projectId: storageId ?? 0,
+    // Diagnostics export goes through the HOST clipboard: a webview is not reliably
+    // granted the Clipboard API, and `vscode.env.clipboard` always works.
+    copyText: (text) => request<null>('evermind.copyText', { text }).then(() => undefined),
+    // Import: the host reads the snapshot or memory folder (fs) and later compacts the
+    // absorbed entries to stubs in their own files; the gateway absorbs in between.
+    pickMemory: () => request<PickedMemory | null>('evermind.pickMemory'),
+    compactMemory: (req) => request<{ compacted: number; bytesSaved: number }>('evermind.compactMemory', { ...req }),
+  }), [init.baseUrl, storageId]);
 
   // Still loading the build list.
   if (builds == null) {

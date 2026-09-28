@@ -1,7 +1,9 @@
 // The top of the Evermind page — the brain at full size, as the web Evermind shows it:
 // stat tiles (model, learned, queued, training loss), the knowledge map with its legend
 // (click a region to filter), what it learned most recently, and the two learning charts.
-// Self-contained: it reads the shared brain picture and owns its selection.
+// Self-contained: it reads the shared brain picture — this machine's Evermind or a
+// workspace model, one view shape either way — and owns its selection. A workspace model's
+// tiles are the console's own (it sits right below), so they are not repeated here.
 import { h } from "../bridge.js";
 import { num, relTime, t } from "../i18n.js";
 import { createBrain } from "./brainSvg.js";
@@ -25,7 +27,7 @@ function legend(onSelect) {
         const cap = h("span", { class: "legend-cap" });
         const btn = h(
           "button",
-          { class: "legend-item", type: "button", title: t(`brain.role.${r.key}`), on: { click: () => onSelect(r.key) } },
+          { class: "legend-item", type: "button", on: { click: () => onSelect(r.key) } },
           h("span", { class: "swatch", attrs: { style: `background: var(${r.hue})` } }),
           h("span", { class: "legend-name", text: t(`brain.region.${r.key}`) }),
           cap,
@@ -43,13 +45,14 @@ const EVENT_TEXT = {
   run: (e) => t(`brain.event.run.${e.detail}`, { name: e.name }),
   approval: (e) => t(`brain.event.approval.${e.detail}`, { name: e.name }),
   adaptation: (e) => t("brain.event.adaptation", { version: e.name, loss: e.detail }),
+  contribution: (e) => (e.detail ? t("brain.event.contributionDistilled", { name: e.name, model: e.detail }) : t("brain.event.contribution", { name: e.name })),
   fact: (e) => t("brain.event.fact", { name: e.title }),
   ask: (e) => t("brain.event.ask", { name: e.title }),
 };
 
 /** What the recent list shows: experience events, or — for a region filter — that region's own items. */
 function recentItems(s, selected) {
-  if (!selected) return (s.experience?.recent ?? []).map((e) => ({ ...e, region: e.region }));
+  if (!selected) return s.view?.recent ?? [];
   const rs = regionStates(s).find((r) => r.meta.key === selected);
   return (rs?.nodes ?? []).map((n) => ({ kind: n.kind, name: n.title, title: n.title, detail: n.detail, at: n.at, region: selected }));
 }
@@ -74,11 +77,13 @@ export function brainPanel() {
   const lossHost = h("div", { class: "chart-host" });
   const daysHost = h("div", { class: "chart-host" });
   const note = h("p", { class: "muted small", hidden: true });
+  const lossBody = h("p", { class: "muted small" });
 
+  const tiles = h("div", { class: "tiles" }, model.el, learned.el, queued.el, loss.el);
   const el = h(
     "div",
     { class: "stack brain-panel" },
-    h("div", { class: "tiles" }, model.el, learned.el, queued.el, loss.el),
+    tiles,
     note,
     h(
       "div",
@@ -89,22 +94,25 @@ export function brainPanel() {
     h(
       "div",
       { class: "brain-grid" },
-      h("section", { class: "card stack" }, h("h2", { text: t("brain.lossTitle") }), h("p", { class: "muted small", text: t("brain.lossBody") }), lossHost),
+      h("section", { class: "card stack" }, h("h2", { text: t("brain.lossTitle") }), lossBody, lossHost),
       h("section", { class: "card stack" }, h("h2", { text: t("brain.daysTitle") }), daysHost, activityLegend()),
     ),
   );
 
   function paint(s) {
     last = s;
-    const x = s.experience;
-    const adaptations = x?.adaptations ?? [];
+    const v = s.view;
+    const local = v.kind === "local";
+    const adaptations = v.adaptations;
     const lastLoss = adaptations.length ? adaptations[adaptations.length - 1].loss : null;
-    model.value.textContent = x?.modelVersion ?? t("brain.noModel");
-    learned.value.textContent = x ? num(x.learned) : "—";
-    queued.value.textContent = x ? num(x.pending) : "—";
+    tiles.hidden = !local;
+    model.value.textContent = v.name ?? t("brain.noModel");
+    learned.value.textContent = v.learned != null ? num(v.learned) : "—";
+    queued.value.textContent = v.pending != null ? num(v.pending) : "—";
     loss.value.textContent = lastLoss != null ? lastLoss.toFixed(3) : "—";
-    note.hidden = !s.experienceError;
-    note.textContent = s.experienceError ? t("brain.experienceUnavailable") : "";
+    const unavailable = local && s.experienceError;
+    note.hidden = !unavailable;
+    note.textContent = unavailable ? t("brain.experienceUnavailable") : "";
 
     const states = regionStates(s);
     const live = states.some((r) => r.active);
@@ -114,12 +122,13 @@ export function brainPanel() {
     for (const rs of states) {
       const row = lg.rows[rs.meta.key];
       row.cap.textContent = num(rs.count);
+      row.btn.title = t(`${v.rolePrefix}.${rs.meta.key}`);
       row.btn.setAttribute("aria-pressed", String(selected === rs.meta.key));
       row.btn.classList.toggle("on", selected === rs.meta.key);
     }
 
     const items = recentItems(s, selected);
-    recentHead.textContent = selected ? t(`brain.region.${selected}`) : items.length ? "" : t("brain.recentEmptyTag");
+    recentHead.textContent = selected ? t(`brain.region.${selected}`) : items.length ? (local ? "" : t("brain.recentCloudTag")) : t("brain.recentEmptyTag");
     recent.replaceChildren(
       ...(items.length
         ? items.slice(0, 40).map((e) =>
@@ -131,11 +140,12 @@ export function brainPanel() {
               e.at ? h("span", { class: "muted small nowrap", text: relTime(e.at) }) : null,
             ),
           )
-        : [h("li", { class: "empty-recent muted", text: t("brain.recentEmpty") })]),
+        : [h("li", { class: "empty-recent muted", text: t(local ? "brain.recentEmpty" : "brain.recentEmptyCloud") })]),
     );
 
-    lossHost.replaceChildren(lossChart(adaptations) ?? h("p", { class: "muted", text: t("brain.lossEmpty") }));
-    daysHost.replaceChildren(activityChart(x?.days ?? []));
+    lossBody.textContent = t(local ? "brain.lossBody" : "brain.lossBodyCloud");
+    lossHost.replaceChildren(lossChart(adaptations) ?? h("p", { class: "muted", text: t(local ? "brain.lossEmpty" : "brain.lossEmptyCloud") }));
+    daysHost.replaceChildren(activityChart(v.days));
   }
 
   const stop = subscribeBrain(paint);

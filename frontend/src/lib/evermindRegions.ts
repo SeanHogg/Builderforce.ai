@@ -5,7 +5,7 @@
  * regions) AND the Learnings panel (which filters contributions to the clicked
  * region), so the two never drift.
  */
-import type { ProjectEvermindContributions, ProjectEvermindRecentEntry } from './projectEvermindApi';
+import type { ProjectEvermindContributions, ProjectEvermindRecentEntry } from './projectEvermindTypes';
 
 export type EvermindRegionKey =
   | 'neocortex' | 'hippocampus'

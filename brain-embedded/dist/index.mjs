@@ -9893,6 +9893,12 @@ function artifactRoutePath(kind, ref, projectId) {
   }
 }
 
+// src/workspaceRoles.ts
+var MANAGER_ROLES = /* @__PURE__ */ new Set(["owner", "admin", "manager"]);
+function isManagerRole(role) {
+  return typeof role === "string" && MANAGER_ROLES.has(role.toLowerCase());
+}
+
 // src/ui/PromptInput.tsx
 import { jsx as jsx4, jsxs } from "react/jsx-runtime";
 var rowStyle = { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", width: "100%" };
@@ -10152,6 +10158,7 @@ export {
   isFailedToolResult,
   isLocalWorkspaceTool,
   isMalformedToolCall,
+  isManagerRole,
   isMutationTool,
   isRouterTool,
   isRunning,

@@ -1,5 +1,5 @@
-/* Signing in, the sidebar account line, and the Chat page. Theme tokens only (styles.css),
-   so both themes read; the two-column chat stacks on narrow windows. */
+/* Signing in, the sidebar account line, and the Chat page (the chats themselves are the
+   sidebar — nav.css). Theme tokens only (styles.css), so both themes read. */
 
 /* ---------- account ---------- */
 .account-chip {
@@ -19,19 +19,9 @@
 .workspace-picker select { min-height: 34px; max-width: 240px; }
 
 /* ---------- chat ---------- */
-.chat-layout { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 14px; align-items: start; }
-.chat-side { display: flex; flex-direction: column; gap: 10px; padding: 14px; max-height: calc(100vh - 170px); min-height: 0; }
-.chat-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.chat-item {
-  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; min-height: 44px;
-  border-radius: var(--radius-sm); color: var(--text); text-decoration: none;
-}
-.chat-item:hover { background: var(--hover); }
-.chat-item.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-.chat-item-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-empty { padding: 16px 8px; text-align: center; list-style: none; }
-
-.chat-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; height: calc(100vh - 170px); min-height: 380px; }
+.chat-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; height: calc(100vh - 68px); min-height: 380px; }
+.chat-title { font-size: 18px; margin: 0; }
+.chat-start { max-width: 560px; margin: 8vh auto 0; text-align: center; align-items: center; }
 .chat-head { flex: none; }
 .agents-bar { flex: none; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .agents-bar select { min-height: 32px; max-width: 220px; }
@@ -51,6 +41,8 @@
 .msg-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
 .msg-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
 
+.chat-empty { padding: 16px 8px; text-align: center; list-style: none; }
+
 .composer { flex: none; display: flex; flex-direction: column; gap: 6px; }
 .composer-to select { min-height: 32px; max-width: 240px; }
 .composer-main { align-items: stretch; }
@@ -62,8 +54,6 @@
 .composer textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 @media (max-width: 760px) {
-  .chat-layout { grid-template-columns: 1fr; }
-  .chat-side { max-height: 220px; }
   .chat-main { height: auto; min-height: 60vh; }
   .msg { max-width: 100%; }
   .account-chip { margin: 0; }

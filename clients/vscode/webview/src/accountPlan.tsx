@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { planIsPaid } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from './authedFetch';
 import type { ChatDiagnosticsMeter } from '@seanhogg/builderforce-brain-embedded';
 import { post } from './vscodeBridge';
@@ -61,25 +62,6 @@ export function usePlanSnapshot(apiReq: AuthedFetch): PlanSnapshot | null {
   return plan;
 }
 
-/**
- * Is this workspace on a PAID tier? The one predicate, so no surface invents its
- * own answer.
- *
- * It reads the shared `/api/consumption` snapshot — the authoritative plan source,
- * and the only one that also carries the allowance meters. The alternative reading
- * (off `GET /llm/v1/models`) is a trap twice over: its `premium` field is the
- * superadmin OVERRIDE flag rather than "has a paid plan", and its `effectivePlan`
- * silently degrades to `'free'` when auth fails — so a transient blip downgrades
- * the UI instead of surfacing an error.
- *
- * Fails CLOSED (false) when the plan can't be read: showing paid-only options to
- * someone who can't use them is the worse error.
- */
-export async function fetchIsPaidPlan(apiReq: AuthedFetch): Promise<boolean> {
-  const plan = await fetchPlanSnapshot(apiReq);
-  return plan != null && plan.plan.effective !== 'free';
-}
-
 /** The AI-token meter — the allowance a chat turn actually spends. */
 function tokenMeter(plan: PlanSnapshot | null): ChatDiagnosticsMeter | null {
   return plan?.meters.find((m) => m.key === 'ai_tokens') ?? null;
@@ -137,7 +119,7 @@ export function AccountStatusPanel({
   }
 
   const tier = plan.plan.effective;
-  const isFree = tier === 'free';
+  const isFree = !planIsPaid(plan);
   const label = planLabel(tier);
   const billing = plan.plan.billingStatus;
   const reset = formatReset(plan.period?.resetsAt);
@@ -224,9 +206,9 @@ export function PlanBadge({
   if (!plan) return null;
 
   const tier = plan.plan.effective;
-  // Same rule as `fetchIsPaidPlan` — inverted here because the chip is written
-  // around the free case. One definition of "paid", one of "free".
-  const isFree = tier === 'free';
+  // The shared paid-plan rule (`planIsPaid`, which the Evermind teacher picker also
+  // reads), inverted because the chip is written around the free case.
+  const isFree = !planIsPaid(plan);
   const meter = tokenMeter(plan);
   // "Available tokens" only means something on a metered plan; an unlimited or
   // absent meter shows the tier alone rather than a fake number.

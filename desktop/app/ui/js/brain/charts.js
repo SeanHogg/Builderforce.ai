@@ -34,7 +34,7 @@ export function lossChart(adaptations) {
     el("polyline", { points: line, class: "chart-line" }),
   );
   points.forEach((p, i) => {
-    svg.append(el("circle", { cx: x(i), cy: y(p.loss), r: i === points.length - 1 ? 3.4 : 2.2, class: "chart-dot" }, t("brain.lossTip", { version: p.version, loss: p.loss.toFixed(3), n: num(p.learned.length) })));
+    svg.append(el("circle", { cx: x(i), cy: y(p.loss), r: i === points.length - 1 ? 3.4 : 2.2, class: "chart-dot" }, t("brain.lossTip", { version: p.version, loss: p.loss.toFixed(3), n: num(p.count) })));
   });
   return svg;
 }

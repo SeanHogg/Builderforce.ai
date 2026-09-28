@@ -20,6 +20,7 @@ import {
   type EvermindConsoleLabels,
   type EvermindContributionStatus,
   type EvermindEvalPoint,
+  type EvermindHost,
   type EvermindKnowledgeAnalysis,
   type EvermindProbeResult,
   type EvermindRecentEntry,
@@ -90,7 +91,7 @@ export interface EvermindConsoleProps {
   /** Which surface is rendering — stamped into the diagnostics export, because the two
    *  hosts fail differently and "which one was this?" is the first question asked of a
    *  pasted report. Default 'web'. */
-  host?: 'web' | 'vscode';
+  host?: EvermindHost;
 }
 
 export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = 'web' }: EvermindConsoleProps) {

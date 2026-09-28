@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "types": ["react", "react-dom", "node"],
+    // The one web module this bundle reads — the brain-region derivation the web
+    // Knowledge Map and the room's 3D brain share — mapped module by module (as the
+    // VS Code webview maps `@/lib/tokenClaims`), never the whole `@/*` closure.
+    "paths": {
+      "@/lib/evermindRegions": ["../../../frontend/src/lib/evermindRegions.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "labels.ts", "labels.test.ts"]
+}

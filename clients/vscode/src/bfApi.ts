@@ -8,6 +8,7 @@ import type {
   BrainMessage,
   PersistTraceEventInput,
 } from "@seanhogg/builderforce-brain-embedded";
+import { isManagerRole } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
@@ -298,9 +299,6 @@ export function getTenantJwt(secrets: vscode.SecretStorage): Promise<string | un
   return exchangeJwt(secrets);
 }
 
-/** Tenant roles that can change project settings (mirrors the API's requireRole(MANAGER)). */
-const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
-
 /**
  * Whether the signed-in user can manage the active workspace (owner/admin/manager) —
  * a best-effort UX gate for the Evermind console's write controls. Resolved from the
@@ -314,7 +312,7 @@ export async function canManageActiveWorkspace(secrets: vscode.SecretStorage): P
     if (!token || !baseJwt) return false;
     const id = selectedTenantId ?? baseJwt.tenantId;
     const role = (await listWorkspaces(secrets)).find((w) => w.id === id)?.role;
-    return role != null && MANAGER_ROLES.has(role.toLowerCase());
+    return isManagerRole(role);
   } catch {
     return false;
   }

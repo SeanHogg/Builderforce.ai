@@ -6,6 +6,7 @@
 pub mod account;
 mod brain;
 pub mod chat;
+pub mod request;
 
 use bf_cloud::{CloudError, Session};
 use serde::{Deserialize, Serialize};

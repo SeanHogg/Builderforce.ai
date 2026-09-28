@@ -21,6 +21,7 @@
  */
 import type {
   EvermindConsoleData,
+  EvermindHost,
   EvermindKnowledgeAnalysis,
   EvermindProbeResult,
   EvermindTarget,
@@ -34,13 +35,15 @@ const MAX_EXCERPT_CHARS = 400;
 const MAX_RECENT = 10;
 const MAX_FINDINGS = 20;
 
+const SURFACE: Record<EvermindHost, string> = { web: 'web console', vscode: 'VS Code sidebar', synapse: 'Synapse desktop' };
+
 export interface EvermindDiagnosticsInput {
   /** Head state — null when the console never loaded (itself worth reporting). */
   data: EvermindConsoleData | null;
   /** The project this console is scoped to, when the host knows it. */
   projectName?: string | undefined;
   /** Which host produced the report — the two surfaces fail differently. */
-  host: 'web' | 'vscode';
+  host: EvermindHost;
   /** Everminds under this project, when the host lists them. */
   targets?: EvermindTarget[] | null | undefined;
   /** The most recent test-bench run, when one was made this session. */
@@ -331,7 +334,7 @@ export function buildEvermindDiagnostics(input: EvermindDiagnosticsInput): strin
     `# Evermind diagnostics${projectName ? ` — ${projectName}` : ''}`,
     '',
     `- Generated: ${new Date(now).toISOString()}`,
-    `- Surface: ${host === 'vscode' ? 'VS Code sidebar' : 'web console'}`,
+    `- Surface: ${SURFACE[host]}`,
     '',
   ];
 

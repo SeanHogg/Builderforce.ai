@@ -96,3 +96,55 @@ pub async fn evermind_train(agents: State<'_, Arc<Agents>>, dry_run: bool) -> Re
     })
     .await
 }
+
+/// The stub prefix memory-mcp writes when it compacts an absorbed fact
+/// (`STUB_PREFIX` in memory-mcp `compaction.ts`). A stub has already been learned
+/// somewhere; offering it again would teach the pointer, not the fact.
+const STUB_PREFIX: &str = "[absorbed→Evermind";
+
+/// Import step 1 for a workspace Evermind: this machine's facts that have not been folded
+/// into a model yet, in the console's `{ path, fileName, entries }` shape (the store is one
+/// source, so `path` names it and the entries carry none of their own).
+#[tauri::command]
+pub async fn facts_learnable(agents: State<'_, Arc<Agents>>) -> Res<Value> {
+    blocking(agents, |a| {
+        let (facts, file) = read_facts(a).map_err(e)?;
+        let entries: Vec<Value> = facts
+            .iter()
+            .filter_map(|f| {
+                let key = f.get("key")?.as_str()?;
+                let text = f.get("content")?.as_str()?;
+                (!key.is_empty() && !text.trim().is_empty() && !text.starts_with(STUB_PREFIX)).then(|| json!({ "key": key, "text": text }))
+            })
+            .collect();
+        Ok(json!({ "path": file, "fileName": "Synapse", "entries": entries }))
+    })
+    .await
+}
+
+/// Import step 3: compact the facts a workspace Evermind absorbed to one-line stubs,
+/// through the live store (`memory_compact`) — never behind the server's back. What it
+/// reclaimed is measured from the store itself, before and after.
+#[tauri::command]
+pub async fn facts_compact(agents: State<'_, Arc<Agents>>, keys: Vec<String>, version: u64) -> Res<Value> {
+    blocking(agents, move |a| {
+        if keys.is_empty() {
+            return Ok(json!({ "compacted": 0, "bytesSaved": 0 }));
+        }
+        let sizes = |a: &Agents| -> std::collections::HashMap<String, usize> {
+            read_facts(a)
+                .map(|(facts, _)| facts)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|f| Some((f.get("key")?.as_str()?.to_string(), f.get("content")?.as_str()?.len())))
+                .filter(|(k, _)| keys.contains(k))
+                .collect()
+        };
+        let before = sizes(a);
+        a.mem.call("memory_compact", json!({ "keys": keys, "version": version })).map_err(e)?;
+        let after = sizes(a);
+        let shrunk: Vec<usize> = before.iter().filter_map(|(k, b)| after.get(k).filter(|n| *n < b).map(|n| b - n)).collect();
+        Ok(json!({ "compacted": shrunk.len(), "bytesSaved": shrunk.iter().sum::<usize>() }))
+    })
+    .await
+}

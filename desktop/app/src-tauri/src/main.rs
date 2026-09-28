@@ -113,6 +113,8 @@ fn main() {
             agents::evermind::fact_forget,
             agents::evermind::forget_everything,
             agents::evermind::evermind_train,
+            agents::evermind::facts_learnable,
+            agents::evermind::facts_compact,
             cloud::account::account_state,
             cloud::account::account_sign_in,
             cloud::account::account_sign_in_cancel,
@@ -128,6 +130,7 @@ fn main() {
             cloud::chat::chat_uninvite,
             cloud::chat::agent_pool,
             cloud::chat::chat_send,
+            cloud::request::cloud_request,
         ])
         .setup(|app| {
             tray::install(app.handle())?;

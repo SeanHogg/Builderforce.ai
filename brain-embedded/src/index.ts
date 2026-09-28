@@ -549,5 +549,7 @@ export {
   PMO_FOCUS_PARAM,
   type ArtifactKind,
 } from './artifactRoute';
+// Which workspace roles may manage project settings (the Evermind console's write gate).
+export { isManagerRole } from './workspaceRoles';
 // UI (PRD 14 §136) — the embeddable one-line composer. Host-translated, router-free.
 export { PromptInput, type PromptInputProps } from './ui/PromptInput';

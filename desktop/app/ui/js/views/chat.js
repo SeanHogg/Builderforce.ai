@@ -1,13 +1,14 @@
-// Chat: the workspace's Brain chats, from Synapse. Signed out, it is the sign-in. Signed
-// in: the chats, one conversation with the agents assigned to it, and the composer. A
-// message to the Brain is answered here with the private Evermind's recall; a message to
-// an agent is answered by that agent, with its own tools, as you.
+// Chat: one of the workspace's Brain chats (picked in the sidebar), the agents assigned to
+// it, and the composer. Signed out, it is the sign-in. A message to the Brain is answered
+// here with the private Evermind's recall; a message to an agent is answered by that agent,
+// with its own tools, as you.
 import { h, invoke, route, showError } from "../bridge.js";
 import { t } from "../i18n.js";
 import { openWeb, subscribeAccount } from "../cloud/accountStore.js";
-import { signInCard, workspacePicker } from "../cloud/accountPanel.js";
+import { signInCard } from "../cloud/accountPanel.js";
 import { agentPool, agentsBar, assignedName, resetAgentPool } from "../chat/agentsBar.js";
-import { chatList } from "../chat/chatList.js";
+import { refreshChats, subscribeChats } from "../chat/chatStore.js";
+import { startChat } from "../chat/sidebarChats.js";
 import { composer } from "../chat/composer.js";
 import { awaitingAgent, renderTranscript } from "../chat/transcript.js";
 
@@ -16,32 +17,26 @@ const SLOW_MS = 6000;
 
 export function render(host, params) {
   const signIn = signInCard();
-  const picker = workspacePicker();
-  const list = chatList((id) => (location.hash = route("chat", { id })));
-  const title = h("h2", { class: "min0 break" });
+  const title = h("h1", { class: "min0 break chat-title" });
   const openBtn = h("button", { class: "ghost small", type: "button", text: t("chat.openWeb") });
   const agents = agentsBar(() => loadAgents());
   const transcript = h("ul", { class: "transcript", attrs: { "aria-live": "polite" } });
   const write = composer(send);
-  const conversation = h(
+  const conversation = h("section", { class: "chat-main", hidden: true }, h("div", { class: "row between wrap chat-head" }, title, openBtn), agents.el, transcript, write.el);
+  const empty = h(
     "section",
-    { class: "chat-main card" },
-    h("div", { class: "row between wrap chat-head" }, title, openBtn),
-    agents.el,
-    transcript,
-    write.el,
+    { class: "card stack chat-start", hidden: true },
+    h("h2", { text: t("chat.startTitle") }),
+    h("p", { class: "muted", text: t("chat.intro") }),
+    h("div", { class: "row" }, h("button", { class: "primary", text: t("chat.new"), on: { click: () => startChat(true) } })),
   );
-  const layout = h("div", { class: "chat-layout" }, list.el, conversation);
-  host.append(
-    h("header", { class: "page-head" }, h("div", {}, h("h1", { text: t("chat.title") }), h("p", { class: "muted", text: t("chat.intro") })), picker.el),
-    signIn.el,
-    layout,
-  );
+  host.append(signIn.el, conversation, empty);
 
   let chatId = null;
   let timer = null;
   let workspace;
   let alive = true;
+  const wanted = Number(params.get("id")) || null;
 
   openBtn.addEventListener("click", () => chatId != null && openWeb(`/brainstorm?chat=${chatId}`).catch(showError));
 
@@ -74,49 +69,55 @@ export function render(host, params) {
   async function send(content, to) {
     await invoke("chat_send", { chatId, content, to });
     await loadMessages();
+    // A first message names the chat; the sidebar shows it.
+    refreshChats();
   }
 
   async function open(id) {
     chatId = id;
-    list.select(id);
-    conversation.hidden = id == null;
+    transcript.replaceChildren();
     write.setEnabled(id != null);
     if (id == null) return;
-    const chat = list.chats().find((c) => c.id === id);
-    title.textContent = chat?.title || t("chat.untitled");
-    transcript.replaceChildren();
     await Promise.all([loadAgents(), loadMessages()]);
     write.focus();
   }
 
-  async function start() {
-    const chats = await list.refresh();
-    const wanted = Number(params.get("id"));
-    const id = chats.some((c) => c.id === wanted) ? wanted : (chats[0]?.id ?? null);
-    await open(id);
-  }
+  // The open chat: the one the route names, else the newest. Its title follows the list.
+  const stopChats = subscribeChats((s) => {
+    if (!s.signedIn || !s.loaded) {
+      conversation.hidden = true;
+      empty.hidden = true;
+      return;
+    }
+    const id = s.chats.some((c) => c.id === wanted) ? wanted : (s.chats[0]?.id ?? null);
+    conversation.hidden = id == null;
+    empty.hidden = id != null;
+    const chat = s.chats.find((c) => c.id === id);
+    title.textContent = chat?.title || t("chat.untitled");
+    if (id !== chatId) open(id);
+  });
 
   const stopAccount = subscribeAccount((s) => {
-    layout.hidden = !s.signedIn;
     signIn.el.hidden = s.signedIn;
     if (!s.signedIn) {
       workspace = undefined;
+      chatId = null;
       clearTimeout(timer);
       return;
     }
-    // Signed in, or switched workspace: its chats and agents are different ones.
+    // A switched workspace has other agents; the chat list re-reads itself.
     if (workspace !== s.workspaceId) {
+      if (workspace !== undefined && wanted != null) location.hash = route("chat");
       workspace = s.workspaceId;
       resetAgentPool();
-      start();
     }
   });
 
   return () => {
     alive = false;
     clearTimeout(timer);
+    stopChats();
     stopAccount();
     signIn.stop();
-    picker.stop();
   };
 }

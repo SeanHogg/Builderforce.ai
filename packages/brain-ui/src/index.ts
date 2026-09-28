@@ -174,6 +174,19 @@ export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timeline
 export { EvermindConsole } from './evermind/EvermindConsole';
 export type { EvermindConsoleProps } from './evermind/EvermindConsole';
 export { DEFAULT_EVERMIND_LABELS } from './evermind/types';
+export { createEvermindRestAdapter, groupAbsorbed, loadEvermindBuilds, planIsPaid, preferredEvermindBuild } from './evermind/restAdapter';
+// The console's write gate lives with the other host-safe rules, so the VS Code host shares it.
+export { isManagerRole } from '@seanhogg/builderforce-brain-embedded';
+export type {
+  EvermindBuild,
+  EvermindHostPowers,
+  EvermindRequest,
+  EvermindRestOptions,
+  MemoryCompactRequest,
+  PickedMemory,
+  PlanTier,
+} from './evermind/restAdapter';
+export { evermindLabelsFromBundle } from './evermind/labelBundle';
 export { evermindLearnedStatus } from './evermind/learnedStatus';
 export type { EvermindLearnedStatus, EvermindTeacherSkipReason, LearnedStatusInput } from './evermind/learnedStatus';
 export { evermindNextAction } from './evermind/actionGuide';
@@ -186,6 +199,7 @@ export type {
   EvermindContributionStatus,
   EvermindTeachResult,
   EvermindMode,
+  EvermindHost,
   EvermindRecentEntry,
   EvermindSeedModel,
   EvermindTarget,

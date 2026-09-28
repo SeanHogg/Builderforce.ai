@@ -82,19 +82,26 @@ __export(src_exports, {
   chatSwitcherLabel: () => chatSwitcherLabel,
   commandOf: () => commandOf,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
+  createEvermindRestAdapter: () => createEvermindRestAdapter,
   displayModelName: () => import_builderforce_brain_embedded13.displayModelName,
+  evermindLabelsFromBundle: () => evermindLabelsFromBundle,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
   filterModelItems: () => import_builderforce_brain_embedded13.filterModelItems,
   formatDuration: () => formatDuration,
   formatElapsed: () => formatElapsed,
+  groupAbsorbed: () => groupAbsorbed,
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
+  isManagerRole: () => import_builderforce_brain_embedded14.isManagerRole,
+  loadEvermindBuilds: () => loadEvermindBuilds,
   modelCategoryLabel: () => import_builderforce_brain_embedded13.modelCategoryLabel,
   modelInUse: () => import_builderforce_brain_embedded13.modelInUse,
   parseAskUser: () => import_builderforce_brain_embedded.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
   perMillionUsd: () => import_builderforce_brain_embedded13.perMillionUsd,
+  planIsPaid: () => planIsPaid,
+  preferredEvermindBuild: () => preferredEvermindBuild,
   premiumCostLabel: () => import_builderforce_brain_embedded13.premiumCostLabel,
   productForPlan: () => import_builderforce_brain_embedded13.productForPlan,
   productModelName: () => import_builderforce_brain_embedded13.productModelName,
@@ -4522,6 +4529,7 @@ var MAX_OUTPUT_CHARS = 1200;
 var MAX_EXCERPT_CHARS = 400;
 var MAX_RECENT = 10;
 var MAX_FINDINGS = 20;
+var SURFACE = { web: "web console", vscode: "VS Code sidebar", synapse: "Synapse desktop" };
 function clamp(text, max) {
   const s = text.trim();
   if (s.length <= max) return s;
@@ -4756,7 +4764,7 @@ function buildEvermindDiagnostics(input) {
     `# Evermind diagnostics${projectName ? ` \u2014 ${projectName}` : ""}`,
     "",
     `- Generated: ${new Date(now).toISOString()}`,
-    `- Surface: ${host === "vscode" ? "VS Code sidebar" : "web console"}`,
+    `- Surface: ${SURFACE[host]}`,
     ""
   ];
   if (error) {
@@ -5583,6 +5591,233 @@ var targetChip = {
   whiteSpace: "nowrap"
 };
 
+// src/evermind/restAdapter.ts
+function planIsPaid(snapshot) {
+  const effective = snapshot?.plan?.effective;
+  return typeof effective === "string" && effective !== "free";
+}
+var json = (body) => JSON.stringify(body);
+function createEvermindRestAdapter(opts) {
+  const { request: req, projectId } = opts;
+  const base = `/api/projects/${projectId}/evermind`;
+  const post = (path, body) => req(`${base}${path}`, { method: "POST", ...body === void 0 ? {} : { body: json(body) } });
+  const patch = (path, body) => req(`${base}${path}`, { method: "PATCH", body: json(body) }).then(() => void 0);
+  const adapter = {
+    loadData: () => req(`${base}/contributions`),
+    loadSeedModels: async () => {
+      const r = await req("/api/llm/models");
+      return (r.models ?? []).filter((m) => typeof m.slug === "string" && !!m.baseModel?.startsWith("evermind/")).map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
+    },
+    loadTeacherOptions: async () => {
+      const [models, plan] = await Promise.all([
+        req("/llm/v1/models"),
+        req("/api/consumption").catch(() => null)
+      ]);
+      return { models: models.codingModels ?? [], isPaid: planIsPaid(plan) };
+    },
+    seedFromModel: (slug) => post(`/seed-from-model`, { slug }).then(() => void 0),
+    setInference: (enabled) => patch("/inference", { enabled }),
+    setMode: (mode) => patch("/mode", { mode }),
+    setTeacher: (model) => patch("/teacher", { model }),
+    // The POST only means "queued" — the teacher runs later in the coordinator's debounced
+    // merge — so hand the console the contribution id and let it poll the status door.
+    teach: (text, prompt) => post("/learn-text", { text, ...prompt ? { prompt } : {} }).then((r) => r.contributionId ? { contributionId: r.contributionId } : {}),
+    teachStatus: (contributionId) => req(`${base}/contribution/${contributionId}`),
+    flush: () => post("/flush").then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
+    validate: (prompt) => post("/validate", { prompt }),
+    loadTargets: () => req(`${base}/targets`).then((r) => r.targets ?? []),
+    probe: (prompt) => post("/probe", prompt ? { prompt } : {}),
+    reseed: (slug) => post("/reseed", slug ? { slug } : {}).then((r) => ({ version: r.version ?? 0 })),
+    reindex: () => post("/reindex").then((r) => ({ reindexed: r.reindexed ?? 0, skipped: r.skipped ?? 0, version: r.version ?? 0 })),
+    cleanup: () => post("/cleanup").then((r) => ({ discarded: r.discarded ?? 0, cachedAnswers: r.cachedAnswers ?? 0 })),
+    analyze: () => post("/analyze", {}),
+    applyFindings: (findings) => post("/analyze", { apply: true, findings })
+  };
+  if (opts.copyText) adapter.copyText = opts.copyText;
+  const { pickMemory, compactMemory } = opts;
+  if (pickMemory && compactMemory) {
+    adapter.importMemory = async () => {
+      const picked = await pickMemory();
+      if (!picked || picked.entries.length === 0) return null;
+      const res = await post("/extract-memories", { entries: picked.entries });
+      const comp = await compactMemory({ files: groupAbsorbed(picked, res.absorbed), version: res.version });
+      return {
+        fileName: picked.fileName,
+        absorbed: res.absorbed.length,
+        skipped: res.skipped.length,
+        merged: res.merged,
+        version: res.version,
+        compacted: comp.compacted,
+        bytesSaved: comp.bytesSaved
+      };
+    };
+  }
+  return adapter;
+}
+function groupAbsorbed(picked, absorbed) {
+  const keep = new Set(absorbed);
+  const byPath = /* @__PURE__ */ new Map();
+  for (const e of picked.entries) {
+    if (!keep.has(e.key)) continue;
+    const p = e.path ?? picked.path;
+    byPath.set(p, [...byPath.get(p) ?? [], e.key]);
+  }
+  return [...byPath].map(([path, absorbedKeys]) => ({ path, absorbedKeys }));
+}
+async function loadEvermindBuilds(request) {
+  const rows = await request("/api/ide-projects");
+  return (rows ?? []).filter((r) => r.modality === "evermind" || r.modality === "llm");
+}
+function preferredEvermindBuild(builds, pick = {}) {
+  const { current, resolvedProjectId, activeProjectId } = pick;
+  if (current != null && builds.some((b) => b.storageProjectId === current)) return current;
+  const resolved = resolvedProjectId ?? activeProjectId;
+  const preferred = builds.find((b) => b.storageProjectId === resolved) ?? builds.find((b) => activeProjectId != null && b.containerProjectId === activeProjectId) ?? builds[0];
+  return preferred?.storageProjectId ?? null;
+}
+
+// src/index.ts
+var import_builderforce_brain_embedded14 = require("@seanhogg/builderforce-brain-embedded");
+
+// src/evermind/labelBundle.ts
+var STATIC_KEYS = [
+  "title",
+  "description",
+  "loading",
+  "managerOnlyHint",
+  "statusUnseeded",
+  "pickModelLabel",
+  "noModels",
+  "notSetUp",
+  "enableCta",
+  "working",
+  "versionLabel",
+  "contributionsLabel",
+  "pendingLabel",
+  "lastLearnedLabel",
+  "neverLearned",
+  "inferenceLabel",
+  "inferenceHint",
+  "learningLabel",
+  "learningHint",
+  "on",
+  "off",
+  "connected",
+  "frozen",
+  "teacherLabel",
+  "teacherHint",
+  "teacherNone",
+  "teacherPaidOnly",
+  "teachTitle",
+  "teachHint",
+  "teachPromptPlaceholder",
+  "teachTextPlaceholder",
+  "teachCta",
+  "teaching",
+  "taught",
+  "taughtDropped",
+  "taughtStillPending",
+  "flushCta",
+  "flushing",
+  "flushedNone",
+  "inspectTitle",
+  "inspectEmpty",
+  "kindText",
+  "kindDelta",
+  "deltaEntry",
+  "refresh",
+  "errorGeneric",
+  "importTitle",
+  "importHint",
+  "importCta",
+  "importing",
+  "importNothing",
+  "quarantinedBadge",
+  "targetsTitle",
+  "targetsHint",
+  "targetsEmpty",
+  "targetSelfBadge",
+  "targetBuildBadge",
+  "targetUnseeded",
+  "targetInferenceOn",
+  "targetConnected",
+  "targetFrozen",
+  "testTitle",
+  "testHint",
+  "testPlaceholder",
+  "testRunCta",
+  "testReadinessCta",
+  "testRunning",
+  "testResultPrompt",
+  "testServable",
+  "testRefused",
+  "testEmptyOutput",
+  "testVerdictReady",
+  "testVerdictNotReady",
+  "maintenanceTitle",
+  "maintenanceHint",
+  "reseedLabel",
+  "reseedHint",
+  "reseedCta",
+  "reseedConfirm",
+  "reseedStarterOption",
+  "reindexLabel",
+  "reindexHint",
+  "reindexCta",
+  "cleanupLabel",
+  "cleanupHint",
+  "cleanupCta",
+  "cleanupConfirm",
+  "analyzeTitle",
+  "analyzeHint",
+  "analyzeCta",
+  "analyzing",
+  "analyzeCorrectionLabel",
+  "analyzeSelectAll",
+  "analyzeSelectNone",
+  "analyzeApplying",
+  "tabsLabel",
+  "tabTeach",
+  "tabTest",
+  "tabCheck",
+  "tabMaintain",
+  "diagnosticsTitle",
+  "diagnosticsHint",
+  "diagnosticsCta",
+  "diagnosticsCopied",
+  "diagnosticsShow",
+  "diagnosticsHide",
+  "diagnosticsManualHint"
+];
+var fill = (template, vars) => template.replace(/\{(\w+)\}/g, (whole, k) => k in vars ? String(vars[k]) : whole);
+function evermindLabelsFromBundle(bundle, prefix = "ev.") {
+  const s = (key) => bundle[`${prefix}${key}`];
+  const out = {};
+  for (const k of STATIC_KEYS) {
+    const v = s(k);
+    if (v != null) out[k] = v;
+  }
+  const seeded = s("statusSeeded");
+  if (seeded) out.statusSeeded = (version) => fill(seeded, { version });
+  const flushedN = s("flushedN");
+  if (flushedN) out.flushedN = (merged, version) => fill(flushedN, { merged, version });
+  const importDone = s("importDone");
+  if (importDone) out.importDone = (absorbed, version, compacted, savedKb) => fill(importDone, { absorbed, version, compacted, savedKb });
+  const quarantinedHint = s("quarantinedHint");
+  if (quarantinedHint) out.quarantinedHint = (reason) => fill(quarantinedHint, { reason });
+  const targetSeeded = s("targetSeeded");
+  if (targetSeeded) out.targetSeeded = (version) => fill(targetSeeded, { version });
+  const targetProjectId = s("targetProjectId");
+  if (targetProjectId) out.targetProjectId = (id) => fill(targetProjectId, { id });
+  const taughtDistilled = s("taughtDistilled");
+  if (taughtDistilled) out.taughtDistilled = (model, version) => fill(taughtDistilled, { model, version });
+  const taughtSelf = s("taughtSelf");
+  if (taughtSelf) out.taughtSelf = (version) => fill(taughtSelf, { version });
+  const taughtTeacherFault = s("taughtTeacherFault");
+  if (taughtTeacherFault) out.taughtTeacherFault = (model, reason) => fill(taughtTeacherFault, { model, reason });
+  return out;
+}
+
 // src/project360/Project360View.tsx
 var import_react21 = require("react");
 
@@ -6077,19 +6312,26 @@ function Row2({ item, onAction }) {
   chatSwitcherLabel,
   commandOf,
   createChatTicketsRestAdapter,
+  createEvermindRestAdapter,
   displayModelName,
+  evermindLabelsFromBundle,
   evermindLearnedStatus,
   evermindNextAction,
   filterModelItems,
   formatDuration,
   formatElapsed,
+  groupAbsorbed,
   healthRingColor,
   initialsOf,
+  isManagerRole,
+  loadEvermindBuilds,
   modelCategoryLabel,
   modelInUse,
   parseAskUser,
   pendingChangesSummary,
   perMillionUsd,
+  planIsPaid,
+  preferredEvermindBuild,
   premiumCostLabel,
   productForPlan,
   productModelName,

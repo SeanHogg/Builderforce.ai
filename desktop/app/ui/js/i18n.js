@@ -20,6 +20,8 @@ export function t(key, vars) {
 
 export function applyI18n(root = document) {
   for (const el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.getAttribute("data-i18n"));
+  for (const el of root.querySelectorAll("[data-i18n-title]")) el.title = t(el.getAttribute("data-i18n-title"));
+  for (const el of root.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria")));
 }
 
 const numberFmt = new Intl.NumberFormat(lang);

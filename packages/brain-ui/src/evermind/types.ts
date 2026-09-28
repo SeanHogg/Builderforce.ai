@@ -8,6 +8,10 @@
 
 export type EvermindMode = 'connected' | 'offline-frozen';
 
+/** Which surface renders the console — stamped into the diagnostics export, because each
+ *  fails differently and "which one was this?" is the first question of a pasted report. */
+export type EvermindHost = 'web' | 'vscode' | 'synapse';
+
 /** One inspectable contribution the coordinator merged into a version. */
 export interface EvermindRecentEntry {
   /** Stable unique id — targets a specific learned memory (Validate highlight / detail). */

@@ -1,10 +1,10 @@
 // Signing in to builderforce.ai, and the account once signed in. `signInCard()` is the
-// full sign-in (the Chat page shows it while signed out); `accountChip()` is the sidebar's
-// one-line account; `workspacePicker()` switches workspace. Each reads the shared account
-// poll and owns its own rendering.
+// full sign-in (Chat and Settings ▸ Account show it while signed out); `mountAccountChip()`
+// is the sidebar's one-line account; `accountCard()` is the signed-in account — workspace,
+// web app, sign out. Each reads the shared account poll and owns its own rendering.
 import { h, opener, route, showError } from "../bridge.js";
 import { t } from "../i18n.js";
-import { cancelSignIn, selectWorkspace, signIn, signOut, subscribeAccount, workspaceName } from "./accountStore.js";
+import { cancelSignIn, openWeb, selectWorkspace, signIn, signOut, subscribeAccount, workspaceName } from "./accountStore.js";
 
 const run = (fn) => (ev) => {
   ev?.preventDefault?.();
@@ -45,7 +45,7 @@ export function signInCard() {
 
 /** The sidebar's account line: who and where, or a way to sign in. */
 export function mountAccountChip(host) {
-  const el = h("a", { class: "account-chip", href: route("chat") });
+  const el = h("a", { class: "account-chip", href: route("account") });
   host.append(el);
   subscribeAccount((s) => {
     el.classList.toggle("signed-in", s.signedIn);
@@ -57,21 +57,35 @@ export function mountAccountChip(host) {
   });
 }
 
-/** Switch workspace, and sign out — the Chat page's header. */
-export function workspacePicker() {
+/** Signed in: the workspace in use (and switching it), the web app, and signing out. */
+export function accountCard() {
   const select = h("select", { attrs: { "aria-label": t("account.workspace") } });
   select.addEventListener("change", () => selectWorkspace(Number(select.value)).catch(showError));
-  const out = h("button", { class: "ghost small", text: t("account.signOut"), on: { click: run(signOut) } });
-  const el = h("div", { class: "row wrap workspace-picker" }, select, out);
+  const status = h("p", { class: "muted small" });
+  const el = h(
+    "section",
+    { class: "card stack account-card" },
+    h("h2", { text: t("account.workspace") }),
+    h("label", { class: "stack-tight workspace-picker" }, select),
+    status,
+    h(
+      "div",
+      { class: "row wrap" },
+      h("button", { class: "ghost", text: t("account.openWebApp"), on: { click: () => openWeb("/").catch(showError) } }),
+      h("button", { class: "ghost danger", text: t("account.signOut"), on: { click: run(signOut) } }),
+    ),
+  );
   const stop = subscribeAccount((s) => {
     el.hidden = !s.signedIn;
+    if (!s.signedIn) return;
     const ids = s.workspaces.map((w) => String(w.id)).join(",");
     if (select.dataset.ids !== ids) {
       select.dataset.ids = ids;
       select.replaceChildren(...s.workspaces.map((w) => h("option", { value: String(w.id), text: w.name })));
     }
     if (s.workspaceId != null) select.value = String(s.workspaceId);
-    select.hidden = s.workspaces.length < 2;
+    select.disabled = s.workspaces.length < 2;
+    status.textContent = s.reachable ? t("account.signedInTitle", { workspace: workspaceName(s) }) : t("account.offline");
   });
   return { el, stop };
 }
