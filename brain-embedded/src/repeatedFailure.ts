@@ -30,7 +30,7 @@
  * clear it. No clock, no I/O — the same shape, and the same reasons, as `ReadCoverage`.
  */
 
-import { stableStringify } from './stableStringify';
+import { stableStringify } from '@builderforce/agent-tools';
 
 /**
  * Identical failures before the model is told it is repeating itself. The first retry

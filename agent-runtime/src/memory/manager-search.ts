@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { truncateUtf16Safe } from "../utils.js";
-import { cosineSimilarity, parseEmbedding } from "./internal.js";
+import { cosineSimilarity } from "@seanhogg/builderforce-memory/retrieval";
+import { parseEmbedding } from "./internal.js";
 
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);

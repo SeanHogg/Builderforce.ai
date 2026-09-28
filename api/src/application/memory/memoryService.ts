@@ -60,6 +60,7 @@ import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING
 import { annRecallProject, annRecallScoped, type RecalledRow } from './memorySemanticRecall';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { clamp01 } from '../../domain/shared/numbers';
+import { queryTerms } from '../../domain/shared/queryTerms';
 
 const RECALL_DEFAULT = 5;
 const RECALL_MAX = 20;
@@ -125,11 +126,6 @@ export async function scopeCacheToken(env: Env, ctx: MemoryScopeContext, chain: 
   ]);
   const scopeSig = chain.map((s) => `${s.kind}${s.id}`).join('|');
   return `${ownVersion}.${factsVersion}:${scopeSig}`;
-}
-
-/** Significant lowercase words (drop 1-char noise) — each becomes an ILIKE matcher. */
-function tokenize(query: string): string[] {
-  return [...new Set(query.toLowerCase().split(/[^a-z0-9]+/i).filter((w) => w.length > 1))].slice(0, 12);
 }
 
 /** Everything a governed write needs beyond the fact itself. */
@@ -257,7 +253,7 @@ export async function recall(
           scopedKinds.length === 0
             ? Promise.resolve([] as Array<{ key: string; content: string; scopeKind: string; origin: string; expiresAt: Date | null }>)
             : (() => {
-                const words = tokenize(query);
+                const words = queryTerms(query);
                 const matchers = words.map((w) => ilike(agentMemory.content, `%${w}%`));
                 const scopeClause = or(
                   ...scopedKinds.map((s) => and(eq(agentMemory.scopeKind, s.kind), eq(agentMemory.scopeId, s.id))),

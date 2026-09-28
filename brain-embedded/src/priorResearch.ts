@@ -20,7 +20,7 @@
  */
 
 import { parseStepMessage } from './persistedSteps';
-import { stableStringify } from './stableStringify';
+import { stableStringify } from '@builderforce/agent-tools';
 import { isStepMessage, type BrainMessage } from './types';
 
 /** Per-call result excerpt. The stored copy is already capped at 4 KB. */

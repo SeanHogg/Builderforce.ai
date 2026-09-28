@@ -13,8 +13,9 @@
  *   • the step budgets and the finish-honesty matcher (loop policy).
  */
 
-import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS } from '@builderforce/agent-tools';
+import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS, stableStringify } from '@builderforce/agent-tools';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
+import { stableStringify } from '@builderforce/agent-tools';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
@@ -46,19 +47,6 @@ export function assertsUnrunVerification(summary: string): boolean {
  */
 export function hasNoCodeDeliverable(writtenPaths: ReadonlySet<string>): boolean {
   return classifyDeliverablePaths(writtenPaths) !== 'implementation';
-}
-
-/** Deterministic JSON: object keys emitted in sorted order at every depth, so two
- *  structurally-identical tool-argument objects always stringify identically even when
- *  the model emitted their keys in a different order. Arrays keep their order (it is
- *  semantic). */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
 }
 
 /** FNV-1a (32-bit), hex. Not cryptographic — this only needs to be stable, cheap, and

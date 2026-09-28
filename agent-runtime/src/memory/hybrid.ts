@@ -2,7 +2,7 @@ import {
   bm25RankToScore as sharedBm25RankToScore,
   hybridScore,
   normalizeHybridWeights,
-} from "@builderforce/agent-tools";
+} from "@seanhogg/builderforce-memory/retrieval";
 import { applyMMRToHybridResults, type MMRConfig, DEFAULT_MMR_CONFIG } from "./mmr.js";
 import {
   applyTemporalDecayToHybridResults,

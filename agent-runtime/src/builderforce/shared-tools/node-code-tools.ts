@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { extractSymbols } from "@builderforce/agent-tools";
+import { bm25Idf, bm25LengthNorm, bm25TermScore } from "@seanhogg/builderforce-memory/retrieval";
 import { buildCodeMap, buildDependencyGraph } from "../code-map.js";
 import {
   loadCustomAgentRoles,
@@ -510,10 +511,7 @@ function bm25Score(queryTokens: string[], fileEntry: FileEntry, index: SearchInd
   for (const q of queryTokens) {
     const tf = fileEntry.tokens.filter((t) => t === q || t.startsWith(q + "_")).length;
     if (tf === 0) continue;
-    const df = index.docFreq[q] ?? 1;
-    const idf = Math.log((N - df + 0.5) / (df + 0.5) + 1);
-    const tfNorm = (tf * (BM25_K1 + 1)) / (tf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / avgdl)));
-    score += idf * tfNorm;
+    score += bm25TermScore(tf, bm25Idf(N, index.docFreq[q] ?? 1), bm25LengthNorm(dl, avgdl, BM25_B), BM25_K1);
   }
   return score;
 }

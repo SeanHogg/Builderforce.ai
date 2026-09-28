@@ -47,7 +47,7 @@
 import { activityTarget, visitTarget, VISIT_QUESTION_SEPARATOR } from './runActivity';
 import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool, isRepoPublishTool } from './localWorkspaceTools';
 import { isReadOnlyShellCommand } from './readOnlyShell';
-import { stableStringify } from './stableStringify';
+import { READ_DEFAULT_LINE_LIMIT, stableStringify } from '@builderforce/agent-tools';
 
 /** Argument keys that name a path — spelled `./a/b/`, `a\\b` and `a/b` by different turns. */
 const PATH_ARG_KEYS = new Set(['path', 'scope', 'repo', 'file', 'filePath', 'dir']);
@@ -122,13 +122,6 @@ function isUnderDir(p: string, dir: string): boolean {
   return path === dir || path.startsWith(`${dir}/`);
 }
 
-/**
- * Default `read_file` window when the caller omitted `limit` — matches
- * `READ_DEFAULT_LINE_LIMIT` in `@builderforce/agent-tools`. Kept as a number here so
- * this module stays free of that package.
- */
-const READ_WINDOW_DEFAULT = 2000;
-
 interface LineSpan {
   /** Inclusive 1-based first line. */
   start: number;
@@ -143,7 +136,7 @@ function asPositiveInt(value: unknown, fallback: number): number {
 /** The line range a `read_file` call is ASKING for. */
 function requestedReadWindow(args: Record<string, unknown>): LineSpan {
   const start = asPositiveInt(args.offset, 1);
-  const limit = asPositiveInt(args.limit, READ_WINDOW_DEFAULT);
+  const limit = asPositiveInt(args.limit, READ_DEFAULT_LINE_LIMIT);
   return { start, end: start + limit - 1 };
 }
 

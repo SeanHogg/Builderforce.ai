@@ -4,7 +4,7 @@ import {
   DEFAULT_HYBRID_TEXT_WEIGHT as SHARED_TEXT_WEIGHT,
   DEFAULT_HYBRID_VECTOR_WEIGHT as SHARED_VECTOR_WEIGHT,
   normalizeHybridWeights,
-} from "@builderforce/agent-tools";
+} from "@seanhogg/builderforce-memory/retrieval";
 import type { BuilderForceAgentsConfig, MemorySearchConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { clampInt, clampNumber, resolveUserPath } from "../utils.js";
@@ -284,7 +284,7 @@ function mergeConfig(
 
   const overlap = clampNumber(chunking.overlap, 0, Math.max(0, chunking.tokens - 1));
   const minScore = clampNumber(query.minScore, 0, 1);
-  // The SHARED normalisation (`@builderforce/agent-tools`): the pair is a ratio, so
+  // The SHARED normalisation (`@seanhogg/builderforce-memory/retrieval`): the pair is a ratio, so
   // only a negative/non-finite weight is rejected and `(3, 1)` keeps meaning three
   // parts semantic to one part lexical. The local copy this replaced capped each
   // weight at 1 first, which silently turned that into an even split.

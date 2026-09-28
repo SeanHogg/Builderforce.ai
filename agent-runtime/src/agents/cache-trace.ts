@@ -8,7 +8,7 @@ import { resolveUserPath } from "../utils.js";
 import { parseBooleanValue } from "../utils/boolean.js";
 import { safeJsonStringify } from "../utils/safe-json.js";
 import { getQueuedFileWriter, type QueuedFileWriter } from "./queued-file-writer.js";
-import { stableStringify } from "./stable-stringify.js";
+import { stableStringify } from "@builderforce/agent-tools";
 
 export type CacheTraceStage =
   | "session:loaded"

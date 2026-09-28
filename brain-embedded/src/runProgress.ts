@@ -33,7 +33,7 @@ import { asksForChange } from '@builderforce/agent-stall';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { visitTarget } from './runActivity';
-import { stableStringify } from './stableStringify';
+import { stableStringify } from '@builderforce/agent-tools';
 import type { BrainMessage } from './types';
 
 /** One target the run went back to more than once. */

@@ -1,5 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  applyTemporalDecayToScore,
+  calculateTemporalDecayMultiplier,
+  toDecayLambda,
+} from "@seanhogg/builderforce-memory/retrieval";
+
+export { applyTemporalDecayToScore, calculateTemporalDecayMultiplier, toDecayLambda };
 
 export type TemporalDecayConfig = {
   enabled: boolean;
@@ -13,33 +20,6 @@ export const DEFAULT_TEMPORAL_DECAY_CONFIG: TemporalDecayConfig = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DATED_MEMORY_PATH_RE = /(?:^|\/)memory\/(\d{4})-(\d{2})-(\d{2})\.md$/;
-
-export function toDecayLambda(halfLifeDays: number): number {
-  if (!Number.isFinite(halfLifeDays) || halfLifeDays <= 0) {
-    return 0;
-  }
-  return Math.LN2 / halfLifeDays;
-}
-
-export function calculateTemporalDecayMultiplier(params: {
-  ageInDays: number;
-  halfLifeDays: number;
-}): number {
-  const lambda = toDecayLambda(params.halfLifeDays);
-  const clampedAge = Math.max(0, params.ageInDays);
-  if (lambda <= 0 || !Number.isFinite(clampedAge)) {
-    return 1;
-  }
-  return Math.exp(-lambda * clampedAge);
-}
-
-export function applyTemporalDecayToScore(params: {
-  score: number;
-  ageInDays: number;
-  halfLifeDays: number;
-}): number {
-  return params.score * calculateTemporalDecayMultiplier(params);
-}
 
 function parseMemoryDateFromPath(filePath: string): Date | null {
   const normalized = filePath.replaceAll("\\", "/").replace(/^\.\//, "");

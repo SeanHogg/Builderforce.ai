@@ -248,7 +248,7 @@ export { HISTORY_TOKEN_BUDGET } from './workingTranscript';
 // A stream that goes silent must END, not hang until the user presses Stop.
 export { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 export type { IdleWatchdogOptions, IdleWatchdogReader } from './streamIdleWatchdog';
-export { stableStringify } from './stableStringify';
+export { stableStringify } from '@builderforce/agent-tools';
 export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats } from './transcriptBudget';
 
 // Durable tool/memory STEP rows — the reader for what the run loop persisted, so a

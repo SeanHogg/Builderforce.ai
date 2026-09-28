@@ -22,17 +22,13 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { queryTerms } from '../../domain/shared/queryTerms';
 
 const NOTES_DEFAULT_LIMIT = 20;
 const NOTES_MAX_LIMIT = 100;
 const NOTES_L1_TTL_MS = 5_000;
 
 const versionKey = (tenantId: number, scopeKey: string): string => `blackboard:ver:${tenantId}:${scopeKey}`;
-
-/** Significant words for the optional lexical filter (mirrors the memory tokenizer). */
-function tokenize(query: string): string[] {
-  return [...new Set(query.toLowerCase().split(/[^a-z0-9]+/i).filter((w) => w.length > 1))].slice(0, 12);
-}
 
 export interface NoteAuthor {
   tenantId: number;
@@ -88,7 +84,7 @@ export async function readNotes(
       env,
       `blackboard:list:${tenantId}:${scopeKey}:${ver}:${limit}:${query}`,
       async () => {
-        const words = query ? tokenize(query) : [];
+        const words = query ? queryTerms(query) : [];
         const matchers = words.flatMap((w) => [ilike(coordinationNotes.content, `%${w}%`), ilike(coordinationNotes.key, `%${w}%`)]);
         const lexical: SQL | undefined = matchers.length > 0 ? or(...matchers) : undefined;
         return db

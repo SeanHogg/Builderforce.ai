@@ -40,6 +40,7 @@ import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
+import { stableStringify } from '@builderforce/agent-tools';
 
 /**
  * The narrow env slice this needs. Widened from `Env` on purpose: the LLM proxy runs
@@ -91,19 +92,6 @@ export interface ResponseCacheKeyParts {
   topP?: number | undefined;
   responseFormat?: unknown;
 }
-
-/** Stable JSON — object keys sorted at every depth — so two structurally identical
- *  requests hash the same regardless of the order their fields were built in. */
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => a.localeCompare(b));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
-}
-
-
 
 /**
  * The cache key for one request. Mirrors `builderforce-memory`'s `buildCacheKey`

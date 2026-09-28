@@ -18,7 +18,7 @@ import type { BrainAction } from './BrainActionsContext';
 import type { BrainTransport } from './streamChatCompletion';
 // Deterministic JSON for the dedupe key (object key order can vary per call) — shared
 // with the run loop's read-repeat guard, so both fingerprint arguments the same way.
-import { stableStringify } from './stableStringify';
+import { stableStringify } from '@builderforce/agent-tools';
 
 /** One tool as the gateway advertises it. */
 export interface McpToolEntry {

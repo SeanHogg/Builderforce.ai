@@ -23,6 +23,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { isExpired } from '../../domain/memory/memoryScope';
+import { queryTerms } from '../../domain/shared/queryTerms';
 
 const RECALL_DEFAULT = 6;
 const RECALL_MAX = 20;
@@ -62,11 +63,6 @@ function versionKey(tenantId: number, projectId: number): string {
  */
 export function projectFactsVersion(env: Env, tenantId: number, projectId: number): Promise<string> {
   return getCacheVersion(env, versionKey(tenantId, projectId));
-}
-
-/** Significant lowercase words (drop 1-char noise) — each becomes an ILIKE matcher. */
-function tokenize(query: string): string[] {
-  return [...new Set(query.toLowerCase().split(/[^a-z0-9]+/i).filter((w) => w.length > 1))].slice(0, 12);
 }
 
 /**
@@ -199,7 +195,7 @@ export async function recallProjectFacts(
           ne(projectFacts.source, QA_CACHE_SOURCE),
           or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
         );
-        const words = tokenize(query);
+        const words = queryTerms(query);
         const where: SQL | undefined = words.length > 0 ? and(base, or(...words.map((w) => ilike(projectFacts.content, `%${w}%`)))) : base;
         const rows = await db
           .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt })
