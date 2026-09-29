@@ -1770,6 +1770,10 @@ interface EvermindRecentEntry {
     at: number;
     /** FedAvg sample weight. */
     weight: number;
+    /** True when this contribution's weights were fitted into the merge (it moved the
+     *  neocortex). Absent on rows written before the flag existed — all of which were
+     *  fitted — so read it as `fitted !== false`. */
+    fitted?: boolean;
     /** The task prompt the run addressed (text-path only). */
     prompt?: string;
     /** The run/exemplar text that was learned (text-path only). Absent when a pinned
@@ -1919,6 +1923,8 @@ interface EvermindConsoleData {
  */
 interface EvermindTarget {
     projectId: number;
+    /** The head's published artifact ref, or null while unseeded. */
+    ref?: string | null;
     version: number;
     name: string;
     mode: EvermindMode;
@@ -1978,6 +1984,8 @@ interface EvermindProbeSample {
 /** A test-bench run: one prompt, or the fixed readiness suite the enable-gate uses. */
 interface EvermindProbeResult {
     version: number;
+    /** The project the probe ran against. */
+    projectId?: number;
     /** `readiness` = the fixed probe suite that gates enabling inference; `prompt` = the
      *  operator's own prompt. Both are graded identically. */
     mode: 'readiness' | 'prompt';
@@ -2392,10 +2400,16 @@ declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projec
  * — the build picker's rules, so the two desktop surfaces pick the same model.
  */
 
-/** An authenticated JSON call, relative to the gateway origin. Throws on a non-2xx. */
+/**
+ * An authenticated JSON call, relative to the gateway origin. Throws on a non-2xx.
+ * `expectedErrors` names the statuses the console reports itself (a refused probe, a
+ * paid-only analysis): a host with a global error surface keeps those off it; a host
+ * without one ignores the field.
+ */
 type EvermindRequest = <T>(path: string, init?: {
     method?: string;
     body?: string;
+    expectedErrors?: number[];
 }) => Promise<T>;
 /**
  * What a host read from its local memory source for an import: the learnable entries,
@@ -2440,6 +2454,30 @@ interface EvermindRestOptions extends EvermindHostPowers {
     /** The Evermind's BACKING storage project — the id `/api/projects/:id/evermind` operates on. */
     projectId: number;
 }
+/** A tenant model row as `GET /api/llm/models` lists it. */
+interface TenantModelRow {
+    slug?: string;
+    name?: string;
+    baseModel?: string | null;
+}
+/** The tenant's PUBLISHED Evermind models — rows pinned to `evermind/<ref>`. */
+declare function publishedEvermindModels(rows: readonly TenantModelRow[] | undefined): EvermindSeedModel[];
+/** The `GET /llm/v1/models` fields the teacher rule reads. */
+interface TeacherModelsPayload {
+    /** The server's unified frontier-access rule (superadmin || override || connected BYO || paid). */
+    canUseFrontierModels?: boolean;
+    /** Teacher-eligible frontier models: the tenant's own connected models plus funded coders. */
+    teacherModels?: string[];
+    /** Older payloads: the plan's coding pool. */
+    codingModels?: string[];
+}
+/**
+ * Who may pin a frontier teacher, and which models they may pick — ONE rule for every
+ * console host. Unlocked by the server's frontier-access verdict (so a BYO or superadmin
+ * tenant is never shown a false paid-only wall), or by a paid plan snapshot, which fails
+ * closed when the models payload does not carry the verdict.
+ */
+declare function resolveTeacherOptions(models: TeacherModelsPayload | null | undefined, plan: PlanTier | null | undefined): EvermindTeacherOptions;
 /** The plan snapshot fields the paid-plan rule reads (`GET /api/consumption`). */
 interface PlanTier {
     plan?: {
@@ -2822,4 +2860,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatDiagnosticsReads, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, groupAbsorbed, healthRingColor, initialsOf, loadEvermindBuilds, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatDiagnosticsReads, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, groupAbsorbed, healthRingColor, initialsOf, loadEvermindBuilds, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete };

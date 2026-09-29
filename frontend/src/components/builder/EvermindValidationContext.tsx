@@ -13,16 +13,16 @@
  */
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { ProjectEvermindValidateResult } from '@/lib/projectEvermindApi';
+import type { EvermindValidateResult } from '@seanhogg/builderforce-brain-ui';
 
 interface EvermindValidationValue {
   /** The current validate result, or null when nothing is being previewed. */
-  highlight: ProjectEvermindValidateResult | null;
+  highlight: EvermindValidateResult | null;
   /** Ids of the matched memories (derived once) — the surfaces highlight these. */
   matchIds: Set<number>;
   /** Id of the top match (the memory most likely used to respond), or null. */
   primaryId: number | null;
-  setHighlight: (result: ProjectEvermindValidateResult | null) => void;
+  setHighlight: (result: EvermindValidateResult | null) => void;
 }
 
 const NOOP: EvermindValidationValue = {
@@ -35,7 +35,7 @@ const NOOP: EvermindValidationValue = {
 const Ctx = createContext<EvermindValidationValue | null>(null);
 
 export function EvermindValidationProvider({ children }: { children: ReactNode }) {
-  const [highlight, setHighlight] = useState<ProjectEvermindValidateResult | null>(null);
+  const [highlight, setHighlight] = useState<EvermindValidateResult | null>(null);
   const value = useMemo<EvermindValidationValue>(() => ({
     highlight,
     matchIds: new Set((highlight?.matches ?? []).map((m) => m.id)),

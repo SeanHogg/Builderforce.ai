@@ -5,40 +5,21 @@ import { useFormatter, useTranslations } from 'next-intl';
 import {
   EvermindConsole,
   DEFAULT_EVERMIND_LABELS,
-  type EvermindConsoleAdapter,
+  createEvermindRestAdapter,
   type EvermindConsoleLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { usePermission } from '@/lib/rbac';
 import { fetchProject } from '@/lib/api';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
-import { listEvermindModels } from '@/lib/studioModelsApi';
-import { useLlmModels } from '@/lib/useLlmModels';
-import {
-  getProjectEvermindContributions,
-  listProjectEvermindTargets,
-  seedProjectEvermindFromModel,
-  setProjectEvermindInference,
-  setProjectEvermindMode,
-  setProjectEvermindTeacher,
-  teachProjectEvermindFromText,
-  getProjectEvermindContributionStatus,
-  flushProjectEvermind,
-  validateProjectEvermind,
-  probeProjectEvermind,
-  reseedProjectEvermind,
-  reindexProjectEvermind,
-  cleanupProjectEvermind,
-  analyzeProjectEvermind,
-  applyProjectEvermindFindings,
-} from '@/lib/projectEvermindApi';
+import { evermindConsoleRequest } from '@/lib/projectEvermindApi';
 import { useEvermindValidation } from './EvermindValidationContext';
 
 /**
  * ProjectEvermindPanel — the web host of the shared <EvermindConsole> (the SAME
  * component the VS Code sidebar renders, so the inspect-and-train surface is one
  * source of truth: [[evermind-learning-architecture]]). This wrapper supplies only
- * the two host seams: an adapter mapping the console's data/mutations to
- * `projectEvermindApi`, and a next-intl label bundle. Manager-gating rides the
+ * the two host seams: the shared REST adapter (the same one VS Code and Synapse use)
+ * over the web's authenticated request, and a next-intl label bundle. Manager-gating rides the
  * `canManage` prop (the console disables — never hides — the write controls).
  */
 export function ProjectEvermindPanel({ projectId, showRecent = true }: { projectId: number; showRecent?: boolean }) {
@@ -63,52 +44,17 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     return () => { cancelled = true; };
   }, [scopedName, projectId]);
   const projectName = scopedName ?? fetchedName;
-  // Frontier teacher gate + options. Gate: the server's unified frontier-access rule
-  // (superadmin || premium override || connected BYO account || paid plan) — NOT bare
-  // `isPaid` — so a superadmin or a BYO tenant is never shown a false "paid plans only"
-  // wall (the console reads the returned `isPaid` flag to lock/unlock the teacher).
-  // Options: `teacherModels` — the tenant's OWN connected frontier models (a BYO-Anthropic
-  // tenant teaches with Opus/Sonnet) plus platform premium coders when we fund them — NOT
-  // the plan `codingModels` (free coders on the free plan).
-  const { teacherModels, canUseFrontierModels } = useLlmModels();
   // Lift the Validate recall result to the shared studio highlight (inert when this
   // panel renders outside the studio — the console still shows its own inline result).
   const { setHighlight } = useEvermindValidation();
 
-  const adapter = useMemo<EvermindConsoleAdapter>(() => ({
-    loadData: () => getProjectEvermindContributions(projectId),
-    loadSeedModels: async () => (await listEvermindModels()).map((m) => ({ slug: m.slug, name: m.name })),
-    loadTeacherOptions: async () => ({ models: teacherModels, isPaid: canUseFrontierModels }),
-    seedFromModel: async (slug) => { await seedProjectEvermindFromModel(projectId, slug); },
-    setInference: async (enabled) => { await setProjectEvermindInference(projectId, enabled); },
-    setMode: async (mode) => { await setProjectEvermindMode(projectId, mode); },
-    setTeacher: async (model) => { await setProjectEvermindTeacher(projectId, model); },
-    // The teach POST is ACCEPTANCE, not success — the teacher runs later, in the
-    // coordinator's debounced merge. Hand the console the contribution id so it can
-    // poll `teachStatus` and correct its optimistic toast with the real outcome.
-    teach: async (text, prompt) => {
-      const r = await teachProjectEvermindFromText(projectId, text, prompt);
-      return r.contributionId ? { contributionId: r.contributionId } : {};
-    },
-    teachStatus: (contributionId) => getProjectEvermindContributionStatus(projectId, contributionId),
-    flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
-    validate: (prompt) => validateProjectEvermind(projectId, prompt),
-    loadTargets: () => listProjectEvermindTargets(projectId),
-    // Test bench + maintenance + knowledge audit. All plain REST on this project, so
-    // the web host implements every one; the console self-gates on their presence.
-    probe: (prompt) => probeProjectEvermind(projectId, prompt),
-    reseed: async (slug) => { const r = await reseedProjectEvermind(projectId, slug); return { version: r.version }; },
-    reindex: async () => {
-      const r = await reindexProjectEvermind(projectId);
-      return { reindexed: r.reindexed, skipped: r.skipped, version: r.version };
-    },
-    cleanup: async () => {
-      const r = await cleanupProjectEvermind(projectId);
-      return { discarded: r.discarded, cachedAnswers: r.cachedAnswers };
-    },
-    analyze: () => analyzeProjectEvermind(projectId),
-    applyFindings: (findings) => applyProjectEvermindFindings(projectId, findings),
-  }), [projectId, teacherModels, canUseFrontierModels]);
+  // The shared REST adapter — every console call, and the one frontier-teacher rule
+  // (the server's frontier verdict, so a BYO or superadmin tenant is never shown a false
+  // paid-only wall) — over the web's authenticated request.
+  const adapter = useMemo(
+    () => createEvermindRestAdapter({ request: evermindConsoleRequest, projectId }),
+    [projectId],
+  );
 
   const labels = useMemo<Partial<EvermindConsoleLabels>>(() => ({
     title: t('title'),

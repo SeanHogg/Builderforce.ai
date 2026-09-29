@@ -5,6 +5,7 @@
  * tenant's published Evermind models and benchmark a chosen one against held-out
  * text on the server (which reuses the model's own persisted tokenizer).
  */
+import { publishedEvermindModels, type TenantModelRow } from '@seanhogg/builderforce-brain-ui';
 import { apiRequest, apiRequestStream } from './apiClient';
 import { downloadBlob, filenameFromResponse } from './download';
 
@@ -14,22 +15,10 @@ export interface PublishedEvermindModel {
   name: string;
 }
 
-const EVERMIND_PIN_PREFIX = 'evermind/';
-
-interface TenantModelRow {
-  slug?: string;
-  name?: string;
-  baseModel?: string | null;
-}
-
-/** List the tenant's PUBLISHED Evermind models (those pinned to `evermind/<ref>`). */
+/** List the tenant's PUBLISHED Evermind models (those pinned to `evermind/<ref>`) — the
+ *  same rule the console's seed picker uses. */
 export async function listEvermindModels(): Promise<PublishedEvermindModel[]> {
-  const res = await apiRequest<{ models?: TenantModelRow[] }>('/api/llm/models');
-  return (res.models ?? [])
-    .filter((m): m is TenantModelRow & { slug: string } =>
-      typeof m.slug === 'string' && !!m.baseModel?.startsWith(EVERMIND_PIN_PREFIX),
-    )
-    .map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
+  return publishedEvermindModels((await apiRequest<{ models?: TenantModelRow[] }>('/api/llm/models')).models);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {

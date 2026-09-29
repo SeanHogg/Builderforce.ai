@@ -24,6 +24,10 @@ export interface EvermindRecentEntry {
   at: number;
   /** FedAvg sample weight. */
   weight: number;
+  /** True when this contribution's weights were fitted into the merge (it moved the
+   *  neocortex). Absent on rows written before the flag existed — all of which were
+   *  fitted — so read it as `fitted !== false`. */
+  fitted?: boolean;
   /** The task prompt the run addressed (text-path only). */
   prompt?: string;
   /** The run/exemplar text that was learned (text-path only). Absent when a pinned
@@ -182,6 +186,8 @@ export interface EvermindConsoleData {
  */
 export interface EvermindTarget {
   projectId: number;
+  /** The head's published artifact ref, or null while unseeded. */
+  ref?: string | null;
   version: number;
   name: string;
   mode: EvermindMode;
@@ -246,6 +252,8 @@ export interface EvermindProbeSample {
 /** A test-bench run: one prompt, or the fixed readiness suite the enable-gate uses. */
 export interface EvermindProbeResult {
   version: number;
+  /** The project the probe ran against. */
+  projectId?: number;
   /** `readiness` = the fixed probe suite that gates enabling inference; `prompt` = the
    *  operator's own prompt. Both are graded identically. */
   mode: 'readiness' | 'prompt';

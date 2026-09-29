@@ -5,6 +5,7 @@ import {
   loadEvermindBuilds,
   planIsPaid,
   preferredEvermindBuild,
+  resolveTeacherOptions,
   type EvermindBuild,
   type EvermindRequest,
 } from './restAdapter';
@@ -56,7 +57,39 @@ describe('createEvermindRestAdapter', () => {
     });
     const a = createEvermindRestAdapter({ request, projectId: 1 });
     expect(await a.loadSeedModels()).toEqual([{ slug: 'a', name: 'Alpha' }]);
-    expect(await a.loadTeacherOptions()).toEqual({ models: ['m1'], isPaid: false });
+    // `premium`/`effectivePlan` are not the verdict; with no frontier verdict and a free
+    // plan the teacher stays locked, and a locked picker offers nothing.
+    expect(await a.loadTeacherOptions()).toEqual({ models: [], isPaid: false });
+  });
+
+  it('unlocks the teacher on the server frontier verdict (BYO / superadmin), offering its teacher models', async () => {
+    const { request } = recorder({
+      '/llm/v1/models': { canUseFrontierModels: true, teacherModels: ['anthropic/claude-opus'], codingModels: ['m1'] },
+      '/api/consumption': { plan: { effective: 'free' } },
+    });
+    expect(await createEvermindRestAdapter({ request, projectId: 1 }).loadTeacherOptions()).toEqual({
+      models: ['anthropic/claude-opus'],
+      isPaid: true,
+    });
+  });
+
+  it('marks the statuses the console reports itself, so a host keeps them off its global error surface', async () => {
+    const seen: Array<{ path: string; expectedErrors?: number[] }> = [];
+    const request: EvermindRequest = async <T,>(path: string, init?: { expectedErrors?: number[] }) => {
+      seen.push({ path, expectedErrors: init?.expectedErrors });
+      return {} as T;
+    };
+    const a = createEvermindRestAdapter({ request, projectId: 5 });
+    await a.probe!();
+    await a.analyze!();
+    await a.setInference(false);
+    await a.flush();
+    expect(seen).toEqual([
+      { path: '/api/projects/5/evermind/probe', expectedErrors: [409, 422] },
+      { path: '/api/projects/5/evermind/analyze', expectedErrors: [402] },
+      { path: '/api/projects/5/evermind/inference', expectedErrors: [422] },
+      { path: '/api/projects/5/evermind/flush', expectedErrors: undefined },
+    ]);
   });
 
   it('offers import only when the host can both read and compact its memory source', async () => {
@@ -89,6 +122,13 @@ describe('groupAbsorbed', () => {
   it('groups by each entry’s own source, falling back to the picked one', () => {
     const picked = { path: 'dir', fileName: 'dir', entries: [{ key: 'a', text: '', path: 'a.md' }, { key: 'b', text: '', path: 'b.md' }, { key: 'c', text: '' }] };
     expect(groupAbsorbed(picked, ['a', 'c'])).toEqual([{ path: 'a.md', absorbedKeys: ['a'] }, { path: 'dir', absorbedKeys: ['c'] }]);
+  });
+});
+
+describe('resolveTeacherOptions', () => {
+  it('falls back to the coding pool on an older payload once a paid plan unlocks it', () => {
+    expect(resolveTeacherOptions({ codingModels: ['m1'] }, { plan: { effective: 'pro' } })).toEqual({ models: ['m1'], isPaid: true });
+    expect(resolveTeacherOptions(null, null)).toEqual({ models: [], isPaid: false });
   });
 });
 

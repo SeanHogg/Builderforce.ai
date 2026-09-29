@@ -19,13 +19,23 @@ import type {
   EvermindKnowledgeAnalysis,
   EvermindKnowledgeRepair,
   EvermindProbeResult,
+  EvermindSeedModel,
   EvermindTarget,
+  EvermindTeacherOptions,
   EvermindValidateResult,
   MemoryImportReport,
 } from './types';
 
-/** An authenticated JSON call, relative to the gateway origin. Throws on a non-2xx. */
-export type EvermindRequest = <T>(path: string, init?: { method?: string; body?: string }) => Promise<T>;
+/**
+ * An authenticated JSON call, relative to the gateway origin. Throws on a non-2xx.
+ * `expectedErrors` names the statuses the console reports itself (a refused probe, a
+ * paid-only analysis): a host with a global error surface keeps those off it; a host
+ * without one ignores the field.
+ */
+export type EvermindRequest = <T>(
+  path: string,
+  init?: { method?: string; body?: string; expectedErrors?: number[] },
+) => Promise<T>;
 
 /**
  * What a host read from its local memory source for an import: the learnable entries,
@@ -63,7 +73,36 @@ export interface EvermindRestOptions extends EvermindHostPowers {
   projectId: number;
 }
 
-interface TenantModelRow { slug?: string; name?: string; baseModel?: string | null }
+/** A tenant model row as `GET /api/llm/models` lists it. */
+export interface TenantModelRow { slug?: string; name?: string; baseModel?: string | null }
+
+/** The tenant's PUBLISHED Evermind models — rows pinned to `evermind/<ref>`. */
+export function publishedEvermindModels(rows: readonly TenantModelRow[] | undefined): EvermindSeedModel[] {
+  return (rows ?? [])
+    .filter((m): m is TenantModelRow & { slug: string } => typeof m.slug === 'string' && !!m.baseModel?.startsWith('evermind/'))
+    .map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
+}
+
+/** The `GET /llm/v1/models` fields the teacher rule reads. */
+export interface TeacherModelsPayload {
+  /** The server's unified frontier-access rule (superadmin || override || connected BYO || paid). */
+  canUseFrontierModels?: boolean;
+  /** Teacher-eligible frontier models: the tenant's own connected models plus funded coders. */
+  teacherModels?: string[];
+  /** Older payloads: the plan's coding pool. */
+  codingModels?: string[];
+}
+
+/**
+ * Who may pin a frontier teacher, and which models they may pick — ONE rule for every
+ * console host. Unlocked by the server's frontier-access verdict (so a BYO or superadmin
+ * tenant is never shown a false paid-only wall), or by a paid plan snapshot, which fails
+ * closed when the models payload does not carry the verdict.
+ */
+export function resolveTeacherOptions(models: TeacherModelsPayload | null | undefined, plan: PlanTier | null | undefined): EvermindTeacherOptions {
+  const isPaid = models?.canUseFrontierModels === true || planIsPaid(plan);
+  return { models: models?.teacherModels ?? (isPaid ? models?.codingModels ?? [] : []), isPaid };
+}
 interface ExtractResponse { absorbed: string[]; skipped: Array<{ key: string; reason: string }>; merged: number; version: number }
 
 /** The plan snapshot fields the paid-plan rule reads (`GET /api/consumption`). */
@@ -85,28 +124,29 @@ const json = (body: unknown) => JSON.stringify(body);
 export function createEvermindRestAdapter(opts: EvermindRestOptions): EvermindConsoleAdapter {
   const { request: req, projectId } = opts;
   const base = `/api/projects/${projectId}/evermind`;
-  const post = <T>(path: string, body?: unknown) => req<T>(`${base}${path}`, { method: 'POST', ...(body === undefined ? {} : { body: json(body) }) });
-  const patch = (path: string, body: unknown) => req<unknown>(`${base}${path}`, { method: 'PATCH', body: json(body) }).then(() => undefined);
+  const post = <T>(path: string, body?: unknown, expectedErrors?: number[]) => req<T>(`${base}${path}`, {
+    method: 'POST',
+    ...(body === undefined ? {} : { body: json(body) }),
+    ...(expectedErrors ? { expectedErrors } : {}),
+  });
+  const patch = (path: string, body: unknown, expectedErrors?: number[]) => req<unknown>(`${base}${path}`, {
+    method: 'PATCH',
+    body: json(body),
+    ...(expectedErrors ? { expectedErrors } : {}),
+  }).then(() => undefined);
 
   const adapter: EvermindConsoleAdapter = {
     loadData: () => req<EvermindConsoleData>(`${base}/contributions`),
-    loadSeedModels: async () => {
-      const r = await req<{ models?: TenantModelRow[] }>('/api/llm/models');
-      return (r.models ?? [])
-        .filter((m): m is TenantModelRow & { slug: string } => typeof m.slug === 'string' && !!m.baseModel?.startsWith('evermind/'))
-        .map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
-    },
+    loadSeedModels: async () => publishedEvermindModels((await req<{ models?: TenantModelRow[] }>('/api/llm/models')).models),
     loadTeacherOptions: async () => {
-      // Models from the gateway (it owns the coder catalog); the PAID verdict from the
-      // plan snapshot — see `planIsPaid` for why not from this payload.
       const [models, plan] = await Promise.all([
-        req<{ codingModels?: string[] }>('/llm/v1/models'),
+        req<TeacherModelsPayload>('/llm/v1/models'),
         req<PlanTier>('/api/consumption').catch(() => null),
       ]);
-      return { models: models.codingModels ?? [], isPaid: planIsPaid(plan) };
+      return resolveTeacherOptions(models, plan);
     },
     seedFromModel: (slug) => post(`/seed-from-model`, { slug }).then(() => undefined),
-    setInference: (enabled) => patch('/inference', { enabled }),
+    setInference: (enabled) => patch('/inference', { enabled }, [422]),
     setMode: (mode) => patch('/mode', { mode }),
     setTeacher: (model) => patch('/teacher', { model }),
     // The POST only means "queued" — the teacher runs later in the coordinator's debounced
@@ -117,14 +157,14 @@ export function createEvermindRestAdapter(opts: EvermindRestOptions): EvermindCo
     flush: () => post<{ merged?: number; version?: number }>('/flush').then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
     validate: (prompt) => post<EvermindValidateResult>('/validate', { prompt }),
     loadTargets: () => req<{ targets?: EvermindTarget[] }>(`${base}/targets`).then((r) => r.targets ?? []),
-    probe: (prompt) => post<EvermindProbeResult>('/probe', prompt ? { prompt } : {}),
+    probe: (prompt) => post<EvermindProbeResult>('/probe', prompt ? { prompt } : {}, [409, 422]),
     reseed: (slug) => post<{ version?: number }>('/reseed', slug ? { slug } : {}).then((r) => ({ version: r.version ?? 0 })),
-    reindex: () => post<{ reindexed?: number; skipped?: number; version?: number }>('/reindex')
+    reindex: () => post<{ reindexed?: number; skipped?: number; version?: number }>('/reindex', undefined, [409, 503])
       .then((r) => ({ reindexed: r.reindexed ?? 0, skipped: r.skipped ?? 0, version: r.version ?? 0 })),
     cleanup: () => post<{ discarded?: number; cachedAnswers?: number }>('/cleanup')
       .then((r) => ({ discarded: r.discarded ?? 0, cachedAnswers: r.cachedAnswers ?? 0 })),
-    analyze: () => post<EvermindKnowledgeAnalysis>('/analyze', {}),
-    applyFindings: (findings) => post<EvermindKnowledgeRepair>('/analyze', { apply: true, findings }),
+    analyze: () => post<EvermindKnowledgeAnalysis>('/analyze', {}, [402]),
+    applyFindings: (findings) => post<EvermindKnowledgeRepair>('/analyze', { apply: true, findings }, [400, 402]),
   };
   if (opts.copyText) adapter.copyText = opts.copyText;
 

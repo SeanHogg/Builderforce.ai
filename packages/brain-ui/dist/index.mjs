@@ -5521,6 +5521,13 @@ var targetChip = {
 };
 
 // src/evermind/restAdapter.ts
+function publishedEvermindModels(rows) {
+  return (rows ?? []).filter((m) => typeof m.slug === "string" && !!m.baseModel?.startsWith("evermind/")).map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
+}
+function resolveTeacherOptions(models, plan) {
+  const isPaid = models?.canUseFrontierModels === true || planIsPaid(plan);
+  return { models: models?.teacherModels ?? (isPaid ? models?.codingModels ?? [] : []), isPaid };
+}
 function planIsPaid(snapshot) {
   const effective = snapshot?.plan?.effective;
   return typeof effective === "string" && effective !== "free";
@@ -5529,23 +5536,28 @@ var json = (body) => JSON.stringify(body);
 function createEvermindRestAdapter(opts) {
   const { request: req, projectId } = opts;
   const base = `/api/projects/${projectId}/evermind`;
-  const post = (path, body) => req(`${base}${path}`, { method: "POST", ...body === void 0 ? {} : { body: json(body) } });
-  const patch = (path, body) => req(`${base}${path}`, { method: "PATCH", body: json(body) }).then(() => void 0);
+  const post = (path, body, expectedErrors) => req(`${base}${path}`, {
+    method: "POST",
+    ...body === void 0 ? {} : { body: json(body) },
+    ...expectedErrors ? { expectedErrors } : {}
+  });
+  const patch = (path, body, expectedErrors) => req(`${base}${path}`, {
+    method: "PATCH",
+    body: json(body),
+    ...expectedErrors ? { expectedErrors } : {}
+  }).then(() => void 0);
   const adapter = {
     loadData: () => req(`${base}/contributions`),
-    loadSeedModels: async () => {
-      const r = await req("/api/llm/models");
-      return (r.models ?? []).filter((m) => typeof m.slug === "string" && !!m.baseModel?.startsWith("evermind/")).map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
-    },
+    loadSeedModels: async () => publishedEvermindModels((await req("/api/llm/models")).models),
     loadTeacherOptions: async () => {
       const [models, plan] = await Promise.all([
         req("/llm/v1/models"),
         req("/api/consumption").catch(() => null)
       ]);
-      return { models: models.codingModels ?? [], isPaid: planIsPaid(plan) };
+      return resolveTeacherOptions(models, plan);
     },
     seedFromModel: (slug) => post(`/seed-from-model`, { slug }).then(() => void 0),
-    setInference: (enabled) => patch("/inference", { enabled }),
+    setInference: (enabled) => patch("/inference", { enabled }, [422]),
     setMode: (mode) => patch("/mode", { mode }),
     setTeacher: (model) => patch("/teacher", { model }),
     // The POST only means "queued" — the teacher runs later in the coordinator's debounced
@@ -5555,12 +5567,12 @@ function createEvermindRestAdapter(opts) {
     flush: () => post("/flush").then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
     validate: (prompt) => post("/validate", { prompt }),
     loadTargets: () => req(`${base}/targets`).then((r) => r.targets ?? []),
-    probe: (prompt) => post("/probe", prompt ? { prompt } : {}),
+    probe: (prompt) => post("/probe", prompt ? { prompt } : {}, [409, 422]),
     reseed: (slug) => post("/reseed", slug ? { slug } : {}).then((r) => ({ version: r.version ?? 0 })),
-    reindex: () => post("/reindex").then((r) => ({ reindexed: r.reindexed ?? 0, skipped: r.skipped ?? 0, version: r.version ?? 0 })),
+    reindex: () => post("/reindex", void 0, [409, 503]).then((r) => ({ reindexed: r.reindexed ?? 0, skipped: r.skipped ?? 0, version: r.version ?? 0 })),
     cleanup: () => post("/cleanup").then((r) => ({ discarded: r.discarded ?? 0, cachedAnswers: r.cachedAnswers ?? 0 })),
-    analyze: () => post("/analyze", {}),
-    applyFindings: (findings) => post("/analyze", { apply: true, findings })
+    analyze: () => post("/analyze", {}, [402]),
+    applyFindings: (findings) => post("/analyze", { apply: true, findings }, [400, 402])
   };
   if (opts.copyText) adapter.copyText = opts.copyText;
   const { pickMemory, compactMemory } = opts;
@@ -6264,7 +6276,9 @@ export {
   productForPlan,
   productModelName,
   promptOptionsLabels,
+  publishedEvermindModels,
   resolvePendingChangesLabels,
+  resolveTeacherOptions,
   revealsModelId,
   selectPendingAskUser,
   serializeAskUser,
