@@ -7,13 +7,16 @@ import en from '@/i18n/messages/en.json';
 
 const mocks = vi.hoisted(() => ({ signedIn: false, ready: true }));
 
-vi.mock('@/lib/AuthContext', () => ({
-  useAuth: () => ({
+// Both hooks read the same session: the prompt calls `useAuth`, and the sample-workspace
+// check beneath it (via `useViewerSession`) calls `useOptionalAuth`.
+vi.mock('@/lib/AuthContext', () => {
+  const session = () => ({
     authReady: mocks.ready,
     isAuthenticated: mocks.signedIn,
     hasTenant: mocks.signedIn,
-  }),
-}));
+  });
+  return { useAuth: session, useOptionalAuth: session };
+});
 
 // The global next/navigation mock answers `usePathname()` with '/'; the wall is
 // recorded from `window.location`, so the two agree when the test puts the

@@ -122,8 +122,10 @@ describe('ChatInput `/` options menu', () => {
     renderComposer({ effort: 'balanced', onEffortChange, thinking: false, onThinkingChange: vi.fn() });
 
     fireEvent.click(trigger());
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /effort_thorough/ }));
+    // Run shaping sits on its own tab of the options dialog.
+    fireEvent.click(screen.getByRole('tab', { name: /chatInput\.effort$/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /effort_thorough/ }));
     expect(onEffortChange).toHaveBeenCalledWith('thorough');
-    expect(screen.getByRole('menuitemcheckbox', { name: /chatInput\.thinking/ })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /chatInput\.thinking/ })).toBeTruthy();
   });
 });
