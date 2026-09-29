@@ -239,6 +239,10 @@ async function isTeacherCooling(env: Env, tenantId: number, model: string): Prom
   }
 }
 
+/** The effective teacher for an alarm: the model to use, or WHY there isn't one. */
+export type EffectiveTeacher =
+  | { model: string }
+  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable'> };
 
 /**
  * Resolve the EFFECTIVE teacher model for a coordinator alarm: the pinned model when
