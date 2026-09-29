@@ -11540,7 +11540,7 @@
     "fp16Label": "Media precisión (F16): archivo más pequeño",
     "export": "Exportar y descargar",
     "exporting": "Exportando…",
-    "pushNote": "Se descarga en tu dispositivo. Publicar en un hub de Hugging Face es un paso aparte.",
+    "pushNote": "Se descarga en tu dispositivo. Para publicarlo, elige Repositorio de Hugging Face y usa el formulario de abajo.",
     "error": "La exportación falló.",
     "done": "Descargado {filename}",
     "format": {
@@ -11560,6 +11560,21 @@
         "label": "GGUF",
         "description": "Contenedor de llama.cpp (arquitectura personalizada; para herramientas GGUF)."
       }
+    },
+    "hub": {
+      "heading": "Publicar en Hugging Face",
+      "intro": "Sube el paquete completo del repositorio de este modelo a un repositorio de modelos de Hugging Face que te pertenezca. Tu token va directamente de esta página a Hugging Face: Builderforce nunca lo ve ni lo guarda.",
+      "repoLabel": "Repositorio",
+      "repoPlaceholder": "tu-nombre/tu-modelo",
+      "tokenLabel": "Token de acceso de Hugging Face",
+      "tokenPlaceholder": "hf_…",
+      "tokenHelp": "Un token con permiso de escritura, desde Access Tokens en la configuración de Hugging Face.",
+      "privateLabel": "Crear el repositorio como privado",
+      "publish": "Publicar en Hugging Face",
+      "publishing": "Publicando…",
+      "invalidRepo": "Escribe el repositorio como propietario/nombre, por ejemplo tu-nombre/tu-modelo.",
+      "error": "No se pudo publicar en Hugging Face.",
+      "done": "{count, plural, one {Publicado # archivo} other {Publicados # archivos}} en"
     }
   },
   "board": {

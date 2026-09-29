@@ -181,6 +181,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   evermind: [
     'four-questions-before-you-buy-enterprise-ai',
     'build-and-train-evermind-on-the-creation-canvas',
+    'publish-your-evermind-to-hugging-face',
     'evermind-self-updating-model',
     'inside-evermind-architecture',
     'memory-first-inference-skip-the-llm',

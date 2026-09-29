@@ -6,9 +6,10 @@
  * Picks one of the tenant's published models and a format (Hugging Face repo,
  * ONNX, safetensors, or GGUF), then streams the export from the server and
  * downloads it. The heavy model stays server-side; the engine's export subsystem
- * produces the files (no external credential — pushing to a hub is a separate
- * step). Self-gating per the DRY rule: the panel owns its own model/format/
- * loading/empty/error states; the host only mounts it.
+ * produces the files (no external credential). With the Hugging Face format picked,
+ * {@link HuggingFacePublishForm} pushes the same repo bundle to the Hub with the
+ * person's own token. Self-gating per the DRY rule: the panel owns its own
+ * model/format/loading/empty/error states; the host only mounts it.
  */
 
 import { Icon } from '@/components/ui/Icon';
@@ -23,6 +24,8 @@ import {
   type EvermindExportFormat,
 } from '@/lib/studioModelsApi';
 import { usePanelTask } from '@/hooks/usePanelTask';
+import { HuggingFacePublishForm } from '@/components/HuggingFacePublishForm';
+
 export function ModelExportPanel() {
   const t = useTranslations('modelExport');
   const [models, setModels] = useState<PublishedEvermindModel[] | null>(null);
@@ -169,6 +172,10 @@ export function ModelExportPanel() {
 
           <Icon source="⚠" size="1em" /> {task.error}
         </div>
+      )}
+
+      {!noModels && format === 'huggingface' && selectedSlug && (
+        <HuggingFacePublishForm slug={selectedSlug} fp16={fp16Supported && fp16} />
       )}
 
       {done && (

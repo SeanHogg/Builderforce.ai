@@ -124,23 +124,33 @@ export const EVERMIND_EXPORT_FORMATS: ExportFormatOption[] = [
 ];
 
 /**
- * Export a published model and trigger a browser download. Streams the artifact
- * (auth-gated, so it can't be a bare <a href>) into a Blob, then clicks a
- * transient object-URL link. Returns the downloaded filename.
+ * Fetch a published model's export as a Blob. Auth-gated, so it can't be a bare
+ * <a href>. The one fetch behind both the download and the Hugging Face publish.
  */
-export async function exportPublishedModel(
+export async function fetchPublishedModelExport(
   slug: string,
   format: EvermindExportFormat,
   fp16 = false,
-): Promise<string> {
+): Promise<{ blob: Blob; filename: string }> {
   const res = await apiRequestStream(
     `/api/studio/models/${encodeURIComponent(slug)}/export?format=${format}&fp16=${fp16 ? 'true' : 'false'}`,
   );
   const blob = await res.blob();
   const safeSlug = slug.replace(/[^a-zA-Z0-9._-]/g, '_');
   const fallbackExt = EVERMIND_EXPORT_FORMATS.find((f) => f.id === format)?.ext ?? '';
-  const filename = filenameFromResponse(res, `${safeSlug}${fallbackExt}`);
+  return { blob, filename: filenameFromResponse(res, `${safeSlug}${fallbackExt}`) };
+}
 
+/**
+ * Export a published model and trigger a browser download (a transient object-URL
+ * link). Returns the downloaded filename.
+ */
+export async function exportPublishedModel(
+  slug: string,
+  format: EvermindExportFormat,
+  fp16 = false,
+): Promise<string> {
+  const { blob, filename } = await fetchPublishedModelExport(slug, format, fp16);
   downloadBlob(blob, filename);
   return filename;
 }

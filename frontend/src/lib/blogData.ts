@@ -66,6 +66,7 @@ import feedbackToMockups from '@/content/blog/customer-feedback-to-ten-mockups.m
 import multiplayerCanvas from '@/content/blog/multiplayer-creation-canvas-web-vscode.md';
 import projectComparisonRoadmap from '@/content/blog/compare-projects-and-build-an-executive-roadmap.md';
 import evermindCanvas from '@/content/blog/build-and-train-evermind-on-the-creation-canvas.md';
+import publishEvermindToHf from '@/content/blog/publish-your-evermind-to-hugging-face.md';
 import createBeforeSignup from '@/content/blog/create-before-you-sign-up.md';
 import brainCanvasOperator from '@/content/blog/brain-operates-the-creation-canvas.md';
 import liveDataStories from '@/content/blog/live-data-stories-on-the-creation-canvas.md';
@@ -310,6 +311,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('multiplayer-creation-canvas-web-vscode', multiplayerCanvas),
   buildPost('compare-projects-and-build-an-executive-roadmap', projectComparisonRoadmap),
   buildPost('build-and-train-evermind-on-the-creation-canvas', evermindCanvas),
+  buildPost('publish-your-evermind-to-hugging-face', publishEvermindToHf),
   buildPost('getting-started-with-ai-agents', gettingStarted),
   buildPost('webgpu-lora-explained', webgpuLora),
   buildPost('multi-agent-orchestration', multiAgent),

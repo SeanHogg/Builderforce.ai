@@ -11540,7 +11540,7 @@
     "fp16Label": "Demi-précision (F16) — fichier plus petit",
     "export": "Exporter et télécharger",
     "exporting": "Exportation…",
-    "pushNote": "Téléchargé sur votre appareil. La publication vers un hub Hugging Face est une étape distincte.",
+    "pushNote": "Téléchargé sur votre appareil. Pour le publier, choisissez Dépôt Hugging Face et utilisez le formulaire ci-dessous.",
     "error": "L’exportation a échoué.",
     "done": "Téléchargé {filename}",
     "format": {
@@ -11560,6 +11560,21 @@
         "label": "GGUF",
         "description": "Conteneur llama.cpp (architecture personnalisée ; pour l’outillage GGUF)."
       }
+    },
+    "hub": {
+      "heading": "Publier sur Hugging Face",
+      "intro": "Envoyez le paquet complet du dépôt de ce modèle vers un dépôt de modèles Hugging Face qui vous appartient. Votre jeton part directement de cette page vers Hugging Face : Builderforce ne le voit ni ne le conserve.",
+      "repoLabel": "Dépôt",
+      "repoPlaceholder": "votre-nom/votre-modele",
+      "tokenLabel": "Jeton d’accès Hugging Face",
+      "tokenPlaceholder": "hf_…",
+      "tokenHelp": "Un jeton avec droit d’écriture, créé dans les paramètres Hugging Face sous Access Tokens.",
+      "privateLabel": "Créer le dépôt en privé",
+      "publish": "Publier sur Hugging Face",
+      "publishing": "Publication…",
+      "invalidRepo": "Saisissez le dépôt sous la forme propriétaire/nom, par exemple votre-nom/votre-modele.",
+      "error": "La publication sur Hugging Face a échoué.",
+      "done": "{count, plural, one {# fichier publié} other {# fichiers publiés}} sur"
     }
   },
   "board": {

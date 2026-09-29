@@ -11540,7 +11540,7 @@
     "fp16Label": "Half-precision (F16) — smaller file",
     "export": "Export & download",
     "exporting": "Exporting…",
-    "pushNote": "Downloads to your device. Pushing to a Hugging Face hub is a separate step.",
+    "pushNote": "Downloads to your device. To publish instead, pick Hugging Face repo and use the form below.",
     "error": "Export failed.",
     "done": "Downloaded {filename}",
     "format": {
@@ -11560,6 +11560,21 @@
         "label": "GGUF",
         "description": "llama.cpp container (custom architecture; for GGUF tooling)."
       }
+    },
+    "hub": {
+      "heading": "Publish to Hugging Face",
+      "intro": "Push this model's full repo bundle to a Hugging Face model repo you own. Your token goes straight from this page to Hugging Face — Builderforce never sees or stores it.",
+      "repoLabel": "Repository",
+      "repoPlaceholder": "your-name/your-model",
+      "tokenLabel": "Hugging Face access token",
+      "tokenPlaceholder": "hf_…",
+      "tokenHelp": "A token with write access, from your Hugging Face settings under Access Tokens.",
+      "privateLabel": "Create the repository as private",
+      "publish": "Publish to Hugging Face",
+      "publishing": "Publishing…",
+      "invalidRepo": "Enter the repository as owner/name, for example your-name/your-model.",
+      "error": "Publishing to Hugging Face failed.",
+      "done": "Published {count, plural, one {# file} other {# files}} to"
     }
   },
   "board": {

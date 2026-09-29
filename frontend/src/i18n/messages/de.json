@@ -11540,7 +11540,7 @@
     "fp16Label": "Halbe Genauigkeit (F16) – kleinere Datei",
     "export": "Exportieren & herunterladen",
     "exporting": "Wird exportiert…",
-    "pushNote": "Wird auf Ihr Gerät heruntergeladen. Das Veröffentlichen in einem Hugging-Face-Hub ist ein separater Schritt.",
+    "pushNote": "Wird auf dein Gerät heruntergeladen. Zum Veröffentlichen wähle Hugging-Face-Repo und nutze das Formular unten.",
     "error": "Export fehlgeschlagen.",
     "done": "{filename} heruntergeladen",
     "format": {
@@ -11560,6 +11560,21 @@
         "label": "GGUF",
         "description": "llama.cpp-Container (benutzerdefinierte Architektur; für GGUF-Tools)."
       }
+    },
+    "hub": {
+      "heading": "Auf Hugging Face veröffentlichen",
+      "intro": "Lade das vollständige Repo-Paket dieses Modells in ein Hugging-Face-Modell-Repo hoch, das dir gehört. Dein Token geht direkt von dieser Seite an Hugging Face – Builderforce sieht und speichert es nie.",
+      "repoLabel": "Repository",
+      "repoPlaceholder": "dein-name/dein-modell",
+      "tokenLabel": "Hugging-Face-Zugriffstoken",
+      "tokenPlaceholder": "hf_…",
+      "tokenHelp": "Ein Token mit Schreibrechten, aus deinen Hugging-Face-Einstellungen unter Access Tokens.",
+      "privateLabel": "Repository als privat anlegen",
+      "publish": "Auf Hugging Face veröffentlichen",
+      "publishing": "Wird veröffentlicht…",
+      "invalidRepo": "Gib das Repository als Besitzer/Name an, zum Beispiel dein-name/dein-modell.",
+      "error": "Veröffentlichen auf Hugging Face fehlgeschlagen.",
+      "done": "{count, plural, one {# Datei} other {# Dateien}} veröffentlicht nach"
     }
   },
   "board": {
