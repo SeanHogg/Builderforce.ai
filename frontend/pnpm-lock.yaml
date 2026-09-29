@@ -20,6 +20,9 @@ importers:
       '@fontsource/jetbrains-mono':
         specifier: ^5.3.0
         version: 5.3.0
+      '@huggingface/hub':
+        specifier: ^2.17.5
+        version: 2.17.5
       '@huggingface/transformers':
         specifier: ^3.8.1
         version: 3.8.1(@types/node@20.19.39)
@@ -48,11 +51,11 @@ importers:
         specifier: link:../builderforce-embedded
         version: link:../builderforce-embedded
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.9.30
-        version: 2026.9.30(@seanhogg/builderforce-memory-engine@2026.9.30)
+        specifier: ^2026.9.31
+        version: 2026.9.31(@seanhogg/builderforce-memory-engine@2026.9.31)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.9.30
-        version: 2026.9.30
+        specifier: ^2026.9.31
+        version: 2026.9.31
       '@seanhogg/builderforce-quality':
         specifier: ^2026.7.5
         version: 2026.7.5
@@ -95,6 +98,9 @@ importers:
       d3-zoom:
         specifier: ^3.0.0
         version: 3.0.0
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       isomorphic-git:
         specifier: ^1.38.3
         version: 1.38.3
@@ -765,12 +771,26 @@ packages:
   '@formatjs/intl-localematcher@0.8.10':
     resolution: {integrity: sha512-P/IC3qws3jH+1fEs+o0RIFgXKRaQlFehjS5W0FPAqdo6hgzawLl+eD0q0JjheQ3XtoOe5n8WSYfX06KQZI/QJA==}
 
+  '@huggingface/blake3-jit@0.0.2':
+    resolution: {integrity: sha512-Bq7B5qabyjrJfhBsl85Jd2QBtf+HzRD7h7A9GfN2lzrrsABhOa5evVPgzoCTxR7Ub0QFj7YDK1YkYRWBU25+2w==}
+
+  '@huggingface/hub@2.17.5':
+    resolution: {integrity: sha512-FbS39It+C+K5F10jyaNAI2wmMaLpOu+KN0Om8ycXc0um/RIisxOyE/5eTqPELy9bAI8JZdGQ29nZYzcZeXzvFg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   '@huggingface/jinja@0.5.8':
     resolution: {integrity: sha512-ZdElB7DPS7QQS8ZnFc5RPPtkg+eN11z8AmIZWAyes6pSbwXqiFB/POVevvm01begdSX1ho9Gxln/F6qlQMsuaA==}
     engines: {node: '>=18'}
 
+  '@huggingface/tasks@0.21.53':
+    resolution: {integrity: sha512-+Vj3tVw7a4ONklouaHP4I7v1HJfHOfXRHGQE935LbqhOdgLgw2PGPeUUsv6oWDf+HwzJaI1GaTmG9YRMrl0pqw==}
+
   '@huggingface/transformers@3.8.1':
     resolution: {integrity: sha512-tsTk4zVjImqdqjS8/AOZg2yNLd1z9S5v+7oUPpXaasDRwEDhB+xnglK1k5cad26lL5/ZIaeREgWWy0bs9y9pPA==}
+
+  '@huggingface/xetchunk-wasm@0.2.0':
+    resolution: {integrity: sha512-cmp7oAAWeCpZGrVQTP/LxDtJdzGMfpxwkEVsZsk5jZQ2FwP2njm8LnyobhnQvLpkSAcJJwUzFJC0PYS9ZsqeTg==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -1364,15 +1384,15 @@ packages:
   '@schummar/icu-type-parser@1.21.5':
     resolution: {integrity: sha512-bXHSaW5jRTmke9Vd0h5P7BtWZG9Znqb8gSDxZnxaGSJnGwPLDPfS+3g0BKzeWqzgZPsIVZkM7m2tbo18cm5HBw==}
 
-  '@seanhogg/builderforce-memory-engine@2026.9.30':
-    resolution: {integrity: sha512-rpjZB7W5cv+6RtUT1pwsi1g1gt+cCS6Xedv1SegHdIBV6JNGk1Eyme+Yn8VCpqeQozDJoZ7zRaweHl4IOqpLCg==}
+  '@seanhogg/builderforce-memory-engine@2026.9.31':
+    resolution: {integrity: sha512-fak3PiT9DSydUdC9JnKzefXLbrU54jATaDydGGJybWvf15a2C+5z20x7CWWqSK6bFkRhMVQarBOVPph7VDDCbw==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.9.30':
-    resolution: {integrity: sha512-6Uby/75i0sCuEVIZ+mgoxg5Vvrsw/E4JO0eOeivXBBR4CN2wmKwnYjxhJKcpTb3JBeRbJu5zlN2ktDXRPld8wQ==}
+  '@seanhogg/builderforce-memory@2026.9.31':
+    resolution: {integrity: sha512-1lQU0JTAZGkNX1fa8EYc5aLxltRPM7Shhk70bDZgkCKVlLSVdMr7Qf8uRIXUrO1AfTYSV+XJ503dD0c/E5C4UA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.9.30
+      '@seanhogg/builderforce-memory-engine': ^2026.9.31
 
   '@seanhogg/builderforce-quality@2026.7.5':
     resolution: {integrity: sha512-TPI+SVch4YxgaYuIGSupP3RlvdB2N1kYbxFH5e1cdGsrYJZunR5wN2PYcj4WtanThy28kLSWXVsU+I9XQ9iiiA==}
@@ -2407,6 +2427,10 @@ packages:
   clean-git-ref@2.0.1:
     resolution: {integrity: sha512-bLSptAy2P0s6hU4PzuIMKmMJJSE6gLXGH1cntDu7bWJUksvuM+7ReOK61mozULErYvP6a15rnYl0zFDef+pyPw==}
 
+  cli-progress@3.12.0:
+    resolution: {integrity: sha512-tRkV3HJ1ASwm19THiiLIXLO7Im7wlTuKnvkYaTkyoAPefqjNg7W7DHKUlGRxy9vxDvbyCYQkQozvptuMkGCg8A==}
+    engines: {node: '>=4'}
+
   client-only@0.0.1:
     resolution: {integrity: sha512-IV3Ou0jSMzZrd3pZ48nLkT9DA7Ag1pnPzaiQhpW7c3RbcqqzvzzVu+L8gfqMp/8IM2MQtSiqaCxrrcfu8I8rMA==}
 
@@ -3400,6 +3424,9 @@ packages:
 
   functions-have-names@1.2.3:
     resolution: {integrity: sha512-xckBUXyTIqT97tq2x2AMb+g163b5JFysYk0x4qxNFwbfQkmNZoiRHb6sPzI9/QV33WeuvVYBUIiD4NzNIyqaRQ==}
+
+  gearhash-jit@1.0.2:
+    resolution: {integrity: sha512-UhzJL4KXSdqAKepy/tZwmi2Rcy0YMmtiC4DQS4SURCuIWdh8ECZtnXK2ePRMLigfB61hRKdLK/Vgg2bSw73izQ==}
 
   generator-function@2.0.1:
     resolution: {integrity: sha512-SFdFmIJi+ybC0vjlHN0ZGVGHc3lgE0DxPAT0djjVg+kjOnSqclqmj0KQ7ykTOLP6YxoqOvuAODGdcHJn+43q3g==}
@@ -6288,7 +6315,18 @@ snapshots:
     dependencies:
       '@formatjs/fast-memoize': 3.1.6
 
+  '@huggingface/blake3-jit@0.0.2': {}
+
+  '@huggingface/hub@2.17.5':
+    dependencies:
+      '@huggingface/tasks': 0.21.53
+      '@huggingface/xetchunk-wasm': 0.2.0
+    optionalDependencies:
+      cli-progress: 3.12.0
+
   '@huggingface/jinja@0.5.8': {}
+
+  '@huggingface/tasks@0.21.53': {}
 
   '@huggingface/transformers@3.8.1(@types/node@20.19.39)':
     dependencies:
@@ -6298,6 +6336,11 @@ snapshots:
       sharp: 0.35.4(@types/node@20.19.39)
     transitivePeerDependencies:
       - '@types/node'
+
+  '@huggingface/xetchunk-wasm@0.2.0':
+    dependencies:
+      '@huggingface/blake3-jit': 0.0.2
+      gearhash-jit: 1.0.2
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -6793,11 +6836,11 @@ snapshots:
 
   '@schummar/icu-type-parser@1.21.5': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.9.30': {}
+  '@seanhogg/builderforce-memory-engine@2026.9.31': {}
 
-  '@seanhogg/builderforce-memory@2026.9.30(@seanhogg/builderforce-memory-engine@2026.9.30)':
+  '@seanhogg/builderforce-memory@2026.9.31(@seanhogg/builderforce-memory-engine@2026.9.31)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.9.30
+      '@seanhogg/builderforce-memory-engine': 2026.9.31
 
   '@seanhogg/builderforce-quality@2026.7.5': {}
 
@@ -7951,6 +7994,11 @@ snapshots:
 
   clean-git-ref@2.0.1: {}
 
+  cli-progress@3.12.0:
+    dependencies:
+      string-width: 4.2.3
+    optional: true
+
   client-only@0.0.1: {}
 
   code-block-writer@10.1.1: {}
@@ -9008,6 +9056,8 @@ snapshots:
       is-callable: 1.2.7
 
   functions-have-names@1.2.3: {}
+
+  gearhash-jit@1.0.2: {}
 
   generator-function@2.0.1: {}
 

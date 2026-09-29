@@ -16,9 +16,9 @@ import type { PublishOutcome } from '@seanhogg/builderforce-memory';
 
 const fieldStyle = {
   width: '100%', boxSizing: 'border-box' as const, background: 'var(--bg-deep)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: '0.8rem',
+  border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 10px', fontSize: 'var(--font-size-small)',
 };
-const labelStyle = { display: 'block', fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 4 };
+const labelStyle = { display: 'block', fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)', marginBottom: 4 };
 
 export function HuggingFacePublishForm({ slug, fp16 }: { slug: string; fp16: boolean }) {
   const t = useTranslations('modelExport.hub');
@@ -51,10 +51,10 @@ export function HuggingFacePublishForm({ slug, fp16 }: { slug: string; fp16: boo
         border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)',
       }}
     >
-      <h4 id="hf-publish-heading" style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+      <h4 id="hf-publish-heading" style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
         {t('heading')}
       </h4>
-      <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{t('intro')}</p>
+      <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', lineHeight: 1.5 }}>{t('intro')}</p>
 
       <div>
         <label htmlFor="hf-publish-repo" style={labelStyle}>{t('repoLabel')}</label>
@@ -81,10 +81,10 @@ export function HuggingFacePublishForm({ slug, fp16 }: { slug: string; fp16: boo
           spellCheck={false}
           style={fieldStyle}
         />
-        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>{t('tokenHelp')}</div>
+        <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 4 }}>{t('tokenHelp')}</div>
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
         <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
         {t('privateLabel')}
       </label>
@@ -95,7 +95,7 @@ export function HuggingFacePublishForm({ slug, fp16 }: { slug: string; fp16: boo
           onClick={() => void publish()}
           disabled={disabled}
           style={{
-            fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.82rem', minHeight: 36,
+            fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 'var(--font-size-small)', minHeight: 36,
             background: task.busy ? 'var(--bg-deep)' : 'var(--coral-bright)',
             color: task.busy ? 'var(--text-muted)' : 'var(--text-on-accent)',
             border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 16px',
@@ -111,7 +111,7 @@ export function HuggingFacePublishForm({ slug, fp16 }: { slug: string; fp16: boo
           role="alert"
           style={{
             background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error)', color: 'var(--error-text)',
-            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem', overflowWrap: 'anywhere',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere',
           }}
         >
           <Icon source="⚠" size="1em" /> {task.error}
@@ -123,7 +123,7 @@ export function HuggingFacePublishForm({ slug, fp16 }: { slug: string; fp16: boo
           role="status"
           style={{
             background: 'var(--success-bg, rgba(34,197,94,0.12))', border: '1px solid var(--success)', color: 'var(--text-primary)',
-            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem', overflowWrap: 'anywhere',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere',
           }}
         >
           <Icon source="✅" size="1em" /> {t('done', { count: published.files.length })}{' '}

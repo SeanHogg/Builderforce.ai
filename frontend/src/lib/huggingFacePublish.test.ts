@@ -8,11 +8,11 @@ const bundleZip = zipSync({
 });
 
 // vi.mock factories run before this module's body, so their state is hoisted too.
-const hub = vi.hoisted(() => ({ createRepo: vi.fn(async () => ({})), uploadFiles: vi.fn(async () => ({})) }));
+const hub = vi.hoisted(() => ({ createRepo: vi.fn(async (_args: unknown) => ({})), uploadFiles: vi.fn(async (_args: unknown) => ({})) }));
 const exportFetch = vi.hoisted(() => ({ zip: null as Uint8Array | null }));
 
 vi.mock('./studioModelsApi', () => ({
-  fetchPublishedModelExport: vi.fn(async () => ({ blob: new Blob([exportFetch.zip!]), filename: 'm-evermind-hf.zip' })),
+  fetchPublishedModelExport: vi.fn(async () => ({ blob: new Blob([exportFetch.zip! as BlobPart]), filename: 'm-evermind-hf.zip' })),
 }));
 vi.mock('@huggingface/hub', () => hub);
 exportFetch.zip = bundleZip;

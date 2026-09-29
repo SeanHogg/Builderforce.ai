@@ -253,11 +253,14 @@ importers:
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.0)(@vitest/browser-playwright@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     optionalDependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.9.30
-        version: 2026.9.30(@seanhogg/builderforce-memory-engine@2026.9.30)
+        specifier: ^2026.9.31
+        version: 2026.9.31(@seanhogg/builderforce-memory-engine@2026.9.31)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.9.30
-        version: 2026.9.30
+        specifier: ^2026.9.31
+        version: 2026.9.31
+      '@seanhogg/builderforce-memory-mcp':
+        specifier: ^2026.9.31
+        version: 2026.9.31(@anthropic-ai/claude-agent-sdk@0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6))(@seanhogg/builderforce-memory-engine@2026.9.31)(@seanhogg/builderforce-memory@2026.9.31(@seanhogg/builderforce-memory-engine@2026.9.31))(fake-indexeddb@6.2.5)
 
   extensions/bluebubbles:
     devDependencies:
@@ -2519,11 +2522,40 @@ packages:
     resolution: {integrity: sha512-rpjZB7W5cv+6RtUT1pwsi1g1gt+cCS6Xedv1SegHdIBV6JNGk1Eyme+Yn8VCpqeQozDJoZ7zRaweHl4IOqpLCg==}
     engines: {node: '>=18.0.0'}
 
+  '@seanhogg/builderforce-memory-engine@2026.9.31':
+    resolution: {integrity: sha512-fak3PiT9DSydUdC9JnKzefXLbrU54jATaDydGGJybWvf15a2C+5z20x7CWWqSK6bFkRhMVQarBOVPph7VDDCbw==}
+    engines: {node: '>=18.0.0'}
+
+  '@seanhogg/builderforce-memory-mcp@2026.9.31':
+    resolution: {integrity: sha512-YLdbkYiAzoFlK5+N9GjdNXzqILH9XRha/GoZNraQj48HQviHnvIiG4fx+0RcVSlTDLEyZexV7rZvirHTS+I9ng==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+    peerDependencies:
+      '@anthropic-ai/claude-agent-sdk': '>=0.1.0'
+      '@seanhogg/builderforce-memory': ^2026.9.31
+      '@seanhogg/builderforce-memory-engine': ^2026.9.31
+      fake-indexeddb: ^6.0.0
+    peerDependenciesMeta:
+      '@anthropic-ai/claude-agent-sdk':
+        optional: true
+      '@seanhogg/builderforce-memory':
+        optional: true
+      '@seanhogg/builderforce-memory-engine':
+        optional: true
+      fake-indexeddb:
+        optional: true
+
   '@seanhogg/builderforce-memory@2026.9.30':
     resolution: {integrity: sha512-6Uby/75i0sCuEVIZ+mgoxg5Vvrsw/E4JO0eOeivXBBR4CN2wmKwnYjxhJKcpTb3JBeRbJu5zlN2ktDXRPld8wQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@seanhogg/builderforce-memory-engine': ^2026.9.30
+
+  '@seanhogg/builderforce-memory@2026.9.31':
+    resolution: {integrity: sha512-1lQU0JTAZGkNX1fa8EYc5aLxltRPM7Shhk70bDZgkCKVlLSVdMr7Qf8uRIXUrO1AfTYSV+XJ503dD0c/E5C4UA==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@seanhogg/builderforce-memory-engine': ^2026.9.31
 
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
@@ -6802,6 +6834,29 @@ snapshots:
       - debug
       - supports-color
 
+  '@modelcontextprotocol/sdk@1.29.0(zod@3.25.76)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.11.10)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.0
+      express: 5.2.1
+      express-rate-limit: 8.6.0(express@5.2.1)
+      hono: 4.11.10
+      jose: 6.2.4
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.2(zod@3.25.76)
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@modelcontextprotocol/sdk@1.29.0(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 1.19.15(hono@4.11.10)
@@ -7660,9 +7715,31 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.9.30': {}
 
+  '@seanhogg/builderforce-memory-engine@2026.9.31':
+    optional: true
+
+  '@seanhogg/builderforce-memory-mcp@2026.9.31(@anthropic-ai/claude-agent-sdk@0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6))(@seanhogg/builderforce-memory-engine@2026.9.31)(@seanhogg/builderforce-memory@2026.9.31(@seanhogg/builderforce-memory-engine@2026.9.31))(fake-indexeddb@6.2.5)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(zod@3.25.76)
+      zod: 3.25.76
+    optionalDependencies:
+      '@anthropic-ai/claude-agent-sdk': 0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+      '@seanhogg/builderforce-memory': 2026.9.31(@seanhogg/builderforce-memory-engine@2026.9.31)
+      '@seanhogg/builderforce-memory-engine': 2026.9.31
+      fake-indexeddb: 6.2.5
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+    optional: true
+
   '@seanhogg/builderforce-memory@2026.9.30(@seanhogg/builderforce-memory-engine@2026.9.30)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.9.30
+
+  '@seanhogg/builderforce-memory@2026.9.31(@seanhogg/builderforce-memory-engine@2026.9.31)':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.9.31
+    optional: true
 
   '@selderee/plugin-htmlparser2@0.11.0':
     dependencies:
@@ -11154,6 +11231,11 @@ snapshots:
       yargs-parser: 21.1.1
 
   yoctocolors@2.1.2: {}
+
+  zod-to-json-schema@3.25.2(zod@3.25.76):
+    dependencies:
+      zod: 3.25.76
+    optional: true
 
   zod-to-json-schema@3.25.2(zod@4.3.6):
     dependencies:

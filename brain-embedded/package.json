@@ -59,7 +59,8 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.9.31"
+    "@seanhogg/builderforce-memory": "^2026.9.31",
+    "@seanhogg/builderforce-memory-engine": "^2026.9.31"
   },
   "peerDependencies": {
     "react": ">=18",

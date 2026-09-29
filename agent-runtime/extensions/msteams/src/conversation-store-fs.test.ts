@@ -20,7 +20,9 @@ describe("msteams conversation store (fs)", () => {
       BUILDERFORCE_AGENTS_STATE_DIR: stateDir,
     };
 
-    const store = createMSTeamsConversationStoreFs({ env, ttlMs: 1_000 });
+    // A TTL wide enough that the fresh entries cannot expire mid-test on a loaded runner
+    // (1s did, under the parallel shard run); the stale one sits far outside it.
+    const store = createMSTeamsConversationStoreFs({ env, ttlMs: 30_000 });
 
     const ref: StoredConversationReference = {
       conversation: { id: "19:active@thread.tacv2" },
@@ -41,7 +43,7 @@ describe("msteams conversation store (fs)", () => {
     json.conversations["19:old@thread.tacv2"] = {
       ...ref,
       conversation: { id: "19:old@thread.tacv2" },
-      lastSeenAt: new Date(Date.now() - 60_000).toISOString(),
+      lastSeenAt: new Date(Date.now() - 10 * 60_000).toISOString(),
     };
 
     // Legacy entry without lastSeenAt should be preserved.

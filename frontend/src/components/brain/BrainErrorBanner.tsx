@@ -46,7 +46,7 @@ export function BrainErrorBanner({
   // banner's `.replace()` then finds no token and leaves it alone. It only reaches
   // for this label under the same `requiredPlan != null` condition, so the two
   // never disagree about which of the two CTAs is shown.
-  const plan = action?.requiredPlan?.replace(/^./, (ch) => ch.toUpperCase());
+  const plan = action?.requiredPlan?.replace(/^./, (ch: string) => ch.toUpperCase());
 
   return (
     <ChatErrorBanner
