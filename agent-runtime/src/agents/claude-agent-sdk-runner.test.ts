@@ -68,4 +68,11 @@ describe("allowedToolsAfterGates", () => {
   it("a wildcard block removes every tool", () => {
     expect(allowedToolsAfterGates([{ id: "g", effect: "block", tool: "*" } as never])).toEqual([]);
   });
+
+  it("admits mounted MCP tool entries under the same gates", () => {
+    const memory = "mcp__builderforce_memory__*";
+    expect(allowedToolsAfterGates(undefined, [memory])).toContain(memory);
+    expect(allowedToolsAfterGates([{ id: "g", effect: "block", tool: memory } as never], [memory])).not.toContain(memory);
+    expect(allowedToolsAfterGates([{ id: "g", effect: "block", tool: "*" } as never], [memory])).toEqual([]);
+  });
 });

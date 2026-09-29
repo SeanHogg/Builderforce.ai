@@ -217,7 +217,8 @@
   },
   "optionalDependencies": {
     "@seanhogg/builderforce-memory": "^2026.9.31",
-    "@seanhogg/builderforce-memory-engine": "^2026.9.31"
+    "@seanhogg/builderforce-memory-engine": "^2026.9.31",
+    "@seanhogg/builderforce-memory-mcp": "^2026.9.31"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -227,7 +228,8 @@
     "minimumReleaseAge": 2880,
     "minimumReleaseAgeExclude": [
       "@seanhogg/builderforce-memory",
-      "@seanhogg/builderforce-memory-engine"
+      "@seanhogg/builderforce-memory-engine",
+      "@seanhogg/builderforce-memory-mcp"
     ],
     "overrides": {
       "hono": "4.11.10",

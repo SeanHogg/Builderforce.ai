@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceSymbolIndex } from "./node-symbols.js";
 
 describe("WorkspaceSymbolIndex", () => {
@@ -56,9 +56,12 @@ describe("WorkspaceSymbolIndex", () => {
     const cachePath = join(root, ".builderforce", "symbols.json");
     const first = new WorkspaceSymbolIndex(root, { cachePath });
     await first.find("buildGitCommand");
-    // Allow the fire-and-forget snapshot write to land.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    const snapshot = JSON.parse(await readFile(cachePath, "utf-8")) as { v: number; files: unknown[] };
+    // The snapshot write is fire-and-forget: wait for it to land (a fixed sleep lost
+    // that race under a loaded full-suite run).
+    const snapshot = await vi.waitFor(
+      async () => JSON.parse(await readFile(cachePath, "utf-8")) as { v: number; files: unknown[] },
+      { timeout: 5_000, interval: 20 },
+    );
     expect(snapshot.v).toBe(1);
     expect(snapshot.files.length).toBe(3);
     const second = new WorkspaceSymbolIndex(root, { cachePath });
