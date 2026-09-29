@@ -21,14 +21,16 @@
  * merge in the coordinator.
  *
  * Pure (no I/O), so the route, the routers and the console all compute the SAME verdict.
+ * The comparison rules themselves — the ratio, the tolerance at the bar, "the same eval"
+ * — are the memory package's eval baseline rules, the ones `evaluateGate`'s
+ * `minBaselineRatio` applies, so an offline launch gate and this routing gate agree.
  */
+
+import { baselineRatio, meetsBaselineRatio, sameEvalProblem } from '@seanhogg/builderforce-memory/eval';
 
 /** The bar: Evermind must reach this fraction of the frontier baseline's coding-eval
  *  score. Operator decision 2026-09-12. The ONE definition — never restate 0.9. */
 export const EVERMIND_CODING_QUALITY_BAR = 0.9;
-
-/** Float tolerance for the bar comparison, so an exact 90% (e.g. 0.81 / 0.9) passes. */
-const BAR_EPSILON = 1e-9;
 
 /** A recorded coding eval of one head version against a frontier baseline. */
 export interface EvermindCodingEval {
@@ -70,13 +72,6 @@ export interface EvermindCodingGate {
   dataset: string | null;
 }
 
-/** Evermind's score as a fraction of the baseline's, or null when the pair can't be
- *  compared (a zero/negative/non-finite baseline proves nothing). */
-export function codingEvalRatio(score: number, baselineScore: number): number | null {
-  if (!Number.isFinite(score) || !Number.isFinite(baselineScore) || score < 0 || baselineScore <= 0) return null;
-  return score / baselineScore;
-}
-
 /**
  * THE predicate: may this head serve a coding turn? Order is the operator's reading
  * order — nothing to serve, then switched off for incoherence, then no evidence, then
@@ -88,7 +83,7 @@ export function evermindQualifiesForCoding(head: {
   codingEval?: EvermindCodingEval | null;
 }): EvermindCodingGate {
   const ev = head.codingEval ?? null;
-  const ratio = ev ? codingEvalRatio(ev.score, ev.baselineScore) : null;
+  const ratio = ev ? baselineRatio(ev.score, ev.baselineScore) : null;
   const verdict = (reason: EvermindCodingGateReason): EvermindCodingGate => ({
     qualified: reason === 'qualified',
     reason,
@@ -103,7 +98,7 @@ export function evermindQualifiesForCoding(head: {
   if (head.quarantinedAt) return verdict('quarantined');
   if (!ev) return verdict('no_eval');
   if (ev.version !== head.version) return verdict('stale_eval');
-  if (ratio === null || ratio + BAR_EPSILON < EVERMIND_CODING_QUALITY_BAR) return verdict('below_bar');
+  if (!meetsBaselineRatio(ratio, EVERMIND_CODING_QUALITY_BAR)) return verdict('below_bar');
   return verdict('qualified');
 }
 
@@ -138,18 +133,6 @@ export function codingEvalFromRow(row: {
   };
 }
 
-/**
- * The fields of builderforce-memory's `EvalHarness` report (`EvalReport`) this gate
- * reads. Structural on purpose: the api pins a builderforce-memory release that
- * predates the eval module's export, and the gate needs only these three facts.
- */
-export interface CodingEvalReportSummary {
-  dataset: string;
-  meanScore: number;
-  /** `EvalReport.cases` (the array) or just its length. */
-  cases: number | readonly unknown[];
-}
-
 const MAX_MODEL_ID_CHARS = 200;
 const MAX_DATASET_CHARS = 200;
 
@@ -182,12 +165,8 @@ export function codingEvalFromReports(args: {
   if (!ev.ok) return ev;
   const base = readSummary(args.baseline, 'baseline');
   if (!base.ok) return base;
-  if (ev.summary.dataset !== base.summary.dataset) {
-    return { ok: false, error: `reports are from different evals ('${ev.summary.dataset}' vs '${base.summary.dataset}')` };
-  }
-  if (ev.summary.cases !== base.summary.cases) {
-    return { ok: false, error: `reports scored different case counts (${ev.summary.cases} vs ${base.summary.cases})` };
-  }
+  const notSameEval = sameEvalProblem(ev.summary, base.summary);
+  if (notSameEval) return { ok: false, error: notSameEval };
   if (!(base.summary.meanScore > 0)) return { ok: false, error: 'baseline meanScore must be above 0 to compare against' };
   const baselineModel = typeof args.baselineModel === 'string' && args.baselineModel.trim()
     ? args.baselineModel.trim().slice(0, MAX_MODEL_ID_CHARS)

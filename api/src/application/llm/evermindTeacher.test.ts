@@ -37,7 +37,7 @@ vi.mock('./tenantProviderKeyService', async (importActual) => ({
   resolveTenantLlmCredentials: (...a: unknown[]) => credsMock(...a),
 }));
 
-import { generateTeacherExemplar, buildEvermindTrainingText, resolveEvermindTeacherModel } from './evermindTeacher';
+import { generateTeacherExemplar, resolveEvermindTeacherModel } from './evermindTeacher';
 
 /** Build a minimal ProxyResult-shaped object with a chat-completion JSON body.
  *  Uses a REAL Response so `readProxyChoice`'s `.clone().json()` works as in production. */
@@ -101,11 +101,10 @@ describe('generateTeacherExemplar', () => {
     expect(r).toEqual({ ok: false, reason: 'gateway_error', detail: 'HTTP 503' });
   });
 
-  it('reports empty_output on a too-short exemplar (not a teaching signal)', async () => {
+  it('returns a short exemplar as-is — too short to teach from is the distillation gate’s call', async () => {
     completeMock.mockResolvedValue(gatewayResponse('ok'));
     const r = await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
-    expect(r.ok).toBe(false);
-    expect(!r.ok && r.reason).toBe('empty_output');
+    expect(r).toEqual({ ok: true, exemplar: { model: 'claude-opus-4-8', output: 'ok' } });
   });
 
   it('reports input_too_short when the model is empty or the input is trivial', async () => {
@@ -119,59 +118,6 @@ describe('generateTeacherExemplar', () => {
     const r = await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
     expect(r.ok).toBe(false);
     expect(!r.ok && r.reason).toBe('exception');
-  });
-});
-
-describe('buildEvermindTrainingText', () => {
-  beforeEach(() => completeMock.mockReset());
-
-  it('with no teacher, returns raw run text unchanged', async () => {
-    const r = await buildEvermindTrainingText(env, TENANT, { model: null, reason: 'not_pinned' }, RUN_TEXT);
-    expect(r).toEqual({ text: RUN_TEXT, distilled: false, skipReason: 'not_pinned' });
-    expect(completeMock).not.toHaveBeenCalled();
-  });
-
-  it('with a teacher + task prompt, distils (task → answer) via answer mode', async () => {
-    completeMock.mockResolvedValue(gatewayResponse('The ideal, expert, fully-worked retry implementation.'));
-    const r = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT, { prompt: TASK_PROMPT });
-    expect(r.distilled).toBe(true);
-    expect(r.teacherModel).toBe('claude-opus-4-8');
-    // The teacher answers the TASK prompt (answer mode), and the training text pairs it.
-    expect((completeMock.mock.calls[0]![0] as { messages: Array<{ content: string }> }).messages[1]!.content).toBe(TASK_PROMPT);
-    expect(r.text.startsWith(TASK_PROMPT.slice(0, 20))).toBe(true);
-    expect(r.text).toContain('The ideal, expert, fully-worked retry implementation.');
-    // The exemplar (teacher's ANSWER alone, no task prefix) is surfaced so the console's
-    // "Learned" shows the answer — not the question echoed back. Regression guard for the
-    // teach-a-task bug where text === prompt === the task.
-    expect(r.exemplar).toBe('The ideal, expert, fully-worked retry implementation.');
-    expect(r.exemplar).not.toContain(TASK_PROMPT);
-  });
-
-  it('leaves exemplar undefined when the teacher is skipped (no answer to surface)', async () => {
-    const noTeacher = await buildEvermindTrainingText(env, TENANT, { model: null, reason: 'not_pinned' }, RUN_TEXT);
-    expect(noTeacher.exemplar).toBeUndefined();
-    completeMock.mockResolvedValue(gatewayResponse('too short', 500));
-    const failed = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT);
-    expect(failed.exemplar).toBeUndefined();
-  });
-
-  it('with a teacher but no prompt, refines the run OUTPUT', async () => {
-    completeMock.mockResolvedValue(gatewayResponse('The ideal, expert version of this task output text.'));
-    const r = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT);
-    expect(r.distilled).toBe(true);
-    expect((completeMock.mock.calls[0]![0] as { messages: Array<{ content: string }> }).messages[1]!.content).toBe(RUN_TEXT);
-    expect(r.text.startsWith(RUN_TEXT.slice(0, 20))).toBe(true);
-  });
-
-  it('falls back to raw text when the teacher call fails (contribution never lost)', async () => {
-    completeMock.mockResolvedValue(gatewayResponse('too short', 500));
-    const r = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT);
-    // The FAILING model is carried so the console can NAME it rather than only saying
-    // "not distilled" — the difference between a diagnosable and an invisible fault.
-    expect(r).toEqual({
-      text: RUN_TEXT, distilled: false, skipReason: 'gateway_error',
-      attemptedTeacherModel: 'claude-opus-4-8', skipDetail: 'HTTP 500',
-    });
   });
 });
 

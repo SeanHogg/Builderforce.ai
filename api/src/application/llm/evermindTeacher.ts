@@ -11,8 +11,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     distillation;
  *   - without a prompt (older producers) → the teacher REFINES the run OUTPUT and the
  *     SSM learns `(run context → ideal version)`.
- * Either way it mirrors the engine's `DistillationEngine` but routes through the
- * METERED gateway so any vendor is reachable and the call is billed.
+ * Either way the recipe is the memory package's `DistillationEngine` (see
+ * `evermindDistillation.ts`); this module is its TEACHER — a strict-pinned call through
+ * the METERED gateway so any vendor is reachable and the call is billed — plus the
+ * budget gate and fault breaker around it.
  *
  * Cost-gated: a teacher call spends frontier tokens, so it is skipped when the tenant
  * is out of token budget ({@link getTenantTokenAvailability} — the SAME cap the
@@ -132,10 +134,9 @@ export async function generateTeacherExemplar(
     if (result.response.status >= 400) {
       return { ok: false, reason: 'gateway_error', detail: `HTTP ${result.response.status}` };
     }
+    // Too short to teach from is the distillation gate's call (`qualityGate.minLength`
+    // = TEACHER_MIN_OUTPUT_CHARS), not the transport's.
     const { content: output } = await readProxyChoice(result);
-    if (output.length < TEACHER_MIN_OUTPUT_CHARS) {
-      return { ok: false, reason: 'empty_output', detail: `${output.length} chars` };
-    }
     return { ok: true, exemplar: { model: result.resolvedModel || model, output } };
   } catch (err) {
     return { ok: false, reason: 'exception', detail: err instanceof Error ? err.message : String(err) };
@@ -238,32 +239,6 @@ async function isTeacherCooling(env: Env, tenantId: number, model: string): Prom
   }
 }
 
-/** The effective teacher for an alarm: the model to use, or WHY there isn't one. */
-export type EffectiveTeacher =
-  | { model: string }
-  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable'> };
-
-export interface EvermindTrainingText {
-  /** The text the coordinator adapts the SSM on. */
-  text: string;
-  /** True when a frontier teacher shaped this text. */
-  distilled: boolean;
-  /** Present when distilled: the model that produced the exemplar. */
-  teacherModel?: string;
-  /** Present when distilled: the teacher's exemplar ANSWER on its own (without the
-   *  task/context prefix that `text` carries). This is what the model actually learned
-   *  FROM, so it — not the raw input — is what the inspection ring should surface as
-   *  "Learned" (otherwise a teach-a-task shows the question back as its own answer). */
-  exemplar?: string;
-  /** Present when NOT distilled: why the teacher was skipped. */
-  skipReason?: TeacherSkipReason;
-  /** Present when NOT distilled: the machine detail behind `skipReason` (HTTP status,
-   *  exception message, …). Operator-facing diagnosis, never shown raw to end users. */
-  skipDetail?: string;
-  /** Present when NOT distilled but a teacher WAS pinned: which model failed. Lets the
-   *  console name the model that isn't answering rather than just "not distilled". */
-  attemptedTeacherModel?: string;
-}
 
 /**
  * Resolve the EFFECTIVE teacher model for a coordinator alarm: the pinned model when
@@ -315,48 +290,3 @@ export async function resolveEvermindTeacherModel(
   return { model };
 }
 
-/**
- * Build the training text the coordinator adapts the SSM on for one run entry.
- *
- * `teacherModel` is the ALREADY-RESOLVED effective teacher ({@link resolveEvermindTeacherModel},
- * budget-gated once per alarm) — null → the raw run text (self-learning). When set and
- * a `prompt` is threaded, the SSM learns `(task → teacher answer)`; otherwise it learns
- * `(run context → refined output)`. The context is trimmed so the exemplar always
- * survives the caller's window cap.
- */
-export async function buildEvermindTrainingText(
-  env: Env,
-  tenantId: number,
-  teacher: EffectiveTeacher,
-  runText: string,
-  opts?: { prompt?: string | null; signal?: AbortSignal },
-): Promise<EvermindTrainingText> {
-  if (teacher.model === null) {
-    return { text: runText, distilled: false, skipReason: teacher.reason };
-  }
-  const model = teacher.model;
-
-  const prompt = (opts?.prompt ?? '').trim();
-  const [input, mode] = prompt ? [prompt, 'answer' as const] : [runText, 'refine' as const];
-  const result = await generateTeacherExemplar(env, tenantId, model, input, mode, opts?.signal);
-  if (!result.ok) {
-    // Bench the teacher when the GATEWAY is what failed, so the next alarm skips
-    // it instead of re-spending on a model that is down or mis-pinned.
-    await noteTeacherFault(env, tenantId, model, result.reason);
-    // A pinned teacher that produced nothing is an OPERATIONAL FAULT, not a normal
-    // path — carry the reason + the model that failed so the console can say so
-    // instead of silently presenting the un-distilled input as what was learned.
-    return {
-      text: runText,
-      distilled: false,
-      skipReason: result.reason,
-      attemptedTeacherModel: model,
-      ...(result.detail ? { skipDetail: result.detail } : {}),
-    };
-  }
-
-  // Teach the (input → exemplar) mapping, mirroring DistillationEngine's shape.
-  const context = input.trim().slice(0, 1500);
-  const { exemplar } = result;
-  return { text: `${context}\n${exemplar.output}`, distilled: true, teacherModel: exemplar.model, exemplar: exemplar.output };
-}

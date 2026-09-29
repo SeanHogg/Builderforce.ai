@@ -32,7 +32,6 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
 import {
   EvermindModelPackage,
   BPETokenizer,
-  adaptAndDiff,
   mergeCheckpointDiffs,
   meanEvalLoss,
   parseDeltaLearnPayload,
@@ -41,7 +40,7 @@ import {
   type EvalExample,
   type EvermindLM,
 } from '@seanhogg/builderforce-memory-engine';
-import { cosineSimilarity } from '@seanhogg/builderforce-memory';
+import { cosineSimilarity } from '@seanhogg/builderforce-memory/retrieval';
 import { buildDatabase, type Db } from '../database/connection';
 import {
   getProjectEvermindHead,
@@ -51,7 +50,8 @@ import {
   projectEvermindRef,
 } from '../../application/llm/projectEvermind';
 import { assessLMCoherence } from '../../application/llm/evermindRuntime';
-import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
+import { resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
+import { distillEvermindEntry, evermindStudent } from '../../application/llm/evermindDistillation';
 import { backfillEntryProvenance } from '../../application/llm/evermindProvenance';
 import type { EffectiveTeacher, RecordedSkipReason } from '../../application/llm/evermindTeacher';
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
@@ -984,6 +984,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const effectiveTeacher: EffectiveTeacher = (isLM && usable.some((e) => !!e.text))
         ? await resolveEvermindTeacherModel(this.env, this.db, tenantId, head.teacherModel)
         : { model: null, reason: 'not_pinned' };
+      const student = evermindStudent(basePkg, tok);
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
       let textFits = 0;
@@ -1029,13 +1030,13 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // frontier LLM back into the Evermind. With the run's TASK PROMPT threaded
           // through, the teacher ANSWERS the task (task → ideal answer); otherwise it
           // refines the output. A teacher failure falls back to the raw text so the
-          // contribution is never lost. [[evermind-learning-architecture]]
-          const training = await buildEvermindTrainingText(
-            this.env, tenantId, effectiveTeacher, e.text, { prompt: e.prompt ?? null },
+          // contribution is never lost. The student is the SAME adaptation recipe the
+          // on-prem producer runs (engine `adaptAndDiff`), so a server-side fit and a
+          // pushed delta are the same size of update. [[evermind-learning-architecture]]
+          const training = await distillEvermindEntry(
+            this.env, tenantId, effectiveTeacher, student, e.text, { prompt: e.prompt ?? null },
           );
-          // The SAME adaptation recipe the on-prem producer runs (engine `adaptAndDiff`),
-          // so a server-side fit and a pushed delta are the same size of update.
-          const adapted = adaptAndDiff(basePkg, tok, training.text);
+          const adapted = training.adapted;
           if (!adapted) continue;
           // Record the trainer's real final-epoch mean loss so the map's training
           // readout reflects measured convergence, not a stand-in.
