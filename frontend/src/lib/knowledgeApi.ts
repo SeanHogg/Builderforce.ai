@@ -4,7 +4,7 @@
  * AI-assisted authoring. Talks to /api/knowledge on the auth API.
  */
 import { apiRequest, apiRequestStream } from './apiClient';
-import { readSseData } from '@/lib/sseFrames';
+import { readSseDataPayloads } from '@seanhogg/builderforce-memory/wire';
 
 export type DocType = 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error';
 export type DocStatus = 'draft' | 'published' | 'archived';
@@ -359,7 +359,7 @@ export const knowledgeApi = {
       throw new Error(msg.error || `AI generation failed (${res.status})`);
     }
     let acc = '';
-    for await (const data of readSseData(res.body)) {
+    for await (const data of readSseDataPayloads(res.body)) {
       try {
         const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
         const chunk = parsed.choices?.[0]?.delta?.content;

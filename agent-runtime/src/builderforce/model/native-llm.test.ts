@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GatewayLlmService } from "../../infra/gateway-llm-service.js";
 import { nativeComplete, nativeStream, type LlmStreamEvent } from "./native-llm.js";
 
 const client = { baseUrl: "https://gw.test", apiKey: "k" };
@@ -66,5 +67,62 @@ describe("native-llm client", () => {
     expect(result.toolCalls[0].function?.arguments).toBe('{"summary":"ok"}');
     expect(events.some((e) => e.type === "text-delta")).toBe(true);
     expect(events.at(-1)?.type).toBe("done");
+  });
+
+  it("stream keeps a last frame that has no blank-line terminator and releases the body", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const enc = new TextEncoder();
+        controller.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: "a" } }] })}\n`));
+        controller.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: "b" } }] })}`));
+        controller.close();
+      },
+    });
+    globalThis.fetch = vi.fn(async () => new Response(stream, { status: 200 })) as typeof fetch;
+
+    const result = await nativeStream(client, { messages: [] }, () => {});
+    expect(result.content).toBe("ab");
+    expect(stream.locked).toBe(false);
+  });
+
+  it("posts to {baseUrl}/v1/chat/completions with the default model and maps a non-2xx to `gateway {status}: {body}`", async () => {
+    const fetchMock = vi.fn(async () => new Response("rate limited", { status: 429 }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await expect(
+      nativeComplete({ ...client, baseUrl: "https://gw.test//", defaultModel: "m-default" }, { messages: [] }),
+    ).rejects.toThrow("gateway 429: rate limited");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://gw.test/v1/chat/completions");
+    expect(JSON.parse(init.body as string)).toEqual({ model: "m-default", messages: [] });
+  });
+});
+
+describe("GatewayLlmService", () => {
+  it("sends system + prompt with the provider as a routing extra, and returns the reply", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: "done" } }] }), { status: 200 }),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const svc = new GatewayLlmService(client);
+    const out = await svc.complete({ provider: "anthropic", model: "m", system: "sys", prompt: "p", temperature: 0 });
+    expect(out).toBe("done");
+    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(JSON.parse(init.body as string)).toEqual({
+      model: "m",
+      messages: [
+        { role: "system", content: "sys" },
+        { role: "user", content: "p" },
+      ],
+      temperature: 0,
+      provider: "anthropic",
+    });
+  });
+
+  it("turns a gateway failure into the node's [llm] output instead of throwing", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("down", { status: 503 })) as typeof fetch;
+    const out = await new GatewayLlmService(client).complete({ prompt: "p" });
+    expect(out).toBe("[llm] request failed: gateway 503: down");
   });
 });

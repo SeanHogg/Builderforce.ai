@@ -14,7 +14,7 @@ import {
 } from './apiClient';
 import { isPlanLimitError } from './planLimitError';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
-import { readSseData } from '@/lib/sseFrames';
+import { readSseDataPayloads } from '@seanhogg/builderforce-memory/wire';
 import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
 import type {
   Project,
@@ -530,7 +530,7 @@ export async function sendAIMessage(
   });
   // 402 already threw a typed plan-limit error inside apiRequestStream.
   if (!res.ok) throw new Error('Failed to send AI message');
-  for await (const data of readSseData(res.body)) {
+  for await (const data of readSseDataPayloads(res.body)) {
     try {
       const parsed = JSON.parse(data) as {
         choices?: Array<{ delta?: { content?: string; reasoning?: string } }>;
@@ -572,7 +572,7 @@ export async function generateDataset(
   if (!res.ok) throw new Error('Failed to generate dataset');
   if (onChunk && res.headers.get('content-type')?.includes('text/event-stream') && res.body) {
     let finalDataset: Dataset | undefined;
-    for await (const data of readSseData(res.body)) {
+    for await (const data of readSseDataPayloads(res.body)) {
       try {
         const parsed = JSON.parse(data);
         if (parsed.type === 'chunk' && parsed.content) onChunk(parsed.content);
@@ -664,7 +664,7 @@ export async function streamTrainingLogs(
 ): Promise<void> {
   const res = await apiRequestStream(`${IDE}/training/${jobId}/logs/stream`);
   if (!res.ok) throw new Error('Failed to stream training logs');
-  for await (const data of readSseData(res.body)) {
+  for await (const data of readSseDataPayloads(res.body)) {
     try {
       onLog(JSON.parse(data) as TrainingLog);
     } catch {
