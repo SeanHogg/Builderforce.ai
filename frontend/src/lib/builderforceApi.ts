@@ -4,7 +4,7 @@
  * Uses tenant JWT from auth.
  */
 
-import { CHANNEL_PLATFORMS, type ChannelPlatform } from '@builderforce/creation-canvas-contract';
+import { CHANNEL_PLATFORMS, type ChannelPlatform, type WorkflowNodeKind as ServerWorkflowNodeKind } from '@builderforce/creation-canvas-contract';
 import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
 import { createBrainRestPersistence, type ChatDiagnosticsReport } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
@@ -950,25 +950,10 @@ export type EvermindBuildKind =
   | 'evaluate' | 'generate-check' | 'benchmark' | 'roundtrip' | 'export'
   | 'distill-corpus' | 'code-parse-check' | 'code-eval' | 'code-benchmark';
 
-export type WorkflowNodeKind =
-  | 'trigger' | 'agent' | 'llm' | 'mcp' | 'memory' | 'knowledge' | 'train'
-  | 'transform' | 'filter' | 'branch' | 'output' | 'gmail'
-  /** The ONE node through which every connector action is reachable. */
-  | 'connector'
-  // Flow Control (0), Tools, Text Parser, AI Agents (reuses 'llm'), Diagnostics —
-  // see api/src/domain/workflowGraph.ts, kept in sync manually (no shared package).
-  | 'router' | 'switch' | 'iterator' | 'merge'
-  /** COMPOSITION: another canvas, run as one step. See domains/workflow/domain/subflow.ts. */
-  | 'subflow'
-  | 'numeric-aggregator' | 'table-aggregator' | 'text-aggregator'
-  | 'set-variable' | 'get-variable' | 'set-variables' | 'get-variables' | 'increment' | 'sleep'
-  | 'compose-string' | 'convert-encoding'
-  | 'regex-match' | 'html-to-text' | 'html-table' | 'html-elements' | 'match-elements'
-  | 'match-pattern-advanced' | 'replace' | 'chunk-text'
-  | 'assert' | 'healthcheck'
-  | 'web-search' | 'web-fetch' | 'google-drive'
-  | 'analyze-image' | 'extract-document-data' | 'transcribe-audio'
-  | EvermindBuildKind;
+/** Every step a definition may place: the server-compiled vocabulary shared with the
+ *  api (`@builderforce/creation-canvas-contract`), plus the in-browser Evermind Build
+ *  kinds above. */
+export type WorkflowNodeKind = ServerWorkflowNodeKind | EvermindBuildKind;
 
 export interface WorkflowDefNode {
   id: string;

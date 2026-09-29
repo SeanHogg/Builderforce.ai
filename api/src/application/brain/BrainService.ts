@@ -26,7 +26,7 @@ import { loadCanvasBoardGrounding } from '../creation/canvasBoardGrounding';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
 import { invite } from '../kernel/InvitationService';
 import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
-import { isServableText } from '../llm/textCoherence';
+import { isServableText } from '@seanhogg/builderforce-memory/evermind';
 import { learnFromPersistedTurns } from './brainEvermindLearning';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';

@@ -5,7 +5,6 @@ import {
   benchmarkEvermind,
   exportEvermindArtifact,
   buildEvermindCompletion,
-  messagesToPrompt,
   loadEvermindModel,
   type ArtifactStore,
 } from './evermindRuntime';
@@ -13,15 +12,6 @@ import {
   buildEvermindFixtureStore as buildFixture,
   buildEvermindMediaFixtureStore as buildMediaFixture,
 } from './__fixtures__/evermindModel';
-
-describe('messagesToPrompt', () => {
-  it('flattens role-tagged turns and primes the assistant', () => {
-    const p = messagesToPrompt([{ role: 'system', content: 'be terse' }, { role: 'user', content: 'hi' }]);
-    expect(p).toContain('system: be terse');
-    expect(p).toContain('user: hi');
-    expect(p.endsWith('assistant:')).toBe(true);
-  });
-});
 
 describe('evermindGenerate (real .evermind from a mock R2)', () => {
   it('loads the artifact + tokenizer and returns text with token usage', async () => {

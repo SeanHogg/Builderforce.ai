@@ -25,13 +25,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getProjectEvermindHead, resolveEffectiveEvermindProjectId, recordEvermindServeOutcome } from './projectEvermind';
 import { getProjectFactByKey, upsertProjectFact, QA_CACHE_SOURCE } from './projectFacts';
-import { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText, isServableText } from './textCoherence';
+import { EVERMIND_ANSWER_MIN_CHARS, isServableText } from '@seanhogg/builderforce-memory/evermind';
 import { memoryReplayable, promisesUnfinishedWork } from '@builderforce/agent-stall';
-
-// Re-exported from the shared, zero-dep coherence module so existing importers keep
-// resolving these from projectMemory — one home for "is this a real, coherent answer"
-// across every surface (DRY).
-export { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText };
 
 /** Where a memory-first answer came from — drives the provenance chip the surfaces render. */
 export type MemoryAnswerSource = 'qa-cache' | 'evermind';

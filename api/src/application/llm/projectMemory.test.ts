@@ -3,9 +3,8 @@ import {
   qaCacheKey,
   resolveMemoryAnswer,
   cacheProjectAnswer,
-  looksLikeCoherentText,
-  EVERMIND_ANSWER_MIN_CHARS,
 } from './projectMemory';
+import { looksLikeCoherentText, EVERMIND_ANSWER_MIN_CHARS } from '@seanhogg/builderforce-memory/evermind';
 import type { Env } from '../../env';
 
 // No AUTH_CACHE_KV → getCacheVersion/getOrSetCached fall through to the loader.

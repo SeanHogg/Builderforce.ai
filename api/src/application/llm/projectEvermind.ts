@@ -42,7 +42,7 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion, invalidateCached } f
 import { rankEvermindRecall, hashRecallQuery, type RankedEvermindRecall } from '@seanhogg/builderforce-memory/evermind';
 import { tierRecallByChat } from './evermindChatTiering';
 import type { RecordedSkipReason } from './evermindTeacher';
-import type { EvermindCoherenceAssessment } from './evermindRuntime';
+import type { EvermindCoherenceAssessment } from '@seanhogg/builderforce-memory/evermind';
 import { codingEvalFromRow, evermindQualifiesForCoding, type EvermindCodingEval, type EvermindCodingGate } from './evermindCodingGate';
 
 /** R2 key prefix under which per-project Evermind model versions live. */

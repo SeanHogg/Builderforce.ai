@@ -49,7 +49,7 @@ import {
   quarantineProjectEvermind,
   projectEvermindRef,
 } from '../../application/llm/projectEvermind';
-import { assessLMCoherence } from '../../application/llm/evermindRuntime';
+import { assessLMCoherence } from '@seanhogg/builderforce-memory/evermind';
 import { resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
 import { distillEvermindEntry, evermindStudent } from '../../application/llm/evermindDistillation';
 import { backfillEntryProvenance } from '../../application/llm/evermindProvenance';

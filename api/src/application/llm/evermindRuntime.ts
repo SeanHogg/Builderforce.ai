@@ -31,15 +31,21 @@ import {
   type VideoRVQCodec,
   type EvermindModality,
 } from '@seanhogg/builderforce-memory-engine';
-import { isServableText, type CoherenceFailure } from './textCoherence';
 import {
-  planEvermindToolCall,
+  assessLMCoherence,
+  generateEvermindText,
+  generateEvermindWithTools,
+  probeEvermindText,
   toOpenAIToolCall,
-  type EvermindToolDecoder,
+  type EvermindCoherenceAssessment,
+  type EvermindGenerateOptions,
+  type EvermindGeneration,
   type EvermindPlannedCall,
+  type EvermindProbeGeneration,
+  type EvermindToolGeneration,
   type NormalizedTool,
   type ToolChoicePlan,
-} from './evermindToolCall';
+} from '@seanhogg/builderforce-memory/evermind';
 
 export { EXPORT_FORMATS };
 export type { ExportFormat, ExportResult };
@@ -47,30 +53,7 @@ export type { ExportFormat, ExportResult };
 /** R2 key prefix under which published Evermind models live. */
 export const EVERMIND_MODEL_ROOT = 'evermind-models';
 
-export interface EvermindGenerateOptions {
-  maxTokens?: number;
-  temperature?: number;
-  seed?: number;
-  /**
-   * Wall-clock budget for the generation loop, in ms.
-   *
-   * Evermind generation is SYNCHRONOUS CPU on the request path, so without this a
-   * large head on a slow isolate simply runs until the Worker CPU limit kills the
-   * request — a 5xx with no useful message and no partial answer. With it, the loop
-   * stops at the budget and says so.
-   */
-  deadlineMs?: number;
-}
-
-export interface EvermindGeneration {
-  content: string;
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-  /** True when the wall-clock budget stopped generation before `maxTokens` or a stop
-   *  token did — the text is a real partial answer, not a complete one. */
-  truncated: boolean;
-  /** How long the generation loop actually took. */
-  elapsedMs: number;
-}
+export type { EvermindGenerateOptions, EvermindGeneration };
 
 interface LoadedModel {
   lm: EvermindLM;
@@ -119,81 +102,18 @@ export async function loadEvermindModel(store: ArtifactStore, ref: string): Prom
   return loaded;
 }
 
-/** Flatten chat messages into a single continuation prompt for the LM. */
-export function messagesToPrompt(messages: Array<{ role?: unknown; content?: unknown }>): string {
-  const lines = messages
-    .map((m) => {
-      const role = typeof m.role === 'string' ? m.role : 'user';
-      const content = typeof m.content === 'string' ? m.content : '';
-      return content ? `${role}: ${content}` : '';
-    })
-    .filter(Boolean);
-  return `${lines.join('\n')}\nassistant:`;
-}
-
-/** Neutral probe prompts a project chat head should be able to answer coherently.
- *  Fixed + generic (not project-specific) so the probe measures GENERATION QUALITY,
- *  not recall. Deterministic seeds keep the verdict reproducible. */
-const COHERENCE_PROBE_PROMPTS: readonly string[] = [
-  'Summarize the current status of the project.',
-  'What has the team been working on recently?',
-  'List the main things left to do.',
-];
-
-/** One graded probe generation. */
-export interface EvermindCoherenceSample {
-  prompt: string;
-  text: string;
-  coherent: boolean;
-  /** The failing signal when `coherent` is false (null when it passed) — so an
-   *  operator sees WHY a head was refused, not just that it was. */
-  failure: CoherenceFailure | null;
-  /** Short human-readable explanation of {@link failure} (empty when coherent). */
-  detail: string;
-}
-
-/** A head's fitness-to-serve verdict (see {@link assessEvermindCoherence}). */
-export interface EvermindCoherenceAssessment {
-  ready: boolean;
-  /** Fraction of probe samples that were substantive AND coherent (0..1). */
-  passRate: number;
-  samples: EvermindCoherenceSample[];
-}
-
 /**
- * Score an ALREADY-LOADED head's fitness to serve chat: generate from the neutral
- * probe prompts and grade each for coherence (`looksLikeCoherentText` + the
- * min-length bar). Pure + synchronous (no R2, no DB), so it serves BOTH callers —
- * the R2-backed {@link assessEvermindCoherence} used by the promote-to-inference
- * gate, and the learning coordinator, which already holds the freshly-merged model
- * in memory and must re-grade it before that version is allowed to answer anyone.
- * Deterministic seeds keep the verdict reproducible.
+ * Serving itself — prompt flattening, sliced generation under a deadline, the
+ * fitness-to-serve grade, constrained-decoding tool calls — is the package's
+ * (`@seanhogg/builderforce-memory/evermind`). These bind it to R2: load the head by
+ * its ref (per-isolate memo above), then run the shared code on it.
  */
-export function assessLMCoherence(
-  lm: EvermindLM,
-  tok: BPETokenizer,
-  opts: { minPassRate?: number } = {},
-): EvermindCoherenceAssessment {
-  const samples: EvermindCoherenceSample[] = COHERENCE_PROBE_PROMPTS.map((prompt, i) => {
-    const text = lm.generateText(messagesToPrompt([{ role: 'user', content: prompt }]), tok, {
-      maxNewTokens: 80,
-      temperature: 0.7,
-      seed: 1234 + i,
-    });
-    const verdict = isServableText(text, { context: prompt });
-    return { prompt, text, coherent: verdict.coherent, failure: verdict.failure, detail: verdict.detail };
-  });
-  const passRate = samples.length ? samples.filter((s) => s.coherent).length / samples.length : 0;
-  // Majority must be coherent by default — one lucky sample isn't fitness to serve.
-  return { ready: passRate >= (opts.minPassRate ?? 0.5), passRate, samples };
-}
 
 /**
- * Benchmark a head's FITNESS TO SERVE CHAT by loading it from R2 and running
- * {@link assessLMCoherence}. This is the gate the promote-to-inference path consults
- * so a degraded head (the one that answered users in gibberish) can never be marked
- * inference-enabled. CPU-only, reuses the same R2 loader + per-isolate memo as
- * generation.
+ * Benchmark a head's FITNESS TO SERVE CHAT by loading it from R2 — the gate the
+ * promote-to-inference path consults so a degraded head can never be marked
+ * inference-enabled. A coordinator already holding the merged model calls the
+ * package's `assessLMCoherence` directly.
  */
 export async function assessEvermindCoherence(
   store: ArtifactStore,
@@ -204,72 +124,20 @@ export async function assessEvermindCoherence(
   return assessLMCoherence(lm, tok, opts);
 }
 
-/** One operator-run test-bench generation: what the head ACTUALLY produced for a
- *  chosen prompt, plus the same serve-time verdict the gateway applies to it. */
-export interface EvermindProbeResult extends EvermindCoherenceSample {
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-  /** True when the wall-clock budget stopped generation early — an incoherent verdict
-   *  on a truncated sample is a statement about the clock, not about the model. */
-  truncated: boolean;
-  /** How long the generation took, so a slow head is visible before it times out. */
-  elapsedMs: number;
-}
+/** Test bench: one operator prompt through a published head, graded with the serve bar. */
+export type EvermindProbeResult = EvermindProbeGeneration;
 
-/**
- * Test bench: run ONE operator-chosen prompt through a head and grade the output with
- * the SAME bar the serve path uses ({@link isServableText}). This is what makes "what
- * will this model actually produce?" answerable BEFORE inference is switched on — the
- * question the console previously had no way to answer (Validate only previewed which
- * memories would be recalled, never the generated text).
- *
- * Deterministic by default (`seed`), so a probe is reproducible and two operators
- * comparing notes see the same output.
- */
 export async function probeEvermindGeneration(
   store: ArtifactStore,
   ref: string,
   prompt: string,
   opts: EvermindGenerateOptions = {},
 ): Promise<EvermindProbeResult> {
-  const gen = await evermindGenerate(store, ref, [{ role: 'user', content: prompt }], {
-    maxTokens: opts.maxTokens ?? 120,
-    temperature: opts.temperature ?? 0.7,
-    seed: opts.seed ?? 1234,
-  });
-  const verdict = isServableText(gen.content, { context: prompt });
-  return {
-    prompt,
-    text: gen.content,
-    coherent: verdict.coherent,
-    failure: verdict.failure,
-    detail: verdict.detail,
-    usage: gen.usage,
-    truncated: gen.truncated,
-    elapsedMs: gen.elapsedMs,
-  };
+  const { lm, tok } = await loadEvermindModel(store, ref);
+  return probeEvermindText(lm, tok, prompt, opts);
 }
 
-/**
- * Tokens generated between wall-clock checks.
- *
- * The deadline is enforced BETWEEN slices rather than between tokens because the
- * engine's `generate()` is one synchronous loop with no per-token hook. Slicing
- * costs nothing: `forward()` already recomputes the whole sequence for every token,
- * so re-entering it with `prompt + producedSoFar` is exactly the work the next token
- * was going to do anyway. Small enough that the overshoot past the deadline is one
- * slice, large enough that the re-encode is noise.
- */
-const GENERATE_SLICE_TOKENS = 16;
-/** Default wall-clock budget for one generation. Comfortably inside a Worker's CPU
- *  allowance, so the caller gets a partial answer plus `truncated` rather than a
- *  killed request. */
-const DEFAULT_GENERATE_DEADLINE_MS = 8000;
-
-/** Run generation for a published Evermind model and return text + token usage.
- *
- *  Deterministic for a given (prompt, seed, maxTokens): each slice derives its seed
- *  from the base seed and its index, so two operators running the same probe see the
- *  same text — the property the test bench actually promises. */
+/** Run generation for a published Evermind model and return text + token usage. */
 export async function evermindGenerate(
   store: ArtifactStore,
   ref: string,
@@ -277,151 +145,10 @@ export async function evermindGenerate(
   opts: EvermindGenerateOptions = {},
 ): Promise<EvermindGeneration> {
   const { lm, tok } = await loadEvermindModel(store, ref);
-  const prompt = messagesToPrompt(messages);
-  const maxTokens = opts.maxTokens ?? 256;
-  const temperature = opts.temperature ?? 0.7;
-  const baseSeed = opts.seed;
-  const deadlineMs = opts.deadlineMs ?? DEFAULT_GENERATE_DEADLINE_MS;
-
-  const started = Date.now();
-  let content = '';
-  let truncated = false;
-  let produced = 0;
-  let slice = 0;
-  while (produced < maxTokens) {
-    const want = Math.min(GENERATE_SLICE_TOKENS, maxTokens - produced);
-    const chunk = lm.generateText(`${prompt}${content}`, tok, {
-      maxNewTokens: want,
-      temperature,
-      ...(baseSeed != null ? { seed: baseSeed + slice } : {}),
-    });
-    slice++;
-    // An empty slice means the model stopped producing; continuing would spin.
-    if (!chunk) break;
-    content += chunk;
-    produced += want;
-    if (Date.now() - started >= deadlineMs) {
-      truncated = produced < maxTokens;
-      break;
-    }
-  }
-
-  const prompt_tokens = tok.encode(prompt).length;
-  const completion_tokens = content ? tok.encode(content).length : 0;
-  return {
-    content,
-    usage: { prompt_tokens, completion_tokens, total_tokens: prompt_tokens + completion_tokens },
-    truncated,
-    elapsedMs: Date.now() - started,
-  };
+  return generateEvermindText(lm, tok, messages, opts);
 }
 
-// ── Tool calling ─────────────────────────────────────────────────────────────
-//
-// The engine-backed half of {@link ./evermindToolCall}. That module owns the schema
-// walk and the decision logic against a narrow port; this owns the only two things
-// that need EvermindLM — scoring a continuation's likelihood, and generating one.
-
-/**
- * A tool-decision prompt is rebuilt for every candidate and every argument, and each
- * one costs a full forward pass, so the conversation is capped rather than replayed
- * whole. Truncated from the LEFT: the most recent turns are what a tool choice
- * actually depends on.
- */
-const MAX_TOOL_PROMPT_CHARS = 6000;
-
-/** Log-probability the model assigned to `id` at a position, from that position's
- *  raw logits (log-softmax, computed max-shifted so long-tail logits don't overflow). */
-function logProbOf(row: Float32Array, id: number): number {
-  let max = -Infinity;
-  for (let i = 0; i < row.length; i++) { const v = row[i]!; if (v > max) max = v; }
-  if (!Number.isFinite(max)) return -Infinity;
-  let sum = 0;
-  for (let i = 0; i < row.length; i++) sum += Math.exp(row[i]! - max);
-  const logit = id >= 0 && id < row.length ? row[id]! : -Infinity;
-  return logit - (max + Math.log(sum));
-}
-
-/** A decoder plus the token usage it accumulated, so a tool-calling turn reports real
- *  numbers instead of zeros. */
-export interface MeteredToolDecoder extends EvermindToolDecoder {
-  usage(): { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-}
-
-/**
- * Bind an already-loaded head to the {@link EvermindToolDecoder} port.
- *
- * `score` is the interesting half: teacher forcing lets one forward pass over
- * `prompt + continuation` yield the log-prob of EVERY continuation token at once
- * (position `t` predicts token `t+1`), so ranking a candidate costs one pass rather
- * than one per token. The mean is returned — not the sum — so a long tool name is
- * not out-voted by a short one for its length alone.
- *
- * `generate` is greedy by default: a tool ARGUMENT is a value to get right, not prose
- * to vary, and determinism keeps a replayed run reproducible.
- */
-export function createEvermindToolDecoder(lm: EvermindLM, tok: BPETokenizer, opts: { temperature?: number; seed?: number } = {}): MeteredToolDecoder {
-  let promptTokens = 0;
-  let completionTokens = 0;
-  return {
-    score(prompt: string, continuation: string): number {
-      const contIds = tok.encode(continuation);
-      if (contIds.length === 0) return -Infinity;
-      // A leading token is required for the first continuation token to have a
-      // position to be predicted FROM; an empty prompt gets the same id-0 prefix the
-      // engine's own sampler uses.
-      const promptIds = tok.encode(clampPromptText(prompt));
-      const prefix = promptIds.length > 0 ? promptIds : [0];
-      const { logits } = lm.forward([...prefix, ...contIds]);
-      let total = 0;
-      for (let i = 0; i < contIds.length; i++) {
-        total += logProbOf(logits[prefix.length + i - 1]!, contIds[i]!);
-      }
-      promptTokens += prefix.length;
-      completionTokens += contIds.length;
-      return total / contIds.length;
-    },
-    generate(prompt: string, maxTokens: number): string {
-      const text = lm.generateText(clampPromptText(prompt), tok, {
-        maxNewTokens: maxTokens,
-        temperature: opts.temperature ?? 0,
-        ...(opts.seed != null ? { seed: opts.seed } : {}),
-      });
-      promptTokens += tok.encode(clampPromptText(prompt)).length;
-      completionTokens += text ? tok.encode(text).length : 0;
-      return text;
-    },
-    usage: () => ({ prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: promptTokens + completionTokens }),
-  };
-}
-
-/** Keep the tail of an over-long prompt (see {@link MAX_TOOL_PROMPT_CHARS}). */
-function clampPromptText(prompt: string): string {
-  return prompt.length <= MAX_TOOL_PROMPT_CHARS ? prompt : prompt.slice(prompt.length - MAX_TOOL_PROMPT_CHARS);
-}
-
-/** A tool-aware generation: either a planned call, or prose when the head chose to
- *  answer directly (`tool_choice: 'auto'`). */
-export interface EvermindToolGeneration {
-  /** The first planned call, or null for prose. See {@link EvermindToolGeneration.calls}. */
-  call: EvermindPlannedCall | null;
-  /** EVERY call this turn emits. The OpenAI shape is an array and frontier models
-   *  emit parallel calls; carrying only the first here is what made the completion
-   *  serialize them. Empty when `call` is null. */
-  calls: EvermindPlannedCall[];
-  /** Prose answer — populated only when `call` is null. */
-  content: string;
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-  /** Confidence separation behind the plan; see {@link EvermindToolPlan.margin}. */
-  margin: number;
-}
-
-/**
- * Run a TOOL-BEARING request against a published Evermind model: plan a call by
- * constrained decoding, or fall through to ordinary prose when the head elected to
- * answer directly. The margin is returned unjudged — the vendor owns the policy of
- * what separation is good enough, because it owns the cascade behaviour.
- */
+/** A tool-bearing request against a published head: planned calls, or prose. */
 export async function evermindGenerateWithTools(
   store: ArtifactStore,
   ref: string,
@@ -431,32 +158,7 @@ export async function evermindGenerateWithTools(
   opts: EvermindGenerateOptions = {},
 ): Promise<EvermindToolGeneration> {
   const { lm, tok } = await loadEvermindModel(store, ref);
-  const decoder = createEvermindToolDecoder(lm, tok, {
-    ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
-    ...(opts.seed != null ? { seed: opts.seed } : {}),
-  });
-  // The planner is given the conversation WITHOUT the `assistant:` primer — it is
-  // choosing an action, not continuing a reply.
-  const conversation = messagesToPrompt(messages).replace(/\nassistant:$/, '');
-  const plan = planEvermindToolCall(decoder, conversation, tools, choice);
-  if (plan.call) {
-    return { call: plan.call, calls: plan.calls, content: '', usage: decoder.usage(), margin: plan.margin };
-  }
-  // No tool: answer as usual. Generated through the same loaded head (and the same
-  // per-isolate memo), so the prose path costs nothing extra to reach.
-  const gen = await evermindGenerate(store, ref, messages, opts);
-  const usage = decoder.usage();
-  return {
-    call: null,
-    calls: [],
-    content: gen.content,
-    usage: {
-      prompt_tokens: usage.prompt_tokens + gen.usage.prompt_tokens,
-      completion_tokens: usage.completion_tokens + gen.usage.completion_tokens,
-      total_tokens: usage.total_tokens + gen.usage.total_tokens,
-    },
-    margin: plan.margin,
-  };
+  return generateEvermindWithTools(lm, tok, messages, tools, choice, opts);
 }
 
 /** Scorecard for a PUBLISHED Evermind model, scored against held-out text. */

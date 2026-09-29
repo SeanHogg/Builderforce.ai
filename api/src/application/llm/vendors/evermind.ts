@@ -40,13 +40,8 @@ import {
   type VendorModule,
 } from './types';
 import { evermindGenerate, evermindGenerateWithTools, buildEvermindCompletion } from '../evermindRuntime';
-import { isServableText } from '../textCoherence';
-import {
-  normalizeEvermindTools,
-  resolveEvermindToolChoice,
-  evermindToolChoiceMinMargin,
-  logToolChoiceMargin,
-} from '../evermindToolCall';
+import { isServableText, normalizeEvermindTools, resolveEvermindToolChoice } from '@seanhogg/builderforce-memory/evermind';
+import { evermindToolChoiceMinMargin, logToolChoiceMargin } from '../evermindToolCall';
 import { pseudoStreamFromCall } from './pseudoStream';
 
 /**

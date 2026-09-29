@@ -3,8 +3,8 @@ import { evermindModule } from './evermind';
 import { modelSupportsTools } from './registry';
 import { VendorFatalError } from './types';
 import { buildEvermindFixtureStore as fixtureStore } from '../__fixtures__/evermindModel';
-import { isServableText } from '../textCoherence';
-import { evermindToolChoiceMinMargin, TOOL_CHOICE_MIN_MARGIN } from '../evermindToolCall';
+import { isServableText, TOOL_CHOICE_MIN_MARGIN } from '@seanhogg/builderforce-memory/evermind';
+import { evermindToolChoiceMinMargin } from '../evermindToolCall';
 
 /** Controls what the (mocked) runtime generates, so the vendor's OWN contracts —
  *  tool refusal and the coherence gate — can be asserted without depending on what a

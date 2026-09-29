@@ -8,112 +8,16 @@
  * agent roles (agent nodes) or reserved node-handler roles (memory / knowledge /
  * train / etc.), and edges become `dependsOn` relationships.
  *
- * The frontend mirrors these types in `lib/builderforceApi.ts` (this repo has no
- * shared package; `Workflow`/`WorkflowTask` are duplicated the same way). Keep
- * the two in sync.
+ * The node-kind vocabulary is shared with the frontend through
+ * `@builderforce/creation-canvas-contract` (`WorkflowNodeKind`).
  */
 
+import type { WorkflowNodeKind } from '@builderforce/creation-canvas-contract';
 import { parse as yamlParse, stringify as yamlStringify } from 'yaml';
 
-/** Every node kind the builder palette can place on the canvas. */
-export type WorkflowNodeKind =
-  | 'trigger'    // entry point: manual / webhook / schedule / board-event / data-collection
-  | 'agent'      // run a configured agent (role + runtime + model)
-  | 'llm'        // call an LLM platform (OpenAI/Anthropic/Gemini/…) via the gateway
-  | 'mcp'        // invoke an MCP-server / SaaS integration tool
-  | 'connector'  // call one action on a connected integration (Twilio, Stripe, Slack…)
-  | 'memory'     // read/write the SSM hippocampus memory
-  | 'knowledge'  // ingest into / query a knowledge base
-  | 'train'      // train an Evermind model (builderforce-memory engine) → hippocampus model
-  | 'transform'  // ETL: map/shape the payload
-  | 'filter'     // Flow Control: drop the payload unless a predicate holds
-  | 'branch'     // Flow Control: conditional fan-out, tags $branch
-  | 'router'     // Flow Control: N-way conditional fan-out, tags $route
-  | 'switch'     // Flow Control: N-way fan-out by literal value match, tags $route
-  | 'iterator'   // Flow Control: fork the downstream processor once per array item (dynamic)
-  | 'merge'      // Flow Control: join multiple upstream branches into one payload
-  | 'subflow'    // Composition: another canvas's definition, run as one step.
-                 // Never reaches the executor: expanded into this graph when a run
-                 // is instantiated (application/workflow/expandSubflows.ts).
-  | 'numeric-aggregator' // Tools: reduce multiple upstream branches to one number
-  | 'table-aggregator'   // Tools: collect multiple upstream branches into one row array
-  | 'text-aggregator'    // Tools: join multiple upstream branches into one string
-  | 'set-variable' // Tools: write a run-scoped variable
-  | 'get-variable' // Tools: read a run-scoped variable
-  | 'set-variables' // Tools: write several run-scoped variables at once
-  | 'get-variables' // Tools: read several run-scoped variables at once
-  | 'increment'    // Tools: a definition-scoped, cross-run persistent counter
-  | 'sleep'        // Tools: delay this path by N seconds
-  | 'compose-string'   // Tools: build a string from a {{input}} template
-  | 'convert-encoding' // Tools: base64 / URL / hex encode or decode the input
-  | 'regex-match'  // Text Parser: match a regular expression against the input
-  | 'html-to-text' // Text Parser: strip HTML tags from the input
-  | 'html-table'   // Text Parser: parse the first <table> into rows of cell text
-  | 'html-elements'        // Text Parser: extract every matching tag's text + attributes
-  | 'match-elements'       // Text Parser: html-elements filtered by a text pattern
-  | 'match-pattern-advanced' // Text Parser: every regex match with named capture groups
-  | 'replace'      // Text Parser: find/replace (literal or regex)
-  | 'chunk-text'   // Text Parser: split the input into fixed-size chunks
-  | 'assert'       // Diagnostics: fail (or warn) the run unless an expression holds
-  | 'healthcheck'  // Diagnostics: probe a URL for reachability / expected status
-  | 'web-search'   // AI Agents: search the open web (tenant key → operator SearXNG → keyless)
-  | 'web-fetch'    // Tools: fetch a public URL (SSRF-guarded, no credential needed)
-  | 'google-drive' // integration: search / read-as-text the tenant's connected Google Drive
-  | 'analyze-image'         // AI Agents: vision-capable image analysis
-  | 'extract-document-data' // AI Agents: vision + structured extraction (document/invoice/receipt)
-  | 'transcribe-audio'      // AI Agents: Whisper transcription or translation
-  | 'output'     // terminal: write artifact / notify / push to board
-  | 'gmail';     // integration: send an email via the tenant's connected Gmail
-
-/** Reserved orchestrator roles for non-agent (in-process) node handlers.
- *  Agent nodes use their configured role instead. Kept here so the builder, the
- *  compiler, and the orchestrator's executeTask switch agree on one vocabulary. */
-export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, string> = {
-  trigger:   'node:trigger',
-  llm:       'node:llm',
-  mcp:       'node:mcp',
-  connector: 'node:connector',
-  memory:    'node:memory',
-  knowledge: 'node:knowledge',
-  train:     'node:train',
-  transform: 'node:transform',
-  filter:    'node:filter',
-  branch:    'node:branch',
-  router:    'node:router',
-  switch:    'node:switch',
-  iterator:  'node:iterator',
-  merge:     'node:merge',
-  subflow:   'node:subflow',
-  'numeric-aggregator': 'node:numeric-aggregator',
-  'table-aggregator':   'node:table-aggregator',
-  'text-aggregator':    'node:text-aggregator',
-  'set-variable': 'node:set-variable',
-  'get-variable': 'node:get-variable',
-  'set-variables': 'node:set-variables',
-  'get-variables': 'node:get-variables',
-  increment:      'node:increment',
-  sleep:          'node:sleep',
-  'compose-string':   'node:compose-string',
-  'convert-encoding': 'node:convert-encoding',
-  'regex-match':  'node:regex-match',
-  'html-to-text': 'node:html-to-text',
-  'html-table':   'node:html-table',
-  'html-elements':          'node:html-elements',
-  'match-elements':         'node:match-elements',
-  'match-pattern-advanced': 'node:match-pattern-advanced',
-  replace:        'node:replace',
-  'chunk-text':   'node:chunk-text',
-  assert:         'node:assert',
-  healthcheck:    'node:healthcheck',
-  'web-search':   'node:web-search',
-  'web-fetch':    'node:web-fetch',
-  'google-drive': 'node:google-drive',
-  'analyze-image':         'node:analyze-image',
-  'extract-document-data': 'node:extract-document-data',
-  'transcribe-audio':      'node:transcribe-audio',
-  output:    'node:output',
-  gmail:     'node:gmail',
-};
+/** Every node kind the builder palette can place on the canvas — the shared vocabulary
+ *  the web builder and Creation Canvas type their definitions with too. */
+export type { WorkflowNodeKind };
 
 export interface WorkflowDefNode {
   id: string;
@@ -247,10 +151,10 @@ export function roleForNode(node: WorkflowDefNode): string {
   if (node.kind === 'agent') {
     return String(node.config.role ?? node.config.agentRole ?? 'code-creator');
   }
-  // Client-side Evermind BUILD-step kinds (train-tokenizer, train-model, …) are a
-  // frontend-only superset run in-browser via the engine, never dispatched here.
-  // If one is ever server-run, fall back to a benign role rather than undefined.
-  return NODE_HANDLER_ROLES[node.kind] ?? `node:${node.kind}`;
+  // Every in-process kind runs under the reserved `node:<kind>` role the orchestrator's
+  // node dispatch switches on. Client-side Evermind BUILD-step kinds (train-tokenizer,
+  // …) never reach here; one that did would get a benign `node:` role, not undefined.
+  return `node:${node.kind}`;
 }
 
 /** Human/agent-readable task text for a node, derived from its config. */

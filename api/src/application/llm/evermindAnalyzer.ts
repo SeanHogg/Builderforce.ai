@@ -28,7 +28,7 @@ import { llmProxyForPlan } from './LlmProxyService';
 import { completeJson, JSON_OBJECT_FORMAT } from './completeJson';
 import { resolveTenantLlmCredentials } from './tenantProviderKeyService';
 import { resolveEvermindTeacherModel } from './evermindTeacher';
-import { assessTextCoherence } from './textCoherence';
+import { assessTextCoherence } from '@seanhogg/builderforce-memory/evermind';
 import {
   getProjectEvermindContributions,
   getProjectEvermindHead,
