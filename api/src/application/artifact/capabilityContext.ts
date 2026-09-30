@@ -19,14 +19,12 @@ import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getBuiltinSkillBody } from './builtinSkills';
+import { meanLimbicSetpoints, type LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import {
-  deriveLimbicSetpoints,
-  neutralState,
-  LIMBIC_DIM_NAMES,
   buildPsychometricBlock,
+  limbicTraits,
   mergeExecParams,
-  type LimbicState,
-  type LimbicPsychProfile,
+  type PsychProfile,
   type AgentExecParams,
 } from '@builderforce/agent-tools';
 
@@ -145,10 +143,10 @@ export async function loadPersonaBody(env: Env, db: Db, slug: string): Promise<P
   });
 }
 
-function parsePsychometric(raw: string | null): LimbicPsychProfile | undefined {
+function parsePsychometric(raw: string | null): PsychProfile | undefined {
   if (!raw) return undefined;
   try {
-    const p = JSON.parse(raw) as LimbicPsychProfile;
+    const p = JSON.parse(raw) as PsychProfile;
     return p && typeof p === 'object' && p.vector ? p : undefined;
   } catch {
     return undefined;
@@ -157,13 +155,13 @@ function parsePsychometric(raw: string | null): LimbicPsychProfile | undefined {
 
 /**
  * Coerce a stored psychometric JSON string OR an already-parsed profile object into a
- * validated {@link LimbicPsychProfile} (returns `undefined` for absent/malformed/traitless
+ * validated {@link PsychProfile} (returns `undefined` for absent/malformed/traitless
  * input). Shared so every caller that resolves a profile — from a DB column or a request
  * body — validates it identically (persona/agent/user all use the same shape).
  */
 export function parsePsychometricProfile(
-  raw: string | LimbicPsychProfile | null | undefined,
-): LimbicPsychProfile | undefined {
+  raw: string | PsychProfile | null | undefined,
+): PsychProfile | undefined {
   if (!raw) return undefined;
   if (typeof raw === 'object') return raw.vector ? raw : undefined;
   return parsePsychometric(raw);
@@ -200,8 +198,8 @@ export async function resolvePsychometricProfile(
     /** Load this persona's psychometric (platform/marketplace persona slug). */
     personaId?: unknown;
   },
-): Promise<LimbicPsychProfile | undefined> {
-  const inline = parsePsychometricProfile(source.psychometric as string | LimbicPsychProfile | null | undefined);
+): Promise<PsychProfile | undefined> {
+  const inline = parsePsychometricProfile(source.psychometric as string | PsychProfile | null | undefined);
   if (inline) return inline;
 
   // CACHED, like the persona leg below it already was. `POST /api/limbic/block` is a
@@ -219,7 +217,7 @@ export async function resolvePsychometricProfile(
         // `null` rather than `undefined` for "no profile": a miss has to be CACHEABLE,
         // or the majority case — someone who has never taken the assessment — keeps
         // paying the per-turn read this exists to remove.
-        return (row?.psychometric ?? null) as string | LimbicPsychProfile | null;
+        return (row?.psychometric ?? null) as string | PsychProfile | null;
       },
       { kvTtlSeconds: 120, l1TtlMs: 120_000 },
     );
@@ -237,7 +235,7 @@ export async function resolvePsychometricProfile(
           .from(ideAgents)
           .where(scopedToTenant(ideAgents, tenantId, eq(ideAgents.id, agentId)))
           .limit(1);
-        return (row?.psychometric ?? null) as string | LimbicPsychProfile | null;
+        return (row?.psychometric ?? null) as string | PsychProfile | null;
       },
       { kvTtlSeconds: 120, l1TtlMs: 120_000 },
     );
@@ -261,7 +259,7 @@ export async function resolvePsychometricProfile(
  * the user has no profile (safe no-op), so callers can inject unconditionally.
  */
 export function buildUserPersonalityBlock(
-  psychometric: string | LimbicPsychProfile | null | undefined,
+  psychometric: string | PsychProfile | null | undefined,
 ): string {
   const block = buildPsychometricBlock(parsePsychometricProfile(psychometric));
   if (!block) return '';
@@ -286,7 +284,7 @@ export async function loadPersonaSetpoints(
   slugs: string[],
   agentPsychometric?: string | null,
 ): Promise<LimbicState | undefined> {
-  const profiles: LimbicPsychProfile[] = [];
+  const profiles: PsychProfile[] = [];
   for (const slug of slugs) {
     const body = await loadPersonaBody(env, db, slug);
     const prof = parsePsychometric(body?.psychometric ?? null);
@@ -297,14 +295,7 @@ export async function loadPersonaSetpoints(
   const own = parsePsychometric(agentPsychometric ?? null);
   if (own) profiles.push(own);
   if (profiles.length === 0) return undefined;
-  const acc = neutralState();
-  for (const name of LIMBIC_DIM_NAMES) acc[name] = 0;
-  for (const prof of profiles) {
-    const sp = deriveLimbicSetpoints(prof);
-    for (const name of LIMBIC_DIM_NAMES) acc[name] += sp[name];
-  }
-  for (const name of LIMBIC_DIM_NAMES) acc[name] /= profiles.length;
-  return acc;
+  return meanLimbicSetpoints(profiles.map(limbicTraits));
 }
 
 /** Invalidate the cached body for one artifact. Call from every mutation that edits
@@ -406,7 +397,7 @@ export async function loadCapabilityContext(
   // profile in play — assigned personas + the agent's own — so personality changes
   // how the cloud agent reasons, not just its prompt text.
   const execParams = mergeExecParams([
-    ...resolvedPersonas.map((r) => parsePsychometric(r.body.psychometric)).filter((p): p is LimbicPsychProfile => Boolean(p)),
+    ...resolvedPersonas.map((r) => parsePsychometric(r.body.psychometric)).filter((p): p is PsychProfile => Boolean(p)),
     ...(ownProfile ? [ownProfile] : []),
   ]);
 

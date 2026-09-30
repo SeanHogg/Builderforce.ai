@@ -12,8 +12,7 @@ import type {
   ILocalResultBroker,
   ITelemetryService,
 } from "../builderforce/ports.js";
-import type { CompiledLimbic, LimbicEvent, LimbicState } from "../builderforce/limbic.js";
-import { neutralState } from "../builderforce/limbic.js";
+import { neutralLimbicState, type CompiledLimbic, type LimbicEvent, type LimbicState } from "@seanhogg/builderforce-memory-engine/limbic";
 import { awaitLocalSubagentResult } from "./local-result-broker.js";
 import { getSsmMemoryService } from "./ssm-memory-service.js";
 import { getLimbicSystemService } from "./limbic-system-service.js";
@@ -135,15 +134,15 @@ export class SsmMemoryAdapter implements IAgentMemoryService {
 export class LimbicSystemAdapter implements ILimbicSystem {
   async appraise(event: LimbicEvent): Promise<LimbicState> {
     const svc = getLimbicSystemService();
-    return svc ? svc.appraise(event) : neutralState();
+    return svc ? svc.appraise(event) : neutralLimbicState();
   }
 
   snapshot(): LimbicState {
-    return getLimbicSystemService()?.snapshot() ?? neutralState();
+    return getLimbicSystemService()?.snapshot() ?? neutralLimbicState();
   }
 
   tick(opts?: { fatigue?: number }): LimbicState {
-    return getLimbicSystemService()?.tick(opts) ?? neutralState();
+    return getLimbicSystemService()?.tick(opts) ?? neutralLimbicState();
   }
 
   attention(): number {

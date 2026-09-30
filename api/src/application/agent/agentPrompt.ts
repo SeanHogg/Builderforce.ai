@@ -20,7 +20,7 @@ import {
   lowerAgentSpec,
   type AgentExecParams,
   type AgentSpec,
-  type LimbicPsychProfile,
+  type PsychProfile,
 } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
@@ -113,10 +113,10 @@ export interface ResolvedWorkforceModel {
 
 /** Parse the stored `ide_agents.psychometric` JSON into a profile, or `undefined`
  *  when absent/malformed/traitless (a fully neutral vector compiles to nothing). */
-function parseAgentPsychometric(raw: unknown): LimbicPsychProfile | undefined {
+function parseAgentPsychometric(raw: unknown): PsychProfile | undefined {
   if (typeof raw !== 'string' || !raw) return undefined;
   try {
-    const p = JSON.parse(raw) as LimbicPsychProfile;
+    const p = JSON.parse(raw) as PsychProfile;
     return p && typeof p === 'object' && p.vector ? p : undefined;
   } catch {
     return undefined;

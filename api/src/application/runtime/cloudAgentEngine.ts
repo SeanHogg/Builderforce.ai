@@ -88,11 +88,14 @@ import {
 } from './cloudAgentTools';
 import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
-  appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
-  applyDelta, appraiseAmygdala, homeostasis,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult, type ToolSchema,
 } from '@builderforce/agent-tools';
+import {
+  appraiseTask, buildLimbicBlock, compileLimbicState, neutralLimbicState,
+  applyLimbicDelta, appraiseAmygdala, homeostasis,
+  type LimbicState, type LimbicEvent,
+} from '@seanhogg/builderforce-memory-engine/limbic';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
 import { buildOrchestrationCapability, imageHostedChildCeiling } from './cloudSubagent';
 import { resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
@@ -1998,7 +2001,7 @@ export function initialCloudLimbicState(
   taskRow: { title: string; description: string | null },
   setpoints?: LimbicState,
 ): LimbicState {
-  return appraiseTask(`${taskRow.title}\n${taskRow.description ?? ''}`, setpoints ?? neutralState());
+  return appraiseTask(`${taskRow.title}\n${taskRow.description ?? ''}`, setpoints ?? neutralLimbicState());
 }
 
 /** Map a finished tick's coarse outcome to an amygdala event. */
@@ -2021,8 +2024,8 @@ export function evolveCloudLimbicState(
   result: { ok: boolean; finished: boolean; cancelled: boolean },
 ): LimbicState {
   const ev = cloudTickEvent(result);
-  const after = ev ? applyDelta(prev, appraiseAmygdala(ev)) : prev;
-  return homeostasis(after, setpoints ?? neutralState(), { rate: 0.1 });
+  const after = ev ? applyLimbicDelta(prev, appraiseAmygdala(ev)) : prev;
+  return homeostasis(after, setpoints ?? neutralLimbicState(), { rate: 0.1 });
 }
 
 /** Record the affective state on the Observability timeline (best-effort). No-op

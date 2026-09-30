@@ -21,8 +21,8 @@
  * Nothing is fabricated. Neocortex + Hippocampus animate from the real
  * `/evermind/contributions` payload (delta runs / taught text + pending). The four
  * limbic regions are driven by the project's REAL current affective state — the
- * `affect` block the server computes with the SAME `@builderforce/agent-tools` limbic
- * compiler the runtime runs (setpoints + amygdala/thalamus/basal-ganglia dynamics
+ * `affect` block the server computes with the SAME limbic implementation
+ * (`@seanhogg/builderforce-memory-engine/limbic`) the runtime runs (setpoints + amygdala/thalamus/basal-ganglia dynamics
  * folded over recent activity). The component self-gates (loading / dormant / error),
  * polls lightly so the graph stays live, and themes through cascading CSS variables so
  * it reads natively in light and dark. Region hues are the validated categorical slots

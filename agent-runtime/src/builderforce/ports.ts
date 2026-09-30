@@ -58,7 +58,7 @@ export interface IAgentMemoryService {
 
 // ── Limbic system (dynamic affective/motivational layer) ──────────────────────
 
-import type { CompiledLimbic, LimbicEvent, LimbicState } from "./limbic.js";
+import type { CompiledLimbic, LimbicEvent, LimbicState } from "@seanhogg/builderforce-memory-engine/limbic";
 
 /**
  * The agent's limbic system — the dynamic counterpart to the static psychometric

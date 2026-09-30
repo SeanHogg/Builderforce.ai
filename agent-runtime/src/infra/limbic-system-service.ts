@@ -2,7 +2,7 @@
  * LimbicSystemService – the runtime home of the agent's limbic system.
  *
  * Holds the live affective state for a self-hosted node and drives it through
- * the brain regions defined in `builderforce/limbic.ts`:
+ * the brain regions of the one limbic implementation (`@seanhogg/builderforce-memory-engine/limbic`):
  *
  *   experience → amygdala appraisal → state update → homeostasis (hypothalamus)
  *              → thalamus attention gate → basal-ganglia action selection
@@ -27,25 +27,26 @@ import { onAgentEvent, type AgentEventPayload } from "./agent-events.js";
 import { getSsmMemoryService } from "./ssm-memory-service.js";
 import { globalPersonaRegistry } from "../builderforce/personas.js";
 import { getRoleProfile } from "../builderforce/psychometrics.js";
+import { limbicTraits } from "@builderforce/agent-tools";
+import type { LimbicSample } from "@seanhogg/builderforce-memory-engine";
 import {
   LIMBIC_DIM_NAMES,
   LIMBIC_STATE_DIM,
   appraiseAmygdala,
-  arrayToState,
-  applyDelta,
+  applyLimbicDelta,
   basalGangliaSelect,
   compileLimbicState,
-  deriveLimbicSetpoints,
+  meanLimbicSetpoints,
   homeostasis,
-  neutralState,
-  stateToArray,
+  neutralLimbicState,
+  recordToState,
   thalamusGate,
   type CompiledLimbic,
   type LimbicDelta,
   type LimbicEvent,
   type LimbicSetpoints,
   type LimbicState,
-} from "../builderforce/limbic.js";
+} from "@seanhogg/builderforce-memory-engine/limbic";
 
 export interface LimbicSystemServiceOptions {
   /** On-disk checkpoint path. Resolution: opt → env → '.builderforce/limbic.bin'. */
@@ -79,13 +80,6 @@ export function resolveLimbicCheckpointPath(explicit?: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type LimbicSession = any;
 
-interface TrainingSample {
-  input: Float32Array;
-  state: number[];
-  deltaTarget: Float32Array;
-  reward: number;
-}
-
 export class LimbicSystemService {
   /** True when the trainable WebGPU model is loaded (else heuristic-only). */
   readonly modelAvailable: boolean;
@@ -100,7 +94,7 @@ export class LimbicSystemService {
   private readonly trainEpochs: number;
   private readonly homeostasisRate: number;
   private readonly modelBlend: number;
-  private readonly buffer: TrainingSample[] = [];
+  private readonly buffer: LimbicSample[] = [];
   private observedSinceTrain = 0;
   /** Unsubscribe handle for the agent event-bus subscription, if attached. */
   private eventUnsub: (() => void) | undefined;
@@ -122,8 +116,8 @@ export class LimbicSystemService {
     this.trainEpochs = opts.trainEpochs;
     this.homeostasisRate = opts.homeostasisRate;
     this.modelBlend = opts.modelBlend;
-    this.setpoints = neutralState();
-    this.state = neutralState();
+    this.setpoints = neutralLimbicState();
+    this.state = neutralLimbicState();
   }
 
   /**
@@ -216,26 +210,17 @@ export class LimbicSystemService {
   refreshSetpoints(): LimbicSetpoints {
     const active = globalPersonaRegistry.listActive?.() ?? [];
     const profiles = active.map(getRoleProfile).filter((p): p is NonNullable<typeof p> => Boolean(p));
-    if (profiles.length === 0) {
-      this.setpoints = neutralState();
-    } else {
-      const acc = neutralState();
-      for (const name of LIMBIC_DIM_NAMES) acc[name] = 0;
-      for (const profile of profiles) {
-        const sp = deriveLimbicSetpoints(profile);
-        for (const name of LIMBIC_DIM_NAMES) acc[name] += sp[name];
-      }
-      for (const name of LIMBIC_DIM_NAMES) acc[name] /= profiles.length;
-      this.setpoints = acc;
-    }
+    this.setpoints = meanLimbicSetpoints(profiles.map(limbicTraits));
     // Keep the trainable model's resting baseline aligned with the active personas
     // so GPU training + relaxation ride the personality setpoint, not a fixed
     // neutral. Best-effort: the session may be null (heuristic-only) or predate
     // setSetpoint (older builderforce-memory) — the heuristic homeostasis still uses
     // `this.setpoints` regardless.
     try {
-      const arr = LIMBIC_DIM_NAMES.map((n) => this.setpoints[n]);
-      (this.session as { setSetpoint?: (t?: unknown, explicit?: number[]) => void } | null)?.setSetpoint?.(undefined, arr);
+      (this.session as { setSetpoint?: (t?: unknown, explicit?: ArrayLike<number>) => void } | null)?.setSetpoint?.(
+        undefined,
+        recordToState(this.setpoints),
+      );
     } catch {
       /* best-effort */
     }
@@ -259,7 +244,7 @@ export class LimbicSystemService {
     if (this.session) {
       try {
         const input = await this.embedEvent(event);
-        const out = await this.session.step(input, stateToArray(preState));
+        const out = await this.session.step(input, recordToState(preState));
         const modelVec: Float32Array = out.delta;
         // Blend: model refines the heuristic.
         appliedVec = heuristicVec.map((h, i) => (1 - this.modelBlend) * h + this.modelBlend * (modelVec[i] ?? 0));
@@ -268,7 +253,7 @@ export class LimbicSystemService {
       }
     }
 
-    this.state = applyDelta(preState, arrayToDelta(appliedVec));
+    this.state = applyLimbicDelta(preState, arrayToDelta(appliedVec));
 
     // Record a training sample: teacher = the heuristic appraisal; reward = the
     // valence of the experience (how good/bad it was).
@@ -276,7 +261,7 @@ export class LimbicSystemService {
       const input = await this.embedEvent(event);
       this.buffer.push({
         input,
-        state: stateToArray(preState),
+        state: recordToState(preState),
         deltaTarget: heuristicVec,
         reward: heuristic.valence ?? 0,
       });
@@ -524,9 +509,6 @@ export function hashedEmbedding(text: string, dim: number): Float32Array {
   for (let i = 0; i < dim; i++) v[i] = v[i]! / norm;
   return v;
 }
-
-// arrayToState re-exported for the service's consumers (session restore).
-export { arrayToState };
 
 // ── Singleton wiring (mirrors ssm-memory-service) ──────────────────────────────
 

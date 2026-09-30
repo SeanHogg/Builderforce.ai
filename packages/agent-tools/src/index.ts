@@ -18,7 +18,6 @@ export * from "./engine.js";
 export * from "./spec.js";
 export * from "./core-tools.js";
 export * from "./psychometric-dims.js";
-export * from "./limbic.js";
 export * from "./psychometrics.js";
 export * from "./knowledge-notes.js";
 export * from "./skill-tools.js";

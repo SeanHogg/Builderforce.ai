@@ -22,17 +22,17 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { EvermindLM, EvermindModelPackage, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
 import {
-  deriveLimbicSetpoints,
+  limbicSetpoints,
   homeostasis,
-  applyDelta,
+  applyLimbicDelta,
   appraiseAmygdala,
   appraiseTask,
   thalamusGate,
   basalGangliaExploreBias,
   type LimbicState,
   type LimbicSetpoints,
-  type LimbicPsychProfile,
-} from '@builderforce/agent-tools';
+} from '@seanhogg/builderforce-memory-engine/limbic';
+import { limbicTraits, type PsychProfile } from '@builderforce/agent-tools';
 import { projectEvermind, ideAgents, ideProjects } from '../../infrastructure/database/schema';
 import { aggregateProjectPsychometric } from '../persona/psychometricCatalog';
 import type { Db } from '../../infrastructure/database/connection';
@@ -1183,8 +1183,8 @@ export async function listProjectEvermindMemories(
  * gates seeded/frozen itself, so a frozen model simply merges nothing.
  */
 /**
- * The project Evermind's current affective (limbic) state, computed by the SHARED
- * `@builderforce/agent-tools` limbic compiler — the exact same "personality =
+ * The project Evermind's current affective (limbic) state, computed by the ONE
+ * limbic implementation (`@seanhogg/builderforce-memory-engine/limbic`) — the exact same "personality =
  * setpoints, limbic = dynamics" implementation the on-prem runtime and cloud engine
  * run (see [[limbic-system]]). Nothing is fabricated: the resting {@link setpoints}
  * come from the personality layer (neutral until a project carries a personality),
@@ -1213,21 +1213,21 @@ export interface ProjectEvermindAffect {
  */
 export function computeProjectAffect(
   recent: ProjectEvermindRecentEntry[],
-  restProfile?: LimbicPsychProfile,
+  restProfile?: PsychProfile,
 ): ProjectEvermindAffect {
   // The resting setpoints come from the project's aggregate temperament — the mean
   // personality of the agents assigned to it (see `loadProjectRestingProfile`) —
   // giving each project a REAL baseline instead of a shared neutral one. Wired through
-  // `deriveLimbicSetpoints`, and falling back to the neutral baseline when no
+  // `limbicSetpoints`, and falling back to the neutral baseline when no
   // contributing agent carries a personality (restProfile === undefined), so the brain
   // map is unchanged for a project with no psychometric signal.
-  const setpoints = deriveLimbicSetpoints(restProfile);
+  const setpoints = limbicSetpoints(limbicTraits(restProfile));
   let state: LimbicState = { ...setpoints };
   const ordered = [...recent].sort((a, b) => a.at - b.at);
   for (const e of ordered) {
     state = homeostasis(state, setpoints, { rate: 0.15 });
     const intensity = Math.max(0.2, Math.min(1, e.weight || 0.5));
-    state = applyDelta(state, appraiseAmygdala({ kind: 'progress', intensity }));
+    state = applyLimbicDelta(state, appraiseAmygdala({ kind: 'progress', intensity }));
     if (e.prompt) state = appraiseTask(e.prompt, state);
   }
   return {
@@ -1256,7 +1256,7 @@ async function loadProjectRestingProfile(
   db: Db,
   tenantId: number,
   projectId: number,
-): Promise<LimbicPsychProfile | undefined> {
+): Promise<PsychProfile | undefined> {
   const rows = await db
     .select({ psychometric: ideAgents.psychometric })
     .from(ideAgents)
@@ -1269,7 +1269,7 @@ async function loadProjectRestingProfile(
     );
   const profiles = rows.map((r) => {
     try {
-      return JSON.parse(r.psychometric as string) as LimbicPsychProfile;
+      return JSON.parse(r.psychometric as string) as PsychProfile;
     } catch {
       return undefined;
     }

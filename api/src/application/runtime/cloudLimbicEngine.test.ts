@@ -6,7 +6,8 @@ import {
   CloudLimbicEngine,
   type CloudEngineContext,
 } from './cloudAgentEngine';
-import { buildLimbicBlock, neutralState, CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
+import { CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
+import { buildLimbicBlock, neutralLimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import { loadPersonaSetpoints } from '../artifact/capabilityContext';
 
 // Minimal context — the engine factory only stores it; resolveAgentEngine does
@@ -52,8 +53,8 @@ describe('initial affect (V3, via the per-step seam — not baked into the promp
 
 describe('cross-tick affect evolution (the seam enables it)', () => {
   it('a failed tick drives affect negative; a successful tick recovers it', () => {
-    const setpoints = neutralState();
-    const start = neutralState();
+    const setpoints = neutralLimbicState();
+    const start = neutralLimbicState();
     const afterError = evolveCloudLimbicState(start, setpoints, { ok: false, finished: false, cancelled: false });
     expect(afterError.valence).toBeLessThan(start.valence);
     expect(afterError.driveCaution).toBeGreaterThan(start.driveCaution);
@@ -63,8 +64,8 @@ describe('cross-tick affect evolution (the seam enables it)', () => {
   });
 
   it('relaxes toward setpoints on a quiet (progress) tick', () => {
-    const setpoints = neutralState();
-    const disturbed = { ...neutralState(), valence: -0.8 };
+    const setpoints = neutralLimbicState();
+    const disturbed = { ...neutralLimbicState(), valence: -0.8 };
     const after = evolveCloudLimbicState(disturbed, setpoints, { ok: true, finished: false, cancelled: false });
     expect(Math.abs(after.valence - setpoints.valence)).toBeLessThan(Math.abs(disturbed.valence - setpoints.valence));
   });

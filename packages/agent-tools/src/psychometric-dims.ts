@@ -3,8 +3,8 @@
  *
  * These string ids are the cross-package contract between the personality
  * compiler (agent-runtime `psychometrics.ts`), the catalog/scoring served to the
- * UI (api `psychometricCatalog.ts`), and the limbic setpoint derivation
- * (`limbic.ts`). They were previously duplicated as three separate `DIM` maps
+ * UI (api `psychometricCatalog.ts`), and the limbic trait projection
+ * (`psychometrics.ts` `limbicTraits`). They were previously duplicated as three separate `DIM` maps
  * that had to be kept byte-identical by hand; this is now the one place they live.
  * Every score in a profile vector is keyed by one of these. Scores are 0..100;
  * an absent dimension is treated as neutral (50).
@@ -57,10 +57,9 @@ export const PSYCH_DIM = {
 
 export type PsychDimKey = keyof typeof PSYCH_DIM;
 
-// ── Trait-scoring primitives (shared by the psychometric compiler + limbic) ──────
-// The 0..100 trait scale thresholds and the scorer live here — the one neutral
-// module both `psychometrics.ts` and `limbic.ts` already import — so the two
-// compilers read a trait vector identically and neither owns the other's constants.
+// ── Trait-scoring primitives (the psychometric compiler + the limbic projection) ─
+// The 0..100 trait scale thresholds and the scorer live here, so the persona
+// directives and the limbic setpoints read a trait vector identically.
 
 /** Score at/above which a trait reads as "high". */
 export const HI = 65;

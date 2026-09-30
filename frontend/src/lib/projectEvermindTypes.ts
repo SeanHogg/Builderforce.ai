@@ -9,6 +9,7 @@
  * restated. Only what the web alone renders (the head, limbic affect, training
  * telemetry) is declared in this file.
  */
+import type { LimbicDimName } from '@seanhogg/builderforce-memory-engine';
 import type {
   EvermindCodingGateView,
   EvermindConsoleData,
@@ -51,12 +52,8 @@ export interface ProjectEvermindHead {
   codingGate?: ProjectEvermindCodingGate | null;
 }
 
-/** The 8 affective (limbic) state dimensions the runtime models. Mirrors
- *  `@builderforce/agent-tools` `LimbicDimName` — keep in sync. */
-export type LimbicDimName =
-  | 'valence' | 'arousal'
-  | 'driveCuriosity' | 'driveCaution' | 'driveEffort' | 'driveSocial'
-  | 'attention' | 'exploration';
+/** The 8 affective (limbic) state dimensions — the engine's one limbic schema. */
+export type { LimbicDimName };
 
 /** The project Evermind's current affective (limbic) state — computed server-side by
  *  the shared limbic compiler from the model's setpoints + recent activity. */

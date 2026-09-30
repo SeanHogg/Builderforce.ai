@@ -26,7 +26,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * returns null when nothing meaningful applied — so a V2 / neutral-profile run records
  * nothing and stays byte-identical.
  */
-import { compilePsychometricProfile, type LimbicPsychProfile, type AgentExecParams } from '@builderforce/agent-tools';
+import { compilePsychometricProfile, type PsychProfile, type AgentExecParams } from '@builderforce/agent-tools';
 import { sanitizeVector } from './psychometricCatalog';
 import { personalityEvents } from '../../infrastructure/database/schema';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -61,11 +61,11 @@ export interface PersonalityEventInput {
  * Shared with personalityRoutes so the panel's read-through derivation and the cloud
  * engine's first-class recording compile from IDENTICAL input.
  */
-export function parsePersonalityProfile(raw: string | null | undefined): LimbicPsychProfile | null {
+export function parsePersonalityProfile(raw: string | null | undefined): PsychProfile | null {
   if (!raw) return null;
   try {
     const o = JSON.parse(raw) as Record<string, unknown>;
-    const profile: LimbicPsychProfile = { vector: sanitizeVector(o.vector) };
+    const profile: PsychProfile = { vector: sanitizeVector(o.vector) };
     if (typeof o.enneagramType === 'number') profile.enneagramType = o.enneagramType;
     return profile;
   } catch {

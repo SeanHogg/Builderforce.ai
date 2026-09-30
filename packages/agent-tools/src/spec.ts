@@ -13,7 +13,7 @@
  *
  * Pure and dependency-free (no GPU, no I/O, no `Env`) so it runs in a Cloudflare
  * Worker, Node, and a VS Code extension alike — the same constraint as
- * {@link AgentEngine} and the limbic compiler beside it. The modality compilers
+ * {@link AgentEngine} and the psychometric compiler beside it. The modality compilers
  * (`compile()`) and surface deployers (`deploy()`) that produce and consume an
  * `AgentSpec` are layered on top in the `api`/`agent-runtime` packages; this file
  * owns only the IR and its lowering. See `PRD-agent-compile-primitive.md`.
@@ -27,6 +27,14 @@
  */
 export type AgentThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type AgentReasoningLevel = "off" | "on" | "stream";
+
+const THINK_ORDER: readonly AgentThinkLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
+/** The deeper of two think levels — the floor every compiler raises thinking to. */
+export function maxThink(a: AgentThinkLevel | undefined, b: AgentThinkLevel): AgentThinkLevel {
+  if (!a) return b;
+  return THINK_ORDER.indexOf(a) >= THINK_ORDER.indexOf(b) ? a : b;
+}
 
 export interface AgentExecParams {
   thinkLevel?: AgentThinkLevel;

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { globalPersonaRegistry } from "../builderforce/personas.js";
 import { DIM } from "../builderforce/psychometrics.js";
-import { LIMBIC_DIM_NAMES, neutralState } from "../builderforce/limbic.js";
+import { LIMBIC_DIM_NAMES, neutralLimbicState } from "@seanhogg/builderforce-memory-engine/limbic";
 import {
   LimbicSystemService,
   hashedEmbedding,
@@ -79,14 +79,14 @@ describe("personality coupling (setpoints)", () => {
   it("derives setpoints from the active persona's profile", async () => {
     const svc = await makeService();
     const sp = svc.currentSetpoints();
-    expect(sp.driveCuriosity).toBeGreaterThan(neutralState().driveCuriosity);
-    expect(sp.exploration).toBeGreaterThan(neutralState().exploration);
+    expect(sp.driveCuriosity).toBeGreaterThan(neutralLimbicState().driveCuriosity);
+    expect(sp.exploration).toBeGreaterThan(neutralLimbicState().exploration);
   });
 
   it("falls back to neutral setpoints when no persona is active", async () => {
     globalPersonaRegistry.deactivate(PERSONA);
     const svc = await makeService();
-    expect(svc.currentSetpoints()).toEqual(neutralState());
+    expect(svc.currentSetpoints()).toEqual(neutralLimbicState());
   });
 });
 
@@ -136,16 +136,16 @@ describe("full execution simulation (heuristic regions, no GPU required)", () =>
 
   it("basal-ganglia selection follows the live state", async () => {
     const svc = await makeService();
-    svc.setState({ ...neutralState(), exploration: 1, driveCuriosity: 1, valence: 0.6 });
+    svc.setState({ ...neutralLimbicState(), exploration: 1, driveCuriosity: 1, valence: 0.6 });
     expect(svc.select([{ novelty: 0.05, t: "safe" }, { novelty: 0.95, t: "novel" }]).choice?.t).toBe("novel");
-    svc.setState({ ...neutralState(), exploration: 0.05, driveEffort: 0.1, driveCaution: 0.95 });
+    svc.setState({ ...neutralLimbicState(), exploration: 0.05, driveEffort: 0.1, driveCaution: 0.95 });
     expect(svc.select([{ novelty: 0.05, t: "safe" }, { novelty: 0.95, t: "novel" }]).choice?.t).toBe("safe");
   });
 
   it("compile() reflects the affective state in directives + exec params", async () => {
     const svc = await makeService();
     // A frustrated, stressed state.
-    svc.setState({ ...neutralState(), valence: -0.7, arousal: 0.85, driveCaution: 0.9 });
+    svc.setState({ ...neutralLimbicState(), valence: -0.7, arousal: 0.85, driveCaution: 0.9 });
     const { directives, params } = svc.compile();
     expect(directives.join(" ")).toMatch(/negative|caution|arousal/i);
     expect(["high", "xhigh"]).toContain(params.thinkLevel);
@@ -170,8 +170,8 @@ describe("full execution simulation (heuristic regions, no GPU required)", () =>
     svc.saveSessionState("task:42");
 
     // Drift to a different state, then restore the session snapshot.
-    svc.setState(neutralState());
-    expect(svc.snapshot().valence).toBe(neutralState().valence);
+    svc.setState(neutralLimbicState());
+    expect(svc.snapshot().valence).toBe(neutralLimbicState().valence);
     expect(svc.restoreSessionState("task:42")).toBe(true);
     expect(svc.snapshot().valence).toBeCloseTo(moody.valence, 6);
     // Unknown session → no-op.

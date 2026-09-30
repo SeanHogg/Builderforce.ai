@@ -298,7 +298,6 @@
     "lib/shellRouting.ts",
     "lib/specObjects.ts",
     "lib/specVerdict.ts",
-    "lib/sseFrames.ts",
     "lib/statusTone.ts",
     "lib/storage.ts",
     "lib/subscriptionCart.ts",

@@ -19,7 +19,8 @@ import {
   mergeExecParams,
   type PsychometricExecParams,
 } from "../builderforce/psychometrics.js";
-import { buildLimbicBlock, mergeLimbicWithPsychometric } from "../builderforce/limbic.js";
+import { mergeLimbicWithPsychometric } from "@builderforce/agent-tools";
+import { buildLimbicBlock } from "@seanhogg/builderforce-memory-engine/limbic";
 import { getLimbicSystemService } from "../infra/limbic-system-service.js";
 import { logDebug } from "../logger.js";
 

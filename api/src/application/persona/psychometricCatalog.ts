@@ -7,7 +7,7 @@
  * both sides key on now come from ONE shared map (`@builderforce/agent-tools`
  * PSYCH_DIM), re-exported here as `DIM` so existing api consumers are unchanged.
  */
-import { PSYCH_DIM, type LimbicPsychProfile } from '@builderforce/agent-tools';
+import { PSYCH_DIM, type PsychProfile } from '@builderforce/agent-tools';
 import { clampScore } from '../../domain/shared/numbers';
 
 // Dimension ids — the single shared map (was duplicated here + in agent-runtime).
@@ -408,8 +408,8 @@ export function sanitizeVector(raw: unknown): Record<string, number> {
  * from the shared {@link DIM}/`PSYCH_DIM` map, so this tracks the catalog automatically.
  */
 export function aggregateProjectPsychometric(
-  profiles: Array<LimbicPsychProfile | undefined | null>,
-): LimbicPsychProfile | undefined {
+  profiles: Array<PsychProfile | undefined | null>,
+): PsychProfile | undefined {
   const acc = new Map<string, { total: number; count: number }>();
   for (const profile of profiles) {
     if (!profile) continue;

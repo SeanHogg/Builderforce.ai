@@ -8,7 +8,7 @@
  *   • the cloud engine (`api` — cloud tenant agents), and
  *   • the VS Code extension's built-in agent.
  *
- * A persona can carry a {@link LimbicPsychProfile} — a structured trait vector
+ * A persona can carry a {@link PsychProfile} — a structured trait vector
  * derived from validated psychological frameworks (HEXACO, Regulatory Focus,
  * Need-for-Cognition, decision style, Moral Foundations, Thomas-Kilmann conflict,
  * Schwartz values, Enneagram, plus dispositional traits). The profile is what
@@ -26,8 +26,10 @@
  * Emitting BOTH is the whole point — without the param half, "high
  * Conscientiousness" would be flavour text that never makes the agent plan more.
  *
- * The static counterpart of the dynamic limbic layer ({@link ./limbic.js}):
- * personality = homeostatic setpoints, limbic = the live deviation. Pure and
+ * The static counterpart of the dynamic limbic layer (the one limbic
+ * implementation, `@seanhogg/builderforce-memory-engine/limbic`): personality =
+ * homeostatic setpoints ({@link limbicTraits} feeds them), limbic = the live
+ * deviation ({@link mergeLimbicWithPsychometric} composes its params). Pure and
  * deterministic (no GPU, no I/O) so it is unit-testable and runs in a Cloudflare
  * Worker, Node, and a VS Code extension alike. The only cross-system contract is
  * the psychometric dimension-id strings in {@link PSYCH_DIM}.
@@ -35,9 +37,21 @@
 // PSYCH_DIM ids + the HI/LO/NEUTRAL thresholds and trait scorer are the single
 // shared source in the neutral psychometric-dims module.
 import { PSYCH_DIM, HI, LO, NEUTRAL, score } from "./psychometric-dims.js";
-// maxThink (think-level ladder) + the profile shape stay with the limbic compiler.
-import { maxThink, type LimbicPsychProfile } from "./limbic.js";
-import { bulletBlock, PERSONA_BLOCK_HEADER, type AgentExecParams } from "./spec.js";
+import {
+  bulletBlock,
+  maxThink,
+  PERSONA_BLOCK_HEADER,
+  type AgentExecParams,
+  type AgentReasoningLevel,
+  type AgentThinkLevel,
+} from "./spec.js";
+
+/** Structural mirror of the runtime's PsychometricProfile (vector + optional skins). */
+export interface PsychProfile {
+  vector?: Record<string, number>;
+  enneagramType?: number;
+  mbti?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,7 +83,7 @@ export type CompiledPsychometrics = {
  * profile always yields the same directives and params, so it is unit-testable
  * and safe to memoise.
  */
-export function compilePsychometricProfile(profile: LimbicPsychProfile): CompiledPsychometrics {
+export function compilePsychometricProfile(profile: PsychProfile): CompiledPsychometrics {
   const v = profile.vector ?? {};
   const directives: string[] = [];
   const params: AgentExecParams = {};
@@ -260,7 +274,7 @@ export function compilePsychometricProfile(profile: LimbicPsychProfile): Compile
  * Render a profile's directives as a system-prompt sub-block. Returns '' when the
  * profile produces no directives (e.g. a fully neutral vector).
  */
-export function buildPsychometricBlock(profile: LimbicPsychProfile | undefined): string {
+export function buildPsychometricBlock(profile: PsychProfile | undefined): string {
   if (!profile) return "";
   const { directives } = compilePsychometricProfile(profile);
   if (directives.length === 0) return "";
@@ -273,7 +287,7 @@ export function buildPsychometricBlock(profile: LimbicPsychProfile | undefined):
  * averaged across those that set one. Used to derive run-level overrides from all
  * personas active on an agent.
  */
-export function mergeExecParams(profiles: LimbicPsychProfile[]): AgentExecParams {
+export function mergeExecParams(profiles: PsychProfile[]): AgentExecParams {
   const merged: AgentExecParams = {};
   const temps: number[] = [];
   for (const profile of profiles) {
@@ -286,4 +300,58 @@ export function mergeExecParams(profiles: LimbicPsychProfile[]): AgentExecParams
     merged.temperature = Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 100) / 100;
   }
   return merged;
+}
+
+// ---------------------------------------------------------------------------
+// The limbic seam: personality → setpoints in, limbic params → exec params out
+// ---------------------------------------------------------------------------
+
+/**
+ * The limbic system's personality traits (0..100) read off a profile's vector —
+ * the psychometric vocabulary ({@link PSYCH_DIM}) projected onto the named traits
+ * the engine's `limbicSetpoints` / `LimbicSession` take. An absent trait reads as
+ * neutral.
+ */
+export function limbicTraits(profile: PsychProfile | undefined): {
+  openness: number;
+  emotionality: number;
+  conscientiousness: number;
+  extraversion: number;
+  regulatoryFocus: number;
+  riskTolerance: number;
+  grit: number;
+  stimulation: number;
+} {
+  const v = profile?.vector;
+  return {
+    openness: score(v, PSYCH_DIM.openness),
+    emotionality: score(v, PSYCH_DIM.emotionality),
+    conscientiousness: score(v, PSYCH_DIM.conscientiousness),
+    extraversion: score(v, PSYCH_DIM.extraversion),
+    regulatoryFocus: score(v, PSYCH_DIM.regulatoryFocus),
+    riskTolerance: score(v, PSYCH_DIM.riskTolerance),
+    grit: score(v, PSYCH_DIM.grit),
+    stimulation: score(v, PSYCH_DIM.valStimulation),
+  };
+}
+
+/**
+ * Compose the dynamic limbic params (the engine's `compileLimbicState(...).params`)
+ * on top of the static psychometric params — "personality = setpoints, limbic =
+ * dynamics". Think level takes the deeper of the two (a floor); reasoning turns on
+ * if either asks; the limbic temperature *delta* nudges the psychometric baseline
+ * (0.6 when none).
+ */
+export function mergeLimbicWithPsychometric(
+  psych: AgentExecParams,
+  limbic: { thinkLevel?: AgentThinkLevel; reasoningLevel?: AgentReasoningLevel; temperatureDelta?: number },
+): AgentExecParams {
+  const out: AgentExecParams = { ...psych };
+  if (limbic.thinkLevel) out.thinkLevel = maxThink(psych.thinkLevel, limbic.thinkLevel);
+  if (limbic.reasoningLevel === "on" || psych.reasoningLevel === "on") out.reasoningLevel = "on";
+  if (typeof limbic.temperatureDelta === "number" && limbic.temperatureDelta !== 0) {
+    const baseline = psych.temperature ?? 0.6;
+    out.temperature = Math.round(Math.max(0.1, Math.min(1.0, baseline + limbic.temperatureDelta)) * 100) / 100;
+  }
+  return out;
 }

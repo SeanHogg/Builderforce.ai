@@ -53,7 +53,7 @@ vi.mock('../../application/runtime/cloudDispatch', () => ({
   parseLaneKey: () => null,
   parseOriginatingChatId: () => null,
 }));
-vi.mock('@builderforce/agent-tools', () => ({ buildLimbicBlock: () => '' }));
+vi.mock('@seanhogg/builderforce-memory-engine/limbic', () => ({ buildLimbicBlock: () => '' }));
 
 import { CloudRunnerDO } from './CloudRunnerDO';
 

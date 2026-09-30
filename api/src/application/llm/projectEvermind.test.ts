@@ -330,7 +330,7 @@ describe('computeProjectAffect (limbic state for the brain map)', () => {
 
   it('returns the neutral resting setpoints when there is no activity', () => {
     const a = computeProjectAffect([]);
-    // No project personality → neutral setpoints (mirrors deriveLimbicSetpoints(undefined)).
+    // No project personality → neutral setpoints (mirrors limbicSetpoints(undefined)).
     expect(a.setpoints.driveEffort).toBeCloseTo(0.8, 5);
     expect(a.setpoints.attention).toBeCloseTo(0.7, 5);
     // With no events the current state equals the setpoints.

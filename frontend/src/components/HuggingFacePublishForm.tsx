@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * HuggingFacePublishForm — push one published Evermind model to a Hugging Face repo
  * with the person's own write token (see `lib/huggingFacePublish.ts`). Owns its fields,

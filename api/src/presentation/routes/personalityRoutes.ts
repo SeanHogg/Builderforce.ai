@@ -42,7 +42,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 import { Hono } from 'hono';
 import { and, desc, eq, gte } from 'drizzle-orm';
-import { compilePsychometricProfile, type LimbicPsychProfile } from '@builderforce/agent-tools';
+import { compilePsychometricProfile, type PsychProfile } from '@builderforce/agent-tools';
 import {
   recordPersonalityEvent,
   personalityVersionKey,
@@ -123,7 +123,7 @@ const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 const parseProfile = parsePersonalityProfile;
 
 /** A short, human-readable summary of an agent's compiled personality directives. */
-function directivesSummaryFor(profile: LimbicPsychProfile | null): { summary: string; count: number; params: { thinkLevel?: string; reasoningLevel?: string; temperature?: number } } {
+function directivesSummaryFor(profile: PsychProfile | null): { summary: string; count: number; params: { thinkLevel?: string; reasoningLevel?: string; temperature?: number } } {
   if (!profile) return { summary: '', count: 0, params: {} };
   const { directives, params } = compilePsychometricProfile(profile);
   const { summary, count } = summarizeDirectives(directives);

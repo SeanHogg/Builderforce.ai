@@ -29,13 +29,8 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import {
-  appraiseTask,
-  buildLimbicBlock,
-  buildPsychometricBlock,
-  deriveLimbicSetpoints,
-  neutralState,
-} from '@builderforce/agent-tools';
+import { buildPsychometricBlock, limbicTraits } from '@builderforce/agent-tools';
+import { appraiseTask, buildLimbicBlock, limbicSetpoints, neutralLimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import {
   buildUserPersonalityBlock,
   resolvePsychometricProfile,
@@ -84,7 +79,7 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
     const profile = await resolvePsychometricProfile(c.env as Env, db, tenantId, body).catch(() => undefined);
     // Personality = homeostatic setpoints: seed the appraisal from the profile's derived
     // setpoints so the affect reflects personality; neutral resting state when none.
-    const base = profile ? { ...neutralState(), ...deriveLimbicSetpoints(profile) } : neutralState();
+    const base = profile ? limbicSetpoints(limbicTraits(profile)) : neutralLimbicState();
     const state = appraiseTask(text, base);
 
     return c.json({
