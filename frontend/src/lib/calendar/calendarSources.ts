@@ -194,14 +194,10 @@ function rowFromDraft(draft: CalendarEventDraft, id: string): Record<string, unk
   };
 }
 
-/** An id for a row a person just created. `randomUUID` where it exists, and a
- *  timestamp-plus-counter where it does not — an id collision here would make two
- *  events edit each other, which is worse than an ugly id. */
-let sequence = 0;
+/** An id for a row a person just created (`crypto.randomUUID` is filled on every
+ *  browser by `lib/randomUUID.ts`). */
 function cryptoId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  sequence += 1;
-  return `evt-${Date.now().toString(36)}-${sequence}`;
+  return crypto.randomUUID();
 }
 
 const BOARD_SOURCE: CalendarSourceDefinition = {

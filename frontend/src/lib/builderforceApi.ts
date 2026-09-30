@@ -8418,7 +8418,7 @@ function getAnonId(): string {
   try {
     let id = window.localStorage.getItem(ANON_ID_KEY);
     if (!id) {
-      id = (crypto?.randomUUID?.() ?? `a-${Date.now()}-${Math.random().toString(36).slice(2)}`).slice(0, 64);
+      id = crypto.randomUUID();
       window.localStorage.setItem(ANON_ID_KEY, id);
     }
     return id;

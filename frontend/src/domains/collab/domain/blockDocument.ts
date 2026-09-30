@@ -130,10 +130,7 @@ export function blocksToMarkdown(blocks: readonly DocumentBlock[]): string {
 
 /** Mint a block id. Prefixed so a stray id in a log says what it is. */
 export function createBlockId(): string {
-  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID().slice(0, 8)
-    : Math.random().toString(36).slice(2, 10);
-  return `b-${random}`;
+  return `b-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 /** An empty paragraph — what a new document, and a document whose last block was
