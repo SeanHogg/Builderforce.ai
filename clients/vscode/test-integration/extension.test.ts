@@ -19,6 +19,7 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { makeNonce, renderBundleShell } from '../src/webviewBundleShell';
 
 const EXTENSION_ID = 'builderforce.builderforce-ai';
 
@@ -154,11 +155,22 @@ suite('webview ↔ host bridge', () => {
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(ext.extensionUri, 'media')] },
     );
     try {
+      // Boot errors the prelude forwards. Without them a broken bundle is just a
+      // timeout; with them the failure names the parse error, the throwing module or
+      // the CSP directive that blocked a load.
+      const bootErrors: string[] = [];
       const received = new Promise<{ type?: string; id?: string }>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('the webview sent nothing to the host within the timeout')), 25_000);
-        panel.webview.onDidReceiveMessage((msg) => {
+        const timer = setTimeout(() => {
+          const why = bootErrors.length ? `:\n  ${bootErrors.join('\n  ')}` : ' (and reported no error)';
+          reject(new Error(`the webview sent nothing to the host within the timeout${why}`));
+        }, 25_000);
+        panel.webview.onDidReceiveMessage((msg: { type?: string; message?: string }) => {
+          if (msg?.type === BOOT_ERROR) {
+            bootErrors.push(String(msg.message));
+            return;
+          }
           clearTimeout(timer);
-          resolve(msg as { type?: string; id?: string });
+          resolve(msg);
         });
       });
       panel.webview.html = bridgeHtml(panel.webview, ext.extensionUri);
@@ -171,37 +183,36 @@ suite('webview ↔ host bridge', () => {
   });
 });
 
+/** The message type the prelude reports boot errors under. Never a real app message. */
+const BOOT_ERROR = '__bridgeTest.bootError';
+
 /**
- * The panel shell, matching `renderWebviewHtml`'s contract for the `webview` bundle:
- * `default-src 'none'`, a nonce'd module script, and the extension's own asset origin
- * for styles and images. Written out here rather than imported because the extension
- * ships as ONE esbuild bundle — the test process cannot reach into it — and because a
- * shell the test builds itself is what makes a CSP regression in the real shell
- * detectable rather than mirrored.
+ * The panel shell — the SAME `renderBundleShell` and CSP the panels ship — plus a
+ * prelude that runs before the bundle and forwards anything that stops it booting:
+ * a script error (parse failure, a module throwing at evaluation), an unhandled
+ * rejection, or a CSP violation (a chunk or worker the policy refuses).
+ *
+ * `acquireVsCodeApi` may be called once per webview, and the bundle calls it as it
+ * boots — so the prelude acquires it only when it has an error to report. If the
+ * bundle got there first, the bridge is up and `ready` has already been posted.
  */
 function bridgeHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-  const nonce = Array.from({ length: 32 }, () => Math.random().toString(36)[2] ?? 'a').join('');
-  const asset = (f: string) => webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'webview', f));
-  const csp = [
-    `default-src 'none'`,
-    `img-src ${webview.cspSource} https: data: blob:`,
-    `style-src ${webview.cspSource} 'unsafe-inline'`,
-    `script-src 'nonce-${nonce}'`,
-    `font-src ${webview.cspSource} data:`,
-    `connect-src https: blob: data:`,
-  ].join('; ');
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="${csp}" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="${asset('index.css')}" />
-<title>bridge</title>
-</head>
-<body>
-<div id="root"></div>
-<script type="module" nonce="${nonce}" src="${asset('index.js')}"></script>
-</body>
-</html>`;
+  const prelude = `(() => {
+  let api;
+  const report = (message) => {
+    try { api = api || acquireVsCodeApi(); } catch { return; }
+    api.postMessage({ type: ${JSON.stringify(BOOT_ERROR)}, message });
+  };
+  window.addEventListener('error', (e) => report('error: ' + (e.error && e.error.stack || e.message) + ' @ ' + e.filename + ':' + e.lineno));
+  window.addEventListener('unhandledrejection', (e) => report('unhandled rejection: ' + (e.reason && e.reason.stack || e.reason)));
+  document.addEventListener('securitypolicyviolation', (e) => report('CSP blocked ' + e.blockedURI + ' (' + e.violatedDirective + ')'));
+})();`;
+  return renderBundleShell({
+    cspSource: webview.cspSource,
+    nonce: makeNonce(),
+    apiOrigin: 'https://api.builderforce.ai',
+    assetUrl: (f) => webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'webview', f)).toString(),
+    title: 'bridge',
+    preludeScript: prelude,
+  });
 }

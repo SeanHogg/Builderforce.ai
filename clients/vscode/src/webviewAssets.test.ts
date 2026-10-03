@@ -55,4 +55,14 @@ describe.skipIf(!built)("the built webview bundle", () => {
   it("ships the entry script the shell names", () => {
     expect(files).toContain("index.js");
   });
+
+  // A worker is an asset; when assets were all named `index.[ext]` the browser
+  // runtime's workers took `index.js`/`index2.js`, the real entry became `index3.js`,
+  // and the shell booted a worker as the app — a blank panel, and no error anywhere.
+  it("the file the shell names IS the app entry, not something that took its name", () => {
+    expect(files.filter((file) => /^index\d+\.(js|css)$/.test(file))).toEqual([]);
+    const entry = fs.readFileSync(path.join(mediaDir, "index.js"), "utf8");
+    // The app entry is an ES module that loads its lazy chunks; a worker is a classic script.
+    expect(entry).toContain("./chunk-");
+  });
 });

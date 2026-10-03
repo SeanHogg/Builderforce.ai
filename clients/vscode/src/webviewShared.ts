@@ -1,14 +1,10 @@
 import * as vscode from "vscode";
 import { getBaseUrl } from "./gateway";
+import { makeNonce, renderBundleShell } from "./webviewBundleShell";
 import { handleSharedHostMessage, postToWebview, respondToWebview, type WebviewInbound } from "./webviewHostBridge";
 
-/** A random nonce for the webview CSP (`script-src`/inline `<style>` on the board). */
-export function makeNonce(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let out = "";
-  for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}
+// Re-exported for the board panel, which builds its own (non-bundle) shell.
+export { makeNonce };
 
 /**
  * The shared HTML shell for the bundled-React webview panels (the workspace —
@@ -27,56 +23,20 @@ export function renderWebviewHtml(
   ctx: vscode.ExtensionContext,
   opts: { title: string },
 ): string {
-  const nonce = makeNonce();
-  const asset = (f: string) =>
-    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", "webview", f));
-  // The React app fetches the gateway/API directly; allow that origin in connect-src.
+  // The gateway/API origin the app fetches directly; allowed in connect-src.
   let apiOrigin = "https://api.builderforce.ai";
   try {
     apiOrigin = new URL(getBaseUrl()).origin;
   } catch {
     /* keep default */
   }
-  // A nonce authorises the ENTRY script only — it does not extend to modules that
-  // script imports. The bundle is code-split (the board's own dependencies, the
-  // Evermind engines, the voice studio and mermaid load on demand), so its chunks
-  // must be allowed by origin or every lazy feature dies at the import.
-  const scriptSrc = `'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'`;
-  const csp = [
-    `default-src 'none'`,
-    `img-src ${webview.cspSource} https: data: blob:`,
-    `style-src ${webview.cspSource} 'unsafe-inline'`,
-    `script-src ${scriptSrc}`,
-    `font-src ${webview.cspSource} data:`,
-    `connect-src ${apiOrigin} https: blob: data:`,
-    // The canvas renders generated artefacts: website/mockup previews in frames,
-    // audio + video deliverables, and WebGPU/WASM training in a worker. Always
-    // granted now that every panel can be the board.
-    //
-    // `https:` carries the canvas Web page panel, which frames an arbitrary address
-    // the user typed or dropped; the allowlist alternative cannot express "any
-    // page". Frames are sandboxed and cross-origin. The loopback origins are what
-    // make a `service` object — the dev server running in this very editor —
-    // previewable, which the deployed web app cannot do at all (a https page may
-    // not frame http).
-    `frame-src ${webview.cspSource} https: http://localhost:* http://127.0.0.1:* blob: data:`,
-    `media-src ${webview.cspSource} https: blob: data:`,
-    `worker-src ${webview.cspSource} blob:`,
-  ].join("; ");
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="${csp}" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="${asset("index.css")}" />
-<title>${opts.title}</title>
-</head>
-<body>
-<div id="root"></div>
-<script type="module" nonce="${nonce}" src="${asset("index.js")}"></script>
-</body>
-</html>`;
+  return renderBundleShell({
+    cspSource: webview.cspSource,
+    nonce: makeNonce(),
+    apiOrigin,
+    assetUrl: (f) => webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", "webview", f)).toString(),
+    title: opts.title,
+  });
 }
 
 // The inbound envelope is declared once, beside the bridge that consumes it.

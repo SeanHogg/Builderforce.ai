@@ -115,6 +115,27 @@ function dropWasmAssets(): Plugin {
   };
 }
 
+/**
+ * The shell loads `index.js` and `index.css` by name (`renderBundleShell`). Rollup
+ * de-duplicates a colliding name by COUNTING, silently — so when anything else
+ * claims `index.js` the entry lands at `index2.js`/`index3.js` and the panel boots
+ * whatever took the name, with no error anywhere. Fail the build instead.
+ */
+function entryKeepsShellNames(): Plugin {
+  return {
+    name: 'bf-entry-keeps-shell-names',
+    generateBundle(_options, bundle) {
+      const entries = Object.values(bundle).filter((file) => file.type === 'chunk' && file.isEntry);
+      const names = entries.map((file) => file.fileName);
+      if (names.length !== 1 || names[0] !== 'index.js') {
+        this.error(`the webview entry must be emitted as index.js (the name the shell loads), got: ${names.join(', ') || 'none'}`);
+      }
+      const stray = Object.keys(bundle).filter((fileName) => /^index\d+\.(js|css)$/.test(fileName));
+      if (stray.length) this.error(`another file collided with the shell's names and was renamed: ${stray.join(', ')}`);
+    },
+  };
+}
+
 export default defineConfig({
   // BUILD IDENTITY for the WEBVIEW HALF, stamped independently of the extension
   // host's. Both halves ship inside one `.vsix`, so in a released install they are
@@ -134,7 +155,7 @@ export default defineConfig({
     'process.env.NEXT_PUBLIC_WORKER_URL': JSON.stringify(''),
     'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify('https://builderforce.ai'),
   },
-  plugins: [react(), canvasMessages(), dropWasmAssets()],
+  plugins: [react(), canvasMessages(), dropWasmAssets(), entryKeepsShellNames()],
   root: HERE,
   base: './',
   resolve: {
@@ -207,7 +228,14 @@ export default defineConfig({
         // inlining them would multiply the panel's start-up cost.
         entryFileNames: 'index.js',
         chunkFileNames: 'chunk-[name].js',
-        assetFileNames: 'index.[ext]',
+        // Only the ONE stylesheet takes the shell's name. Every other asset keeps its
+        // own: a worker (`new Worker(new URL('./worker.js', import.meta.url))`) is an
+        // ASSET, and under the old blanket `index.[ext]` the browser runtime's two
+        // workers took `index.js` and `index2.js` and the real entry was pushed to
+        // `index3.js` — the shell then booted a worker as the app. Assets are reached
+        // through rewritten URLs, so their names only need to be distinct.
+        assetFileNames: (asset) =>
+          (asset.names ?? []).some((name) => name.endsWith('.css')) ? 'index.css' : 'asset-[name][extname]',
       },
     },
   },
