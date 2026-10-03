@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Research tools for a LOGGED-OUT Creation Canvas turn.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Read this to me" — one control, wherever there are words.
  *

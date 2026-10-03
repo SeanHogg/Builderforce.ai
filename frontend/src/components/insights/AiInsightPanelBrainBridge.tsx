@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Registers the `show_ai_insight` Brain tool: lets the Brain open any AI insight
  * in the global slide-out side panel (over /brainstorm or the floating drawer).

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Capability picker — "what are we making?" for a Brain chat.
  *

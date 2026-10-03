@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Board-config slide-out, opened from the Task-Mgmt cog — the SHELL only.
  *

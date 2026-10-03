@@ -1,5 +1,3 @@
-'use client';
-
 import { roiApi, type RoiRollup } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';

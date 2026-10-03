@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A card whose whole surface opens something AND which hosts its own action buttons.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { DEADLINE_TONE, type DeadlineStatus } from '@/lib/schedule';
 import { statusColor } from '@/lib/statusTone';

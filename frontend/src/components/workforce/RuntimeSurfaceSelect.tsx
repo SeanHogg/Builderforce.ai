@@ -1,5 +1,3 @@
-'use client';
-
 import { useId } from 'react';
 import { useTranslations } from 'next-intl';
 

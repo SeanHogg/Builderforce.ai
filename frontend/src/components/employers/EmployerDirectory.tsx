@@ -1,5 +1,3 @@
-'use client';
-
 // Required directive — see the note in `RatingStars`.
 
 import { useCallback, useEffect, useState } from 'react';

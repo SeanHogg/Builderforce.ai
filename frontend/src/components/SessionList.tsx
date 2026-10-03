@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The left panel's SESSIONS (PRD 21 §3.2).
  *

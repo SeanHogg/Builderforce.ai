@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Catalog surfaces (Skills, Personas, Prompts, Models) decomposed into pinnable
  * widgets — the rollout of the "insights everywhere" standard onto the catalog

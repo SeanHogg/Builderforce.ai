@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * GuestBrainPanel — the Brain/Ideas chat for LOGGED-OUT visitors.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * WHO the money is spent on — the targeting spec, as a form.
  *

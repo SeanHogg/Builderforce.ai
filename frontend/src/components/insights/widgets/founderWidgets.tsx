@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * FOUNDER WIDGETS (PRD 25 A4) — the three tiles every vertical dashboard opens with.
  *

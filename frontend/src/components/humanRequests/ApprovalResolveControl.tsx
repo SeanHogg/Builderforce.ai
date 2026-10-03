@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { approvalsApi, type Approval, type ResolvedApproval } from '@/lib/builderforceApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';

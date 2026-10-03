@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The INSIGHTS lens over a posting's AI proposal evaluations.
  *

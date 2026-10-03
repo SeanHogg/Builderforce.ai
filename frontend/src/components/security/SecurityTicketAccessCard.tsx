@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * SecurityTicketAccessCard — the setup configuration for WHO can see the
  * access-restricted SECURITY tickets the Security agent files. Owner/Manager only.

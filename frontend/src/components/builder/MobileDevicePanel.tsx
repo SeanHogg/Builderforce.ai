@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Preview on your phone" — the Mobile modality's hand-off to a real handset.
  *

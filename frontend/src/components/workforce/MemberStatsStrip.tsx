@@ -1,5 +1,3 @@
-'use client';
-
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MemberScorecard, MemberEngagement } from '@/lib/builderforceApi';

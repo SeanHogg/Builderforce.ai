@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Observability / knowledge surfaces (Alerts, Logs, Quality, Integrations,
  * Content Manager) decomposed into individually-pinnable widgets — the "insights

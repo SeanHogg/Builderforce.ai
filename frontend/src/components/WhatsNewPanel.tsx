@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Product Updates — the platform changelog, opened by clicking the version number
  * in the footer (and auto-opened by `?whatsnew=1`, the deep link the weekly

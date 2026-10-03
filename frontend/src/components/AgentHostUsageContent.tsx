@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { usageApi, type UsageSnapshot } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";

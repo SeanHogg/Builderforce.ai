@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The Analytics tab: the reporting a visitor sees first.
  *

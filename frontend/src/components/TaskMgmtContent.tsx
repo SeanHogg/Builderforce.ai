@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { ModalOverlay } from '@/components/ui/ModalOverlay';
 import type { Formatter } from '@/i18n/format';

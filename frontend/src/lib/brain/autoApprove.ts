@@ -1,5 +1,3 @@
-'use client';
-
 import {
   localStorageConfirmationPersistence,
   type ToolConfirmationPersistence,

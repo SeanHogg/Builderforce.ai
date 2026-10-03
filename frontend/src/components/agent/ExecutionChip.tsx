@@ -1,5 +1,3 @@
-'use client';
-
 import { RoleGate } from '@/components/RoleGate';
 import { EXECUTION_STATUS_TONE, rerunAffordance, type RerunAffordance } from '../board/AgentChip';
 import { statusColor } from '@/lib/statusTone';

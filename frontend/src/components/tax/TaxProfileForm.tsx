@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A payee's own W-9/W-8 form — self-service, own state, own fetch.
  *

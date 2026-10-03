@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * AI-Impact lens, decomposed into individually-pinnable widgets.
  *

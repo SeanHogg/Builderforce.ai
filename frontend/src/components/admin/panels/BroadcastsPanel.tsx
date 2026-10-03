@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Platform broadcasts — messages to visitors who have no workspace.
  *

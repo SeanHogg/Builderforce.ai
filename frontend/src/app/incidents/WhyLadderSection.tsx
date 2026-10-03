@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * WhyLadderSection — laddered 5-Why capture for an incident's RCA.
  *

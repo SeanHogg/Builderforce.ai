@@ -1,5 +1,3 @@
-'use client';
-
 // Required directive — see the note in `SourcedJobsList`. These cards mount from
 // canvas surfaces and embedded apps, not only from the hiring console.
 

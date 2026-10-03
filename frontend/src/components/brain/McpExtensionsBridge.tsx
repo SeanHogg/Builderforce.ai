@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Mounts the gateway's MCP tool catalog into the Brain's client tool loop —
  * BOTH the tenant's external MCP servers AND the first-party `builtin` platform

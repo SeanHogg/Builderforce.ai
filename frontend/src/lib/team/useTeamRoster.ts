@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { getTeamRoster, type TeamRosterMember } from '@/lib/kernel/kernelApi';
 import { useAuth } from '@/lib/AuthContext';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * DevEx survey visuals — pure SVG / CSS chart primitives for the DevEx results
  * lens (no charting dependency, matching the BurnChart pattern). Each component

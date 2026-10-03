@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Registers `list_destinations` and `show_panel` — the Brain's door onto the
  * SAME destination registry the command palette and the sidebar read.

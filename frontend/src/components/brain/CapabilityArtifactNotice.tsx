@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "This reply didn't produce the artifact" — the honest answer to a stub.
  *

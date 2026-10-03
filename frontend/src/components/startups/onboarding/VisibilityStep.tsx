@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Step 3 — be found. Whether the company is raising, what it is looking for, the
  * goal, who investors should reach, and whether the card takes inquiries. The

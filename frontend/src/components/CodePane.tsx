@@ -1,5 +1,3 @@
-'use client';
-
 import type * as Y from 'yjs';
 import { EditorTabs } from './EditorTabs';
 import { CodeEditor } from './CodeEditor';

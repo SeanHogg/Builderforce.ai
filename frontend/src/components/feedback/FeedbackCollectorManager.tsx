@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Feedback collector setup — the project's embeddable snippet.
  *

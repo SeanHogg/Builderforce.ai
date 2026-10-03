@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Shared primitives for the Platform Admin panels.
  *

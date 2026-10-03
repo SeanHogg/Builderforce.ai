@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import { PanelCloseButton } from '@/components/PanelCloseButton';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Workspace panel: the AI Manager's autonomy DEFAULTS (migration 0363).
  *

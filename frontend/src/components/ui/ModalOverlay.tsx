@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE centered overlay every modal in the app stands in.
  *

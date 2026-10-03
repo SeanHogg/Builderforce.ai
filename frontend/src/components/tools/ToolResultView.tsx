@@ -1,5 +1,3 @@
-'use client';
-
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ToolResult, ToolMetric } from '@/lib/tools';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The global Brain: a floating icon (bottom-right) that opens a docked
  * slide-out drawer hosting the shared <BrainPanel>. Mounted once, app-wide, by

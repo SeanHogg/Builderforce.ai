@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * RoleAssigneePicker — the shared "assign an existing teammate to a role" control,
  * used by BOTH the project Recommended Roster card and the Workforce → Roles tab.

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The project drawer — a CONTAINER, and nothing else.
  *

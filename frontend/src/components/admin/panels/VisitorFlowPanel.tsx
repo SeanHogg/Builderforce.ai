@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Visitor flow — the anonymous funnel as a graph, with its conversion gaps.
  *

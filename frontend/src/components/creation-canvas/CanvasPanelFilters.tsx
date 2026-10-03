@@ -1,5 +1,3 @@
-'use client';
-
 import styles from './CreationCanvas.module.css';
 
 /**

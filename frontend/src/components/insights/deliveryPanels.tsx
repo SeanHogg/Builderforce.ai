@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Single source of truth for the consolidated DELIVERY hub's drill-down panels.
  *

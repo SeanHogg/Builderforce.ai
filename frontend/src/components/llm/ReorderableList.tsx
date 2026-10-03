@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useDragReorder } from '@/lib/useDragReorder';
 import { buttonDanger, buttonPrimary } from './providerKeysStyles';

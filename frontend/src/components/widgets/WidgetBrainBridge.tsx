@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Registers the widget Brain tools: `list_widgets`, `pin_widget`, `unpin_widget`,
  * `show_widget` and `answer_with_widgets`. Lets the Brain manage the user's

@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';

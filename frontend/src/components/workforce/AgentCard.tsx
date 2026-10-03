@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { SessionGate } from '@/components/guest/SessionGate';
 import { useTranslations } from 'next-intl';

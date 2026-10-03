@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { agentHosts, type AgentHost } from '@/lib/builderforceApi';

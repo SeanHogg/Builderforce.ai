@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "What do you want done?" — the Work-mode starting points.
  *

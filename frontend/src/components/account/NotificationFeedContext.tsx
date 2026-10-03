@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The alert feed's STATE — mounted once in the shell.
  *

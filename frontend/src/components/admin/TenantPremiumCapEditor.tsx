@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { TenantIntegerOverrideEditor } from './TenantIntegerOverrideEditor';

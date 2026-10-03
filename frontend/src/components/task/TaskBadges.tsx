@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';

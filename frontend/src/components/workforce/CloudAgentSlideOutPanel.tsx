@@ -1,5 +1,3 @@
-'use client';
-
 import { Select } from '@/components/Select';
 import { Icon } from '@/components/ui/Icon';
 

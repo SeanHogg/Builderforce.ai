@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * SlideOutPanel — the canonical overlay for the app.
  *

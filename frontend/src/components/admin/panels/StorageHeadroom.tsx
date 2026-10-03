@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * StorageHeadroom — how full one Neon endpoint is against its plan ceiling.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE drawing of a poll's answers, for every surface that shows them.
  *

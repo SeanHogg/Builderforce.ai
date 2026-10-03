@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { MigrationWizard } from '@/components/integrations/MigrationWizard';
 import { boardConnectionsApi, integrationsApi, type BoardProviderMeta, type IntegrationCredential } from '@/lib/builderforceApi';

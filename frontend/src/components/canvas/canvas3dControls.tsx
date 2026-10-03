@@ -1,5 +1,3 @@
-'use client';
-
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Canvas3DDepthMode } from '@/lib/canvas/canvas3d';
 

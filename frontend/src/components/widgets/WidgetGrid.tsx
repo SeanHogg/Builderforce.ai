@@ -1,5 +1,3 @@
-'use client';
-
 import type { CSSProperties } from 'react';
 import { getComponent } from '@/components/widgets/registry';
 import type { ComponentSize } from '@/lib/components/types';

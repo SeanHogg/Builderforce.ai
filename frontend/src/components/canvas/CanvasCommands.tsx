@@ -1,5 +1,3 @@
-'use client';
-
 import { ControlButton, Controls, MiniMap, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
 import { useCallback, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react';

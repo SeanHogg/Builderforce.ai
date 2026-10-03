@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';

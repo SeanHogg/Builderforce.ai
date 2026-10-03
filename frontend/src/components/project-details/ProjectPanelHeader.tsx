@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The drawer's header: what project this is, and the two ways out of it.
  *

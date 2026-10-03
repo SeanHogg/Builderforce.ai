@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Guest (logged-out) wiring for the embeddable brain core.
  *

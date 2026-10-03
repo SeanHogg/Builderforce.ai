@@ -1,5 +1,3 @@
-'use client';
-
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import type { Components } from 'react-markdown';

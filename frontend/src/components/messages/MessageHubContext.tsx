@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The message hub's STATE — mounted once in the shell, so it floats.
  *

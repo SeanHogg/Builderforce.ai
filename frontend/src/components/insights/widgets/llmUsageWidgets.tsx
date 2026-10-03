@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * LLM Usage lens, decomposed into individually-pinnable widgets.
  *

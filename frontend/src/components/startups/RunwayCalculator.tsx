@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The runway calculator — cash on hand, monthly spend, monthly revenue, and the
  * verdict beside them as you type.

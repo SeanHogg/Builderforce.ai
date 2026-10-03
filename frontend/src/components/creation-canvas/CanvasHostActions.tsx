@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import {

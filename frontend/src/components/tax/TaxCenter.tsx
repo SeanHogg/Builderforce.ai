@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The tax surface embedded in `/billing/tax` — two audiences, one screen.
  *

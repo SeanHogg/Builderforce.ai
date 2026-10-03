@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Provider webhook setup — import requests a team already gathers in Sentry or
  * PostHog instead of asking them to re-instrument their product with our snippet.

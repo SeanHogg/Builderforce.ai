@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations, useFormatter } from 'next-intl';

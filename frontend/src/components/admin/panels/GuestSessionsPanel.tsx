@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Adoption sessions — the anonymous funnel, with what people actually asked for.
  *

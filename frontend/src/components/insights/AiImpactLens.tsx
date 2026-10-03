@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { DaysWindowSelect } from './LensShell';
 import { WidgetGrid } from '@/components/widgets/WidgetGrid';

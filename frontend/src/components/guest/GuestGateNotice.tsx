@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The visible half of "this needs an account" — extracted from `SessionGate` so
  * `RoleGate` can show the SAME notice instead of inventing its own.

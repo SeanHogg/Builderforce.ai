@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { runtimeApi, type ActiveRun } from '@/lib/builderforceApi';

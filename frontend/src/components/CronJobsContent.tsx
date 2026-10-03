@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect, useCallback } from 'react';
 import { cronApi, type CronJob } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";

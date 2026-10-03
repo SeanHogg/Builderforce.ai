@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { agentHostNodesApi, type AgentHostNode } from '@/lib/builderforceApi';
 import { useTranslations } from 'next-intl';

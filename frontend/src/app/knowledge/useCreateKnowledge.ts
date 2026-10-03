@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { knowledgeApi, type CreateDocInput } from '@/lib/knowledgeApi';

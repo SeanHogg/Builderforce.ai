@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * FeedbackTriage — the ONE queue component behind both triage surfaces: the
  * tenant/project queue (Quality ▸ Feedback) and the superadmin cross-tenant

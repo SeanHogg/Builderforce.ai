@@ -1,5 +1,3 @@
-'use client';
-
 import { Button, Icon } from '@/components/ui';
 import { useSessionManagement, type SessionManagementPorts } from './useSessionManagement';
 import styles from './SessionActionBar.module.css';

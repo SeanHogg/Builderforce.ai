@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Extended member / EMP metrics decomposed into individually-pinnable widgets —
  * the "insights everywhere" rollout for the EMP lenses (over-allocation,

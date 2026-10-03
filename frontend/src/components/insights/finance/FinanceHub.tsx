@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Consolidated Finance hub — the single entry point at /insights/finance that
  * replaces the three separate routes (FinOps spend, Investment Allocation and

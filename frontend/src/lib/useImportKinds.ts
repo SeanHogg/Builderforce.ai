@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { listImportKinds, type ImportKind } from './importApi';
 import { recordKindsFrom, type RecordKindInfo } from './import-input-schema';

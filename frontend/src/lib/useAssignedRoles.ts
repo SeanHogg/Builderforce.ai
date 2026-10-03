@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * useAssignedRoles — resolve the workspace-default job-roles a given workforce
  * member (agent / hire / human) is pinned to, for READ-ONLY display in a detail

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * One anonymous visitor's journey, visit by visit — the evidence behind a number
  * in the flow graph.

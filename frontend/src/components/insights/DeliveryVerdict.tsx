@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { usePermission } from '@/lib/rbac';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The reader's own panel-width choice — extracted out of SlideOutPanel so the
  * two hand-rolled drawers (AgentHostSlideOutPanel, CloudAgentSlideOutPanel)

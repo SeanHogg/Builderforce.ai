@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * BenchmarkPanel — benchmarking for the LLM Studio.
  *

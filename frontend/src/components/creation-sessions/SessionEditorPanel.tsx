@@ -1,5 +1,3 @@
-'use client';
-
 import type { FormEvent, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';

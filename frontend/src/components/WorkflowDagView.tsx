@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * WorkflowDagView — SVG-based visual dependency graph for a workflow (P4-1).
  *

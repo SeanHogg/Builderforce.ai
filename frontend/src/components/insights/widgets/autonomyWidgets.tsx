@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Autonomy-Health lens, decomposed into individually-PINNABLE widgets.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo } from 'react';
 
 import { type Formatter, EMPTY_VALUE } from '@/i18n/format';

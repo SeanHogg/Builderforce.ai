@@ -1,5 +1,3 @@
-'use client';
-
 import type { CSSProperties } from 'react';
 import type { Task } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';

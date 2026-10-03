@@ -1,5 +1,3 @@
-'use client';
-
 import { getFileName } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
 

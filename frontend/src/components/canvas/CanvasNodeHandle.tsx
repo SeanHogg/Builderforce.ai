@@ -1,5 +1,3 @@
-'use client';
-
 import { Handle, useNodeId, type HandleProps } from '@xyflow/react';
 
 /**

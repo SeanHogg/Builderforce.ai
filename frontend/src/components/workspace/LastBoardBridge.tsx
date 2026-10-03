@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "After sign-in a person lands on the board they last worked on and never
  * leaves it." (PRD 21 §0)

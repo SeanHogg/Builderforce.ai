@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Show me the product updates" — one panel, many triggers.
  *

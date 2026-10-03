@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * GitHub Actions deploy — the CI half of the Publish tab.
  *

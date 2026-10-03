@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The listing wizard — three steps over one company, saved as it goes.
  *

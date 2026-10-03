@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useFormat } from '@/i18n/useFormat';
 import type { Formatter } from '@/i18n/format';

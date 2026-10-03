@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Workforce surfaces (Agents, Teams, Performance) decomposed into individually-
  * pinnable widgets — the "insights everywhere" rollout for the workforce pages

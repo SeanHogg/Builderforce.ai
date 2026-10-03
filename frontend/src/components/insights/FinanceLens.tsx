@@ -1,5 +1,3 @@
-'use client';
-
 import { useProjects } from '@/lib/ProjectScopeContext';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';

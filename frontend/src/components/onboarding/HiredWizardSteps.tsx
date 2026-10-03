@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Step bodies for the HIRED (for-hire / freelancer) onboarding track.
  *

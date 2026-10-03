@@ -1,5 +1,3 @@
-'use client';
-
 import { useOptionalAuth } from './AuthContext';
 import type { AuthUser } from './types';
 

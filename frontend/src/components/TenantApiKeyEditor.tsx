@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { useErrorMessage } from '@/i18n/useErrorMessage';

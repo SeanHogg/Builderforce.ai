@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A PLATFORM COMPONENT, MOUNTED ON THE BOARD — the canvas adapter.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * SuspectAccountsPanel — the review the signup OTP gate could not do backwards.
  *

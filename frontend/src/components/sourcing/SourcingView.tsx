@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { SourcedJobsList } from './SourcedJobsList';
 import { JobSourcesPanel } from './JobSourcesPanel';

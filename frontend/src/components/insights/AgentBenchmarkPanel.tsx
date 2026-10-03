@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Agent quality against a FIXED task set, over time.
  *

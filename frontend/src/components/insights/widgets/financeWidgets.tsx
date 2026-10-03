@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Finance/FinOps lens + the AI-Effectiveness "Engineering" lens, decomposed into
  * individually-pinnable widgets.

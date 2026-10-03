@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * CONNECT the ad accounts — the first of the three jobs the paid-media panel does.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Step 1 of the beta flow: the strip across the top of the app offering the one
  * beta this person has not answered yet — join, or close it.

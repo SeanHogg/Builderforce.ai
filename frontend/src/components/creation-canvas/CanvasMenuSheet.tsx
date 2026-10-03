@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';

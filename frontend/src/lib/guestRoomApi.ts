@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Shared guest ROOMS — the free, logged-out session a visitor can invite other
  * people into.

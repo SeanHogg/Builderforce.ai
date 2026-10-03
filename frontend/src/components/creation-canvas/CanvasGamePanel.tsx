@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Play it somewhere real" — the panel behind a game object's Ship button.
  *

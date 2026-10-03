@@ -1,5 +1,3 @@
-'use client';
-
 // The directive is REQUIRED here, not incidental to `PhoneConsole`. These cards
 // are mounted from canvas surfaces and embedded apps as well as from the console,
 // and several of those hosts are server components — a card that relies on an

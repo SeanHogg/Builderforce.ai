@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE sales report, rendered once.
  *

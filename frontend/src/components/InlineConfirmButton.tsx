@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useId, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './InlineConfirmButton.module.css';

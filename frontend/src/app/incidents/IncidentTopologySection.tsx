@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * IncidentTopologySection — the derived RCA topology beside the hand-written analysis.
  *

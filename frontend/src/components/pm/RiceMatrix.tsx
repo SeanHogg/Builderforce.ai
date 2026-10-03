@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo } from 'react';
 import { scaleLinear } from 'd3-scale';
 import { segmentTrackerClient, type TrackerRow } from '@/lib/builderforceApi';

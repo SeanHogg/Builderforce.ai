@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The campaign draft form, in a SlideOutPanel rather than inline: a campaign has
  * a transport, a template, a subject and a body, and cramming that into a column

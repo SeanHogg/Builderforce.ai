@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * What a lane DOES when a card lands in it — run a workflow, or nothing.
  *

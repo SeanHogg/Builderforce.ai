@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A user's OWN account security: the sessions signed in to their account across
  * devices, plus a read-only log of any platform-admin access to their account.

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Global controller for the Finance hub's drill-down slide-out — the consolidated
  * /insights/finance hub drills its tiles into it, and the Brain opens the same panels

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * PsychometricEditor — the Pro persona-personality editor.
  *

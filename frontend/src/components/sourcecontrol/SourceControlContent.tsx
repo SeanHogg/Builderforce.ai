@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';

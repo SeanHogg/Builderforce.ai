@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Attachments on a posting or a proposal.
  *

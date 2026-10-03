@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * One listed startup, as a marketplace card.
  *

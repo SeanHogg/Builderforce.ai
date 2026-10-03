@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Owner panel: per-seat AI spend limits (Teams). The account owner sets a team-wide
  * DEFAULT monthly cap and can override it per seat, and sees each seat's

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Registers the Brain's CLIENT-ONLY actions (browser navigation + local UI
  * panels) into the client tool loop. Rendered (null UI) inside the Brain

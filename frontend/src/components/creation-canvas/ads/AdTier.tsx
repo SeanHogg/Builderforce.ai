@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE ADS INSIDE ONE AD SET — the creative a person actually sees.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { AUTH_API_URL, getStoredWebToken } from '@/lib/auth';

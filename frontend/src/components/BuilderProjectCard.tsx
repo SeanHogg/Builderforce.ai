@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useModalityCopy } from '@/lib/useModalityCopy';
 import type { IdeProject } from '@/lib/types';

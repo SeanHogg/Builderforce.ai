@@ -1,5 +1,3 @@
-'use client';
-
 import { useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import { getActiveCanvasSync, subscribeActiveCanvasSync } from '@/lib/activeCanvasSyncStatus';

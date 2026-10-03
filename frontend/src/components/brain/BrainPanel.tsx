@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The one Brain UI. Used by BOTH the full-page Brain Storm route
  * (`variant="page"`) and the global docked drawer (`variant="docked"`). All

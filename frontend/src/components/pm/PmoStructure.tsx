@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useRef, useState } from 'react';
 import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';

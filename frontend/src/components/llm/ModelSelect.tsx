@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { useLlmModels } from '@/lib/useLlmModels';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Step 2 — your startup's numbers. Cash on hand, monthly spend, team cost and
  * monthly revenue, with the runway computed as you type by the ONE calculator.

@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { FieldFrame, TextField } from '@/components/ui';
 import { fieldLabelKey, type FieldDirective } from '@/lib/import-input-schema';

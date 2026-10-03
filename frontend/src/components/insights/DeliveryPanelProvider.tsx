@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Global controller for the Delivery hub's drill-down slide-out — the consolidated
  * /insights/delivery dashboard drills into it, and the Brain opens the same panels via

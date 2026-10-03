@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Reusable subject and body. "Use" hands the pick to the Campaigns tab via
  * `?template=` rather than holding composer state here — the compose flow needs

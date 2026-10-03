@@ -14,6 +14,7 @@ export default [
   ...EDIT_RATCHETS,
   ['check:api-transport', 'check-api-transport.mjs'],
   ['check:architecture', 'check-frontend-architecture.mjs'],
+  ['check:use-client-boundaries', 'check-redundant-use-client.mjs'],
   ['check:destinations', 'check-destinations.mjs'],
   ['check:container-queries', 'check-container-queries.mjs'],
   ['check:edge-runtime', 'check-edge-runtime.mjs'],

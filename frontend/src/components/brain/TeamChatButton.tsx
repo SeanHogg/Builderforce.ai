@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * TeamChatButton — the single, shared entry point into a Team Chat (migration 0294).
  *

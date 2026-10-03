@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { fetchProject, updateProject } from '@/lib/api';
 import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';

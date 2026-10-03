@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The two doors under the directory — BurnRateOS's "Ready to connect?" band:
  * browse as an investor, or list your own startup.

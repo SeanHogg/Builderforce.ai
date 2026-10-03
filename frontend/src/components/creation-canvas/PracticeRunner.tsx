@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The study loop, once: ask, answer, find out, come back to it.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Reusable DevFinOps lens — R&D Tax Credit, SOC 1 controls, and the audit-ready
  * report — as a chrome-free component (no PageContainer / page header), so it can

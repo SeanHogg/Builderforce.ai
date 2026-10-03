@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A destination, opened OVER the board that stays mounted (PRD 21 §0, §3.4).
  *

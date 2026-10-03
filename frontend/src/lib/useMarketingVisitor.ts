@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { getStoredUser } from './auth';
 import { getMarketingSession, convertVisitor, type MarketingSessionView } from './marketingApi';

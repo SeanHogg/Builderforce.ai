@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * VoiceOutput — the Voice modality's CENTER pane: the generated speech is the
  * output, mirroring how Preview is the output for Designer. Shows the player plus

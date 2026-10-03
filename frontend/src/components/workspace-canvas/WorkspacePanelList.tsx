@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import type { WorkspaceCanvasPanel } from './WorkspaceCanvas';

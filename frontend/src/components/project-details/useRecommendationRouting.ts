@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Take me to the fix" — the routing behind an inspection recommendation.
  *

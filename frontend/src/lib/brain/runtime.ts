@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Host wiring for the embeddable brain core (@seanhogg/builderforce-brain-embedded).
  *

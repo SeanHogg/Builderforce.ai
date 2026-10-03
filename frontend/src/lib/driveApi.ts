@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Connected file storage — the client for `/api/drive`.
  *

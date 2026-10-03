@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The year-end 1099 report — manager+, own state, own fetch.
  *

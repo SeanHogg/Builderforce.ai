@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CalendarEvent, UndatedEntry } from '@builderforce/creation-canvas-contract';

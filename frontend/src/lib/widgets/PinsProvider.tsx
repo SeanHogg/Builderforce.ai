@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * App-wide pin state. Mounted once near the app root so ANY surface can show a
  * pin control on a widget and have it reflect/update the user's personal home

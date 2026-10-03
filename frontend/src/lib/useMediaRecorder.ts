@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveBinaryFile } from './api';
 import { recordedClipExtension, useStreamRecorder } from './useStreamRecorder';

@@ -1,5 +1,3 @@
-'use client';
-
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Sidebar from './Sidebar';

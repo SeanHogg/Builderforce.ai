@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Platform Admin › Usage tab.
  *

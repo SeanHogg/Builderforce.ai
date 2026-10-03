@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Where this workspace sends its agent telemetry.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * useLensPersona — the client hook that resolves the signed-in user's primary
  * lens persona and exposes the view-shaping helpers (which lenses to highlight /

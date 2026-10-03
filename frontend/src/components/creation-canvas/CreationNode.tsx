@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { NodeResizer, Position, useStore, type NodeProps } from '@xyflow/react';
 import { CanvasNodeHandle } from '@/components/canvas/CanvasNodeHandle';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Forecast / anomaly lens, decomposed into individually-pinnable widgets.
  *

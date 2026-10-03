@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE diagnostic runner — one component, two surfaces (PRD 21 §11.4.5).
  *

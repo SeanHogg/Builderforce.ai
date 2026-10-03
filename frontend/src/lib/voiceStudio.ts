@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * useVoiceStudio — the Voice modality's state + actions, lifted out of the old
  * standalone VoiceClonePanel so the IDE chrome can drive it: the Brain writes the

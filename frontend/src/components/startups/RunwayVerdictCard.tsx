@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A runway verdict, rendered — months, net burn, the cash-out date and the
  * health band. The ONE presentation of `RunwayVerdict`, used by the marketing

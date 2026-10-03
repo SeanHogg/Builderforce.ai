@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE control per poll format — what a participant actually touches.
  *

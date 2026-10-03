@@ -1,5 +1,3 @@
-'use client';
-
 import React, { useEffect, useId } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button, Surface } from '@/components/ui';

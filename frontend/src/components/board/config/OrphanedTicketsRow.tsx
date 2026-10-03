@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ORPHANED TICKETS — the tickets sitting in no column at all.
  *

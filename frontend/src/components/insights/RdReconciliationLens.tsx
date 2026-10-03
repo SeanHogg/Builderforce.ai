@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import type { Formatter } from '@/i18n/format';
 import { useTranslations } from 'next-intl';

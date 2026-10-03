@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { usePhone } from '@/lib/usePhone';
 import { useErrorText } from '@/i18n/useErrorMessage';

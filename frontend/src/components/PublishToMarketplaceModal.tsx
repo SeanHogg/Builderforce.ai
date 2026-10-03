@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * PublishToMarketplaceModal — the CORE "publish a work item for hire" dialog,
  * opened from the task drawer. Lets a manager choose how the ticket is offered

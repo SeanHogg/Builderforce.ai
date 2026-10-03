@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * PersonalityUsagePanel — the user-facing surface for personality LEARNING +
  * TRACKING (Gaps 6 & 7). For a given cloud agent it shows:

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The invitations standing on ONE posting — the employer's side of the row.
  *

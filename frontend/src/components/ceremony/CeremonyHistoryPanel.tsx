@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';

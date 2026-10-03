@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The startup directory — the marketplace's `company · business` section.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * What a card must satisfy before it may ENTER a lane.
  *

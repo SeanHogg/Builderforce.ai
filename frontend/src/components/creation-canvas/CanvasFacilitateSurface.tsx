@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE facilitation surface — where a workshop is actually RUN.
  *

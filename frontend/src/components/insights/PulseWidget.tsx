@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { pulseApi, type PulseActive, type PulseSurveySummary, type PulseTrendPoint } from '@/lib/pulseApi';

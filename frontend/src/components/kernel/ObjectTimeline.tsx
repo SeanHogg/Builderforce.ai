@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE timeline component, instead of a per-subsystem feed (PRD 20 §7.1).
  *

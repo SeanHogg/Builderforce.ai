@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The alert feed, as a panel.
  *

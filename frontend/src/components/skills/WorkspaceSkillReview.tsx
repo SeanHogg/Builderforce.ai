@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The review queue for skills this workspace's agents proposed.
  *

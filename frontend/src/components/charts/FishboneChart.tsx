@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Reusable Ishikawa "fishbone" / 5-Why cause-and-effect diagram — the visual answer
  * to "why did this occur?". The effect (the problem being analysed) sits in the fish

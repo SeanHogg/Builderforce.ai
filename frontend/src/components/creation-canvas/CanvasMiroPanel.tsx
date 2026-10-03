@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Your Miro boards, browsable on the canvas — the migration path off the whiteboard.
  *

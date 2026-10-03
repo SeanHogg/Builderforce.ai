@@ -1,5 +1,3 @@
-'use client';
-
 import { Surface } from '@/components/ui';
 import { useFormat } from '@/i18n/useFormat';
 

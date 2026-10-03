@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { WorkforceMetricsContent } from './WorkforceMetricsContent';
 import { EmpMetricsView } from './EmpMetricsView';

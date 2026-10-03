@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 
 import { hasGithubRepo, useGithubActionsReadiness } from '@/lib/useGithubActionsReadiness';

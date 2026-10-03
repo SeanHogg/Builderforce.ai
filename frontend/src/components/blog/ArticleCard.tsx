@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import type { BlogPost } from '@/lib/blogData';

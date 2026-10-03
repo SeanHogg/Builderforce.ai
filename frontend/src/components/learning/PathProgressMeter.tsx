@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { PathProgress } from '@/lib/learningApi';
 import styles from './learning.module.css';

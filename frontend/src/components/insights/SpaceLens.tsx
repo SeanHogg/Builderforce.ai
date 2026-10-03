@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { recommendationsApi, type SpaceMetrics, type SpaceDimension } from '@/lib/recommendationsApi';

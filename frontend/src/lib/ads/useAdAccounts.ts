@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { adsApi, type AdAccount, type AdNetworkOption } from '@/lib/adsApi';
 import {

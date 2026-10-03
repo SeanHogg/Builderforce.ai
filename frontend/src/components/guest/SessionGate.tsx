@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Gate an ACTION on having an account — the third member of a family, written to
  * the contract the other two already set.

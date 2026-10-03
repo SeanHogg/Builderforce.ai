@@ -1,5 +1,3 @@
-'use client';
-
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';

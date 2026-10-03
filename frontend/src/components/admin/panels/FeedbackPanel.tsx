@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Superadmin feedback inbox — every tenant's external requests in one queue.
  *

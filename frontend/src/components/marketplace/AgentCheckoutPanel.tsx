@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * AgentCheckoutPanel — buy a priced marketplace agent, then hire it.
  *

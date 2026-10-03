@@ -1,5 +1,3 @@
-'use client';
-
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { MeetingMinutesPanel } from './MeetingMinutesPanel';
 

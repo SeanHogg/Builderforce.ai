@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The client's shortlist — people this workspace saved, before anyone was hired.
  *

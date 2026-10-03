@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * PersonalitySummary — a compact, READ-ONLY view of an agent's/persona's
  * psychometric profile. Where {@link PsychometricEditor} is the Pro editing

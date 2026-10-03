@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { PublishedAgent } from '@/lib/types';

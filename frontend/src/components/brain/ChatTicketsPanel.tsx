@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ChatTicketsPanel (web) — a thin host wrapper around the SHARED
  * `@seanhogg/builderforce-brain-ui` ChatTicketsPanel. All the UI AND the REST

@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect } from 'react';
 import { getStoredTenantToken, getStoredWebToken } from '../auth';
 import { apiSocketUrl } from '../apiSocket';

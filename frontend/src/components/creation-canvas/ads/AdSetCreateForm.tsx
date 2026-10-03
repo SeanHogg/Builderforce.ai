@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * NAME AN AUDIENCE — create one ad set under a campaign.
  *

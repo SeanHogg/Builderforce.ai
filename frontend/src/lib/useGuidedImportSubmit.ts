@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState } from 'react';
 import { importRows, type ImportResult } from './importApi';
 import { toImportRow } from './importHelpers';

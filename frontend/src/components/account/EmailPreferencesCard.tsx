@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Settings surface for the two things that decide what lands in a user's inbox:
  * the LANGUAGE their email is written in, and CONSENT for each kind of

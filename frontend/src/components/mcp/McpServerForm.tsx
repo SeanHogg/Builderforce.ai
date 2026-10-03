@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The register / edit form for one bring-your-own MCP server, rendered inside a
  * SlideOutPanel by the gallery. Presentational + local draft state only: it never

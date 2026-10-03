@@ -1,5 +1,3 @@
-'use client';
-
 import { ChatMessageContent } from './ChatMessageContent';
 
 export interface ChatMessageBubbleProps {

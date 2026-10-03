@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * What you get AFTER "publish" — putting it on your domain, and seeing who came.
  * (Its data — tables, sign-ins, server functions — lives in the IDE's Database view.)

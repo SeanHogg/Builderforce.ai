@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The free runway calculator on the Business Intelligence explainer — BurnRateOS's
  * `/tools/runway` page, folded into the CFO's own story.

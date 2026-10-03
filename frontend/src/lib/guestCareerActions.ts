@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Career tools for a LOGGED-OUT Creation Canvas turn.
  *

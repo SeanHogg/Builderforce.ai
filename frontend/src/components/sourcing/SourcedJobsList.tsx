@@ -1,5 +1,3 @@
-'use client';
-
 // The directive is REQUIRED here, not incidental to whichever page mounts this
 // today. Sourcing cards are built to be dropped onto canvas surfaces and into
 // embedded apps as well as the hiring console, and several of those hosts are

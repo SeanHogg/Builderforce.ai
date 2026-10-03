@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE record surface for all 244 consolidated tables (PRD 20 §7.1).
  *

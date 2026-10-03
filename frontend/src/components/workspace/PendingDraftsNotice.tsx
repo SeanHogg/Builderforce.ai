@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { SessionActionBar } from '@/components/creation-sessions/SessionActionBar';
 import { useEffect, useState } from 'react';

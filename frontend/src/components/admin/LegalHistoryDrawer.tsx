@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type LegalDocVersion } from '@/lib/adminApi';

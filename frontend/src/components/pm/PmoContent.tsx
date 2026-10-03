@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { parsePmoFocus, PMO_FOCUS_PARAM } from '@seanhogg/builderforce-brain-embedded';

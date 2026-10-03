@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useComponentLabel } from '@/components/widgets/useComponentCatalog';
 import { RoleGate } from '@/components/RoleGate';

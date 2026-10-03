@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * FeedbackTab — the app's own feedback collector, dogfooding the embeddable
  * widget the snippet ships to customers.

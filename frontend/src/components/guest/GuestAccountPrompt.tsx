@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The invitation a signed-out visitor sees where content that needs an account
  * would have been.

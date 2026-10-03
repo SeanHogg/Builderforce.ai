@@ -1,5 +1,3 @@
-'use client';
-
 import { Select } from '@/components/Select';
 import type { Formatter } from '@/i18n/format';
 

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Incident Management (`/incidents`) decomposed into individually-pinnable widgets
  * — the "insights everywhere" rollout for the reliability surface, so a human asking

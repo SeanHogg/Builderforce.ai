@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * useRoles — the ONE roles-CRUD hook shared by every surface that lists, creates,
  * or deletes workspace job-roles (the Workforce → Roles tab {@link RolesView} and

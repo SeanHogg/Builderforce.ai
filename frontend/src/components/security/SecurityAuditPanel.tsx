@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * SecurityAuditPanel — the Security agent's SOC 2 audit results. Owner/Manager only.
  * Lists audit runs (status, findings, severity/criterion rollups, summary), lets an

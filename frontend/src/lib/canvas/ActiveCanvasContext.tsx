@@ -1,5 +1,3 @@
-'use client';
-
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { rendersAppShell } from '@/lib/shellRouting';
 import type { AssessmentMode } from '@/lib/academic/assessment';

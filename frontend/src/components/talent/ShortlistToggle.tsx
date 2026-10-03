@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Shortlist this person" on a profile.
  *

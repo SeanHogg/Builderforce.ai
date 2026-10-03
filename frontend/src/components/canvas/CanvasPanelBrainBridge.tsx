@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Registers the `show_canvas` Brain tool: the model lays a set of ideas out as notes and
  * OPENS THEM ON THE CANVAS.

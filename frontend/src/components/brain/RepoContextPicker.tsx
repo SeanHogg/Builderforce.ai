@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Repo file picker for the Brain composer's "Add context" affordance. When the
  * active chat is in a repo-backed context, the user can pick a file and attach

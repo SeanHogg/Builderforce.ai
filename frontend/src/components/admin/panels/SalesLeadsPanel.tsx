@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * SalesLeadsPanel (migration 0360) — the book-a-demo pipeline. Lists sales_leads
  * newest-first (filterable by status) and lets a superadmin advance each lead's

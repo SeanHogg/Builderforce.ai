@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * TalentView — the Workforce → Talent tab: employer-side management of hired
  * freelancers (engagements, job postings, timecard approvals, invoices). Relocated

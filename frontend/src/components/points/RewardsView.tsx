@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { PointsBalanceCard } from './PointsBalanceCard';
 import { BadgeGrid } from './BadgeGrid';

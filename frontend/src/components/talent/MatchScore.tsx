@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * How a recommendation explains itself.
  *

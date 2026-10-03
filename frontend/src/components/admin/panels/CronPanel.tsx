@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * CronPanel — the operator control for the platform's scheduled work.
  *

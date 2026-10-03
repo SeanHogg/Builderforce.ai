@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * usePersonalityBlock — the single seam that threads the signed-in HUMAN user's
  * personality into the Brain chat's system prompt (Gap 2/3, client half).

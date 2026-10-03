@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { usePolledResource } from '@/hooks/usePolledResource';

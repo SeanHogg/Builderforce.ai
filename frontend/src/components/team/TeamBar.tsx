@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The footer roster — the team (PRD 21 §3.3, §4).
  *

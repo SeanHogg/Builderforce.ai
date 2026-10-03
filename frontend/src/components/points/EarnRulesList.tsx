@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { usePoints } from '@/lib/usePoints';
 import styles from './points.module.css';

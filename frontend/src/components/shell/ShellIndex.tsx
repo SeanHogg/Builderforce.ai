@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The active destination's sub-views, as an index (PRD 21 §3.4).
  *

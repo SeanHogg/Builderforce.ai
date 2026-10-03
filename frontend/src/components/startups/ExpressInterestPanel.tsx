@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Express interest" — the investor's form, as a slide-out over whatever they
  * were reading (the directory, a profile, the explainer).

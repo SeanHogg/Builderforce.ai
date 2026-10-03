@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useRef, useState } from 'react';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';

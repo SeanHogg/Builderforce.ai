@@ -1,5 +1,3 @@
-'use client';
-
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import type { Edge } from '@xyflow/react';
 import { CARD_ACTS } from '@/domains/canvas/application/cardActs';

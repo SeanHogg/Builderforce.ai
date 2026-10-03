@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { empInsightsApi, type DelayTaxonomyResult } from '@/lib/empInsightsApi';

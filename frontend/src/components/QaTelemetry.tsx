@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Mounts the Agentic QA capture client inside the authenticated app shell.
  * Emits a pageview on every route change and starts the document-level

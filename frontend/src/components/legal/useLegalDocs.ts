@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 import { fetchLegalCurrent, type LegalCurrent } from '@/lib/legalDocs';

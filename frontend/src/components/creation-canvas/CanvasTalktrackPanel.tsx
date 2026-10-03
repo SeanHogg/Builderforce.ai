@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * TALKTRACK — record a narrated walkthrough of this board.
  *

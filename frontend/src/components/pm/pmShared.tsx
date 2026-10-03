@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { InsightStat } from '@/components/dashboard/InsightStat';
 import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';

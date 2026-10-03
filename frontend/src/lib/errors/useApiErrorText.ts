@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * How an API-error event reads to a PERSON.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import type { Task, AgentHost } from '@/lib/builderforceApi';

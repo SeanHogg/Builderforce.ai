@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import type { MeetingTranscriptSegment } from '@/lib/builderforceApi';

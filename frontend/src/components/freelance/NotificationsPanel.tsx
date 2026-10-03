@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';

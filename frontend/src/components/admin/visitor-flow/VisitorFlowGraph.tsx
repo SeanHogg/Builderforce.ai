@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The anonymous funnel, drawn.
  *

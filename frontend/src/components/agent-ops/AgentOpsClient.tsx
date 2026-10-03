@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { CoordinationPanel } from './CoordinationPanel';
 import { MemoryPanel } from './MemoryPanel';

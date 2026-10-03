@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The platform's message to whoever is on the page.
  *

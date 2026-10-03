@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * VoiceConfigPanel — the Voice modality's RIGHT pane: everything that configures
  * a generation (create/enrol a clone, pick the active voice, and the lines to

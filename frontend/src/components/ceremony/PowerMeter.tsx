@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A compact load/utilization "power meter" shown above a seat. Fills with the
  * member's active-work load vs their capacity; green → yellow → red as they near

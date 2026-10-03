@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { pmoApi, type PmoRollup as PmoRollupData, type PmoScopeKind } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';

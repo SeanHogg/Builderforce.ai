@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Fixed-price milestones + escrow, for both sides of the deal.
  *

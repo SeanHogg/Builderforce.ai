@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The inspector half of learning on the canvas: say it at my level, teach me
  * this subject, and give me something to practise.

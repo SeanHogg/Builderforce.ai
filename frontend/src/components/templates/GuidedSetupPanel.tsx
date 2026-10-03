@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The guided setup — the wizard a template is set up in.
  *

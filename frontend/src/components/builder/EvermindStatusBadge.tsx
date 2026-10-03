@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * EvermindStatusBadge — a compact, honest indicator of a project's Evermind state,
  * shown in the Brain composer so the user can see, from the chat, whether the project

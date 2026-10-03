@@ -1,5 +1,3 @@
-'use client';
-
 import { useProjects } from '@/lib/ProjectScopeContext';
 import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';

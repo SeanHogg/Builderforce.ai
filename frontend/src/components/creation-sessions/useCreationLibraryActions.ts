@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { creationSessionFoldersApi, creationSessionsApi } from '@/lib/builderforceApi';

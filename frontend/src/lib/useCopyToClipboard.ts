@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * useCopyToClipboard — the ONE clipboard write.
  *

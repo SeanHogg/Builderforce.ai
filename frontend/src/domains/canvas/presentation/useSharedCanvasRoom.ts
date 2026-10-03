@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * WHERE AN ACCOUNT-LESS BOARD LIVES — this device, and (when it is shared) the
  * room everybody else is reading.

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The project OVERVIEW form: its fields, its key-availability check, and its save.
  *

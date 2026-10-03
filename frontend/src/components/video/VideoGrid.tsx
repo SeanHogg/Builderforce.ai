@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { VideoTile } from './VideoTile';
 import type { RemoteTile } from '@/lib/useMediaRoom';

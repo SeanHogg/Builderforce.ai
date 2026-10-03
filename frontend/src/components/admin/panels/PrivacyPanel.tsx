@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminPrivacyRequest } from '@/lib/adminApi';

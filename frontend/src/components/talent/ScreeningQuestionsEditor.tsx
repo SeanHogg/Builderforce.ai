@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Authoring the questions every bidder is asked.
  *

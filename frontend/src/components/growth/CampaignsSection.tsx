@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * What to send, and through which transport. Owns the composer: a campaign
  * needs an audience, a sender/mailbox and a transport all at once, which is why

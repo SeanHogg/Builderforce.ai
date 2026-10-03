@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { SkillAssignmentsContent } from './SkillAssignmentsContent';
 import { PersonaAssignmentsContent } from './PersonaAssignmentsContent';

@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { membersApi, type MemberScorecard, type MemberProfile } from '@/lib/builderforceApi';
 import { formatHours } from '@/lib/duration';

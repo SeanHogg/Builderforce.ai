@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Designer "Publish" panel — deploy the built app to a subdomain.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE detail surface for anything addressable (PRD 20 §7.1).
  *

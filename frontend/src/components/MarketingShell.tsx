@@ -1,5 +1,3 @@
-'use client';
-
 import { usePathname } from 'next/navigation';
 import MarketingHeader from './MarketingHeader';
 import MobileBottomNav from './MobileBottomNav';

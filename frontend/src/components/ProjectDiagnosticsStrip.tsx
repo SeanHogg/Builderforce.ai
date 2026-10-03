@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { diagnosticScoreColor, orderDiagnostics } from '@/lib/diagnosticScore';

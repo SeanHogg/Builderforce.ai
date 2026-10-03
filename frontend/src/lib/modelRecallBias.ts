@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Learned Model Routing (PRD 13 §6.6) — CLIENT-SIDE SSM recall bias.
  *

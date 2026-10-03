@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "You are looking at sample data" — said once, in the shell, for every surface.
  *

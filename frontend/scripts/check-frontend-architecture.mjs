@@ -2,6 +2,17 @@
 /**
  * Frontend architecture ratchets. Counts and sets that may shrink but not grow.
  *
+ * `useClientFiles` RETIRED (2026-10-03, operator decision). The count it capped was
+ * 1001, and 828 of those directives marked no boundary — every importer was already
+ * client code. Nearly every feature that added a component tripped it, and the fix
+ * each time was to trim a few directives back under the number; the changelog below
+ * is that cycle, a hundred entries long. The 828 are stripped, and the rule is now
+ * the boundary itself, enforced by `check-redundant-use-client.mjs`: a directive must
+ * have a server-side importer or be an entry, and that check names the file and
+ * offers `--fix`. A count of real boundaries needs no cap. `useClientPages` stays —
+ * a client-rooted page is a real first-paint cost — as does `check-root-closure`.
+ * The changelog below is kept as history.
+ *
  * `oversizedProductionFiles` +1 (2026-08-20) — `lib/structured-data.ts` (995),
  * crossing 800 when the per-entity SEO pass added detail schemas for personas,
  * prompts and published agents beside the marketplace-skill one that was already
@@ -1011,14 +1022,11 @@
  *   each file (`components/phone/*` is the model) rather than here.
  *
  *   What this pass did NOT do, deliberately: strip the directive from the ~600
- *   modules whose every CURRENT importer is a client boundary. The "800 -> 798" and
- *   "807 -> 808" notes above are right that such a directive marks nothing TODAY, and
- *   wrong as a rule to automate -- components here are built to mount from a canvas
- *   surface and from an embedded app as well as from their page, so a boundary
- *   inferred from today's import graph is a boundary that breaks the first time one
- *   is reused. The directive on a reusable component is a declaration about the
- *   component, not an observation about its callers. Removing one needs that
- *   argument made per file, in the file, the way `components/phone/*` states it.
+ *   modules whose every CURRENT importer is a client boundary, on the argument that
+ *   a reusable component's directive declares its contract. SUPERSEDED 2026-10-03
+ *   (see the top of this header): reusing one from a server module fails Next's
+ *   build loudly until the directive is added back, so the inferred boundary cannot
+ *   ship a broken page, while the declared one was breaking the build weekly.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
@@ -1165,7 +1173,6 @@ for (const file of files) if (!order.has(file)) visit(file);
  */
 const TALLY_PATH = resolve(here, '.frontend-architecture-tally.json');
 const tallies = {
-  useClientFiles: tallyByFile(client.map(rel)),
   useClientPages: tallyByFile(clientPages.map(rel)),
 };
 const recorded = readTallies(TALLY_PATH);
@@ -1206,7 +1213,6 @@ function ratchetSet(label, actual, allowed) {
   for (const item of actual) if (!permitted.has(item)) violations.push(`${label}: new violation ${item}`);
 }
 
-ratchetCount("'use client' files", 'useClientFiles', client.length, baseline.useClientFiles);
 ratchetCount("client-rooted pages", 'useClientPages', clientPages.length, baseline.useClientPages);
 ratchetSet('presentation -> infrastructure', presentationInfrastructureImports, baseline.presentationInfrastructureImports);
 ratchetSet('presentation engine construction', directEngineConstruction, baseline.directEngineConstruction);

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * A person's registered passkeys.
  *

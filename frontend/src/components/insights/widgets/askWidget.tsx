@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Ask a question" — the plain-English query, as a pinnable widget.
  *

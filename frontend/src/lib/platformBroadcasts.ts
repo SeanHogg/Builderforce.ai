@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Platform broadcasts on the client — fetch, live refresh, dismissal, and the
  * engagement each of those is worth reporting.

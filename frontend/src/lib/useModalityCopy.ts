@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Localized modality copy — the ONE place the IDE reads a modality's user-facing
  * `label` / `tagline` / `runLabel` from the i18n catalogs (`ide.modality.<id>.*`).

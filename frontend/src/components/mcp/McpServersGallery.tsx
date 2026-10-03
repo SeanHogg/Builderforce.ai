@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Bring-your-own MCP servers, as a settings section.
  *

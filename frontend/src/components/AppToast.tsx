@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { CSSProperties, ReactNode } from 'react';
 import styles from './AppToast.module.css';

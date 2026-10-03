@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { AttentionState } from '@/lib/builderforceApi';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';

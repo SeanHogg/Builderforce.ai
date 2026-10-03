@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Governance policy packs — the authoring surface for the gates the agent runtime
  * hard-enforces.

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Shared "book a demo with sales" form (migration 0360). One source of truth for
  * the lead-capture fields + submit, reused by the public /book-demo page and the

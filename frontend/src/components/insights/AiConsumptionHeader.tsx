@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConsumption } from '@/lib/useConsumption';

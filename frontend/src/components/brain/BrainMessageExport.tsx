@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Download as …" for a capability reply — the action that makes a Document,
  * Slides, or Spreadsheet chat produce something usable outside the chat.

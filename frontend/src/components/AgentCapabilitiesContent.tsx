@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
 import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool';

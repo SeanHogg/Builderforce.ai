@@ -1,5 +1,3 @@
-'use client';
-
 import { AnchoredPopover, Icon } from '@/components/ui';
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';

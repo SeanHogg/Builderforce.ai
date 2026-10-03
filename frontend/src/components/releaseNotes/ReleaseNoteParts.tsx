@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The pieces every product-update surface shares: the badges, the body, and the
  * date format.

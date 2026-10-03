@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Write a platform broadcast — the ONE composer.
  *

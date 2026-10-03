@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The directory's read: query state, the paged fetch, and the inquiry target.
  *

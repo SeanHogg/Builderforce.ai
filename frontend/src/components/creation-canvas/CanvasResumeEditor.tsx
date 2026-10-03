@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';

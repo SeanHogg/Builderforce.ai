@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * diagnosticsCapture — the ONE way a surface stamps a diagnostics report.
  *

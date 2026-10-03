@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 
 /** Round control button — pressed (danger) when the track is OFF. */

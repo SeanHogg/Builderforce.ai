@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, kanbanApi, type TicketContext, type TicketObjective } from '@/lib/builderforceApi';

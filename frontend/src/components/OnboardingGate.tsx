@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Pessimistically gates the chrome of any authenticated route.
  *

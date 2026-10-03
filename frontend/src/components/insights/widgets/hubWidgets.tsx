@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The insights HUBS, decomposed into individually-pinnable widgets.
  *

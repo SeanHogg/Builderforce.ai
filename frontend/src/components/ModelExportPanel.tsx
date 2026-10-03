@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ModelExportPanel — export a published Evermind model to a portable artifact.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { salesApi, type SalesCommissionRule, type SalesPricing } from '@/lib/salesApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';

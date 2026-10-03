@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { runtimeApi, boardsApi, type Execution, type BoardDispatch } from '@/lib/builderforceApi';
 

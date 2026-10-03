@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE payout-destination surface — one component, three places.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /** Who a campaign is from — a domain proved with a TXT record before sending. */
 
 import { useCallback, useEffect, useState } from 'react';

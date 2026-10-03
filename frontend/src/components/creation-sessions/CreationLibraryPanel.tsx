@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';

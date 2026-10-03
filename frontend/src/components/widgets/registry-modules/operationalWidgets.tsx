@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Operational / delivery surfaces (Tasks board, Workflows list, Brainstorm/Brain
  * chats) decomposed into individually-pinnable widgets — the "insights everywhere"

@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import type { LlmProvider, ProviderAuthType } from './builderforceApi';
 import { providerModelsApi, type ProviderModelsView } from './providerModelsApi';

@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredTenant } from '@/lib/auth';

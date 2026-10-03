@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Who should I invite to bid on this?" — the client side of the cached match query.
  *

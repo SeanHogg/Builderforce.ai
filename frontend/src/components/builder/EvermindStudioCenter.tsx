@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * EvermindStudioCenter — the center stage of the `llm` build modality: the live
  * Knowledge Map beside the region-filterable Learnings list. It owns the ONE read

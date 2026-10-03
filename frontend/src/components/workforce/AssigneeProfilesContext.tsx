@@ -1,5 +1,3 @@
-'use client';
-
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { kanbanApi, type AssigneeProfileMap, type AssigneeProfileDto } from '@/lib/builderforceApi';
 

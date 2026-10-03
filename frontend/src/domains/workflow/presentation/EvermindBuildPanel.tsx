@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * EvermindBuildPanel — runs a visually-authored Evermind BUILD pipeline IN-BROWSER
  * via the engine (`lib/evermindBuild.ts`), streams the execution-output timeline,

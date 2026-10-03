@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useRef } from 'react';
 
 /** Deterministic accent from a name (theme-token hues, readable in both themes). */

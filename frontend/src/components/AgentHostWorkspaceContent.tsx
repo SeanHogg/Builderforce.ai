@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { workspaceApi, type AgentHostDirectory, type AgentHostDirectoryFile } from '@/lib/builderforceApi';

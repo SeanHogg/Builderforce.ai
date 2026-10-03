@@ -1,5 +1,3 @@
-'use client';
-
 import { Fragment, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {

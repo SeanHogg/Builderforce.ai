@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { type BenchmarkRating } from '@/lib/benchmarkingApi';
 import { autonomousHopShare, shareOfCreated } from '@/lib/autonomyApi';

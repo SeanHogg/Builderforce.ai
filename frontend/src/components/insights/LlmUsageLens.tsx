@@ -1,5 +1,3 @@
-'use client';
-
 import { LlmUsageContent } from '@/components/LlmUsageContent';
 import { ModelRoutingAnalytics } from '@/components/ModelRoutingAnalytics';
 

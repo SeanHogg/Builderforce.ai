@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo } from 'react';
 
 import { useFormat } from '@/i18n/useFormat';

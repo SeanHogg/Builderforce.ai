@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * An audience, in one line.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The message hub — the conversation behind the account menu's Messages row.
  *

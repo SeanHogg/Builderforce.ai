@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import type { Formatter } from '@/i18n/format';
 import { useCallback, useEffect, useRef, useState } from 'react';

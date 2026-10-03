@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The drawer's tab strip. It renders `PROJECT_PANEL_TABS` and nothing else — the
  * set of tabs is data, so adding one never touches this file.

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Rollback and packaging — the two things a published app needs that publishing
  * alone never gave it.

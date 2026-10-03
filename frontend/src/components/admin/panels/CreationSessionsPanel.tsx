@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminCreationSession } from '@/lib/adminApi';
 import { AdminError, AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';

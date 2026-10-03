@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The tab strip a canvas side panel switches its mode with.
  *

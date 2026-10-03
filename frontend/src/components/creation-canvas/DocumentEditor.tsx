@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The document editor — word processing, on the card AND at page scale.
  *

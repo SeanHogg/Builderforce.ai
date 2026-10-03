@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * EvermindLearnings — the center-stage "Learnings" list beside the Knowledge Map.
  * Three modes, in priority order:

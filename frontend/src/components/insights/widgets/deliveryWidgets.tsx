@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Delivery + DORA lenses, decomposed into individually-pinnable widgets.
  *

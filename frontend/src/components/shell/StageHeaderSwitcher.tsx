@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { METHOD_STAGES } from '@/lib/methodology';
 import type { Stage } from '@/lib/navGroups';

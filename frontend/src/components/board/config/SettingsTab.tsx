@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Board SETTINGS — the rules that hold for the whole board rather than one lane.
  */

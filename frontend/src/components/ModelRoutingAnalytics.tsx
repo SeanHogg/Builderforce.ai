@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Learned Model Routing analytics (PRD 13 §6.5). Reads the cached `routing:<scope>`
  * KV blob via `/llm/v1/model-analytics` and renders, per action type, the models

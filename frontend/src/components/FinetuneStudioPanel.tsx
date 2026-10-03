@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * FinetuneStudioPanel — center workspace for the `finetune` project modality.
  *

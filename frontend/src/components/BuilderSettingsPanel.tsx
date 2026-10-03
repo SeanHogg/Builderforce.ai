@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
 import { RepoSyncControl } from './builder/RepoSyncControl';

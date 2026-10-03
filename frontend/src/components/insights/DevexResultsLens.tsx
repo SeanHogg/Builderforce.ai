@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';

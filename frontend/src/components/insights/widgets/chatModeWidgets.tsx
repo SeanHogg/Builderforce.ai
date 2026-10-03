@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Conversations vs Executions" — the chat MODE lens, as pinnable widgets.
  *

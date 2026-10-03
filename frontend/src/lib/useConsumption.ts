@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { useOptionalAuth } from '@/lib/AuthContext';
 import { consumptionApi, type ConsumptionSnapshot, type PlanFeatureKey } from '@/lib/builderforceApi';

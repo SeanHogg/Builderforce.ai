@@ -1,5 +1,3 @@
-'use client';
-
 /** Who a campaign sends to — fed automatically by site form submissions. */
 
 import { useCallback, useEffect, useState } from 'react';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE AD SETS UNDER ONE CAMPAIGN — the level where an audience is named.
  *

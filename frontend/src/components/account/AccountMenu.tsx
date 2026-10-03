@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE account control — the avatar in the top-right corner, and everything the
  * signed-in chrome used to spread across six buttons beside it.

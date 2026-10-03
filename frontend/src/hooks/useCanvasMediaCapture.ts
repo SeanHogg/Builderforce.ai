@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState } from 'react';
 import { useCameraCapture } from '@/lib/useCameraCapture';
 import { useDisplayCapture } from '@/lib/useDisplayCapture';

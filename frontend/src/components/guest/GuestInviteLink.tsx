@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { ShareLinkField } from '@/components/share/ShareLinkField';
 import { guestRoomInviteUrl, type GuestRoomSurface } from '@/lib/guestRoomApi';

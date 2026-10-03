@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The agents assigned to one lane — who acts when a card arrives there.
  *

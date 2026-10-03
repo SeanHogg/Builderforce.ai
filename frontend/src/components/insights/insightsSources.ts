@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE deduped read layer for every insights collector.
  *

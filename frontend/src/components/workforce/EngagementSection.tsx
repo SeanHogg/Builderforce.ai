@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { membersApi, type MemberEngagement, type EngagementLevel } from '@/lib/builderforceApi';

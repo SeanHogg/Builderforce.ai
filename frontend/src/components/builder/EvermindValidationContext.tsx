@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * EvermindValidationContext — shares the live "Validate" recall result between the
  * two halves of the LLM Studio that live in separate subtrees: the teach console in

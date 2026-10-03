@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Take this away as…" — the one download row, wherever it appears.
  *

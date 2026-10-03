@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE transclusion — another document, shown HERE, live.
  *

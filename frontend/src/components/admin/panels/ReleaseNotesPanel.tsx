@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Superadmin authoring for platform release notes — the changelog marketed to
  * every user via the footer "What's new" panel and the weekly digest email.

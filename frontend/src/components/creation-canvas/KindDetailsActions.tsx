@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { CARD_ACT_HANDLER, kindSettingsActions } from '@/lib/canvasKindSettings';
 import { useCanRunCardActs, useCardActRunner } from './cardActRunner';

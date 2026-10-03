@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Workforce health — over-allocated, under-utilised and idle, in ONE card.
  *

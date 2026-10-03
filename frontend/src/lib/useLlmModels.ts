@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { byoVendorLabel, perMillionUsd, productForPlan, type ChatModelOptions, type ModelIdentityContext } from '@seanhogg/builderforce-brain-ui';

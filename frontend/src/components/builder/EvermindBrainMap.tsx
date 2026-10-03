@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * EvermindBrainMap — the center-stage visualization for the `llm` build modality.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * D3 execution-timeline chart — a zoomable/pannable swimlane Gantt of agent
  * activity. One band per agent; concurrent tool calls / tasks within an agent

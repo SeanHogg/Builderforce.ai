@@ -13,7 +13,6 @@ import {
   type RequestOptions,
 } from './apiClient';
 import { isPlanLimitError } from './planLimitError';
-import { notifySitePublished } from './sitePublishEvents';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { readSseDataPayloads } from '@seanhogg/builderforce-memory/wire';
 import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
@@ -469,7 +468,10 @@ export async function publishSite(
     method: 'POST',
     body: form,
   });
-  notifySitePublished(Number(projectId));
+  // Loaded on demand: `api.ts` sits in the root layout's static closure, and the
+  // publish signal is only needed by the few surfaces that publish. The listeners
+  // import the same module, so the import resolves to the instance they subscribed on.
+  void import('./sitePublishEvents').then(({ notifySitePublished }) => notifySitePublished(Number(projectId)));
   return result;
 }
 

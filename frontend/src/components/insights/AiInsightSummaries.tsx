@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { PLATFORM_PROVIDER_ID, type ProviderConsumption } from '@/lib/aiImpactApi';
 import { type RecSeverity } from '@/lib/recommendationsApi';

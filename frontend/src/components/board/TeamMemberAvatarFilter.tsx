@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, type MouseEvent } from 'react';
 import { Avatar } from '@/components/Avatar';
 import { Icon } from '@/components/ui/Icon';

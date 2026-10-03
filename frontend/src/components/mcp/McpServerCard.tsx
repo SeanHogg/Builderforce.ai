@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * One registered MCP server, as a card. Presentational: it renders the row's
  * facts and raises intent, so the same card serves the gallery grid and the table

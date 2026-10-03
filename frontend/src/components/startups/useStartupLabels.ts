@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The startup vocabulary, in the reader's language — ONE hook.
  *

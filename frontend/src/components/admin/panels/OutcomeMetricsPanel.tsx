@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Value outcomes — what the platform actually produced, at platform, workspace
  * or project scope.

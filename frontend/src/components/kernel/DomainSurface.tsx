@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE domain surface, composed from the kernel components (PRD 20 §7.1).
  *

@@ -1,5 +1,3 @@
-'use client';
-
 import { Icon } from '@/components/ui/Icon';
 import { formatClock } from '@/lib/duration';
 import { useEffect, useRef, useState } from 'react';

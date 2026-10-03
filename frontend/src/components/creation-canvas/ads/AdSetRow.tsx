@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE AD SET — what it targets, what it costs, and the ads inside it.
  *

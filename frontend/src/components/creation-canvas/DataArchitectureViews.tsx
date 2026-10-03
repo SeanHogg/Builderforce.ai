@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Node bodies for the data-architecture objects.
  *

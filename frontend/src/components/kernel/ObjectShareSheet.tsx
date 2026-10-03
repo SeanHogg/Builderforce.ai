@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE share sheet with ONE revocation path (PRD 20 §7.1).
  *

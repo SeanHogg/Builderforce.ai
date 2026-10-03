@@ -1,5 +1,3 @@
-'use client';
-
 import { streamChatCompletion, type ChatCompletionMessage } from '@seanhogg/builderforce-brain-embedded';
 import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';

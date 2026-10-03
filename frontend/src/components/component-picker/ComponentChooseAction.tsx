@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { usePermission, type Capability } from '@/lib/rbac';
 import type { ComponentDef } from '@/lib/components/types';

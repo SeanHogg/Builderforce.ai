@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Registers the `show_devex_insight` Brain tool: lets the Brain open any DevEx
  * surface in the global slide-out side panel (over /brainstorm or the floating

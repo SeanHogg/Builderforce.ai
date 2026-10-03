@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * WHO YOU ARE — one card, every account type (PRD 21 §5 E2, "port Settings and
  * Profile").

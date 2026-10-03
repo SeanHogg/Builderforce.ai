@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { innovationApi, pmoApi, type FunnelMetrics, type InnovationIdea, type FunnelStage, type Initiative } from '@/lib/builderforceApi';

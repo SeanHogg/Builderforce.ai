@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';

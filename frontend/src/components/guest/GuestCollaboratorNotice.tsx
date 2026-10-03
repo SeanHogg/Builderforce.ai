@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useIsLinkGuest } from '@/lib/rbac';
 import { registerHref } from '@/lib/auth';

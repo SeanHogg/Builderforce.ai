@@ -1,5 +1,3 @@
-'use client';
-
 import { useSearchParams } from 'next/navigation';
 import { getOAuthUrl } from '@/lib/auth/credentials';
 

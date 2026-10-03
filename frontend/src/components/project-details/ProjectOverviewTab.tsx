@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The Details tab: the project's own facts, and the form that edits them.
  *

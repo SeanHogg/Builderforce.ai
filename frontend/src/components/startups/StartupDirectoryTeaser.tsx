@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The newest listed startups plus the two doors — what the investor-intelligence
  * explainer shows a visitor before they have read a word of copy. Diagnostics is

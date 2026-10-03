@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE chart primitive fed by one shape (PRD 20 §7.1).
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The directory's filters — a stage row a person can press, then the narrower
  * controls. Owns no fetching and no state: the parent holds the query and reacts

@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { Button, Icon, Surface } from '@/components/ui';
 import type { ImportResult } from '@/lib/importApi';

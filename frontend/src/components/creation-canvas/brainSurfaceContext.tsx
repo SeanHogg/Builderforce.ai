@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The channel that lets the Brain Object on the graph BE the conversation.
  *

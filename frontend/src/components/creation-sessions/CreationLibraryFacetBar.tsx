@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { CREATION_LIBRARY_FACETS, creationLibraryFacetCounts, type CreationLibraryFacet, type CreationLibraryItem } from '@/domains/canvas/domain/creationLibrary';
 import styles from './CreationLibraryFacetBar.module.css';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The starting-point picker under the prompt bar.
  *

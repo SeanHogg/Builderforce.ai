@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { getMyFreelancerProfileCached, invalidateMyFreelancerProfile, updateMyFreelancerProfile, type FreelancerProfile } from '@/lib/freelance/talentProfile';
 import { useErrorMessage } from '@/i18n/useErrorMessage';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * QR code renderer — turns a string into an SVG matrix via the local encoder.
  *

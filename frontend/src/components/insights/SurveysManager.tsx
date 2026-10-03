@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Reusable DevEx survey-management surface — template authoring, templates list,
  * campaign launcher, campaigns list and the respond form.

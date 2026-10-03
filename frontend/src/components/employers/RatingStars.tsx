@@ -1,5 +1,3 @@
-'use client';
-
 // Required directive: this mounts from canvas surfaces and embedded apps as well
 // as the employer pages, and several of those hosts are Server Components.
 

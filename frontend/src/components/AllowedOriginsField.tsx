@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Shared origin-allowlist input — used by both the owner self-service mint
  * page and the superadmin mint-on-behalf flow.

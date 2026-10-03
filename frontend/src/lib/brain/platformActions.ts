@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Client-only Brain actions — browser navigation + local UI panels.
  *

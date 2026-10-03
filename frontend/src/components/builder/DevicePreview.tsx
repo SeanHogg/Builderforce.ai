@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * DevicePreview — the Mobile modality's centre panel.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * MEASURE what it cost and returned — the third of the panel's three jobs.
  *

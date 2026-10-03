@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * KanbanRosterCard — the project-settings surface for the Agentic Workforce Kanban.
  * Picks the board's kanban template, shows the recommended roster (which roles are

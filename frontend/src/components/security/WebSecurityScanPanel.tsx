@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * WebSecurityScanPanel — the "point at your live website, get findings now" surface.
  * Owner/Manager only. Configure a target URL, run a deterministic external scan in

@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { invalidateLlmModels } from '@/lib/useLlmModels';

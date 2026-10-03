@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The single app-wide mount of the Product Updates panel, plus the one handler
  * for the `?whatsnew=1` deep link the weekly release-digest email links to.

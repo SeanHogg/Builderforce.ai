@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Core (non-insights) surfaces, decomposed into individually-pinnable widgets —
  * the proof that the app-wide widget registry is NOT insights-only.

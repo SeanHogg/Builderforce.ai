@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE collaborative clock — one component for `timer` and `stopwatch`.
  *

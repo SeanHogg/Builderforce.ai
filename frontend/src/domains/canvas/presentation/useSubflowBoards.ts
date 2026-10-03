@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { canvasSessionGateway } from '../infrastructure/canvasSessionGateway';
 import { forgetSubflowBoard, loadSubflowBoard, type SubflowSourcePort } from '../application/LoadSubflowBoard';

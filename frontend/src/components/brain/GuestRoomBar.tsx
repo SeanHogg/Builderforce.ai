@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
 import type { GuestRoomParticipant, GuestRoomSurface } from '@/lib/guestRoomApi';

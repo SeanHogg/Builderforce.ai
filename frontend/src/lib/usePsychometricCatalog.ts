@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Shared loader + hook for the psychometric catalog (framework/dimension labels,
  * questionnaire bank, enneagram types, Pro entitlement).

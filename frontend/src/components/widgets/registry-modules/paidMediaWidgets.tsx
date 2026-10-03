@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Paid media as pinnable widgets — the `measure` half of the CMO's surface, on any
  * dashboard rather than only inside the canvas panel.

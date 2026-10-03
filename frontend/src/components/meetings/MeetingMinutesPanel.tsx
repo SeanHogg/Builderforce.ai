@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { meetingsApi, type MeetingTranscript } from '@/lib/builderforceApi';

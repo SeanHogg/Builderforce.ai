@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Token-allowance banner for the Brain composer.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeRunStore, getGlobalRunState, type GlobalRunState } from '@seanhogg/builderforce-brain-embedded';
 import { runtimeApi, type AttentionResponse, type AttentionState } from '@/lib/builderforceApi';

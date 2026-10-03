@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Drag one axis with pointer capture, clamped, with an arrow-key nudge.
  *

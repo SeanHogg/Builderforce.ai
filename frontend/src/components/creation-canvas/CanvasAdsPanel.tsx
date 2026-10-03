@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The workspace's PAID media, managed on the canvas.
  *

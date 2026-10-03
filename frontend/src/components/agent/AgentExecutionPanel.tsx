@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';

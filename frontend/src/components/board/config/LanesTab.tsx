@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * SWIMLANES — the board's columns, and the agents that act on each one.
  *

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Node bodies for the QA objects — plan, case, run, defect — plus the page-audit
  * section the `diagnostics` card renders when an audit is attached.

@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { initialsOf } from '@/lib/initials';
 

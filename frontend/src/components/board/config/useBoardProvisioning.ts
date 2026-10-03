@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Heal a board that should exist and does not.
  *

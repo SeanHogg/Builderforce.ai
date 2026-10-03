@@ -1,5 +1,3 @@
-'use client';
-
 import { ReactNode, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { faultMessage } from '@/lib/apiClient';

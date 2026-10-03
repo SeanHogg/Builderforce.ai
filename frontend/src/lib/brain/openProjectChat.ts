@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback } from 'react';
 import { useOptionalBrainContext } from '@seanhogg/builderforce-brain-embedded';
 

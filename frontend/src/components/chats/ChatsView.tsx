@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';

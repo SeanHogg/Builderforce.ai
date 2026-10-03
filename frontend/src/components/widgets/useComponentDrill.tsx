@@ -1,5 +1,3 @@
-'use client';
-
 import { useRouter } from 'next/navigation';
 import { useOptionalAiInsightPanel } from '@/components/insights/AiInsightPanelProvider';
 import { useOptionalDeliveryPanel } from '@/components/insights/DeliveryPanelProvider';

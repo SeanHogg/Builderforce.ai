@@ -1,5 +1,3 @@
-'use client';
-
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ChatErrorBanner } from '@seanhogg/builderforce-brain-ui';

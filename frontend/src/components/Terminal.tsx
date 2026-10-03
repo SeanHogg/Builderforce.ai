@@ -1,5 +1,3 @@
-'use client';
-
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';

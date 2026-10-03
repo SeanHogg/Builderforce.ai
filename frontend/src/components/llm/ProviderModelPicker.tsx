@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { useToast } from '@/components/ToastProvider';

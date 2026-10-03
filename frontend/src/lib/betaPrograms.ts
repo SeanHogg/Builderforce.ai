@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Product updates on the client — ONE store behind every surface that shows a
  * beta, and behind the unread badge on the version chip.

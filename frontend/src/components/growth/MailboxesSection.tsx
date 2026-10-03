@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The Microsoft 365 / Gmail account a campaign can send as. Fully self-contained
  * — the Growth tab bar swaps this in for `?tab=` (default), and it owns its own

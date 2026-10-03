@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Which TEAMS this project's board belongs to.
  *

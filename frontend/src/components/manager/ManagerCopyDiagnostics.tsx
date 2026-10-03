@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { CopyButton } from '@/components/CopyButton';

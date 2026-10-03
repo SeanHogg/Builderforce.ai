@@ -1,5 +1,3 @@
-'use client';
-
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useMediaRoom, type MediaPathEvidence, type MediaRoomConnection, type MediaRoomTransport, type RemoteTile } from '@/lib/useMediaRoom';

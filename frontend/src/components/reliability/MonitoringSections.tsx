@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * MonitoringSections — the Active Monitoring surface, extracted from the old
  * standalone /monitoring page so it can live as tabs of the consolidated

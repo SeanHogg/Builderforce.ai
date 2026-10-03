@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The Workspace tab: three shortcuts into the tabs where work actually starts,
  * and the door out to the project's Builder canvas.

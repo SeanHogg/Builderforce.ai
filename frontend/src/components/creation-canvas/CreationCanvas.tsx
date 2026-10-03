@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import dynamic from 'next/dynamic';

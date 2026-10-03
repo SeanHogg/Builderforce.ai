@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * "Is this screen looking at the sample workspace?" — asked once, answered here.
  *

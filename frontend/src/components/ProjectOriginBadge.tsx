@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';

@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { useOptionalAuth } from '@/lib/AuthContext';
 import { fetchPointsSummary, type PointsSummary } from '@/lib/pointsApi';

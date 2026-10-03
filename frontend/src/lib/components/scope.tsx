@@ -1,5 +1,3 @@
-'use client';
-
 import { createContext, useContext, type ReactNode } from 'react';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { useEmbedProjectId } from '@/lib/embed/useEmbedProjectId';

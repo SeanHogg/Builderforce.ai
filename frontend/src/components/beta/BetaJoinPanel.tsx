@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Step 3 of the beta flow: what you are joining, and agreeing to join it.
  *

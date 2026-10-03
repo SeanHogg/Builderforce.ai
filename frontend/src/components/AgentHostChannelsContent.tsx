@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { CHANNEL_PLATFORMS, type ChannelPlatform } from '@builderforce/creation-canvas-contract';

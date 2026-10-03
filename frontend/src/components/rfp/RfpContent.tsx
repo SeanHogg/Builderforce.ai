@@ -1,5 +1,3 @@
-'use client';
-
 import { useProjects } from '@/lib/ProjectScopeContext';
 import { useCallback, useEffect, useState } from 'react';
 import type { Formatter } from '@/i18n/format';

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE index (PRD 21 §3.4, §4 of the sequence).
  *

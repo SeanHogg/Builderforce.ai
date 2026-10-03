@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Chat | Work — the mode choice on a conversation's EMPTY STATE.
  *

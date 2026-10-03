@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';

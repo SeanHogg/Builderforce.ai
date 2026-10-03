@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * EvermindStudioPanel — center workspace for the `evermind` project modality.
  *

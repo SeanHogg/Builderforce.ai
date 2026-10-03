@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Live preview of a running app — device frame, Expo QR, service tabs, 402 gate.
  *

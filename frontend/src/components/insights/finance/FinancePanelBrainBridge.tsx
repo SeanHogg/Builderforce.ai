@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Registers the `show_finance_insight` Brain tool: lets the Brain open any
  * finance insight in the global slide-out side panel (over /brainstorm or the

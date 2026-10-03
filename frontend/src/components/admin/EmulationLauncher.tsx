@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Emulate ("impersonate") launcher — a self-contained cross-cutting concern.
  *

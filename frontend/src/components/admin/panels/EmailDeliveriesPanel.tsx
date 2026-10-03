@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminEmailDeliveryFailurePage } from '@/lib/adminApi';
 import { AdminError, AdminLoading, errText } from '@/components/admin/adminShared';

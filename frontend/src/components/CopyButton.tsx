@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * CopyButton — the ONE copy-to-clipboard control.
  *

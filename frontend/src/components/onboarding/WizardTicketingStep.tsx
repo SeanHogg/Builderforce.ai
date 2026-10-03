@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { boardConnectionsApi, type BoardProviderMeta, type BoardConnection } from '@/lib/builderforceApi';

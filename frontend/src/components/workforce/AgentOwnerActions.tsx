@@ -1,5 +1,3 @@
-'use client';
-
 import type { PublishedAgent } from '@/lib/types';
 import { canDeleteAgent } from '@/lib/agentPermissions';
 import { btnPrimary, btnSubtle } from './CloudAgentFormFields';

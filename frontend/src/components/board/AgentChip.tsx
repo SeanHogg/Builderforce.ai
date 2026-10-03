@@ -1,5 +1,3 @@
-'use client';
-
 import type { CSSProperties, MouseEvent } from 'react';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 

@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { useStartCardValidation } from '@/lib/useCardValidation';

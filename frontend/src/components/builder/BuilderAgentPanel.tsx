@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState, useCallback } from 'react';
 import { Select } from '@/components/Select';
 import { tasksApi, agentHosts as agentHostsApi, type Task, type AgentHost } from '@/lib/builderforceApi';

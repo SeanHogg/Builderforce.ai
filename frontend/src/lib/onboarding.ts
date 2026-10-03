@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Single source of truth for the post-login onboarding gate.
  *

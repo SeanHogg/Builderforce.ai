@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * LAUNCH and steer a campaign — and, from each campaign, reach the two levels beneath it.
  *

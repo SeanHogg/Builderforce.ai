@@ -1,5 +1,3 @@
-'use client';
-
 /** Logos and images an email can actually load — templates using `{{logo}}` pick
  *  up the most recently uploaded or generated one. */
 

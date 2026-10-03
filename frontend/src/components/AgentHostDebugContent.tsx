@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { agentHosts } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';

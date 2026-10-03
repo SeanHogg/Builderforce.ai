@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * RolesView — the Workforce → Roles tab. Shows the role roster a team fills: the
  * standard roles the selected board template calls for, plus any custom roles the

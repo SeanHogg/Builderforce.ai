@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * State for the workspace's bring-your-own MCP servers: the list, the mutations,
  * and the entitlement that decides whether any of it may be read at all.

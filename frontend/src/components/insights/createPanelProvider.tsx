@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * THE insights drill-down controller, built once.
  *

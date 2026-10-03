@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * PanelCloseButton — the one way out of a slide-out panel.
  *

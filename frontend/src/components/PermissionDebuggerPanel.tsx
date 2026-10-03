@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePermissionDebugger, type PermissionRegistration } from '@/lib/PermissionDebuggerContext';

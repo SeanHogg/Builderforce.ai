@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 

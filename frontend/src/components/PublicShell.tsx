@@ -1,5 +1,3 @@
-'use client';
-
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileBottomNav from './MobileBottomNav';

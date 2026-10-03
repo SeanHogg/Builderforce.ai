@@ -1,5 +1,3 @@
-'use client';
-
 import type { ComponentDef, ComponentMount } from '@/lib/components/types';
 import type { Domain } from '@/lib/kernel/kernelApi';
 import { ComponentScopeProvider, useComponentProjectId } from '@/lib/components/scope';

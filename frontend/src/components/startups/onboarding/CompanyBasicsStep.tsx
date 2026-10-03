@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Step 1 — tell us about your business. What the public card and the CEO
  * advisor both read: name, one line, the story, sector, stage, where, since

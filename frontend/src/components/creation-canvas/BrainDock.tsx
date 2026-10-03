@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';

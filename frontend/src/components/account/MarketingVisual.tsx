@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Decorative, theme-aware SVG for the account-type marketing panels. Two
  * variants: `standard` renders an agent-workforce graph (a hub delegating to

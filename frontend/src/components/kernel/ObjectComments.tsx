@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * ONE comment thread, mountable anywhere (PRD 20 §7.1).
  *

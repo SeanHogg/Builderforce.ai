@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Workforce-planning pinnable widgets — the blended human + agent capacity-vs-WIP
  * plan, decomposed into individually-pinnable cards for the app-wide widget

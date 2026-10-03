@@ -1,5 +1,3 @@
-'use client';
-
 import type { ReactNode, CSSProperties, KeyboardEvent } from 'react';
 import { AgentTypePill, type AgentPillKind } from '@/components/AgentTypePill';
 
