@@ -1,3 +1,56 @@
+## ✅ RESOLVED 2026-10-03 — StackBlitz is gone: Run, Publish, Check, the terminal and Node servers all run on our own runtime
+
+- **The gap.** The canvas Run fell back to a StackBlitz WebContainer for anything the instant preview could not serve (Node servers, Vue, Svelte). Publish builds, Check and the terminal also ran there. That meant a metered, non-commercial-licence session, `@webcontainer/api`, a `/webcontainer/connect` handshake route with its own isolation carve-outs, and an attribution badge. The user asked for StackBlitz to be "obsolete and never used".
+- **Runtime (builderforce-webcontainers 2026.10.3, on npm with provenance):**
+  - `spawn()`: node, npm (install, run), npx and a `jsh` shell. Each process runs in its own Web Worker, with the same shape as `@webcontainer/api`. Servers answer at `/__port/<n>/` and announce `server-ready`.
+  - A registry-backed npm installer.
+  - `buildProject()` / `runtime.build()` for production builds.
+  - A `/check` type-check worker.
+  - Vue and Svelte support.
+  - Found in review and fixed before release: process workers were being started on the HOST origin, so npm packages and the user's server would have shared builderforce.ai's storage. In relay mode the relay frame now starts them on the preview origin (`relayWorker.ts`, `RELAY_SPAWN`, `process-worker.js` in `./assets`), with a regression test.
+- **api:** `browserPreviewOrigin.ts` serves `process-worker.js` beside `relay.html` and `sw.js`, from a table of assets looked up by own keys only, so `/__bfwc/constructor` no longer resolves to `Object`. Tests are added.
+- **frontend:**
+  - `hooks/useProjectRuntime.ts` replaces `useWebContainer`.
+  - `lib/browserRuntime/siteTools.ts` builds (Publish) and type-checks (Check) from the files, without touching the live preview.
+  - `lib/browserRuntime/projectChecks.ts` runs the check steps through ports and has tests.
+  - `replaceProjectFiles` keeps `node_modules` across runs, so an unchanged `package.json` does not reinstall.
+  - Deleted: `useWebContainer`, `webcontainerSession`, `webcontainer.ts` (+test), `WebContainerAttribution`, `WebContainerConnect`, both `/webcontainer/connect` pages, the agent worker's dead `buildCommand` gate, the connect COOP/COEP carve-outs in middleware / next.config / `_headers`, the `webcontainer` route entries, and the `@webcontainer/api` dependency.
+  - App-wide isolation stays, because it gives onnxruntime-web its WASM threads.
+  - The runtime status label is localized. Orphaned i18n keys were removed.
+- **Known:** Check's `lint` step mounts the clean files into the shared runtime, so the preview's overlays drop until the next Run. StackBlitz behaved the same way, and only projects with a `lint` script are affected.
+- **Verified:**
+  - Runtime: build, typecheck, core 170 tests and browser 23 tests, plus a pack check of the tarball contents.
+  - api: tsgo clean; `browserPreviewOrigin` 5/5.
+  - frontend: tsgo clean in `src/`; 9 files / 72 tests (workspace, instant preview, browserRuntime, COI parity, shell routing); edit ratchets 6/6; i18n, declared-deps, root-routes, design-scale, methodology and blog-index checks pass.
+  - **Not run in a real browser.** That check is still on the roadmap and needs a deploy.
+
+## ✅ RESOLVED 2026-10-03 — Builderforce Studio on studio.builderforce.ai: pop-up sign-in, a version per agent turn, search and panel tabs, header actions, a Database view
+
+- **Subdomain:** the same Next app. The studio host redirects `/` → `/studio`. A frontend zone route `studio.builderforce.ai/*` is added, and `appOrigins()` derives `studio.<apex>`.
+- **Pop-up sign-in:**
+  - OAuth and SSO carry a signed `return_origin`, checked by `trustedReturnOrigin`. The pop-up lands on `/auth/popup-done`.
+  - The opener rehydrates on `storage` events. A blocked pop-up falls back to a full redirect.
+- **Versions:**
+  - R2 manifests of `{path, etag}`, with metadata listed in one call.
+  - An automatic version when a burst of agent writes settles, plus named saves.
+  - Restore saves the current state first. Deleted files are archived to history so they can be restored.
+- **Workspace:**
+  - Project-wide search (server-side, bounded).
+  - Terminal / Output / Problems tabs.
+  - Header actions: Publish, GitHub, Share, and Upgrade on the free plan.
+  - A `workspaceCommands` bus so surfaces outside the workspace can drive its panels.
+  - `PaneLayer` replaced nine hand-written pane wrappers in `BuilderWorkspace.tsx`, which went from 1768 to 1692 lines.
+- **Database view** (Preview · Code · Database, for site-backed modalities):
+  - **Tables:** collections and records, add a table, delete a row or a table, page through rows.
+  - **Users:** the app's `site_users`. Suspend, which also ends their sessions, reinstate, or remove.
+  - **Server functions:** `ProjectBackendPanel`.
+  - It notices a first publish without a reload (`sitePublishEvents`).
+  - New owner routes, all project-scoped. This fixed an existing gap: PATCH on a collection and reading its records only checked the tenant.
+  - The overlapping `SiteFormsPanel` was retired.
+- **Marketing:** release notes in migration 1192 (two `new` rows) and the post `builderforce-studio-describe-it-run-it`.
+- **Not built:** File storage. It is on the roadmap, blocked on an operator decision about per-app quota and abuse policy.
+- **Verified:** api tests for siteDataAdmin, siteUsersAdmin, workspaceCheckpoints, searchWorkspace and cors; frontend studio, versions and workspace suites; ratchets green on the touched files.
+
 ## ✅ RESOLVED 2026-10-03 — Second performance pass: polled reads cached, cache misses stop waiting on KV, N+1 queries batched, published sites on their own 1.4 MB Worker
 
 - **Polled reads, shared until something changes.**

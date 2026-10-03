@@ -558,8 +558,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     if (!mount) throw new Error(t('runLog.invalidPackageJsonFix'));
 
     // `npm run build` is the COMMAND this stands for — shown verbatim.
-    publishLog.raw('[36mnpm run build…[0m
-');
+    publishLog.raw('\x1b[36mnpm run build…\x1b[0m\r\n');
     const assets = await buildSite(mount);
     if (assets.length === 0) {
       throw new Error(t('runLog.noDistOutput'));
@@ -621,8 +620,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       const msg = e instanceof Error ? e.message : String(e);
       log.error('checkError', { message: msg });
       setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
-      recordBuildFailure(projectIdNum, { source: 'build', message: msg.split('
-')[0] || 'Checks failed.', detail: msg });
+      recordBuildFailure(projectIdNum, { source: 'build', message: msg.split('\n')[0] || 'Checks failed.', detail: msg });
     } finally {
       setIsChecking(false);
     }
