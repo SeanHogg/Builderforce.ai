@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-10-03 — `'use client'` stops failing the frontend build: 828 redundant directives removed, the count cap replaced by a boundary check
+
+- **Symptom.** `Deploy frontend` failed at `check:architecture` (`'use client' files: 1001 exceeds baseline 1000`) and `check:root-closure` (`lib/sitePublishEvents.ts` newly reachable from `app/layout.tsx`). The count cap had failed this way repeatedly: the guard's changelog has ~100 raise/trim entries.
+- **Root cause.** 828 of the 1001 directives marked no boundary, because every importer was already client code. New components got the directive by habit, and the cap punished each one.
+- **Fix (operator decision: retire the cap AND strip):**
+  - `frontend/scripts/check-redundant-use-client.mjs` (`check:use-client-boundaries`): a directive must have a server-side importer, or no importer at all (an entry). "Client side" is a least fixpoint over static, re-export and dynamic imports, so a one-pass `--fix` cannot strip a boundary a chain depends on. The check names each offender and offers `--fix`.
+  - The 828 directives were stripped with `--fix`, taking the count from 1001 to 173. A re-run reports zero.
+  - `useClientFiles` was removed from `check-frontend-architecture.mjs`, the baseline and the tally. The header records the retirement and supersedes the old "directive is the component's contract" paragraph. `useClientPages` and `check-root-closure` stay, because they measure real first-paint cost.
+  - `lib/api.ts` `publishSite` loads `sitePublishEvents` with `import()`, so the publish signal is out of the root layout's static closure.
+- **Verified:** locally, `pnpm run check` passed 25/25 guards, brain-ui 154 tests passed, and `next build` passed with no server/client boundary errors (Sonnet). In CI, run 37161295563 deployed frontend and API successfully, including the Linux `cf-build`.
+
 ## ✅ RESOLVED 2026-10-03 — VS Code release gate: the panels booted a worker instead of the app
 
 - **Symptom.** The `Publish VS Code extension` job failed. The extension-host test "the shipped webview boots and its first message reaches the host" timed out with no error, which blocked `2026.9.96`. The `chatSessionsProvider` proposal errors in the same log are caught and logged, and did not fail it.
