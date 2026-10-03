@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { membersApi, type TenantMember } from '@/lib/auth/members';
 import {
   agentHosts, vscodeConnections, runtimeApi, isVscodeConnectionOnline,
@@ -80,14 +81,21 @@ export function useWorkforcePresence(): WorkforcePresence {
     }
   }, [isAuthenticated, hasTenant, tenant, tenantToken]);
 
+  // The shared poller, not a bare setInterval: it skips ticks while the tab is
+  // hidden (four requests every 30s from every background tab otherwise), backs
+  // off on errors, and restarts on a tenant change.
+  const enabled = isAuthenticated && hasTenant;
   useEffect(() => {
-    if (!isAuthenticated || !hasTenant) { setLoading(false); return; }
-    let alive = true;
-    setLoading(true);
-    void load().finally(() => { if (alive) setLoading(false); });
-    const id = setInterval(() => { void load(); }, POLL_MS);
-    return () => { alive = false; clearInterval(id); };
-  }, [isAuthenticated, hasTenant, load]);
+    if (!enabled) setLoading(false);
+  }, [enabled]);
+  const loadOnce = useCallback(async () => {
+    try {
+      await load();
+    } finally {
+      setLoading(false);
+    }
+  }, [load]);
+  usePolledResource(loadOnce, { intervalMs: POLL_MS, enabled, restartKey: tenant?.id ?? null });
 
   return useMemo(() => {
     const membersById = new Map(members.map((m) => [m.id, m]));

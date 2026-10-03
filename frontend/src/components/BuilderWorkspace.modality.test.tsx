@@ -26,13 +26,12 @@ vi.mock('./FinetuneStudioPanel', () => ({
 }));
 
 // --- Heavy collaborators, mocked to inert stubs ----------------------------
-vi.mock('@/hooks/useWebContainer', () => ({
-  useWebContainer: () => ({
+vi.mock('@/hooks/useProjectRuntime', () => ({
+  useProjectRuntime: () => ({
     state: { status: 'idle' },
     mountFiles: vi.fn(),
     runCommandAndWait: vi.fn(),
-    readDirRecursive: vi.fn(),
-    writeFileToContainer: vi.fn(),
+    writeFile: vi.fn(),
     startShell: vi.fn(),
     startDevServer: vi.fn(),
   }),
@@ -75,6 +74,8 @@ vi.mock('./Terminal', () => ({ Terminal: () => <div /> }));
 vi.mock('./AITrainingPanel', () => ({ AITrainingPanel: () => <div /> }));
 vi.mock('./AgentPublishPanel', () => ({ AgentPublishPanel: () => <div /> }));
 vi.mock('./SitePublishPanel', () => ({ SitePublishPanel: () => <div /> }));
+vi.mock('@/components/builder/VersionsPanel', () => ({ VersionsPanel: () => <div /> }));
+vi.mock('@/components/builder/database/DatabasePanel', () => ({ DatabasePanel: () => <div /> }));
 vi.mock('./AgentStateViewer', () => ({ AgentStateViewer: () => <div /> }));
 vi.mock('./PreviewFrame', () => ({ PreviewFrame: () => <div data-testid="center-preview-frame" /> }));
 vi.mock('./builder/DevicePreview', () => ({ DevicePreview: () => <div data-testid="center-device-preview" /> }));

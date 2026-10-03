@@ -1,0 +1,61 @@
+# builderforce-sites — published sites on `*.builderforce.ai` (src/sitesWorker.ts).
+#
+# Split out of the API Worker so a site visit cold-starts ~1.4 MB of code instead of
+# the API's ~21 MB. It serves the static half of a site itself and hands everything
+# else — platform hosts, a site's datastore, sign-in and server code, the landing-page
+# fork — to the API over the `API` service binding. Deploy with:
+#   npx wrangler deploy --config wrangler.sites.toml
+# AFTER the API (the binding needs `builderforce-api` to exist; see release.yml).
+name = "builderforce-sites"
+main = "src/sitesWorker.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Wildcard subdomain hosting — moved here from api/wrangler.toml. The single-label
+# apex keeps it on the free Universal SSL cert. More-specific bindings still win:
+# `api.builderforce.ai` (the API's custom domain) and any www/app frontend binding
+# never reach this Worker; a reserved label that does is forwarded to the API by
+# `subdomainFromHost` returning no site.
+# REQUIRES the proxied wildcard DNS record documented in api/wrangler.toml's history:
+#   Type AAAA  Name *  Content 100::  Proxied
+[[routes]]
+pattern = "*.builderforce.ai/*"
+zone_name = "builderforce.ai"
+
+[placement]
+mode = "smart"
+
+[vars]
+ENVIRONMENT = "production"
+APP_URL     = "https://builderforce.ai"
+
+# Same bucket and cache namespace as the API: a published site's files and its cached
+# site record are one store, written by the API's publish path and read here.
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "builderforce-uploads"
+
+[[kv_namespaces]]
+binding = "AUTH_CACHE_KV"
+id = "ce66c3418ad64952b6847227962429d0"
+
+[[services]]
+binding = "API"
+service = "builderforce-api"
+
+# Secrets (synced by the deploy-api job from the GitHub secrets of the same name):
+#   NEON_DATABASE_URL, NEON_TRANSACTIONAL_DATABASE_URL, NEON_APPS_DATABASE_URL,
+#   BUILDERFORCE_ERROR_API_KEY, and SITE_VISITOR_SALT — which must equal the API's, so
+#   both Workers fingerprint a visitor the same way. Without it this Worker counts
+#   page views but does not deduplicate visitors (it never hashes unsalted).
+
+# Same posture as the API: invocation logs on, sampled traces off.
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true

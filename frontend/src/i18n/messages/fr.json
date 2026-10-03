@@ -1272,7 +1272,6 @@
       "mounted": "{count, plural, one {# fichier monté.} other {# fichiers montés.}}",
       "stepInstalling": "[3/3] Installation des dépendances…",
       "installFailed": "Échec de npm install (code de sortie {code}). Corrigez les erreurs ci-dessus et réessayez.",
-      "installFailedShort": "Échec de npm install (sortie {code}).",
       "depsReady": "Dépendances prêtes.",
       "startingDevServer": "Démarrage du serveur de développement…",
       "devServerReady": "Serveur de développement prêt sur {url}",
@@ -1289,7 +1288,6 @@
       "noDistOutput": "La compilation n’a produit aucune sortie dans dist/. Vérifiez que votre script de build écrit dans « dist ».",
       "capturedFiles": "{count, plural, one {# fichier compilé récupéré.} other {# fichiers compilés récupérés.}}",
       "runningChecks": "Exécution des vérifications",
-      "synthesizedTsconfig": "(un tsconfig.json minimal a été généré pour la vérification de types de secours)",
       "checkStep": "{label}…",
       "allChecksPassed": "Toutes les vérifications ont réussi.",
       "checksFailed": "{count, plural, one {# vérification a échoué.} other {# vérifications ont échoué.}}",
@@ -1307,6 +1305,7 @@
     "rightTab": {
       "voice": "Voix",
       "files": "Fichiers",
+      "versions": "Versions",
       "agent": "Agent",
       "train": "Entraîner",
       "publish": "Publier",
@@ -1519,6 +1518,12 @@
         "android": "Projet Android",
         "ios": "Projet iOS"
       }
+    },
+    "centerDatabase": "Base de données",
+    "runtimeStatus": {
+      "booting": "⏳ Démarrage…",
+      "ready": "✅ Prêt",
+      "error": "⚠️ Erreur d’exécution"
     }
   },
   "references": {
@@ -26103,19 +26108,10 @@
       }
     },
     "forms": {
-      "title": "Formulaires",
-      "description": "Tout site publié peut recevoir des soumissions. Envoyez le formulaire à cette adresse.",
       "endpoint": "Point de terminaison",
-      "submissionCount": "{count} soumissions",
-      "viewSubmissions": "Voir les soumissions",
-      "hideSubmissions": "Masquer les soumissions",
       "noSubmissions": "Aucune soumission pour l'instant.",
       "when": "Date",
       "email": "E-mail",
-      "fields": "Champs",
-      "newPlaceholder": "nouveau-formulaire",
-      "newLabel": "Nom du formulaire",
-      "add": "Ajouter un formulaire",
       "raisesTickets": "Ouvrir un ticket pour chaque soumission",
       "raisesTicketsHint": "Une fois activé, chaque nouvelle soumission ouvre un ticket sur le tableau de ce projet afin que l'équipe puisse agir — la personne à l'origine de la soumission est prévenue une fois le ticket résolu.",
       "genericError": "Une erreur est survenue. Réessayez.",
@@ -31802,11 +31798,6 @@
     "loadingMessages": "Chargement des messages…",
     "noMessages": "Aucun message."
   },
-  "webcontainerConnect": {
-    "connecting": "Connexion à votre IDE…",
-    "connected": "Connecté. Vous pouvez fermer cet onglet si l’aperçu s’affiche dans votre IDE.",
-    "failed": "Échec de la connexion : {error}"
-  },
   "startups": {
     "vocab": {
       "stage": {
@@ -32107,10 +32098,6 @@
     "download": "Télécharger pour Windows, macOS ou Linux",
     "readMore": "Comment ça marche"
   },
-  "webcontainer": {
-    "attributionLead": "S’exécute dans votre navigateur avec",
-    "attributionAria": "Propulsé par WebContainers de StackBlitz (s’ouvre dans un nouvel onglet)"
-  },
   "siteBadge": {
     "body": "Les sites gratuits affichent un petit badge « Made with Builderforce.ai ».",
     "upgrade": "Passez à une offre supérieure pour le retirer"
@@ -32176,6 +32163,98 @@
       "loadFailed": "Impossible d’ouvrir ce projet.",
       "loading": "Ouverture de votre projet…",
       "signInLead": "Connectez-vous pour ouvrir ce projet."
+    }
+  },
+  "builderSearch": {
+    "filesTab": "Fichiers",
+    "searchTab": "Recherche",
+    "panelLabel": "Fichiers et recherche",
+    "label": "Rechercher dans tous les fichiers",
+    "placeholder": "Rechercher dans tous les fichiers…",
+    "searching": "Recherche en cours…",
+    "failed": "La recherche n’a pas abouti. Réessayez.",
+    "hint": "Saisissez au moins {min} caractères pour rechercher dans tous les fichiers.",
+    "count": "{matches, plural, =0 {Aucun résultat} one {# résultat} other {# résultats}} dans {files, plural, one {# fichier} other {# fichiers}}",
+    "countTruncated": "Les {matches} premiers résultats dans {files, plural, one {# fichier} other {# fichiers}}. Affinez la recherche pour voir le reste."
+  },
+  "builderPanels": {
+    "panelLabel": "Terminal, sortie et problèmes",
+    "terminal": "Terminal",
+    "output": "Sortie",
+    "problems": "Problèmes",
+    "problemsCount": "Problèmes ({count})",
+    "collapse": "Réduire le panneau",
+    "expand": "Développer le panneau",
+    "noProblems": "Aucun problème. Les erreurs de build et d’exécution de votre dernière exécution apparaissent ici.",
+    "clearProblems": "Effacer",
+    "sourceBuild": "Build",
+    "sourceRuntime": "Exécution"
+  },
+  "builderVersions": {
+    "loading": "Chargement des versions…",
+    "loadFailed": "Impossible de charger les versions.",
+    "restored": "{restored, plural, one {# fichier restauré} other {# fichiers restaurés}}, {removed, plural, one {# fichier supprimé} other {# fichiers supprimés}}.",
+    "missing": "{count, plural, one {# fichier était trop ancien} other {# fichiers étaient trop anciens}} pour être restauré(s) : {files}.",
+    "restoreFailed": "Impossible de restaurer cette version.",
+    "saveFailed": "Impossible d’enregistrer une version.",
+    "autoTitle": "Modifié : {files}",
+    "someFiles": "quelques fichiers",
+    "filesAndMore": "{files} et {more} autres",
+    "baselineTitle": "Point de départ",
+    "beforeRestoreTitle": "Avant une restauration",
+    "meta": "Version {number} · {time}",
+    "restore": "Restaurer",
+    "confirmRestore": "Cliquez à nouveau pour restaurer",
+    "nameLabel": "Nom de la version",
+    "namePlaceholder": "Nommer cette version…",
+    "save": "Enregistrer",
+    "restoreHint": "Votre travail actuel est d’abord enregistré comme version."
+  },
+  "builderDatabase": {
+    "sectionsLabel": "Sections de la base de données",
+    "sections": {
+      "tables": "Tables",
+      "users": "Utilisateurs",
+      "functions": "Fonctions serveur"
+    },
+    "needsSite": {
+      "checking": "Recherche d’une app publiée…",
+      "title": "Publiez pour activer votre base de données",
+      "body": "Les tables et les connexions vivent avec l’app publiée. Publiez une fois et elles apparaîtront ici.",
+      "action": "Ouvrir Publier"
+    },
+    "tables": {
+      "loading": "Chargement des tables…",
+      "heading": "Tables",
+      "rows": "{count, plural, one {# ligne} other {# lignes}}",
+      "pick": "Choisissez une table pour voir ses lignes.",
+      "empty": "Aucune table pour l’instant. Ajoutez-en une, puis pointez un formulaire vers son endpoint.",
+      "delete": "Supprimer la table",
+      "deleteConfirm": "Supprimer la table « {name} » et ses {count, plural, one {# ligne} other {# lignes}} ? Action irréversible.",
+      "deleteRow": "Supprimer la ligne",
+      "deleteRowConfirm": "Supprimer cette ligne ? Action irréversible.",
+      "actions": "Actions",
+      "loadMore": "Charger plus",
+      "newLabel": "Nom de la nouvelle table",
+      "newPlaceholder": "ex. commandes",
+      "add": "Ajouter une table"
+    },
+    "users": {
+      "loading": "Chargement des utilisateurs…",
+      "intro": "Les personnes connectées à votre app. Elles se connectent avec un code à usage unique envoyé par e-mail : aucun mot de passe à gérer.",
+      "failed": "Une erreur s’est produite. Réessayez.",
+      "empty": "Personne ne s’est encore connecté.",
+      "removeConfirm": "Retirer {email} ? Sa connexion et ses abonnements disparaissent ; ce qu’il a envoyé est conservé.",
+      "remove": "Retirer",
+      "loadMore": "Charger plus",
+      "active": "Actif",
+      "suspended": "Suspendu",
+      "meta": "Inscrit le {joined} · vu {seen}",
+      "never": "jamais",
+      "reinstate": "Réactiver",
+      "suspend": "Suspendre",
+      "suspendConfirm": "Confirmer la suspension",
+      "suspendHint": "La personne est déconnectée partout et ne peut plus se reconnecter avant réactivation."
     }
   }
 }

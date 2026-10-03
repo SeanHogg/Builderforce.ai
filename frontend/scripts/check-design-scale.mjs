@@ -118,7 +118,7 @@ const BASELINE = {
    * `--success-bg` / `--success-border` / `--success-text` and the info family instead
    * of mixing `rgba(34,197,94,*)` / `rgba(59,130,246,*)` by hand.
    */
-  themeLockedColours: 162,
+  themeLockedColours: 158,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -278,7 +278,7 @@ const BASELINE = {
    * work. Net −29 below the drifted tally, −25 below the old floor, and the floor
    * follows it down.
    */
-  offScaleFontSizes: 3434,
+  offScaleFontSizes: 3423,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

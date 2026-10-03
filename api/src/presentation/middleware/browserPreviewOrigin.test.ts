@@ -26,6 +26,13 @@ describe('serveBrowserPreviewOrigin', () => {
     expect((await res.text()).length).toBeGreaterThan(100);
   });
 
+  it('serves the process worker beside the relay, so project code runs on the preview origin', async () => {
+    const res = get('https://preview.builderforce.ai/__bfwc/process-worker.js')!;
+    expect(res.headers.get('content-type')).toMatch(/javascript/);
+    expect(res.headers.get('content-security-policy')).toBeNull();
+    expect((await res.text()).length).toBeGreaterThan(1000);
+  });
+
   it('never names "*" as an app origin, even when CORS is open', () => {
     const res = serveBrowserPreviewOrigin(new Request(BROWSER_PREVIEW_RELAY_URL), '*')!;
     expect(res.headers.get('content-security-policy')).not.toContain('*');
@@ -35,6 +42,8 @@ describe('serveBrowserPreviewOrigin', () => {
     expect(get('https://api.builderforce.ai/__bfwc/relay.html')).toBeNull();
     expect(get('https://preview.builderforce.ai/abc.123.sig/index.html')).toBeNull();
     expect(get('https://preview.builderforce.ai/__bfwc/other.js')).toBeNull();
+    expect(get('https://preview.builderforce.ai/__bfwc/constructor')).toBeNull();
+    expect(get('https://preview.builderforce.ai/__bfwc/__proto__')).toBeNull();
     expect(get(BROWSER_PREVIEW_RELAY_URL, 'POST')).toBeNull();
   });
 });

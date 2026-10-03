@@ -30,13 +30,7 @@ import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { backendByProject } from '../backend';
 import { dispatchIngressRequest } from '../backend/ingress';
-import {
-  contentTypeFor,
-  isImmutableAsset,
-  lookupSite,
-  resolveSiteForHost,
-  type SiteRecord,
-} from './siteHosting';
+import { lookupSite, type SiteRecord } from './siteHosting';
 import { listOwnedSiteRecords, submitSiteRecord } from './siteData';
 import {
   SESSION_TTL_MS,
@@ -48,126 +42,30 @@ import {
   verifySiteSignIn,
 } from './siteAuth';
 import { sendRawEmail } from '../../infrastructure/email/EmailService';
-import {
-  flushTrafficDeltas,
-  invalidateSiteTraffic,
-  isPageView,
-  sharedTrafficBuffer,
-  utcDay,
-  visitorHash,
-  visitorSalt,
-} from './siteTraffic';
+import { utcDay, visitorHash, visitorSalt } from './siteTraffic';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import { SITE_LANDING_KEY } from './siteLandingPage';
 import { jsonResponse, readSubmission, corsHeaders } from './siteServer.http';
 import { handleSiteBilling } from '../marketplace/siteBilling';
-import { forkedDocumentHeaders, landingPageApplies, resolveSiteVisitor } from './siteVisitor';
+import { forkedDocumentHeaders, resolveSiteVisitor } from './siteVisitor';
+import { landingPageApplies } from './siteLandingRule';
 import { withSiteBadge } from './siteAttribution';
-
-/** Path prefix reserved for the site's datastore. A published site cannot use
- *  it for assets — enforced by checking it before R2 is consulted. */
-export const SITE_API_PREFIX = '/__api/';
-
-/** Path prefix a published site's own handlers answer on. Unlike
- *  {@link SITE_API_PREFIX} this is NOT reserved: a request here falls back to a
- *  real file when no handler claims the route, so a site that already ships a
- *  static `/api/config.json` keeps working. */
-export const SITE_BACKEND_PREFIX = '/api/';
-
-type WaitUntil = (promise: Promise<unknown>) => void;
-
-/**
- * Make a single-page app's entry document work when it is served for a nested
- * route.
- *
- * A Vite/CRA build emits `<script src="./assets/app.js">` (or `assets/app.js`).
- * Served at `/`, that resolves correctly. Served as the SPA fallback for
- * `/docs/getting-started`, the browser resolves it against `/docs/`, asks for
- * `/docs/assets/app.js`, gets a 404, and the visitor sees a blank page — the
- * deep-link failure that makes a published site look broken precisely when
- * someone shares an inner page.
- *
- * `<base href="/">` fixes every relative URL in the document at once, which is
- * why it is preferable to rewriting each `src`/`href`. A document that already
- * declares its own base is left untouched: the author has said what they mean.
- */
-export function withRootBase(html: string): string {
-  if (/<base\s/i.test(html)) return html;
-  const tag = '<base href="/">';
-  const head = /<head[^>]*>/i.exec(html);
-  if (head) return html.slice(0, head.index + head[0].length) + tag + html.slice(head.index + head[0].length);
-  const htmlTag = /<html[^>]*>/i.exec(html);
-  if (htmlTag) {
-    return html.slice(0, htmlTag.index + htmlTag[0].length) + `<head>${tag}</head>` + html.slice(htmlTag.index + htmlTag[0].length);
-  }
-  return tag + html;
-}
-
-/** True when serving the entry document for this path would break relative URLs
- *  — i.e. the browser's base is not the site root. */
-function needsRootBase(assetPath: string): boolean {
-  return assetPath.replace(/^\/+/, '').includes('/');
-}
-
-/** Serve one asset of a published site from an already-resolved site record.
- *  `exactOnly` suppresses the SPA fallback — used on the backend prefix, where
- *  answering an unmatched `/api/…` with the app's HTML would hand a `fetch()` a
- *  document instead of an error. */
-async function serveAsset(
-  env: Env & { UPLOADS?: R2Bucket },
-  site: SiteRecord,
-  assetPath: string,
-  exactOnly = false,
-): Promise<{ response: Response; bytes: number }> {
-  if (!env.UPLOADS) {
-    return { response: new Response('Storage not configured', { status: 503 }), bytes: 0 };
-  }
-
-  const rel = assetPath.replace(/^\/+/, '');
-  const tryKeys: string[] = [];
-  if (rel && rel !== '/') tryKeys.push(site.r2Prefix + rel);
-  // Directory / client-route request → SPA entry document.
-  const looksLikeFile = /\.[a-z0-9]+$/i.test(rel);
-  const fallbackKey = site.r2Prefix + site.indexDocument;
-  if (!looksLikeFile && !exactOnly) tryKeys.push(fallbackKey);
-
-  for (const key of tryKeys) {
-    const obj = await env.UPLOADS.get(key);
-    if (!obj) continue;
-    const servedPath = key.slice(site.r2Prefix.length);
-    const headers = new Headers();
-    headers.set('Content-Type', contentTypeFor(servedPath));
-    // Build-hashed assets are immutable; everything else (incl. the entry doc)
-    // gets a short TTL so a republish is picked up quickly.
-    headers.set(
-      'Cache-Control',
-      isImmutableAsset(servedPath) ? 'public, max-age=31536000, immutable' : 'public, max-age=60',
-    );
-    // Only the SPA FALLBACK is rewritten, and only for a nested path: a direct
-    // request for an HTML file resolves its own relative URLs correctly and must
-    // be served byte-for-byte.
-    if (key === fallbackKey && key !== site.r2Prefix + rel && needsRootBase(rel)) {
-      const body = withRootBase(await obj.text());
-      return { response: new Response(body, { headers }), bytes: body.length };
-    }
-    return { response: new Response(obj.body, { headers }), bytes: obj.size ?? 0 };
-  }
-  if (exactOnly) return { response: new Response(null, { status: 404 }), bytes: 0 };
-
-  const notFound = await env.UPLOADS.get(site.r2Prefix + '404.html');
-  if (notFound) {
-    return {
-      response: new Response(notFound.body, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
-      bytes: notFound.size ?? 0,
-    };
-  }
-  return { response: new Response('Not found', { status: 404 }), bytes: 0 };
-}
+import {
+  SITE_API_PREFIX,
+  SITE_BACKEND_PREFIX,
+  countSiteRequest,
+  serveAsset,
+  serveCountedAsset,
+  serveStaticSiteRequest,
+  type OnPageView,
+  type SitesEnv,
+  type WaitUntil,
+} from './siteStaticServe';
 
 /** Serve one asset of a published site by subdomain + asset path. */
 export async function serveHostedSite(
-  env: Env & { UPLOADS?: R2Bucket },
+  env: SitesEnv,
   subdomain: string,
   assetPath: string,
 ): Promise<Response> {
@@ -177,78 +75,16 @@ export async function serveHostedSite(
   return withSiteBadge(env, site.tenantId, response);
 }
 
-/**
- * Record one served request. Never awaited on the response path — the visitor
- * gets their bytes whether or not the counter lands.
- */
-async function countRequest(
-  env: Env,
-  site: SiteRecord,
-  request: Request,
-  path: string,
-  bytes: number,
-  /** Override the path-derived classification. A backend call has no file
-   *  extension, so it would otherwise be counted as a page view — and one page
-   *  that calls three handlers on load would report four visits. */
-  pageViewOverride?: boolean,
-): Promise<void> {
-  const day = utcDay(Date.now());
-  const buffer = sharedTrafficBuffer();
-  const pageView = pageViewOverride ?? isPageView(path);
-  // Only page views need a visitor hash; hashing every asset fetch would triple
-  // the crypto work on the hot path for no additional signal.
-  const visitor = pageView
-    ? await visitorHash(
-        visitorSalt(env),
-        request.headers.get('cf-connecting-ip') ?? undefined,
-        request.headers.get('user-agent') ?? undefined,
-        day,
-      )
-    : undefined;
-
-  const shouldFlush = buffer.record({
-    siteId: site.siteId,
+/** The `page-view` workflow trigger — fired from the API only, which is why the
+ *  static path routes a site with a listener here (see `serveStaticSiteRequest`). */
+function firePageView(env: Env): OnPageView {
+  return (site, path, day) => fireEventTriggers(buildDatabase(env), {
     tenantId: site.tenantId,
-    projectId: site.projectId,
-    day,
-    pageView,
-    bytes,
-    visitor,
+    env,
+    eventType: 'page-view',
+    payload: { siteId: site.siteId, projectId: site.projectId, path, day },
+    match: { pagePath: path },
   });
-
-  // A `page-view` workflow trigger fires on the view itself, not on the batched
-  // flush — a workflow that reacts to "somebody hit /pricing" is worthless if it
-  // waits for the buffer to fill. This is the hottest path in the product, so the
-  // dispatch is gated by the CACHED listener check inside fireEventTriggers: a
-  // tenant with no such workflow pays no database round-trip at all.
-  if (pageView) {
-    await fireEventTriggers(buildDatabase(env), {
-      tenantId: site.tenantId,
-      env,
-      eventType: 'page-view',
-      payload: { siteId: site.siteId, projectId: site.projectId, path, day },
-      match: { pagePath: path },
-    }).catch(() => undefined);
-  }
-
-  if (!shouldFlush) return;
-
-  const deltas = buffer.drain();
-  try {
-    await flushTrafficDeltas(buildDatabase(env), deltas);
-    // The summary is read-through cached, so without this a user who just
-    // shared their link would watch a stale zero for the whole TTL — exactly
-    // the moment the number matters most. Only the projects in THIS batch.
-    await Promise.all([...new Set(deltas.map((d) => d.projectId))]
-      .map((projectId) => invalidateSiteTraffic(env, projectId)));
-  } catch (error) {
-    // Losing a batch of counters must never surface to a site visitor, and
-    // re-queueing risks unbounded growth if the database is down. The metric is
-    // explicitly approximate (see application/ide/siteTraffic.ts) — but a
-    // PERSISTENTLY failing flush means the numbers are silently wrong, so it is
-    // reported even though it is not raised.
-    reportCaughtError(error, { source: 'application/ide/siteServer.ts', operation: 'flushSiteTraffic' });
-  }
 }
 
 /** Handle a request to the site's own backend (`/__api/...`). */
@@ -313,7 +149,8 @@ async function handleSiteApi(
 
   const ip = request.headers.get('cf-connecting-ip') ?? undefined;
   const day = utcDay(Date.now());
-  const ipHash = ip ? await visitorHash(visitorSalt(env), ip, undefined, day) : null;
+  const salt = visitorSalt(env);
+  const ipHash = ip && salt ? await visitorHash(salt, ip, undefined, day) : null;
   // A submission from a signed-in end user is OWNED by them, which is what makes
   // it readable back. Anonymous posts keep owner null and behave exactly as before.
   const author = await resolveSiteUser(db, site.siteId, site.tenantId, siteSessionCookie(request.headers.get('cookie')));
@@ -490,18 +327,23 @@ async function deliverSiteSignInCode(env: Env, host: string, email: string, code
  * verified custom domain), or null to let normal API routing continue.
  */
 export async function tryServeHostedSite(
-  env: Env & { UPLOADS?: R2Bucket },
+  env: SitesEnv,
   request: Request,
   waitUntil?: WaitUntil,
 ): Promise<Response | null> {
-  const site = await resolveSiteForHost(env, request.headers.get('host') ?? undefined);
-  if (!site) return null;
+  // The static path answers most requests on its own (and is all the published-site
+  // Worker carries); only what it reports as dynamic continues below.
+  const outcome = await serveStaticSiteRequest(env, request, waitUntil);
+  if (outcome.kind === 'not-a-site') return null;
+  if (outcome.kind === 'served') return outcome.response;
+  const { site } = outcome;
 
   const url = new URL(request.url);
   const path = url.pathname;
-  // One counting call for every exit, so a new branch cannot forget it.
+  const onPageView = firePageView(env);
+  // One counting call for every dynamic exit, so a new branch cannot forget it.
   const count = async (bytes: number, pageView?: boolean): Promise<void> => {
-    const pending = countRequest(env, site, request, path, bytes, pageView);
+    const pending = countSiteRequest(env, site, request, path, bytes, { pageView, onPageView });
     if (waitUntil) waitUntil(pending);
     else await pending;
   };
@@ -523,10 +365,8 @@ export async function tryServeHostedSite(
   }
 
   // ── The shop window ─────────────────────────────────────────────────────────
-  // One additive fork, on the ENTRY DOCUMENT only. A site with no landing page never
-  // reaches the database here — `landingPageApplies` reads a field already on the
-  // cached record — so nothing about serving an app changes for anyone who has not
-  // authored one.
+  // A dynamic request is either this entry-document fork or a page view a workflow
+  // listens to — re-asked here, because only the former renders the shop window.
   if (landingPageApplies(site, url)) {
     const visitor = await resolveSiteVisitor(env, buildDatabase(env), site, request);
     // A not-yet-entitled visitor sees the shop window to subscribe, same as always.
@@ -546,9 +386,7 @@ export async function tryServeHostedSite(
     }
   }
 
-  const { response, bytes } = await serveAsset(env, site, path.replace(/^\/+/, ''));
-  await count(bytes);
-  return withSiteBadge(env, site.tenantId, response);
+  return serveCountedAsset(env, site, request, path, waitUntil, onPageView);
 }
 
 /** Read the rendered landing document out of the release's own prefix. Null when it

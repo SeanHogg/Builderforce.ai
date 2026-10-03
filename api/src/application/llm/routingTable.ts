@@ -287,8 +287,12 @@ export async function finestScopeStats(
   scopes: readonly RoutingScope[],
   pick: (table: RoutingTable) => ActionModelStat[] | undefined,
 ): Promise<ActionModelStat[] | undefined> {
-  for (const scope of scopes) {
-    const stats = pick(await getRoutingTable(env, db, scope));
+  // Every scope's read starts at once; they are still CONSUMED finest-first, so the
+  // answer is the same and a coarser scope's failure only surfaces if it is reached.
+  const tables = scopes.map((scope) => getRoutingTable(env, db, scope));
+  for (const table of tables) table.catch(() => undefined);
+  for (const table of tables) {
+    const stats = pick(await table);
     if (scopeHasSignal(stats, MIN_SAMPLES)) return stats;
   }
   return undefined;

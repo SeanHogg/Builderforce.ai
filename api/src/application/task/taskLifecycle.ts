@@ -18,7 +18,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * own idea of what "not a human" means. Readers that only ask "was this autonomous?"
  * keep working unchanged — every agent kind is still `!== 'human'`.
  */
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -291,13 +291,16 @@ async function closeOpenDescendantsOnParentDone(
     .select({ id: tasks.id, status: tasks.status, projectId: tasks.projectId })
     .from(tasks)
     .where(scopedToTenant(tasks, input.tenantId, eq(tasks.parentTaskId, input.taskId)));
-  for (const child of children) {
-    if (seen.has(child.id)) continue;
-    if (isDoneClass(child.status, ordinals) || isTerminalTaskStatus(child.status)) continue;
-    await db
-      .update(tasks)
-      .set({ status: TaskStatus.DONE, updatedAt: new Date() })
-      .where(scopedToTenant(tasks, input.tenantId, eq(tasks.id, child.id)));
+  const toClose = children.filter((child) =>
+    !seen.has(child.id) && !isDoneClass(child.status, ordinals) && !isTerminalTaskStatus(child.status));
+  if (!toClose.length) return;
+  // Every child gets the same values, so ONE update closes them all; the transitions
+  // (and their recursion into grandchildren) still run per child, in order.
+  await db
+    .update(tasks)
+    .set({ status: TaskStatus.DONE, updatedAt: new Date() })
+    .where(scopedToTenant(tasks, input.tenantId, inArray(tasks.id, toClose.map((child) => child.id))));
+  for (const child of toClose) {
     await recordStatusTransition(env, db, {
       tenantId: input.tenantId,
       projectId: child.projectId,

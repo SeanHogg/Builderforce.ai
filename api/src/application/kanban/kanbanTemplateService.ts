@@ -337,11 +337,15 @@ export class KanbanTemplateService {
       .where(scopedToTenant(swimlanes, tenantId, eq(swimlanes.boardId, boardId)));
     const laneByKey = new Map(existingLanes.map((l) => [l.key, l.id]));
 
+    // Every write below goes into ONE db.batch — a single round trip, atomic — in the
+    // same per-lane order the statements used to run one by one (lane upsert, then its
+    // requirements replaced), followed by the board/project provenance stamps.
+    const writes: unknown[] = [];
     let requirementsApplied = 0;
     for (const lane of template.lanes) {
       let laneId = laneByKey.get(lane.key);
       if (laneId) {
-        await this.db
+        writes.push(this.db
           .update(swimlanes)
           .set({
             name: lane.name, position: lane.position, isTerminal: lane.isTerminal,
@@ -356,23 +360,23 @@ export class KanbanTemplateService {
             isParking: isParkedLane(lane.key),
             requirementGate: lane.requirementGate, updatedAt: now,
           })
-          .where(scopedToTenant(swimlanes, tenantId, eq(swimlanes.id, laneId)));
+          .where(scopedToTenant(swimlanes, tenantId, eq(swimlanes.id, laneId))));
       } else {
         laneId = crypto.randomUUID();
-        await this.db.insert(swimlanes).values({
+        writes.push(this.db.insert(swimlanes).values({
           id: laneId, tenantId, segmentId: realBoard.segmentId ?? null, boardId,
           key: lane.key, name: lane.name, position: lane.position, isTerminal: lane.isTerminal,
           isParking: isParkedLane(lane.key),
           gate: lane.gate, gateSource: 'operator', requirementGate: lane.requirementGate,
           executionMode: 'sequential', failurePolicy: 'needs_attention',
           createdAt: now, updatedAt: now,
-        });
+        }));
         laneByKey.set(lane.key, laneId);
       }
       // Replace this lane's live requirements with the template's.
-      await this.db.delete(swimlaneRequirements).where(scopedToTenant(swimlaneRequirements, tenantId, eq(swimlaneRequirements.swimlaneId, laneId)));
+      writes.push(this.db.delete(swimlaneRequirements).where(scopedToTenant(swimlaneRequirements, tenantId, eq(swimlaneRequirements.swimlaneId, laneId))));
       if (lane.requirements.length) {
-        await this.db.insert(swimlaneRequirements).values(
+        writes.push(this.db.insert(swimlaneRequirements).values(
           lane.requirements.map((r) => ({
             id: crypto.randomUUID(), tenantId, swimlaneId: laneId!,
             kind: r.kind, ref: r.ref, responsibility: r.responsibility ?? null,
@@ -380,7 +384,7 @@ export class KanbanTemplateService {
             ticketType: r.ticketType ?? null, quorum: r.quorum ?? null, condition: r.condition ?? null,
             createdAt: now,
           })),
-        );
+        ));
         requirementsApplied += lane.requirements.length;
       }
     }
@@ -388,8 +392,9 @@ export class KanbanTemplateService {
     // A lifecycle-managed template (PRD §5.5) flips the board into Coordinator mode
     // (assignee = Coordinator, never the default executor); re-applying a legacy
     // template turns it back off, so the flag always tracks the applied template.
-    await this.db.update(boards).set({ templateId, lifecycleManaged: template.lifecycleManaged === true, updatedAt: now }).where(scopedToTenant(boards, tenantId, eq(boards.id, boardId)));
-    await this.db.update(projects).set({ kanbanTemplateId: templateId, updatedAt: now }).where(scopedToTenant(projects, tenantId, eq(projects.id, projectId)));
+    writes.push(this.db.update(boards).set({ templateId, lifecycleManaged: template.lifecycleManaged === true, updatedAt: now }).where(scopedToTenant(boards, tenantId, eq(boards.id, boardId))));
+    writes.push(this.db.update(projects).set({ kanbanTemplateId: templateId, updatedAt: now }).where(scopedToTenant(projects, tenantId, eq(projects.id, projectId))));
+    await this.db.batch(writes as unknown as Parameters<typeof this.db.batch>[0]);
 
     // STAFF WHAT WAS JUST DECLARED. Applying a template writes the lanes and their role
     // requirements and stopped there, so every board in production shipped fully

@@ -13,6 +13,7 @@ import {
   type RequestOptions,
 } from './apiClient';
 import { isPlanLimitError } from './planLimitError';
+import { notifySitePublished } from './sitePublishEvents';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { readSseDataPayloads } from '@seanhogg/builderforce-memory/wire';
 import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
@@ -239,6 +240,43 @@ export async function searchProjectFiles(
   return apiRequest(`${IDE}/projects/${projectId}/search?q=${encodeURIComponent(query)}`);
 }
 
+/** Why a project version exists: the UI words each kind. */
+export type ProjectCheckpointKind = 'baseline' | 'auto' | 'manual' | 'beforeRestore';
+
+export interface ProjectCheckpoint {
+  /** Epoch ms; also the id. */
+  id: number;
+  kind: ProjectCheckpointKind;
+  name?: string;
+  /** A few files that changed since the previous version. */
+  changed: string[];
+  fileCount: number;
+}
+
+export interface ProjectCheckpointRestore {
+  restored: string[];
+  removed: string[];
+  /** Files the version names whose bytes are no longer kept. */
+  missing: string[];
+}
+
+/** Whole-project versions: list, save one, put the project back to one. */
+export const projectCheckpointsApi = {
+  list: (projectId: number | string): Promise<ProjectCheckpoint[]> =>
+    apiRequest(`${IDE}/projects/${projectId}/checkpoints`),
+  create: (
+    projectId: number | string,
+    input: { kind: Exclude<ProjectCheckpointKind, 'beforeRestore'>; name?: string; changed?: string[] },
+  ): Promise<ProjectCheckpoint> =>
+    apiRequest(`${IDE}/projects/${projectId}/checkpoints`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  restore: (projectId: number | string, checkpointId: number): Promise<ProjectCheckpointRestore> =>
+    apiRequest(`${IDE}/projects/${projectId}/checkpoints/${checkpointId}/restore`, { method: 'POST' }),
+};
+
 export async function saveFile(
   projectId: number | string,
   filePath: string,
@@ -427,10 +465,12 @@ export async function publishSite(
   }
   // apiRequest leaves Content-Type unset for FormData so the multipart boundary
   // survives — no header surgery needed.
-  return apiRequest<SitePublishResult>(`${IDE}/projects/${projectId}/publish`, {
+  const result = await apiRequest<SitePublishResult>(`${IDE}/projects/${projectId}/publish`, {
     method: 'POST',
     body: form,
   });
+  notifySitePublished(Number(projectId));
+  return result;
 }
 
 // ---------------------------------------------------------------------------

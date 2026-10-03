@@ -201,25 +201,10 @@ const nextConfig = {
   },
   async headers() {
     return [
-      // WebContainer connect route: must NOT be cross-origin isolated so the
-      // preview tab can complete the connect handshake with the IDE. BOTH COOP
-      // and COEP must be relaxed — COOP:same-origin (inherited from the catch-all
-      // below) severs the opener/postMessage bridge setupConnect needs. The
-      // catch-all's negative-lookahead also excludes this path so it can't re-add
-      // same-origin (Next applies every matching rule).
-      // @see https://github.com/stackblitz/webcontainer-core/issues/1725
-      {
-        source: '/webcontainer/connect/:path*',
-        headers: [
-          { key: 'Cross-Origin-Opener-Policy', value: 'unsafe-none' },
-          { key: 'Cross-Origin-Embedder-Policy', value: 'unsafe-none' },
-        ],
-      },
       {
         // Pages + assets: COOP required for popups; COEP=credentialless allows
         // cross-origin fonts/images while still enabling SharedArrayBuffer (WebGPU).
-        // Excludes /webcontainer/connect (served non-isolated, rule above).
-        source: '/((?!api/|webcontainer/connect).*)',
+        source: '/((?!api/).*)',
         headers: [
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
@@ -232,9 +217,8 @@ const nextConfig = {
         // `frame-ancestors` CSP in middleware.ts; adding X-Frame-Options:SAMEORIGIN
         // or frame-ancestors 'self' here would break that framing. /embed keeps the
         // COOP/COEP rule above but is left out of this one so middleware stays
-        // authoritative for its framing. api/ and webcontainer/connect are excluded
-        // as before.
-        source: '/((?!api/|webcontainer/connect|embed).*)',
+        // authoritative for its framing. api/ is excluded as before.
+        source: '/((?!api/|embed).*)',
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },

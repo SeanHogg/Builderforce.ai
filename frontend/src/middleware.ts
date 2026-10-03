@@ -20,32 +20,18 @@ import { isStudioHost, studioHostRedirect, STUDIO_ROUTE } from '@/lib/studio/stu
  *   request through so the client renders a marketing teaser + login/CTA
  *   (RouteMarketing) rather than redirecting; signed-in-but-no-tenant → /tenants.
  */
-// Cross-origin isolation for Canvas Builder workspaces. WebContainer needs
-// `self.crossOriginIsolated === true` to transfer a SharedArrayBuffer to its
-// worker; that requires COOP:same-origin + COEP:credentialless on the Canvas
-// document. public/_headers + next.config.js set these for static/prerendered
-// routes, but @cloudflare/next-on-pages applies _headers ONLY to static assets
-// and does NOT reliably emit next.config headers() for dynamically-rendered
-// (SSR) routes. `/create/[sessionId]` is SSR, so it can slip
-// through both and booted un-isolated — failing with "not cross-origin
-// isolated". Middleware runs in the Worker for matched routes and DOES apply to
-// the SSR response, so we set the headers here for Canvas routes. Scoped to
-// creation sessions on purpose: blanket credentialless on /embed/* or auth-popup routes can
-// break credentialed cross-origin frames.
+// Cross-origin isolation for Canvas Builder workspaces: it is what gives the
+// in-browser WASM runtimes (onnxruntime-web) SharedArrayBuffer and their threads.
+// public/_headers + next.config.js set it for static/prerendered routes, but
+// @cloudflare/next-on-pages applies _headers ONLY to static assets and does NOT
+// reliably emit next.config headers() for dynamically-rendered (SSR) routes, so
+// the SSR canvas and Studio project routes get it here. Scoped on purpose:
+// blanket credentialless on /embed/* or auth-popup routes can break
+// credentialed cross-origin frames. The preview itself runs on
+// preview.builderforce.ai, whose documents opt into COEP, so it frames fine.
 const COI_HEADERS: Record<string, string> = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'credentialless',
-};
-// The WebContainer connect handshake tab is the INVERSE of COI: it must NOT be
-// cross-origin isolated, or COOP:same-origin severs the postMessage/opener
-// bridge back to the Canvas Builder (setupConnect → "This page must have an opener. You
-// must serve it with appropriate headers"). next.config + public/_headers also
-// declare this, but @cloudflare/next-on-pages doesn't reliably apply either to a
-// dynamically-rendered route — and /webcontainer/connect/[id] is SSR — so set it
-// here, exactly as we do for the SSR Canvas route. Keep all three in sync.
-const NO_ISOLATION_HEADERS: Record<string, string> = {
-  'Cross-Origin-Opener-Policy': 'unsafe-none',
-  'Cross-Origin-Embedder-Policy': 'unsafe-none',
 };
 const PROTECTED_PATHS = [
   '/dashboard',
@@ -148,13 +134,6 @@ export function middleware(request: NextRequest) {
   const rootSegment = pathname.slice(1);
   if (rootSegment && !rootSegment.includes('/') && !MIDDLEWARE_ROOT_SEGMENTS.has(rootSegment)) {
     return NextResponse.next();
-  }
-
-  // WebContainer connect handshake tab — public, and must be served WITHOUT
-  // cross-origin isolation (see NO_ISOLATION_HEADERS). Handle first so it never
-  // hits the isolation or auth logic below.
-  if (pathname === '/webcontainer/connect' || pathname.startsWith('/webcontainer/connect/')) {
-    return withHeaders(NextResponse.next(), NO_ISOLATION_HEADERS);
   }
 
   // The former editor product surface is retired. Preserve published deep links without
@@ -260,8 +239,6 @@ export const config = {
     // through untouched (see `isUnknownRootSlug`), so behaviour for every
     // existing route is unchanged.
     '/:slug',
-    '/webcontainer/connect',
-    '/webcontainer/connect/:path*',
     '/embed/:path*',
     '/logs/:path*',
     '/timeline/:path*',

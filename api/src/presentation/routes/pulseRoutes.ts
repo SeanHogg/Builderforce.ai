@@ -22,7 +22,7 @@ import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { pulseSurveys, pulseResponses } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { computePulseAggregate, computePulseTrend } from '../../application/insights/pulseSurvey';
+import { computePulseAggregate, computePulseAggregates, computePulseTrend } from '../../application/insights/pulseSurvey';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseOptionalBody, z, zNumberLike } from './requestBody';
@@ -112,8 +112,10 @@ export function createPulseRoutes(db: Db): Hono<HonoEnv> {
       .where(eq(pulseSurveys.tenantId, tenantId))
       .orderBy(desc(pulseSurveys.createdAt))
       .limit(100);
-    const withAgg = await Promise.all(surveys.map(async (s) => {
-      const agg = await computePulseAggregate(db, tenantId, s.id);
+    // One responses read for the whole list, not two queries per survey.
+    const aggregates = await computePulseAggregates(db, tenantId, surveys);
+    const withAgg = surveys.map((s) => {
+      const agg = aggregates.get(s.id);
       return {
         id: s.id, question: s.question, scale: s.scale, active: s.active,
         createdAt: new Date(s.createdAt).toISOString(),
@@ -122,7 +124,7 @@ export function createPulseRoutes(db: Db): Hono<HonoEnv> {
         averageScore: agg?.averageScore ?? null,
         enps: agg?.enps ?? null,
       };
-    }));
+    });
     return c.json({ surveys: withAgg });
   });
 

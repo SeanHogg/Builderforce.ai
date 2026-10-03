@@ -22,7 +22,6 @@ import { requestDb } from '../../application/shared/dbHandle';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
   freelancerEngagements,
-  freelancerNotifications,
   jobInvites,
   jobPostings,
   jobProposals,
@@ -80,6 +79,7 @@ import {
 import { hireShape } from '../../application/marketplace/engagementShape';
 import { clientRatingCountSql, clientRatingSql, jobColumns, mapJob, mapProposal, proposalColumns } from '../../application/marketplace/jobs/jobRows';
 import { acceptProposal } from '../../application/marketplace/jobs/acceptProposal';
+import { markNotificationsRead, readNotificationFeed } from '../../application/notifications/notificationFeed';
 import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
@@ -1279,33 +1279,10 @@ export function createJobRoutes(): Hono<HonoEnv> {
 export function createNotificationRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  // GET / — the signed-in user's notification feed + unread count.
+  // GET / — the signed-in user's notification feed + unread count (cached per user;
+  // see `notificationFeed.ts`).
   router.get('/', webAuthMiddleware, async (c) => {
-    const db = requestDb(c);
-    const userId = c.get('userId') as string;
-    const [rows, unreadRows] = await Promise.all([db
-      .select({
-        id:         freelancerNotifications.id,
-        kind:       freelancerNotifications.kind,
-        title:      freelancerNotifications.title,
-        body:       freelancerNotifications.body,
-        ref:        freelancerNotifications.ref,
-        read_at:    freelancerNotifications.readAt,
-        created_at: freelancerNotifications.createdAt,
-      })
-      .from(freelancerNotifications)
-      .where(eq(freelancerNotifications.userId, userId))
-      .orderBy(desc(freelancerNotifications.createdAt))
-      .limit(100),
-      db.select({ value: sql<number>`count(*)::int` })
-        .from(freelancerNotifications)
-        .where(and(eq(freelancerNotifications.userId, userId), isNull(freelancerNotifications.readAt))),
-    ]);
-    const unread = Number(unreadRows[0]?.value ?? 0);
-    return c.json({
-      unread,
-      items: rows.map((r) => ({ id: Number(r.id), kind: r.kind, title: r.title, body: r.body ?? null, ref: r.ref ?? null, read: r.read_at != null, createdAt: r.created_at })),
-    });
+    return c.json(await readNotificationFeed(c.env as Env, requestDb(c), c.get('userId') as string));
   });
 
   // POST /read — mark all (or a given set of) notifications read.
@@ -1316,17 +1293,7 @@ export function createNotificationRoutes(): Hono<HonoEnv> {
     // so a malformed `ids` is a 400 rather than silently marking the whole feed read.
     const b = await parseOptionalBody(c, NotificationReadBody);
     const ids = b.ids ? b.ids.map(Number).filter(Number.isFinite) : null;
-    if (ids && ids.length > 0) {
-      await db
-        .update(freelancerNotifications)
-        .set({ readAt: sql`NOW()` })
-        .where(and(eq(freelancerNotifications.userId, userId), inArray(freelancerNotifications.id, ids), isNull(freelancerNotifications.readAt)));
-    } else {
-      await db
-        .update(freelancerNotifications)
-        .set({ readAt: sql`NOW()` })
-        .where(and(eq(freelancerNotifications.userId, userId), isNull(freelancerNotifications.readAt)));
-    }
+    await markNotificationsRead(c.env as Env, db, userId, ids);
     return c.json({ ok: true });
   });
 

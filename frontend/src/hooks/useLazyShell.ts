@@ -8,9 +8,8 @@ type StartShell = (onOutput: (data: string) => void) => Promise<WritableStreamDe
  * The IDE terminal's shell, started on the FIRST keystroke rather than when the
  * page opens.
  *
- * Starting a shell boots a WebContainer, a metered StackBlitz session. Booting one
- * on every canvas open spent a session even when the user never touched the
- * terminal, and previews no longer need one (they run on our own runtime). Input
+ * Starting a shell boots the in-browser runtime's relay and a process worker,
+ * which is wasted work on a canvas open where nobody touches the terminal. Input
  * typed while the shell starts is buffered and flushed, so nothing is lost.
  *
  * Returns the terminal's `onInput` handler.

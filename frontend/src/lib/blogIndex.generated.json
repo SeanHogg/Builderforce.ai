@@ -1,5 +1,20 @@
 [
   {
+    "slug": "builderforce-studio-describe-it-run-it",
+    "title": "Builderforce Studio — describe an app, watch it run, keep every version",
+    "date": "2026-10-03",
+    "description": "studio.builderforce.ai turns a prompt into a running app in one window. Every agent turn becomes a version you can restore, the app's data has its own Database view, and Node, Vue and Svelte projects run right in your browser.",
+    "tags": [
+      "studio",
+      "app-development",
+      "preview",
+      "versions",
+      "database",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "publish-your-evermind-to-hugging-face",
     "title": "Put the model you trained on Hugging Face, from the page you trained it on",
     "date": "2026-09-28",

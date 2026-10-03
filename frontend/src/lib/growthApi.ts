@@ -103,12 +103,53 @@ export const siteDataApi = {
       body: JSON.stringify(patch),
     }),
 
+  /** Newest first; pass the last id of the previous page as `before` for the next one. */
   listRecords: (
     projectId: number | string,
     collectionId: number,
     limit = 50,
+    before?: number,
   ): Promise<{ records: SiteRecord[] }> =>
-    apiRequest(`${siteBase(projectId)}/collections/${collectionId}/records?limit=${limit}`),
+    apiRequest(`${siteBase(projectId)}/collections/${collectionId}/records?limit=${limit}${before ? `&before=${before}` : ''}`),
+
+  /** Removes the collection AND every record in it. */
+  deleteCollection: (projectId: number | string, collectionId: number): Promise<{ ok: true }> =>
+    apiRequest(`${siteBase(projectId)}/collections/${collectionId}`, { method: 'DELETE' }),
+
+  deleteRecord: (projectId: number | string, collectionId: number, recordId: number): Promise<{ ok: true }> =>
+    apiRequest(`${siteBase(projectId)}/collections/${collectionId}/records/${recordId}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Site end users — the people who signed up to the app
+// ---------------------------------------------------------------------------
+
+export type SiteUserStatus = 'active' | 'suspended';
+
+export interface SiteUser {
+  id: number;
+  email: string;
+  displayName: string | null;
+  status: SiteUserStatus;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+export const siteUsersApi = {
+  /** Newest first; pass the last id of the previous page as `before` for the next one. */
+  list: (projectId: number | string, limit = 50, before?: number): Promise<{ users: SiteUser[] }> =>
+    apiRequest(`${siteBase(projectId)}/users?limit=${limit}${before ? `&before=${before}` : ''}`),
+
+  /** Suspending also signs the person out everywhere. */
+  setStatus: (projectId: number | string, userId: number, status: SiteUserStatus): Promise<SiteUser> =>
+    apiRequest(`${siteBase(projectId)}/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }),
+
+  remove: (projectId: number | string, userId: number): Promise<{ ok: true }> =>
+    apiRequest(`${siteBase(projectId)}/users/${userId}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------

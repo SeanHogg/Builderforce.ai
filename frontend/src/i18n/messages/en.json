@@ -1272,7 +1272,6 @@
       "mounted": "{count, plural, one {Mounted # file.} other {Mounted # files.}}",
       "stepInstalling": "[3/3] Installing dependencies…",
       "installFailed": "npm install failed (exit code {code}). Fix the errors above and try again.",
-      "installFailedShort": "npm install failed (exit {code}).",
       "depsReady": "Dependencies ready.",
       "startingDevServer": "Starting dev server…",
       "devServerReady": "Dev server ready at {url}",
@@ -1289,7 +1288,6 @@
       "noDistOutput": "The build produced no dist/ output. Make sure your build script outputs to \"dist\".",
       "capturedFiles": "{count, plural, one {Captured # built file.} other {Captured # built files.}}",
       "runningChecks": "Running checks",
-      "synthesizedTsconfig": "(synthesized a minimal tsconfig.json for the type-check fallback)",
       "checkStep": "{label}…",
       "allChecksPassed": "All checks passed.",
       "checksFailed": "{count, plural, one {# check failed.} other {# checks failed.}}",
@@ -1307,6 +1305,7 @@
     "rightTab": {
       "voice": "Voice",
       "files": "Files",
+      "versions": "Versions",
       "agent": "Agent",
       "train": "Train",
       "publish": "Publish",
@@ -1519,6 +1518,12 @@
         "android": "Android project",
         "ios": "iOS project"
       }
+    },
+    "centerDatabase": "Database",
+    "runtimeStatus": {
+      "booting": "⏳ Starting…",
+      "ready": "✅ Ready",
+      "error": "⚠️ Runtime error"
     }
   },
   "references": {
@@ -26103,19 +26108,10 @@
       }
     },
     "forms": {
-      "title": "Forms",
-      "description": "Every published site can collect submissions. Post a form to the endpoint below.",
       "endpoint": "Endpoint",
-      "submissionCount": "{count} submissions",
-      "viewSubmissions": "View submissions",
-      "hideSubmissions": "Hide submissions",
       "noSubmissions": "No submissions yet.",
       "when": "When",
       "email": "Email",
-      "fields": "Fields",
-      "newPlaceholder": "new-form",
-      "newLabel": "New form name",
-      "add": "Add form",
       "raisesTickets": "Open a ticket for each submission",
       "raisesTicketsHint": "When on, every new submission opens a ticket on this project's board so the workforce can act on it — and the submitter is notified when it's resolved.",
       "genericError": "Something went wrong. Try again.",
@@ -31802,11 +31798,6 @@
     "loadingMessages": "Loading messages…",
     "noMessages": "No messages."
   },
-  "webcontainerConnect": {
-    "connecting": "Connecting to your IDE…",
-    "connected": "Connected. You can close this tab if the preview is showing in your IDE.",
-    "failed": "Connection failed: {error}"
-  },
   "startups": {
     "vocab": {
       "stage": {
@@ -32107,10 +32098,6 @@
     "download": "Download for Windows, macOS or Linux",
     "readMore": "How it works"
   },
-  "webcontainer": {
-    "attributionLead": "Runs in your browser on",
-    "attributionAria": "Powered by WebContainers by StackBlitz (opens in a new tab)"
-  },
   "siteBadge": {
     "body": "Free sites show a small “Made with Builderforce.ai” badge.",
     "upgrade": "Upgrade to remove it"
@@ -32176,6 +32163,98 @@
       "loadFailed": "Couldn't open this project.",
       "loading": "Opening your project…",
       "signInLead": "Sign in to open this project."
+    }
+  },
+  "builderSearch": {
+    "filesTab": "Files",
+    "searchTab": "Search",
+    "panelLabel": "Files and search",
+    "label": "Search all files",
+    "placeholder": "Search all files…",
+    "searching": "Searching…",
+    "failed": "Search didn't finish. Try again.",
+    "hint": "Type at least {min} characters to search every file.",
+    "count": "{matches, plural, =0 {No matches} one {# match} other {# matches}} in {files, plural, one {# file} other {# files}}",
+    "countTruncated": "First {matches} matches in {files, plural, one {# file} other {# files}}. Narrow the search to see the rest."
+  },
+  "builderPanels": {
+    "panelLabel": "Terminal, output and problems",
+    "terminal": "Terminal",
+    "output": "Output",
+    "problems": "Problems",
+    "problemsCount": "Problems ({count})",
+    "collapse": "Collapse panel",
+    "expand": "Expand panel",
+    "noProblems": "No problems. Build and runtime errors from your last run appear here.",
+    "clearProblems": "Clear",
+    "sourceBuild": "Build",
+    "sourceRuntime": "Runtime"
+  },
+  "builderVersions": {
+    "loading": "Loading versions…",
+    "loadFailed": "Couldn't load versions.",
+    "restored": "Restored {restored, plural, one {# file} other {# files}}, removed {removed, plural, one {# file} other {# files}}.",
+    "missing": "{count, plural, one {# file was} other {# files were}} too old to restore: {files}.",
+    "restoreFailed": "Couldn't restore that version.",
+    "saveFailed": "Couldn't save a version.",
+    "autoTitle": "Changed {files}",
+    "someFiles": "some files",
+    "filesAndMore": "{files} and {more} more",
+    "baselineTitle": "Starting point",
+    "beforeRestoreTitle": "Before a restore",
+    "meta": "Version {number} · {time}",
+    "restore": "Restore",
+    "confirmRestore": "Click again to restore",
+    "nameLabel": "Version name",
+    "namePlaceholder": "Name this version…",
+    "save": "Save",
+    "restoreHint": "Your current work is saved as a version first."
+  },
+  "builderDatabase": {
+    "sectionsLabel": "Database sections",
+    "sections": {
+      "tables": "Tables",
+      "users": "Users",
+      "functions": "Server functions"
+    },
+    "needsSite": {
+      "checking": "Checking for a published app…",
+      "title": "Publish to switch on your database",
+      "body": "Tables and sign-ins live with the published app. Publish once and they appear here.",
+      "action": "Open Publish"
+    },
+    "tables": {
+      "loading": "Loading tables…",
+      "heading": "Tables",
+      "rows": "{count, plural, one {# row} other {# rows}}",
+      "pick": "Pick a table to see its rows.",
+      "empty": "No tables yet. Add one, then point a form at its endpoint.",
+      "delete": "Delete table",
+      "deleteConfirm": "Delete the “{name}” table and its {count, plural, one {# row} other {# rows}}? This can’t be undone.",
+      "deleteRow": "Delete row",
+      "deleteRowConfirm": "Delete this row? This can’t be undone.",
+      "actions": "Actions",
+      "loadMore": "Load more",
+      "newLabel": "New table name",
+      "newPlaceholder": "e.g. orders",
+      "add": "Add table"
+    },
+    "users": {
+      "loading": "Loading users…",
+      "intro": "People who signed in to your app. They sign in with a one-time code sent to their email, so there are no passwords to manage.",
+      "failed": "Something went wrong. Try again.",
+      "empty": "Nobody has signed in yet.",
+      "removeConfirm": "Remove {email}? Their sign-in and subscriptions go; anything they submitted stays.",
+      "remove": "Remove",
+      "loadMore": "Load more",
+      "active": "Active",
+      "suspended": "Suspended",
+      "meta": "Joined {joined} · last seen {seen}",
+      "never": "never",
+      "reinstate": "Reinstate",
+      "suspend": "Suspend",
+      "suspendConfirm": "Confirm suspend",
+      "suspendHint": "They’re signed out everywhere and can’t sign back in until reinstated."
     }
   }
 }

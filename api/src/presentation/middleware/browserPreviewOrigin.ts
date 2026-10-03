@@ -10,11 +10,11 @@
  * preview iframe loads from here too. Both files come from the npm package, so
  * the worker and the app's runtime are always the same version.
  *
- * Static and cheap: two constant strings, no database, no auth. `relay.html` may
+ * Static and cheap: three constant strings, no database, no auth. `relay.html` may
  * only be framed by the app itself (`frame-ancestors`), because whoever frames it
  * can drive it.
  */
-import { relayHtml, serviceWorkerSource } from '@seanhogg/builderforce-webcontainers/assets';
+import { processWorkerSource, relayHtml, serviceWorkerSource } from '@seanhogg/builderforce-webcontainers/assets';
 import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
 import { appOrigins } from './cors';
 
@@ -34,31 +34,41 @@ const EMBEDDABLE = {
   'X-Content-Type-Options': 'nosniff',
 };
 
+/** What each file is and how long a cache may answer for it. */
+interface PreviewAsset {
+  body: string;
+  contentType: string;
+  cacheControl: string;
+  /** Only `relay.html` is framed, so only it carries `frame-ancestors`. */
+  framed?: boolean;
+}
+
+const ASSETS: Record<string, PreviewAsset> = {
+  // Short: a deploy that changes the relay reaches open tabs on their next boot.
+  'relay.html': { body: relayHtml, contentType: 'text/html; charset=utf-8', cacheControl: 'public, max-age=300', framed: true },
+  // Browsers re-check a worker script on navigation; never let a cache answer for it.
+  'sw.js': { body: serviceWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'no-cache' },
+  // The process worker (node, npm, the shell). The relay starts it HERE, so a
+  // project's code runs on this origin and never on builderforce.ai. Versioned by
+  // the package, so a short cache is enough.
+  'process-worker.js': { body: processWorkerSource, contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=300' },
+};
+
 export function serveBrowserPreviewOrigin(request: Request, corsOrigins: string | undefined): Response | null {
   const url = new URL(request.url);
   if (url.hostname !== PREVIEW_HOST || !url.pathname.startsWith(BROWSER_PREVIEW_PREFIX)) return null;
   if (request.method !== 'GET' && request.method !== 'HEAD') return null;
 
-  if (url.pathname === `${BROWSER_PREVIEW_PREFIX}relay.html`) {
-    return new Response(request.method === 'HEAD' ? null : relayHtml, {
-      headers: {
-        ...EMBEDDABLE,
-        'Content-Type': 'text/html; charset=utf-8',
-        'Content-Security-Policy': `frame-ancestors ${appOrigins(corsOrigins).join(' ')}`,
-        // Short: a deploy that changes the relay reaches open tabs on their next boot.
-        'Cache-Control': 'public, max-age=300',
-      },
-    });
-  }
-  if (url.pathname === `${BROWSER_PREVIEW_PREFIX}sw.js`) {
-    return new Response(request.method === 'HEAD' ? null : serviceWorkerSource, {
-      headers: {
-        ...EMBEDDABLE,
-        'Content-Type': 'text/javascript; charset=utf-8',
-        // Browsers re-check a worker script on navigation; never let a cache answer for it.
-        'Cache-Control': 'no-cache',
-      },
-    });
-  }
-  return null;
+  const name = url.pathname.slice(BROWSER_PREVIEW_PREFIX.length);
+  // Own keys only: `constructor` or `__proto__` must not resolve to Object's.
+  if (!Object.hasOwn(ASSETS, name)) return null;
+  const asset = ASSETS[name]!;
+  return new Response(request.method === 'HEAD' ? null : asset.body, {
+    headers: {
+      ...EMBEDDABLE,
+      'Content-Type': asset.contentType,
+      'Cache-Control': asset.cacheControl,
+      ...(asset.framed ? { 'Content-Security-Policy': `frame-ancestors ${appOrigins(corsOrigins).join(' ')}` } : {}),
+    },
+  });
 }

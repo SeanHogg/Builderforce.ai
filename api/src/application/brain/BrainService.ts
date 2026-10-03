@@ -422,14 +422,11 @@ export class BrainService {
   private async ensureMembership(chatId: number, tenantId: number, userId: string, ownerId: string | null): Promise<void> {
     if (!userId || userId === ownerId) return;
     try {
-      const [existing] = await this.db
-        .select({ id: chatMembers.id })
-        .from(chatMembers)
-        .where(scopedToTenant(chatMembers, tenantId, eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId)))
-        .limit(1);
-      if (existing) return;
+      // One statement: an existing row (whatever its status) wins on the unique
+      // (chat_id, user_id) index, exactly as the old read-then-insert left it alone.
       await this.db.insert(chatMembers)
-        .values({ chatId, tenantId, userId, status: 'active', role: 'participant' });
+        .values({ chatId, tenantId, userId, status: 'active', role: 'participant' })
+        .onConflictDoNothing({ target: [chatMembers.chatId, chatMembers.userId] });
     } catch (error) {
       /* audience tracking is non-critical — never fail a post over it */
     
@@ -556,7 +553,9 @@ export class BrainService {
     // Activate any pending email-invites for this user, then list chats they OWN
     // or are an active MEMBER of (shared access, migration 0288).
     await this.syncPendingMemberships(tenantId, userId);
-    const memberRows = await this.db
+    // The membership set is a SUBQUERY of the chat read rather than a round trip of
+    // its own; it runs after the sync above, so just-activated invites are in it.
+    const memberChatIds = this.db
       .select({ chatId: chatMembers.chatId })
       .from(chatMembers)
       .where(and(
@@ -564,14 +563,11 @@ export class BrainService {
         eq(chatMembers.userId, userId),
         eq(chatMembers.status, 'active'),
       ));
-    const memberChatIds = memberRows.map((r) => r.chatId);
 
     // Visible chats: ones you OWN, ones you're an active member of, and every
     // SHARED chat in this tenant (chats are global to project+tenant). Locked chats
     // only surface to their owner/members.
-    const visible = memberChatIds.length > 0
-      ? or(eq(brainChats.userId, userId), eq(brainChats.visibility, 'shared'), inArray(brainChats.id, memberChatIds))!
-      : or(eq(brainChats.userId, userId), eq(brainChats.visibility, 'shared'))!;
+    const visible = or(eq(brainChats.userId, userId), eq(brainChats.visibility, 'shared'), inArray(brainChats.id, memberChatIds))!;
     const conditions = [
       eq(brainChats.tenantId, tenantId),
       visible,
@@ -613,8 +609,11 @@ export class BrainService {
     const byChat = new Map<number, Array<{ ref: string; kind: string; name?: string }>>();
     const ids = rows.map((r) => r.id);
     if (ids.length > 0) {
-      try {
-        const asg = await this.db
+      // The agent and human rosters are independent reads, so they run together.
+      // Settled separately to keep the old failure shape: a failed agent read leaves
+      // the roster empty, a failed member read still keeps the agents.
+      const [asg, mem] = await Promise.allSettled([
+        this.db
           .select({
             scopeId: agentAssignments.scopeId,
             agentRef: agentAssignments.agentRef,
@@ -625,19 +624,11 @@ export class BrainService {
             eq(agentAssignments.tenantId, tenantId),
             eq(agentAssignments.scope, 'chat'),
             inArray(agentAssignments.scopeId, ids.map(String)),
-          ));
-        for (const a of asg) {
-          const cid = Number(a.scopeId);
-          if (!Number.isNaN(cid)) {
-            const list = byChat.get(cid) ?? [];
-            list.push({ ref: a.agentRef, kind: 'agent' });
-            byChat.set(cid, list);
-          }
-        }
+          )),
         // Human members (migration 0288) join the same roster with kind='human',
         // ref = their user id, name = their display name (so a non-webview surface
         // like the native SESSIONS tree can label them without a second lookup).
-        const mem = await this.db
+        this.db
           .select({ chatId: chatMembers.chatId, userId: chatMembers.userId, name: users.displayName, email: users.email })
           .from(chatMembers)
           .leftJoin(users, eq(users.id, chatMembers.userId))
@@ -645,17 +636,30 @@ export class BrainService {
             eq(chatMembers.tenantId, tenantId),
             eq(chatMembers.status, 'active'),
             inArray(chatMembers.chatId, ids),
-          ));
-        for (const m of mem) {
-          if (!m.userId) continue;
-          const list = byChat.get(m.chatId) ?? [];
-          list.push({ ref: m.userId, kind: 'human', name: m.name || m.email || undefined });
-          byChat.set(m.chatId, list);
+          )),
+      ]);
+      /* participants are non-critical — the chat list must survive their absence */
+      if (asg.status === 'rejected') {
+        reportCaughtError(asg.reason, { source: "application/brain/BrainService.ts", operation: "attachParticipants" });
+      } else {
+        for (const a of asg.value) {
+          const cid = Number(a.scopeId);
+          if (!Number.isNaN(cid)) {
+            const list = byChat.get(cid) ?? [];
+            list.push({ ref: a.agentRef, kind: 'agent' });
+            byChat.set(cid, list);
+          }
         }
-      } catch (error) {
-        /* participants are non-critical — the chat list must survive their absence */
-      
-        reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "attachParticipants" });
+        if (mem.status === 'rejected') {
+          reportCaughtError(mem.reason, { source: "application/brain/BrainService.ts", operation: "attachParticipants" });
+        } else {
+          for (const m of mem.value) {
+            if (!m.userId) continue;
+            const list = byChat.get(m.chatId) ?? [];
+            list.push({ ref: m.userId, kind: 'human', name: m.name || m.email || undefined });
+            byChat.set(m.chatId, list);
+          }
+        }
       }
     }
     return rows.map((r) => ({ ...r, participants: byChat.get(r.id) ?? [] }));
@@ -975,9 +979,12 @@ export class BrainService {
     }
 
     // Contributing to a shared chat joins you to it (records the live audience).
-    await this.ensureMembership(chatId, tenantId, userId, (chat as unknown as { ownerId: string | null }).ownerId);
-
-    return this.appendRaw(chatId, dto.messages);
+    // Best-effort and independent of the message write, so the two run together.
+    const [, written] = await Promise.all([
+      this.ensureMembership(chatId, tenantId, userId, (chat as unknown as { ownerId: string | null }).ownerId),
+      this.appendRaw(chatId, dto.messages),
+    ]);
+    return written;
   }
 
   /** Append messages to a chat (seq-managed insert + touch), NO access check —

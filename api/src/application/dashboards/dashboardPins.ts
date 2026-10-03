@@ -70,16 +70,14 @@ export async function removePin(db: Db, env: Env, tenantId: number, userId: stri
   await invalidateCached(env, pinsKey(tenantId, userId));
 }
 
-/** Apply positions in the given order. Sequential is fine: the set is small and
- *  neon-http has no interactive transaction to batch it into anyway. */
+/** Apply positions in the given order — one UPDATE per pin, sent as ONE db.batch
+ *  (a single round trip, atomic). Position carries no unique index, so no two-phase. */
 export async function reorderPins(db: Db, env: Env, tenantId: number, userId: string, order: string[]): Promise<Pin[]> {
-  let i = 0;
-  for (const key of order) {
-    await db
+  if (order.length) {
+    await db.batch(order.map((key, i) => db
       .update(dashboardPins)
       .set({ position: i })
-      .where(and(eq(dashboardPins.tenantId, tenantId), eq(dashboardPins.userId, userId), eq(dashboardPins.widgetKey, key)));
-    i++;
+      .where(and(eq(dashboardPins.tenantId, tenantId), eq(dashboardPins.userId, userId), eq(dashboardPins.widgetKey, key)))) as unknown as Parameters<typeof db.batch>[0]);
   }
   await invalidateCached(env, pinsKey(tenantId, userId));
   return loadPins(db, tenantId, userId);

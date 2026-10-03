@@ -371,15 +371,18 @@ export class TicketParticipantsService {
     const exact = opts.stageKey != null ? all.filter((r) => r.stageKey === opts.stageKey && ADVANCEABLE_PARTICIPANT_STATES.has(r.state as ParticipantState)) : [];
     const targets = exact.length ? exact : all.filter((r) => ADVANCEABLE_PARTICIPANT_STATES.has(r.state as ParticipantState));
     if (!targets.length) return;
-    for (const r of targets) {
-      const state: ParticipantState = 'in_progress';
+    // Each slot keeps its own evidence, so the updates differ per row: one batch
+    // (a single round trip) instead of one UPDATE per slot.
+    const state: ParticipantState = 'in_progress';
+    const updates = targets.map((r) => {
       const evidence = {
         ...(r.evidence && typeof r.evidence === 'object' ? r.evidence : {}),
         ...(opts.executionId != null ? { executionId: opts.executionId } : {}),
         ...(opts.prUrl ? { prUrl: opts.prUrl } : {}),
       };
-      await this.db.update(ticketParticipants).set({ state, evidence, updatedAt: new Date() }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, r.id)));
-    }
+      return this.db.update(ticketParticipants).set({ state, evidence, updatedAt: new Date() }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, r.id)));
+    });
+    await this.db.batch(updates as unknown as Parameters<typeof this.db.batch>[0]);
     await this.bump(env, taskId);
   }
 
@@ -609,12 +612,16 @@ export class TicketParticipantsService {
    * so the parent ticket's %-complete rolls up from real board tasks.
    */
   async materializeChildTasks(env: Env, tenantId: number, taskId: number, createChild: CreateChildTask): Promise<number> {
-    const [parent] = await this.db.select({ title: tasks.title }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1);
-    const rows = await this.db
-      .select()
-      .from(ticketParticipants)
-      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId)));
-    let created = 0;
+    const [[parent], rows] = await Promise.all([
+      this.db.select({ title: tasks.title }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1),
+      this.db
+        .select()
+        .from(ticketParticipants)
+        .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId))),
+    ]);
+    // Children are still created one at a time (task creation allocates per-board
+    // state); the participant links they produce are written in ONE batch after.
+    const links: Array<{ participantId: string; childTaskId: number }> = [];
     for (const r of rows) {
       if (r.childTaskId != null || !r.assigneeRef) continue;
       const title = `[${roleName(r.roleKey)}] ${parent?.title ?? `Ticket #${taskId}`}`;
@@ -625,9 +632,14 @@ export class TicketParticipantsService {
         assignedUserId: r.assigneeKind === 'human' ? r.assigneeRef : null,
       }).catch(() => null);
       if (!child) continue;
-      await this.db.update(ticketParticipants).set({ childTaskId: child.id, updatedAt: new Date() }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, r.id)));
-      created += 1;
+      links.push({ participantId: r.id, childTaskId: child.id });
     }
+    if (links.length) {
+      await this.db.batch(links.map((l) => this.db.update(ticketParticipants)
+        .set({ childTaskId: l.childTaskId, updatedAt: new Date() })
+        .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, l.participantId)))) as unknown as Parameters<typeof this.db.batch>[0]);
+    }
+    const created = links.length;
     if (created) { await this.syncStates(env, tenantId, taskId); await this.bump(env, taskId); }
     return created;
   }
@@ -638,15 +650,18 @@ export class TicketParticipantsService {
    * add, materialize) — reads stay cached.
    */
   async syncStates(env: Env, tenantId: number, taskId: number): Promise<void> {
-    const rows = await this.db.select().from(ticketParticipants).where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId)));
+    // The participants and the sign-off ledger are independent reads — one wave.
+    const [rows, signoffs] = await Promise.all([
+      this.db.select().from(ticketParticipants).where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId))),
+      // Latest sign-off per role (append-only ledger — last verdict wins).
+      this.db
+        .select({ id: ticketRoleSignoffs.id, laneKey: ticketRoleSignoffs.laneKey, roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
+        .from(ticketRoleSignoffs)
+        .where(scopedToTenant(ticketRoleSignoffs, tenantId, eq(ticketRoleSignoffs.taskId, taskId)))
+        .orderBy(asc(ticketRoleSignoffs.createdAt)),
+    ]);
     if (!rows.length) return;
 
-    // Latest sign-off per role (append-only ledger — last verdict wins).
-    const signoffs = await this.db
-      .select({ id: ticketRoleSignoffs.id, laneKey: ticketRoleSignoffs.laneKey, roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
-      .from(ticketRoleSignoffs)
-      .where(scopedToTenant(ticketRoleSignoffs, tenantId, eq(ticketRoleSignoffs.taskId, taskId)))
-      .orderBy(asc(ticketRoleSignoffs.createdAt));
     const latestBySlot = new Map<string, { id: string; verdict: string }>();
     // A verdict recorded WITHOUT a laneKey, indexed by role alone. `laneKey` is optional
     // on the sign-off route and the MCP tool, so an agent that omits it produced a ledger
@@ -668,6 +683,8 @@ export class TicketParticipantsService {
       for (const k of kids) childStatus.set(k.id, k.status);
     }
 
+    // Changed rows are collected and persisted in ONE batch, not one UPDATE each.
+    const changed: Array<{ id: string; state: ParticipantState; signoffId: string | null }> = [];
     for (const r of rows) {
       const so = latestBySlot.get(slotKey(r.stageKey, r.roleKey)) ?? latestByRole.get(r.roleKey);
       // PRESERVE `in_progress`. It is written by run ATTRIBUTION
@@ -711,9 +728,12 @@ export class TicketParticipantsService {
         else if (so.verdict === 'changes_requested') state = 'changes_requested';
         else if (so.verdict === 'delegated') state = 'assigned';
       }
-      if (state !== r.state || signoffId !== r.signoffId) {
-        await this.db.update(ticketParticipants).set({ state, signoffId, updatedAt: new Date() }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, r.id)));
-      }
+      if (state !== r.state || signoffId !== r.signoffId) changed.push({ id: r.id, state, signoffId });
+    }
+    if (changed.length) {
+      await this.db.batch(changed.map((c) => this.db.update(ticketParticipants)
+        .set({ state: c.state, signoffId: c.signoffId, updatedAt: new Date() })
+        .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, c.id)))) as unknown as Parameters<typeof this.db.batch>[0]);
     }
   }
 

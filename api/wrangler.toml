@@ -17,27 +17,12 @@ mode = "smart"
 pattern = "api.builderforce.ai"
 custom_domain = true
 
-# Wildcard subdomain hosting for published IDE (Designer) projects. Every
-# `<sub>.builderforce.ai` request lands on this worker; the host-hosting
-# middleware in src/index.ts serves it from R2 (`sites/<sub>/...`) as a public
-# website. A zone route (not custom_domain) so one pattern covers all subdomains.
-#
-# Single-label apex (`*.builderforce.ai`, NOT `*.apps.builderforce.ai`) so the
-# FREE Universal SSL cert covers it — a second-level wildcard would need paid ACM.
-# The trade-off: this apex is SHARED with platform hostnames, so the route is
-# greedy. Two safeguards: (1) more-specific routes win — `api.builderforce.ai`
-# (custom_domain above) and any www/app frontend binding keep their traffic;
-# (2) `subdomainFromHost` (siteHosting.ts) refuses RESERVED_SUBDOMAINS, so a
-# reserved label that DOES hit this worker falls through to normal routing.
-#
-# REQUIRES a matching proxied wildcard DNS record so unclaimed labels resolve to
-# the edge — add once (Cloudflare dashboard → DNS, or the API call below):
-#   Type AAAA  Name *  Content 100::  Proxied (orange cloud)
-#   (specific records for api/www/etc. take DNS precedence over the wildcard;
-#    100:: is the standard discard placeholder for a Worker-only route.)
-[[routes]]
-pattern = "*.builderforce.ai/*"
-zone_name = "builderforce.ai"
+# Wildcard subdomain hosting (`*.builderforce.ai/*`) is NOT bound here any more: it is
+# the `builderforce-sites` Worker's route (wrangler.sites.toml, src/sitesWorker.ts), so
+# a published-site visit no longer cold-starts this whole Worker. Requests it does not
+# serve itself — platform hosts and a site's dynamic paths — reach THIS Worker over
+# that Worker's `API` service binding, and the host-hosting middleware in src/index.ts
+# answers them exactly as it did when the wildcard landed here directly.
 
 # Same-origin gateway path. Corporate networks frequently whitelist the primary
 # apex (builderforce.ai) but block the `api.` subdomain, so direct calls to

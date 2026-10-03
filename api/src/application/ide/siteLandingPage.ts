@@ -30,7 +30,7 @@ import {
   type WebsiteTheme,
 } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
-import { ENTER_APP_PARAM } from './siteVisitor';
+import { ENTER_APP_PARAM } from './siteLandingRule';
 import { SITE_COMMERCE_WIDGET_PATH } from '../marketplace/siteCommerceWidget';
 import {
   creationSessionObjects,

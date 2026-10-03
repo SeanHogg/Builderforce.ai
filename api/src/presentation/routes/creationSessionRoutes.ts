@@ -744,27 +744,42 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       .offset(offsetParam(c.req.query('offset')));
     // Search matches are only hints. Revalidate every authoritative resource
     // represented in the preview because access can be revoked after insertion.
-    const safeRows = await Promise.all(rows.map(async (row) => {
-      const referencedObjects = await db.select({
-        id: creationSessionObjects.id,
-        kind: creationSessionObjects.kind,
-        resourceType: creationSessionObjects.resourceType,
-        resourceId: creationSessionObjects.resourceId,
-        resourceRevision: creationSessionObjects.resourceRevision,
-        canvasData: creationSessionObjects.canvasData,
-        content: creationSessionObjects.content,
-      }).from(creationSessionObjects).where(and(
-        eq(creationSessionObjects.sessionId, row.id),
-        sql`${creationSessionObjects.resourceType} IS NOT NULL`,
-        sql`${creationSessionObjects.resourceId} IS NOT NULL`,
-      ));
-      if (!referencedObjects.length) return row;
-      const graphDenied = await validateResourceAccess(referencedObjects, tenantId, segmentId, userId);
-      if (!graphDenied) return row;
-      const deniedIds = new Set((await Promise.all(referencedObjects.map(async (object) => (
-        await validateResourceAccess([object], tenantId, segmentId, userId) ? object.id : null
-      )))).filter((id): id is string => !!id));
-      if (!deniedIds.size) return row;
+    // One object read for the whole page, not one per result row.
+    const referencedObjects = rows.length ? await db.select({
+      id: creationSessionObjects.id,
+      sessionId: creationSessionObjects.sessionId,
+      kind: creationSessionObjects.kind,
+      resourceType: creationSessionObjects.resourceType,
+      resourceId: creationSessionObjects.resourceId,
+      resourceRevision: creationSessionObjects.resourceRevision,
+      canvasData: creationSessionObjects.canvasData,
+      content: creationSessionObjects.content,
+    }).from(creationSessionObjects).where(and(
+      inArray(creationSessionObjects.sessionId, rows.map((row) => row.id)),
+      sql`${creationSessionObjects.resourceType} IS NOT NULL`,
+      sql`${creationSessionObjects.resourceId} IS NOT NULL`,
+    )) : [];
+    // Access is decided per resource id, so a clean union means every row is clean;
+    // otherwise each DISTINCT resource is checked once, not once per object per row.
+    const deniedBySession = new Map<string, Set<string>>();
+    if (referencedObjects.length && await validateResourceAccess(referencedObjects, tenantId, segmentId, userId)) {
+      const byResource = new Map<string, typeof referencedObjects>();
+      for (const object of referencedObjects) {
+        const key = `${object.resourceType}:${object.resourceId}`;
+        byResource.set(key, [...(byResource.get(key) ?? []), object]);
+      }
+      await Promise.all([...byResource.values()].map(async (objects) => {
+        if (!(await validateResourceAccess(objects.slice(0, 1), tenantId, segmentId, userId))) return;
+        for (const object of objects) {
+          const denied = deniedBySession.get(object.sessionId) ?? new Set<string>();
+          denied.add(object.id);
+          deniedBySession.set(object.sessionId, denied);
+        }
+      }));
+    }
+    const safeRows = rows.map((row) => {
+      const deniedIds = deniedBySession.get(row.id);
+      if (!deniedIds?.size) return row;
       const preview = row.preview && typeof row.preview === 'object'
         ? row.preview as { objects?: Array<{ id?: string }>; [key: string]: unknown }
         : null;
@@ -778,7 +793,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
             : [],
         } : null,
       };
-    }));
+    });
     return c.json({ sessions: safeRows, hasMore: rows.length === searchLimit });
   });
 

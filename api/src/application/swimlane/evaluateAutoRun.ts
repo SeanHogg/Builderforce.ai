@@ -20,7 +20,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { classifyRunFailure, isPlatformFailure } from '../runtime/runFailureReasons';
-import { resolveArtifacts } from '../artifact/resolveArtifacts';
+import { resolveArtifactsForCloudAgents } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { resolveManagedProducer } from '../kanban/managedLaneRoles';
 import {
@@ -745,28 +745,32 @@ export async function evaluateTaskAutoRun(
     .from(laneAgentAssignments)
     .where(forLane(lane.id));
 
-  const laneAgents = await Promise.all(
-    rows.map(async (r): Promise<LaneAgentLike> => {
-      const requiredCapabilities = parseRequiredCapabilities(r.requiredCapabilities);
-      let capabilities: string[] | undefined;
-      // Resolve the agent's capabilities when the GATE needs them (an explicit
-      // requirement) OR when the ROUTER does (more than one candidate to rank). A
-      // single-agent lane still costs zero extra lookups — there is nothing to weigh.
-      if ((requiredCapabilities.length > 0 || rows.length > 1) && r.agentRef) {
-        const resolved = await resolveArtifacts(db, { tenantId: args.tenantId, taskId: args.taskId, cloudAgentRef: r.agentRef })
-          .catch(() => ({ skills: [], personas: [], content: [] }));
-        capabilities = [...resolved.skills, ...resolved.personas];
-      }
-      return {
-        agentRef: r.agentRef,
-        model: r.model,
-        requiredCapabilities,
-        capabilities,
-        runtime: normalizeLaneAgentRuntime(r.runtime),
-        target: r.target,
-      };
-    }),
-  );
+  // Resolve an agent's capabilities when the GATE needs them (an explicit
+  // requirement) OR when the ROUTER does (more than one candidate to rank). A
+  // single-agent lane still costs zero extra lookups — there is nothing to weigh.
+  const parsedRows = rows.map((r) => ({ r, requiredCapabilities: parseRequiredCapabilities(r.requiredCapabilities) }));
+  const needsCapabilities = (r: (typeof rows)[number], required: string[]): r is (typeof rows)[number] & { agentRef: string } =>
+    (required.length > 0 || rows.length > 1) && !!r.agentRef;
+  const capabilityRefs = parsedRows.filter(({ r, requiredCapabilities }) => needsCapabilities(r, requiredCapabilities)).map(({ r }) => r.agentRef as string);
+  // All staffed agents resolve together: the task and assignment reads run once per lane, not once per agent.
+  const resolvedByRef: Map<string, { skills: string[]; personas: string[] }> = capabilityRefs.length
+    ? await resolveArtifactsForCloudAgents(db, { tenantId: args.tenantId, taskId: args.taskId }, capabilityRefs).catch(() => new Map())
+    : new Map();
+  const laneAgents = parsedRows.map(({ r, requiredCapabilities }): LaneAgentLike => {
+    let capabilities: string[] | undefined;
+    if (needsCapabilities(r, requiredCapabilities)) {
+      const resolved = resolvedByRef.get(r.agentRef) ?? { skills: [], personas: [] };
+      capabilities = [...resolved.skills, ...resolved.personas];
+    }
+    return {
+      agentRef: r.agentRef,
+      model: r.model,
+      requiredCapabilities,
+      capabilities,
+      runtime: normalizeLaneAgentRuntime(r.runtime),
+      target: r.target,
+    };
+  });
   const staffedAgentRefs = laneAgents.map((a) => a.agentRef).filter((r): r is string => !!r);
 
   // The lane's required PRODUCER role (a role requirement with owner/contributor

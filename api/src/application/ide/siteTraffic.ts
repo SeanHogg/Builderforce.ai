@@ -84,9 +84,12 @@ export async function visitorHash(
 }
 
 /** The salt used for visitor hashing. Dedicated secret preferred so rotating it
- *  cannot invalidate sessions; falls back so the feature works un-provisioned. */
-export function visitorSalt(env: Env): string {
-  return env.SITE_VISITOR_SALT ?? env.JWT_SECRET;
+ *  cannot invalidate sessions; falls back to the JWT secret so the API works
+ *  un-provisioned. `undefined` where neither is bound (the published-site Worker
+ *  carries no JWT secret): callers then SKIP the hash rather than compute an
+ *  unsalted, reversible fingerprint of an IP address. */
+export function visitorSalt(env: Pick<Env, 'SITE_VISITOR_SALT' | 'JWT_SECRET'>): string | undefined {
+  return env.SITE_VISITOR_SALT || env.JWT_SECRET || undefined;
 }
 
 export interface TrafficBufferOptions {

@@ -40,7 +40,6 @@ import { getOrSetCached, setCached } from '../../infrastructure/cache/readThroug
 import { executionStateVersion } from './executionStateVersion';
 import { liveExecution } from '../rehearsal/executionMode';
 import { unreadCountsForUser } from '../brain/chatReadState';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export type AttentionState = 'running' | 'awaiting_input';
 

@@ -1,4 +1,4 @@
-'use client';
+// No `'use client'`: imported only by client components, so it is already on the client side of the boundary.
 
 import { useId, useState, type FormEvent } from 'react';
 import Link from 'next/link';

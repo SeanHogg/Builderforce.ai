@@ -25,7 +25,7 @@ import {
   type TriggerSpec,
 } from '../../domain/workflowTriggers';
 import { nextCronTime, isValidCron } from '../../domain/workflowSchedule';
-import { bumpEventTriggerListeners } from './eventTriggers';
+import { bumpEventTriggerListeners } from './eventTriggerListeners';
 import type { WorkflowDefinition } from '../../domain/workflowGraph';
 import type { RunTarget } from './instantiateRun';
 import type { Env } from '../../env';

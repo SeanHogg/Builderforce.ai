@@ -12,7 +12,7 @@ describe('classifyGuestBrainstormEntry', () => {
 describe('classifyShell — app-shell deny-list model [1557]', () => {
   it('renders full-screen routes with no chrome', () => {
     expect(classifyShell('/embed/kanban')).toBe('none');
-    expect(classifyShell('/webcontainer')).toBe('none');
+    expect(classifyShell('/studio')).toBe('none');
     expect(classifyShell('/auth/callback')).toBe('none');
   });
 

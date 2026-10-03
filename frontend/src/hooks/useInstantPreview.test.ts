@@ -3,24 +3,28 @@ import { renderHook } from '@testing-library/react';
 
 /** The boot double: a plain swappable function, so a rejection is only ever created on call. */
 let boot: () => Promise<unknown> = async () => undefined;
-vi.mock('@/lib/browserRuntime/previewRuntime', () => ({ bootSharedPreviewRuntime: () => boot() }));
+vi.mock('@/lib/browserRuntime/previewRuntime', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/browserRuntime/previewRuntime')>()),
+  bootSharedPreviewRuntime: () => boot(),
+}));
 const bootsTo = (...runtimes: unknown[]) => {
   boot = async () => runtimes.length > 1 ? runtimes.shift() : runtimes[0];
 };
 
 import { useInstantPreview } from './useInstantPreview';
 
-/** A runtime double with just the surface the hook touches. */
+/** A runtime double with just the surface the hook touches. Paths are absolute, as the VFS lists them. */
 function fakeRuntime(profile: { supported: boolean; reason?: string }) {
   const files = new Map<string, string>();
   return {
     files,
     url: 'https://preview.builderforce.ai/__bfwc/abc/',
     fs: {
-      rm: vi.fn(() => files.clear()),
+      list: () => [...files.keys()],
+      rm: vi.fn((path: string) => files.delete(path)),
       writeFile: vi.fn((path: string, contents: string) => files.set(path, contents)),
     },
-    mount: vi.fn((flat: Record<string, string>) => { for (const [p, c] of Object.entries(flat)) files.set(p, c); }),
+    mount: vi.fn((flat: Record<string, string>) => { for (const [p, c] of Object.entries(flat)) files.set(`/${p}`, c); }),
     profile: () => profile,
   };
 }
@@ -44,10 +48,20 @@ describe('useInstantPreview', () => {
     const { result } = renderHook(() => useInstantPreview());
 
     await result.current.start({ 'index.html': '' });
-    expect([...runtime.files.keys()]).toEqual(['index.html']);
+    expect([...runtime.files.keys()]).toEqual(['/index.html']);
   });
 
-  it('declines an unsupported project with the runtime reason, leaving edits to the WebContainer', async () => {
+  it('keeps installed packages across runs, so an unchanged package.json does not reinstall', async () => {
+    const runtime = fakeRuntime({ supported: true });
+    runtime.files.set('/node_modules/react/index.js', 'module.exports = {}');
+    bootsTo(runtime);
+    const { result } = renderHook(() => useInstantPreview());
+
+    await result.current.start({ 'index.html': '' });
+    expect([...runtime.files.keys()].sort()).toEqual(['/index.html', '/node_modules/react/index.js']);
+  });
+
+  it('declines an unsupported project with the runtime reason, taking no edits', async () => {
     bootsTo(fakeRuntime({ supported: false, reason: 'Next.js needs a Node server.' }));
     const { result } = renderHook(() => useInstantPreview());
 

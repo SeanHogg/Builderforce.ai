@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEventTriggers, hasEventTriggerListeners } from './eventTriggers';
+import { fireEventTriggers } from './eventTriggers';
+import { hasEventTriggerListeners } from './eventTriggerListeners';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 

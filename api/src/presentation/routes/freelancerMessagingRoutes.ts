@@ -22,6 +22,7 @@
  * builder cannot express the statement). No raw `neon()` client lives here.
  */
 import { Hono } from 'hono';
+import { invalidateConversationLists, readEmployerInbox, readFreelancerInbox } from '../../application/marketplace/conversationLists';
 import { and, asc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
@@ -252,20 +253,22 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   router.get('/mine', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    const rows = await db.select({
-      ...getTableColumns(freelancerConversations),
-      tenantName: tenants.name,
-      freelancerName: users.displayName,
-      unread: unreadCount('freelancer'),
-    })
-      .from(freelancerConversations)
-      .innerJoin(tenants, eq(tenants.id, freelancerConversations.tenantId))
-      .innerJoin(users, eq(users.id, freelancerConversations.freelancerUserId))
-      .where(eq(freelancerConversations.freelancerUserId, userId))
-      .orderBy(...CONVERSATION_ORDER)
-      .limit(200);
-    const items = rows.map(mapConversation);
-    return c.json({ items, unread: items.reduce((s, r) => s + r.unread, 0) });
+    return c.json(await readFreelancerInbox(c.env, userId, async () => {
+      const rows = await db.select({
+        ...getTableColumns(freelancerConversations),
+        tenantName: tenants.name,
+        freelancerName: users.displayName,
+        unread: unreadCount('freelancer'),
+      })
+        .from(freelancerConversations)
+        .innerJoin(tenants, eq(tenants.id, freelancerConversations.tenantId))
+        .innerJoin(users, eq(users.id, freelancerConversations.freelancerUserId))
+        .where(eq(freelancerConversations.freelancerUserId, userId))
+        .orderBy(...CONVERSATION_ORDER)
+        .limit(200);
+      const items = rows.map(mapConversation);
+      return { items, unread: items.reduce((s, r) => s + r.unread, 0) };
+    }));
   });
 
   // POST /mine — freelancer opens a thread with a tenant they are ENGAGED with
@@ -297,6 +300,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
       title: b.title ?? eng.title ?? null,
     });
     if (b.body && b.body.trim()) await appendMessage(db, c.env, conv, userId, b.body.trim());
+    await invalidateConversationLists(c.env, conv);
     return c.json({ id: conv.id }, 201);
   });
 
@@ -328,6 +332,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     await db.update(freelancerConversations)
       .set({ freelancerLastReadAt: readThrough })
       .where(eq(freelancerConversations.id, id));
+    await invalidateConversationLists(c.env, conv);
     return c.json({ id: msgId }, 201);
   });
 
@@ -339,8 +344,9 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     const rows = await db.update(freelancerConversations)
       .set({ freelancerLastReadAt: sql`NOW()` })
       .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.freelancerUserId, userId)))
-      .returning({ id: freelancerConversations.id });
+      .returning({ tenantId: freelancerConversations.tenantId, freelancerUserId: freelancerConversations.freelancerUserId });
     if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
+    await invalidateConversationLists(c.env, rows[0]!);
     return c.json({ ok: true });
   });
 
@@ -350,20 +356,22 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   router.get('/', authMiddleware, async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const rows = await db.select({
-      ...getTableColumns(freelancerConversations),
-      tenantName: tenants.name,
-      freelancerName: users.displayName,
-      unread: unreadCount('employer'),
-    })
-      .from(freelancerConversations)
-      .innerJoin(tenants, eq(tenants.id, freelancerConversations.tenantId))
-      .innerJoin(users, eq(users.id, freelancerConversations.freelancerUserId))
-      .where(eq(freelancerConversations.tenantId, tenantId))
-      .orderBy(...CONVERSATION_ORDER)
-      .limit(200);
-    const items = rows.map(mapConversation);
-    return c.json({ items, unread: items.reduce((s, r) => s + r.unread, 0) });
+    return c.json(await readEmployerInbox(c.env, tenantId, async () => {
+      const rows = await db.select({
+        ...getTableColumns(freelancerConversations),
+        tenantName: tenants.name,
+        freelancerName: users.displayName,
+        unread: unreadCount('employer'),
+      })
+        .from(freelancerConversations)
+        .innerJoin(tenants, eq(tenants.id, freelancerConversations.tenantId))
+        .innerJoin(users, eq(users.id, freelancerConversations.freelancerUserId))
+        .where(eq(freelancerConversations.tenantId, tenantId))
+        .orderBy(...CONVERSATION_ORDER)
+        .limit(200);
+      const items = rows.map(mapConversation);
+      return { items, unread: items.reduce((s, r) => s + r.unread, 0) };
+    }));
   });
 
   // POST / — employer opens (or reuses) a conversation with a freelancer. Optionally
@@ -424,6 +432,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
         .set({ employerLastReadAt: readThrough })
         .where(eq(freelancerConversations.id, conv.id));
     }
+    await invalidateConversationLists(c.env, conv);
     return c.json({ id: conv.id }, 201);
   });
 
@@ -454,6 +463,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     await db.update(freelancerConversations)
       .set({ employerLastReadAt: readThrough })
       .where(scopedToTenant(freelancerConversations, tenantId, eq(freelancerConversations.id, id)));
+    await invalidateConversationLists(c.env, conv);
     return c.json({ id: msgId }, 201);
   });
 
@@ -465,8 +475,9 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     const rows = await db.update(freelancerConversations)
       .set({ employerLastReadAt: sql`NOW()` })
       .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.tenantId, tenantId)))
-      .returning({ id: freelancerConversations.id });
+      .returning({ tenantId: freelancerConversations.tenantId, freelancerUserId: freelancerConversations.freelancerUserId });
     if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
+    await invalidateConversationLists(c.env, rows[0]!);
     return c.json({ ok: true });
   });
 

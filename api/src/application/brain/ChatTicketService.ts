@@ -884,10 +884,11 @@ export class ChatTicketService {
     if (sources.length === 0) return { error: 'No source chats to merge' };
 
     // Verify every source belongs to the tenant/user before mutating anything.
-    for (const sid of sources) {
-      const owned = await this.ownedChat(sid, tenantId, userId);
-      if (!owned) return { error: `Source chat ${sid} not found` };
-    }
+    // The checks are independent reads, so they run together; the first missing
+    // source (in input order) is still the one reported.
+    const owned = await Promise.all(sources.map((sid) => this.ownedChat(sid, tenantId, userId)));
+    const missing = sources.find((_, i) => !owned[i]);
+    if (missing != null) return { error: `Source chat ${missing} not found` };
 
     // Gather source messages, ordered chronologically across all sources.
     const srcMsgs = await this.db
@@ -896,34 +897,42 @@ export class ChatTicketService {
       .where(inArray(brainChatMessages.chatId, sources))
       .orderBy(brainChatMessages.createdAt, brainChatMessages.seq);
 
+    // One multi-row insert for every message, then one seq stamp for the batch —
+    // seq BECOMES the generated id, the same rule as BrainService.appendRaw. The
+    // VALUES keep chronological order, so the ids (and seq) still ascend with it.
     let messagesMoved = 0;
-    for (const m of srcMsgs) {
-      const [inserted] = await this.db.insert(brainChatMessages).values({
+    if (srcMsgs.length > 0) {
+      const inserted = await this.db.insert(brainChatMessages).values(srcMsgs.map((m) => ({
         chatId: input.targetChatId, role: m.role, content: m.content,
         metadata: m.metadata, eventKey: m.eventKey,
-      }).onConflictDoNothing().returning({ id: brainChatMessages.id });
-      if (inserted) {
-        await this.db.update(brainChatMessages).set({ seq: inserted.id }).where(eq(brainChatMessages.id, inserted.id));
-        messagesMoved += 1;
+      }))).onConflictDoNothing().returning({ id: brainChatMessages.id });
+      if (inserted.length > 0) {
+        await this.db.update(brainChatMessages).set({ seq: sql`${brainChatMessages.id}` })
+          .where(inArray(brainChatMessages.id, inserted.map((r) => r.id)));
       }
+      messagesMoved = inserted.length;
     }
 
     // Move ticket links to the target (skip ones already present on the target).
-    const srcLinks = await this.db.select().from(chatTicketLinks)
-      .where(and(eq(chatTicketLinks.tenantId, tenantId), inArray(chatTicketLinks.chatId, sources)));
-    const [targetLinksRows] = [await this.db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef }).from(chatTicketLinks).where(scopedToTenant(chatTicketLinks, tenantId, eq(chatTicketLinks.chatId, input.targetChatId)))];
+    const [srcLinks, targetLinksRows, seg] = await Promise.all([
+      this.db.select().from(chatTicketLinks)
+        .where(and(eq(chatTicketLinks.tenantId, tenantId), inArray(chatTicketLinks.chatId, sources))),
+      this.db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef }).from(chatTicketLinks).where(scopedToTenant(chatTicketLinks, tenantId, eq(chatTicketLinks.chatId, input.targetChatId))),
+      resolveSegment(this.db, tenantId),
+    ]);
     const targetHas = new Set(targetLinksRows.map((l) => `${l.kind}:${l.ref}`));
-    const seg = await resolveSegment(this.db, tenantId);
-    let linksMoved = 0;
+    const newLinks: Array<typeof chatTicketLinks.$inferInsert> = [];
     for (const l of srcLinks) {
       if (targetHas.has(`${l.ticketKind}:${l.ticketRef}`)) continue;
-      await this.db.insert(chatTicketLinks).values({
+      newLinks.push({
         tenantId, segmentId: seg, chatId: input.targetChatId, ticketKind: l.ticketKind, ticketRef: l.ticketRef,
         linkType: l.linkType, createdBy: l.createdBy,
       });
       targetHas.add(`${l.ticketKind}:${l.ticketRef}`);
-      linksMoved += 1;
     }
+    // One multi-row insert for every moved link, not one per link.
+    if (newLinks.length > 0) await this.db.insert(chatTicketLinks).values(newLinks);
+    const linksMoved = newLinks.length;
     // Drop the source links (their chats are about to be archived/redirected).
     await this.db.delete(chatTicketLinks).where(and(eq(chatTicketLinks.tenantId, tenantId), inArray(chatTicketLinks.chatId, sources)));
 

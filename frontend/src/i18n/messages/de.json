@@ -1272,7 +1272,6 @@
       "mounted": "{count, plural, one {# Datei eingebunden.} other {# Dateien eingebunden.}}",
       "stepInstalling": "[3/3] Abhängigkeiten werden installiert…",
       "installFailed": "npm install fehlgeschlagen (Exit-Code {code}). Behebe die Fehler oben und versuche es erneut.",
-      "installFailedShort": "npm install fehlgeschlagen (Exit {code}).",
       "depsReady": "Abhängigkeiten bereit.",
       "startingDevServer": "Dev-Server wird gestartet…",
       "devServerReady": "Dev-Server bereit unter {url}",
@@ -1289,7 +1288,6 @@
       "noDistOutput": "Der Build hat keine dist/-Ausgabe erzeugt. Stelle sicher, dass dein Build-Skript nach „dist“ schreibt.",
       "capturedFiles": "{count, plural, one {# gebaute Datei erfasst.} other {# gebaute Dateien erfasst.}}",
       "runningChecks": "Prüfungen laufen",
-      "synthesizedTsconfig": "(eine minimale tsconfig.json wurde für die Typprüfung als Rückfallebene erzeugt)",
       "checkStep": "{label}…",
       "allChecksPassed": "Alle Prüfungen bestanden.",
       "checksFailed": "{count, plural, one {# Prüfung fehlgeschlagen.} other {# Prüfungen fehlgeschlagen.}}",
@@ -1307,6 +1305,7 @@
     "rightTab": {
       "voice": "Stimme",
       "files": "Dateien",
+      "versions": "Versionen",
       "agent": "Agent",
       "train": "Trainieren",
       "publish": "Veröffentlichen",
@@ -1519,6 +1518,12 @@
         "android": "Android-Projekt",
         "ios": "iOS-Projekt"
       }
+    },
+    "centerDatabase": "Datenbank",
+    "runtimeStatus": {
+      "booting": "⏳ Wird gestartet …",
+      "ready": "✅ Bereit",
+      "error": "⚠️ Laufzeitfehler"
     }
   },
   "references": {
@@ -26103,19 +26108,10 @@
       }
     },
     "forms": {
-      "title": "Formulare",
-      "description": "Jede veröffentlichte Website kann Einsendungen sammeln. Sende das Formular an diese Adresse.",
       "endpoint": "Endpunkt",
-      "submissionCount": "{count} Einsendungen",
-      "viewSubmissions": "Einsendungen ansehen",
-      "hideSubmissions": "Einsendungen ausblenden",
       "noSubmissions": "Noch keine Einsendungen.",
       "when": "Zeitpunkt",
       "email": "E-Mail",
-      "fields": "Felder",
-      "newPlaceholder": "neues-formular",
-      "newLabel": "Name des Formulars",
-      "add": "Formular hinzufügen",
       "raisesTickets": "Für jede Einsendung ein Ticket eröffnen",
       "raisesTicketsHint": "Wenn aktiviert, eröffnet jede neue Einsendung ein Ticket im Board dieses Projekts, damit das Team reagieren kann — die einsendende Person wird benachrichtigt, sobald es gelöst ist.",
       "genericError": "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
@@ -31802,11 +31798,6 @@
     "loadingMessages": "Nachrichten werden geladen…",
     "noMessages": "Keine Nachrichten."
   },
-  "webcontainerConnect": {
-    "connecting": "Verbindung zu deiner IDE wird hergestellt…",
-    "connected": "Verbunden. Du kannst diesen Tab schließen, wenn die Vorschau in deiner IDE angezeigt wird.",
-    "failed": "Verbindung fehlgeschlagen: {error}"
-  },
   "startups": {
     "vocab": {
       "stage": {
@@ -32107,10 +32098,6 @@
     "download": "Für Windows, macOS oder Linux herunterladen",
     "readMore": "So funktioniert es"
   },
-  "webcontainer": {
-    "attributionLead": "Läuft in deinem Browser mit",
-    "attributionAria": "Bereitgestellt von WebContainers von StackBlitz (öffnet in einem neuen Tab)"
-  },
   "siteBadge": {
     "body": "Kostenlose Websites zeigen ein kleines „Made with Builderforce.ai“-Abzeichen.",
     "upgrade": "Upgrade, um es zu entfernen"
@@ -32176,6 +32163,98 @@
       "loadFailed": "Dieses Projekt konnte nicht geöffnet werden.",
       "loading": "Dein Projekt wird geöffnet …",
       "signInLead": "Melde dich an, um dieses Projekt zu öffnen."
+    }
+  },
+  "builderSearch": {
+    "filesTab": "Dateien",
+    "searchTab": "Suche",
+    "panelLabel": "Dateien und Suche",
+    "label": "Alle Dateien durchsuchen",
+    "placeholder": "Alle Dateien durchsuchen …",
+    "searching": "Suche läuft …",
+    "failed": "Die Suche wurde nicht abgeschlossen. Versuche es erneut.",
+    "hint": "Gib mindestens {min} Zeichen ein, um alle Dateien zu durchsuchen.",
+    "count": "{matches, plural, =0 {Keine Treffer} one {# Treffer} other {# Treffer}} in {files, plural, one {# Datei} other {# Dateien}}",
+    "countTruncated": "Die ersten {matches} Treffer in {files, plural, one {# Datei} other {# Dateien}}. Grenze die Suche ein, um den Rest zu sehen."
+  },
+  "builderPanels": {
+    "panelLabel": "Terminal, Ausgabe und Probleme",
+    "terminal": "Terminal",
+    "output": "Ausgabe",
+    "problems": "Probleme",
+    "problemsCount": "Probleme ({count})",
+    "collapse": "Bereich einklappen",
+    "expand": "Bereich ausklappen",
+    "noProblems": "Keine Probleme. Build- und Laufzeitfehler deines letzten Laufs erscheinen hier.",
+    "clearProblems": "Leeren",
+    "sourceBuild": "Build",
+    "sourceRuntime": "Laufzeit"
+  },
+  "builderVersions": {
+    "loading": "Versionen werden geladen …",
+    "loadFailed": "Versionen konnten nicht geladen werden.",
+    "restored": "{restored, plural, one {# Datei} other {# Dateien}} wiederhergestellt, {removed, plural, one {# Datei} other {# Dateien}} entfernt.",
+    "missing": "{count, plural, one {# Datei war} other {# Dateien waren}} zu alt zum Wiederherstellen: {files}.",
+    "restoreFailed": "Diese Version konnte nicht wiederhergestellt werden.",
+    "saveFailed": "Die Version konnte nicht gespeichert werden.",
+    "autoTitle": "{files} geändert",
+    "someFiles": "Einige Dateien",
+    "filesAndMore": "{files} und {more} weitere",
+    "baselineTitle": "Ausgangspunkt",
+    "beforeRestoreTitle": "Vor einer Wiederherstellung",
+    "meta": "Version {number} · {time}",
+    "restore": "Wiederherstellen",
+    "confirmRestore": "Zum Wiederherstellen erneut klicken",
+    "nameLabel": "Versionsname",
+    "namePlaceholder": "Diese Version benennen …",
+    "save": "Speichern",
+    "restoreHint": "Dein aktueller Stand wird vorher als Version gespeichert."
+  },
+  "builderDatabase": {
+    "sectionsLabel": "Datenbankbereiche",
+    "sections": {
+      "tables": "Tabellen",
+      "users": "Nutzer",
+      "functions": "Serverfunktionen"
+    },
+    "needsSite": {
+      "checking": "Veröffentlichte App wird gesucht …",
+      "title": "Veröffentlichen, um die Datenbank einzuschalten",
+      "body": "Tabellen und Anmeldungen gehören zur veröffentlichten App. Einmal veröffentlichen, dann erscheinen sie hier.",
+      "action": "Veröffentlichen öffnen"
+    },
+    "tables": {
+      "loading": "Tabellen werden geladen …",
+      "heading": "Tabellen",
+      "rows": "{count, plural, one {# Zeile} other {# Zeilen}}",
+      "pick": "Wähle eine Tabelle, um ihre Zeilen zu sehen.",
+      "empty": "Noch keine Tabellen. Lege eine an und richte ein Formular auf ihren Endpunkt.",
+      "delete": "Tabelle löschen",
+      "deleteConfirm": "Tabelle „{name}“ mit {count, plural, one {# Zeile} other {# Zeilen}} löschen? Das lässt sich nicht rückgängig machen.",
+      "deleteRow": "Zeile löschen",
+      "deleteRowConfirm": "Diese Zeile löschen? Das lässt sich nicht rückgängig machen.",
+      "actions": "Aktionen",
+      "loadMore": "Mehr laden",
+      "newLabel": "Name der neuen Tabelle",
+      "newPlaceholder": "z. B. bestellungen",
+      "add": "Tabelle hinzufügen"
+    },
+    "users": {
+      "loading": "Nutzer werden geladen …",
+      "intro": "Personen, die sich bei deiner App angemeldet haben. Sie melden sich mit einem Einmalcode per E-Mail an – es gibt keine Passwörter zu verwalten.",
+      "failed": "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
+      "empty": "Bisher hat sich niemand angemeldet.",
+      "removeConfirm": "{email} entfernen? Anmeldung und Abos werden gelöscht; Eingereichtes bleibt erhalten.",
+      "remove": "Entfernen",
+      "loadMore": "Mehr laden",
+      "active": "Aktiv",
+      "suspended": "Gesperrt",
+      "meta": "Dabei seit {joined} · zuletzt gesehen {seen}",
+      "never": "nie",
+      "reinstate": "Entsperren",
+      "suspend": "Sperren",
+      "suspendConfirm": "Sperren bestätigen",
+      "suspendHint": "Die Person wird überall abgemeldet und kann sich erst nach dem Entsperren wieder anmelden."
     }
   }
 }

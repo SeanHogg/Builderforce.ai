@@ -79,6 +79,8 @@ export type ContentValidation = FileContentValidation;
 export interface WorkspaceEntry {
   path: string;
   size: number;
+  /** R2's content hash: equal bytes, equal tag. How a checkpoint recognises a version. */
+  etag?: string;
 }
 
 /**
@@ -117,7 +119,7 @@ export type WriteResult =
 export async function listWorkspaceFiles(bucket: R2Bucket, projectId: number): Promise<WorkspaceEntry[]> {
   const prefix = workspacePrefix(projectId);
   const listed = await bucket.list({ prefix });
-  return (listed.objects ?? []).map((o) => ({ path: o.key.slice(prefix.length), size: o.size }));
+  return (listed.objects ?? []).map((o) => ({ path: o.key.slice(prefix.length), size: o.size, etag: o.etag }));
 }
 
 /**
@@ -221,6 +223,8 @@ export interface WorkspaceVersion {
   /** Epoch ms the version was superseded — i.e. when it stopped being current. */
   at: number;
   size: number;
+  /** Content hash of the archived bytes (see {@link WorkspaceEntry.etag}). */
+  etag?: string;
 }
 
 /** Split a history key back into its `{ at, path }`. Null when it is malformed. */
@@ -318,7 +322,7 @@ export async function listWorkspaceHistory(
       const parsed = parseHistoryKey(object.key, prefix);
       if (!parsed) return [];
       if (path && parsed.path !== path) return [];
-      return [{ ...parsed, size: object.size }];
+      return [{ ...parsed, size: object.size, etag: object.etag }];
     })
     .sort((a, b) => b.at - a.at);
 }
@@ -392,5 +396,9 @@ export async function writeWorkspaceBinary(
 /** Delete one file. Invalid paths are a no-op (the key can't exist). */
 export async function deleteWorkspaceFile(bucket: R2Bucket, projectId: number, path: string): Promise<void> {
   if (!validateWorkspacePath(path).ok) return;
+  // A delete destroys the file as surely as an overwrite does, so it is archived
+  // the same way: an agent that deletes the wrong file can be undone, and a
+  // checkpoint restore can bring a deleted file back.
+  await captureWorkspaceVersion(bucket, projectId, path);
   await withSameObjectRetry(() => bucket.delete(workspacePrefix(projectId) + path));
 }

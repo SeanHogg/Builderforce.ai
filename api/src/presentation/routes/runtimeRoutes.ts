@@ -55,6 +55,8 @@ import { evaluateExecutionApprovalGate } from '../../application/runtime/executi
 import { revertRun } from '../../application/runtime/runRollback';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
 import { readAttention } from '../../application/runtime/attentionSnapshot';
+import { readActiveRuns } from '../../application/runtime/activeRuns';
+import { executionStateVersion } from '../../application/runtime/executionStateVersion';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { parseBody, parseOptionalBody, z, zNonEmptyString, zNumberLike, zPositiveInt } from './requestBody';
@@ -615,10 +617,22 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/executions', async (c) => {
     const limit = limitParam(c.req.query('limit'), 50, 500);
     const sessionId = (c.req.query('sessionId') ?? '').trim();
-    const executions = sessionId
-      ? await runtimeService.listBySession(c.get('tenantId'), sessionId, limit)
-      : await runtimeService.listByTenant(c.get('tenantId'), limit);
-    return c.json(executions.map(e => e.toPlain()));
+    const tenantId = c.get('tenantId');
+    if (sessionId) {
+      const executions = await runtimeService.listBySession(tenantId, sessionId, limit);
+      return c.json(executions.map(e => e.toPlain()));
+    }
+    // The tenant-wide list is polled (workforce presence, every 30s per open
+    // workspace), so it is shared behind the execution-state version — any status
+    // change orphans it. See `executionStateVersion.ts` for the bump and the TTL backstop.
+    const env = c.env as Env;
+    const version = await executionStateVersion(env, tenantId);
+    return c.json(await getOrSetCached(
+      env,
+      `executions:v:${version}:${tenantId}:${limit}`,
+      async () => (await runtimeService.listByTenant(tenantId, limit)).map(e => e.toPlain()),
+      { kvTtlSeconds: 60, l1TtlMs: 3_000 },
+    ));
   });
 
   // Tenant-level runtime dashboard aggregates derived from recent execution history.
@@ -741,54 +755,11 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
   });
 
-  // Fleet "what's running right now" — every non-terminal execution for the
-  // tenant (pending / submitted / running), with task title, the executing agent
-  // (host id or cloud agent ref), and how long it's been going. This is the live
-  // fleet view the dashboard's rolled-up counts couldn't give, and the single
-  // source the UI uses to mark a cloud agent as actively running.
-  // Intentionally uncached: a live operational surface that must reflect the
-  // fleet's state this instant (same rationale as /cloud-agents).
+  // Fleet "what's running right now" — see `readActiveRuns` for what it returns and
+  // why it is cached behind the execution-state version rather than read live.
   router.get('/active', async (c) => {
-    const tenantId = c.get('tenantId');
     const limit = limitParam(c.req.query('limit'), 200, 500);
-    // `liveExecution()` — a rehearsal (0372) drives a real execution row but is a
-    // probe rather than fleet activity, so it must not appear on the active-runs board.
-    const rows = await db
-      .select({
-        id: executions.id,
-        status: executions.status,
-        taskId: executions.taskId,
-        taskTitle: tasks.title,
-        projectId: projects.id,
-        projectName: projects.name,
-        agentHostId: executions.agentHostId,
-        cloudAgentRef: tasks.assignedAgentRef,
-        agentName: sql<string | null>`coalesce(${agentHosts.name}, ${ideAgents.name})`,
-        submittedBy: executions.submittedBy,
-        startedAt: executions.startedAt,
-        createdAt: executions.createdAt,
-      })
-      .from(executions)
-      .innerJoin(tasks, eq(tasks.id, executions.taskId))
-      .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .leftJoin(agentHosts, eq(agentHosts.id, executions.agentHostId))
-      .leftJoin(ideAgents, eq(ideAgents.id, tasks.assignedAgentRef))
-      .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running']), liveExecution()))
-      .orderBy(desc(executions.createdAt))
-      .limit(limit);
-
-    const now = Date.now();
-    const active = rows.map((r) => {
-      const isCloud = r.agentHostId == null;
-      const since = r.startedAt ?? r.createdAt;
-      return {
-        ...r,
-        kind: isCloud ? ('cloud' as const) : ('on-prem' as const),
-        cloudAgentRef: isCloud ? (r.cloudAgentRef ?? DEFAULT_CLOUD_REF) : null,
-        elapsedMs: since ? Math.max(0, now - new Date(since).getTime()) : null,
-      };
-    });
-    return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
+    return c.json(await readActiveRuns(c.env as Env, db, c.get('tenantId'), limit));
   });
 
   // Persisted workspace execution override. This is deliberately separate from

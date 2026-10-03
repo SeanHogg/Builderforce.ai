@@ -1272,7 +1272,6 @@
       "mounted": "{count, plural, one {Se montó # archivo.} other {Se montaron # archivos.}}",
       "stepInstalling": "[3/3] Instalando dependencias…",
       "installFailed": "npm install falló (código de salida {code}). Corrige los errores anteriores e inténtalo de nuevo.",
-      "installFailedShort": "npm install falló (salida {code}).",
       "depsReady": "Dependencias listas.",
       "startingDevServer": "Iniciando el servidor de desarrollo…",
       "devServerReady": "Servidor de desarrollo listo en {url}",
@@ -1289,7 +1288,6 @@
       "noDistOutput": "La compilación no generó ninguna salida en dist/. Asegúrate de que tu script de compilación escriba en «dist».",
       "capturedFiles": "{count, plural, one {Se capturó # archivo compilado.} other {Se capturaron # archivos compilados.}}",
       "runningChecks": "Ejecutando comprobaciones",
-      "synthesizedTsconfig": "(se generó un tsconfig.json mínimo para la comprobación de tipos de reserva)",
       "checkStep": "{label}…",
       "allChecksPassed": "Todas las comprobaciones pasaron.",
       "checksFailed": "{count, plural, one {Falló # comprobación.} other {Fallaron # comprobaciones.}}",
@@ -1307,6 +1305,7 @@
     "rightTab": {
       "voice": "Voz",
       "files": "Archivos",
+      "versions": "Versiones",
       "agent": "Agente",
       "train": "Entrenar",
       "publish": "Publicar",
@@ -1519,6 +1518,12 @@
         "android": "Proyecto Android",
         "ios": "Proyecto iOS"
       }
+    },
+    "centerDatabase": "Base de datos",
+    "runtimeStatus": {
+      "booting": "⏳ Iniciando…",
+      "ready": "✅ Listo",
+      "error": "⚠️ Error del entorno"
     }
   },
   "references": {
@@ -26103,19 +26108,10 @@
       }
     },
     "forms": {
-      "title": "Formularios",
-      "description": "Todo sitio publicado puede recibir envíos. Envía el formulario a esta dirección.",
       "endpoint": "Endpoint",
-      "submissionCount": "{count} envíos",
-      "viewSubmissions": "Ver envíos",
-      "hideSubmissions": "Ocultar envíos",
       "noSubmissions": "Aún no hay envíos.",
       "when": "Fecha",
       "email": "Correo",
-      "fields": "Campos",
-      "newPlaceholder": "nuevo-formulario",
-      "newLabel": "Nombre del formulario",
-      "add": "Añadir formulario",
       "raisesTickets": "Abrir un ticket por cada envío",
       "raisesTicketsHint": "Cuando está activado, cada nuevo envío abre un ticket en el tablero de este proyecto para que el equipo actúe — y se notifica a quien lo envió cuando se resuelve.",
       "genericError": "Algo salió mal. Inténtalo de nuevo.",
@@ -31802,11 +31798,6 @@
     "loadingMessages": "Cargando mensajes…",
     "noMessages": "No hay mensajes."
   },
-  "webcontainerConnect": {
-    "connecting": "Conectando con tu IDE…",
-    "connected": "Conectado. Puedes cerrar esta pestaña si la vista previa aparece en tu IDE.",
-    "failed": "La conexión falló: {error}"
-  },
   "startups": {
     "vocab": {
       "stage": {
@@ -32107,10 +32098,6 @@
     "download": "Descargar para Windows, macOS o Linux",
     "readMore": "Cómo funciona"
   },
-  "webcontainer": {
-    "attributionLead": "Se ejecuta en tu navegador con",
-    "attributionAria": "Con la tecnología de WebContainers de StackBlitz (se abre en una pestaña nueva)"
-  },
   "siteBadge": {
     "body": "Los sitios gratuitos muestran una pequeña insignia «Made with Builderforce.ai».",
     "upgrade": "Mejora tu plan para quitarla"
@@ -32176,6 +32163,98 @@
       "loadFailed": "No se pudo abrir este proyecto.",
       "loading": "Abriendo tu proyecto…",
       "signInLead": "Inicia sesión para abrir este proyecto."
+    }
+  },
+  "builderSearch": {
+    "filesTab": "Archivos",
+    "searchTab": "Buscar",
+    "panelLabel": "Archivos y búsqueda",
+    "label": "Buscar en todos los archivos",
+    "placeholder": "Buscar en todos los archivos…",
+    "searching": "Buscando…",
+    "failed": "La búsqueda no terminó. Inténtalo de nuevo.",
+    "hint": "Escribe al menos {min} caracteres para buscar en todos los archivos.",
+    "count": "{matches, plural, =0 {Sin coincidencias} one {# coincidencia} other {# coincidencias}} en {files, plural, one {# archivo} other {# archivos}}",
+    "countTruncated": "Primeras {matches} coincidencias en {files, plural, one {# archivo} other {# archivos}}. Acota la búsqueda para ver el resto."
+  },
+  "builderPanels": {
+    "panelLabel": "Terminal, salida y problemas",
+    "terminal": "Terminal",
+    "output": "Salida",
+    "problems": "Problemas",
+    "problemsCount": "Problemas ({count})",
+    "collapse": "Contraer panel",
+    "expand": "Expandir panel",
+    "noProblems": "Sin problemas. Los errores de compilación y de ejecución de tu última ejecución aparecen aquí.",
+    "clearProblems": "Borrar",
+    "sourceBuild": "Compilación",
+    "sourceRuntime": "Ejecución"
+  },
+  "builderVersions": {
+    "loading": "Cargando versiones…",
+    "loadFailed": "No se pudieron cargar las versiones.",
+    "restored": "Se restauraron {restored, plural, one {# archivo} other {# archivos}} y se eliminaron {removed, plural, one {# archivo} other {# archivos}}.",
+    "missing": "{count, plural, one {# archivo era} other {# archivos eran}} demasiado antiguos para restaurarlos: {files}.",
+    "restoreFailed": "No se pudo restaurar esa versión.",
+    "saveFailed": "No se pudo guardar una versión.",
+    "autoTitle": "Cambios en {files}",
+    "someFiles": "algunos archivos",
+    "filesAndMore": "{files} y {more} más",
+    "baselineTitle": "Punto de partida",
+    "beforeRestoreTitle": "Antes de una restauración",
+    "meta": "Versión {number} · {time}",
+    "restore": "Restaurar",
+    "confirmRestore": "Haz clic de nuevo para restaurar",
+    "nameLabel": "Nombre de la versión",
+    "namePlaceholder": "Ponle nombre a esta versión…",
+    "save": "Guardar",
+    "restoreHint": "Tu trabajo actual se guarda antes como una versión."
+  },
+  "builderDatabase": {
+    "sectionsLabel": "Secciones de la base de datos",
+    "sections": {
+      "tables": "Tablas",
+      "users": "Usuarios",
+      "functions": "Funciones de servidor"
+    },
+    "needsSite": {
+      "checking": "Buscando una app publicada…",
+      "title": "Publica para activar tu base de datos",
+      "body": "Las tablas y los inicios de sesión viven con la app publicada. Publica una vez y aparecerán aquí.",
+      "action": "Abrir Publicar"
+    },
+    "tables": {
+      "loading": "Cargando tablas…",
+      "heading": "Tablas",
+      "rows": "{count, plural, one {# fila} other {# filas}}",
+      "pick": "Elige una tabla para ver sus filas.",
+      "empty": "Aún no hay tablas. Crea una y apunta un formulario a su endpoint.",
+      "delete": "Eliminar tabla",
+      "deleteConfirm": "¿Eliminar la tabla «{name}» y sus {count, plural, one {# fila} other {# filas}}? No se puede deshacer.",
+      "deleteRow": "Eliminar fila",
+      "deleteRowConfirm": "¿Eliminar esta fila? No se puede deshacer.",
+      "actions": "Acciones",
+      "loadMore": "Cargar más",
+      "newLabel": "Nombre de la nueva tabla",
+      "newPlaceholder": "p. ej. pedidos",
+      "add": "Añadir tabla"
+    },
+    "users": {
+      "loading": "Cargando usuarios…",
+      "intro": "Personas que iniciaron sesión en tu app. Entran con un código de un solo uso enviado a su correo, así que no hay contraseñas que gestionar.",
+      "failed": "Algo salió mal. Inténtalo de nuevo.",
+      "empty": "Nadie ha iniciado sesión todavía.",
+      "removeConfirm": "¿Quitar a {email}? Se eliminan su acceso y sus suscripciones; lo que envió se conserva.",
+      "remove": "Quitar",
+      "loadMore": "Cargar más",
+      "active": "Activo",
+      "suspended": "Suspendido",
+      "meta": "Desde {joined} · última vez {seen}",
+      "never": "nunca",
+      "reinstate": "Reactivar",
+      "suspend": "Suspender",
+      "suspendConfirm": "Confirmar suspensión",
+      "suspendHint": "Se cierra su sesión en todas partes y no podrá volver a entrar hasta que lo reactives."
     }
   }
 }

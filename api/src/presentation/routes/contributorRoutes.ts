@@ -444,15 +444,18 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       .from(contributors)
       .where(and(eq(contributors.tenantId, tenantId), eq(contributors.isActive, true)));
 
-    let processed = 0;
-    for (const contributor of allContributors) {
-      const d = new Date(fromDate);
-      while (d <= toDate) {
-        await aggregateDailyMetrics(db, tenantId, contributor.id, new Date(d));
-        d.setUTCDate(d.getUTCDate() + 1);
-        processed++;
-      }
+    const days: Date[] = [];
+    for (const d = new Date(fromDate); d <= toDate; d.setUTCDate(d.getUTCDate() + 1)) days.push(new Date(d));
+    const jobs = allContributors.flatMap((contributor) => days.map((day) => ({ contributorId: contributor.id, day })));
+
+    // Each contributor-day is an independent read + upsert; run them 8 at a time
+    // rather than strictly one after another, bounded so a wide range can't flood the pool.
+    const CONCURRENCY = 8;
+    for (let i = 0; i < jobs.length; i += CONCURRENCY) {
+      await Promise.all(jobs.slice(i, i + CONCURRENCY).map((job) =>
+        aggregateDailyMetrics(db, tenantId, job.contributorId, job.day)));
     }
+    const processed = jobs.length;
 
     return c.json({ processed, contributors: allContributors.length });
   });

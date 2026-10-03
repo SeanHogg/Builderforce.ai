@@ -1,3 +1,38 @@
+## ✅ RESOLVED 2026-10-03 — Second performance pass: polled reads cached, cache misses stop waiting on KV, N+1 queries batched, published sites on their own 1.4 MB Worker
+
+- **Polled reads, shared until something changes.**
+  - **`GET /runtime/active` (polled every 4s) and `GET /runtime/executions`.** Both are cached per tenant behind the new execution-state version token (`application/runtime/executionStateVersion.ts`). Every status change bumps it through the existing lifecycle outbox, and the attention badge uses the same token. The active-runs query moved out of the route into `application/runtime/activeRuns.ts`; `elapsedMs` is still computed per request.
+  - **The notification feed.** Its reads and writes live in `application/notifications/notificationFeed.ts`. It is invalidated by `notify()` and by mark-read, and is declared as `subject_own_rows`.
+  - **Both conversation inboxes.** `application/marketplace/conversationLists.ts`, invalidated by all six handlers that write a conversation, each after its read watermark.
+  - **`GET /tenants/:id/security/users`.** Bounded by a 60s TTL rather than invalidated. The code states why: its session counts drift by the clock.
+  - **Workforce presence** now polls through the shared `usePolledResource`, so a background tab stops firing four requests every 30 seconds.
+- **Cache misses no longer wait for KV.**
+  - `@builderforce/read-through-cache` gained a `defer` hook. The API wires it to the invocation's `waitUntil` through a new `application/shared/requestScope.ts`, which now owns the per-request AsyncLocalStorage the error reporter used to own privately.
+  - It also gained single-flight: concurrent misses share one loader call, and a load overtaken by an `invalidate` is not cached.
+  - Four package tests cover this.
+- **N+1 queries and sequential round trips** (from the 2026-10-03 audit):
+  - Lane capability resolution: up to 3N queries → 2.
+  - Creation-session search: an object select per row → 1, with access checks deduplicated.
+  - Pulse list and trend: N → 1.
+  - Chat-ticket consolidation: 2M + L writes → 3.
+  - Contributor aggregation: chunked in parallel.
+  - `listChats`: 5 sequential steps → 3. `appendMessages`: ~5 → 3, with membership as an upsert.
+  - Routing-table scope reads, portfolio rollups, participant writes, the cascade-to-done, pin reorders and template application now run in parallel or as one `db.batch`.
+- **Published sites run on their own Worker.**
+  - **The bundle:** `src/sitesWorker.ts` + `api/wrangler.sites.toml` measure **1.41 MB / 304 KB gzip, against the API's 21.2 MB / 4.7 MB**.
+  - **What it serves:** it serves the static half of a site itself (`application/ide/siteStaticServe.ts`). Everything dynamic — the site datastore and sign-in, server code, the landing-page fork, a page view a workflow listens to — goes to the API over a service binding.
+  - **What made it possible:** two small extractions. `siteLandingRule.ts` (the pure landing predicate) and `workflow/eventTriggerListeners.ts` (the cached listener gate, apart from the workflow runner).
+  - **Route and deploy:** the wildcard route moved from the API's config to this one. The deploy-api job deploys it after the API, syncing its secrets from GitHub.
+  - **Guard:** `check:sites-worker-graph` fails if its import graph ever reaches the API's composition root, routers or agent runtime again. The first measurement came out larger than the API because of one such chain.
+  - **Privacy fix:** `visitorSalt` returns `undefined` when no secret is bound, and both callers then skip hashing instead of fingerprinting an IP unsalted.
+- **Verified (Sonnet):**
+  - The read-through-cache package: 21/21.
+  - API vitest: 890 files and 10,562 tests pass.
+  - Frontend vitest: 4,811/4,812. The one failure is the known expired `credential-encryption` review date.
+  - Both bundles were measured.
+  - The fixes made after that run (the package typing, the creation-search typing, per-user scoping on the notification feed, the silent catch) were re-verified before commit.
+- **Versions.** api 2026.10.3, frontend 2026.10.2.
+
 ## ✅ RESOLVED 2026-10-03 — Canvas previews run on our own runtime, isolated on preview.builderforce.ai
 
 - **The gap.** Every Run on the canvas needed a StackBlitz WebContainer: a metered session, an `npm install` and a dev server before anything showed. The IDE also booted one on every open just to start the terminal.

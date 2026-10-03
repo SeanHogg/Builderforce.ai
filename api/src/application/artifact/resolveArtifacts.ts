@@ -7,7 +7,7 @@
  * assignments. This gives users a union of everything assigned across the
  * hierarchy, with de-duplication by slug.
  */
-import { eq, and, or, isNull } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray } from 'drizzle-orm';
 import {
   artifactAssignments,
   projectAgents,
@@ -46,7 +46,120 @@ export async function resolveArtifacts(
   db: Db,
   ctx: ResolutionContext,
 ): Promise<ResolvedArtifacts> {
-  // Build scope conditions
+  const scopeConditions = await sharedScopeConditions(db, ctx);
+
+  // Agent-level — per-agent assignments keyed on project_agents.id. A workforce
+  // cloud agent is addressed by its ide_agents.id, resolved here to its
+  // canonical (project-less) identity row so capabilities follow the agent.
+  let agentAssignmentId = ctx.agentAssignmentId;
+  if (agentAssignmentId == null && ctx.cloudAgentRef != null) {
+    const [identity] = await db
+      .select({ id: projectAgents.id })
+      .from(projectAgents)
+      .where(and(
+        eq(projectAgents.tenantId, ctx.tenantId),
+        eq(projectAgents.agentKind, 'workforce'),
+        eq(projectAgents.agentRef, ctx.cloudAgentRef),
+        isNull(projectAgents.projectId),
+      ))
+      .limit(1);
+    agentAssignmentId = identity?.id;
+  }
+  if (agentAssignmentId != null) {
+    scopeConditions.push(
+      and(
+        eq(artifactAssignments.scope, AssignmentScope.AGENT),
+        eq(artifactAssignments.scopeId, agentAssignmentId),
+      ),
+    );
+  }
+
+  const rows = await db
+    .select({
+      artifactType: artifactAssignments.artifactType,
+      artifactSlug: artifactAssignments.artifactSlug,
+      // WHERE the assignment lives. The result is a union across the whole hierarchy,
+      // so without this an agent-pinned skill and a tenant-wide one are the same string.
+      scope:        artifactAssignments.scope,
+    })
+    .from(artifactAssignments)
+    .where(and(
+      eq(artifactAssignments.tenantId, ctx.tenantId),
+      or(...scopeConditions),
+    ));
+
+  return mergeAssignments(rows);
+}
+
+/**
+ * `resolveArtifacts` for several workforce cloud agents in ONE execution context
+ * (e.g. every agent staffed on a lane). The task, identity and assignment reads
+ * run once for the whole set instead of once per agent; each agent's entry is
+ * what `resolveArtifacts` returns for that `cloudAgentRef`.
+ */
+export async function resolveArtifactsForCloudAgents(
+  db: Db,
+  ctx: Omit<ResolutionContext, 'cloudAgentRef' | 'agentAssignmentId'>,
+  cloudAgentRefs: string[],
+): Promise<Map<string, ResolvedArtifacts>> {
+  const refs = [...new Set(cloudAgentRefs)];
+  const result = new Map<string, ResolvedArtifacts>();
+  if (!refs.length) return result;
+
+  const [scopeConditions, identities] = await Promise.all([
+    sharedScopeConditions(db, ctx),
+    db
+      .select({ id: projectAgents.id, agentRef: projectAgents.agentRef })
+      .from(projectAgents)
+      .where(and(
+        eq(projectAgents.tenantId, ctx.tenantId),
+        eq(projectAgents.agentKind, 'workforce'),
+        inArray(projectAgents.agentRef, refs),
+        isNull(projectAgents.projectId),
+      )),
+  ]);
+  // First identity row per ref, as the single-agent path's `.limit(1)` takes.
+  const identityByRef = new Map<string, number>();
+  for (const row of identities) {
+    if (!identityByRef.has(row.agentRef)) identityByRef.set(row.agentRef, row.id);
+  }
+  const identityIds = [...new Set(identityByRef.values())];
+  if (identityIds.length) {
+    scopeConditions.push(
+      and(
+        eq(artifactAssignments.scope, AssignmentScope.AGENT),
+        inArray(artifactAssignments.scopeId, identityIds),
+      ),
+    );
+  }
+
+  const rows = await db
+    .select({
+      artifactType: artifactAssignments.artifactType,
+      artifactSlug: artifactAssignments.artifactSlug,
+      scope:        artifactAssignments.scope,
+      scopeId:      artifactAssignments.scopeId,
+    })
+    .from(artifactAssignments)
+    .where(and(
+      eq(artifactAssignments.tenantId, ctx.tenantId),
+      or(...scopeConditions),
+    ));
+
+  for (const ref of refs) {
+    const identityId = identityByRef.get(ref);
+    // Every shared-scope row, plus only THIS agent's own agent-scope rows.
+    result.set(ref, mergeAssignments(rows.filter((row) =>
+      row.scope !== AssignmentScope.AGENT || row.scopeId === identityId)));
+  }
+  return result;
+}
+
+/** Tenant, host, project and task scope conditions: every level except the agent's. */
+async function sharedScopeConditions(
+  db: Db,
+  ctx: ResolutionContext,
+): Promise<ReturnType<typeof and>[]> {
   const scopeConditions: ReturnType<typeof and>[] = [];
 
   // Always include tenant-level
@@ -96,46 +209,13 @@ export async function resolveArtifacts(
     );
   }
 
-  // Agent-level — per-agent assignments keyed on project_agents.id. A workforce
-  // cloud agent is addressed by its ide_agents.id, resolved here to its
-  // canonical (project-less) identity row so capabilities follow the agent.
-  let agentAssignmentId = ctx.agentAssignmentId;
-  if (agentAssignmentId == null && ctx.cloudAgentRef != null) {
-    const [identity] = await db
-      .select({ id: projectAgents.id })
-      .from(projectAgents)
-      .where(and(
-        eq(projectAgents.tenantId, ctx.tenantId),
-        eq(projectAgents.agentKind, 'workforce'),
-        eq(projectAgents.agentRef, ctx.cloudAgentRef),
-        isNull(projectAgents.projectId),
-      ))
-      .limit(1);
-    agentAssignmentId = identity?.id;
-  }
-  if (agentAssignmentId != null) {
-    scopeConditions.push(
-      and(
-        eq(artifactAssignments.scope, AssignmentScope.AGENT),
-        eq(artifactAssignments.scopeId, agentAssignmentId),
-      ),
-    );
-  }
+  return scopeConditions;
+}
 
-  const rows = await db
-    .select({
-      artifactType: artifactAssignments.artifactType,
-      artifactSlug: artifactAssignments.artifactSlug,
-      // WHERE the assignment lives. The result is a union across the whole hierarchy,
-      // so without this an agent-pinned skill and a tenant-wide one are the same string.
-      scope:        artifactAssignments.scope,
-    })
-    .from(artifactAssignments)
-    .where(and(
-      eq(artifactAssignments.tenantId, ctx.tenantId),
-      or(...scopeConditions),
-    ));
-
+/** Merge assignment rows into the de-duped, per-type result with each slug's source scope. */
+function mergeAssignments(
+  rows: ReadonlyArray<{ artifactType: string; artifactSlug: string; scope: string | null }>,
+): ResolvedArtifacts {
   // De-dup by slug per type
   const skills   = new Set<string>();
   const personas = new Set<string>();

@@ -75,7 +75,7 @@ export async function getOrSetCached<T>(
   // loader when there is no KV (unit tests, non-Worker callers). The signature
   // said `Env`, which forced every caller holding an optional env to either
   // assert or drop the cached read entirely.
-  env: Env | undefined,
+  env: CacheEnv,
   key: string,
   loader: () => Promise<T>,
   opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
@@ -225,6 +225,6 @@ export async function bumpPublicCanvasVersion(env: Env, tenantId: number): Promi
 
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
-export async function invalidateCached(env: Env | undefined, key: string): Promise<void> {
+export async function invalidateCached(env: CacheEnv, key: string): Promise<void> {
   return cache.invalidate(env?.AUTH_CACHE_KV, key);
 }

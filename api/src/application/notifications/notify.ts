@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { freelancerNotifications, users } from '../../infrastructure/database/schema';
+import { invalidateNotificationFeed } from './notificationFeed';
 
 export interface NotifyInput {
   userId: string;
@@ -28,7 +29,7 @@ export interface NotifyResult {
 }
 
 /** Insert an in-app notification for the recipient (+ optional email). */
-export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY_EMAIL_KEY'>, input: NotifyInput): Promise<NotifyResult> {
+export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY_EMAIL_KEY' | 'AUTH_CACHE_KV'>, input: NotifyInput): Promise<NotifyResult> {
   let inAppDelivered = false;
   let emailDelivered: boolean | null = null;
   try {
@@ -41,6 +42,8 @@ export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY
       ref: input.ref ?? null,
     });
     inAppDelivered = true;
+    // The recipient's cached feed no longer holds every row they have.
+    await invalidateNotificationFeed(env, input.userId);
   } catch (err) {
     // Deliberately non-fatal (see docblock), but the drop must not be silent:
     // this row IS the durable feed, so losing it means the recipient never learns

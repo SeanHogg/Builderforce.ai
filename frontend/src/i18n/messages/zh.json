@@ -1272,7 +1272,6 @@
       "mounted": "{count, plural, other {已挂载 # 个文件。}}",
       "stepInstalling": "[3/3] 正在安装依赖…",
       "installFailed": "npm install 失败（退出码 {code}）。请修复上方的错误后重试。",
-      "installFailedShort": "npm install 失败（退出码 {code}）。",
       "depsReady": "依赖已就绪。",
       "startingDevServer": "正在启动开发服务器…",
       "devServerReady": "开发服务器已就绪：{url}",
@@ -1289,7 +1288,6 @@
       "noDistOutput": "构建没有生成 dist/ 输出。请确认构建脚本输出到 “dist”。",
       "capturedFiles": "{count, plural, other {已捕获 # 个构建文件。}}",
       "runningChecks": "正在运行检查",
-      "synthesizedTsconfig": "（已为类型检查回退生成一个最小的 tsconfig.json）",
       "checkStep": "{label}…",
       "allChecksPassed": "所有检查均已通过。",
       "checksFailed": "{count, plural, other {# 项检查未通过。}}",
@@ -1307,6 +1305,7 @@
     "rightTab": {
       "voice": "语音",
       "files": "文件",
+      "versions": "版本",
       "agent": "智能体",
       "train": "训练",
       "publish": "发布",
@@ -1519,6 +1518,12 @@
         "android": "Android 项目",
         "ios": "iOS 项目"
       }
+    },
+    "centerDatabase": "数据库",
+    "runtimeStatus": {
+      "booting": "⏳ 正在启动……",
+      "ready": "✅ 就绪",
+      "error": "⚠️ 运行环境错误"
     }
   },
   "references": {
@@ -26103,19 +26108,10 @@
       }
     },
     "forms": {
-      "title": "表单",
-      "description": "每个已发布站点都可以收集提交内容。将表单提交到下方地址。",
       "endpoint": "接口地址",
-      "submissionCount": "{count} 条提交",
-      "viewSubmissions": "查看提交",
-      "hideSubmissions": "隐藏提交",
       "noSubmissions": "暂无提交。",
       "when": "时间",
       "email": "邮箱",
-      "fields": "字段",
-      "newPlaceholder": "new-form",
-      "newLabel": "新表单名称",
-      "add": "添加表单",
       "raisesTickets": "每次提交都创建一个工单",
       "raisesTicketsHint": "开启后，每次新提交都会在该项目看板上创建一个工单，供团队处理——处理完成后会通知提交者。",
       "genericError": "出错了，请重试。",
@@ -31802,11 +31798,6 @@
     "loadingMessages": "正在加载消息…",
     "noMessages": "没有消息。"
   },
-  "webcontainerConnect": {
-    "connecting": "正在连接到你的 IDE…",
-    "connected": "已连接。如果预览已显示在你的 IDE 中，可以关闭此标签页。",
-    "failed": "连接失败：{error}"
-  },
   "startups": {
     "vocab": {
       "stage": {
@@ -32107,10 +32098,6 @@
     "download": "下载 Windows、macOS 或 Linux 版",
     "readMore": "了解工作原理"
   },
-  "webcontainer": {
-    "attributionLead": "在你的浏览器中运行，基于",
-    "attributionAria": "由 StackBlitz 的 WebContainers 提供支持（在新标签页中打开）"
-  },
   "siteBadge": {
     "body": "免费网站会显示一个小的“Made with Builderforce.ai”徽章。",
     "upgrade": "升级即可移除"
@@ -32176,6 +32163,98 @@
       "loadFailed": "无法打开此项目。",
       "loading": "正在打开你的项目……",
       "signInLead": "登录后即可打开此项目。"
+    }
+  },
+  "builderSearch": {
+    "filesTab": "文件",
+    "searchTab": "搜索",
+    "panelLabel": "文件与搜索",
+    "label": "搜索所有文件",
+    "placeholder": "搜索所有文件……",
+    "searching": "正在搜索……",
+    "failed": "搜索未完成，请重试。",
+    "hint": "至少输入 {min} 个字符即可搜索所有文件。",
+    "count": "{files, plural, other {# 个文件}}中{matches, plural, =0 {没有匹配} other {有 # 处匹配}}",
+    "countTruncated": "{files, plural, other {# 个文件}}中的前 {matches} 处匹配。请缩小搜索范围以查看其余结果。"
+  },
+  "builderPanels": {
+    "panelLabel": "终端、输出和问题",
+    "terminal": "终端",
+    "output": "输出",
+    "problems": "问题",
+    "problemsCount": "问题（{count}）",
+    "collapse": "收起面板",
+    "expand": "展开面板",
+    "noProblems": "没有问题。上次运行的构建错误和运行时错误会显示在这里。",
+    "clearProblems": "清除",
+    "sourceBuild": "构建",
+    "sourceRuntime": "运行时"
+  },
+  "builderVersions": {
+    "loading": "正在加载版本……",
+    "loadFailed": "无法加载版本。",
+    "restored": "已恢复 {restored} 个文件，已移除 {removed} 个文件。",
+    "missing": "{count} 个文件过旧，无法恢复：{files}。",
+    "restoreFailed": "无法恢复该版本。",
+    "saveFailed": "无法保存版本。",
+    "autoTitle": "已修改 {files}",
+    "someFiles": "部分文件",
+    "filesAndMore": "{files} 等另外 {more} 个",
+    "baselineTitle": "起点",
+    "beforeRestoreTitle": "恢复之前",
+    "meta": "版本 {number} · {time}",
+    "restore": "恢复",
+    "confirmRestore": "再次点击以恢复",
+    "nameLabel": "版本名称",
+    "namePlaceholder": "为此版本命名……",
+    "save": "保存",
+    "restoreHint": "当前内容会先保存为一个版本。"
+  },
+  "builderDatabase": {
+    "sectionsLabel": "数据库分区",
+    "sections": {
+      "tables": "数据表",
+      "users": "用户",
+      "functions": "服务器函数"
+    },
+    "needsSite": {
+      "checking": "正在检查已发布的应用……",
+      "title": "发布后即可启用数据库",
+      "body": "数据表和登录信息随已发布的应用一起存在。发布一次，它们就会出现在这里。",
+      "action": "打开发布"
+    },
+    "tables": {
+      "loading": "正在加载数据表……",
+      "heading": "数据表",
+      "rows": "{count} 行",
+      "pick": "选择一张数据表以查看其行。",
+      "empty": "还没有数据表。添加一张，然后让表单提交到它的端点。",
+      "delete": "删除数据表",
+      "deleteConfirm": "删除数据表“{name}”及其 {count} 行？此操作无法撤销。",
+      "deleteRow": "删除行",
+      "deleteRowConfirm": "删除这一行？此操作无法撤销。",
+      "actions": "操作",
+      "loadMore": "加载更多",
+      "newLabel": "新数据表名称",
+      "newPlaceholder": "例如 orders",
+      "add": "添加数据表"
+    },
+    "users": {
+      "loading": "正在加载用户……",
+      "intro": "登录过你的应用的人。他们通过发送到邮箱的一次性验证码登录，因此无需管理密码。",
+      "failed": "出了点问题，请重试。",
+      "empty": "还没有人登录。",
+      "removeConfirm": "移除 {email}？其登录和订阅将被删除；其提交的内容会保留。",
+      "remove": "移除",
+      "loadMore": "加载更多",
+      "active": "正常",
+      "suspended": "已停用",
+      "meta": "加入于 {joined} · 最近活动 {seen}",
+      "never": "从未",
+      "reinstate": "恢复",
+      "suspend": "停用",
+      "suspendConfirm": "确认停用",
+      "suspendHint": "对方将在所有设备上退出登录，恢复前无法再次登录。"
     }
   }
 }

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { withRootBase } from './siteServer';
+import { withRootBase } from './siteStaticServe';
 
 describe('withRootBase', () => {
   it('injects a root base so relative assets resolve from a nested route', () => {

@@ -134,6 +134,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'walk-me-through-what-you-made',
     'send-the-link-join-without-an-account',
     'run-your-app-on-the-canvas',
+    'builderforce-studio-describe-it-run-it',
     'the-canvas-gave-the-screen-back-to-the-board',
     'build-a-3d-world-in-the-browser',
     'read-any-pdf-even-the-scanned-ones',
@@ -157,6 +158,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'grade-the-proof-and-close-the-loop',
     'idea-to-real-the-operating-methodology',
     'run-your-app-on-the-canvas',
+    'builderforce-studio-describe-it-run-it',
     'close-the-deal-on-the-board-you-built-it-on',
     'eight-ways-to-make-an-idea-real',
     'creation-canvas-beyond-chat',
@@ -230,7 +232,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Feature routes — associated blog content shown on each logged-out feature
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
-  ide: ['one-local-index-for-every-ai-tool', 'vs-code-command-center-for-your-agentic-workforce', 'choose-who-answers-not-just-who-you-ask', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
+  ide: ['builderforce-studio-describe-it-run-it', 'one-local-index-for-every-ai-tool', 'vs-code-command-center-for-your-agentic-workforce', 'choose-who-answers-not-just-who-you-ask', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
   training: ['webgpu-lora-explained', 'local-first-ai-webgpu-in-the-browser', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices', 'how-to-launch-a-course-and-upload-scorm-on-hired-video', 'how-to-run-a-classroom-cohort-as-an-educator', 'how-to-earn-a-verifiable-certificate-on-hired-video'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],

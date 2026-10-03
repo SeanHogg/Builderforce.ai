@@ -22,7 +22,8 @@ type Row = Record<string, unknown>;
  * Minimal Drizzle stand-in for `syncStates`: `select().from(t).where(...)` is awaited
  * directly for the participant rows and `.orderBy(...)`-chained for the ledger, so the
  * `where` result is both a thenable and an object with `orderBy`. Collects the `set`
- * payload of every `update`, which is exactly the observable behaviour under test.
+ * payload of every `update` (sent through `batch`), which is exactly the observable
+ * behaviour under test.
  */
 function makeDb(participantRows: Row[], signoffRows: Row[]) {
   const updates: Row[] = [];
@@ -41,6 +42,8 @@ function makeDb(participantRows: Row[], signoffRows: Row[]) {
       }),
     }),
     update: () => ({ set: (values: Row) => ({ where: async () => { updates.push(values); } }) }),
+    // Changed slots are persisted as one batch of the updates built above.
+    batch: async (statements: unknown[]) => Promise.all(statements),
   } as never;
   return { db, updates };
 }

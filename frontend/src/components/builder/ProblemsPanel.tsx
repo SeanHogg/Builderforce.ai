@@ -1,4 +1,4 @@
-'use client';
+// No `'use client'`: imported only by client components, so it is already on the client side of the boundary.
 
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';

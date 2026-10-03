@@ -141,7 +141,8 @@ export interface IdeContainerOption {
   key: string;
 }
 
-export interface WebContainerState {
+/** The in-browser runtime behind Run, the terminal and dev servers. */
+export interface RuntimeState {
   status: 'idle' | 'booting' | 'ready' | 'error';
   url?: string;
   error?: string;

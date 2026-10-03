@@ -1223,6 +1223,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
+    // Bounded by TTL, not invalidated by its writers — by design. Workforce presence
+    // polls this every 30s per open workspace, and half of what it returns is a
+    // time-windowed measure (sessions/tokens active by `last_seen_at`, which the
+    // auth middleware itself refreshes about once a minute), so there is no write
+    // that marks it stale: it drifts by the clock. The membership half is written
+    // from eight modules. A 60s ceiling (Workers KV's minimum) keeps the presence
+    // reading inside the same one-minute precision it already has.
+    return c.json(await getOrSetCached(c.env as Env, `tenant-security-users:${tenantId}`, () => loadSecurityUsers(tenantId), { kvTtlSeconds: 60, l1TtlMs: 15_000 }));
+  });
+
+  async function loadSecurityUsers(tenantId: number) {
     const memberRows = await db
       .select({
         userId: users.id,
@@ -1243,7 +1254,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const { sessionsByUser, tokensByUser } = await countActiveSessionsAndTokens(db, userIds);
 
-    return c.json({
+    return {
       users: memberRows.map((row) => ({
         id: row.userId,
         email: row.email,
@@ -1258,8 +1269,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         activeSessions: sessionsByUser.get(row.userId) ?? 0,
         activeTokens: tokensByUser.get(row.userId) ?? 0,
       })),
-    });
-  });
+    };
+  }
 
   // GET /api/tenants/:id/security/users/:userId
   router.get('/:id/security/users/:userId', requireRole(TenantRole.MANAGER), async (c) => {

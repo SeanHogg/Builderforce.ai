@@ -68,6 +68,7 @@ import {
   restoreWorkspaceVersion,
 } from '../../application/ide/workspaceStore';
 import { searchWorkspace, SEARCH_QUERY_MAX, SEARCH_QUERY_MIN } from '../../application/ide/searchWorkspace';
+import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../../application/ide/workspaceCheckpoints';
 import { onCanvasWrite } from '../../application/backend';
 import { HOSTING_APEX, publishedSiteRecord } from '../../application/ide/siteHosting';
 import { listSiteReleases, restoreSiteRelease } from '../../application/ide/siteReleases';
@@ -260,6 +261,12 @@ const EnableDeploysBody = z.object({
   distDir: z.string().optional(),
 });
 const RestoreVersionBody = z.object({ path: zNonEmptyString, at: z.coerce.number() });
+/** A version the client may ask for: the automatic ones and a person's named save. `beforeRestore` is the server's own. */
+const CreateCheckpointBody = z.object({
+  kind: z.enum(['baseline', 'auto', 'manual']),
+  name: z.string().max(200).optional(),
+  changed: z.array(z.string().max(500)).max(50).optional(),
+});
 const ImportRepoBody = z.object({ repoId: zNonEmptyString, ref: zOptionalString });
 const CommitBody = z.object({ repoId: zNonEmptyString, message: zOptionalString, branch: zOptionalString });
 const CreateRepoBody = z.object({
@@ -546,6 +553,46 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!result.ok) return c.json({ error: result.reason }, result.status);
     await onCanvasWrite(c.env, projectId, path);
     return c.json({ success: true, path, at });
+  });
+
+  // ---------- Project versions (checkpoints) ----------
+  // A version is a manifest of the whole project at a moment; restoring makes the
+  // project match it from file history. See application/ide/workspaceCheckpoints.ts.
+
+  router.get('/projects/:projectId/checkpoints', async (c) => {
+    const db = requestDb(c);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    return c.json(await listCheckpoints(bucket, projectId));
+  });
+
+  router.post('/projects/:projectId/checkpoints', async (c) => {
+    const db = requestDb(c);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await canWriteFiles(c, db, tenantId, projectId))) return c.json({ error: WRITE_REFUSED }, 403);
+    const body = await parseBody(c, CreateCheckpointBody);
+    return c.json(await createCheckpoint(bucket, projectId, body), 201);
+  });
+
+  router.post('/projects/:projectId/checkpoints/:checkpointId/restore', async (c) => {
+    const db = requestDb(c);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await canWriteFiles(c, db, tenantId, projectId))) return c.json({ error: WRITE_REFUSED }, 403);
+    const outcome = await restoreCheckpoint(bucket, projectId, Number(c.req.param('checkpointId')));
+    if (!outcome) return c.json({ error: 'That version is no longer available.' }, 404);
+    for (const path of [...outcome.restored, ...outcome.removed]) await onCanvasWrite(c.env, projectId, path);
+    return c.json(outcome);
   });
 
   // ---------- Site releases (roll a published site back) ----------

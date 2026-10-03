@@ -46,7 +46,7 @@ vi.mock('./cloudAgentEngine', () => ({
   markCloudExecutionRunning: (...a: unknown[]) => markCloudExecutionRunning(...(a as [])),
 }));
 vi.mock('./cloudToolEvents', () => ({ recordCloudToolEvent: (...a: unknown[]) => recordCloudToolEvent(...(a as [])) }));
-vi.mock('../artifact/resolveArtifacts', () => ({ resolveArtifacts: async () => undefined }));
+vi.mock('../artifact/resolveArtifacts', () => ({ resolveArtifacts: async () => undefined, resolveArtifactsForCloudAgents: async () => new Map() }));
 
 import { resumePausedExecution } from './executionResume';
 

@@ -26,14 +26,13 @@ import PageContainer from '@/components/PageContainer';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
 import { runCodingDispatch, toResultPayload } from '@/lib/browserRuntime/coding';
 import { createCodingDeps } from '@/lib/browserRuntime/factory';
-import { WebContainerAttribution } from '@/components/webcontainer/WebContainerAttribution';
 import { getApiBaseUrl, getAuthHeaders } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**
  * Default coding handler: for a repo-targeted dispatch, clone + edit + push
- * in-browser via the git-proxy (and optionally build in a WebContainer). Wired
- * from the real factory; tests inject their own handler instead.
+ * in-browser via the git-proxy. Wired from the real factory; tests inject their
+ * own handler instead.
  */
 function defaultCodeHandler(transport: BrowserRuntimeTransport) {
   return async (dispatch: ClaimedDispatch): Promise<CodeResult> => {
@@ -116,7 +115,6 @@ export function AgentWorker({
           <li key={i}>{t(`outcome.${o}`)}</li>
         ))}
       </ul>
-      <WebContainerAttribution />
     </PageContainer>
   );
 }

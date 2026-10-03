@@ -227,7 +227,10 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
       if (pending) return pending as Promise<T>;
 
       const l1Ttl = opts?.l1TtlMs ?? L1_TTL_MS;
-      const load = (async (): Promise<T> => {
+      // `let` + definite assignment: the body compares against its OWN promise to
+      // tell whether an invalidate overtook it, so it must be able to name itself.
+      let load!: Promise<T>;
+      load = (async (): Promise<T> => {
         if (kv) {
           const cached = await kvGet<T>(kv, key, 'getOrSet');
           if (cached != null) {

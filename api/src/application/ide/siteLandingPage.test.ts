@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ENTER_APP_HREF, renderLandingPage, escapeHtml, SITE_LANDING_KEY } from './siteLandingPage';
-import { ENTER_APP_PARAM, landingPageApplies } from './siteVisitor';
+import { ENTER_APP_PARAM, landingPageApplies } from './siteLandingRule';
 import type { SiteRecord } from './siteHosting';
 import type { WebsitePage, WebsiteTheme } from '@builderforce/creation-canvas-contract';
 

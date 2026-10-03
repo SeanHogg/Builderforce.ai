@@ -5,8 +5,9 @@ import { resolve } from 'node:path';
 /**
  * Cross-origin-isolation (COOP/COEP) header parity [1570].
  *
- * Three places declare the isolation headers and MUST stay in sync, or
- * WebContainer "Run" silently breaks in one environment but not another:
+ * Three places declare the isolation headers and MUST stay in sync, or a page
+ * is isolated in one environment and not another. Isolation is what gives
+ * in-browser WASM (onnxruntime-web) its threads:
  *   - public/_headers      — the Cloudflare Workers static-asset deploy
  *   - next.config.js        — `next dev` (and prerendered routes)
  *   - src/middleware.ts     — `withCoi`, SSR Creation Canvas routes
@@ -34,33 +35,13 @@ describe('cross-origin-isolation header parity [1570]', () => {
     }
   });
 
-  it('the static + dev configs keep the /webcontainer/connect COEP override (unsafe-none)', () => {
-    const headers = SOURCES[0]![1];
-    const nextCfg = SOURCES[1]![1];
-    expect(headers).toContain('webcontainer/connect');
-    expect(headers).toContain('unsafe-none');
-    expect(nextCfg).toContain('webcontainer/connect');
-    expect(nextCfg).toContain('unsafe-none');
-  });
-
-  it('the static + dev configs relax the connect route COOP to unsafe-none (not just COEP)', () => {
-    // The connect handshake tab needs window.opener/postMessage to the IDE, which
-    // COOP:same-origin severs. Relaxing only COEP (the old bug) left it isolated.
-    // In both files the global COOP:same-origin is declared BEFORE the connect
-    // override, so the text AFTER the connect marker must carry COOP unsafe-none.
-    for (const name of ['public/_headers', 'next.config.js'] as const) {
-      const src = SOURCES.find(([n]) => n === name)![1];
-      const after = src.slice(src.indexOf('webcontainer/connect'));
-      expect(after, `${name}: connect block declares COOP`).toContain('Cross-Origin-Opener-Policy');
-      expect(after, `${name}: connect COOP is unsafe-none`).toContain('unsafe-none');
+  it('no source carves out the retired StackBlitz connect route any more', () => {
+    // That tab existed only for @webcontainer/api's handshake; previews run on our
+    // own runtime now, on preview.builderforce.ai, with nothing to connect.
+    for (const [name, src] of SOURCES) {
+      expect(src, `${name}: no webcontainer/connect exception`).not.toContain('webcontainer/connect');
+      expect(src, `${name}: no unsafe-none override`).not.toContain('unsafe-none');
     }
-  });
-
-  it('middleware sets the no-isolation pair for the connect route (reliable path for the SSR [id] route)', () => {
-    const mw = SOURCES.find(([n]) => n === 'src/middleware.ts')![1];
-    expect(mw).toContain('NO_ISOLATION_HEADERS');
-    expect(mw).toContain("'unsafe-none'");
-    expect(mw).toContain('/webcontainer/connect');
   });
 
   it('no source silently weakens the global COEP to require-corp', () => {

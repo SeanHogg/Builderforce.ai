@@ -498,6 +498,49 @@ jobs:
             sleep 30
           done
 
+      # The published-site Worker (api/wrangler.sites.toml). AFTER the API, in this
+      # order, for two reasons: its `API` service binding needs builderforce-api to
+      # exist, and on the first rollout the API deploy above is what releases the
+      # `*.builderforce.ai/*` route this one claims.
+      #
+      # Its secrets are synced from GitHub on every deploy rather than set once by
+      # hand, so the two Workers cannot drift apart. Only secrets that are actually set
+      # are pushed — an absent SITE_VISITOR_SALT leaves visitor dedup off on the sites
+      # Worker (it never hashes unsalted) rather than overwriting anything with "".
+      # The salt goes to BOTH Workers, because a visitor must fingerprint identically
+      # whichever of them counts the request.
+      - name: Deploy published-site Worker
+        working-directory: api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
+          NEON_APPS_DATABASE_URL: ${{ secrets.NEON_APPS_DATABASE_URL }}
+          BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
+          SITE_VISITOR_SALT: ${{ secrets.SITE_VISITOR_SALT }}
+        run: |
+          node -e '
+            const names = ["NEON_DATABASE_URL", "NEON_TRANSACTIONAL_DATABASE_URL", "NEON_APPS_DATABASE_URL", "BUILDERFORCE_ERROR_API_KEY", "SITE_VISITOR_SALT"];
+            const set = Object.fromEntries(names.filter((n) => process.env[n]).map((n) => [n, process.env[n]]));
+            require("fs").writeFileSync("sites-secrets.json", JSON.stringify(set));
+            console.log("syncing", Object.keys(set).join(", "));
+          '
+          for attempt in 1 2 3; do
+            npm run deploy:sites && break
+            if [ "$attempt" -eq 3 ]; then rm -f sites-secrets.json; exit 1; fi
+            sleep 30
+          done
+          npx wrangler secret bulk sites-secrets.json --config wrangler.sites.toml
+          if [ -n "$SITE_VISITOR_SALT" ]; then
+            printf '%s' "{\"SITE_VISITOR_SALT\":\"$SITE_VISITOR_SALT\"}" > api-salt.json
+            npx wrangler secret bulk api-salt.json
+            rm -f api-salt.json
+          else
+            echo "::warning::SITE_VISITOR_SALT is not set — published-site visitors are counted but not deduplicated on the sites Worker."
+          fi
+          rm -f sites-secrets.json
+
       - name: Refresh demo accounts
         env:
           DEMO_RESEED_SECRET: ${{ secrets.DEMO_RESEED_SECRET }}

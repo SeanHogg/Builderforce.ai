@@ -49,8 +49,8 @@ export function deferPastResponse(task: Promise<unknown>, scope: RequestScope | 
   try {
     scope.waitUntil(task);
     return true;
-  } catch (error) {
-    console.error('[request-scope:wait-until-failed]', error);
+  } catch {
+    // Not swallowed: `false` hands the task back, and the caller awaits it itself.
     return false;
   }
 }

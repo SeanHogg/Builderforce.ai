@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.10.2",
+  "version": "2026.10.3",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -16,6 +16,8 @@
     "check:source-package-graph": "node ../scripts/check-source-package-graph.mjs",
     "check:schema": "node scripts/check-schema-drift.mjs",
     "check:db-access": "node scripts/check-db-access.mjs",
+    "check:sites-worker-graph": "node scripts/check-sites-worker-graph.mjs",
+    "deploy:sites": "wrangler deploy --config wrangler.sites.toml",
     "check:migrations": "node scripts/check-migrations.mjs",
     "check:swept-tables": "node scripts/check-swept-tables.mjs",
     "check:usage-counts": "node scripts/check-usage-counts.mjs",
@@ -63,7 +65,7 @@
     "@seanhogg/builderforce-memory": "^2026.9.33",
     "@seanhogg/builderforce-memory-engine": "^2026.9.33",
     "@seanhogg/builderforce-quality": "^2026.7.5",
-    "@seanhogg/builderforce-webcontainers": "^2026.10.2",
+    "@seanhogg/builderforce-webcontainers": "^2026.10.3",
     "drizzle-orm": "^0.36.4",
     "fflate": "^0.8.2",
     "hono": "^4.6.17",

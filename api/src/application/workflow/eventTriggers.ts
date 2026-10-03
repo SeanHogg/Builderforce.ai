@@ -17,7 +17,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * The Growth events are on genuinely hot paths: a page view happens on every hosted
  * site request, an open pixel on every campaign mail read. Querying `workflow_triggers`
  * per event would put a DB round-trip on each of those, and the honest answer is
- * almost always "nobody is listening". `hasEventTriggerListeners` answers that from
+ * almost always "nobody is listening". `hasEventTriggerListeners` (`eventTriggerListeners.ts`) answers that from
  * the read-through cache (L1 map + L2 KV) keyed by (tenant, type), so an event with
  * no subscriber costs no round-trip at all. `bumpEventTriggerListeners` — called by
  * `syncDefinitionTriggers` on every definition save — is what re-arms it, so a
@@ -32,50 +32,10 @@ import { workflowDefinitions, workflowTriggers } from '../../infrastructure/data
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { instantiateWorkflowRun, type RunTarget } from './instantiateRun';
-import { EVENT_TRIGGER_TYPES, TRIGGER_FILTER_KEYS, type EventTriggerType, type TriggerFilterKey, type TriggerMatchContext } from '../../domain/workflowTriggers';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { TRIGGER_FILTER_KEYS, type EventTriggerType, type TriggerFilterKey, type TriggerMatchContext } from '../../domain/workflowTriggers';
+import { hasEventTriggerListeners } from './eventTriggerListeners';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-/** Cache key for "does this tenant have any enabled trigger of this type?". */
-function listenerKey(tenantId: number, eventType: string): string {
-  return `wf:evt-listeners:${tenantId}:${eventType}`;
-}
-
-/**
- * Whether any enabled trigger row of `eventType` exists for the tenant. Cached, so
- * a high-frequency emitter (page view, email open) pays nothing when nobody listens.
- * Without `env` there is no cache to consult and the answer is an honest `true` —
- * the caller then does the real lookup, which is the pre-cache behaviour.
- */
-export async function hasEventTriggerListeners(
-  env: Env | undefined,
-  db: Db,
-  tenantId: number,
-  eventType: EventTriggerType,
-): Promise<boolean> {
-  if (!env) return true;
-  return getOrSetCached(env, listenerKey(tenantId, eventType), async () => {
-    const [row] = await db
-      .select({ id: workflowTriggers.id })
-      .from(workflowTriggers)
-      .where(and(
-        eq(workflowTriggers.tenantId, tenantId),
-        eq(workflowTriggers.triggerType, eventType),
-        eq(workflowTriggers.enabled, true),
-      ))
-      .limit(1);
-    return !!row;
-  }, { kvTtlSeconds: 300, l1TtlMs: 30_000 });
-}
-
-/** Drop the cached listener answers for a tenant — called whenever the registry
- *  changes, so publishing a trigger takes effect on the next event, not after a TTL. */
-export async function bumpEventTriggerListeners(env: Env | undefined, tenantId: number): Promise<void> {
-  if (!env) return;
-  await Promise.all(EVENT_TRIGGER_TYPES.map((type) =>
-    invalidateCached(env, listenerKey(tenantId, type)).catch(() => undefined)));
-}
 
 export interface FireEventTriggersParams {
   tenantId: number;

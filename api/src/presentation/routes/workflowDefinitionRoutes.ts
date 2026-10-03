@@ -45,7 +45,7 @@ import { resolveCanvasRunTarget } from '../../application/workflow/canvasRunTarg
 import { evaluateWorkflowRunApprovalGate } from '../../application/workflow/workflowRunApproval';
 import { notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
-import { bumpEventTriggerListeners } from '../../application/workflow/eventTriggers';
+import { bumpEventTriggerListeners } from '../../application/workflow/eventTriggerListeners';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';

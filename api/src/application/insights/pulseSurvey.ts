@@ -14,7 +14,7 @@
  * All aggregation is pure so it is unit-testable without a DB.
  */
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { pulseSurveys, pulseResponses } from '../../infrastructure/database/schema';
 
@@ -123,6 +123,32 @@ export async function computePulseAggregate(db: Db, tenantId: number, surveyId: 
   return summarizePulse(survey, responses);
 }
 
+/**
+ * I/O: aggregate several already-loaded surveys with ONE responses read, keyed by
+ * survey id (anonymous — user_id is never selected). A survey with no responses
+ * still gets its empty aggregate.
+ */
+export async function computePulseAggregates(
+  db: Db,
+  tenantId: number,
+  surveys: ReadonlyArray<{ id: string; question: string; scale: number; active: boolean }>,
+): Promise<Map<string, PulseAggregate>> {
+  const result = new Map<string, PulseAggregate>();
+  if (!surveys.length) return result;
+  const responses = await db
+    .select({ surveyId: pulseResponses.surveyId, score: pulseResponses.score, comment: pulseResponses.comment })
+    .from(pulseResponses)
+    .where(and(inArray(pulseResponses.surveyId, surveys.map((s) => s.id)), eq(pulseResponses.tenantId, tenantId)));
+  const bySurvey = new Map<string, Array<{ score: number; comment: string | null }>>();
+  for (const r of responses) {
+    const list = bySurvey.get(r.surveyId) ?? [];
+    list.push({ score: r.score, comment: r.comment });
+    bySurvey.set(r.surveyId, list);
+  }
+  for (const s of surveys) result.set(s.id, summarizePulse(s, bySurvey.get(s.id) ?? []));
+  return result;
+}
+
 export interface PulseTrendPoint { surveyId: string; question: string; createdAt: string; averageScore: number | null; responseCount: number; enps: number | null }
 
 /**
@@ -138,12 +164,9 @@ export async function computePulseTrend(db: Db, tenantId: number, limit = 12): P
     .orderBy(desc(pulseSurveys.createdAt))
     .limit(limit);
 
-  const points = await Promise.all(surveys.map(async (s) => {
-    const responses = await db
-      .select({ score: pulseResponses.score, comment: pulseResponses.comment })
-      .from(pulseResponses)
-      .where(and(eq(pulseResponses.surveyId, s.id), eq(pulseResponses.tenantId, tenantId)));
-    const agg = summarizePulse(s, responses);
+  const aggregates = await computePulseAggregates(db, tenantId, surveys);
+  const points = surveys.map((s) => {
+    const agg = aggregates.get(s.id)!;
     return {
       surveyId: s.id,
       question: s.question,
@@ -152,7 +175,7 @@ export async function computePulseTrend(db: Db, tenantId: number, limit = 12): P
       responseCount: agg.responseCount,
       enps: agg.enps,
     };
-  }));
+  });
 
   return points.reverse(); // oldest → newest for charting
 }

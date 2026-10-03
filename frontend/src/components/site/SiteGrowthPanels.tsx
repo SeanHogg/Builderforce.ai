@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * What you get AFTER "publish" — the three things a published site was missing.
+ * What you get AFTER "publish" — putting it on your domain, and seeing who came.
+ * (Its data — tables, sign-ins, server functions — lives in the IDE's Database view.)
  *
  *   <SiteDomainPanel>   put your own domain on it
- *   <SiteFormsPanel>    the endpoint a form posts to, and what people submitted
  *   <SiteTrafficPanel>  whether anyone actually came
  *
  * Each panel decides its OWN visibility: none of them takes a `canShow` prop,
@@ -18,12 +18,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  siteDataApi,
   siteDomainApi,
   siteTrafficApi,
   type CustomDomainState,
-  type SiteCollection,
-  type SiteRecord,
   type SiteTrafficSummary,
 } from '@/lib/growthApi';
 import { useFormat } from "@/i18n/useFormat";
@@ -234,172 +231,6 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
       {state.error && (
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted)' }}>{state.error}</p>
       )}
-      {error && (
-        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text)' }}>{error}</p>
-      )}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Forms
-// ---------------------------------------------------------------------------
-
-export function SiteFormsPanel({ projectId }: { projectId: number }) {
-  const fmt = useFormat();
-  const t = useTranslations('site.forms');
-  const [collections, setCollections] = useState<SiteCollection[] | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [records, setRecords] = useState<SiteRecord[]>([]);
-  const [newName, setNewName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const load = useCallback(() => {
-    siteDataApi.listCollections(projectId)
-      .then((r) => setCollections(r.collections))
-      .catch(() => setCollections(null));
-  }, [projectId]);
-
-  useEffect(load, [load]);
-
-  const openCollection = useCallback((id: number) => {
-    if (openId === id) { setOpenId(null); return; }
-    setOpenId(id);
-    setRecords([]);
-    siteDataApi.listRecords(projectId, id)
-      .then((r) => setRecords(r.records))
-      .catch(() => setRecords([]));
-  }, [openId, projectId]);
-
-  const create = useCallback(async () => {
-    setBusy(true);
-    setError('');
-    try {
-      await siteDataApi.createCollection(projectId, newName);
-      setNewName('');
-      load();
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    } finally {
-      setBusy(false);
-    }
-  }, [load, newName, projectId, t]);
-
-  const [togglingId, setTogglingId] = useState<number | null>(null);
-  // ONE patch path for every per-collection switch, so a new flag is a new
-  // checkbox and not a new copy of the busy/error/reload dance.
-  const patchCollection = useCallback(async (collection: SiteCollection, patch: Parameters<typeof siteDataApi.updateCollection>[2]) => {
-    setTogglingId(collection.id);
-    setError('');
-    try {
-      await siteDataApi.updateCollection(projectId, collection.id, patch);
-      load();
-    } catch (e) {
-      setError(faultText(e, t('genericError')));
-    } finally {
-      setTogglingId(null);
-    }
-  }, [load, projectId, t]);
-
-  if (!collections) return null;
-
-  return (
-    <section style={card} aria-labelledby="site-forms-heading">
-      <h3 id="site-forms-heading" style={{ margin: 0, fontSize: 15, color: 'var(--text-primary, var(--bg-elevated))' }}>
-        {t('title')}
-      </h3>
-      <p style={{ margin: '6px 0 12px', fontSize: 13, color: 'var(--text-muted)' }}>
-        {t('description')}
-      </p>
-
-      <div style={{ display: 'grid', gap: 10 }}>
-        {collections.map((collection) => (
-          <div key={collection.id} style={{
-            border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 12,
-            background: 'var(--surface-2)',
-          }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-              <strong style={{ fontSize: 14, color: 'var(--text-primary, var(--bg-elevated))' }}>{collection.name}</strong>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {t('submissionCount', { count: collection.recordCount })}
-              </span>
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <div style={label}>{t('endpoint')}</div>
-              <DnsValue>{`POST ${collection.endpoint}`}</DnsValue>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13, color: 'var(--text-primary, var(--bg-elevated))' }}>
-              <input
-                type="checkbox"
-                checked={collection.raisesTickets}
-                disabled={togglingId === collection.id}
-                onChange={() => patchCollection(collection, { raisesTickets: !collection.raisesTickets })}
-              />
-              {t('raisesTickets')}
-            </label>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{t('raisesTicketsHint')}</p>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 'var(--font-size-body)', color: 'var(--text-primary, var(--bg-elevated))' }}>
-              <input
-                type="checkbox"
-                checked={collection.readPolicy === 'owner'}
-                disabled={togglingId === collection.id}
-                onChange={() => patchCollection(collection, { readPolicy: collection.readPolicy === 'owner' ? 'none' : 'owner' })}
-              />
-              {t('readPolicy')}
-            </label>
-            <p style={{ margin: '2px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('readPolicyHint')}</p>
-            <button type="button" style={{ ...button, marginTop: 10 }} onClick={() => openCollection(collection.id)}>
-              {openId === collection.id ? t('hideSubmissions') : t('viewSubmissions')}
-            </button>
-
-            {openId === collection.id && (
-              <div style={{ marginTop: 10, overflowX: 'auto' }}>
-                {records.length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('noSubmissions')}</p>
-                ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: '28rem' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted)' }}>{t('when')}</th>
-                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted)' }}>{t('email')}</th>
-                        <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-muted)' }}>{t('fields')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {records.map((record) => (
-                        <tr key={record.id} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td style={{ padding: 6, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                            {fmt.dateTime(record.createdAt)}
-                          </td>
-                          <td style={{ padding: 6, color: 'var(--text-primary, var(--bg-elevated))' }}>{record.email ?? '—'}</td>
-                          <td style={{ padding: 6, color: 'var(--text-primary, var(--bg-elevated))' }}>
-                            {Object.entries(record.payload).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        <input
-          style={input}
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder={t('newPlaceholder')}
-          aria-label={t('newLabel')}
-          disabled={busy}
-        />
-        <button type="button" style={button} disabled={busy || !newName.trim()} onClick={create}>
-          {t('add')}
-        </button>
-      </div>
       {error && (
         <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text)' }}>{error}</p>
       )}

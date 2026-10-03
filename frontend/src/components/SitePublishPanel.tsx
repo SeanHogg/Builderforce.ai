@@ -13,7 +13,7 @@ import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
 import { formatBytes } from '@/lib/formatBytes';
 import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
-import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
+import { SiteDomainPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 import { ProjectAppPanel } from './apps/ProjectAppPanel';
 import { SiteReleasePanel } from './site/SiteReleasePanel';
 import { faultText } from '@/lib/apiClient';
@@ -166,7 +166,6 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
           knows how to produce, so they take the same `onBuild`. */}
       <SiteReleasePanel projectId={projectId} onBuild={onBuild} />
       <SiteDomainPanel projectId={projectId} />
-      <SiteFormsPanel projectId={projectId} />
       <SiteTrafficPanel projectId={projectId} />
       {/* What the app IS — its address, its data and its people — for a project
           that came from a board. Renders nothing for a project that is not an app. */}

@@ -39,7 +39,7 @@ export type ProjectModality = PersonaModalityId;
 const LEGACY_MODALITY_ALIASES: Record<string, ProjectModality> = { llm: 'evermind' };
 
 /** Right-panel tab ids Builder can surface. Each modality picks the relevant subset. */
-export type RightTab = 'voice' | 'files' | 'agent' | 'train' | 'publish' | 'state';
+export type RightTab = 'voice' | 'files' | 'versions' | 'agent' | 'train' | 'publish' | 'state';
 
 /**
  * Which component fills Builder's centre pane. Naming the layout here (rather
@@ -106,6 +106,7 @@ export interface ModalityDef {
 export const RIGHT_TAB_ICONS: Record<RightTab, string> = {
   voice: '🎙',
   files: '📁',
+  versions: '🕘',
   agent: '🤖',
   train: '🧠',
   publish: '🚀',
@@ -120,7 +121,7 @@ const BASE_MODALITIES: ModalityEntry[] = [
     id: 'designer',
     label: 'Website',
     tagline: 'Generate and build a website or web app with Preview, Code, and a live dev server.',
-    rightTabs: ['files', 'agent', 'train', 'publish', 'state'],
+    rightTabs: ['files', 'versions', 'agent', 'train', 'publish', 'state'],
     showRunButton: true,
     runLabel: 'Run',
     showChecks: true,
@@ -132,7 +133,7 @@ const BASE_MODALITIES: ModalityEntry[] = [
     id: 'mobile',
     label: 'Mobile',
     tagline: 'Build a phone app and preview it in a device simulator, then scan to open it on your own handset.',
-    rightTabs: ['files', 'agent', 'publish', 'state'],
+    rightTabs: ['files', 'versions', 'agent', 'publish', 'state'],
     showRunButton: true,
     runLabel: 'Run',
     showChecks: true,
@@ -144,7 +145,7 @@ const BASE_MODALITIES: ModalityEntry[] = [
     id: 'webmobile',
     label: 'Web + Mobile',
     tagline: 'Build a web application and a mobile app together from one codebase — preview both side by side.',
-    rightTabs: ['files', 'agent', 'publish', 'state'],
+    rightTabs: ['files', 'versions', 'agent', 'publish', 'state'],
     showRunButton: true,
     runLabel: 'Run',
     showChecks: true,
@@ -157,7 +158,7 @@ const BASE_MODALITIES: ModalityEntry[] = [
     id: 'evermind',
     label: 'Evermind',
     tagline: 'Grow a living Evermind model that learns from every project — teach it and watch its Knowledge Map fill in.',
-    rightTabs: ['files', 'publish', 'state'],
+    rightTabs: ['files', 'versions', 'publish', 'state'],
     showRunButton: false,
     runLabel: 'Run',
     showChecks: false,
@@ -169,7 +170,7 @@ const BASE_MODALITIES: ModalityEntry[] = [
     id: 'finetune',
     label: 'Fine-tune',
     tagline: 'Design datasets and train a custom LoRA model, then benchmark, publish, and export it.',
-    rightTabs: ['files', 'train', 'publish', 'state'],
+    rightTabs: ['files', 'versions', 'train', 'publish', 'state'],
     showRunButton: false,
     runLabel: 'Run',
     showChecks: false,
@@ -181,7 +182,7 @@ const BASE_MODALITIES: ModalityEntry[] = [
     id: 'voice',
     label: 'Voice',
     tagline: 'Clone and design a custom voice, then synthesize speech from it.',
-    rightTabs: ['voice', 'files', 'state'],
+    rightTabs: ['voice', 'files', 'versions', 'state'],
     showRunButton: true,
     runLabel: 'Generate',
     showChecks: false,

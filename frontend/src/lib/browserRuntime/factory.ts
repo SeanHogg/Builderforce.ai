@@ -1,17 +1,13 @@
 /**
  * factory.ts — wires the REAL in-browser coding stack: isomorphic-git over the
- * git-proxy (with LightningFS), a model-driven change proposer, and an optional
- * WebContainer build/test gate. This is thin glue around the unit-tested
- * orchestration in gitClient/coding/webcontainer; the live WebContainer boot is
- * capability-gated (it needs cross-origin isolation, so only a real tab runs it).
+ * git-proxy (with LightningFS) and a model-driven change proposer. Thin glue
+ * around the unit-tested orchestration in gitClient/coding.
  */
 import * as gitMod from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import { slugify } from '@builderforce/creation-canvas-contract';
 import { BrowserGitClient, type GitOps, type FsLike } from './gitClient';
-import { runBuildInWebContainer, type WebContainerLike } from './webcontainer';
-import { bootSharedWebContainer } from './webcontainerSession';
 import { parseProposedChanges, type CodingDeps, type RepoContext } from './coding';
 import { DEFAULT_BROWSER_MODEL, type ModelCall } from './runner';
 
@@ -53,36 +49,6 @@ export function createBrowserGitClient(opts: {
   return { git, fs: fs as unknown as FsLike, dir };
 }
 
-interface WalkFs {
-  promises: {
-    readdir(p: string): Promise<string[]>;
-    stat(p: string): Promise<{ isDirectory(): boolean }>;
-    readFile(p: string, enc: string): Promise<string>;
-  };
-}
-
-/** Snapshot a LightningFS dir into a WebContainer FileSystemTree (skips .git). */
-export async function snapshotDir(fs: WalkFs, dir: string): Promise<Record<string, unknown>> {
-  const tree: Record<string, unknown> = {};
-  const entries = await fs.promises.readdir(dir);
-  for (const name of entries) {
-    if (name === '.git') continue;
-    const full = `${dir}/${name}`;
-    const st = await fs.promises.stat(full);
-    if (st.isDirectory()) {
-      tree[name] = { directory: await snapshotDir(fs, full) };
-    } else {
-      tree[name] = { file: { contents: await fs.promises.readFile(full, 'utf8') } };
-    }
-  }
-  return tree;
-}
-
-/** The page's WebContainer (shared singleton, gated on cross-origin isolation). */
-export async function bootWebContainer(): Promise<WebContainerLike> {
-  return (await bootSharedWebContainer()) as unknown as WebContainerLike;
-}
-
 const slug = (text: string): string => slugify(text, { maxLength: 40, fallback: 'task' });
 
 function codingPrompt(role: string, input: string): string {
@@ -104,12 +70,11 @@ export function createCodingDeps(opts: {
   apiBase: string;
   authHeaders: Record<string, string>;
   callModel: (c: ModelCall) => Promise<string>;
-  buildCommand?: string[];
   /** Opens a PR server-side for the pushed branch (the transport binds the
    *  dispatchId). Omitted → branch is pushed without a PR. */
   openPr?: CodingDeps['openPr'];
 }): CodingDeps {
-  const { git, fs, dir } = createBrowserGitClient({
+  const { git } = createBrowserGitClient({
     repoId: opts.repo.repoId,
     apiBase: opts.apiBase,
     authHeaders: opts.authHeaders,
@@ -121,12 +86,5 @@ export function createCodingDeps(opts: {
     return parseProposedChanges(text, { fallbackBranch: `agentHost/${slug(input)}` });
   };
 
-  const build = opts.buildCommand
-    ? async () => {
-        const tree = await snapshotDir(fs as unknown as WalkFs, dir);
-        return runBuildInWebContainer({ boot: bootWebContainer, tree }, opts.buildCommand as string[]);
-      }
-    : undefined;
-
-  return { git, propose, build, openPr: opts.openPr };
+  return { git, propose, openPr: opts.openPr };
 }

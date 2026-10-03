@@ -20,16 +20,6 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
 
-# The WebContainer connect handshake tab must NOT be cross-origin isolated, or
-# the preview can't complete its postMessage handshake with Canvas Builder. BOTH COOP
-# and COEP must be relaxed — COOP:same-origin (from /* above) severs the opener
-# bridge setupConnect needs, not just COEP.
-# @see https://github.com/stackblitz/webcontainer-core/issues/1725
-# (later rule wins for a repeated header, so these override /* above)
-/webcontainer/connect/*
-  Cross-Origin-Opener-Policy: unsafe-none
-  Cross-Origin-Embedder-Policy: unsafe-none
-
 # The service worker script must always be revalidated against the network so a
 # new deploy's stamped BUILD_VERSION is picked up promptly. Caching /sw.js (even
 # briefly at the CDN edge) delays the update toast. no-cache = store but always

@@ -9,7 +9,6 @@ import { createRunLog, RUN_LOG_RULE, type RunLog } from '@/lib/runLog';
 import { datasetNameForPath, looksLikeDatasetPath, parseJsonlDataset } from '@/lib/datasetFromFile';
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
-import { Terminal } from './Terminal';
 // WebGPU LoRA training — onnxruntime-web, the tokenizer and the whole training
 // loop, behind ONE tab of this workspace. Statically imported it shipped to
 // every builder who only ever edits files; `CreationCanvas` already defers the
@@ -33,13 +32,17 @@ import { useToast } from '@/components/ToastProvider';
 import { BuilderAgentPanel } from './builder/BuilderAgentPanel';
 import { DevicePreview } from './builder/DevicePreview';
 import { MobileDevicePanel } from './builder/MobileDevicePanel';
-import { useWebContainer } from '@/hooks/useWebContainer';
+import { useProjectRuntime } from '@/hooks/useProjectRuntime';
 import { useLazyShell } from '@/hooks/useLazyShell';
 import { useInstantPreview } from '@/hooks/useInstantPreview';
-import { useWorkspaceCommands } from '@/lib/workspace/workspaceCommands';
+import { sendWorkspaceCommand, useWorkspaceCommands } from '@/lib/workspace/workspaceCommands';
 import { FilesPanel } from '@/components/builder/FilesPanel';
 import { WorkspaceBottomPanel } from '@/components/builder/WorkspaceBottomPanel';
-import { WebContainerAttribution } from '@/components/webcontainer/WebContainerAttribution';
+import { VersionsPanel } from '@/components/builder/VersionsPanel';
+import { PaneLayer } from '@/components/builder/PaneLayer';
+import { DatabasePanel } from '@/components/builder/database/DatabasePanel';
+import { buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/siteTools';
+import { runProjectChecks, type CheckResult } from '@/lib/browserRuntime/projectChecks';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject, importCanvasDataset } from '@/lib/api';
@@ -80,21 +83,24 @@ interface IDEProps {
   initialTicket?: { kind: string; ref: string };
 }
 
-type CenterView = 'preview' | 'code';
+type CenterView = 'preview' | 'code' | 'database';
+
+/** A project that publishes a site has a database (its tables, sign-ins and server functions); the rest have only preview and code. */
+const centerViewsFor = (publishPanel: string): CenterView[] =>
+  publishPanel === 'site' ? ['preview', 'code', 'database'] : ['preview', 'code'];
+
+/** Glyph + label key for the views that are not the preview (whose glyph follows the device). */
+const CENTER_VIEW_META: Record<Exclude<CenterView, 'preview'>, { icon: string; label: 'centerCode' | 'centerDatabase' }> = {
+  code: { icon: '💻', label: 'centerCode' },
+  database: { icon: '🗄️', label: 'centerDatabase' },
+};
 
 /** Cheap, stable string hash (djb2) — used to skip npm install when package.json
- *  is unchanged since the last install in this WebContainer session. */
+ *  is unchanged since the last install in this runtime session. */
 function hashString(s: string): string {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return String(h >>> 0);
-}
-
-/** A single in-WebContainer quality check (typecheck / lint / build). */
-interface CheckResult {
-  label: string;
-  status: 'pass' | 'fail' | 'skip';
-  detail?: string;
 }
 
 export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
@@ -168,6 +174,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     () => createRunLog(terminalWriter, (key, values) => t(`runLog.${key}` as never, values as never)),
     [terminalWriter, t],
   );
+  /** The Output tab's narration: what a publish build prints, apart from the shell. */
+  const outputWriteRef = useRef<((data: string) => void) | null>(null);
+  const publishLog = useMemo(
+    () => createRunLog((data) => outputWriteRef.current?.(data), (key, values) => t(`runLog.${key}` as never, values as never)),
+    [t],
+  );
   /** Same narration bound to the mount-time writer ref (used before a run). */
   const refLog = useMemo(
     () => createRunLog((data) => terminalWriteRef.current?.(data), (key, values) => t(`runLog.${key}` as never, values as never)),
@@ -197,13 +209,13 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     else if (command.type === 'openTab' && allowedRightTabs.includes(command.tab)) setRightTab(command.tab);
   });
 
-  const { state: wcState, mountFiles, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer } = useWebContainer();
+  const { state: runtimeState, mountFiles, runCommandAndWait, writeFile: writeRuntimeFile, startShell, startDevServer } = useProjectRuntime();
   const { start: startInstantPreview, write: writeInstantPreview } = useInstantPreview();
   /** An edit reaches whichever runtime is showing the preview. */
   const writePreviewFile = useCallback(
     (path: string, contents: string): Promise<void> =>
-      writeInstantPreview(path, contents) ? Promise.resolve() : writeFileToContainer(path, contents),
-    [writeInstantPreview, writeFileToContainer],
+      writeInstantPreview(path, contents) ? Promise.resolve() : writeRuntimeFile(path, contents),
+    [writeInstantPreview, writeRuntimeFile],
   );
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
   const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
@@ -216,6 +228,9 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const handleTerminalReady = useCallback((write: (data: string) => void) => {
     terminalWriteRef.current = write;
     setTerminalWriter(() => write);
+  }, []);
+  const handleOutputReady = useCallback((write: (data: string) => void) => {
+    outputWriteRef.current = write;
   }, []);
 
   const openFile = useCallback(async (path: string) => {
@@ -302,7 +317,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   }, [project.id, closeTab]);
 
   /**
-   * Assemble the path→content map to mount into the WebContainer: the project's
+   * Assemble the path→content map to mount into the runtime: the project's
    * current contents (fetching any not yet loaded into state) plus the starter
    * scaffold for any missing/empty required file. Returns null if a present
    * package.json is invalid JSON. Shared by Run, Check and the publish build so
@@ -384,7 +399,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
 
   /**
    * Run `npm install` only when package.json changed since the last install in
-   * this WebContainer session (the singleton container keeps node_modules across
+   * this runtime session (the shared runtime keeps node_modules across
    * runs). Returns the install exit code (0 when skipped). Cuts the dominant cost
    * of every Run/Check after the first.
    */
@@ -445,7 +460,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       const overlaid = withVisualEditor(withPreviewErrorReporter(mountContents));
 
       // Instant preview first: served from memory, no install and no dev server.
-      // Projects it cannot serve continue below on the full WebContainer.
+      // Projects it cannot serve (a Node server) run their own `npm run dev` below.
       const instant = await startInstantPreview(overlaid);
       if (instant.kind === 'ready') {
         log.ok('instantPreviewReady');
@@ -530,48 +545,35 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   }, [isRunning, startDevServer, startInstantPreview, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, toast, t, tc, projectIdNum]);
 
   /**
-   * Build the project in the WebContainer and capture its `dist/` output for
-   * publishing. Mirrors handleRun's mount + install, then runs `npm run build`
-   * (instead of the dev server) and reads the build directory back out. Shared
-   * singleton container, so this reuses any already-installed deps.
+   * Build the project for publishing, in the browser: its files in, a static
+   * site out (index.html, hashed assets, public/). No install and no dev
+   * server, and the running preview is left alone. The base is relative, so the
+   * site works at `<sub>.builderforce.ai/` and under the `/api/sites/<sub>/` path.
    */
   const handlePublishBuild = useCallback(async (): Promise<Array<{ path: string; data: Uint8Array }>> => {
-    log.bannerInline('buildingForPublish');
+    sendWorkspaceCommand(project.id, { type: 'showPanel', panel: 'output' });
+    publishLog.bannerInline('buildingForPublish');
 
-    const mount = await assembleMountContents(log);
+    const mount = await assembleMountContents(publishLog);
     if (!mount) throw new Error(t('runLog.invalidPackageJsonFix'));
 
-    await mountFiles(mount);
-    // `npm install` / `npm run build` are the COMMANDS being run, not prose —
-    // shown verbatim so they match what the user would type.
-    log.raw('\x1b[36mnpm install…\x1b[0m\r\n');
-    const installCode = await ensureInstalled(mount, (d) => log.raw(d), log);
-    if (installCode !== 0) throw new Error(t('runLog.installFailedShort', { code: installCode }));
-    // Force a RELATIVE asset base (`--base=./`). Vite defaults to `base: '/'`,
-    // which emits root-absolute asset URLs (`/assets/...`). Those only resolve
-    // when the site is served from the domain root, so they 404 under the path
-    // form `/api/sites/<sub>/` (the "preview" + pre-TLS fallback). Relative URLs
-    // resolve correctly BOTH at `<sub>.apps.builderforce.ai/` and under the path
-    // prefix. The flag overrides whatever the project's vite config sets.
-    log.raw('\r\n\x1b[36mnpm run build…\x1b[0m\r\n');
-    const buildCode = await runCommandAndWait('npm', ['run', 'build', '--', '--base=./'], (d) => log.raw(d));
-    if (buildCode !== 0) throw new Error(t('runLog.buildFailed', { code: buildCode }));
-
-    const assets = await readDirRecursive('dist');
+    // `npm run build` is the COMMAND this stands for — shown verbatim.
+    publishLog.raw('[36mnpm run build…[0m
+');
+    const assets = await buildSite(mount);
     if (assets.length === 0) {
       throw new Error(t('runLog.noDistOutput'));
     }
-    log.blank();
-    log.ok('capturedFiles', { count: assets.length });
+    publishLog.blank();
+    publishLog.ok('capturedFiles', { count: assets.length });
     return assets;
-  }, [assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, readDirRecursive, log, t]);
+  }, [assembleMountContents, publishLog, t, project.id]);
 
   /**
-   * Run the project's quality checks inside the WebContainer — real, in-browser
-   * validation of the code Builder/the agent produced. Mounts + installs (reusing the
-   * install cache), then runs type-check, lint and build from the project's own
-   * package.json scripts (skipping any it doesn't define). Surfaces a pass/fail
-   * summary the Run button reads to warn before serving a broken preview.
+   * Check the project the way its own toolchain would: type-check and build
+   * straight from the files (no install), then the project's `lint` script on
+   * the Node runtime when it defines one. The Run button reads the result to
+   * warn before serving a broken preview; failures reach the agent.
    */
   const handleCheck = useCallback(async () => {
     if (isChecking || isRunning) return;
@@ -585,97 +587,28 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         return;
       }
       let scripts: Record<string, string> = {};
-      let hasTypescript = false;
       try {
-        const pkg = JSON.parse(mount['package.json'] ?? '{}') as {
-          scripts?: Record<string, string>;
-          dependencies?: Record<string, string>;
-          devDependencies?: Record<string, string>;
-        };
-        scripts = pkg.scripts ?? {};
-        hasTypescript = !!(pkg.dependencies?.typescript || pkg.devDependencies?.typescript);
+        scripts = (JSON.parse(mount['package.json'] ?? '{}') as { scripts?: Record<string, string> }).scripts ?? {};
       } catch { /* validated above */ }
 
-      // When we'll fall back to `npx tsc --noEmit` (TS present, no project
-      // typecheck script) and the project ships no tsconfig.json, synthesize a
-      // minimal one into the WebContainer so tsc doesn't bail with "no inputs"/
-      // default-config noise. Mounted only in the WC — never persisted to the project.
-      const willUseTscFallback = hasTypescript && !scripts['typecheck'];
-      if (willUseTscFallback && !mount['tsconfig.json']) {
-        mount['tsconfig.json'] = JSON.stringify(
-          {
-            compilerOptions: {
-              target: 'ES2020',
-              module: 'ESNext',
-              moduleResolution: 'Bundler',
-              jsx: 'react-jsx',
-              strict: true,
-              noEmit: true,
-              esModuleInterop: true,
-              skipLibCheck: true,
-              allowJs: true,
-              resolveJsonModule: true,
-              isolatedModules: true,
-            },
-            include: ['**/*.ts', '**/*.tsx'],
-          },
-          null,
-          2,
-        );
-        log.note('synthesizedTsconfig');
-      }
-
-      await mountFiles(mount);
-      const installLog = teeOutput((d) => log.raw(d));
-      const installCode = await ensureInstalled(mount, installLog.write, log);
-      if (installCode !== 0) {
-        setCheckResults([{ label: 'npm install', status: 'fail', detail: `exit ${installCode}` }]);
-        recordBuildFailure(projectIdNum, {
-          source: 'build', command: 'npm install', exitCode: installCode,
-          message: `npm install failed (exit ${installCode}).`, detail: installLog.text(),
-        });
-        return;
-      }
-
-      // Each check: prefer the project's own script; fall back to a sensible
-      // default only when the toolchain is clearly present.
-      const plan: Array<{ label: string; cmd: [string, string[]] | null }> = [
-        {
-          label: 'type-check',
-          cmd: scripts['typecheck']
-            ? ['npm', ['run', 'typecheck']]
-            : hasTypescript
-              ? ['npx', ['tsc', '--noEmit']]
-              : null,
-        },
-        { label: 'lint', cmd: scripts['lint'] ? ['npm', ['run', 'lint']] : null },
-        { label: 'build', cmd: scripts['build'] ? ['npm', ['run', 'build']] : null },
-      ];
-
-      const results: CheckResult[] = [];
-      for (const step of plan) {
-        if (!step.cmd) {
-          results.push({ label: step.label, status: 'skip', detail: 'no script' });
-          continue;
-        }
-        // `step.label` names the npm script being run (type-check / lint /
-        // build) — an identifier, not prose, so it is interpolated verbatim.
-        log.section('checkStep', { label: step.label });
-        const stepLog = teeOutput((d) => log.raw(d));
-        const code = await runCommandAndWait(step.cmd[0], step.cmd[1], stepLog.write);
-        results.push({ label: step.label, status: code === 0 ? 'pass' : 'fail', detail: code === 0 ? undefined : `exit ${code}` });
-        if (code !== 0) {
-          // A failed type-check or build is the single most repairable thing this
-          // workspace produces, and its output was previously terminal-only.
-          recordBuildFailure(projectIdNum, {
-            source: 'build',
-            command: `${step.cmd[0]} ${step.cmd[1].join(' ')}`,
-            exitCode: code,
-            message: `${step.label} failed (exit ${code}).`,
-            detail: stepLog.text(),
-          });
-        }
-      }
+      const { results, failures } = await runProjectChecks({
+        typecheck: hasTypeScript(mount) ? () => typecheckFiles(mount) : null,
+        build: () => buildSite(mount),
+        lint: scripts['lint']
+          ? async () => {
+            await mountFiles(mount);
+            const installLog = teeOutput((d) => log.raw(d));
+            const installCode = await ensureInstalled(mount, installLog.write, log);
+            if (installCode !== 0) return { step: 'npm install' as const, code: installCode, output: installLog.text() };
+            const lintLog = teeOutput((d) => log.raw(d));
+            return { step: 'lint' as const, code: await runCommandAndWait('npm', ['run', 'lint'], lintLog.write), output: lintLog.text() };
+          }
+          : null,
+        // `label` names the step (type-check / build / lint) — an identifier, interpolated verbatim.
+        onStep: (label) => log.section('checkStep', { label }),
+        onOutput: (text) => log.raw(text),
+      });
+      for (const failure of failures) recordBuildFailure(projectIdNum, failure);
       setCheckResults(results);
       const failed = results.filter(r => r.status === 'fail').length;
       if (failed === 0) {
@@ -688,7 +621,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       const msg = e instanceof Error ? e.message : String(e);
       log.error('checkError', { message: msg });
       setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
-      recordBuildFailure(projectIdNum, { source: 'build', message: msg.split('\n')[0] || 'Checks failed.', detail: msg });
+      recordBuildFailure(projectIdNum, { source: 'build', message: msg.split('
+')[0] || 'Checks failed.', detail: msg });
     } finally {
       setIsChecking(false);
     }
@@ -1094,13 +1028,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     setBrainOpen(true);
   }, [initialChatId, initialPrompt, initialTicket, hasDockedBrain, setBrainContext, setBrainOpen]);
 
-  const statusLabel = wcState.status === 'booting'
-    ? '⏳ Booting…'
-    : wcState.status === 'ready'
-      ? '✅ Ready'
-      : wcState.status === 'error'
-        ? '⚠️ WC Error'
-        : '';
+  const statusLabel = runtimeState.status === 'idle' ? '' : t(`runtimeStatus.${runtimeState.status}`);
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>
@@ -1493,7 +1421,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           <>
           {/* Preview/Code toggle */}
           <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '2px 6px', gap: 6, flexShrink: 0 }}>
-            {(['preview', 'code'] as CenterView[]).map(view => (
+            {centerViewsFor(modalityDef.publishPanel).map(view => (
               <button
                 key={view}
                 onClick={() => setCenterView(view)}
@@ -1515,8 +1443,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                   </>
                 ) : (
                   <>
-                    <span aria-hidden><Icon source="💻" size="1em" /></span>
-                    {t('centerCode')}
+                    <span aria-hidden><Icon source={CENTER_VIEW_META[view].icon} size="1em" /></span>
+                    {t(CENTER_VIEW_META[view].label)}
                   </>
                 )}
               </button>
@@ -1552,7 +1480,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           {/* Main content area */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
             {/* Preview */}
-            <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'preview' ? 'visible' : 'hidden', pointerEvents: centerView === 'preview' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
+            <PaneLayer active={centerView === 'preview'} style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
                 {/* Mobile previews inside a device bezel at the handset's real
                     viewport size; every other code modality fills the pane. The
@@ -1564,7 +1492,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                   <PreviewFrame url={previewUrl} frameRef={previewFrameRef} />
                 )}
               </div>
-              <WebContainerAttribution />
               {/* Point-and-edit: the cheap half of changing an app. A class or a
                   line of copy is an exact, single-line source edit anchored to the
                   element React itself reported — no model turn, no tokens. */}
@@ -1634,10 +1561,10 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                   )}
                 </div>
               )}
-            </div>
+            </PaneLayer>
 
             {/* Code Editor */}
-            <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'code' ? 'visible' : 'hidden', pointerEvents: centerView === 'code' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
+            <PaneLayer active={centerView === 'code'} style={{ display: 'flex', flexDirection: 'column' }}>
               <CodePane
                 openFiles={openFiles}
                 activeFile={activeFile}
@@ -1648,7 +1575,14 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                 ydoc={ydoc}
                 projectId={project.id}
               />
-            </div>
+            </PaneLayer>
+
+            {/* Database — mounted only while open, so it re-reads each time it is shown */}
+            {centerView === 'database' && (
+              <PaneLayer active>
+                <DatabasePanel projectId={project.id} />
+              </PaneLayer>
+            )}
           </div>
 
           <WorkspaceBottomPanel
@@ -1680,10 +1614,10 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             ))}
           </div>
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'voice' ? 'visible' : 'hidden', pointerEvents: rightTab === 'voice' ? 'auto' : 'none' }}>
+            <PaneLayer active={rightTab === 'voice'}>
               {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
-            </div>
-            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'files' ? 'visible' : 'hidden', pointerEvents: rightTab === 'files' ? 'auto' : 'none' }}>
+            </PaneLayer>
+            <PaneLayer active={rightTab === 'files'}>
               <FilesPanel
                 projectId={project.id}
                 onOpenFile={openFile}
@@ -1698,11 +1632,17 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                   />
                 )}
               />
-            </div>
-            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'agent' ? 'visible' : 'hidden', pointerEvents: rightTab === 'agent' ? 'auto' : 'none' }}>
+            </PaneLayer>
+            {/* Always mounted where the modality has versions: the panel is also what records one per agent turn. */}
+            {allowedRightTabs.includes('versions') && (
+              <PaneLayer active={rightTab === 'versions'}>
+                <VersionsPanel projectId={project.id} />
+              </PaneLayer>
+            )}
+            <PaneLayer active={rightTab === 'agent'}>
               {rightTab === 'agent' && <BuilderAgentPanel projectId={project.id} />}
-            </div>
-            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'train' ? 'visible' : 'hidden', pointerEvents: rightTab === 'train' ? 'auto' : 'none' }}>
+            </PaneLayer>
+            <PaneLayer active={rightTab === 'train'}>
               <AITrainingPanel
                 projectId={project.id}
                 datasetsVersion={datasetsRegistered}
@@ -1712,15 +1652,15 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                   return exists ? prev.map(j => j.id === job.id ? job : j) : [job, ...prev];
                 })}
               />
-            </div>
-            <div style={{ position: 'absolute', inset: 0, overflow: 'auto', visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
+            </PaneLayer>
+            <PaneLayer active={rightTab === 'publish'} style={{ overflow: 'auto' }}>
               {modalityDef.publishPanel === 'site'
                 ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={handlePublishBuild} />
                 : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
-            </div>
-            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'state' ? 'visible' : 'hidden', pointerEvents: rightTab === 'state' ? 'auto' : 'none' }}>
+            </PaneLayer>
+            <PaneLayer active={rightTab === 'state'}>
               <AgentStateViewer projectId={project.id} />
-            </div>
+            </PaneLayer>
           </div>
         </div>
       </div>

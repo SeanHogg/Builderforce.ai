@@ -553,7 +553,7 @@ async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days:
  * Portfolio rollup report (PMO exec summary) — one row per portfolio with its
  * delivery / spend / DORA / OKR / dependency-health rollup. Reuses the canonical
  * computePortfolioRollup so the scheduled report and the live /pmo lens never
- * drift. Sequential over portfolios (few per tenant; MANAGER-gated, infrequent).
+ * drift. Portfolios compute concurrently (few per tenant; MANAGER-gated, infrequent).
  */
 async function generatePortfolioReport(db: Db, tenantId: number, segmentId: string) {
   const pfRows = await db
@@ -563,8 +563,12 @@ async function generatePortfolioReport(db: Db, tenantId: number, segmentId: stri
 
   const now = Date.now();
   const items: Array<Record<string, unknown>> = [];
-  for (const pf of pfRows) {
-    const r = await computePortfolioRollup(db, tenantId, segmentId, { kind: 'portfolio', id: pf.id }, { now });
+  // The rollups are independent reads, so every portfolio computes at once; the
+  // items still come out in portfolio order.
+  const rollups = await Promise.all(pfRows.map((pf) =>
+    computePortfolioRollup(db, tenantId, segmentId, { kind: 'portfolio', id: pf.id }, { now })));
+  for (const [i, pf] of pfRows.entries()) {
+    const r = rollups[i];
     if (!r) continue;
     items.push({
       portfolioId: pf.id,
