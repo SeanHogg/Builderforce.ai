@@ -225,6 +225,32 @@ for (const column of footerBlock.matchAll(/ids:\s*\[([^\]]*)\]/g)) {
   }
 }
 
+// A row placed in a Product ▾ column renders NOWHERE unless something else
+// carries it, and that is invisible from the array it is written in. The
+// Product menu is a projection of `NAV_GROUPS` (`productFacesFor` →
+// `groupsForStage`), not of `placement`, so a product-column row reaches the
+// menu only by declaring the `groupId` of a rail row. Without one it survives
+// on `/features` instead — but ONLY if `kind` is `domain` or `foundation`,
+// because `REFERENCE_DESTINATIONS` filters `link` rows out. So a `link` row in
+// a product column with no `groupId` is advertised in exactly one place, the
+// footer, which is how Studio shipped with no entry point anybody found.
+//
+// Learn columns and `bar` need no such rule: both are read straight off
+// `placement` by `columnOf`, so declaring one is enough to render it.
+const PRODUCT_PLACEMENTS = new Set(['idea', 'make', 'run']);
+for (const row of referenceBlock.matchAll(/\{[^{}]*\bid:\s*'([^']+)'[^{}]*\}/g)) {
+  const [text, id] = row;
+  const placement = text.match(/placement:\s*'([^']+)'/)?.[1];
+  if (!PRODUCT_PLACEMENTS.has(placement)) continue;
+  if (/groupId:\s*'[^']+'/.test(text)) continue;
+  if (!/kind:\s*'link'/.test(text)) continue;
+  fail(
+    `[placement] \`${id}\` sits in the Product column \`${placement}\` as kind \`link\` with no \`groupId\`,\n` +
+    '    so it renders in no menu and is filtered out of /features — the footer would be its only\n' +
+    "    entry point. Give it `placement: 'bar'`, or a Learn column, or bind it to a NAV_GROUPS row.",
+  );
+}
+
 // Two public pages may not claim the same rail row. The Product menu links a
 // destination to whichever page is bound to it, so a duplicate `groupId` would
 // pick a winner silently — and `/product-management` vs `/survival-focused-agile`

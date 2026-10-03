@@ -14,6 +14,22 @@ rules = [
 [assets]
 directory = ".vercel/output/static"
 binding = "ASSETS"
+# `/` must reach the Worker. With the assets binding, a request whose path has a
+# matching static file is answered by the asset layer and the Worker script is
+# NEVER invoked — and `/` is prerendered to `index.html`. That silently killed
+# the only path `studioHostRedirect` handles: `studio.builderforce.ai/` served
+# the marketing home page instead of redirecting to `/studio`, because the
+# middleware that decides never ran. Proven in production on 2026-10-03:
+# `/dashboard` came back with `x-middleware-set-cookie: NEXT_LOCALE=…` and `/`
+# came back with no `Set-Cookie` at all.
+#
+# Scoped to the ONE path rather than `true`: `true` routes every request —
+# including every `_next/static/*` asset — through the Worker, which is a
+# per-asset invocation bill for a decision only the root needs. The cost here is
+# one invocation per home-page view, which also makes first-visit locale
+# detection (`ensureLocaleCookie`) work on `/`, where it had been dead for the
+# same reason.
+run_worker_first = ["/"]
 
 [[routes]]
 pattern = "builderforce.ai"

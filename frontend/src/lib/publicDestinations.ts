@@ -111,18 +111,6 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'canvas', seat: 'Brain', icon: '✦', marketingHref: '/create/new', appHref: '/create', kind: 'link', placement: 'idea', panel: false, groupId: 'create' },
   { id: 'ref.aiCoach', copyId: 'aiCoach', seat: 'Brain', icon: '✨', marketingHref: '/features/ai-coach', appHref: '/create', kind: 'foundation', placement: 'idea', panel: true },
   // ── Product ▾ · MAKE ─────────────────────────────────────────────────────
-  // Studio (`studio.builderforce.ai`, served by this app at `/studio` — see
-  // `lib/studio/studioHost.ts`). It shipped with its subdomain, its release
-  // notes and its blog post, and with no way to REACH it from the site: not a
-  // bar link, not a menu row, not a footer link. A product whose only entry
-  // point is a sentence inside one article is a product nobody finds, so it is
-  // declared here like every other destination rather than linked ad hoc.
-  //
-  // `marketingHref` is the PATH, not the subdomain: `/studio` resolves on the
-  // apex and on the studio host alike (whose root redirects here), so one row
-  // works from either shell and from localhost. Not a `panel` row — `/studio`
-  // is `classifyShell` → `none`, the standalone IDE that opens over nothing.
-  { id: 'studio', seat: 'CTO', icon: '🛠', marketingHref: '/studio', appHref: '/studio', kind: 'link', placement: 'make', panel: false },
   { id: 'ref.productManagement', copyId: 'productManagement', seat: 'CPO', icon: '📦', marketingHref: '/product-management', appHref: '/projects?tab=pm', kind: 'domain', placement: 'make', panel: true, groupId: 'projects' },
   { id: 'ref.agileSurvival', copyId: 'agileSurvival', seat: 'CTO', icon: '⚡', marketingHref: '/survival-focused-agile', appHref: '/projects?tab=ceremonies', kind: 'domain', placement: 'make', panel: true },
   // ── Product ▾ · RUN — one row per business seat ──────────────────────────
@@ -168,6 +156,28 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'prompts', seat: 'Support', icon: '📚', marketingHref: '/prompts', appHref: '/prompts', kind: 'link', placement: 'buildWith', panel: false },
   // ── The flat bar ─────────────────────────────────────────────────────────
   { id: 'features', seat: 'platform', icon: '✨', marketingHref: '/features', appHref: '/create', kind: 'link', placement: 'bar', panel: true },
+  // Studio (`studio.builderforce.ai`, served by this app at `/studio` — see
+  // `lib/studio/studioHost.ts`). It shipped with its subdomain, its release
+  // notes and its blog post, and with no way to REACH it from the site: not a
+  // bar link, not a menu row, not a footer link. A product whose only entry
+  // point is a sentence inside one article is a product nobody finds.
+  //
+  // `bar`, and NOT a Product ▾ column, for a reason worth writing down because
+  // it is not visible from this array: the Product menu is a projection of
+  // `NAV_GROUPS` (`productFacesFor` → `groupsForStage`), so a product-column
+  // `placement` does nothing on its own — a row only reaches that menu by
+  // declaring the `groupId` of a RAIL row. Studio has none and should not: it
+  // is `classifyShell` → `none`, a standalone IDE that replaces the shell
+  // rather than a destination inside it. Placed in a product column it would
+  // have rendered in no menu at all, and as `kind: 'link'` it is filtered out
+  // of `/features` too, so the footer would have been its only entry.
+  // `check-destinations` now fails that combination outright.
+  //
+  // `marketingHref` is the PATH, not the subdomain: `/studio` resolves on the
+  // apex and on the studio host alike (whose root redirects here), so one row
+  // works from either shell and from localhost. Not a `panel` row for the same
+  // reason the canvas is not — there is nothing to open it over.
+  { id: 'studio', seat: 'CTO', icon: '🛠', marketingHref: '/studio', appHref: '/studio', kind: 'link', placement: 'bar', panel: false },
   // Talent, agents, models and assets are FAMILIES of the one storefront, not
   // four destinations — so one entry, and the families filter inside it. It is
   // "Marketplace" here, in the footer and in the rail: one place, one name.
