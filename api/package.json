@@ -68,7 +68,7 @@
     "@seanhogg/builderforce-webcontainers": "^2026.10.3",
     "drizzle-orm": "^0.36.4",
     "fflate": "^0.8.2",
-    "hono": "^4.6.17",
+    "hono": "^4.13.7",
     "lib0": "^0.2.94",
     "pdf-lib": "^1.17.1",
     "pptxgenjs": "^3.12.0",
