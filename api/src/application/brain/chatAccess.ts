@@ -35,21 +35,17 @@ export const MANAGER_ORIGIN = 'manager';
 /** Origins reachable through the shared chat access/message endpoints. */
 export const ACCESSIBLE_ORIGINS = [BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN] as const;
 
-/** The user's email, lower-cased (for pending-invite matching). */
-export async function getUserEmail(db: Db, userId: string): Promise<string | null> {
-  const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-  return u?.email?.toLowerCase() ?? null;
-}
-
 /**
  * Activate any pending chat-member invites whose `invited_email` matches this
  * user's address — the auto-conversion that mirrors tenant_invitations. Single
  * bounded UPDATE keyed on the indexed lower(invited_email); a no-op (0 rows) when
  * the user has no pending invites. Returns the chat ids that just converted.
+ *
+ * The address is a subquery, not a prior read: this runs on every chat list and
+ * access check, and one statement is one round trip where read-then-update was
+ * two. A user with no address compares against NULL and matches nothing.
  */
 export async function syncPendingMemberships(db: Db, tenantId: number, userId: string): Promise<number[]> {
-  const email = await getUserEmail(db, userId);
-  if (!email) return [];
   const rows = await db
     .update(chatMembers)
     .set({ userId, status: 'active', invitedEmail: null, updatedAt: new Date() })
@@ -57,7 +53,7 @@ export async function syncPendingMemberships(db: Db, tenantId: number, userId: s
       eq(chatMembers.tenantId, tenantId),
       isNull(chatMembers.userId),
       eq(chatMembers.status, 'pending'),
-      sql`lower(${chatMembers.invitedEmail}) = ${email}`,
+      sql`lower(${chatMembers.invitedEmail}) = (select lower(${users.email}) from ${users} where ${users.id} = ${userId})`,
     ))
     .returning({ chatId: chatMembers.chatId });
   return rows.map((r) => r.chatId);

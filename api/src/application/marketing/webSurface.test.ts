@@ -117,7 +117,7 @@ describe('ordering survives a swap', () => {
     // `position` is UNIQUE per page: writing final positions directly collides the
     // moment two blocks swap.
     expect(body).toContain('position: -(i + 1)');
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
   });
 
   it('refuses a partial order rather than silently dropping blocks', () => {
@@ -143,7 +143,7 @@ describe('deleting a website page collapses the level rather than orphaning it',
 
   it('does both writes in one transaction, so a crash cannot orphan the children', () => {
     const fn = src.slice(src.indexOf('export async function deleteWebsitePage'));
-    expect(fn.slice(0, fn.indexOf('\n// ──'))).toContain('db.transaction');
+    expect(fn.slice(0, fn.indexOf('\n// ──'))).toContain('inTransaction(db');
   });
 });
 

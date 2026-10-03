@@ -14,7 +14,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeDb } from '../../../test/fakeDb';
-import type { Db } from '../../infrastructure/database/connection';
+import type { Db, Tx } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
 const notify = vi.fn(async (..._args: unknown[]) => ({ inAppDelivered: true, emailDelivered: null }));
@@ -286,7 +286,7 @@ describe('bindScheduleToEngagement — the accept path', () => {
   it("stamps the posting's drafts onto the engagement and the freelancer, scoped to the tenant", async () => {
     const db = fakeDb([[{ id: 'm-1' }, { id: 'm-2' }]]);
 
-    const bound = await bindScheduleToEngagement(db as unknown as Db, {
+    const bound = await bindScheduleToEngagement(db as unknown as Tx, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
     });
 
@@ -303,7 +303,7 @@ describe('bindScheduleToEngagement — the accept path', () => {
   it('only ever moves DRAFTS, so re-accepting cannot reopen transacted work', async () => {
     const db = fakeDb([[]]);
 
-    await bindScheduleToEngagement(db as unknown as Db, {
+    await bindScheduleToEngagement(db as unknown as Tx, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
     });
 
@@ -313,7 +313,7 @@ describe('bindScheduleToEngagement — the accept path', () => {
   it('is a no-op for an hourly posting, which simply has no schedule', async () => {
     const db = fakeDb([[]]);
 
-    expect(await bindScheduleToEngagement(db as unknown as Db, {
+    expect(await bindScheduleToEngagement(db as unknown as Tx, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
     })).toEqual({ bound: 0, source: 'none' });
   });
@@ -323,7 +323,7 @@ describe('bindScheduleToEngagement — the accept path', () => {
   it("binds the ACCEPTED bid's own schedule in preference to the posting's", async () => {
     const db = fakeDb([[{ id: 'pm-1' }, { id: 'pm-2' }], []]);
 
-    const result = await bindScheduleToEngagement(db as unknown as Db, {
+    const result = await bindScheduleToEngagement(db as unknown as Tx, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f', proposalId: 'p-9',
     });
 
@@ -334,7 +334,7 @@ describe('bindScheduleToEngagement — the accept path', () => {
   it("cancels the posting's superseded drafts so the engagement has ONE agreed schedule", async () => {
     const db = fakeDb([[{ id: 'pm-1' }], []]);
 
-    await bindScheduleToEngagement(db as unknown as Db, {
+    await bindScheduleToEngagement(db as unknown as Tx, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f', proposalId: 'p-9',
     });
 
@@ -347,7 +347,7 @@ describe('bindScheduleToEngagement — the accept path', () => {
   it('falls back to the posting when the accepted bid proposed no schedule of its own', async () => {
     const db = fakeDb([[], [{ id: 'm-1' }]]);
 
-    const result = await bindScheduleToEngagement(db as unknown as Db, {
+    const result = await bindScheduleToEngagement(db as unknown as Tx, {
       tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f', proposalId: 'p-9',
     });
 

@@ -33,6 +33,8 @@ next-env.d.ts
 # Minified copies of src/i18n/messages/ — that directory is the source of truth.
 /public/i18n/
 
-# Translated blog bodies published by scripts/publish-blog-translations.mjs
-# (dev + prebuild). src/content/blog/<slug>.<locale>.md is the source of truth.
+# Blog bodies (every locale), published by
+# scripts/publish-blog-content.mjs (dev + prebuild). The post index it also
+# writes (src/lib/blogIndex.generated.json) is committed — see that script.
+# src/content/blog/ is the source of truth.
 /public/blog-i18n/

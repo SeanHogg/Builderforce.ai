@@ -33,7 +33,7 @@
  */
 
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import {
   contactCompensations,
   contactEducations,
@@ -114,7 +114,7 @@ export async function setExperience(
     throw new ContactProfileError('a current role cannot have an end date');
   }
 
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     if (input.isCurrent) {
       await tx
         .update(contactExperiences)

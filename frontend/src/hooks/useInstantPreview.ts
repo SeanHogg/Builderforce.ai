@@ -1,4 +1,4 @@
-'use client';
+// No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 import { useCallback, useRef } from 'react';
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';

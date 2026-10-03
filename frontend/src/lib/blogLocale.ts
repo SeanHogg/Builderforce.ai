@@ -18,13 +18,14 @@ import { reportProductError } from './reportError';
  *     `<slug>.md`. Body only: no front-matter, no H1 (the title is catalog copy).
  *
  * ── WHY BODIES ARE FETCHED, NOT IMPORTED ────────────────────────────────────
- * The English bodies are already ~1.2 MB of bundled markdown. Four more
- * languages imported the same way would put ~5 MB into every edge function that
- * can reach `blogData` — the exact failure that moved the message catalogs out
- * of the bundle (`i18n/catalog.ts`: "Exceeds maximum edge function size"). So a
- * translated body is DATA: `scripts/publish-blog-translations.mjs` (prebuild)
- * publishes it under `/blog-i18n/<locale>/<slug>.md`, and the post route's
- * server render fetches the one it needs. Missing → the English body, the same
+ * Every body is DATA, the English included. Imported, the English corpus
+ * (~1.2 MB) rode into every client bundle that rendered a post card and every
+ * edge function that could reach `blogData`, and four translated languages would
+ * have added ~5 MB more — the failure that moved the message catalogs out of the
+ * bundle (`i18n/catalog.ts`: "Exceeds maximum edge function size").
+ * `scripts/publish-blog-content.mjs` (prebuild) publishes each body under
+ * `/blog-i18n/<locale>/<slug>.md`, and the post route's server render fetches
+ * the one it needs. A missing translation → the English body, the same
  * degradation the catalogs make: a page in the wrong language is a far smaller
  * failure than a page that does not render.
  */
@@ -68,42 +69,57 @@ export function blogTagLabel(tag: string, t: BlogText): string {
 }
 
 /**
- * Root-relative URL of a published translated body, versioned by the build so
- * `public/_headers` can mark it immutable (the same contract as `catalogUrl`).
+ * Root-relative URL of a published body (any locale, English included), versioned
+ * by the build so `public/_headers` can mark it immutable (the same contract as
+ * `catalogUrl`).
  */
 export function blogBodyUrl(slug: string, locale: string): string {
   return `/blog-i18n/${locale}/${slug}.md?v=${process.env.NEXT_PUBLIC_APP_VERSION || 'dev'}`;
+}
+
+
+/** One published body, cleaned; `undefined` when it is not published (a 404 is the
+ *  normal answer for a post nobody has translated yet). Network faults throw. */
+async function fetchPublishedBody(slug: string, locale: string, origin: string): Promise<string | undefined> {
+  const response = await fetch(`${origin}${blogBodyUrl(slug, locale)}`, { cache: 'force-cache' });
+  if (!response.ok) return undefined;
+  return postBody(await response.text()) || undefined;
 }
 
 /**
  * The post's body in `locale`, or the English body if there is no translation
  * (or it cannot be read).
  *
+ * The English body is the floor: when it cannot be read either, this throws, and
+ * the route's error boundary renders — an article page with no article is not a
+ * degradation worth serving.
+ *
  * @param origin Absolute origin to resolve the asset against — required on the
- *   server (see `i18n/requestOrigin.ts`), ignored for the default locale, which
- *   never leaves the bundle.
+ *   server (see `i18n/requestOrigin.ts`), where a worker has no implicit base URL.
  */
 export async function loadPostBody(post: BlogPost, locale: string, origin = ''): Promise<string> {
-  if (locale === DEFAULT_LOCALE || !isLocale(locale)) return post.content;
-  try {
-    const response = await fetch(`${origin}${blogBodyUrl(post.slug, locale)}`, { cache: 'force-cache' });
-    if (!response.ok) return post.content;
-    return postBody(await response.text()) || post.content;
-  } catch (error) {
-    // A network fault fetching a translated body degrades to the English one — the
-    // reader still gets a page — but the gap needs a durable record or nobody
-    // notices the translation is missing. `reportProductError` is the one sink every
-    // reporter here already writes to; the underlying calls all no-op on the fields
-    // they read (localStorage, cookies, window) rather than throw, so it works from
-    // this server render the same as from a browser tab.
-    await reportProductError({
-      title: 'Blog translation body unavailable',
-      message: `"${post.slug}" body unavailable in ${locale} — rendering ${DEFAULT_LOCALE}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-      url: `${origin}/blog/${post.slug}`,
-      level: 'warning',
-    }).catch(() => undefined);
-    return post.content;
+  if (locale !== DEFAULT_LOCALE && isLocale(locale)) {
+    try {
+      const translated = await fetchPublishedBody(post.slug, locale, origin);
+      if (translated) return translated;
+    } catch (error) {
+      // A network fault fetching a translated body degrades to the English one — the
+      // reader still gets a page — but the gap needs a durable record or nobody
+      // notices the translation is missing. `reportProductError` is the one sink every
+      // reporter here already writes to; the underlying calls all no-op on the fields
+      // they read (localStorage, cookies, window) rather than throw, so it works from
+      // this server render the same as from a browser tab.
+      await reportProductError({
+        title: 'Blog translation body unavailable',
+        message: `"${post.slug}" body unavailable in ${locale} — rendering ${DEFAULT_LOCALE}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        url: `${origin}/blog/${post.slug}`,
+        level: 'warning',
+      }).catch(() => undefined);
+    }
   }
+  const english = await fetchPublishedBody(post.slug, DEFAULT_LOCALE, origin);
+  if (english === undefined) throw new Error(`Blog body "${post.slug}" is not published (${blogBodyUrl(post.slug, DEFAULT_LOCALE)}).`);
+  return english;
 }

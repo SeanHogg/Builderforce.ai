@@ -30,7 +30,7 @@
  * effective status; a response past the deadline is refused with the same predicate.
  */
 import { desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { jobInvites, jobPostings, jobProposals, tenants, users } from '../../infrastructure/database/schema';
@@ -324,7 +324,7 @@ export async function respondToInvite(
   env: Env,
   input: { userId: string; inviteId: string; accept: boolean },
 ): Promise<InviteResponse | { error: InviteResponseFailure }> {
-  const outcome = await db.transaction(async (tx) => {
+  const outcome = await inTransaction(db, async (tx) => {
     const [row] = await tx
       .select({
         id: jobInvites.id,

@@ -42,7 +42,7 @@
  */
 
 import { and, desc, eq, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { sprintFinancialImpact, sprints, taskEffortEstimates } from '../../infrastructure/database/schema';
 import { scopedToTenant, taskInTenant } from '../../infrastructure/database/tenantScope';
@@ -132,7 +132,7 @@ export async function recordEstimate(
   }
   if (!(await taskInTenant(db, taskId, tenantId))) throw new AgileCostError('ticket not found', 404);
 
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     await tx
       .update(taskEffortEstimates)
       .set({ isCurrent: false })

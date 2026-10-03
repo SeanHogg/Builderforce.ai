@@ -39,7 +39,7 @@
  */
 
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   dealFlowOpportunities,
@@ -124,7 +124,7 @@ export async function createIcp(db: Db, tenantId: number, input: IcpInput) {
 /** Exactly one default ICP, enforced by the writer — a prospect scored against
  *  "the" ICP must have one ICP to be scored against. */
 export async function setDefaultIcp(db: Db, tenantId: number, id: number) {
-  const row = await db.transaction(async (tx) => {
+  const row = await inTransaction(db, async (tx) => {
     await tx
       .update(riIcps)
       .set({ isDefault: false, updatedAt: new Date() })

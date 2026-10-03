@@ -7,7 +7,7 @@
  * this one binds whatever the chat wrote.
  */
 
-import pptxgen from 'pptxgenjs';
+import { createPresentation, type Presentation, type PresentationSlide } from './pptxPresentation';
 import { parseSlides, type MdSlide } from './markdownBlocks';
 
 const BRAND = {
@@ -18,9 +18,9 @@ const BRAND = {
   font: 'Arial',
 };
 
-type Slide = ReturnType<pptxgen['addSlide']>;
+type Slide = PresentationSlide;
 
-function titleSlide(pptx: pptxgen, title: string, subtitle: string): void {
+function titleSlide(pptx: Presentation, title: string, subtitle: string): void {
   const s = pptx.addSlide();
   s.background = { color: BRAND.primary };
   s.addText(title, { x: 0.6, y: 1.9, w: 8.8, h: 1.4, fontSize: 34, bold: true, color: BRAND.white, fontFace: BRAND.font });
@@ -29,7 +29,7 @@ function titleSlide(pptx: pptxgen, title: string, subtitle: string): void {
   }
 }
 
-function contentSlide(pptx: pptxgen, slide: MdSlide): void {
+function contentSlide(pptx: Presentation, slide: MdSlide): void {
   const s: Slide = pptx.addSlide();
   s.background = { color: BRAND.white };
   s.addText(slide.title || ' ', { x: 0.5, y: 0.4, w: 9, h: 0.7, fontSize: 24, bold: true, color: BRAND.ink, fontFace: BRAND.font });
@@ -58,7 +58,7 @@ function contentSlide(pptx: pptxgen, slide: MdSlide): void {
 /** Render markdown slides (one `##` per slide) as .pptx bytes. */
 export async function markdownToPptx(markdown: string, title?: string): Promise<Uint8Array> {
   const slides = parseSlides(markdown);
-  const pptx = new pptxgen();
+  const pptx = await createPresentation();
   pptx.layout = 'LAYOUT_4x3';
 
   // The reply's own first heading is the deck title when it has no body of its

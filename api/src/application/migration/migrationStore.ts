@@ -26,7 +26,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { cascadeProjectDelete } from '../shared/siblingCascade';
 import type { Env } from '../../env';
 import { hasPendingInvite, invite } from '../kernel/InvitationService';
@@ -307,7 +307,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     },
 
     async rollbackImport(runId, tenantId) {
-      const { removed, projectIds } = await db.transaction(async (tx) => {
+      const { removed, projectIds } = await inTransaction(db, async (tx) => {
         const removedTasks = await tx.delete(tasks)
           .where(scopedToTenant(tasks, tenantId, eq(tasks.importRunId, runId)))
           .returning({ id: tasks.id });

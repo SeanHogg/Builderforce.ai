@@ -1,9 +1,3 @@
-// Raw Markdown imports via webpack asset/source
-declare module '*.md' {
-  const content: string;
-  export default content;
-}
-
 // Side-effect CSS imports (handled by the bundler at build time). TypeScript 6.0
 // errors (TS2882) on side-effect imports lacking a module declaration; TS 5.x did not.
 declare module '*.css';

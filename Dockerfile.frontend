@@ -72,7 +72,11 @@ WORKDIR /repo/frontend
 COPY frontend/ ./
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN pnpm exec next build
+# Not `pnpm build`: `prebuild` also renders OG cards and copies the ONNX runtime,
+# which this image does not need. It DOES need the published data the server
+# fetches at request time — the message catalogs and every blog body (the post
+# page reads `/blog-i18n/<locale>/<slug>.md`, English included).
+RUN node scripts/publish-message-catalogs.mjs && node scripts/publish-blog-content.mjs && pnpm exec next build
 EXPOSE 3000
 # Same `--` trap as the dev stage above.
 CMD ["pnpm", "exec", "next", "start", "--hostname", "0.0.0.0"]

@@ -1,5 +1,6 @@
-import { neon, neonConfig } from '@neondatabase/serverless';
+import { neon, neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle, NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import { drizzle as drizzlePool, type NeonDatabase } from 'drizzle-orm/neon-serverless';
 import * as schema from './schema';
 import { withDatabaseAvailability } from './neonAvailability';
 import type { Env } from '../../env';
@@ -22,6 +23,13 @@ export type Db = NeonHttpDatabase<typeof schema>;
 function applyFetchEndpoint(endpoint: string | undefined): void {
   if (endpoint && endpoint.trim()) {
     neonConfig.fetchEndpoint = endpoint.trim();
+    // The same proxy carries the WebSocket protocol `inTransaction` speaks, on its
+    // `/v2` path. A local proxy is a plain socket and does no TLS pipelining.
+    const proxy = new URL(endpoint.trim());
+    neonConfig.wsProxy = () => `${proxy.host}/v2`;
+    neonConfig.useSecureWebSocket = proxy.protocol === 'https:';
+    neonConfig.pipelineTLS = false;
+    neonConfig.pipelineConnect = false;
   }
 }
 
@@ -49,13 +57,18 @@ function applyFetchEndpoint(endpoint: string | undefined): void {
  */
 const handleEnv = new WeakMap<object, Env>();
 
+/** The connection string each handle was built from — what `inTransaction` opens. */
+const handleUrl = new WeakMap<object, string>();
+
 function connect(url: string | undefined, variable: string): Db {
   if (!url || typeof url !== 'string' || !url.trim()) {
     throw new Error(
       `${variable} is not set. Set it with: wrangler secret put ${variable} (in the api/ directory)`
     );
   }
-  return drizzle(withDatabaseAvailability(neon(url)), { schema });
+  const db = drizzle(withDatabaseAvailability(neon(url)), { schema });
+  handleUrl.set(db, url);
+  return db;
 }
 
 /**
@@ -65,11 +78,23 @@ function connect(url: string | undefined, variable: string): Db {
  * fully compatible with Cloudflare Workers without nodejs_compat TCP quirks.
  */
 export function buildDatabase(env: Env): Db {
+  const existing = coreHandles.get(env);
+  if (existing) return existing;
   applyFetchEndpoint(env.NEON_FETCH_ENDPOINT);
   const db = connect(env.NEON_DATABASE_URL, 'NEON_DATABASE_URL');
   handleEnv.set(db, env);
+  coreHandles.set(env, db);
   return db;
 }
+
+/**
+ * One core handle per env, i.e. per isolate — the same key `presentation/appCache.ts`
+ * builds the app against. The HTTP driver holds no connection, so a handle is just a
+ * configured client; building one per request (the auth middleware did, and ~125
+ * other call sites still ask) only allocated a new client and threw away every memo
+ * keyed on the handle, the sibling handles above among them.
+ */
+const coreHandles = new WeakMap<Env, Db>();
 
 /**
  * THE SIBLING DATABASES — the endpoints split out of the core one, by role, and the
@@ -139,4 +164,36 @@ export function siblingDatabase(env: Env | undefined, core: Db, which: SiblingDa
  */
 export function siblingDatabaseOf(core: Db, which: SiblingDatabase): Db {
   return siblingDatabase(handleEnv.get(core), core, which);
+}
+
+/** The handle a transaction body receives: the same query builder as {@link Db}. */
+export type Tx = Parameters<Parameters<NeonDatabase<typeof schema>['transaction']>[0]>[0];
+
+/**
+ * Run `work` in ONE interactive database transaction — reads and writes that see
+ * each other, commit together, or roll back together.
+ *
+ * THE way to get a transaction. `db.transaction()` on a {@link Db} THROWS: the HTTP
+ * driver is one request per statement and has no session to hold a transaction open
+ * ("No transactions support in neon-http driver"). Its `db.batch([...])` is atomic
+ * but non-interactive — no statement can branch on what an earlier one returned.
+ * Every read-check-write (a slot that must still be free, a posting that must still
+ * be open) needs the real thing, so this opens a short-lived WebSocket pool to the
+ * same database the handle points at, runs the transaction there, and closes it.
+ *
+ * Writes only, and only where atomicity is the point: a socket handshake costs more
+ * than an HTTP query, so a plain read or a single statement stays on `db`.
+ *
+ * A handle not built here (a test double) has no connection string, and is handed
+ * its own `transaction()` — which is what those doubles implement.
+ */
+export async function inTransaction<T>(db: Db, work: (tx: Tx) => Promise<T>): Promise<T> {
+  const url = handleUrl.get(db);
+  if (!url) return db.transaction(work as never) as Promise<T>;
+  const pool = new Pool({ connectionString: url });
+  try {
+    return await drizzlePool(pool, { schema }).transaction(work);
+  } finally {
+    await pool.end();
+  }
 }

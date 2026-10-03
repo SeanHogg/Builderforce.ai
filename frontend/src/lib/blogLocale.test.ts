@@ -9,6 +9,7 @@ import fr from '@/i18n/messages/fr.json';
 import de from '@/i18n/messages/de.json';
 import { DEFAULT_LOCALE, LOCALES, type Locale } from '@/i18n/config';
 import { BLOG_POSTS, postBody } from './blogData';
+import { BLOG_CORPUS } from '@/test/blogCorpus';
 import { blogPostKey, blogTagKey, blogTagLabel, loadPostBody, localizePost, type BlogText } from './blogLocale';
 
 /**
@@ -134,7 +135,7 @@ describe('catalog copy', () => {
 describe('translated bodies', () => {
   it.each(TRANSLATED)('%s bodies are structurally identical to the English', (locale) => {
     const problems: string[] = [];
-    for (const post of BLOG_POSTS) {
+    for (const post of BLOG_CORPUS) {
       const file = resolve(CONTENT_DIR, `${post.slug}.${locale}.md`);
       if (!existsSync(file)) continue;
       const translated = structure(postBody(readFileSync(file, 'utf8')));
@@ -151,26 +152,42 @@ describe('translated bodies', () => {
 describe('loadPostBody', () => {
   afterEach(() => vi.unstubAllGlobals());
   const post = BLOG_POSTS[0];
+  const ENGLISH = '---\ntitle: T\n---\n\n# T\n\nHello world.\n';
+  const requested = (spy: ReturnType<typeof vi.fn>) => spy.mock.calls.map((call) => String((call as unknown[])[0]));
 
-  it('serves the bundled English body for the default locale without a fetch', async () => {
-    const fetchSpy = vi.fn();
+  /** Serves the English original for `/en/`, `translated` (or a status) for any other locale. */
+  function publishedAssets(translated: string | number | Error) {
+    return vi.fn(async (url: string) => {
+      if (url.includes('/blog-i18n/en/')) return new Response(ENGLISH, { status: 200 });
+      if (translated instanceof Error) throw translated;
+      return typeof translated === 'number' ? new Response('nope', { status: translated }) : new Response(translated, { status: 200 });
+    });
+  }
+
+  it('fetches the published English body for the default locale — no body is bundled', async () => {
+    const fetchSpy = publishedAssets(404);
     vi.stubGlobal('fetch', fetchSpy);
-    expect(await loadPostBody(post, 'en', 'https://example.test')).toBe(post.content);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(await loadPostBody(post, 'en', 'https://example.test')).toBe('Hello world.');
+    expect(requested(fetchSpy)).toEqual([expect.stringMatching(new RegExp(`^https://example\\.test/blog-i18n/en/${post.slug}\\.md\\?v=`))]);
   });
 
   it('fetches the published translation and cleans it the way the English is cleaned', async () => {
-    const fetchSpy = vi.fn(async () => new Response('# Titel\n\nHallo Welt.\n', { status: 200 }));
+    const fetchSpy = publishedAssets('# Titel\n\nHallo Welt.\n');
     vi.stubGlobal('fetch', fetchSpy);
     expect(await loadPostBody(post, 'de', 'https://example.test')).toBe('Hallo Welt.');
-    expect(String((fetchSpy.mock.calls[0] as unknown[])[0])).toMatch(new RegExp(`^https://example\\.test/blog-i18n/de/${post.slug}\\.md\\?v=`));
+    expect(requested(fetchSpy)).toEqual([expect.stringMatching(new RegExp(`^https://example\\.test/blog-i18n/de/${post.slug}\\.md\\?v=`))]);
   });
 
   it('falls back to English when the translation is missing or unreachable', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
-    expect(await loadPostBody(post, 'fr', 'https://example.test')).toBe(post.content);
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    vi.stubGlobal('fetch', publishedAssets(404));
+    expect(await loadPostBody(post, 'fr', 'https://example.test')).toBe('Hello world.');
+    vi.stubGlobal('fetch', publishedAssets(new Error('offline')));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await loadPostBody(post, 'fr', 'https://example.test')).toBe(post.content);
+    expect(await loadPostBody(post, 'fr', 'https://example.test')).toBe('Hello world.');
+  });
+
+  it('refuses to render an article with no body at all rather than an empty page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
+    await expect(loadPostBody(post, 'en', 'https://example.test')).rejects.toThrow(/not published/);
   });
 });

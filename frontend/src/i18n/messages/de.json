@@ -11176,6 +11176,14 @@
       "one-local-index-for-every-ai-tool": {
         "title": "Ein lokaler Index für jedes KI-Werkzeug auf Ihrem Rechner",
         "description": "Synapse indiziert Ihre Repositorys auf Ihrem eigenen Computer – jede Definition, eine Karte nach Abhängigkeiten geordnet, Suche nach Bedeutung – und gibt diesen Kontext gleichermaßen an den VS-Code-Agenten, Claude Code und Cursor. Erinnerungen, die inzwischen gelöschten Code nennen, werden markiert statt befolgt. Nichts wird hochgeladen."
+      },
+      "install-your-verticals-kpi-dashboard": {
+        "title": "Die Kennzahlen, nach denen Ihre Branche wirklich läuft – mit einem Klick installiert",
+        "description": "Jedes Unternehmen hat einen Finanz-Tab. Kaum eines hat die sechs Zahlen, an denen die eigene Branche gemessen wird. KPI-Dashboards gibt es jetzt als Marktplatz-Vorlagen: Branche wählen, installieren – und die Kacheln, die Ihre Wettbewerber verfolgen, sind schon auf dem Board."
+      },
+      "the-run-that-teaches-the-next-one": {
+        "title": "Der Lauf, der den nächsten lehrt",
+        "description": "Ein Agent, der verifizierte Arbeit abschließt, hat gerade ein Vorgehen ausgeführt, das funktioniert – und früher verschwand es in einem Transkript. Agenten schlagen jetzt als Skill vor, was sie gelernt haben, Ihr Team gibt ihn frei, und jeder spätere Lauf folgt ihm."
       }
     }
   },

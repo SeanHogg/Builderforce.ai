@@ -1,4 +1,4 @@
-'use client';
+// No `'use client'`: this module exports a session singleton and a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 /**
  * webcontainerSession — THE one WebContainer boot for a page, and the record that

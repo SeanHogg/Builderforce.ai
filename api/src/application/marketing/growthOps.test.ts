@@ -105,7 +105,7 @@ describe('traffic allocation is validated, not assumed', () => {
   });
 
   it('replaces variants wholesale inside a transaction', () => {
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
     expect(body).toContain('.delete(abTestVariants)');
   });
 });
@@ -226,7 +226,7 @@ describe('onboarding gates state, never capability', () => {
 describe('exclusive defaults are enforced by the writer', () => {
   it('brand kit default clears and sets in one transaction', () => {
     const body = fn(content, 'setDefaultBrandKit');
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
     expect(body).toContain('.set({ isDefault: false');
   });
 

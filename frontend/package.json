@@ -1,12 +1,12 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.9.43",
+  "version": "2026.10.1",
   "private": true,
   "scripts": {
     "postinstall": "node ../scripts/ensure-linked-deps.mjs",
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
-    "dev": "node scripts/publish-message-catalogs.mjs && node scripts/publish-blog-translations.mjs && next dev --turbopack",
-    "prebuild": "node scripts/copy-ort-runtime.mjs && node scripts/publish-message-catalogs.mjs && node scripts/publish-blog-translations.mjs && node scripts/gen-blog-og.mjs",
+    "dev": "node scripts/publish-message-catalogs.mjs && node scripts/publish-blog-content.mjs && next dev --turbopack",
+    "prebuild": "node scripts/copy-ort-runtime.mjs && node scripts/publish-message-catalogs.mjs && node scripts/publish-blog-content.mjs && node scripts/gen-blog-og.mjs",
     "build": "next build",
     "cf-build": "pnpm exec next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && node scripts/stamp-sw-version.js && node scripts/patch-worker-fetch.mjs && node scripts/check-worker-size.mjs",
     "check:worker-size": "node scripts/check-worker-size.mjs",

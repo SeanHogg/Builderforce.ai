@@ -33,6 +33,10 @@ jobs:
         with:
           node-version: 24
 
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: package-npm
+
       - uses: ./.github/actions/npm-publish-auth
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
@@ -81,6 +85,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: package-agents
 
       - uses: ./.github/actions/npm-publish-auth
         with:
@@ -137,6 +145,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: publish-extension
 
       - name: Build and package the VSIX
         working-directory: clients/vscode
@@ -451,9 +463,13 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install Wrangler
-        run: npm install --global wrangler
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: deploy-api
 
+      # No global Wrangler here: `deploy:worker` runs through `npm run`, which resolves
+      # api's own pinned `wrangler` devDependency. A global install was a second,
+      # floating copy nothing in this job called.
       - name: Verify and deploy API
         working-directory: api
         env:
@@ -510,8 +526,24 @@ jobs:
         with:
           node-version: 24
 
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: deploy-frontend
+
       - name: Install Wrangler
         run: npm install --global wrangler
+
+      # Next's persistent build cache (webpack module cache + SWC output). The build is
+      # the longest step in the release; with the previous run's cache restored, only
+      # modules that changed recompile. Keyed per commit so every run saves its own
+      # (cache entries are immutable), and restore-keys falls back to the newest cache
+      # built against the same lockfile — a dependency change starts cold, on purpose.
+      - name: Restore the Next.js build cache
+        uses: actions/cache@v6
+        with:
+          path: frontend/.next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: next-cache-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}-
 
       # The linked local packages (`link:../studio`, …) install themselves: each
       # consumer's `postinstall` runs scripts/ensure-linked-deps.mjs, which walks
@@ -566,6 +598,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          # docs-site is the one npm package here, so setup-node's own npm cache fits.
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
 
       - name: Install Wrangler
         run: npm install --global wrangler

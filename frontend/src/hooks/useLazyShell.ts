@@ -1,6 +1,6 @@
-'use client';
+// No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 type StartShell = (onOutput: (data: string) => void) => Promise<WritableStreamDefaultWriter<string>>;
 
@@ -20,7 +20,11 @@ export function useLazyShell(startShell: StartShell, onOutput: (data: string) =>
   const startingRef = useRef<Promise<void> | null>(null);
   const pendingRef = useRef<string[]>([]);
   const outputRef = useRef(onOutput);
-  outputRef.current = onOutput;
+  // Kept current from an effect, not during render: a render may be discarded, and the
+  // shell only reads this when output arrives, after the commit that set it.
+  useEffect(() => {
+    outputRef.current = onOutput;
+  }, [onOutput]);
 
   return useCallback((data: string) => {
     if (writerRef.current) {

@@ -68,16 +68,10 @@ const nextConfig = {
   transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk', '@seanhogg/builderforce-brain-ui'],
   // Turbopack powers local development. Keep its behavior aligned with the
   // webpack production build below: resolve linked workspace packages from the
-  // monorepo root, load blog Markdown as source text, and prevent browser
-  // bundles from following Transformers.js into Node-only native bindings.
+  // monorepo root, and prevent browser bundles from following Transformers.js
+  // into Node-only native bindings.
   turbopack: {
     root: path.join(__dirname, '..'),
-    rules: {
-      '*.md': {
-        loaders: [path.join(__dirname, 'scripts/rawContentLoader.cjs')],
-        as: '*.js',
-      },
-    },
     resolveAlias: {
       // Turbopack resolves linked packages from their physical workspace paths,
       // where pnpm's host-created dependency symlinks are not valid inside the
@@ -103,10 +97,6 @@ const nextConfig = {
     },
   },
   webpack(config, { isServer, webpack }) {
-    config.module.rules.push({
-      test: /\.md$/,
-      type: 'asset/source',
-    });
     // pnpm + linked workspace packages: when webpack follows the symlinked
     // package into its real .pnpm/<hash>/ location, peer-dep resolution
     // from that deep path fails to find sibling packages. symlinks:false

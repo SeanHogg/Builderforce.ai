@@ -73,11 +73,13 @@ import {
   recommendPostingsForFreelancer, recommendTalentForPosting,
 } from '../../application/marketplace/talentRecommendations';
 import {
-  bindScheduleToEngagement, createMilestone, readJobSchedule,
+  createMilestone, readJobSchedule,
   readProposalSchedule, readProposalSchedules, replaceProposalSchedule,
   type ProposedMilestoneInput,
 } from '../../application/marketplace/milestones';
 import { hireShape } from '../../application/marketplace/engagementShape';
+import { clientRatingCountSql, clientRatingSql, jobColumns, mapJob, mapProposal, proposalColumns } from '../../application/marketplace/jobs/jobRows';
+import { acceptProposal } from '../../application/marketplace/jobs/acceptProposal';
 import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
@@ -103,122 +105,6 @@ import {
 // live with the writer now (`application/marketplace/jobPostings.ts` and `jobFilters.ts`).
 // They used to be re-declared here AND in `gigMarketplaceRoutes`, which is how the two
 // publish paths came to validate `discipline` differently.
-
-
-/** `job_postings.*` — snake_case keys so `mapJob` keeps reading the same row shape. */
-const jobColumns = {
-  id:                 jobPostings.id,
-  tenant_id:          jobPostings.tenantId,
-  project_id:         jobPostings.projectId,
-  title:              jobPostings.title,
-  description:        jobPostings.description,
-  discipline:         jobPostings.discipline,
-  skills:             jobPostings.skills,
-  rate_min_cents:     jobPostings.rateMinCents,
-  rate_max_cents:     jobPostings.rateMaxCents,
-  currency:           jobPostings.currency,
-  status:             jobPostings.status,
-  visibility:         jobPostings.visibility,
-  source_ticket_id:   jobPostings.sourceTicketId,
-  posting_type:       jobPostings.postingType,
-  engagement_type:    jobPostings.engagementType,
-  requirements:       jobPostings.requirements,
-  budget_total_cents: jobPostings.budgetTotalCents,
-  experience_level:   jobPostings.experienceLevel,
-  project_length:     jobPostings.projectLength,
-  specialty:          jobPostings.specialty,
-  screening_questions: jobPostings.screeningQuestions,
-  attachments:        jobPostings.attachments,
-  created_by_user_id: jobPostings.createdByUserId,
-  closed_at:          jobPostings.closedAt,
-  created_at:         jobPostings.createdAt,
-  updated_at:         jobPostings.updatedAt,
-};
-
-/** `job_proposals.*` — snake_case keys so `mapProposal` keeps reading the same row shape. */
-const proposalColumns = {
-  id:                 jobProposals.id,
-  job_id:             jobProposals.jobId,
-  freelancer_user_id: jobProposals.freelancerUserId,
-  cover_note:         jobProposals.coverNote,
-  rate_cents:         jobProposals.rateCents,
-  currency:           jobProposals.currency,
-  status:             jobProposals.status,
-  last_eval_overall:  jobProposals.lastEvalOverall,
-  decline_reason:     jobProposals.declineReason,
-  screening_answers:  jobProposals.screeningAnswers,
-  attachments:        jobProposals.attachments,
-  created_at:         jobProposals.createdAt,
-  updated_at:         jobProposals.updatedAt,
-};
-
-/** The employer's two-way reputation, correlated onto a posting's tenant.
- *  `freelancer_reviews.direction` exists in the DB (migration 0299) but is not
- *  modelled in schema.ts, so these stay raw `sql` fragments.
- *  The outer reference is written out as `job_postings.tenant_id` rather than
- *  interpolating the column: drizzle only table-qualifies a column when the
- *  statement has a join, and a bare `tenant_id` would bind to the subquery's own
- *  `r` scope instead of the outer posting. */
-const clientRatingSql = sql<string | null>`(SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.tenant_id = job_postings.tenant_id AND r.direction = 'freelancer_to_employer')`;
-const clientRatingCountSql = sql<number>`(SELECT COUNT(*) FROM freelancer_reviews r WHERE r.tenant_id = job_postings.tenant_id AND r.direction = 'freelancer_to_employer')::int`;
-
-const mapJob = (r: Record<string, unknown>) => ({
-  id: r.id,
-  tenantId: Number(r.tenant_id),
-  tenantName: r.tenant_name ?? null,
-  projectId: r.project_id == null ? null : Number(r.project_id),
-  title: r.title,
-  description: r.description ?? null,
-  discipline: r.discipline ?? null,
-  skills: parseJsonArray<string>(r.skills),
-  rateMinCents: r.rate_min_cents == null ? null : Number(r.rate_min_cents),
-  rateMaxCents: r.rate_max_cents == null ? null : Number(r.rate_max_cents),
-  currency: r.currency ?? 'USD',
-  status: r.status,
-  visibility: r.visibility ?? 'public',
-  postingType: r.posting_type ?? 'project_bid',
-  engagementType: r.engagement_type ?? null,
-  requirements: r.requirements ?? null,
-  // 0985. A rate BAND and a whole-job TOTAL are different quantities in different units,
-  // so both travel and `engagementType` says which one the reader should believe.
-  budgetTotalCents: r.budget_total_cents == null ? null : Number(r.budget_total_cents),
-  experienceLevel: r.experience_level ?? null,
-  projectLength: r.project_length ?? null,
-  specialty: r.specialty ?? null,
-  // Re-validated on the way OUT as well as in: a hand-edited JSONB row degrades to "asks
-  // nothing" rather than to a 500 on a public browse surface.
-  screeningQuestions: normalizeScreeningQuestions(r.screening_questions),
-  attachments: normalizeAttachments(r.attachments),
-  sourceTicketId: r.source_ticket_id == null ? null : Number(r.source_ticket_id),
-  proposalCount: r.proposal_count == null ? undefined : Number(r.proposal_count),
-  // The client's (employer's) two-way reputation, so freelancers can vet who they bid with.
-  clientRating: r.client_rating == null ? null : Number(r.client_rating),
-  clientRatingCount: r.client_rating_count == null ? 0 : Number(r.client_rating_count),
-  createdAt: r.created_at ?? null,
-});
-
-const mapProposal = (r: Record<string, unknown>) => ({
-  id: r.id,
-  jobId: r.job_id,
-  jobTitle: r.job_title ?? null,
-  freelancerUserId: r.freelancer_user_id,
-  freelancerName: r.freelancer_name ?? null,
-  coverNote: r.cover_note ?? null,
-  rateCents: r.rate_cents == null ? null : Number(r.rate_cents),
-  currency: r.currency ?? 'USD',
-  status: r.status,
-  lastEvalOverall: r.last_eval_overall == null ? null : Number(r.last_eval_overall),
-  declineReason: r.decline_reason ?? null,
-  /** The bidder's answers to the posting's screening questions, each carrying the prompt
-   *  AS ASKED so a later edit to the posting cannot rewrite the question retroactively. */
-  screeningAnswers: parseJsonArray(r.screening_answers),
-  attachments: normalizeAttachments(r.attachments),
-  /** The schedule this bidder counter-proposed, when the caller asked for one. Absent
-   *  (rather than empty) on the surfaces that do not read it, so a caller can tell
-   *  "no schedule proposed" from "schedules not loaded". */
-  milestones: r.milestones ?? undefined,
-  createdAt: r.created_at ?? null,
-});
 
 /**
  * The proposed-schedule lines off a bid body, normalised.
@@ -720,7 +606,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   //
   // A fixed-price posting says what it will pay FOR, before anybody bids. These
   // milestones hang off the job (`job_id`), and accepting a proposal stamps them onto
-  // the engagement — see `bindScheduleToEngagement` in the accept route below. That is
+  // the engagement — see `bindScheduleToEngagement` in `acceptProposal`. That is
   // why the schedule is authored here rather than only after hiring: a freelancer
   // deciding whether to bid needs to see the deliverables and the money attached to
   // them, and a schedule invented after the handshake is a different agreement.
@@ -775,71 +661,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const pid = c.req.param('pid');
-    const accepted = await db.transaction(async (tx) => {
-      const [pr] = await tx.select({
-        ...proposalColumns,
-        job_tenant: jobPostings.tenantId,
-        project_id: jobPostings.projectId,
-        job_title: jobPostings.title,
-        job_engagement_type: jobPostings.engagementType,
-        source_ticket_id: jobPostings.sourceTicketId,
-      }).from(jobProposals)
-        .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
-        .where(and(eq(jobProposals.id, pid), inArray(jobProposals.status, ['submitted', 'shortlisted'])));
-      if (!pr || Number(pr.job_tenant) !== Number(tenantId)) return null;
-
-      // This conditional transition is the concurrency gate. Only one request can
-      // move an open posting to filled; a replay cannot mint another engagement.
-      const claimed = await tx.update(jobPostings)
-        .set({ status: 'filled', closedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(jobPostings.id, pr.job_id), eq(jobPostings.tenantId, tenantId), eq(jobPostings.status, 'open')))
-        .returning({ id: jobPostings.id });
-      if (claimed.length === 0) return { conflict: true as const };
-
-      const projectId = pr.project_id == null ? null : Number(pr.project_id);
-      const [existing] = await tx.select({ id: freelancerEngagements.id })
-        .from(freelancerEngagements)
-        .where(and(
-          eq(freelancerEngagements.tenantId, tenantId),
-          eq(freelancerEngagements.freelancerUserId, pr.freelancer_user_id),
-          sql`COALESCE(${freelancerEngagements.projectId}, 0) = COALESCE(${projectId}, 0)`,
-          isNull(freelancerEngagements.terminatedAt),
-        ));
-      const engagementId = existing?.id ?? crypto.randomUUID();
-      if (existing) {
-        await tx.update(freelancerEngagements)
-          .set({ status: 'active', hiredAt: sql`COALESCE(${freelancerEngagements.hiredAt}, NOW())`, rateCents: pr.rate_cents, updatedAt: new Date() })
-          .where(eq(freelancerEngagements.id, engagementId));
-      } else {
-        await tx.insert(freelancerEngagements).values({
-          id: engagementId, tenantId, projectId,
-          freelancerUserId: pr.freelancer_user_id, status: 'active',
-          rateCents: pr.rate_cents, currency: pr.currency ?? 'USD',
-          title: pr.job_title, createdByUserId: actor, hiredAt: new Date(),
-          // Frozen at hire from the posting that was bid on — see 0928 on why this is
-          // a declared copy rather than a join, and why it must not be re-read later.
-          engagementType: hireShape(pr.job_engagement_type),
-        });
-      }
-      // Carry the AGREED payment schedule onto the engagement, in the SAME transaction
-      // that created it. Naming the accepted proposal is what makes this the agreed one:
-      // a bid that counter-proposed its own deliverables binds THOSE, and the posting's
-      // published schedule binds only when the accepted bid proposed none. Accepting a
-      // proposal is agreeing to that proposal — funding the posting's terms over the top
-      // would discard the counter-offer at the moment it was accepted. A no-op for an
-      // hourly posting, which simply has no schedule at all.
-      await bindScheduleToEngagement(tx, {
-        tenantId,
-        jobId: pr.job_id as string,
-        engagementId,
-        freelancerUserId: pr.freelancer_user_id as string,
-        proposalId: pid,
-      });
-      await tx.update(jobProposals).set({ status: 'accepted', updatedAt: new Date() }).where(eq(jobProposals.id, pid));
-      await tx.update(jobProposals).set({ status: 'declined', updatedAt: new Date() })
-        .where(and(eq(jobProposals.jobId, pr.job_id), inArray(jobProposals.status, ['submitted', 'shortlisted'])));
-      return { conflict: false as const, engagementId, proposal: pr };
-    });
+    const accepted = await acceptProposal(db, { tenantId, actorUserId: actor, proposalId: pid });
     if (!accepted) return c.json({ error: 'Not found' }, 404);
     if (accepted.conflict) return c.json({ error: 'This job has already been filled' }, 409);
     await invalidatePostingCaches(c.env as Env, tenantId, accepted.proposal.source_ticket_id as number | null);

@@ -266,36 +266,37 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     // and both the kanban and the config panel must pick the same one when a
     // project happens to have more than one board. Without an explicit order the
     // (HTTP) row order is non-deterministic, so the two could disagree.
-    const rows = await db
-      .select()
-      .from(boards)
-      .where(eq(boards.tenantId, tenantId))
-      .orderBy(desc(boards.lifecycleManaged), desc(boards.updatedAt), desc(boards.createdAt), desc(boards.id)).limit(LIST_ROW_CAP);
-    // Alongside the list, not on each row: it is one workspace fact, and repeating
-    // it per board would invite a per-board reading of a per-workspace condition.
-    return c.json({ boards: rows, cloudRunAllowance: await readCloudRunAllowance(db, c.env as Env, tenantId) });
+    // The allowance rides alongside the list, not on each row: it is one workspace
+    // fact, and repeating it per board would invite a per-board reading of a
+    // per-workspace condition. Independent of the list, so both load at once.
+    const [rows, cloudRunAllowance] = await Promise.all([
+      db
+        .select()
+        .from(boards)
+        .where(eq(boards.tenantId, tenantId))
+        .orderBy(desc(boards.lifecycleManaged), desc(boards.updatedAt), desc(boards.createdAt), desc(boards.id)).limit(LIST_ROW_CAP),
+      readCloudRunAllowance(db, c.env as Env, tenantId),
+    ]);
+    return c.json({ boards: rows, cloudRunAllowance });
   });
 
   router.get('/:boardId', async (c) => {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
-    const [board] = await db
-      .select()
-      .from(boards)
-      .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
+    // Three independent reads in one round trip. The lanes are tenant-scoped, so
+    // reading them before the board is confirmed reveals nothing; a missing board
+    // still answers 404 and the lanes are discarded.
+    const [[board], lanes, cloudRunAllowance] = await Promise.all([
+      db
+        .select()
+        .from(boards)
+        .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId))),
+      readBoardLanes(tenantId, boardId),
+      readCloudRunAllowance(db, c.env as Env, tenantId),
+    ]);
     if (!board) return c.json({ error: 'Board not found' }, 404);
 
-    const lanes = await db
-      .select()
-      .from(swimlanes)
-      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position)).limit(LIST_ROW_CAP);
-
-    return c.json({
-      ...board,
-      swimlanes: lanes,
-      cloudRunAllowance: await readCloudRunAllowance(db, c.env as Env, tenantId),
-    });
+    return c.json({ ...board, swimlanes: lanes, cloudRunAllowance });
   });
 
   router.patch('/:boardId', async (c) => {
@@ -344,6 +345,16 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
   // ── Swimlanes (nested) ────────────────────────────────────────────────────
 
+  /** A board's lanes in display order — tenant-scoped, so safe to read before the
+   *  board itself is confirmed. */
+  function readBoardLanes(tenantId: number, boardId: string) {
+    return db
+      .select()
+      .from(swimlanes)
+      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
+      .orderBy(asc(swimlanes.position)).limit(LIST_ROW_CAP);
+  }
+
   async function assertBoard(tenantId: number, boardId: string): Promise<boolean> {
     const [board] = await db
       .select({ id: boards.id })
@@ -355,12 +366,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:boardId/swimlanes', async (c) => {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
-    if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
-    const lanes = await db
-      .select()
-      .from(swimlanes)
-      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position)).limit(LIST_ROW_CAP);
+    const [exists, lanes] = await Promise.all([assertBoard(tenantId, boardId), readBoardLanes(tenantId, boardId)]);
+    if (!exists) return c.json({ error: 'Board not found' }, 404);
     return c.json({ swimlanes: lanes });
   });
 
@@ -379,11 +386,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
     if (!board) return c.json({ error: 'Board not found' }, 404);
 
-    const existing = await db
-      .select()
-      .from(swimlanes)
-      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position));
+    const existing = await readBoardLanes(tenantId, boardId);
     if (existing.length > 0) return c.json({ swimlanes: existing, seeded: false });
 
     const now = new Date();
@@ -393,11 +396,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .onConflictDoNothing();
     await invalidateBoardLaneOrdinals(c.env as Env, db, boardId);
 
-    const lanes = await db
-      .select()
-      .from(swimlanes)
-      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position));
+    const lanes = await readBoardLanes(tenantId, boardId);
     return c.json({ swimlanes: lanes, seeded: true });
   });
 

@@ -31,8 +31,6 @@
  * though it did.
  */
 
-import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
-
 /** Mime types whose bytes are text and can carry a banner directly. */
 const TEXT_LIKE = /^(text\/|application\/json|application\/xml|application\/x-yaml)/i;
 const PDF_LIKE = /^application\/pdf/i;
@@ -85,6 +83,10 @@ async function stampPdf(bytes: Uint8Array, label: string): Promise<Uint8Array> {
 }
 
 async function drawStamp(bytes: Uint8Array, label: string): Promise<Uint8Array> {
+  // Loaded here, not at module scope: pdf-lib (and its embedded standard fonts) only
+  // matters to a watermarked PDF download, so it must not be evaluated on the
+  // Worker's cold-start path for every other request.
+  const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib');
   // `ignoreEncryption` lets a permissions-flagged (but readable) PDF through — the
   // common case for a document exported by a finance tool. A PDF that needs a
   // password to open still throws, and is refused by the guard above.

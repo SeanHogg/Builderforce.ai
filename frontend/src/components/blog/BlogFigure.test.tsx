@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import BlogFigure, { parseFigure, type FigureSpec } from './BlogFigure';
 import { FIGURE_RENDERERS } from './figures/registry';
 import { BLOG_POSTS } from '@/lib/blogData';
+import { BLOG_CORPUS } from '@/test/blogCorpus';
 import { PROOF_FORMS } from '@/lib/methodology';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 
@@ -22,7 +23,7 @@ const FENCE = /```bf-figure\r?\n([\s\S]*?)```/g;
 /** Every ```bf-figure block in the published corpus, tagged with its post. */
 function figuresInCorpus(): Array<{ slug: string; index: number; source: string }> {
   const found: Array<{ slug: string; index: number; source: string }> = [];
-  for (const post of BLOG_POSTS) {
+  for (const post of BLOG_CORPUS) {
     let index = 0;
     for (const match of post.content.matchAll(FENCE)) {
       found.push({ slug: post.slug, index: index++, source: match[1] });

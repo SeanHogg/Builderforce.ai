@@ -60,7 +60,7 @@
  */
 
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   landingPageBlocks,
@@ -488,7 +488,7 @@ export async function reorderBlocks(
   }
   if (order.length === 0) return [];
 
-  await db.transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     for (const [i, id] of order.entries()) {
       await tx
         .update(landingPageBlocks)
@@ -665,7 +665,7 @@ export async function deleteWebsitePage(
     .limit(1);
   if (!page) throw new WebSurfaceError('website page not found', 404);
 
-  await db.transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     await tx
       .update(websitePages)
       .set({ parentPath: page.parentPath ?? null, updatedAt: new Date() })

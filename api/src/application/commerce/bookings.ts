@@ -36,7 +36,7 @@
  */
 
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   bookingHosts,
@@ -258,7 +258,7 @@ export async function reserve(
   const windowStart = new Date(input.startsAt.getTime() - bufferMs);
   const windowEnd = new Date(endsAt.getTime() + bufferMs);
 
-  const inserted = await db.transaction(async (tx) => {
+  const inserted = await inTransaction(db, async (tx) => {
     // Half-open overlap: back-to-back bookings are allowed, genuine overlap is not.
     const clash = await tx
       .select({ n: sql<number>`count(*)::int` })

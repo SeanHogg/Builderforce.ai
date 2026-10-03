@@ -379,9 +379,14 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // GET /api/tasks/:id
   router.get('/:id', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const id = Number(c.req.param('id'));
-    if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
-    const task = await taskService.getTask(id);
-    const plain = task.toPlain() as unknown as Record<string, unknown>;
+    // The tenant gate and the aggregate load are independent reads, so they share
+    // one round trip. The gate still decides: a task outside this tenant is a 404
+    // whatever the load did, and a load failure on an OWNED task is a real error.
+    const [owned, loaded] = await Promise.allSettled([loadTenantTask(id, c.get('tenantId')), taskService.getTask(id)]);
+    if (owned.status === 'rejected') throw owned.reason;
+    if (!owned.value) return c.json({ error: 'Task not found' }, 404);
+    if (loaded.status === 'rejected') throw loaded.reason;
+    const plain = loaded.value.toPlain() as unknown as Record<string, unknown>;
     // A SECURITY ticket the viewer isn't cleared for is returned MASKED (200) — its
     // existence is surfaced, its content redacted with `restricted: true`. Same shared
     // gate as the list.

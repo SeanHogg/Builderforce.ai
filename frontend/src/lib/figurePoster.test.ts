@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 // through `node`), tested from here because this is where the test runner looks
 // and because the corpus it draws lives in `src/content`.
 import { esc, firstFigure, posterArt } from '../../scripts/lib/figurePoster.mjs';
-import { BLOG_POSTS } from './blogData';
+import { BLOG_CORPUS } from '@/test/blogCorpus';
 import { FIGURE_RENDERERS } from '@/components/blog/figures/registry';
 
 /**
@@ -49,7 +49,7 @@ describe('figurePoster', () => {
     // Not "every": the legacy corpus predates the figure vocabulary and keeps
     // the title layout, which is the honest fallback. What matters is that a
     // post WITH a figure never falls back.
-    const withFigure = BLOG_POSTS.filter((post) => firstFigure(post.content));
+    const withFigure = BLOG_CORPUS.filter((post) => firstFigure(post.content));
     expect(withFigure.length).toBeGreaterThan(10);
     const fellBack = withFigure
       .filter((post) => {
@@ -72,7 +72,7 @@ describe('figurePoster', () => {
   });
 
   it('reads the first figure of a post and ignores the rest', () => {
-    const post = BLOG_POSTS.find((entry) => entry.slug === 'grade-the-proof-and-close-the-loop');
+    const post = BLOG_CORPUS.find((entry) => entry.slug === 'grade-the-proof-and-close-the-loop');
     expect(post, 'the methodology article is the fixture').toBeDefined();
     const spec = firstFigure(post!.content);
     expect(spec.kind).toBe('bars');

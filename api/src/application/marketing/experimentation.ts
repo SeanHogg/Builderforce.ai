@@ -39,7 +39,7 @@
  */
 
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   abTestSegments,
@@ -177,7 +177,7 @@ export async function setVariants(
   const keys = new Set(variants.map((v) => v.key.trim().toLowerCase()));
   if (keys.size !== variants.length) throw new ExperimentError('variant keys must be unique');
 
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     await tx
       .delete(abTestVariants)
       .where(scopedToTenant(abTestVariants, tenantId, eq(abTestVariants.testId, testId)));

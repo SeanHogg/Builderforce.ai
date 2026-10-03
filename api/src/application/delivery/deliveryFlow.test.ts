@@ -94,7 +94,7 @@ describe('an estimate is a history, not a field', () => {
   const body = fn(cost, 'recordEstimate');
 
   it('demotes the previous current estimate and inserts in one transaction', () => {
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
     expect(body).toContain('.set({ isCurrent: false })');
     expect(body).toContain('isCurrent: true');
   });
@@ -121,7 +121,7 @@ describe('sprint cost is stamped, not derived on read', () => {
   it('reads back what was stamped rather than recomputing', () => {
     const body = fn(cost, 'sprintEconomics');
     expect(body).toContain('.from(sprintFinancialImpact)');
-    expect(body).not.toContain('db.transaction');
+    expect(body).not.toContain('inTransaction(db');
   });
 
   it('returns a null value ratio when nothing was priced, never zero', () => {
@@ -215,7 +215,7 @@ describe('the work item is a task (spec PM spine unified onto tasks, 2026-09-12)
   it('checks the ticket is this tenant\'s before recording an estimate on it', () => {
     const body = fn(cost, 'recordEstimate');
     expect(body).toContain('taskInTenant(db, taskId, tenantId)');
-    expect(body.indexOf('taskInTenant(')).toBeLessThan(body.indexOf('db.transaction'));
+    expect(body.indexOf('taskInTenant(')).toBeLessThan(body.indexOf('inTransaction(db'));
   });
 
   it('checks the sprint is this tenant\'s before stamping its cost', () => {

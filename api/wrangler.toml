@@ -3,6 +3,16 @@ main = "src/index.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Run the Worker near its back end, not near the caller. Almost every request here
+# is a chain of Neon queries (auth, tenant, permissions, then the handler's own
+# reads), each an HTTPS round trip to ONE database region; from a far-away edge colo
+# that chain pays the cross-region latency on every hop. Smart Placement measures
+# the subrequests and moves execution next to Neon, so the caller crosses the
+# distance once instead of once per query. Static asset and hosted-site traffic is
+# unaffected: placement only moves invocations whose subrequests justify it.
+[placement]
+mode = "smart"
+
 [[routes]]
 pattern = "api.builderforce.ai"
 custom_domain = true

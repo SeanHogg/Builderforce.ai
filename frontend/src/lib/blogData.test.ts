@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readdirSync } from 'node:fs';
 import { BLOG_POSTS, getPostBySlug } from './blogData';
+import { BLOG_CONTENT_DIR, BLOG_CORPUS } from '@/test/blogCorpus';
 
 // ---------------------------------------------------------------------------
 // BLOG_POSTS
@@ -20,7 +22,6 @@ describe('BLOG_POSTS', () => {
       expect(typeof post.description).toBe('string');
       expect(Array.isArray(post.tags)).toBe(true);
       expect(typeof post.author).toBe('string');
-      expect(typeof post.content).toBe('string');
     }
   });
 
@@ -28,6 +29,19 @@ describe('BLOG_POSTS', () => {
     for (let i = 1; i < BLOG_POSTS.length; i++) {
       expect(BLOG_POSTS[i - 1].date >= BLOG_POSTS[i].date).toBe(true);
     }
+  });
+
+  it('publishes every English original in src/content/blog — the directory is the registry', () => {
+    // Regression: the index was a hand-kept import list, and two shipped posts
+    // missing from it had OG cards but 404'd as articles.
+    const originals = readdirSync(BLOG_CONTENT_DIR).filter((file) => /^[^.]+\.md$/.test(file)).map((file) => file.replace(/\.md$/, '')).sort();
+    expect(BLOG_POSTS.map((post) => post.slug).sort()).toEqual(originals);
+  });
+
+  it('carries no article bodies, so client bundles that list posts stay small', () => {
+    // Bodies are published assets fetched by the post route (lib/blogLocale.ts);
+    // a body back in this index is ~1.2 MB back in every bundle that renders a card.
+    expect(BLOG_POSTS.filter((post) => 'content' in post).map((post) => post.slug)).toEqual([]);
   });
 
   it('has no duplicate slugs', () => {
@@ -57,8 +71,8 @@ describe('getPostBySlug', () => {
   });
 
   it('content does not start with a top-level H1 heading', () => {
-    for (const post of BLOG_POSTS) {
-      // The buildPost helper strips "# Title\n" from the body
+    for (const post of BLOG_CORPUS) {
+      // postBody strips the "# Title\n" that duplicates the page title
       expect(post.content.trimStart()).not.toMatch(/^# /);
     }
   });

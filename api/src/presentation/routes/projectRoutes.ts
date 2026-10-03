@@ -298,14 +298,21 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     }
 
     const projectIds = plainProjects.map((project) => project.id);
+    // Every card aggregate below depends only on `projectIds` (and the projects'
+    // initiatives), never on another aggregate, so they all start at once: one
+    // round trip of latency for the whole card payload instead of one per query.
+    // The list is version-token cached, but every task write bumps that version, so
+    // a cold build is the common case on an active tenant.
+    //
     // One grouped aggregate over the project's tasks → total + the status/timeliness
-    // breakdown that drives the card's health speedometer and % done ring. Postgres
-    // FILTER keeps this a SINGLE query (no N+1, no extra round-trips vs. the prior
-    // plain count). `done` spans the canonical + common imported-board "completed"
-    // statuses; `overdue` = past-due work not yet resolved.
+    // breakdown that drives the card's health speedometer and % done ring, AND the
+    // date span behind the calendar/Gantt views (same rows, same grouping — one
+    // statement, not two). Postgres FILTER keeps it a SINGLE query. `done` spans the
+    // canonical + common imported-board "completed" statuses; `overdue` = past-due
+    // work not yet resolved.
     const DONE_SQL = sql`${tasks.status} in ('done', 'completed', 'closed', 'merged', 'resolved')`;
     const TERMINAL_SQL = sql`${tasks.status} in ('done', 'completed', 'closed', 'merged', 'resolved', 'cancelled')`;
-    const taskCounts = await db
+    const taskAggregatesQuery = db
       .select({
         projectId: tasks.projectId,
         taskCount: count(),
@@ -313,34 +320,6 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         blockedCount: sql<number>`count(*) filter (where ${tasks.status} = 'blocked')`,
         cancelledCount: sql<number>`count(*) filter (where ${tasks.status} = 'cancelled')`,
         overdueCount: sql<number>`count(*) filter (where ${tasks.dueDate} < now() and not (${TERMINAL_SQL}))`,
-      })
-      .from(tasks)
-      .where(
-        and(
-          inArray(tasks.projectId, projectIds),
-          eq(tasks.archived, false),
-          notSystemTask,
-        ),
-      )
-      .groupBy(tasks.projectId);
-
-    interface TaskBreakdown { total: number; done: number; blocked: number; cancelled: number; overdue: number }
-    const taskBreakdownByProject = new Map<number, TaskBreakdown>(
-      taskCounts.map((row) => [row.projectId, {
-        total: Number(row.taskCount),
-        done: Number(row.doneCount),
-        blocked: Number(row.blockedCount),
-        cancelled: Number(row.cancelledCount),
-        overdue: Number(row.overdueCount),
-      }]),
-    );
-
-    // Project timelines are derived from their tasks: a project has no date column
-    // of its own, so its schedule spans the earliest task start (falling back to the
-    // earliest due date) through the latest task due date. Powers the calendar/Gantt views.
-    const dateRanges = await db
-      .select({
-        projectId: tasks.projectId,
         minStart: min(tasks.startDate),
         minDue: min(tasks.dueDate),
         maxDue: max(tasks.dueDate),
@@ -355,16 +334,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       )
       .groupBy(tasks.projectId);
 
-    const toIso = (value: Date | string | null): string | null =>
-      value ? new Date(value).toISOString() : null;
-    const dateRangeByProject = new Map<number, { startDate: string | null; dueDate: string | null }>(
-      dateRanges.map((row) => [
-        row.projectId,
-        { startDate: toIso(row.minStart ?? row.minDue), dueDate: toIso(row.maxDue) },
-      ]),
-    );
-
-    const assignedAgentHostRows = await db
+    const assignedAgentHostQuery = db
       .select({
         projectId: agentHostProjects.projectId,
         agentHostId: agentHosts.id,
@@ -373,48 +343,36 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       .from(agentHostProjects)
       .innerJoin(agentHosts, eq(agentHostProjects.agentHostId, agentHosts.id))
       .where(and(eq(agentHostProjects.tenantId, tenantId), inArray(agentHostProjects.projectId, projectIds)));
-    const assignedAgentHostByProject = new Map<number, { id: number; name: string }>();
-    for (const row of assignedAgentHostRows) {
-      if (!assignedAgentHostByProject.has(row.projectId)) {
-        assignedAgentHostByProject.set(row.projectId, { id: row.agentHostId, name: row.agentHostName });
-      }
-    }
 
     // Workflow counts per project — powers the "N workflows" badge + View button.
-    const workflowCounts = await db
+    const workflowCountsQuery = db
       .select({ projectId: workflows.projectId, workflowCount: count() })
       .from(workflows)
       .where(and(eq(workflows.tenantId, tenantId), inArray(workflows.projectId, projectIds)))
       .groupBy(workflows.projectId);
-    const workflowCountByProject = new Map<number, number>(
-      workflowCounts
-        .filter((row) => row.projectId != null)
-        .map((row) => [row.projectId as number, Number(row.workflowCount)]),
-    );
 
     // Which projects already have an architecture PRD (Architect analysis output).
-    // Drives the "Run Architecture Analysis" vs "View Arch Analysis" button. Single
-    // grouped query — no per-project round trip.
-    const archSpecRows = await db
+    // Drives the "Run Architecture Analysis" vs "View Arch Analysis" button.
+    const archSpecQuery = db
       .select({ projectId: specs.projectId })
       .from(specs)
       .where(and(eq(specs.tenantId, tenantId), inArray(specs.projectId, projectIds), eq(specs.kind, 'architecture')))
       .groupBy(specs.projectId);
-    const hasArchByProject = new Set<number>(
-      archSpecRows.filter((row) => row.projectId != null).map((row) => row.projectId as number),
-    );
 
     // Distinct objectives/OKRs linked to each project — the "is the need defined"
     // (goals) signal behind the inspection's Direction dimension. A project's goals
-    // come from TWO edges: objectives linked to its TASKS, and objectives linked to
-    // the INITIATIVE it rolls up to. We union both into a distinct count per project
-    // (two grouped reads, no per-project round trip; merged in memory).
+    // come from THREE edges: objectives linked to its TASKS, objectives linked to the
+    // INITIATIVE it rolls up to, and (0268) objectives scoped DIRECTLY to the project —
+    // the Brain's `objectives.create` with a projectId, or the OKR tab's project scope.
+    // Three grouped reads, no per-project round trip; merged in memory below into one
+    // distinct set, so a project counts each linked objective once.
     const initiativeByProject = new Map<number, string>();
     for (const project of plainProjects) {
       if (project.initiativeId) initiativeByProject.set(project.id, project.initiativeId);
     }
+    const initiativeIds = [...new Set(initiativeByProject.values())];
 
-    const taskGoalRows = await db
+    const taskGoalQuery = db
       .select({ projectId: tasks.projectId, objectiveId: objectiveLinks.objectiveId })
       .from(objectiveLinks)
       .innerJoin(tasks, eq(objectiveLinks.taskId, tasks.id))
@@ -423,10 +381,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         eq(objectiveLinks.linkKind, 'task'),
         inArray(tasks.projectId, projectIds),
       ));
-
-    const initiativeIds = [...new Set(initiativeByProject.values())];
-    const initiativeGoalRows = initiativeIds.length
-      ? await db
+    const initiativeGoalQuery = initiativeIds.length
+      ? db
           .select({ initiativeId: objectiveLinks.initiativeId, objectiveId: objectiveLinks.objectiveId })
           .from(objectiveLinks)
           .where(and(
@@ -434,7 +390,79 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
             eq(objectiveLinks.linkKind, 'initiative'),
             inArray(objectiveLinks.initiativeId, initiativeIds),
           ))
-      : [];
+      : Promise.resolve([]);
+    const projectScopedGoalQuery = db
+      .select({ projectId: objectives.projectId, objectiveId: objectives.id })
+      .from(objectives)
+      .where(and(eq(objectives.tenantId, tenantId), inArray(objectives.projectId, projectIds)));
+
+    // Per-project delivery signals (DORA + cycle time + flow) over the standard
+    // 30-day window — the compact inputs the frontend runs through the SAME
+    // computeDeliveryVerdict the /insights/delivery banner uses, so a project's
+    // health score is identical on its card and on the delivery tab. One bounded
+    // grouped pass (no N+1).
+    const deliverySignalsQuery = computeProjectDeliverySignals(db, tenantId, DELIVERY_SIGNAL_WINDOW_DAYS);
+
+    const [
+      taskAggregates,
+      assignedAgentHostRows,
+      workflowCounts,
+      archSpecRows,
+      taskGoalRows,
+      initiativeGoalRows,
+      projectScopedGoalRows,
+      deliverySignalsByProject,
+    ] = await Promise.all([
+      taskAggregatesQuery,
+      assignedAgentHostQuery,
+      workflowCountsQuery,
+      archSpecQuery,
+      taskGoalQuery,
+      initiativeGoalQuery,
+      projectScopedGoalQuery,
+      deliverySignalsQuery,
+    ]);
+
+    interface TaskBreakdown { total: number; done: number; blocked: number; cancelled: number; overdue: number }
+    const taskBreakdownByProject = new Map<number, TaskBreakdown>(
+      taskAggregates.map((row) => [row.projectId, {
+        total: Number(row.taskCount),
+        done: Number(row.doneCount),
+        blocked: Number(row.blockedCount),
+        cancelled: Number(row.cancelledCount),
+        overdue: Number(row.overdueCount),
+      }]),
+    );
+
+    // Project timelines are derived from their tasks: a project has no date column
+    // of its own, so its schedule spans the earliest task start (falling back to the
+    // earliest due date) through the latest task due date.
+    const toIso = (value: Date | string | null): string | null =>
+      value ? new Date(value).toISOString() : null;
+    const dateRangeByProject = new Map<number, { startDate: string | null; dueDate: string | null }>(
+      taskAggregates.map((row) => [
+        row.projectId,
+        { startDate: toIso(row.minStart ?? row.minDue), dueDate: toIso(row.maxDue) },
+      ]),
+    );
+
+    const assignedAgentHostByProject = new Map<number, { id: number; name: string }>();
+    for (const row of assignedAgentHostRows) {
+      if (!assignedAgentHostByProject.has(row.projectId)) {
+        assignedAgentHostByProject.set(row.projectId, { id: row.agentHostId, name: row.agentHostName });
+      }
+    }
+
+    const workflowCountByProject = new Map<number, number>(
+      workflowCounts
+        .filter((row) => row.projectId != null)
+        .map((row) => [row.projectId as number, Number(row.workflowCount)]),
+    );
+
+    const hasArchByProject = new Set<number>(
+      archSpecRows.filter((row) => row.projectId != null).map((row) => row.projectId as number),
+    );
+
     const objectivesByInitiative = new Map<string, Set<string>>();
     for (const row of initiativeGoalRows) {
       if (!row.initiativeId || !row.objectiveId) continue;
@@ -456,26 +484,12 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       const initiativeObjectives = objectivesByInitiative.get(initiativeId);
       if (initiativeObjectives) for (const objectiveId of initiativeObjectives) goalSet(projectId).add(objectiveId);
     }
-    // Third edge (0268): objectives scoped DIRECTLY to a project — the Brain's
-    // `objectives.create` with a projectId, or the OKR tab's project scope. Merged
-    // into the same distinct set so a project counts each linked objective once.
-    const projectScopedGoalRows = await db
-      .select({ projectId: objectives.projectId, objectiveId: objectives.id })
-      .from(objectives)
-      .where(and(eq(objectives.tenantId, tenantId), inArray(objectives.projectId, projectIds)));
     for (const row of projectScopedGoalRows) {
       if (row.projectId != null) goalSet(row.projectId).add(row.objectiveId);
     }
     const goalCountByProject = new Map<number, number>(
       [...goalObjectivesByProject].map(([projectId, set]) => [projectId, set.size]),
     );
-
-    // Per-project delivery signals (DORA + cycle time + flow) over the standard
-    // 30-day window — the compact inputs the frontend runs through the SAME
-    // computeDeliveryVerdict the /insights/delivery banner uses, so a project's
-    // health score is identical on its card and on the delivery tab. One bounded
-    // grouped pass (no N+1); the whole list payload is version-token cached.
-    const deliverySignalsByProject = await computeProjectDeliverySignals(db, tenantId, DELIVERY_SIGNAL_WINDOW_DAYS);
 
     return plainProjects.map((project) => {
       const b = taskBreakdownByProject.get(project.id);

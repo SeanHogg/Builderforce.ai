@@ -92,7 +92,7 @@ describe('the Claim-to-Proof position is stated, not implied', () => {
 describe('the baseline is exclusive', () => {
   it('clears and sets in one transaction', () => {
     const body = fn(scenarios, 'setBaseline');
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
     expect(body).toContain('.set({ isBaseline: false');
     expect(body).toContain('.set({ isBaseline: true');
   });

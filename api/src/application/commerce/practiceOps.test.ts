@@ -85,7 +85,7 @@ describe('double booking is prevented by the write', () => {
   const body = fn(booking, 'reserve');
 
   it('checks and inserts inside one transaction', () => {
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
   });
 
   it('uses a half-open overlap, so back-to-back bookings are allowed', () => {
@@ -221,7 +221,7 @@ describe('people data is handled carefully', () => {
 
   it('keeps exactly one primary emergency contact, in a transaction', () => {
     const body = fn(people, 'setEmergencyContact');
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
     expect(body).toContain('.set({ isPrimary: false');
   });
 

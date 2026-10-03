@@ -33,7 +33,7 @@
  */
 
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   brandKits,
@@ -106,7 +106,7 @@ export async function createBrandKit(
 
 /** Exactly one default, for the reason in the module docstring. */
 export async function setDefaultBrandKit(db: Db, tenantId: number, id: number) {
-  const row = await db.transaction(async (tx) => {
+  const row = await inTransaction(db, async (tx) => {
     await tx
       .update(brandKits)
       .set({ isDefault: false, updatedAt: new Date() })

@@ -105,8 +105,10 @@ function finalize(cached: CachedAttention): AttentionSnapshot {
 }
 
 async function loadAttention(db: Db, tenantId: number, projectId: number | undefined, userId: string | undefined): Promise<CachedAttention> {
+  // Steps 1, 2, 4b and 5 are independent reads, so they start together — one round
+  // trip of latency instead of four. Only the chat links (4) wait, on the task ids.
   // 1) Every non-terminal execution for the tenant (optionally one project), with its task.
-  const execRows = await db
+  const execQuery = db
     .select({ id: executions.id, taskId: executions.taskId, status: executions.status })
     .from(executions)
     .innerJoin(tasks, eq(tasks.id, executions.taskId))
@@ -121,7 +123,7 @@ async function loadAttention(db: Db, tenantId: number, projectId: number | undef
     .limit(LIMIT);
 
   // 2) Pending human questions (ask_human) — the authoritative "needs an answer" rows.
-  const approvalRows = await db
+  const approvalQuery = db
     .select({ id: approvals.id, executionId: approvals.executionId })
     .from(approvals)
     .where(scopedToTenant(
@@ -131,6 +133,25 @@ async function loadAttention(db: Db, tenantId: number, projectId: number | undef
       inArray(approvals.kind, ['question', 'feedback']),
     ))
     .limit(LIMIT);
+
+  // 4b) Unread Brain chats for the caller — global (not project-scoped), because unread is
+  // inherently cross-project. Only for a real user; an agentHost runtime token sees {}.
+  const unreadQuery = userId
+    ? unreadCountsForUser(db, tenantId, userId).catch(() => ({} as Record<number, number>))
+    : Promise.resolve({} as Record<number, number>);
+
+  // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's scope:
+  // that project's stamp when project-scoped, MAX across the tenant otherwise.
+  const managerQuery = db
+    .select({ lastRunAt: sql<Date | null>`max(${projectManagerConfigs.lastRunAt})` })
+    .from(projectManagerConfigs)
+    .where(scopedToTenant(
+      projectManagerConfigs,
+      tenantId,
+      projectId != null ? eq(projectManagerConfigs.projectId, projectId) : undefined,
+    ));
+
+  const [execRows, approvalRows, chatUnread, [mgrRow]] = await Promise.all([execQuery, approvalQuery, unreadQuery, managerQuery]);
 
   // execId → approval (only executions surfaced above, so already project-scoped).
   const approvalByExec = new Map<number, string>();
@@ -179,23 +200,8 @@ async function loadAttention(db: Db, tenantId: number, projectId: number | undef
   const tasksOut: Record<number, AttentionItem> = {};
   for (const [taskId, item] of taskState) tasksOut[taskId] = item;
 
-  // 4b) Unread Brain chats for the caller — global (not project-scoped), because unread is
-  // inherently cross-project. Only for a real user; an agentHost runtime token sees {}.
-  const chatUnread = userId
-    ? await unreadCountsForUser(db, tenantId, userId).catch(() => ({} as Record<number, number>))
-    : {};
   const unreadTotal = Object.values(chatUnread).reduce((a, b) => a + b, 0);
 
-  // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's scope:
-  // that project's stamp when project-scoped, MAX across the tenant otherwise.
-  const [mgrRow] = await db
-    .select({ lastRunAt: sql<Date | null>`max(${projectManagerConfigs.lastRunAt})` })
-    .from(projectManagerConfigs)
-    .where(scopedToTenant(
-      projectManagerConfigs,
-      tenantId,
-      projectId != null ? eq(projectManagerConfigs.projectId, projectId) : undefined,
-    ));
   const managerLastRunAt = mgrRow?.lastRunAt ? new Date(mgrRow.lastRunAt).toISOString() : null;
 
   return {

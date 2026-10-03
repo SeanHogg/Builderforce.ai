@@ -30,6 +30,18 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   998 → 1000 (`useClientFiles`, 2026-10-03) — two components from the free-tier
+ *   attribution and canvas-preview passes that landed unrecorded:
+ *   `components/site/SiteBadgeNotice.tsx` (the site release panel's upgrade notice —
+ *   it reads `usePlanFeature` and `useTranslations`, and decides its own visibility,
+ *   so it cannot be a Server Component) and `components/webcontainer/WebContainerAttribution.tsx`
+ *   (the preview badge, which subscribes to the WebContainer boot through
+ *   `useWebContainerBooted`). The same passes brought three NON-component modules
+ *   in with a directive — `hooks/useInstantPreview.ts`, `hooks/useLazyShell.ts` and
+ *   `lib/browserRuntime/webcontainerSession.ts` — which marked nothing and were
+ *   dropped under the `domainExtras.tsx` rule (every importer is already client),
+ *   which is why the raise is 2 and not 5.
+ *
  *   1001 → 998 (`useClientFiles`, 2026-09-26) — a TIGHTENING, recorded because it
  *   is why 1002 became 998 and not 1001. Four `lib/*.ts` modules dropped a directive
  *   that marked nothing: `lib/appVersions.ts`, `lib/guestChatApi.ts`,

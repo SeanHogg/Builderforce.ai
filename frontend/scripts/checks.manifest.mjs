@@ -28,6 +28,7 @@ export default [
   ['check:layering', 'check-layering.mjs'],
   ['check:root-closure', 'check-root-closure.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
+  ['check:blog-index', 'publish-blog-content.mjs', '--check'],
   // `--changed`, not a full sweep: four of the six rules run the React Compiler,
   // so all 2,071 files cost ~10 minutes and a single component costs ~17s. The
   // cost here is proportional to the diff, and a change touching no component

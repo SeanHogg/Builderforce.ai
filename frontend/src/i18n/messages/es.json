@@ -11176,6 +11176,14 @@
       "one-local-index-for-every-ai-tool": {
         "title": "Un índice local para todas las herramientas de IA de tu equipo",
         "description": "Synapse indexa tus repositorios en tu propio ordenador —cada definición, un mapa ordenado por dependencias, búsqueda por significado— y entrega ese contexto por igual al agente de VS Code, a Claude Code y a Cursor. Los recuerdos que nombran código ya eliminado se marcan en lugar de obedecerse. No se sube nada."
+      },
+      "install-your-verticals-kpi-dashboard": {
+        "title": "Las métricas con las que realmente funciona tu sector, instaladas con un clic",
+        "description": "Toda empresa tiene una pestaña de finanzas. Casi ninguna tiene las seis cifras con las que se juzga a su propio sector. Los paneles de KPI ahora llegan como plantillas del marketplace: elige tu sector, instálalo y los indicadores que siguen tus pares ya están en el tablero."
+      },
+      "the-run-that-teaches-the-next-one": {
+        "title": "La ejecución que enseña a la siguiente",
+        "description": "Un agente que termina un trabajo verificado acaba de ejecutar un procedimiento que funciona, y antes eso se perdía en una transcripción. Ahora los agentes proponen lo que aprendieron como una habilidad, tu equipo la aprueba y cada ejecución posterior la sigue."
       }
     }
   },

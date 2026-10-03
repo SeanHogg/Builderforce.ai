@@ -1,0 +1,30 @@
+name: Cache the pnpm store
+description: >
+  Restore (and, at job end, save) pnpm's content-addressable store so `pnpm install`
+  links from disk instead of downloading every tarball on every run. Run it AFTER
+  pnpm/action-setup and BEFORE the first install.
+inputs:
+  scope:
+    description: >
+      A per-job name. The repo is a set of separately installed packages whose
+      linked dependencies install themselves (scripts/ensure-linked-deps.mjs), so
+      each job fills the store with a DIFFERENT package set. One shared key would
+      let whichever concurrent job saved first hand every other job a store
+      missing most of what it needs; scoping the key gives each job its own.
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    # Keyed on every lockfile, not just the job's own: the linked-package installs
+    # read their own lockfiles, so any of them changing changes what lands in the
+    # store. restore-keys hands a changed lockfile the previous store, so only the
+    # delta downloads.
+    - uses: actions/cache@v6
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ inputs.scope }}-${{ hashFiles('**/pnpm-lock.yaml', '!**/node_modules/**') }}
+        restore-keys: pnpm-store-${{ runner.os }}-${{ inputs.scope }}-

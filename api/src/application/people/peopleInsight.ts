@@ -34,7 +34,7 @@
  */
 
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { cohortRetention, healthDimensions, hrEmergencyContacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
@@ -153,7 +153,7 @@ export async function setEmergencyContact(
     throw new PeopleInsightError('an emergency contact needs a phone number or an email — a name alone cannot be reached');
   }
 
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     if (input.isPrimary) {
       await tx
         .update(hrEmergencyContacts)

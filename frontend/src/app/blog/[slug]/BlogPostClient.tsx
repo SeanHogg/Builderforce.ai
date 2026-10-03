@@ -50,15 +50,14 @@ const MARKDOWN_COMPONENTS = { pre: MarkdownPre };
 
 /**
  * @param content The body in the reader's language, resolved on the server by
- *   the route (`loadPostBody`). Absent for the default locale, whose body is the
- *   bundled English one.
+ *   the route (`loadPostBody`). The client bundle carries no article bodies.
  */
-export default function BlogPostClient({ slug, content }: { slug: string; content?: string }) {
+export default function BlogPostClient({ slug, content }: { slug: string; content: string }) {
   const tBlog = useTranslations('blog') as unknown as BlogText;
   const source = getPostBySlug(slug);
   // Title and description from the catalogs, body from the route — the article
   // reads in ONE language, not a translated title over an English body.
-  const post = source ? { ...localizePost(source, tBlog), content: content ?? source.content } : undefined;
+  const post = source ? { ...localizePost(source, tBlog), content } : undefined;
   const t = useTranslations('blog.post');
   // The published date is formatted in the reader's locale rather than always
   // en-US — a localized article with an American date is half-translated.

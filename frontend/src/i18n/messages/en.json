@@ -11176,6 +11176,14 @@
       "one-local-index-for-every-ai-tool": {
         "title": "One local index for every AI tool on your machine",
         "description": "Synapse indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded."
+      },
+      "install-your-verticals-kpi-dashboard": {
+        "title": "The metrics your vertical actually runs on, installed in one click",
+        "description": "Every company has a finance tab. Almost none of them have the six numbers their own vertical is judged by. KPI dashboards ship as marketplace templates now — pick your sector, install, and the tiles your peers track are already on the board."
+      },
+      "the-run-that-teaches-the-next-one": {
+        "title": "The run that teaches the next one",
+        "description": "An agent that finishes verified work has just executed a procedure that works — and it used to vanish into a transcript. Agents now propose what they learned as a skill, your team approves it, and every later run follows it."
       }
     }
   },

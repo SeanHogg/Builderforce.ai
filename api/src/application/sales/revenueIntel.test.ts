@@ -71,7 +71,7 @@ describe('exactly one current role', () => {
   const body = fn(profile, 'setExperience');
 
   it('clears other current roles in the same transaction', () => {
-    expect(body).toContain('db.transaction');
+    expect(body).toContain('inTransaction(db');
     expect(body).toContain('.set({ isCurrent: false })');
   });
 
@@ -156,7 +156,7 @@ describe('a prospect score is explained', () => {
 
   it('keeps exactly one default ICP, in a transaction', () => {
     const dflt = fn(intel, 'setDefaultIcp');
-    expect(dflt).toContain('db.transaction');
+    expect(dflt).toContain('inTransaction(db');
     expect(dflt).toContain('.set({ isDefault: false');
   });
 

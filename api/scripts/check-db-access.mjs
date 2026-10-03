@@ -23,6 +23,13 @@
  * banned outright rather than merely discouraged. `connection.ts` is the single
  * sanctioned exception: it is where the driver is wrapped.
  *
+ * A second rule rides the same walk: no `.transaction(` call outside the access
+ * layer. A `Db` is the neon-HTTP driver, whose `transaction()` THROWS ("No
+ * transactions support in neon-http driver") — thirteen write paths (booking a slot,
+ * accepting a proposal, rolling back an import, …) shipped calling it, passed their
+ * tests against doubles that implement it, and failed on every real request. The
+ * one sanctioned transaction is `inTransaction(db, …)` in `connection.ts`.
+ *
  * Run via `npm run check:db-access` and wired into `npm test`.
  */
 import { readdirSync, readFileSync } from 'node:fs';
@@ -49,6 +56,10 @@ function collect(dir, out = []) {
 }
 
 const violations = [];
+const transactionCalls = [];
+
+/** A transaction opened on a handle. Test files are exempt: their doubles implement it. */
+const TRANSACTION_CALL = /\.transaction\(\s*async\b/;
 
 for (const file of collect(srcDir)) {
   const rel = relative(srcDir, file).split('\\').join('/');
@@ -60,6 +71,7 @@ for (const file of collect(srcDir)) {
     // side-effect imports, `require(…)`, dynamic `import(…)` and `vi.mock(…)` are all
     // caught — while prose that merely NAMES the package in a comment is not.
     if (SPECIFIER.test(line)) violations.push(`${rel}:${i + 1}  ${line.trim()}`);
+    if (!rel.endsWith('.test.ts') && TRANSACTION_CALL.test(line)) transactionCalls.push(`${rel}:${i + 1}  ${line.trim()}`);
   });
 }
 
@@ -71,6 +83,16 @@ if (violations.length > 0) {
     `\n  infrastructure/database/connection.ts and use the query builder.` +
     `\nFor SQL the builder cannot express, use db.execute(sql\`...\`) — still Drizzle, still typed access.` +
     `\nIf a table has no pgTable() definition yet, add one (npm run check:schema enforces that both ways).`,
+  );
+  process.exit(1);
+}
+
+if (transactionCalls.length > 0) {
+  console.error(`Interactive transaction opened on an HTTP handle (${transactionCalls.length} site(s)):\n`);
+  for (const v of transactionCalls) console.error('  - ' + v);
+  console.error(
+    `\nA Db is the neon-HTTP driver: its transaction() throws on every real request.` +
+    `\nUse inTransaction(db, async (tx) => …) from infrastructure/database/connection.ts.`,
   );
   process.exit(1);
 }

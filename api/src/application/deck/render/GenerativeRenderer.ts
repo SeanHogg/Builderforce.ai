@@ -16,7 +16,7 @@
  * numeric shape of the same data to keep in step with the tables beside it.
  */
 
-import pptxgen from 'pptxgenjs';
+import { createPresentation, type Presentation, type PresentationSlide } from '../../office/pptxPresentation';
 import type { DeckData, DeckArchetype } from '../types';
 import { parseNumericCell } from '../bindingResolver';
 
@@ -34,7 +34,7 @@ const BRAND = {
 const fmt = (n: number | null | undefined, suffix = ''): string =>
   n == null || !Number.isFinite(n) ? '—' : `${n.toLocaleString('en-US')}${suffix}`;
 
-type Slide = ReturnType<pptxgen['addSlide']>;
+type Slide = PresentationSlide;
 
 function header(slide: Slide, title: string, sub: string): void {
   slide.background = { color: BRAND.white };
@@ -62,7 +62,7 @@ interface SeriesSpec { name: string; column: number }
  * the same reason `parseNumericCell` returns null instead of 0.
  */
 function chart(
-  pptx: pptxgen,
+  pptx: Presentation,
   slide: Slide,
   type: 'bar' | 'line',
   opts: { x: number; y: number; w: number; h: number; title: string; rows: string[][]; series: SeriesSpec[] },
@@ -111,7 +111,7 @@ function table(slide: Slide, x: number, y: number, w: number, head: string[], ro
   slide.addTable([headerRow, ...body] as never, { x, y, w, border: { type: 'solid', color: 'E5E7EB', pt: 1 }, fontFace: BRAND.font, autoPage: false });
 }
 
-function titleSlide(pptx: pptxgen, data: DeckData, subtitle: string): void {
+function titleSlide(pptx: Presentation, data: DeckData, subtitle: string): void {
   const slide = pptx.addSlide();
   slide.background = { color: BRAND.primary };
   slide.addText(data.meta.tenantName ?? 'R&D Organization', { x: 0.5, y: 1.7, w: 9, h: 0.5, fontSize: 16, color: 'C7D2FE', fontFace: BRAND.font });
@@ -119,7 +119,7 @@ function titleSlide(pptx: pptxgen, data: DeckData, subtitle: string): void {
   slide.addText(`${data.meta.quarter}  ·  Generated ${data.meta.generatedAt.slice(0, 10)}`, { x: 0.5, y: 3.5, w: 9, h: 0.4, fontSize: 13, color: 'E0E7FF', fontFace: BRAND.font });
 }
 
-function renderBoard(pptx: pptxgen, data: DeckData): void {
+function renderBoard(pptx: Presentation, data: DeckData): void {
   titleSlide(pptx, data, 'R&D Quarterly Board Review');
 
   // 1 — Investment
@@ -205,7 +205,7 @@ function renderBoard(pptx: pptxgen, data: DeckData): void {
   table(s, 5.6, 2.8, 4.0, ['Program', 'Objective', 'Invested'], data.ai.programs);
 }
 
-function renderCfo(pptx: pptxgen, data: DeckData): void {
+function renderCfo(pptx: Presentation, data: DeckData): void {
   titleSlide(pptx, data, 'CFO / DevFinOps Review');
 
   let s = pptx.addSlide();
@@ -237,7 +237,7 @@ function renderCfo(pptx: pptxgen, data: DeckData): void {
 
 /** Render the deck and return the .pptx bytes. */
 export async function renderGenerativeDeck(data: DeckData, archetype: DeckArchetype): Promise<Uint8Array> {
-  const pptx = new pptxgen();
+  const pptx = await createPresentation();
   pptx.author = 'Builderforce';
   pptx.company = data.meta.tenantName ?? 'Builderforce';
   // Default layout is LAYOUT_16x9 (10in × 5.625in) — the coordinates above assume it.

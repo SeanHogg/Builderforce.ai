@@ -24,7 +24,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import type { Db, Tx } from '../../infrastructure/database/connection';
 import {
   engagementMilestones,
   freelancerEngagements,
@@ -360,12 +360,12 @@ export async function createMilestone(db: Db, input: CreateMilestoneInput): Prom
  * time.
  */
 export async function bindScheduleToEngagement(
-  // Structural rather than `Db`, so the accept path can pass its TRANSACTION. Binding
+  // The transaction handle (`inTransaction`), so the accept path can bind inside it. Binding
   // has to happen in the same transaction that creates the engagement: a commit that
   // hires somebody but leaves the schedule on the job is an engagement whose agreed
   // deliverables silently vanished, and there is no second request that would repair it
   // — accepting a proposal is a one-shot, concurrency-gated move.
-  db: Pick<Db, 'update'>,
+  db: Pick<Tx, 'update'>,
   input: { tenantId: number; jobId: string; engagementId: string; freelancerUserId: string; proposalId?: string | null },
 ): Promise<{ bound: number; source: 'proposal' | 'posting' | 'none' }> {
   const stamp = {

@@ -43,7 +43,7 @@
  */
 
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   breakEvenScenarios,
@@ -219,7 +219,7 @@ export async function setBaseline(
   actor: ActorIdentity,
   id: number,
 ) {
-  const row = await db.transaction(async (tx) => {
+  const row = await inTransaction(db, async (tx) => {
     await tx
       .update(breakEvenScenarios)
       .set({ isBaseline: false, updatedAt: new Date() })

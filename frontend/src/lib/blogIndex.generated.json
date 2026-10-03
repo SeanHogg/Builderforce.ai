@@ -1,0 +1,2276 @@
+[
+  {
+    "slug": "publish-your-evermind-to-hugging-face",
+    "title": "Put the model you trained on Hugging Face, from the page you trained it on",
+    "date": "2026-09-28",
+    "description": "A trained Evermind used to leave Builderforce as a zip on your laptop, and getting it onto the Hugging Face Hub was a separate job with separate tools. Now you pick a repository, paste your own token, and the full model repo lands on the Hub from the export panel.",
+    "tags": [
+      "evermind",
+      "hugging-face",
+      "model-publishing",
+      "llm-studio",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "a-private-brain-on-your-desktop-that-hands-work-to-agents",
+    "title": "A private brain on your desktop that hands the work to your agents",
+    "date": "2026-09-27",
+    "description": "Synapse now signs in to Builderforce and brings your chats to the desktop. Ask the Brain and it answers with what your private Evermind has learned on your machine; assign an agent and address it with @, and it does the work with its own tools. A live brain in the sidebar shows what you know, what you have done, and what it is learning right now.",
+    "tags": [
+      "agents",
+      "evermind",
+      "privacy",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "teach-it-once-and-it-does-it-again",
+    "title": "Teach it once, and it does it again",
+    "date": "2026-09-27",
+    "description": "Synapse can now learn a task by watching you do it once in any Windows program, turn it into a skill that asks for new values each time, run it on request or on a schedule, stop for your OK before anything irreversible — and teach your private Evermind the procedure. Opt-in, local, and forgettable.",
+    "tags": [
+      "agents",
+      "evermind",
+      "privacy",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "one-local-index-for-every-ai-tool",
+    "title": "One local index for every AI tool on your machine",
+    "date": "2026-09-26",
+    "description": "Synapse indexes your repositories on your own computer — every definition, a map ranked by what the code depends on, search by meaning — and hands that context to the VS Code agent, Claude Code and Cursor alike. Memories that name code you have since deleted are flagged instead of obeyed. Nothing is uploaded.",
+    "tags": [
+      "vs-code",
+      "agents",
+      "evermind",
+      "privacy",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "ideas-scratchpad-on-the-canvas",
+    "title": "Write the idea down before it's gone — and know which ones you've actually tested",
+    "date": "2026-09-15",
+    "description": "Every canvas now has an Ideas scratchpad. Capture an idea in a sentence, track it from first thought to validated, and plan the customer interview that tests it — on the same board where it becomes real.",
+    "tags": [
+      "creation-canvas",
+      "product-ideation",
+      "validation",
+      "idea-to-real",
+      "methodology"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "list-your-startup-and-meet-investors",
+    "title": "List your startup, meet investors, and watch your runway on the same board",
+    "date": "2026-09-15",
+    "description": "A company could be built, run and measured here and still not be found. Now a founder lists the company in the Marketplace, investors express interest straight into the workspace, and Finance opens on the one number every founder acts on — with its source named.",
+    "tags": [
+      "startups",
+      "investors",
+      "marketplace",
+      "finance",
+      "runway",
+      "idea-to-real"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "choose-who-answers-not-just-who-you-ask",
+    "title": "Choose who answers, not just who you ask",
+    "date": "2026-09-12",
+    "description": "A chat with teammates and agents asks two things on every turn — who you are talking to, and who is answering. The editor could only set the first. Now “Acting as” is in VS Code too, so you can run the Brain as a persona or as one of your agents, and a question put to a whole board shows everyone it went to.",
+    "tags": [
+      "team-chat",
+      "agents",
+      "collaboration",
+      "workforce",
+      "vs-code",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "design-the-room-you-meet-in",
+    "title": "Design the room you meet in — then walk it",
+    "date": "2026-09-12",
+    "description": "The room on your board used to be one room. Now it is a boardroom, an office kitchen or an open floor of desks — or a room you lay out piece by piece, walk through like a game, sell in the marketplace, and play your Roblox place inside.",
+    "tags": [
+      "creation-canvas",
+      "collaboration",
+      "3d",
+      "marketplace",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "sign-measure-and-plug-in-inside-the-room",
+    "title": "Sign it off, read the numbers, plug in your own tools — inside the room",
+    "date": "2026-09-12",
+    "description": "The canvas could already tell you a change needed a signature, define every metric once, and register a third-party widget. It just had nowhere to do any of the three. The room now has an approval desk, a live metrics board and stands for third-party widgets.",
+    "tags": [
+      "creation-canvas",
+      "approvals",
+      "governance",
+      "metrics",
+      "widgets",
+      "3d",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "delegate-the-search-not-the-decision",
+    "title": "Delegate the search, not the decision",
+    "date": "2026-09-07",
+    "description": "An agent that spends twenty turns finding one file has no room left to think about it. Sub-agents send that search to a second agent with its own context and bring back one paragraph — on every surface an agent runs on, and now they can make the change too.",
+    "tags": [
+      "agents",
+      "sub-agents",
+      "context",
+      "cloud-agents",
+      "vscode",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "every-account-gets-a-sales-programme",
+    "title": "Every account gets a sales programme",
+    "date": "2026-09-07",
+    "description": "The pipeline, the campaigns, the weekly numbers, the payouts and the referral link were already built — and only Builderforce's own associates could open them. Now every account owns one, and Reach is where it lives.",
+    "tags": [
+      "sales",
+      "crm",
+      "reach",
+      "navigation",
+      "idea-to-real"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "one-canvas-inside-another",
+    "title": "One canvas, running inside another",
+    "date": "2026-09-07",
+    "description": "Offboarding an employee is a flow. So is promoting one — and it contains the first. Until now every canvas was a closed system and the shared part had to be redrawn in each. A canvas can now be placed on another canvas as a single step, with the parameters it accepts read off the board itself.",
+    "tags": [
+      "creation-canvas",
+      "workflow",
+      "automation",
+      "operations",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "send-the-link-join-without-an-account",
+    "title": "Send someone the link — and let them join without an account",
+    "date": "2026-09-07",
+    "description": "Sharing a canvas used to get worse the moment you signed up. Any saved board can now produce a link that grants view, comment or edit access, and whoever opens it can join by typing a name — no signup, no password, a real collaborator.",
+    "tags": [
+      "creation-canvas",
+      "collaboration",
+      "sharing",
+      "guest",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "stand-up-inside-your-board",
+    "title": "Stand up inside your board",
+    "date": "2026-09-07",
+    "description": "A standup is about the work in front of you, and until now it happened somewhere else. The room surface puts your team in a circle on the board itself, with the session's work on the wall behind you.",
+    "tags": [
+      "creation-canvas",
+      "collaboration",
+      "ceremonies",
+      "3d",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "the-run-that-teaches-the-next-one",
+    "title": "The run that teaches the next one",
+    "date": "2026-09-07",
+    "description": "An agent that finishes verified work has just executed a procedure that works — and it used to vanish into a transcript. Agents now propose what they learned as a skill, your team approves it, and every later run follows it.",
+    "tags": [
+      "agents",
+      "skills",
+      "governance",
+      "observability",
+      "mcp",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "walk-me-through-what-you-made",
+    "title": "Twenty-four things landed on your board. Here is where to start.",
+    "date": "2026-09-07",
+    "description": "A generated canvas is the product working and, for the person who asked one question, a wall. The walkthrough groups what was made, orders it by what feeds what, and takes you round it one stop at a time.",
+    "tags": [
+      "creation-canvas",
+      "onboarding",
+      "product",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "import-your-records",
+    "title": "Import a quarter of records at once — and see the board lenses move",
+    "date": "2026-09-06",
+    "description": "The People, R&D, Quality and AI lenses on the Insights board always read from real tables, and for the datasets with no connector the only way in was one row at a time. Import now takes a file, maps its columns onto the server's own registry, checks every row before writing, and posts in batches you can watch land.",
+    "tags": [
+      "product-updates",
+      "insights",
+      "import",
+      "board-deck",
+      "measure"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "see-what-the-agent-changed-before-you-commit",
+    "title": "See what the agent changed — before you commit it",
+    "date": "2026-09-05",
+    "description": "An agent in your editor can edit your working tree, and the conversation used to be the only record that it had. The VS Code extension now carries a Changes section with a count badge and a pending-changes bar in the chat itself, so unreviewed edits announce themselves and every one is a click from its real diff.",
+    "tags": [
+      "vs-code",
+      "code-review",
+      "agents",
+      "git",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "ship-from-the-editor-commit-branch-pull-request",
+    "title": "Ship from the editor — commit, branch, pull request",
+    "date": "2026-09-05",
+    "description": "The agent in your editor can now finish the job it started. git_commit, git_push and open_pull_request give it a ticket branch and a review, not a shell. Asked to push straight to main, it offers a pull request instead — and pushing the base branch is a separate, declared act your approval gate prompts for.",
+    "tags": [
+      "vs-code",
+      "git",
+      "agents",
+      "code-review",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "grade-the-proof-and-close-the-loop",
+    "title": "Grade the proof — how a kill condition turns a launch into a decision",
+    "date": "2026-08-22",
+    "description": "Most teams record what they built and never what they learned. A proof now carries a verdict — met, missed or abandoned — with the number that decided it, which is what turns Idea to Real from a line into a loop.",
+    "tags": [
+      "methodology",
+      "idea-to-real",
+      "validation",
+      "product-strategy",
+      "metrics"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "install-your-verticals-kpi-dashboard",
+    "title": "The metrics your vertical actually runs on, installed in one click",
+    "date": "2026-08-22",
+    "description": "Every company has a finance tab. Almost none of them have the six numbers their own vertical is judged by. KPI dashboards ship as marketplace templates now — pick your sector, install, and the tiles your peers track are already on the board.",
+    "tags": [
+      "finance",
+      "dashboards",
+      "metrics",
+      "benchmarking",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "run-your-app-on-the-canvas",
+    "title": "Run the app your board just built — without leaving the board",
+    "date": "2026-08-22",
+    "description": "A canvas that writes a backend, a page and a setup note used to have nowhere to run them. The app surface assembles every code card into one working application, at real device widths, on the same board you built it on.",
+    "tags": [
+      "creation-canvas",
+      "app-development",
+      "preview",
+      "no-code",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "build-a-3d-world-in-the-browser",
+    "title": "Build a 3D world in the browser — and walk around in it",
+    "date": "2026-08-21",
+    "description": "Place props, move a camera and walk a scene with real physics, on the same canvas that writes your code. Games made here play, including a Roblox place decoded and walked in the browser.",
+    "tags": [
+      "creation-canvas",
+      "3d",
+      "game-development",
+      "roblox",
+      "webgl"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "read-any-pdf-even-the-scanned-ones",
+    "title": "Read any PDF — including the scanned ones nobody can search",
+    "date": "2026-08-21",
+    "description": "Modern PDFs store glyph indices, not letters, which is why so many tools hand back gibberish. Here is what actually goes wrong, and what happens now when you drop a scan, a contract or a résumé on the board.",
+    "tags": [
+      "documents",
+      "pdf",
+      "ocr",
+      "creation-canvas",
+      "resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "the-canvas-gave-the-screen-back-to-the-board",
+    "title": "Four bands of chrome, removed — the canvas gave the screen back to the board",
+    "date": "2026-08-21",
+    "description": "A workspace that spent a quarter of the window on controls, and what changed when the rule became: collapse hides controls, never status. With before and after.",
+    "tags": [
+      "creation-canvas",
+      "design",
+      "ux",
+      "product",
+      "mobile"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "close-the-deal-on-the-board-you-built-it-on",
+    "title": "Close the deal on the board you built it on",
+    "date": "2026-08-20",
+    "description": "Quotes that can be accepted, sequences that stop on a reply, trials with criteria agreed up front, trust packets and mutual action plans — the commercial half of the work as objects, next to the work itself.",
+    "tags": [
+      "sales",
+      "crm",
+      "quotes",
+      "mutual-action-plan",
+      "creation-canvas"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "fixed-price-milestones-and-escrow",
+    "title": "Fixed-price milestones, with the money held until it is delivered",
+    "date": "2026-08-20",
+    "description": "Escrow only works when both sides can see the same balance and the same next move. Here is how milestone funding, delivery, acceptance and release work when the schedule lives beside the work.",
+    "tags": [
+      "freelance",
+      "escrow",
+      "milestones",
+      "marketplace",
+      "contracts"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "from-offer-to-payroll-without-retyping-anything",
+    "title": "From offer to payroll without retyping anything — and the HR system you already run",
+    "date": "2026-08-19",
+    "description": "Two funnels used to stop next to each other: hiring ended at an accepted offer, and people started with an employee record somebody typed. Here is the handover, and the read-only connectors that stop headcount being guesswork.",
+    "tags": [
+      "hiring",
+      "hr",
+      "hrms",
+      "onboarding",
+      "integrations"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "the-founder-back-office-money-ownership-and-paperwork",
+    "title": "The founder back office — money in, ownership, and the paperwork before all the other paperwork",
+    "date": "2026-08-19",
+    "description": "Invoices you can issue and chase, ageing computed rather than typed, a cap table recorded as events instead of a percentage column, and the four founding documents as templates you can actually send for signature.",
+    "tags": [
+      "founder-ops",
+      "finance",
+      "cap-table",
+      "equity",
+      "legal",
+      "invoicing"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "fifteen-free-career-tools-and-a-salary-guide",
+    "title": "Fifteen career tools that compute an answer — and a salary guide that names your city",
+    "date": "2026-08-18",
+    "description": "Score a résumé, match it to a posting, tailor it, plan a route to a target role, prepare interview questions, check your market salary. Free, no account, and every number shows its working.",
+    "tags": [
+      "career",
+      "resume",
+      "salary",
+      "job-search",
+      "tools"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "four-questions-before-you-buy-enterprise-ai",
+    "title": "The four questions an enterprise AI purchase actually turns on",
+    "date": "2026-08-18",
+    "description": "Not \"which model\". Can it read our data, will it leak across tenants, what did that answer cost, and how do we know it is getting better — and what an honest answer to each looks like.",
+    "tags": [
+      "enterprise",
+      "evermind",
+      "security",
+      "procurement",
+      "rag"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "escape-your-diagramming-tool",
+    "title": "Escape Your Diagramming Tool — Visio, Lucidchart, Miro and Excalidraw, In",
+    "date": "2026-08-15",
+    "description": "Practical migration routes out of the commercial diagramming tools, what each export format actually preserves, and how to turn a picture back into editable shapes.",
+    "tags": [
+      "diagrams",
+      "visio",
+      "lucidchart",
+      "miro",
+      "excalidraw",
+      "migration",
+      "creation-canvas"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "every-diagram-format-the-canvas-reads",
+    "title": "Every Diagram Format the Creation Canvas Reads and Writes",
+    "date": "2026-08-15",
+    "description": "Nine notations — Draw.io, Mermaid, PlantUML, Graphviz DOT, BPMN 2.0, Excalidraw, ArchiMate, SVG and Visio — read into one shared graph, so any diagram you have can become any diagram you need.",
+    "tags": [
+      "creation-canvas",
+      "diagrams",
+      "drawio",
+      "mermaid",
+      "bpmn",
+      "visio",
+      "interoperability"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "idea-to-real-the-operating-methodology",
+    "title": "Idea to Real — the operating methodology behind Builderforce",
+    "date": "2026-08-15",
+    "description": "Four stages say where you are. Three acts say what you do. This is the method Builderforce is built around, why the middle act is the one that matters, and how a kill condition turns a straight line into a loop.",
+    "tags": [
+      "methodology",
+      "idea-to-real",
+      "product-strategy",
+      "validation"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "which-diagram-should-you-draw",
+    "title": "Which Diagram Should You Draw? Twelve Types, With Examples",
+    "date": "2026-08-15",
+    "description": "Flowchart, sequence, class, ER, state, C4, BPMN, mindmap, Gantt, journey, dependency graph and deployment diagram — what each one is actually for, and a working example you can paste.",
+    "tags": [
+      "diagrams",
+      "mermaid",
+      "bpmn",
+      "architecture",
+      "creation-canvas",
+      "uml"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "eight-ways-to-make-an-idea-real",
+    "title": "Eight ways to make an idea real — and how to pick one",
+    "date": "2026-08-14",
+    "description": "A demo video, a clickable prototype, a smoke test, a Wizard of Oz, a proof of concept, a pilot, a phone line, or the whole system running. Each answers a different question and costs a different amount. Here is the map.",
+    "tags": [
+      "methodology",
+      "validation",
+      "proof-of-concept",
+      "product-strategy"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "read-prove-build-the-inner-loop",
+    "title": "Read, Prove, Build — why reading an idea should cost nothing",
+    "date": "2026-08-13",
+    "description": "Three acts, and the first two are free on purpose. A look at what actually happens when a brief is read, why planning and building are two separate calls, and what a build really produces.",
+    "tags": [
+      "methodology",
+      "idea-to-real",
+      "validation",
+      "agentic-workforce"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "idea-make-run-measure-menu-as-methodology",
+    "title": "Idea · Make · Run · Measure — when a menu becomes a methodology",
+    "date": "2026-08-12",
+    "description": "Most product navigation is an org chart. Builderforce groups every destination by where it sits in the journey instead, generates the marketing site from the same list, and lets a build script prove the two can never disagree.",
+    "tags": [
+      "methodology",
+      "navigation",
+      "product-design",
+      "idea-to-real"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "creation-canvas-functionality-guide",
+    "title": "Creation Canvas Guide: Build, Analyze, Collaborate, and Work in 3D",
+    "date": "2026-08-09",
+    "description": "A practical guide to Creation Canvas functionality, including objects, Brain scope and review, file and data workflows, 2D and 3D navigation, collaboration, and export.",
+    "tags": [
+      "creation-canvas",
+      "how-to",
+      "brain",
+      "3d",
+      "collaboration",
+      "data"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "whats-new-always-on-canvas-workspace",
+    "title": "What’s New: An Always-On Canvas, Native Files, and Connected Tools",
+    "date": "2026-08-09",
+    "description": "Builderforce’s latest release keeps the Creation Canvas at the center of the product, opens tools and reference pages beside your work, and adds richer files, integrations, sharing, and local-first creation.",
+    "tags": [
+      "product-updates",
+      "creation-canvas",
+      "integrations",
+      "collaboration",
+      "local-first"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "learn-how-to-build-an-llm-interactive-course",
+    "title": "Learn How to Build an LLM—from Data to Deployment",
+    "date": "2026-08-08",
+    "description": "Generate a complete interactive LLM course on the Creation Canvas, work through hands-on labs and assessments, and export the training to any SCORM-compatible LMS.",
+    "tags": [
+      "llm",
+      "training",
+      "lms",
+      "scorm",
+      "xapi",
+      "creation-canvas"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-ai-coding-agents-compared",
+    "title": "AI Coding and Agent Platforms — A Criteria-First Guide",
+    "date": "2026-08-04",
+    "description": "A practical framework for evaluating AI editors, terminal agents, hosted engineering agents, open runtimes, and connected delivery platforms without relying on stale rankings.",
+    "tags": [
+      "comparison",
+      "ai-coding-tools",
+      "orchestration",
+      "governance"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "builderforce-vs-claude-code",
+    "title": "Builderforce.ai and Claude Code — Terminal Agent or Connected Delivery?",
+    "date": "2026-08-04",
+    "description": "Compare terminal-centered engineering with a multi-surface creative and delivery system using current requirements.",
+    "tags": [
+      "comparison",
+      "claude-code",
+      "orchestration",
+      "governance"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "builderforce-vs-cursor-windsurf",
+    "title": "Builderforce.ai, Cursor, and Windsurf — Canvas or AI-Native Editor?",
+    "date": "2026-08-04",
+    "description": "A criteria-first comparison of AI-native editing and connected human-and-agent delivery.",
+    "tags": [
+      "comparison",
+      "cursor",
+      "windsurf",
+      "creative-canvas"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "builderforce-vs-devin",
+    "title": "Builderforce.ai and Devin — Compare the Operating Model",
+    "date": "2026-08-04",
+    "description": "Compare hosted autonomous engineering and connected human-and-agent delivery without relying on stale prices or binary claims.",
+    "tags": [
+      "comparison",
+      "devin",
+      "autonomous-agents",
+      "governance"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "builderforce-vs-github-copilot",
+    "title": "Builderforce.ai and GitHub Copilot — Which Workflow Are You Buying?",
+    "date": "2026-08-04",
+    "description": "Compare editor assistance with a connected creative canvas and governed delivery using current, testable criteria.",
+    "tags": [
+      "comparison",
+      "copilot",
+      "github",
+      "orchestration"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "brain-operates-the-creation-canvas",
+    "title": "Brain Is a Canvas Operator, Not a Chatbot Beside the Work",
+    "date": "2026-08-02",
+    "description": "Builderforce Brain can read a scoped Creation Canvas, author supported object fields, arrange objects, create typed relationships, and propose native actions through a review-before-mutation contract.",
+    "tags": [
+      "creation-canvas",
+      "brain",
+      "ai-agents",
+      "human-in-the-loop",
+      "governance"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "create-before-you-sign-up",
+    "title": "Create Before You Sign Up: A Private Canvas That Grows With the Work",
+    "date": "2026-08-02",
+    "description": "Start a complete Builderforce Creation Canvas on your device without an account, then sign in only when publishing, delivery, training, integrations, or live collaboration need durable workspace resources.",
+    "tags": [
+      "creation-canvas",
+      "local-first",
+      "privacy",
+      "onboarding",
+      "collaboration"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "creation-canvas-templates-frames-branches-checkpoints",
+    "title": "From Blank Canvas to Repeatable Playbook: Templates, Frames, Branches, and Checkpoints",
+    "date": "2026-08-02",
+    "description": "Start with Builderforce Creation Canvas packs, save reusable frames, preserve named checkpoints, branch experiments, and merge objects explicitly instead of copying entire workspaces.",
+    "tags": [
+      "creation-canvas",
+      "templates",
+      "versioning",
+      "collaboration",
+      "workflows"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "design-build-debug-one-spatial-workspace",
+    "title": "Design, Build, and Debug in One Spatial Workspace",
+    "date": "2026-08-02",
+    "description": "Connect Website and WYSIWYG prototypes to code, repository context, editor selections, diagnostics, terminal output, local services, and browser previews in one Creation Session.",
+    "tags": [
+      "creation-canvas",
+      "vscode",
+      "prototyping",
+      "developer-tools",
+      "debugging"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "forty-eight-live-objects-one-creation-canvas",
+    "title": "48 Live Objects, One Extensible Creation Canvas",
+    "date": "2026-08-02",
+    "description": "Inside Builderforce Creation Canvas's registry-driven architecture: 48 object kinds, ten palette groups, six semantic connection types, capability gates, safe AI context, and one contract shared by web and VS Code.",
+    "tags": [
+      "creation-canvas",
+      "architecture",
+      "integrations",
+      "mcp",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "live-data-stories-on-the-creation-canvas",
+    "title": "From Raw Rows to a Live Data Story on One Canvas",
+    "date": "2026-08-02",
+    "description": "Import tabular evidence, profile it, create charts and KPIs, assemble dashboards and reports, and preserve the source relationships behind an executive data story in Builderforce Creation Canvas.",
+    "tags": [
+      "creation-canvas",
+      "data",
+      "dashboards",
+      "analytics",
+      "presentations"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "visual-team-rituals-humans-and-agents",
+    "title": "Run Visual Team Rituals With Humans and AI Agents",
+    "date": "2026-08-02",
+    "description": "Gather staff and agents into a shared stand-up object, surface progress and blockers, and turn approved follow-ups into connected work without losing the context of the ritual.",
+    "tags": [
+      "creation-canvas",
+      "collaboration",
+      "standups",
+      "ai-agents",
+      "teamwork"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "build-and-train-evermind-on-the-creation-canvas",
+    "title": "Build, Tune, and Evaluate an Evermind Model on the Creation Canvas",
+    "date": "2026-08-01",
+    "description": "Design an Evermind model pipeline visually, connect datasets and evaluation gates, collaborate with specialists, and deliver a governed model without leaving the Creation Canvas.",
+    "tags": [
+      "creation-canvas",
+      "evermind",
+      "model-training",
+      "llm",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "compare-projects-and-build-an-executive-roadmap",
+    "title": "Compare Projects Visually and Build an Evidence-Backed Executive Roadmap",
+    "date": "2026-08-01",
+    "description": "Use Builderforce Creation Canvas to compare project features, maturity, performance, and delivery evidence, then turn the result into an executive or sales roadmap.",
+    "tags": [
+      "creation-canvas",
+      "portfolio-management",
+      "roadmaps",
+      "executive-planning",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "creation-canvas-beyond-chat",
+    "title": "Beyond Chat — Why Creation Needs a Canvas, Not Another Prompt Window",
+    "date": "2026-08-01",
+    "description": "Builderforce Creation Canvas keeps the familiar AI prompt while turning workflows, websites, data, models, agents, and delivery into live objects in one durable session.",
+    "tags": [
+      "creation-canvas",
+      "collaboration",
+      "workflows",
+      "product-design",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "customer-feedback-to-ten-mockups",
+    "title": "From Customer Feedback to Ten Interactive Mockups in One Session",
+    "date": "2026-08-01",
+    "description": "A practical Creation Canvas workflow for importing customer evidence, synthesizing requested features, generating mockups, and delivering approved concepts through projects, tasks, and agents.",
+    "tags": [
+      "creation-canvas",
+      "customer-feedback",
+      "product-management",
+      "mockups",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "multiplayer-creation-canvas-web-vscode",
+    "title": "One Multiplayer Creation Session Across the Web and VS Code",
+    "date": "2026-08-01",
+    "description": "See how product, design, data, and engineering collaborate with AI in the same Builderforce Creation Session across the browser and a native VS Code editor surface.",
+    "tags": [
+      "creation-canvas",
+      "vscode",
+      "realtime-collaboration",
+      "developers",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "local-first-ai-webgpu-in-the-browser",
+    "title": "Local-First AI in the Browser, Done Properly",
+    "date": "2026-07-24",
+    "description": "SitePoint's WebGPU guide lays out the blueprint for running LLMs entirely on-device. Here's how Builderforce implements every best practice — Chrome's Prompt API, real token streaming, Web Worker isolation, GPU-loss recovery, and a progressive-enhancement cascade — and goes beyond it with on-device WebGPU training.",
+    "tags": [
+      "webgpu",
+      "local-first",
+      "privacy",
+      "deep-dive",
+      "evermind"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "automated-rfp-response-from-your-codebase",
+    "title": "From Codebase to Costed Proposal: Automated RFP & RFQ Responses",
+    "date": "2026-07-12",
+    "description": "Builderforce.ai turns an analyzed project into a branded, costed proposal — CTO and Product-Owner agents produce cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask, co-branded with the requester's palette and logo, with freshness-gated grounding so the proposal reflects the real system.",
+    "tags": [
+      "rfp",
+      "proposals",
+      "pre-sales",
+      "agents",
+      "delivery",
+      "cost"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "incident-management-on-call-and-war-rooms",
+    "title": "Incidents That Teach: On-Call, War Rooms, and RCAs Your Agents Learn From",
+    "date": "2026-07-12",
+    "description": "Builderforce.ai runs incidents end-to-end — a help-desk agent, on-call rotations, timed escalation, Teams/Slack/email paging, and a per-incident war-room — then feeds the root-cause analysis to your Knowledge base and the project's Evermind, so the workforce stops repeating the same failure.",
+    "tags": [
+      "incidents",
+      "on-call",
+      "monitoring",
+      "agents",
+      "reliability",
+      "system-of-record"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "memory-first-inference-skip-the-llm",
+    "title": "Answer Before You Pay: Memory-First Inference That Skips the LLM",
+    "date": "2026-07-12",
+    "description": "Before a paid model call, Builderforce.ai's Brain consults the project's own memory — an exact-repeat Q&A cache plus opt-in inference on the project's Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under a project, so a lesson taught once answers everywhere and the token bill falls as memory grows.",
+    "tags": [
+      "evermind",
+      "cost",
+      "semantic-cache",
+      "tokens",
+      "memory",
+      "agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "role-gated-accountability-proof-of-participation",
+    "title": "Proof of Participation: Role-Gated Delivery and the Accountability Report",
+    "date": "2026-07-12",
+    "description": "Builderforce.ai resolves the roles a ticket requires to the humans and agents capable of each, gates sign-off behind default-deny permissions, and records an immutable Accountability Report of Who, When, Verdict, Comments, and Contribution per role — so a Product Manager is never dispatched to write code and quality is proven at the board.",
+    "tags": [
+      "accountability",
+      "workforce",
+      "kanban",
+      "governance",
+      "roles",
+      "agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "ai-agent-personality-psychometric-personas",
+    "title": "Give Your AI Agents a Personality: Psychometric Personas Explained",
+    "date": "2026-07-05",
+    "description": "Builderforce.ai lets you give an AI agent a real, measurable personality — take a short psychometric test or move sliders across frameworks like HEXACO, Enneagram, and MBTI, and the resulting trait vector compiles into prompt directives and execution parameters. A cautious reviewer and a fast prototyper genuinely behave differently, consistently, run after run.",
+    "tags": [
+      "personas",
+      "personality",
+      "psychometric",
+      "agents",
+      "workforce",
+      "evermind"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "cobit-governance-readiness-for-agentic-it",
+    "title": "COBIT Governance Readiness for the Agentic Enterprise",
+    "date": "2026-07-05",
+    "description": "A plain-language guide to COBIT IT governance in the age of AI agents, including where instrumented platform workflows can contribute evidence and where controls still require review.",
+    "tags": [
+      "governance",
+      "cobit",
+      "compliance",
+      "audit",
+      "risk",
+      "enterprise"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "multi-party-team-chat-humans-and-agents",
+    "title": "Multi-Party Team Chat: @-Mention a Human or an Agent in the Same Thread",
+    "date": "2026-07-05",
+    "description": "Builderforce.ai turns AI chat into real team chat — shared threads scoped to your project, invite humans by email, invite AI agents into the room, and address any message to a specific participant. Talk to a colleague and the agent loop stays idle; @-mention an agent and it actually replies as itself, running a permission-scoped tool loop to act on the board. Works on the web and in VS Code.",
+    "tags": [
+      "team-chat",
+      "collaboration",
+      "agents",
+      "workforce",
+      "real-time",
+      "governance"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "real-time-collaboration-humans-and-agents",
+    "title": "Real-Time Collaboration on Builderforce: Meetings, Team Chat, and Video for Human + Agent Teams",
+    "date": "2026-07-05",
+    "description": "Builderforce.ai is where humans and AI agents collaborate in real time — a shared Kanban board, multi-party team chat you can address to a person or an @agent, live video meetings and standups over WebRTC, shared calendars with bookable availability, and the same collaboration surface inside VS Code. One system of record, everyone (and everything) on it.",
+    "tags": [
+      "collaboration",
+      "meetings",
+      "team-chat",
+      "video",
+      "workforce",
+      "real-time",
+      "agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "video-meetings-standups-and-shared-calendars",
+    "title": "Video Meetings, Standups, and Shared Calendars on Your Agentic Board",
+    "date": "2026-07-05",
+    "description": "Builderforce.ai adds live video and audio to your agentic workspace — WebRTC standups with cameras on the ceremony round-table, ad-hoc and direct calls, a bookable team calendar with availability windows and \"Find a time\", Google and Microsoft calendar sync, and one-click join from the web or VS Code. Media flows peer-to-peer and never touches the server.",
+    "tags": [
+      "meetings",
+      "video",
+      "collaboration",
+      "ceremonies",
+      "calendar",
+      "webrtc",
+      "workforce"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "vs-code-command-center-for-your-agentic-workforce",
+    "title": "The VS Code Command Center: Run Your Whole Agentic Workforce Without Leaving the Editor",
+    "date": "2026-07-05",
+    "description": "The BuilderForce VS Code extension is a full command center for a workforce of humans and AI agents — multi-party team chat, live at-a-glance status showing which sessions are executing or need your answer, a Meetings tree you can join natively, an Evermind sidebar to inspect and train your project's self-updating model, project and task trees, and human-in-the-loop approvals. Everything, in your editor.",
+    "tags": [
+      "vs-code",
+      "collaboration",
+      "workforce",
+      "agents",
+      "evermind",
+      "meetings",
+      "real-time"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "hire-assign-and-pay-for-work-in-one-place",
+    "title": "Hire, Assign, Track, and Pay for Work — All in One Place",
+    "date": "2026-07-04",
+    "description": "Juggling a freelancer's task list in one app, their timesheet in another, and payment in a third is where work falls through the cracks. Here's how to run the whole loop on Builderforce.",
+    "tags": [
+      "recruiting",
+      "hiring",
+      "recruiting-ops",
+      "team-activities",
+      "track-work",
+      "assign-tasks"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "send-hiring-managers-a-bias-free-candidate-packet",
+    "title": "How to Send Hiring Managers a Clean, Bias-Free Candidate Packet",
+    "date": "2026-07-01",
+    "description": "Forwarding a pile of resumes as email attachments makes recruiters look disorganized — and invites bias. Here's how to package a shortlist into one polished, optionally anonymized packet.",
+    "tags": [
+      "recruiting",
+      "hiring",
+      "agents",
+      "hiring-workspace",
+      "candidate-packet",
+      "anonymize-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "everything-an-agentic-employee-can-do",
+    "title": "Everything an Agentic Employee Can Do on BuilderForce",
+    "date": "2026-06-29",
+    "description": "An EMP — an agentic employee — is a first-class member of your workforce, not a chatbot. Here is the full picture of what one can do: hired from a marketplace, given skills and a personality, assigned work on the same board as humans, executing in the IDE, on-prem or in the cloud, governed by approval gates, and trainable into your own model.",
+    "tags": [
+      "agents",
+      "agentic-employee",
+      "workforce",
+      "capabilities",
+      "governance",
+      "training"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "migrate-and-integrate-jira-monday-rally-gitlab-bitbucket",
+    "title": "Migrate Without Fear: Jira, Monday, Rally, GitLab, Bitbucket and GitHub into BuilderForce",
+    "date": "2026-06-29",
+    "description": "Every external system BuilderForce connects to, and the staged migration importer that moves you off Jira, Monday or Rally — combine projects, map item types and users, review everything, then import. Or never leave your tracker and just sync. The Brain can run the whole thing.",
+    "tags": [
+      "integrations",
+      "migration",
+      "jira",
+      "monday",
+      "rally",
+      "gitlab",
+      "bitbucket",
+      "github",
+      "connectors"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "ai-development-maturity-diagnostic",
+    "title": "What's Your AI Development Maturity Level? A Free Four-Question Diagnostic",
+    "date": "2026-06-28",
+    "description": "Most teams adopted AI coding tools and still ship at the same pace, because the tools were bolted onto an unchanged process. This free diagnostic rates where your organization actually sits across four dimensions of AI-native development — and what it takes to reach the next level.",
+    "tags": [
+      "diagnostics",
+      "maturity",
+      "leadership",
+      "governance",
+      "ai-native-development"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "define-a-need-the-agentic-system-solves-it",
+    "title": "Define a Need, the Agentic System Solves It — One Spine Under Every Agent",
+    "date": "2026-06-28",
+    "description": "Any human defines a need in plain language, a dataset, a process chart, or a persona — and Builderforce.ai compiles it into an agent that runs in the IDE, on the desktop, or in the cloud. The compile primitive that unifies the platform is now live, end to end.",
+    "tags": [
+      "vision",
+      "compile-primitive",
+      "agent-spec",
+      "orchestration",
+      "workflows",
+      "on-device"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "inside-evermind-architecture",
+    "title": "Inside Evermind: The Architecture of a Self-Updating Model",
+    "date": "2026-06-28",
+    "description": "A technical deep-dive into Evermind — the selective state-space cortex, the write-through knowledge memory with its single-incumbent invariant, and the trainable limbic layer. The math, the proofs, and an honest account of what is measured versus what is hypothesized.",
+    "tags": [
+      "evermind",
+      "ssm",
+      "mamba",
+      "write-through-cognition",
+      "architecture",
+      "webgpu",
+      "research"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "transitioning-to-an-agentic-workforce",
+    "title": "Transitioning to an Agentic Workforce: Why Evermind Changes the Math",
+    "date": "2026-06-28",
+    "description": "A CTO/CEO guide to moving from a team of people to a team of teams. Why a frozen frontier model is the wrong foundation for an agentic workforce, how Evermind's Write-Through Cognition fixes it, and what the owned stack looks like end to end.",
+    "tags": [
+      "evermind",
+      "agentic-workforce",
+      "write-through-cognition",
+      "llm",
+      "strategy",
+      "leadership"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "agent-tech-stack-all-seven-layers",
+    "title": "The AI Agent Tech Stack, Built — How Builderforce.ai Implements All Seven Layers",
+    "date": "2026-06-27",
+    "description": "The seven-layer agent stack everyone diagrams — foundation model, orchestration, memory, RAG, tools, observability, deployment — is a shopping list of separate vendors. Builderforce.ai ships all seven as one integrated platform, and meets-or-exceeds the reference design at every layer.",
+    "tags": [
+      "agent-stack",
+      "rag",
+      "evaluation",
+      "memory",
+      "orchestration",
+      "architecture"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "agentic-tester-autonomous-qa",
+    "title": "The Agentic Tester: An Autonomous QA Agent That Files Its Own Bugs",
+    "date": "2026-06-27",
+    "description": "Point the Agentic Tester at your app, give it logins, and it ranks what to test from real usage heatmaps, generates Playwright specs, drives a real authenticated browser through your hottest flows on a schedule, and files every bug it finds straight onto your board — where a fix agent picks it up.",
+    "tags": [
+      "qa",
+      "agentic-tester",
+      "testing",
+      "playwright",
+      "autonomous",
+      "system-of-record"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "evermind-self-updating-model",
+    "title": "Evermind: A Model That Learns As It Works — And Never Goes Stale",
+    "date": "2026-06-27",
+    "description": "Frozen frontier models go out of date the moment they ship. Evermind is Builderforce.ai's self-updating model, governed by Write-Through Cognition — new knowledge is written straight through, so an update replaces what came before with no reconciliation step.",
+    "tags": [
+      "evermind",
+      "write-through-cognition",
+      "ssm",
+      "llm",
+      "on-device",
+      "memory"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "knowledge-management-sops-and-compliance",
+    "title": "SOPs Your Agents Can Read and Your Auditor Can Trust",
+    "date": "2026-06-27",
+    "description": "Builderforce.ai's Knowledge Management subsystem is a versioned base for SOPs, processes and docs — with read-acknowledgement audit trails for SOX, TISAX and ISO 27001, AI-assisted authoring, and real-time co-editing — so the same knowledge that proves compliance also grounds your agents.",
+    "tags": [
+      "knowledge-management",
+      "compliance",
+      "sops",
+      "governance",
+      "audit",
+      "system-of-record"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "planning-spine-cost-bearing-delivery",
+    "title": "The Planning Spine: One Dated, Cost-Bearing Hierarchy from Portfolio to Task",
+    "date": "2026-06-27",
+    "description": "Most teams keep strategy in a slide deck, delivery in a board, and cost in a spreadsheet — and reconcile them by hand. Builderforce.ai's Planning Spine unifies portfolio, initiative, epic and task into one dated timeline where every level carries its own rolled-up cost, split CAPEX vs OPEX.",
+    "tags": [
+      "planning",
+      "pmo",
+      "finops",
+      "capex-opex",
+      "portfolio",
+      "system-of-record"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "quality-error-observability-one-click-fix",
+    "title": "From Stack Trace to Pull Request: Error Observability with a One-Click Agent Fix",
+    "date": "2026-06-27",
+    "description": "Builderforce.ai ingests runtime errors from your browser SDK, OpenTelemetry, Sentry, PostHog or LogRocket, groups them by fingerprint, and turns any error group into a fix task an agent picks up and ships as a pull request — closing the loop from crash to PR.",
+    "tags": [
+      "observability",
+      "quality",
+      "errors",
+      "agents",
+      "one-click-fix",
+      "system-of-record"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "single-pane-board-connectors",
+    "title": "One Board, Every Tracker: Connecting Linear, Jira, Sentry and PagerDuty",
+    "date": "2026-06-27",
+    "description": "Builderforce.ai's board connectors sync work two-ways with Linear, Jira, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry and PagerDuty — so your agent workforce can act on tickets and incidents wherever they originate, without forcing a migration.",
+    "tags": [
+      "integrations",
+      "connectors",
+      "single-pane",
+      "board-sync",
+      "itsm",
+      "incident"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "earn-verifiable-certificates-and-level-up-your-career",
+    "title": "Earn Verifiable Certificates and Actually Level Up — Not Just Collect PDFs",
+    "date": "2026-06-24",
+    "description": "Most online courses hand you a PDF nobody can verify. Builderforce Learning gives you tamper-proof certificates, a structured path to a real goal, and momentum that keeps you going.",
+    "tags": [
+      "learning",
+      "training",
+      "courses",
+      "upskilling",
+      "scorm-course",
+      "learning-path"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "system-of-record-for-agentic-work",
+    "title": "The System of Record for Agentic Work",
+    "date": "2026-06-23",
+    "description": "In the agentic era, half your workforce is software — and for the first time, every unit of work is fully instrumented. Builderforce.ai turns that into one system of record where work is costed and attributed from idea to ship to learn.",
+    "tags": [
+      "enterprise",
+      "system-of-record",
+      "observability",
+      "finops",
+      "agentic"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "every-role-operating-picture",
+    "title": "Every Role Gets Its Operating Picture",
+    "date": "2026-06-22",
+    "description": "When every unit of work is instrumented and costed, the CEO, CTO, CFO, PMO and CISO can all work from the same source of truth. Here is what each role gets from one instrumented system — and how role-based access keeps it appropriate.",
+    "tags": [
+      "enterprise",
+      "leadership",
+      "finops",
+      "dora",
+      "governance",
+      "pmo"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "autonomous-swimlane-execution",
+    "title": "Autonomous Swimlane Execution — Turn Your Kanban Board Into a Self-Driving Workforce",
+    "date": "2026-06-18",
+    "description": "Assign an AI agent to a Kanban swimlane and the board runs itself — tickets dispatch automatically, work advances lane to lane, and execution stops only at the approval gates you choose. Here's how self-driving delivery works on Builderforce.ai.",
+    "tags": [
+      "kanban",
+      "orchestration",
+      "autonomous",
+      "swimlanes",
+      "approval-gates",
+      "agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "semantic-response-cache",
+    "title": "Cut Your LLM Token Bill With a Cross-Surface Semantic Cache",
+    "date": "2026-06-16",
+    "description": "The single biggest cost lever in an AI platform is never paying twice for the same answer. Builderforce.ai's two-tier semantic cache reuses a prior response when a new prompt means the same thing — across your browser, your agents, and the gateway.",
+    "tags": [
+      "semantic-cache",
+      "cost-optimization",
+      "llm",
+      "performance",
+      "tokens"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "build-a-career-roadmap-with-ai",
+    "title": "How to Build a Career Roadmap with AI: Targets, Gaps, and a 90-Day Plan",
+    "date": "2026-06-14",
+    "description": "Turn a vague ambition into a dated plan. This guide shows how to pick a realistic target role, run an AI gap analysis across the eight signals recruiters actually read, and convert the gaps into a 30/60/90/180-day roadmap with Career 360.",
+    "tags": [
+      "career-strategy",
+      "career-growth",
+      "career-360",
+      "career-goals",
+      "career-roadmap",
+      "ai-career-planner"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "turn-your-references-into-a-job-winning-asset",
+    "title": "Stop Emailing References as an Afterthought — Turn Them Into a Job-Winning Asset",
+    "date": "2026-06-11",
+    "description": "Most candidates treat references as a formality. Here's how to collect, verify, and showcase references that quietly close the deal — with full control over what stays private.",
+    "tags": [
+      "career-strategy",
+      "career-growth",
+      "references",
+      "reference-page",
+      "job-references",
+      "verified-references"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "sync-your-resume-everywhere-without-copy-paste",
+    "title": "How to Sync One Master Resume to LinkedIn, Indeed, and Every Other Job Board",
+    "date": "2026-06-10",
+    "description": "Keep one master resume and push it everywhere without copy-paste drift. This guide shows how Profile Sync generates paste-ready blocks for nine vendors and uses the Chrome extension for safe two-way sync with LinkedIn, Indeed, and more.",
+    "tags": [
+      "job-search",
+      "career-strategy",
+      "vendor-sync",
+      "profile-sync",
+      "master-resume",
+      "resume-copy-paste"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "extract-skills-from-any-job-or-resume",
+    "title": "How to Extract Every Skill from a Job Description or Resume with AI",
+    "date": "2026-06-09",
+    "description": "Stop reading job descriptions line by line. This guide shows how to pull every skill from any job posting or resume — grouped, deduplicated, and synonym-aware — and turn it into a skills-gap comparison with the AI Skill Extractor.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "skill-extractor",
+      "skill-matching",
+      "skills-gap-analysis"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-ask-for-a-reference-and-share-it",
+    "title": "How to Ask for a Reference (and Share It So It Counts)",
+    "date": "2026-06-04",
+    "description": "Ask for a strong reference the right way, collect them on Builderforce, and share a clean reference link with employers — including who to ask, what to give them, and timing.",
+    "tags": [
+      "job-search",
+      "career-strategy",
+      "references",
+      "reference-list",
+      "share-references",
+      "reference-letter"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-leave-a-company-review-that-helps",
+    "title": "How to Leave a Company Review That Actually Helps People",
+    "date": "2026-06-03",
+    "description": "Write a fair, specific company review on Builderforce — rate the six sub-axes honestly, give actionable pros and cons, and earn a verified-employee badge so your review carries weight.",
+    "tags": [
+      "job-search",
+      "career-strategy",
+      "company-reviews",
+      "write-employer-review",
+      "company-culture-review",
+      "honest-employer-review"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-book-a-coaching-session-on-hired-video",
+    "title": "How to Book a Career Coaching Session on Builderforce",
+    "date": "2026-06-02",
+    "description": "Find a coach, book a session, and get the most out of career coaching on Builderforce — including resume feedback and the difference between a one-off session and ongoing coaching.",
+    "tags": [
+      "coaching",
+      "career-growth",
+      "bookings",
+      "career-coaching",
+      "resume-feedback",
+      "career-coach-booking"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "team-health-signals-every-manager-should-watch",
+    "title": "Team Health Signals Every Manager Should Watch (Before People Quit)",
+    "date": "2026-05-29",
+    "description": "The early-warning signals of a team in trouble — engagement drift, 1:1 cancellations, goal stalls — and how to read them on Builderforce's team health view before they become resignations.",
+    "tags": [
+      "people-ops",
+      "workforce",
+      "management",
+      "team-health",
+      "team-morale",
+      "people-analytics"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "add-ai-voiceover-to-your-video-resume",
+    "title": "Add a Studio-Quality AI Voiceover to Your Video Resume — Free, In Your Browser",
+    "date": "2026-05-28",
+    "description": "Narrate your video resume in a natural AI voice without a microphone or a recording studio. Here's how browser-based voiceover, per-scene scripts, and voice cloning work on Builderforce.",
+    "tags": [
+      "creation-canvas",
+      "video-resume",
+      "studio",
+      "ai-voiceover",
+      "voice-cloning",
+      "free-ai-narration"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-earn-a-verifiable-certificate-on-hired-video",
+    "title": "How to Earn a Verifiable Certificate on Builderforce (and Prove It's Real)",
+    "date": "2026-05-27",
+    "description": "Complete a course or learning path on Builderforce to earn an HMAC-signed certificate anyone can verify — plus how to share it so an employer can confirm it's genuine.",
+    "tags": [
+      "learning",
+      "training",
+      "courses",
+      "hmac-certificate",
+      "prove-certification",
+      "learning-certificate"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "ai-recruiter-agent-source-50-candidates-in-5-minutes",
+    "title": "Source 50 Candidates in 5 Minutes: The AI Recruiter Agent v2 Playbook",
+    "date": "2026-05-25",
+    "description": "Use Builderforce's AI Recruiter Agent to convert a plain-English brief into a ranked shortlist with personalized outreach drafts and scheduled follow-ups — without touching Boolean search.",
+    "tags": [
+      "recruiting",
+      "hiring",
+      "agents",
+      "recruiter-agent",
+      "semantic-sourcing",
+      "ai-recruiter-agent"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "hired-video-vs-glassdoor-reviews-salary-employer-branding",
+    "title": "Builderforce vs Glassdoor: Employer Branding, Reviews, and Salary Data",
+    "date": "2026-05-25",
+    "description": "Glassdoor is the legacy reviews + salary surface. Builderforce bundles a multi-axis reviews system, a role × city salary grid, and a recruiter workflow on top — at one flat monthly rate.",
+    "tags": [
+      "comparison",
+      "recruiting",
+      "hiring",
+      "companies",
+      "glassdoor-vs",
+      "salary-by-city"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "hired-video-vs-indeed-when-to-use-each",
+    "title": "Builderforce vs Indeed: When to Use Each Platform in 2026",
+    "date": "2026-05-25",
+    "description": "Indeed has unmatched scale (31 hires per minute). Builderforce has AI Recruiter Agent v2, multi-format candidate pitches, and a flat monthly cap. Here's how to choose.",
+    "tags": [
+      "comparison",
+      "recruiting",
+      "hiring",
+      "for-recruiters",
+      "indeed-vs",
+      "indeed-pricing"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "hired-video-vs-linkedin-recruiter-2026-comparison",
+    "title": "Builderforce vs LinkedIn Recruiter: A 2026 Cost and Capability Breakdown",
+    "date": "2026-05-25",
+    "description": "LinkedIn Recruiter Corporate starts at ~$1,080/month per seat. Builderforce Pro is one flat monthly rate with unlimited seats. Here's what each gets you in 2026 — and where each one wins.",
+    "tags": [
+      "comparison",
+      "recruiting",
+      "hiring",
+      "for-recruiters",
+      "linkedin-recruiter-vs",
+      "builderforce-vs-linkedin"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "hired-video-vs-ziprecruiter-pricing-ai-video-screening",
+    "title": "Builderforce vs ZipRecruiter: Pricing, AI Matching, and Video Screening Compared",
+    "date": "2026-05-25",
+    "description": "ZipRecruiter Standard starts at ~$299/mo per job slot. Builderforce Pro is one flat monthly rate with unlimited postings and unlimited seats. Here's the workflow-level comparison.",
+    "tags": [
+      "comparison",
+      "recruiting",
+      "hiring",
+      "for-recruiters",
+      "ai-matching",
+      "video-screening"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "research-employers-with-reviews-and-salary-data",
+    "title": "How to Use the Employer Research Tool: Reviews and Salary Data in 10 Minutes",
+    "date": "2026-05-25",
+    "description": "A walkthrough of Builderforce's Employer Research tool — combine multi-axis company reviews with role × city salary data to pressure-test an offer before you accept, or to negotiate the one you have.",
+    "tags": [
+      "job-search",
+      "career-strategy",
+      "employer-research",
+      "salary-by-city",
+      "company-reviews",
+      "employee-reviews"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "run-a-live-screening-block-in-30-minutes",
+    "title": "Run a 30-Minute Live Screening Block and Replace Two Weeks of Phone Calls",
+    "date": "2026-05-25",
+    "description": "ZipIntro-style back-to-back video screening blocks for any role on Builderforce. Set a window, schedule matched candidates, and run 6+ interviews in one sitting.",
+    "tags": [
+      "recruiting",
+      "hiring",
+      "agents",
+      "live-screening",
+      "zipintro-alternative",
+      "live-video-screening"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-build-an-org-chart-that-stays-accurate",
+    "title": "How to Build an Org Chart That Stays Accurate",
+    "date": "2026-05-24",
+    "description": "Build a live org chart on Builderforce that reflects who actually reports to whom — including external and placeholder roles — and keeps itself current as your roster changes.",
+    "tags": [
+      "people-ops",
+      "workforce",
+      "management",
+      "roster",
+      "headcount-roster",
+      "company-org-chart"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-build-a-3d-world-resume-in-hired-video-studio",
+    "title": "How to Build a 3D World Resume in the Builderforce Creation Canvas",
+    "date": "2026-05-22",
+    "description": "Use the 3D World game studio in Builderforce to build an explorable, interactive resume scene with Three.js-powered objects and physics — no game-engine install required.",
+    "tags": [
+      "creation-canvas",
+      "video-resume",
+      "studio",
+      "3d-resume",
+      "game-resume",
+      "three-js-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "retained-vs-contingency-search-and-the-power-of-warm-intros",
+    "title": "Retained vs Contingency Search — and Why Warm Intros Beat Both",
+    "date": "2026-05-20",
+    "description": "Understand the difference between retained and contingency recruiting, when each makes sense, and why a warm introduction outperforms cold outreach for the roles that matter most.",
+    "tags": [
+      "recruiting",
+      "hiring",
+      "recruiting-ops",
+      "recruiter-agent",
+      "retained-search",
+      "warm-intro-hiring"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-run-a-classroom-cohort-as-an-educator",
+    "title": "How to Run a Classroom Cohort as an Educator on Builderforce",
+    "date": "2026-05-19",
+    "description": "Set up a cohort, enroll students, hand out learning assignments, and track classroom analytics on Builderforce — the educator workflow that turns a self-paced course into a live class.",
+    "tags": [
+      "learning",
+      "training",
+      "courses",
+      "classrooms",
+      "run-a-cohort",
+      "educator-tools"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-make-an-animated-comic-resume-in-hired-video-studio",
+    "title": "How to Make an Animated Comic Resume in the Builderforce Creation Canvas",
+    "date": "2026-05-16",
+    "description": "Turn your career story into a panel-by-panel animated comic in the Builderforce Creation Canvas using the animation media kind — keyframes, layers, and a browser-rendered video export.",
+    "tags": [
+      "creation-canvas",
+      "video-resume",
+      "studio",
+      "comic-resume",
+      "motion-resume",
+      "animated-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "structured-scorecards-and-blind-review-to-reduce-hiring-bias",
+    "title": "Structured Scorecards and Blind Review: How to Reduce Hiring Bias",
+    "date": "2026-05-13",
+    "description": "Replace gut-feel interviews with structured scorecards and blind review. Define the dimensions before you interview, score consistently, and aggregate decisions to keep bias out of hiring.",
+    "tags": [
+      "recruiting",
+      "hiring",
+      "recruiting-ops",
+      "scorecards",
+      "interview-rubric",
+      "structured-hiring"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-host-a-hiring-event-on-hired-video",
+    "title": "How to Host a Hiring Event on Builderforce",
+    "date": "2026-05-11",
+    "description": "Create, promote, and manage a hiring event on Builderforce — set the details, share a public page, collect RSVPs, and run the day from one manage view.",
+    "tags": [
+      "events",
+      "hiring",
+      "event-rsvp",
+      "talent-event",
+      "hiring-meetup",
+      "create-an-event"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-launch-a-course-and-upload-scorm-on-hired-video",
+    "title": "How to Launch a Course (and Upload SCORM) on Builderforce",
+    "date": "2026-05-10",
+    "description": "Publish a course on Builderforce as a Creator or employer — structure modules, upload SCORM 1.2 packages, track completion with the built-in xAPI LRS, and issue verifiable certificates.",
+    "tags": [
+      "learning",
+      "training",
+      "courses",
+      "xapi-lrs",
+      "upload-scorm",
+      "sell-a-course"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-make-a-podcast-episode-in-hired-video-studio",
+    "title": "How to Make a Podcast Episode in the Builderforce Creation Canvas (Step-by-Step)",
+    "date": "2026-05-08",
+    "description": "Record, script, and publish a podcast-style audio episode in the Builderforce Creation Canvas — using the teleprompter, AI voiceover, and multi-track audio editing without leaving the browser.",
+    "tags": [
+      "creation-canvas",
+      "video-resume",
+      "studio",
+      "audio-resume",
+      "podcast-resume",
+      "ai-voiceover-podcast"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-run-effective-one-on-ones",
+    "title": "How to Run Effective 1:1s (and Actually Track the Follow-Through)",
+    "date": "2026-05-06",
+    "description": "A manager's guide to 1:1s that build trust and surface problems early — the cadence, the agenda, who owns the conversation, and how to track action items so nothing falls through.",
+    "tags": [
+      "people-ops",
+      "workforce",
+      "management",
+      "one-on-ones",
+      "1-1-template",
+      "1-1-action-items"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-run-take-home-assignments-without-losing-candidates",
+    "title": "How to Run Take-Home Assignments Without Losing Good Candidates",
+    "date": "2026-05-03",
+    "description": "A practical guide to fair, predictive take-home assignments: scope them to two hours, pay for longer ones, score with a rubric, and use blind review to keep bias out of the evaluation.",
+    "tags": [
+      "recruiting",
+      "hiring",
+      "recruiting-ops",
+      "scorecards",
+      "fair-take-home",
+      "work-sample-test"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-make-a-video-resume-in-hired-video-studio",
+    "title": "How to Make a Video Resume in the Builderforce Creation Canvas (60-Second Method)",
+    "date": "2026-04-30",
+    "description": "Record a polished 60-second video resume in the Builderforce Creation Canvas using the teleprompter, scene-by-scene retakes, AI voiceover, and browser-side render — start to publish in one tab.",
+    "tags": [
+      "creation-canvas",
+      "video-resume",
+      "studio",
+      "video-cv",
+      "video-resume-studio",
+      "teleprompter-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "video-resume-examples-that-land-interviews",
+    "title": "Video Resume Examples That Land Interviews (And the Patterns Behind Them)",
+    "date": "2026-04-26",
+    "description": "Three worked examples — Hook-Led, Story-Led, Pivot-Led — showing what separates a video resume that gets a callback from one that gets ignored. Each opens in Studio as a starter template.",
+    "tags": [
+      "video-resume",
+      "creation-canvas",
+      "studio",
+      "video-cv",
+      "video-resume-tips",
+      "video-resume-hook"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "what-makes-a-standout-candidate-profile",
+    "title": "What Makes a Standout Candidate Profile (And How to Build One)",
+    "date": "2026-04-26",
+    "description": "Three real candidate profiles, broken down: the headline that lands, the metrics that matter, and the signals recruiters scan for in seven seconds.",
+    "tags": [
+      "career-strategy",
+      "career-growth",
+      "people",
+      "talent-profile",
+      "headline-writing",
+      "candidate-profile"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-nurses-and-healthcare",
+    "title": "The Best Resume Template for Nurses, Physicians, and Allied Health Roles",
+    "date": "2026-04-25",
+    "description": "Healthcare resumes are credentialing documents. Why the Clinical Blue template puts licenses, certifications, and clinical specialties above the fold — and how to write clinical bullets that don't read like duty lists.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "healthcare-clinical-blue",
+      "rn-resume",
+      "np-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-sales-and-business-development",
+    "title": "The Best Resume Template for Sales and Business Development Roles",
+    "date": "2026-04-25",
+    "description": "Sales hiring is quota-driven. Why the Growth Emerald template puts achievement metrics — quota attainment, deal sizes, ARR closed — above the work history, and how to write quota-led bullets.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "sales-growth-emerald",
+      "ae-resume",
+      "sdr-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-software-engineers",
+    "title": "The Best Resume Template for Software Engineers and Developers",
+    "date": "2026-04-25",
+    "description": "Why engineers need a different resume than designers — tech stack as a sidebar, projects weighted equally with work history, and how the Dev Graphite template signals senior-eng fluency.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "software-engineer-graphite",
+      "faang-resume",
+      "developer-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-designers-and-creatives",
+    "title": "The Best Resume Template for Designers, Creatives, and Product Builders",
+    "date": "2026-04-24",
+    "description": "The creative resume paradox: less design wins. Why the Minimal Slate template's monospace font and generous whitespace work for product designers, creative directors, and indie makers.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "creative-minimal",
+      "monospace-resume",
+      "minimalist-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-hospitality-and-retail",
+    "title": "The Best Resume Template for Hospitality, Retail, and Customer-Facing Roles",
+    "date": "2026-04-23",
+    "description": "Hospitality hiring is about personality, reliability, and service mindset. Why the Warm Amber template's friendly palette and approachable layout help service candidates stand out.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "hospitality-amber",
+      "hotel-resume",
+      "retail-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-new-grads-and-interns",
+    "title": "The Best Resume Template for New Grads and Interns (2026)",
+    "date": "2026-04-22",
+    "description": "When you have limited work history, the order of sections matters more than the design. How the Education First template surfaces projects, coursework, and internships above thin work history.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "intern-education-first",
+      "intern-resume",
+      "college-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-executives-and-c-suite",
+    "title": "The Best Resume Template for Executive and C-Suite Roles",
+    "date": "2026-04-21",
+    "description": "Executive resumes are narrative documents, not skill lists. Why the Trusted Taupe template's spacious serif layout works for VPs, Directors, and C-suite candidates.",
+    "tags": [
+      "career-strategy",
+      "career-growth",
+      "executive-taupe",
+      "cxo-resume",
+      "executive-cv",
+      "board-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-consulting-and-risk",
+    "title": "The Best Resume Template for Consulting, Risk, and Audit Roles",
+    "date": "2026-04-20",
+    "description": "Why consulting and risk recruiters respond to ALL-CAPS headings and a dark, structured layout — and how to use the Asphalt template to frame engagements rather than job titles.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "risk-asphalt",
+      "big-4-resume",
+      "audit-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "best-resume-template-for-finance-and-payroll",
+    "title": "The Best Resume Template for Finance, Accounting, and Payroll Roles",
+    "date": "2026-04-19",
+    "description": "Why finance recruiters expect a sober, two-column print layout — and how the Iron Gray template is built to pass ATS filters while signaling industry fit.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "payroll-iron-gray",
+      "payroll-resume",
+      "two-column-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-choose-the-right-resume-template",
+    "title": "How to Choose the Right Resume Template for Your Industry (2026)",
+    "date": "2026-04-18",
+    "description": "A short guide to picking the resume template that signals fit for your industry — when to use a serif print layout, when ALL-CAPS headings help, and when to lead with education.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "marketplace-templates",
+      "resume-design",
+      "resume-template"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-prepare-for-any-job-interview",
+    "title": "How to Prepare for Any Job Interview with AI Practice",
+    "date": "2026-04-14",
+    "description": "A comprehensive guide to interview preparation: common questions by role, the STAR method, AI mock interviews, and how to build confidence before the real thing.",
+    "tags": [
+      "interview-prep",
+      "hiring",
+      "interview",
+      "star-method",
+      "ai-interview",
+      "mock-interview"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "parse-resume-pdf-to-structured-json",
+    "title": "How to Parse a Resume PDF Into Structured JSON (Developer Guide)",
+    "date": "2026-04-08",
+    "description": "A technical guide to resume parsing: how to extract structured data from PDF resumes using AI, with schema examples, common pitfalls, and integration patterns.",
+    "tags": [
+      "developer-tools",
+      "api",
+      "pdf-to-json",
+      "resume-api",
+      "resume-parser",
+      "resume-extraction"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "write-a-professional-summary-that-gets-noticed",
+    "title": "How to Write a Professional Summary That Gets Noticed (AI Guide)",
+    "date": "2026-04-03",
+    "description": "Your professional summary is the first thing recruiters read. Learn how to write one that hooks in 5 seconds — or generate one instantly with AI.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "summarize-resume",
+      "about-me-resume",
+      "linkedin-summary"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "merge-multiple-resumes-into-one",
+    "title": "How to Merge Multiple Resumes Into One Master Resume",
+    "date": "2026-03-31",
+    "description": "Have 3 resumes for 3 different roles? Learn how to consolidate them into a single master resume — without losing a single achievement — using AI deduplication.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "resume-consolidator",
+      "merge-resumes",
+      "master-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-write-your-personal-value-proposition",
+    "title": "How to Write a Personal Value Proposition That Wins Interviews",
+    "date": "2026-03-19",
+    "description": "A value proposition is your 30-second answer to 'Why should we hire you?' Learn to craft one that combines your resume, the job, and the company's mission.",
+    "tags": [
+      "career-strategy",
+      "career-growth",
+      "value-proposition",
+      "elevator-pitch",
+      "interview-pitch",
+      "personal-brand-statement"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "security-and-multi-tenant-architecture",
+    "title": "Security and Multi-Tenant Architecture — How Builderforce Keeps Your Work Isolated",
+    "date": "2026-03-16",
+    "description": "A deep dive into how Builderforce.ai handles multi-tenancy, role-based access control, session security, audit trails, and the trust model for BuilderForce Agents agent authentication.",
+    "tags": [
+      "security",
+      "multi-tenant",
+      "rbac",
+      "audit",
+      "authentication",
+      "compliance"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "in-browser-ide-and-collaboration",
+    "title": "The In-Browser IDE — Full-Stack Development Without a Local Setup",
+    "date": "2026-03-15",
+    "description": "How Builderforce's in-browser IDE works — WebContainers, Monaco editor, real-time collaboration, AI-pair programming, and how it connects to your BuilderForce Agents agents for seamless human-AI co-authorship.",
+    "tags": [
+      "ide",
+      "webcontainers",
+      "collaboration",
+      "monaco",
+      "ai-coding",
+      "browser"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "specs-and-planning-with-ai",
+    "title": "Specs and Planning — From Idea to Executable Task with AI",
+    "date": "2026-03-14",
+    "description": "How Builderforce.ai structures product thinking into actionable agent work — using specs, PRDs, architecture documents, and AI-assisted task breakdown to move from raw ideas to a running multi-agent workflow.",
+    "tags": [
+      "specs",
+      "planning",
+      "prd",
+      "architecture",
+      "tasks",
+      "brainstorm",
+      "ai-planning"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "skills-assignment-and-the-marketplace",
+    "title": "Skills, Assignments, and the Marketplace — Equipping Your Agents",
+    "date": "2026-03-13",
+    "description": "How the Builderforce skills system works — from browsing and publishing in the marketplace, to assigning skills at tenant or agentHost scope, to how skills load into running BuilderForce Agents agents at startup.",
+    "tags": [
+      "skills",
+      "marketplace",
+      "assignments",
+      "agents",
+      "plugins",
+      "extensions"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "fleet-management-and-agent-routing",
+    "title": "Fleet Management — Running and Routing a BuilderForce Agents Mesh",
+    "date": "2026-03-12",
+    "description": "How to register, monitor, and route work across a fleet of BuilderForce Agents instances from the Builderforce portal — covering heartbeats, capability declarations, smart routing, and the agentHost-to-agentHost mesh.",
+    "tags": [
+      "fleet",
+      "builderforce",
+      "routing",
+      "mesh",
+      "capabilities",
+      "orchestration"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "task-execution-and-observability",
+    "title": "Task Execution and the Observability Portal",
+    "date": "2026-03-11",
+    "description": "How Builderforce tracks every task from creation through execution to completion — the task model, execution lifecycle, workflow telemetry, and how to use the portal's timeline and dashboard to understand what your agents are doing.",
+    "tags": [
+      "tasks",
+      "execution",
+      "observability",
+      "telemetry",
+      "timeline",
+      "workflows"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "approval-gates-and-human-oversight",
+    "title": "Approval Gates — Keeping Humans in Control of Agent Actions",
+    "date": "2026-03-10",
+    "description": "How Builderforce.ai's approval gate system lets you define exactly which agent actions require human sign-off, block execution until a decision is made, and maintain a complete audit trail.",
+    "tags": [
+      "approval-gates",
+      "human-in-the-loop",
+      "governance",
+      "security",
+      "orchestration"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "write-a-confident-resume-tone-guide",
+    "title": "How to Write a Confident, Action-Driven Resume (Tone & Sentiment Guide)",
+    "date": "2026-03-10",
+    "description": "Your resume's tone matters as much as its content. Learn how AI sentiment analysis reveals weak phrasing, passive language, and missed opportunities to sound more assertive.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "sentiment-analysis",
+      "resume-tone",
+      "confident-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "product-ideation-with-builderforce",
+    "title": "Product Ideation with Builderforce — The Original Workflow and Its Creation Canvas Successor",
+    "date": "2026-03-08",
+    "description": "See how Builderforce's original multi-surface ideation workflow evolved into one Creation Canvas session for evidence, mockups, projects, tasks, and agent delivery.",
+    "tags": [
+      "product-ideation",
+      "creation-canvas",
+      "project-management",
+      "workforce"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "ai-dataset-generation-best-practices",
+    "title": "AI Dataset Generation Best Practices",
+    "date": "2026-03-05",
+    "description": "Tips and techniques for generating high-quality instruction-tuning datasets with Builderforce — from writing effective capability prompts to filtering noise.",
+    "tags": [
+      "dataset",
+      "fine-tuning",
+      "best-practices",
+      "quality"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "builderforce-agents-and-agent-integration",
+    "title": "BuilderForce Agents and Agent Integration — Building with the Marketplace",
+    "date": "2026-03-05",
+    "description": "Learn how BuilderForce Agents powers agent-to-agent communication on Builderforce, how to discover and integrate agents from the marketplace, and how to compose multi-agent pipelines for complex tasks.",
+    "tags": [
+      "builderforce",
+      "agents",
+      "marketplace",
+      "integration",
+      "multi-agent"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "introduction-and-overview",
+    "title": "Welcome to Builderforce.ai — The AI-Native Development Platform",
+    "date": "2026-03-01",
+    "description": "Discover what Builderforce.ai is, why it was built, and how its AI agents, in-browser training, and workforce marketplace are redefining how software gets made.",
+    "tags": [
+      "introduction",
+      "overview",
+      "platform",
+      "ai-agents"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "multi-agent-orchestration",
+    "title": "Multi-Agent Orchestration with the Builderforce Mesh",
+    "date": "2026-02-28",
+    "description": "How to compose multiple specialised AI agents into collaborative workflows using the Builderforce Mesh — routing tasks, sharing context, and coordinating output.",
+    "tags": [
+      "multi-agent",
+      "orchestration",
+      "mesh",
+      "architecture"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "tailor-your-resume-for-every-application",
+    "title": "How to Tailor Your Resume for Every Job Application (Without Going Crazy)",
+    "date": "2026-02-27",
+    "description": "Why tailored resumes get 2x more interviews, and how to customize yours in under 2 minutes per job using AI — without losing your voice or inventing experience.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "resume-tailor",
+      "tailor-resume",
+      "per-job-resume"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "complete-guide-to-video-resumes",
+    "title": "The Complete Guide to Video Resumes in 2026",
+    "date": "2026-02-14",
+    "description": "Everything you need to know about video resumes: what they are, why employers love them, how to create one in 60 seconds with AI, and best practices for standing out.",
+    "tags": [
+      "video-resume",
+      "creation-canvas",
+      "studio",
+      "ai-video-resume",
+      "video-resume-tips",
+      "video-resume-2026"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "getting-started-with-ai-agents",
+    "title": "Getting Started with AI Agents on Builderforce",
+    "date": "2026-02-14",
+    "description": "Learn how to build, train, and deploy your first custom AI agent using Builderforce's in-browser WebGPU LoRA pipeline — no cloud GPU required.",
+    "tags": [
+      "getting-started",
+      "ai-agents",
+      "lora",
+      "tutorial"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-match-your-resume-to-any-job",
+    "title": "How to Match Your Resume to Any Job Posting (AI Fit Score Guide)",
+    "date": "2026-01-29",
+    "description": "Learn how to measure the fit between your resume and a job description, identify skill gaps, and close them before you apply — using AI match scoring.",
+    "tags": [
+      "job-search",
+      "job-resume-match",
+      "job-fit-score",
+      "should-i-apply",
+      "ai-job-matching",
+      "resume-job-match"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "webgpu-lora-explained",
+    "title": "WebGPU LoRA Fine-Tuning Explained",
+    "date": "2026-01-28",
+    "description": "A deep dive into how Builderforce runs LoRA fine-tuning entirely inside your browser using WebGPU compute shaders — no servers, no data leaks, total privacy.",
+    "tags": [
+      "webgpu",
+      "lora",
+      "fine-tuning",
+      "deep-dive"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-research-your-market-salary",
+    "title": "How to Research Your Market Salary and Negotiate with Confidence",
+    "date": "2026-01-08",
+    "description": "A data-driven guide to salary research: how to find your market rate, understand percentile bands, and negotiate compensation using AI salary benchmarks.",
+    "tags": [
+      "career-strategy",
+      "career-growth",
+      "salary-calculator",
+      "salary-research",
+      "market-rate-salary",
+      "salary-negotiation"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "optimize-your-resume-for-any-job",
+    "title": "How to Optimize Your Resume for Any Job Description with AI",
+    "date": "2025-12-03",
+    "description": "A step-by-step guide to resume optimization: how to match keywords, rewrite bullets, and beat ATS filters using AI tools — without losing your authentic voice.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "resume-optimizer",
+      "ai-resume-rewrite",
+      "resume-optimization"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "how-to-score-your-resume-for-ats",
+    "title": "How to Score Your Resume for ATS Compatibility in 2026",
+    "date": "2025-11-12",
+    "description": "Learn how Applicant Tracking Systems score resumes, what makes a high ATS score, and how to use an AI resume scorer to grade your resume before you apply.",
+    "tags": [
+      "resume",
+      "ats",
+      "job-search",
+      "ai-resume-scorer",
+      "ats-resume-score",
+      "ai-resume-grader"
+    ],
+    "author": "Sean Hogg"
+  }
+]

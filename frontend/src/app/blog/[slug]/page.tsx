@@ -4,7 +4,6 @@ import { getPostBySlug } from '@/lib/blogData';
 import { blogTagLabel, loadPostBody, localizePost, type BlogText } from '@/lib/blogLocale';
 import { BRAND } from '@/lib/content/brand';
 import { pageMetadata } from '@/lib/seo';
-import { DEFAULT_LOCALE } from '@/i18n/config';
 import { requestOrigin } from '@/i18n/requestOrigin';
 import BlogPostClient from './BlogPostClient';
 
@@ -53,13 +52,13 @@ export async function generateMetadata({
 /**
  * Resolves the article BODY on the server, in the reader's language, so the
  * HTML a crawler or a first paint receives is already translated (see
- * `lib/blogLocale.ts` for why bodies are fetched rather than bundled). The
- * default locale's body is in the bundle already, so nothing is passed for it.
+ * `lib/blogLocale.ts` for why bodies are fetched rather than bundled). Every
+ * locale, English included, comes through here — no body ships in the client.
  */
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const post = getPostBySlug(slug);
   const locale = await getLocale();
-  const content = post && locale !== DEFAULT_LOCALE ? await loadPostBody(post, locale, await requestOrigin()) : undefined;
+  const content = post ? await loadPostBody(post, locale, await requestOrigin()) : '';
   return <BlogPostClient slug={slug} content={content} />;
 }

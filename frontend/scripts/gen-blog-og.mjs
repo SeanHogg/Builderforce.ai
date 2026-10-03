@@ -27,6 +27,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { esc, firstFigure, posterArt } from './lib/figurePoster.mjs';
+import { blogFrontMatter, blogTags } from './lib/blogFrontMatter.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CONTENT_DIR = resolve(here, '..', 'src', 'content', 'blog');
@@ -65,19 +66,6 @@ function wrap(text, perLine, maxLines) {
     lines[maxLines - 1] = `${lines[maxLines - 1].replace(/[\s.,;:]+$/, '')}…`;
   }
   return lines;
-}
-
-/** Front-matter reader. Deliberately tiny — the posts are ours and well-formed. */
-function frontMatter(source) {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(source);
-  if (!match) return {};
-  const out = {};
-  for (const line of match[1].split(/\r?\n/)) {
-    const at = line.indexOf(':');
-    if (at < 0) continue;
-    out[line.slice(0, at).trim()] = line.slice(at + 1).trim().replace(/^["']|["']$/g, '');
-  }
-  return out;
 }
 
 /**
@@ -145,8 +133,8 @@ async function main() {
       continue;
     }
     const source = readFileSync(sourcePath, 'utf8');
-    const meta = frontMatter(source);
-    const tag = (meta.tags ?? '').replace(/^\[|\]$/g, '').split(',')[0]?.trim();
+    const meta = blogFrontMatter(source);
+    const tag = blogTags(meta.tags ?? '')[0];
     const png = await sharp(Buffer.from(card({
       slug,
       title: meta.title || slug.replace(/-/g, ' '),
