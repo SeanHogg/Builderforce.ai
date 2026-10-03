@@ -11,6 +11,7 @@ import LightningFS from '@isomorphic-git/lightning-fs';
 import { slugify } from '@builderforce/creation-canvas-contract';
 import { BrowserGitClient, type GitOps, type FsLike } from './gitClient';
 import { runBuildInWebContainer, type WebContainerLike } from './webcontainer';
+import { bootSharedWebContainer } from './webcontainerSession';
 import { parseProposedChanges, type CodingDeps, type RepoContext } from './coding';
 import { DEFAULT_BROWSER_MODEL, type ModelCall } from './runner';
 
@@ -77,14 +78,9 @@ export async function snapshotDir(fs: WalkFs, dir: string): Promise<Record<strin
   return tree;
 }
 
-/** Boot a real WebContainer, gated on cross-origin isolation. */
+/** The page's WebContainer (shared singleton, gated on cross-origin isolation). */
 export async function bootWebContainer(): Promise<WebContainerLike> {
-  const g = globalThis as { crossOriginIsolated?: boolean };
-  if ('crossOriginIsolated' in g && g.crossOriginIsolated === false) {
-    throw new Error('WebContainer requires cross-origin isolation (COOP/COEP headers).');
-  }
-  const { WebContainer } = await import('@webcontainer/api');
-  return (await WebContainer.boot()) as unknown as WebContainerLike;
+  return (await bootSharedWebContainer()) as unknown as WebContainerLike;
 }
 
 const slug = (text: string): string => slugify(text, { maxLength: 40, fallback: 'task' });

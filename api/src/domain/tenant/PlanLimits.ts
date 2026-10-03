@@ -178,6 +178,13 @@ export interface PlanLimits {
    * instance for as long as a tab is open; this is the instance the run itself uses.
    */
   containerRuntime: boolean;
+  /**
+   * Whether the tenant's published sites are served WITHOUT the "Made with
+   * Builderforce.ai" badge. Free sites carry it: the badge on live public sites is
+   * the free tier's contribution to growth (the Framer/Webflow model), and dropping
+   * it is one of the reasons to upgrade. See `application/ide/siteAttribution.ts`.
+   */
+  removeBranding: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -214,6 +221,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     evermindTraining: false,
     livePreview: false,
     containerRuntime: false,
+    removeBranding: false,
   },
   [TenantPlan.PRO]: {
     maxCreationSessions: 500,
@@ -248,6 +256,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     evermindTraining: true,
     livePreview: true,
     containerRuntime: true,
+    removeBranding: true,
   },
   [TenantPlan.TEAMS]: {
     maxCreationSessions: -1,
@@ -282,6 +291,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     evermindTraining: true,
     livePreview: true,
     containerRuntime: true,
+    removeBranding: true,
   },
 };
 

@@ -63,6 +63,7 @@ import { SITE_LANDING_KEY } from './siteLandingPage';
 import { jsonResponse, readSubmission, corsHeaders } from './siteServer.http';
 import { handleSiteBilling } from '../marketplace/siteBilling';
 import { forkedDocumentHeaders, landingPageApplies, resolveSiteVisitor } from './siteVisitor';
+import { withSiteBadge } from './siteAttribution';
 
 /** Path prefix reserved for the site's datastore. A published site cannot use
  *  it for assets — enforced by checking it before R2 is consulted. */
@@ -173,7 +174,7 @@ export async function serveHostedSite(
   const site = await lookupSite(env, subdomain);
   if (!site) return new Response('Site not found', { status: 404 });
   const { response } = await serveAsset(env, site, assetPath);
-  return response;
+  return withSiteBadge(env, site.tenantId, response);
 }
 
 /**
@@ -537,7 +538,7 @@ export async function tryServeHostedSite(
       const landing = await serveLandingDocument(env, site);
       if (landing) {
         await count(landing.bytes, true);
-        return landing.response;
+        return withSiteBadge(env, site.tenantId, landing.response);
       }
       // The pointer said there is a shop window and R2 did not have it. Serving the
       // app is the right failure: the visitor gets the product rather than an error
@@ -547,7 +548,7 @@ export async function tryServeHostedSite(
 
   const { response, bytes } = await serveAsset(env, site, path.replace(/^\/+/, ''));
   await count(bytes);
-  return response;
+  return withSiteBadge(env, site.tenantId, response);
 }
 
 /** Read the rendered landing document out of the release's own prefix. Null when it

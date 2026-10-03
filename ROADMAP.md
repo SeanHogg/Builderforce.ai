@@ -184,7 +184,7 @@ Public copy describes evidence available today; stronger promises become roadmap
         - In `BuilderWorkspace`, for free tenants whose `runtime.profile().supported` is true, mount the files and set the preview iframe to `runtime.url` instead of `startDevServer`.
         - Wire `runtime.onError` into the existing run log.
         - Keep WebContainers or the container for unsupported projects (Next.js, Vue, Svelte, Node servers).
-      - *Blocker: first publish. The repo is live at github.com/SeanHogg/builderforce-webcontainers (pushed 2026-10-03). It still needs an `NPM_TOKEN` repo secret (a credential only the operator can add), then `git tag v2026.10.0 && git push --tags`, which runs the release workflow.*
+      - Published 2026-10-03: `@seanhogg/builderforce-webcontainers-core` and `@seanhogg/builderforce-webcontainers` 2026.10.0 (release run 37144624108). The integration above is next; nothing blocks it.
     - **Optional platform-owned compute:** the Google Cloud Run free tier (180k vCPU-seconds, 2M requests a month). It needs a billing account with a card and has no hard spending cap, so it is opt-in only.
     - **Neon Free:** keep core and transactional, gated so the cron does not keep them awake. Nightly `pg_dump` to R2. Delete `builderforce-apps` and `builderforce-primary`.
   - **Agent-run telemetry cutover to the operational endpoint: run it against production (code shipped 2026-10-03, api 2026.10.1, see DONE.md).** The Worker now reads and writes `tool_audit_*`, `execution_claim*`, `usage_snapshots`, `brain_chat_trace`, `run_context_state` and `run_model_outcomes` on `NEON_TRANSACTIONAL_DATABASE_URL`. Until the rows are copied, those surfaces start empty in production (routing stats, compliance window, lifecycle ledger).

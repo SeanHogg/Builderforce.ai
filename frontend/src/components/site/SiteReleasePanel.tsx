@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { SiteBadgeNotice } from './SiteBadgeNotice';
 import { Icon } from '@/components/ui/Icon';
 import {
   APP_PACKAGE_TARGETS,
@@ -94,6 +95,7 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
         <div style={{ fontWeight: 600, fontSize: 'var(--font-size-body)' }}><Icon source="↩️" size="1em" /> {t('releases.title')}</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', marginTop: 2 }}>{t('releases.description')}</div>
       </div>
+      <SiteBadgeNotice />
 
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {releases.map((release) => (

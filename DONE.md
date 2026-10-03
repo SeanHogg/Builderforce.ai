@@ -1,3 +1,20 @@
+## ✅ RESOLVED 2026-10-03 — "Made with Builderforce.ai" on free published sites, and the default-on preview badge
+
+- **The aim.** Free users drive traffic back to builderforce.ai, the Framer/Webflow way, without making attribution a licence condition.
+- **New plan feature `removeBranding`.** Free: false. Pro and Teams: true. Defined in `domain/tenant/PlanLimits.ts` with its label in `planFeatures.ts`, and resolved by the one entitlement evaluator, so superadmins and comped tenants are covered.
+- **`application/ide/siteAttribution.ts` → `withSiteBadge`:**
+  - It adds a plain-HTML backlink (UTM-tagged, inline `!important` styles, no script) to every HTML document a free tenant's site serves. A plain link survives a site's CSP and is crawlable.
+  - Non-HTML responses skip the plan read entirely. The plan read is the cached `resolveTenantPlan`, so an upgrade removes the badge as soon as the plan cache is invalidated.
+  - It is applied at the document exits in `siteServer.ts`: subdomain/custom-domain serving, the landing page and the path-based `/sites/:subdomain` route.
+- **Frontend:**
+  - `usePlanFeature(feature)` is the shared hook. `RuntimeSurfaceSelect`'s private copy was deleted and migrated to it.
+  - `components/site/SiteBadgeNotice.tsx` decides its own visibility and is shown in the site release panel: "Free sites show a … badge — Upgrade to remove it". Strings are in `siteBadge.*` in all five catalogs.
+- **builderforce-webcontainers.** A default-on "Built with Builderforce.ai" badge in previews (shadow DOM, UTM-tagged, light/dark), disabled with `attribution: false`. The README asks forks to keep it. The licence stays MIT.
+- **Verified:**
+  - api: tsgo clean, 96/96 tests.
+  - frontend: typecheck clean; 3080/3081 tests. The one failure is the unrelated expired-claim entry in the roadmap.
+  - webcontainers: build, typecheck and 44/44 tests.
+
 ## ✅ RESOLVED 2026-10-03 — Agent-run telemetry moves from core to the operational endpoint (Neon grouping rule)
 
 - **The gap.** Neon bills each project by its own awake time. Agent-run telemetry was written on core while every run also wrote the usage ledger on transactional, so each run kept both projects awake. `tool_audit_events` alone took ~77k writes between two of core's sleeps.
@@ -21,6 +38,17 @@
 - **Dead code.** Removed `forgetRunContextScope` (no callers) and an unused import in `cloudAgentEngine.ts`.
 - **Verified (Sonnet):** `tsgo` clean; `npm run check` 36/36 (the tenant-scope baseline was lowered after `agentHostRoutes` improved 3 → 2); vitest 885 files / 10,531 tests pass. The segment route tests now assert the erasure cascade, and that it does not run on a 404.
 - **Version.** api 2026.10.1.
+
+## ✅ RESOLVED 2026-10-03 — WebContainer attribution and the single shared boot
+
+- **The gap.** Free-tier WebContainer use is licensed for non-commercial use with attribution, up to 25,000 API sessions a month. Nothing in the app showed the attribution.
+- **A latent bug.** Two independent `WebContainer.boot()` calls existed: the IDE hook (`hooks/useWebContainer.ts`) and the agent worker's build step (`lib/browserRuntime/factory.ts`). A page may hold only one instance, so whichever booted second threw "Unable to create more instances".
+- **Fix:**
+  - `lib/browserRuntime/webcontainerSession.ts` is now the one boot singleton. It also records that a session started.
+  - `components/webcontainer/WebContainerAttribution.tsx` decides its own visibility: it renders nothing until the page has booted one, then links to webcontainers.io. It uses theme tokens and a wrapping layout.
+  - It is mounted under the IDE preview pane and on the agent-worker page.
+  - Strings live in `webcontainer.*` in all five catalogs.
+- **Verified:** typecheck clean; 163/163 tests pass, including the catalog parity test.
 
 ## ✅ RESOLVED 2026-09-29 — One limbic implementation (P2 (f)), and the release/deploy CI failures
 

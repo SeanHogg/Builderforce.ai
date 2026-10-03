@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { WebContainerState } from '@/lib/types';
 import { useErrorText } from '@/i18n/useErrorMessage';
+import { bootSharedWebContainer } from '@/lib/browserRuntime/webcontainerSession';
 
 let webContainerInstance: import('@webcontainer/api').WebContainer | null = null;
 let bootPromise: Promise<import('@webcontainer/api').WebContainer> | null = null;
@@ -66,11 +67,11 @@ export function useWebContainer() {
       throw new Error(msg);
     }
 
-    // Start a new boot
+    // Start a new boot — through the page-wide singleton, so the agent worker's
+    // build step and this hook never race for the one instance a page may hold.
     setState({ status: 'booting' });
     try {
-      const { WebContainer } = await import('@webcontainer/api');
-      bootPromise = WebContainer.boot();
+      bootPromise = bootSharedWebContainer();
       const instance = await bootPromise;
       webContainerInstance = instance;
       instanceRef.current = instance;

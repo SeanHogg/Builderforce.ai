@@ -16,6 +16,8 @@ vi.mock('@/lib/useConsumption', () => ({
   useConsumption: () => snapshot.current,
   fetchConsumptionSnapshot: async () => snapshot.current,
   invalidateConsumption: () => {},
+  usePlanFeature: (feature: string) =>
+    (snapshot.current as { features?: { entitled?: Record<string, boolean> } } | null)?.features?.entitled?.[feature] ?? null,
 }));
 function entitledToContainers(value: boolean | null) {
   snapshot.current = value == null ? null : { features: { entitled: { containerRuntime: value } } };

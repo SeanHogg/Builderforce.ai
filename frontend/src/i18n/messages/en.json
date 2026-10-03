@@ -32094,5 +32094,13 @@
     "privacy": "Indexing and embeddings run locally. Your code is never uploaded.",
     "download": "Download for Windows, macOS or Linux",
     "readMore": "How it works"
+  },
+  "webcontainer": {
+    "attributionLead": "Runs in your browser on",
+    "attributionAria": "Powered by WebContainers by StackBlitz (opens in a new tab)"
+  },
+  "siteBadge": {
+    "body": "Free sites show a small “Made with Builderforce.ai” badge.",
+    "upgrade": "Upgrade to remove it"
   }
 }

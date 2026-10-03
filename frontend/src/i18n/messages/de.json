@@ -32094,5 +32094,13 @@
     "privacy": "Indizierung und Embeddings laufen lokal. Ihr Code wird nie hochgeladen.",
     "download": "Für Windows, macOS oder Linux herunterladen",
     "readMore": "So funktioniert es"
+  },
+  "webcontainer": {
+    "attributionLead": "Läuft in deinem Browser mit",
+    "attributionAria": "Bereitgestellt von WebContainers von StackBlitz (öffnet in einem neuen Tab)"
+  },
+  "siteBadge": {
+    "body": "Kostenlose Websites zeigen ein kleines „Made with Builderforce.ai“-Abzeichen.",
+    "upgrade": "Upgrade, um es zu entfernen"
   }
 }

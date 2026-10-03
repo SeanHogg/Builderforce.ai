@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { GithubActionsUnavailableReason } from '@/components/repos/githubActionsSurface';
 import { useGithubActionsSupported } from '@/lib/useGithubActionsReadiness';
-import { useConsumption } from '@/lib/useConsumption';
+import { usePlanFeature } from '@/lib/useConsumption';
 import type { AgentRuntimeSurface } from '@/lib/api';
 
 /**
@@ -64,20 +64,6 @@ export type RuntimeSurfaceChoice = AgentRuntimeSurface | '';
 export const RUNTIME_SURFACE_KEYS: RuntimeSurfaceChoice[] = ['', 'durable', 'container', 'github_actions'];
 
 /**
- * Is the billable container surface covered by this workspace's plan?
- *
- * Tri-state like the Actions readiness above: `null` until the consumption snapshot
- * (which carries the SERVER's resolved entitlements) arrives, so a slow or failed read
- * never locks a configuration the workspace is entitled to. Served from the same cached
- * snapshot the meters and navigation already read — no extra request.
- */
-function useContainerRuntimeEntitled(): boolean | null {
-  const features = useConsumption()?.features;
-  const entitled = features?.entitled?.containerRuntime;
-  return entitled ?? null;
-}
-
-/**
  * Why this surface selection is refused, localized — or null when it is fine.
  *
  * Exported so a form's SUBMIT can refuse the combination rather than merely
@@ -96,7 +82,7 @@ function useContainerRuntimeEntitled(): boolean | null {
 export function useRuntimeSurfaceRefusal(surface: RuntimeSurfaceChoice | string): string | null {
   const t = useTranslations('cloudAgentForm');
   const supported = useGithubActionsSupported();
-  const containerEntitled = useContainerRuntimeEntitled();
+  const containerEntitled = usePlanFeature('containerRuntime');
   if (surface === 'github_actions' && supported === false) {
     return t('errSurfaceBlocked', { surface: t('surfaceLabel.github_actions') });
   }
@@ -123,7 +109,7 @@ export interface RuntimeSurfaceSelectProps {
 export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: RuntimeSurfaceSelectProps) {
   const t = useTranslations('cloudAgentForm');
   const actionsSupported = useGithubActionsSupported();
-  const containerEntitled = useContainerRuntimeEntitled();
+  const containerEntitled = usePlanFeature('containerRuntime');
   const reasonId = useId();
   const containerReasonId = `${reasonId}-container`;
 

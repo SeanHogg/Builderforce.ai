@@ -32094,5 +32094,13 @@
     "privacy": "索引和向量计算都在本地运行。你的代码从不上传。",
     "download": "下载 Windows、macOS 或 Linux 版",
     "readMore": "了解工作原理"
+  },
+  "webcontainer": {
+    "attributionLead": "在你的浏览器中运行，基于",
+    "attributionAria": "由 StackBlitz 的 WebContainers 提供支持（在新标签页中打开）"
+  },
+  "siteBadge": {
+    "body": "免费网站会显示一个小的“Made with Builderforce.ai”徽章。",
+    "upgrade": "升级即可移除"
   }
 }

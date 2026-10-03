@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useOptionalAuth } from '@/lib/AuthContext';
-import { consumptionApi, type ConsumptionSnapshot } from '@/lib/builderforceApi';
+import { consumptionApi, type ConsumptionSnapshot, type PlanFeatureKey } from '@/lib/builderforceApi';
 import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 /**
@@ -69,4 +69,14 @@ export function useConsumption(): ConsumptionSnapshot | null {
   }, [hasTenant]);
 
   return hasTenant ? snapshot : null;
+}
+
+/**
+ * The SERVER's verdict on one plan feature: true, false, or null while the snapshot
+ * is still loading (or unavailable). Callers treat null as "don't decide yet", so a
+ * slow read neither locks a paid feature nor flashes an upsell at a paying tenant.
+ * Read from the shared snapshot, so it costs no extra request.
+ */
+export function usePlanFeature(feature: PlanFeatureKey): boolean | null {
+  return useConsumption()?.features?.entitled?.[feature] ?? null;
 }

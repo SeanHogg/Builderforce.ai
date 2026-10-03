@@ -34,6 +34,7 @@ import { BuilderAgentPanel } from './builder/BuilderAgentPanel';
 import { DevicePreview } from './builder/DevicePreview';
 import { MobileDevicePanel } from './builder/MobileDevicePanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
+import { WebContainerAttribution } from '@/components/webcontainer/WebContainerAttribution';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject, importCanvasDataset } from '@/lib/api';
@@ -1569,6 +1570,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                   <PreviewFrame url={previewUrl} frameRef={previewFrameRef} />
                 )}
               </div>
+              <WebContainerAttribution />
               {/* Point-and-edit: the cheap half of changing an app. A class or a
                   line of copy is an exact, single-line source edit anchored to the
                   element React itself reported — no model turn, no tokens. */}

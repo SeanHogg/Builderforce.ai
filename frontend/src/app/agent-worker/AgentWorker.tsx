@@ -26,6 +26,7 @@ import PageContainer from '@/components/PageContainer';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
 import { runCodingDispatch, toResultPayload } from '@/lib/browserRuntime/coding';
 import { createCodingDeps } from '@/lib/browserRuntime/factory';
+import { WebContainerAttribution } from '@/components/webcontainer/WebContainerAttribution';
 import { getApiBaseUrl, getAuthHeaders } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
@@ -115,6 +116,7 @@ export function AgentWorker({
           <li key={i}>{t(`outcome.${o}`)}</li>
         ))}
       </ul>
+      <WebContainerAttribution />
     </PageContainer>
   );
 }
