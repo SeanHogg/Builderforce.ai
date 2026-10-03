@@ -89,3 +89,8 @@ agent-runtime/.builderforce/sessions/
 # the rule below now covers them like everything else.
 package-lock.json
 !docs-site/package-lock.json
+
+# Claude Code agent worktrees: full checkouts of this repo created for isolated
+# subagent work. Never track them: committed, they become gitlinks with no
+# .gitmodules, which breaks submodule-aware checkouts and the VS Code Git view.
+.claude/worktrees/
