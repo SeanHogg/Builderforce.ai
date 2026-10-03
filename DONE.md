@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-03 — VS Code release gate: the panels booted a worker instead of the app
+
+- **Symptom.** The `Publish VS Code extension` job failed. The extension-host test "the shipped webview boots and its first message reaches the host" timed out with no error, which blocked `2026.9.96`. The `chatSessionsProvider` proposal errors in the same log are caught and logged, and did not fail it.
+- **Root cause, a real shipping bug.** The new browser runtime (`@seanhogg/builderforce-webcontainers`, `check/` and `node/`) starts workers with `new Worker(new URL('./worker.js', import.meta.url))`, so Vite emits them as ASSETS. The webview config named every asset `index.[ext]`. The two workers took `index.js` and `index2.js`, and Rollup quietly renamed the real entry to `index3.js`. The shell loads `index.js` by name, so every bundled panel would have booted a worker as the app: a blank panel, no `ready`, and no error.
+- **Fix:**
+  - `webview/vite.config.ts`: only the stylesheet takes `index.css`; other assets are `asset-[name][extname]`. A new `bf-entry-keeps-shell-names` plugin fails the build if the entry isn't `index.js` or any `index<N>` file appears.
+  - `src/webviewAssets.test.ts`: asserts that the file named `index.js` IS the entry.
+- **Gate drift fixed in the same pass.** The integration test kept a hand copy of the panel CSP, which had fallen behind (nonce-only `script-src`). The shell is now one pure module, `src/webviewBundleShell.ts` (`makeNonce`, `bundleCsp`, `renderBundleShell`). Both `renderWebviewHtml` and the test render it, and the test forwards webview script errors, rejections and CSP violations into its failure message instead of an unexplained timeout.
+- **Verified (Sonnet):** type-check clean; `npm test` 44 files / 465 tests; `build:webview` emits `index.js` (the entry) plus `asset-worker*.js`; `test:integration` 7/7, with the bridge test passing in 1.9 s.
+
 ## ✅ RESOLVED 2026-10-03 — StackBlitz is gone: Run, Publish, Check, the terminal and Node servers all run on our own runtime
 
 - **The gap.** The canvas Run fell back to a StackBlitz WebContainer for anything the instant preview could not serve (Node servers, Vue, Svelte). Publish builds, Check and the terminal also ran there. That meant a metered, non-commercial-licence session, `@webcontainer/api`, a `/webcontainer/connect` handshake route with its own isolation carve-outs, and an attribution badge. The user asked for StackBlitz to be "obsolete and never used".
