@@ -18259,6 +18259,10 @@
         "title": "Canvas",
         "tagline": "One board, from prompt to product."
       },
+      "studio": {
+        "title": "Studio",
+        "tagline": "Describe an app; watch it run."
+      },
       "blog": {
         "title": "Blog",
         "tagline": "How the product gets built."

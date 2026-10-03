@@ -18259,6 +18259,10 @@
         "title": "Lienzo",
         "tagline": "Un lienzo, del prompt al producto."
       },
+      "studio": {
+        "title": "Studio",
+        "tagline": "Describe una app y mírala funcionar."
+      },
       "blog": {
         "title": "Blog",
         "tagline": "Cómo se construye el producto."

@@ -111,6 +111,18 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'canvas', seat: 'Brain', icon: '✦', marketingHref: '/create/new', appHref: '/create', kind: 'link', placement: 'idea', panel: false, groupId: 'create' },
   { id: 'ref.aiCoach', copyId: 'aiCoach', seat: 'Brain', icon: '✨', marketingHref: '/features/ai-coach', appHref: '/create', kind: 'foundation', placement: 'idea', panel: true },
   // ── Product ▾ · MAKE ─────────────────────────────────────────────────────
+  // Studio (`studio.builderforce.ai`, served by this app at `/studio` — see
+  // `lib/studio/studioHost.ts`). It shipped with its subdomain, its release
+  // notes and its blog post, and with no way to REACH it from the site: not a
+  // bar link, not a menu row, not a footer link. A product whose only entry
+  // point is a sentence inside one article is a product nobody finds, so it is
+  // declared here like every other destination rather than linked ad hoc.
+  //
+  // `marketingHref` is the PATH, not the subdomain: `/studio` resolves on the
+  // apex and on the studio host alike (whose root redirects here), so one row
+  // works from either shell and from localhost. Not a `panel` row — `/studio`
+  // is `classifyShell` → `none`, the standalone IDE that opens over nothing.
+  { id: 'studio', seat: 'CTO', icon: '🛠', marketingHref: '/studio', appHref: '/studio', kind: 'link', placement: 'make', panel: false },
   { id: 'ref.productManagement', copyId: 'productManagement', seat: 'CPO', icon: '📦', marketingHref: '/product-management', appHref: '/projects?tab=pm', kind: 'domain', placement: 'make', panel: true, groupId: 'projects' },
   { id: 'ref.agileSurvival', copyId: 'agileSurvival', seat: 'CTO', icon: '⚡', marketingHref: '/survival-focused-agile', appHref: '/projects?tab=ceremonies', kind: 'domain', placement: 'make', panel: true },
   // ── Product ▾ · RUN — one row per business seat ──────────────────────────
@@ -320,7 +332,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   // `compare` sits under Product, not Learn: "how does this compare to what I
   // already use" is a question asked while choosing the product, alongside
   // Pricing — not an article you go and read afterwards.
-  { titleKey: 'colProduct', ids: ['canvas', 'marketplace', 'features', 'pricing', 'compare', 'about'] },
+  { titleKey: 'colProduct', ids: ['canvas', 'studio', 'marketplace', 'features', 'pricing', 'compare', 'about'] },
   { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'embedded', 'models', 'prompts'] },
   { titleKey: 'colLearn', ids: ['method', 'blog', 'tutorials', 'diagnostics', 'soc2', 'media'] },
   { titleKey: 'colGetStarted', ids: ['demo', 'sell', 'signIn'] },

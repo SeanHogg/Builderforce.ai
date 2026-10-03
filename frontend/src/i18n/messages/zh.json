@@ -18259,6 +18259,10 @@
         "title": "画板",
         "tagline": "一块画板，从提示词到产品。"
       },
+      "studio": {
+        "title": "Studio",
+        "tagline": "描述一个应用，看着它运行起来。"
+      },
       "blog": {
         "title": "博客",
         "tagline": "产品是如何构建出来的。"

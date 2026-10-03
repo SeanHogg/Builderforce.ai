@@ -18259,6 +18259,10 @@
         "title": "Canevas",
         "tagline": "Un tableau, du prompt au produit."
       },
+      "studio": {
+        "title": "Studio",
+        "tagline": "Décrivez une application, puis regardez-la tourner."
+      },
       "blog": {
         "title": "Blog",
         "tagline": "Comment le produit se construit."

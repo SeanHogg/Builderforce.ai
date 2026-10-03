@@ -18259,6 +18259,10 @@
         "title": "Canvas",
         "tagline": "Ein Board, vom Prompt zum Produkt."
       },
+      "studio": {
+        "title": "Studio",
+        "tagline": "Eine App beschreiben und laufen sehen."
+      },
       "blog": {
         "title": "Blog",
         "tagline": "Wie das Produkt gebaut wird."
