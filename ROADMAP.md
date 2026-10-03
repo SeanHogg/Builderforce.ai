@@ -176,15 +176,9 @@ Public copy describes evidence available today; stronger promises become roadmap
       - Once tenants pay, the account moves to Workers Paid, and paid tenants get Containers through the existing `planFeatures.containerRuntime` gate (`cloudSurfaceEntitlement.ts`, `PAID_DEFAULT_CLOUD_SURFACE`).
       - Deploy config must support both modes. A `[[containers]]` block will not deploy on Workers Free, so it goes in a paid wrangler environment while the default deploy has no containers. Runtime already falls back when `AGENT_CONTAINER` is unbound.
       - The preview path must be chosen by entitlement: a container preview for paid tenants, WebContainers for free ones.
-    - **Free-tier previews move to our own runtime, `builderforce-webcontainers` (repo created 2026-10-03 at `../builderforce-webcontainers`).** It is MIT-licensed, needs no COOP/COEP headers and has no session cap. 40/40 tests pass.
-      - Until it ships, StackBlitz WebContainers keep the attribution (`WebContainerAttribution`) and the unmetered 25,000-sessions-a-month cap.
-      - Integration plan:
-        - Add `@seanhogg/builderforce-webcontainers`.
-        - Serve `dist/sw.js` at `/__bfwc/sw.js`.
-        - In `BuilderWorkspace`, for free tenants whose `runtime.profile().supported` is true, mount the files and set the preview iframe to `runtime.url` instead of `startDevServer`.
-        - Wire `runtime.onError` into the existing run log.
-        - Keep WebContainers or the container for unsupported projects (Next.js, Vue, Svelte, Node servers).
-      - Published 2026-10-03: `@seanhogg/builderforce-webcontainers-core` and `@seanhogg/builderforce-webcontainers` 2026.10.0 (release run 37144624108). The integration above is next; nothing blocks it.
+    - **Canvas previews on our own runtime: built 2026-10-03, see DONE.md; one step left.**
+      - What remains on StackBlitz WebContainers: unsupported projects (Next.js, Vue, Svelte, Node servers), publish builds, Check, the terminal (now started only on first keystroke) and the agent worker's build step.
+      - *Blocker: a live check in a real browser. Deploy the api (serves `preview.builderforce.ai/__bfwc/relay.html` and `sw.js`) and the frontend, then Run a Vite project on the canvas. Confirm the relay boots under the page's COEP and the preview renders and reloads on edit. Unit tests cover each piece; no test here runs a real service worker.*
     - **Optional platform-owned compute:** the Google Cloud Run free tier (180k vCPU-seconds, 2M requests a month). It needs a billing account with a card and has no hard spending cap, so it is opt-in only.
     - **Neon Free:** keep core and transactional, gated so the cron does not keep them awake. Nightly `pg_dump` to R2. Delete `builderforce-apps` and `builderforce-primary`.
   - **Agent-run telemetry cutover to the operational endpoint: run it against production (code shipped 2026-10-03, api 2026.10.1, see DONE.md).** The Worker now reads and writes `tool_audit_*`, `execution_claim*`, `usage_snapshots`, `brain_chat_trace`, `run_context_state` and `run_model_outcomes` on `NEON_TRANSACTIONAL_DATABASE_URL`. Until the rows are copied, those surfaces start empty in production (routing stats, compliance window, lifecycle ledger).

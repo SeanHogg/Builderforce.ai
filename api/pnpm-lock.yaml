@@ -26,6 +26,9 @@ importers:
       '@seanhogg/builderforce-quality':
         specifier: ^2026.7.5
         version: 2026.7.5
+      '@seanhogg/builderforce-webcontainers':
+        specifier: ^2026.10.2
+        version: 2026.10.2
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@cloudflare/workers-types@4.20260313.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)
@@ -895,6 +898,14 @@ packages:
     resolution: {integrity: sha512-TPI+SVch4YxgaYuIGSupP3RlvdB2N1kYbxFH5e1cdGsrYJZunR5wN2PYcj4WtanThy28kLSWXVsU+I9XQ9iiiA==}
     engines: {node: '>=18'}
 
+  '@seanhogg/builderforce-webcontainers-core@2026.10.2':
+    resolution: {integrity: sha512-rt8EgMAZZhu1MIIUryUrqI/PxDlQwAI3Lb5iN4VpLygng+2z7wmCNaL2xxjGkIgbCo06HiQioNxALOM4KTloUw==}
+    engines: {node: '>=18.0.0'}
+
+  '@seanhogg/builderforce-webcontainers@2026.10.2':
+    resolution: {integrity: sha512-kXKSCsnQKNTcyiP6GbwUcTdJelbbmXF6fRBx195JrFiNer+fRE4g5x0OsUqILyYbvAOm9xe7Z2D7kBmt2C43wA==}
+    engines: {node: '>=18.0.0'}
+
   '@sindresorhus/is@7.2.0':
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
     engines: {node: '>=18'}
@@ -1142,6 +1153,9 @@ packages:
   error-stack-parser-es@1.0.5:
     resolution: {integrity: sha512-5qucVt2XcuGMcEGgWI7i+yZpmpByQ8J1lHhcL7PwqCwu9FPP3VUXzT4ltHe5i2z9dePwEHcDVOAfSnHsOlCXRA==}
 
+  es-module-lexer@1.7.0:
+    resolution: {integrity: sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==}
+
   es-module-lexer@2.0.0:
     resolution: {integrity: sha512-5POEcUuZybH7IdmGsD8wlf0AI55wMecM9rVBTI/qEAy2c1kTOm3DjFYjrBdI2K3BaJjJYfYFeRtM0t9ssnRuxw==}
 
@@ -1149,6 +1163,11 @@ packages:
     resolution: {integrity: sha512-H2/S7Pm8a9CL1uhp9OvjwrBh5Pvx0H8qVOxNu8Wed9Y7qv56MPtq+GGM8RJpq6glYJn9Wspr8uw7l55uyinNeg==}
     peerDependencies:
       esbuild: '>=0.12 <1'
+
+  esbuild-wasm@0.24.2:
+    resolution: {integrity: sha512-03/7Z1gD+ohDnScFztvI4XddTAbKVmMEzCvvkBpQdWKEXJ+73dTyeNrmdxP1Q0zpDMFjzUJwtK4rLjqwiHbzkw==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   esbuild@0.18.20:
     resolution: {integrity: sha512-ceqxoedUrcayh7Y7ZX6NdbbDzGROiyVBgC4PriJThBKSVPWnnFHZAkfI1lJT8QFkOwH4qOS2SJkS4wvpGl8BpA==}
@@ -2136,6 +2155,15 @@ snapshots:
 
   '@seanhogg/builderforce-quality@2026.7.5': {}
 
+  '@seanhogg/builderforce-webcontainers-core@2026.10.2':
+    dependencies:
+      es-module-lexer: 1.7.0
+
+  '@seanhogg/builderforce-webcontainers@2026.10.2':
+    dependencies:
+      '@seanhogg/builderforce-webcontainers-core': 2026.10.2
+      esbuild-wasm: 0.24.2
+
   '@sindresorhus/is@7.2.0': {}
 
   '@speed-highlight/core@1.2.14': {}
@@ -2282,6 +2310,8 @@ snapshots:
 
   error-stack-parser-es@1.0.5: {}
 
+  es-module-lexer@1.7.0: {}
+
   es-module-lexer@2.0.0: {}
 
   esbuild-register@3.6.0(esbuild@0.19.12):
@@ -2290,6 +2320,8 @@ snapshots:
       esbuild: 0.19.12
     transitivePeerDependencies:
       - supports-color
+
+  esbuild-wasm@0.24.2: {}
 
   esbuild@0.18.20:
     optionalDependencies:

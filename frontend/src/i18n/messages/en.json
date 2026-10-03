@@ -1254,7 +1254,7 @@
   "ide": {
     "runLog": {
       "terminalBanner": "Builderforce Terminal",
-      "terminalReady": "WebContainer ready. Start coding!",
+      "terminalReady": "Type a command to start a shell.",
       "trainTag": "Train",
       "fileLoadFailed": "Failed to load {path} — click again to retry.",
       "fileFetchFailed": "{path} — failed to fetch",
@@ -1276,6 +1276,8 @@
       "depsReady": "Dependencies ready.",
       "startingDevServer": "Starting dev server…",
       "devServerReady": "Dev server ready at {url}",
+      "instantPreviewReady": "Preview ready — served instantly in your browser, no install needed.",
+      "instantPreviewDeclined": "Instant preview can't serve this project ({reason}). Starting the full dev environment…",
       "packageJsonErrorTitle": "PACKAGE.JSON ERROR",
       "packageJsonErrorBody": "Your package.json file is invalid or empty.",
       "packageJsonErrorHint": "Check the Files tab and make sure package.json contains valid JSON.",

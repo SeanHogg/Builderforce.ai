@@ -8,7 +8,7 @@
   "frontend/src": {
     "empty-catch": 189,
     "empty-promise-catch": 84,
-    "console-only": 19,
+    "console-only": 17,
     "durable-object-direct-report": 0
   },
   "agent-runtime/src": {

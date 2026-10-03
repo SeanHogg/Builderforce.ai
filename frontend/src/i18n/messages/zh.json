@@ -1254,7 +1254,7 @@
   "ide": {
     "runLog": {
       "terminalBanner": "Builderforce 终端",
-      "terminalReady": "WebContainer 已就绪，开始编码吧！",
+      "terminalReady": "输入命令以启动 Shell。",
       "trainTag": "训练",
       "fileLoadFailed": "无法加载 {path} — 请再次点击重试。",
       "fileFetchFailed": "{path} — 获取失败",
@@ -1276,6 +1276,8 @@
       "depsReady": "依赖已就绪。",
       "startingDevServer": "正在启动开发服务器…",
       "devServerReady": "开发服务器已就绪：{url}",
+      "instantPreviewReady": "预览已就绪——直接在浏览器中即时运行，无需安装。",
+      "instantPreviewDeclined": "即时预览无法运行此项目（{reason}）。正在启动完整的开发环境……",
       "packageJsonErrorTitle": "PACKAGE.JSON 错误",
       "packageJsonErrorBody": "你的 package.json 文件无效或为空。",
       "packageJsonErrorHint": "请检查“文件”标签页，确保 package.json 包含有效的 JSON。",

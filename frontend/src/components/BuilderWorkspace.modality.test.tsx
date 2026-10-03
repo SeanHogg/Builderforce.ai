@@ -30,13 +30,11 @@ vi.mock('@/hooks/useWebContainer', () => ({
   useWebContainer: () => ({
     state: { status: 'idle' },
     mountFiles: vi.fn(),
-    runCommand: vi.fn(),
     runCommandAndWait: vi.fn(),
     readDirRecursive: vi.fn(),
     writeFileToContainer: vi.fn(),
     startShell: vi.fn(),
     startDevServer: vi.fn(),
-    getOrBootWebContainer: vi.fn(),
   }),
 }));
 vi.mock('@/hooks/useCollaboration', () => ({

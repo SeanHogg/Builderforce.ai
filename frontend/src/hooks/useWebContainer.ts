@@ -213,5 +213,5 @@ export function useWebContainer() {
     return shellProcess.input.getWriter();
   }, [getOrBootWebContainer]);
 
-  return { state, mountFiles, runCommand, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer, getOrBootWebContainer };
+  return { state, mountFiles, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer };
 }

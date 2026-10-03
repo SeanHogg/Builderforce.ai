@@ -1,3 +1,28 @@
+## ✅ RESOLVED 2026-10-03 — Canvas previews run on our own runtime, isolated on preview.builderforce.ai
+
+- **The gap.** Every Run on the canvas needed a StackBlitz WebContainer: a metered session, an `npm install` and a dev server before anything showed. The IDE also booted one on every open just to start the terminal.
+- **Runtime (builderforce-webcontainers 2026.10.1 and 2026.10.2, on npm):**
+  - Relay mode, `bootPreviewRuntime({ relayUrl })`. The preview is served from a separate origin through a hidden `relay.html`, so AI-written code and arbitrary packages never share builderforce.ai's cookies, storage or DOM.
+  - Live reload: edits reload every frame showing the preview.
+  - Documents send COEP `credentialless` and CORP `cross-origin`, so the cross-origin-isolated canvas can frame them.
+  - The service worker leaves dotted paths (`sw.js`, `relay.html`) to the network.
+- **api:**
+  - `presentation/middleware/browserPreviewOrigin.ts` serves the relay and worker at `preview.builderforce.ai/__bfwc/`, straight from the package (`/assets`).
+  - `frame-ancestors` comes from the new shared `appOrigins()` in `cors.ts`, which `resolveAllowedOrigin` now uses too.
+  - `preview` was already a reserved label routed to this worker, so no DNS change.
+- **frontend:**
+  - `lib/browserRuntime/previewRuntime.ts` is the page-wide boot.
+  - `hooks/useInstantPreview.ts` mounts the run's files (overlays included) and serves when the project is supported, otherwise declines with the reason.
+  - `BuilderWorkspace.handleRun` tries it first and falls back to the WebContainer path unchanged.
+  - Every live edit goes through one `writePreviewFile`, which reaches whichever runtime is showing.
+  - `hooks/useLazyShell.ts` starts the terminal shell on the first keystroke, buffering input, instead of booting a WebContainer on page open.
+  - Run-log strings are in all five catalogs.
+  - Dead exports `getOrBootWebContainer` and `runCommand` were dropped from `useWebContainer`.
+- **Verified:**
+  - webcontainers: build, typecheck and 47/47 tests.
+  - api: tsgo clean, 23/23 tests across the touched files.
+  - frontend: tsgo clean; the hook, BuilderWorkspace and i18n suites pass; edit ratchets 6/6.
+
 ## ✅ RESOLVED 2026-10-03 — "Made with Builderforce.ai" on free published sites, and the default-on preview badge
 
 - **The aim.** Free users drive traffic back to builderforce.ai, the Framer/Webflow way, without making attribution a licence condition.

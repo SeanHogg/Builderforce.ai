@@ -34,6 +34,8 @@ import { BuilderAgentPanel } from './builder/BuilderAgentPanel';
 import { DevicePreview } from './builder/DevicePreview';
 import { MobileDevicePanel } from './builder/MobileDevicePanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
+import { useLazyShell } from '@/hooks/useLazyShell';
+import { useInstantPreview } from '@/hooks/useInstantPreview';
 import { WebContainerAttribution } from '@/components/webcontainer/WebContainerAttribution';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
@@ -127,7 +129,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [visualDraft, setVisualDraft] = useState<{ text: string; className: string }>({ text: '', className: '' });
   const [visualError, setVisualError] = useState<string | null>(null);
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
-  const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
   const [isRunning, setIsRunning] = useState(false);
   const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
   const [projectTitle, setProjectTitle] = useState(project.name);
@@ -154,7 +155,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   >(null);
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
   /**
    * The run/check terminal's narration. Every line the pipeline authors goes
@@ -189,47 +189,20 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modality]);
 
-  const { state: wcState, mountFiles, runCommand, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
+  const { state: wcState, mountFiles, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer } = useWebContainer();
+  const { start: startInstantPreview, write: writeInstantPreview } = useInstantPreview();
+  /** An edit reaches whichever runtime is showing the preview. */
+  const writePreviewFile = useCallback(
+    (path: string, contents: string): Promise<void> =>
+      writeInstantPreview(path, contents) ? Promise.resolve() : writeFileToContainer(path, contents),
+    [writeInstantPreview, writeFileToContainer],
+  );
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
   const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
   // Voice studio state (clones, selected voice, lines, generation). Always called
   // for hook stability but only does work for Voice projects; the green Run button
   // calls voice.synth() and the center/right panels render its state.
   const voice = useVoiceStudio({ enabled: modality === 'voice', storageProjectId: projectIdNum });
-
-  // Boot WebContainer and spawn an interactive shell immediately on Builder load.
-  // This makes the terminal live from the moment Builder opens, not just after clicking Run.
-  useEffect(() => {
-    if (shellStartedRef.current) return;
-    shellStartedRef.current = true;
-
-    const initShell = async () => {
-      try {
-        await getOrBootWebContainer();
-        // Pipe shell output to terminal via ref so it works whether Terminal has mounted yet or not
-        let attempts = 0;
-        const trySpawn = async () => {
-          const writer = await startShell((data) => {
-            terminalWriteRef.current?.(data);
-          });
-          setShellWriter(writer);
-        };
-        const waitAndSpawn = () => {
-          attempts++;
-          trySpawn().catch((e) => {
-            if (attempts < 5) setTimeout(waitAndSpawn, 500);
-            else console.warn('Shell spawn failed:', e);
-          });
-        };
-        setTimeout(waitAndSpawn, 300);
-      } catch (e) {
-        console.warn('WebContainer boot failed (may not be supported in this browser):', e);
-      }
-    };
-
-    initShell();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // When Terminal mounts, store its write function in a ref so the single shell's output reaches it
   const handleTerminalReady = useCallback((write: (data: string) => void) => {
@@ -286,13 +259,13 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     if (!validateFileContentForPath(activeFile, value).ok) return;
     // Live reload: when a dev server is running, push the edit straight into the
     // container FS so Vite HMR refreshes the preview without a full re-run.
-    if (previewUrl) writeFileToContainer(activeFile, value).catch(() => { /* best-effort */ });
+    if (previewUrl) writePreviewFile(activeFile, value).catch(() => { /* best-effort */ });
     try {
       await saveFile(project.id, activeFile, value);
     } catch (e) {
       console.error('Failed to save:', e);
     }
-  }, [activeFile, project.id, previewUrl, writeFileToContainer]);
+  }, [activeFile, project.id, previewUrl, writePreviewFile]);
 
   const handleFileCreate = useCallback(async (path: string) => {
     // Creating a file posts an EMPTY body by construction — which is exactly the
@@ -457,12 +430,27 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       log.ok('filesReady');
       log.blank();
 
-      log.step('stepMounting');
       // Both overlays go into the MOUNTED copy only — never the files on disk and
       // never the publish path — so a runtime error inside the preview reaches the
       // agent, and any element in it can be pointed at, while the user's source and
       // their published build stay exactly what they wrote.
-      await mountFiles(withVisualEditor(withPreviewErrorReporter(mountContents)));
+      const overlaid = withVisualEditor(withPreviewErrorReporter(mountContents));
+
+      // Instant preview first: served from memory, no install and no dev server.
+      // Projects it cannot serve continue below on the full WebContainer.
+      const instant = await startInstantPreview(overlaid);
+      if (instant.kind === 'ready') {
+        log.ok('instantPreviewReady');
+        log.raw(`\x1b[36m${RUN_LOG_RULE}\x1b[0m\r\n\r\n`);
+        setPreviewUrl(instant.url);
+        setCenterView('preview');
+        return;
+      }
+      log.hint('instantPreviewDeclined', { reason: instant.reason });
+      log.blank();
+
+      log.step('stepMounting');
+      await mountFiles(overlaid);
       log.ok('mounted', { count: Object.keys(mountContents).length });
       log.blank();
 
@@ -531,7 +519,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, toast, t, tc, projectIdNum]);
+  }, [isRunning, startDevServer, startInstantPreview, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, toast, t, tc, projectIdNum]);
 
   /**
    * Build the project in the WebContainer and capture its `dist/` output for
@@ -698,9 +686,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     }
   }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, log, projectIdNum]);
 
-  const handleTerminalInput = useCallback((data: string) => {
-    shellWriter?.write(data);
-  }, [shellWriter]);
+  const handleTerminalInput = useLazyShell(startShell, (data) => terminalWriteRef.current?.(data));
 
   // Refresh file list after create/delete
   const refreshFiles = useCallback(async () => {
@@ -778,12 +764,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       if (!valid.ok) { setVisualError(valid.reason); return; }
       await saveFile(project.id, selection.file, content);
       setFileContents((prev) => ({ ...prev, [selection.file]: content }));
-      if (previewUrl) await writeFileToContainer(selection.file, content).catch(() => { /* best-effort */ });
+      if (previewUrl) await writePreviewFile(selection.file, content).catch(() => { /* best-effort */ });
       setVisualSelection(null);
     } catch (error) {
       setVisualError(faultMessage(error, t('visualNoPreview')));
     }
-  }, [project.id, previewUrl, t, visualDraft, visualSelection, writeFileToContainer]);
+  }, [project.id, previewUrl, t, visualDraft, visualSelection, writePreviewFile]);
 
   /**
    * A file this workspace has open was written from the BOARD.
@@ -801,11 +787,11 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       void fetchFileContent(project.id, path)
         .then((content) => {
           setFileContents((prev) => (prev[path] === content ? prev : { ...prev, [path]: content }));
-          if (previewUrl) void writeFileToContainer(path, content).catch(() => { /* best-effort */ });
+          if (previewUrl) void writePreviewFile(path, content).catch(() => { /* best-effort */ });
         })
         .catch(() => { /* the file may have been deleted between write and read */ });
     }
-  }), [projectIdNum, project.id, previewUrl, refreshFiles, writeFileToContainer]);
+  }), [projectIdNum, project.id, previewUrl, refreshFiles, writePreviewFile]);
 
   // --- Brain integration ----------------------------------------------------
   // Builder's AI lives in the global Brain drawer. Builder exposes its
@@ -820,16 +806,16 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     const valid = validateFileContentForPath(activeFile, code);
     if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [activeFile]: code }));
-    if (previewUrl) writeFileToContainer(activeFile, code).catch(() => { /* best-effort */ });
+    if (previewUrl) writePreviewFile(activeFile, code).catch(() => { /* best-effort */ });
     saveFile(project.id, activeFile, code).catch(console.error);
     return { ok: true };
-  }, [activeFile, project.id, previewUrl, writeFileToContainer]);
+  }, [activeFile, project.id, previewUrl, writePreviewFile]);
 
   const createProjectFile = useCallback((path: string, content: string): { ok: true } | { ok: false; reason: string } => {
     const valid = validateFileContentForPath(path, content);
     if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [path]: content }));
-    if (previewUrl) writeFileToContainer(path, content).catch(() => { /* best-effort */ });
+    if (previewUrl) writePreviewFile(path, content).catch(() => { /* best-effort */ });
     saveFile(project.id, path, content)
       .then(() => {
         // A corpus written as a FILE must also become a registered dataset.
@@ -859,7 +845,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       })
       .catch(console.error);
     return { ok: true };
-  }, [project.id, refreshFiles, openFiles, previewUrl, writeFileToContainer]);
+  }, [project.id, refreshFiles, openFiles, previewUrl, writePreviewFile]);
 
   // Latest Builder state for action handlers, so the registered action array stays
   // stable (no re-registration churn) while `run()` reads current values.

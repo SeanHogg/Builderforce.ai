@@ -1254,7 +1254,7 @@
   "ide": {
     "runLog": {
       "terminalBanner": "Terminal Builderforce",
-      "terminalReady": "WebContainer prêt. À vous de coder !",
+      "terminalReady": "Saisissez une commande pour démarrer un shell.",
       "trainTag": "Entraînement",
       "fileLoadFailed": "Impossible de charger {path} — cliquez à nouveau pour réessayer.",
       "fileFetchFailed": "{path} — échec de la récupération",
@@ -1276,6 +1276,8 @@
       "depsReady": "Dépendances prêtes.",
       "startingDevServer": "Démarrage du serveur de développement…",
       "devServerReady": "Serveur de développement prêt sur {url}",
+      "instantPreviewReady": "Aperçu prêt — servi instantanément dans votre navigateur, sans installation.",
+      "instantPreviewDeclined": "L’aperçu instantané ne peut pas servir ce projet ({reason}). Démarrage de l’environnement de développement complet…",
       "packageJsonErrorTitle": "ERREUR PACKAGE.JSON",
       "packageJsonErrorBody": "Votre fichier package.json est non valide ou vide.",
       "packageJsonErrorHint": "Vérifiez l’onglet Fichiers et assurez-vous que package.json contient du JSON valide.",

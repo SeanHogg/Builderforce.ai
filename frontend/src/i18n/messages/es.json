@@ -1254,7 +1254,7 @@
   "ide": {
     "runLog": {
       "terminalBanner": "Terminal de Builderforce",
-      "terminalReady": "WebContainer listo. ¡Empieza a programar!",
+      "terminalReady": "Escribe un comando para iniciar una shell.",
       "trainTag": "Entrenamiento",
       "fileLoadFailed": "No se pudo cargar {path}: haz clic de nuevo para reintentar.",
       "fileFetchFailed": "{path}: no se pudo obtener",
@@ -1276,6 +1276,8 @@
       "depsReady": "Dependencias listas.",
       "startingDevServer": "Iniciando el servidor de desarrollo…",
       "devServerReady": "Servidor de desarrollo listo en {url}",
+      "instantPreviewReady": "Vista previa lista: servida al instante en tu navegador, sin instalar nada.",
+      "instantPreviewDeclined": "La vista previa instantánea no puede servir este proyecto ({reason}). Iniciando el entorno de desarrollo completo…",
       "packageJsonErrorTitle": "ERROR EN PACKAGE.JSON",
       "packageJsonErrorBody": "Tu archivo package.json no es válido o está vacío.",
       "packageJsonErrorHint": "Revisa la pestaña Archivos y asegúrate de que package.json contenga JSON válido.",

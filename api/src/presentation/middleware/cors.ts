@@ -102,12 +102,23 @@ export function resolveAllowedOrigin(
   pathname: string,
 ): string | null {
   const value = origin ?? '';
-  const configured = corsOrigins ?? 'https://builderforce.ai';
-  const allowAll = configured === '*' || isPublicIngestPath(pathname);
+  const allowAll = (corsOrigins ?? DEFAULT_APP_ORIGIN) === '*' || isPublicIngestPath(pathname);
   if (allowAll) return '*';
-  const allowed = configured.split(',').map((s) => s.trim()).filter(Boolean);
-  if (allowed.includes(value) || DEV_ORIGINS.includes(value) || isEditorWebviewOrigin(value)) return value;
+  if (appOrigins(corsOrigins).includes(value) || isEditorWebviewOrigin(value)) return value;
   return null;
+}
+
+const DEFAULT_APP_ORIGIN = 'https://builderforce.ai';
+
+/**
+ * The web app's own origins: the configured `CORS_ORIGINS` list plus local dev.
+ * For where the APP must be named rather than any caller, such as the
+ * `frame-ancestors` of a page only the app may embed. A `*` entry is dropped,
+ * since "any origin" is never a valid answer to "which page is the app".
+ */
+export function appOrigins(corsOrigins: string | undefined): string[] {
+  const configured = (corsOrigins ?? DEFAULT_APP_ORIGIN).split(',').map((s) => s.trim()).filter((s) => s && s !== '*');
+  return [...new Set([...(configured.length ? configured : [DEFAULT_APP_ORIGIN]), ...DEV_ORIGINS])];
 }
 
 /**

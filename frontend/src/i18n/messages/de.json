@@ -1254,7 +1254,7 @@
   "ide": {
     "runLog": {
       "terminalBanner": "Builderforce-Terminal",
-      "terminalReady": "WebContainer bereit. Leg los!",
+      "terminalReady": "Gib einen Befehl ein, um eine Shell zu starten.",
       "trainTag": "Training",
       "fileLoadFailed": "{path} konnte nicht geladen werden — erneut klicken, um es noch einmal zu versuchen.",
       "fileFetchFailed": "{path} — Abruf fehlgeschlagen",
@@ -1276,6 +1276,8 @@
       "depsReady": "Abhängigkeiten bereit.",
       "startingDevServer": "Dev-Server wird gestartet…",
       "devServerReady": "Dev-Server bereit unter {url}",
+      "instantPreviewReady": "Vorschau bereit – sofort im Browser bereitgestellt, ohne Installation.",
+      "instantPreviewDeclined": "Die Sofortvorschau kann dieses Projekt nicht bereitstellen ({reason}). Die vollständige Entwicklungsumgebung wird gestartet…",
       "packageJsonErrorTitle": "PACKAGE.JSON-FEHLER",
       "packageJsonErrorBody": "Deine package.json ist ungültig oder leer.",
       "packageJsonErrorHint": "Prüfe den Tab „Dateien“ und stelle sicher, dass package.json gültiges JSON enthält.",
