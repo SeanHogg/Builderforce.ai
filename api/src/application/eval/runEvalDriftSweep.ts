@@ -14,6 +14,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { alertEvents, runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { buildTenantDriftReport } from './driftReport';
 import { notifyAlert } from '../alerts/runAlertSweep';
 import type { Env } from '../../env';
@@ -34,7 +35,7 @@ export async function runEvalDriftSweep(env: Env, db: Db = buildDatabase(env)): 
 
   // Tenants with eval scores in the last 60 days are the only ones worth checking.
   const sinceMs = Date.now() - 60 * 24 * 60 * 60 * 1000;
-  const tenants = await db
+  const tenants = await runTelemetryDatabase(db)
     .select({ tenantId: runModelOutcomes.tenantId })
     .from(runModelOutcomes)
     .where(

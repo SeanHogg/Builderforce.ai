@@ -34,17 +34,8 @@ export const APPS_TABLES: ReadonlySet<string> = new Set(
  * every statement on a core table keeps the core one. No statement may join the two —
  * they are different databases — so a read that needs both reads one side, then the
  * other, by id. Foreign keys into core are bare ids for the same reason, and the
- * cascades they used to give are done in `infrastructure/database/appsCascade.ts`.
+ * cascades they used to give are done in `application/shared/siblingCascade.ts`.
  */
 export function appsDatabaseOf(db: Db): Db {
   return siblingDatabaseOf(db, 'apps');
-}
-
-/**
- * The database that holds `table` — the apps one for a site table, the core `db`
- * otherwise. For code that is generic over tables (the entity layer, the registry
- * projection), which knows a relation by name rather than by the module that owns it.
- */
-export function databaseForTable(db: Db, table: string): Db {
-  return APPS_TABLES.has(table) ? appsDatabaseOf(db) : db;
 }

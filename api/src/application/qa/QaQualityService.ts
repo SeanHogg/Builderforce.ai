@@ -19,11 +19,12 @@
  * rollup is workspace-wide (all of the tenant's projects).
  */
 
-import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { pullRequests, qaFindings, runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { DAY_MS } from '../../domain/shared/time';
 
 const TOP_N = 12;
@@ -110,8 +111,13 @@ export function summarizeProducers(
  * Attribute escaped defects (runtime findings) to the producer most likely to have
  * shipped them: the most recent *in-window merged* run in the same project that
  * completed at or before the finding. A coarse, project-scoped blame (not route-
- * precise — see the gap register) computed set-based via a LATERAL join, so it is
- * one query, not an N+1 per finding.
+ * precise — see the gap register).
+ *
+ * TWO READS, MATCHED IN MEMORY. The findings live on core and the outcomes on the
+ * run-telemetry database, so the LATERAL join this replaced cannot run on either.
+ * Both sides are bounded by the same window, and the outcome read is limited to the
+ * projects that actually have findings, so it stays two queries rather than one per
+ * finding.
  */
 async function attributeEscapedDefects(
   db: Db,
@@ -119,34 +125,62 @@ async function attributeEscapedDefects(
   projectId: number | null,
   since: Date,
 ): Promise<{ byModel: Record<string, number>; byAgent: Record<string, number>; attributed: number }> {
-  const projectFilter = projectId != null ? sql`AND f.project_id = ${projectId}` : sql``;
-  const res = await db.execute(sql`
-    SELECT o.model AS model, o.agent AS agent, count(*)::int AS c
-    FROM qa_findings f
-    JOIN LATERAL (
-      SELECT r.resolved_model AS model, r.cloud_agent_ref AS agent
-      FROM run_model_outcomes r
-      WHERE r.project_id = f.project_id
-        AND r.merged = true
-        AND r.created_at <= f.created_at
-        AND r.created_at >= ${since}
-      ORDER BY r.created_at DESC
-      LIMIT 1
-    ) o ON true
-    WHERE f.tenant_id = ${tenantId}
-      AND f.created_at >= ${since}
-      ${projectFilter}
-    GROUP BY o.model, o.agent
-  `);
-  const rows = ((res as unknown as { rows?: Array<{ model: string | null; agent: string | null; c: number }> }).rows) ?? [];
   const byModel: Record<string, number> = {};
   const byAgent: Record<string, number> = {};
   let attributed = 0;
-  for (const r of rows) {
-    const c = Number(r.c) || 0;
-    attributed += c;
-    if (r.model) byModel[r.model] = (byModel[r.model] ?? 0) + c;
-    if (r.agent) byAgent[r.agent] = (byAgent[r.agent] ?? 0) + c;
+
+  const findings = await db
+    .select({ projectId: qaFindings.projectId, createdAt: qaFindings.createdAt })
+    .from(qaFindings)
+    .where(and(
+      eq(qaFindings.tenantId, tenantId),
+      gte(qaFindings.createdAt, since),
+      ...(projectId != null ? [eq(qaFindings.projectId, projectId)] : []),
+    ));
+  const projectIds = [...new Set(findings.flatMap((f) => (f.projectId == null ? [] : [f.projectId])))];
+  if (projectIds.length === 0) return { byModel, byAgent, attributed };
+
+  const merged = await runTelemetryDatabase(db)
+    .select({
+      projectId: runModelOutcomes.projectId,
+      model: runModelOutcomes.resolvedModel,
+      agent: runModelOutcomes.cloudAgentRef,
+      createdAt: runModelOutcomes.createdAt,
+    })
+    .from(runModelOutcomes)
+    .where(and(
+      eq(runModelOutcomes.tenantId, tenantId),
+      inArray(runModelOutcomes.projectId, projectIds),
+      eq(runModelOutcomes.merged, true),
+      gte(runModelOutcomes.createdAt, since),
+    ))
+    .orderBy(runModelOutcomes.createdAt);
+  const runsByProject = new Map<number, typeof merged>();
+  for (const r of merged) {
+    if (r.projectId == null) continue;
+    const list = runsByProject.get(r.projectId) ?? [];
+    list.push(r);
+    runsByProject.set(r.projectId, list);
+  }
+
+  for (const f of findings) {
+    const runs = f.projectId == null ? undefined : runsByProject.get(f.projectId);
+    if (!runs) continue;
+    // Latest run at or before the finding: runs are ascending, so binary-search the
+    // last index whose createdAt <= the finding's.
+    const at = new Date(f.createdAt).getTime();
+    let lo = 0;
+    let hi = runs.length - 1;
+    let hit = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (new Date(runs[mid]!.createdAt).getTime() <= at) { hit = mid; lo = mid + 1; } else { hi = mid - 1; }
+    }
+    if (hit < 0) continue;
+    const run = runs[hit]!;
+    attributed += 1;
+    if (run.model) byModel[run.model] = (byModel[run.model] ?? 0) + 1;
+    if (run.agent) byAgent[run.agent] = (byAgent[run.agent] ?? 0) + 1;
   }
   return { byModel, byAgent, attributed };
 }
@@ -170,6 +204,7 @@ export async function computeProjectQualityTrend(
     isNotNull(pullRequests.buildStatus),
     ...(projectId != null ? [eq(pullRequests.projectId, projectId)] : []),
   );
+  const outcomesDb = runTelemetryDatabase(db);
   const outcomeScope = and(
     eq(runModelOutcomes.tenantId, tenantId),
     gte(runModelOutcomes.createdAt, since),
@@ -195,7 +230,7 @@ export async function computeProjectQualityTrend(
       builds: sql<number>`count(*)::int`,
       failures: sql<number>`count(*) filter (where ${pullRequests.buildStatus} = 'failure')::int`,
     }).from(pullRequests).where(prScope),
-    db.select({
+    outcomesDb.select({
       key: runModelOutcomes.resolvedModel,
       runs: sql<number>`count(*)::int`,
       avgScore: sql<number>`coalesce(avg(${runModelOutcomes.score}), 0)`,
@@ -203,7 +238,7 @@ export async function computeProjectQualityTrend(
       ciGreen: sql<number>`count(*) filter (where ${runModelOutcomes.ciGreen})::int`,
       degraded: sql<number>`count(*) filter (where ${runModelOutcomes.degraded})::int`,
     }).from(runModelOutcomes).where(outcomeScope).groupBy(runModelOutcomes.resolvedModel).orderBy(desc(sql`count(*)`)).limit(TOP_N),
-    db.select({
+    outcomesDb.select({
       key: runModelOutcomes.cloudAgentRef,
       runs: sql<number>`count(*)::int`,
       avgScore: sql<number>`coalesce(avg(${runModelOutcomes.score}), 0)`,
@@ -211,12 +246,12 @@ export async function computeProjectQualityTrend(
       ciGreen: sql<number>`count(*) filter (where ${runModelOutcomes.ciGreen})::int`,
       degraded: sql<number>`count(*) filter (where ${runModelOutcomes.degraded})::int`,
     }).from(runModelOutcomes).where(and(outcomeScope, isNotNull(runModelOutcomes.cloudAgentRef))).groupBy(runModelOutcomes.cloudAgentRef).orderBy(desc(sql`count(*)`)).limit(TOP_N),
-    db.select({ avg: sql<number | null>`avg(${runModelOutcomes.score})`, n: sql<number>`count(*)::int` }).from(runModelOutcomes).where(outcomeScope),
+    outcomesDb.select({ avg: sql<number | null>`avg(${runModelOutcomes.score})`, n: sql<number>`count(*)::int` }).from(runModelOutcomes).where(outcomeScope),
     db.select({ d: sql<string>`to_char(date_trunc('day', ${qaFindings.createdAt}), 'YYYY-MM-DD')`, c: sql<number>`count(*)::int` })
       .from(qaFindings).where(findingScope).groupBy(sql`date_trunc('day', ${qaFindings.createdAt})`),
     db.select({ d: sql<string>`to_char(date_trunc('day', ${pullRequests.createdAt}), 'YYYY-MM-DD')`, c: sql<number>`count(*) filter (where ${pullRequests.buildStatus} = 'failure')::int` })
       .from(pullRequests).where(prScope).groupBy(sql`date_trunc('day', ${pullRequests.createdAt})`),
-    db.select({ d: sql<string>`to_char(date_trunc('day', ${runModelOutcomes.createdAt}), 'YYYY-MM-DD')`, avg: sql<number | null>`avg(${runModelOutcomes.score})` })
+    outcomesDb.select({ d: sql<string>`to_char(date_trunc('day', ${runModelOutcomes.createdAt}), 'YYYY-MM-DD')`, avg: sql<number | null>`avg(${runModelOutcomes.score})` })
       .from(runModelOutcomes).where(outcomeScope).groupBy(sql`date_trunc('day', ${runModelOutcomes.createdAt})`),
     attributeEscapedDefects(db, tenantId, projectId, since),
   ]);

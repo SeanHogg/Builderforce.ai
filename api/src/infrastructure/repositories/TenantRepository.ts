@@ -13,7 +13,7 @@ import {
 import { asSeatKind } from '../../domain/tenant/SeatKind';
 import { tenants as tenantsTable, tenantMembers as membersTable, segments as segmentsTable } from '../database/schema';
 import type { Db } from '../database/connection';
-import { deleteAppsForTenant } from '../database/appsCascade';
+import { cascadeTenantDelete } from '../../application/shared/siblingCascade';
 
 export class TenantRepository implements ITenantRepository {
   constructor(private readonly db: Db) {}
@@ -197,8 +197,8 @@ export class TenantRepository implements ITenantRepository {
 
   async delete(id: TenantId): Promise<void> {
     await this.db.delete(tenantsTable).where(eq(tenantsTable.id, id));
-    // The workspace's published sites live on the apps database, beyond the FK cascade.
-    await deleteAppsForTenant(this.db, Number(id));
+    // Its sites (apps database) and run telemetry (telemetry database) are beyond the FK cascade.
+    await cascadeTenantDelete(this.db, Number(id));
   }
 
   // ---------------------------------------------------------------------------

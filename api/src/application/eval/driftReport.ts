@@ -13,6 +13,7 @@
 import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { detectGroupDrift, type ScoredSample } from './driftMonitor';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -23,7 +24,7 @@ const WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 /** Loads recent eval-scored runs for a tenant and computes per-group drift. */
 export async function buildTenantDriftReport(db: Db, tenantId: number) {
   const sinceMs = Date.now() - WINDOW_MS;
-  const rows = await db
+  const rows = await runTelemetryDatabase(db)
     .select({
       actionType: runModelOutcomes.actionType,
       model: runModelOutcomes.resolvedModel,

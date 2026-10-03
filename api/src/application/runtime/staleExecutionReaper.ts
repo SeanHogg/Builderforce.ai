@@ -28,6 +28,7 @@ import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { executionPauseState, executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
@@ -247,7 +248,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   ];
   await Promise.all(reaped.map(async ({ row: r, toolName }) => {
     try {
-      await db.insert(toolAuditEvents).values({
+      await runTelemetryDatabase(db).insert(toolAuditEvents).values({
         tenantId: r.tenant_id,
         agentHostId: r.agent_host_id,
         cloudAgentRef: cloudRefFromPayload(r.payload),
@@ -419,7 +420,7 @@ async function requeueCloudRun(env: Env, db: Db, row: CloudCandidateRow): Promis
   // Surface the self-heal on the Observability timeline so the gap (a run that
   // looked dead) is explained rather than silently resurrected.
   try {
-    await db.insert(toolAuditEvents).values({
+    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
       tenantId: row.tenant_id,
       agentHostId: null,
       cloudAgentRef: row.cloud_agent_ref,

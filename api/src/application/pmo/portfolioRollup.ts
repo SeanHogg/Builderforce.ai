@@ -37,6 +37,7 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
 import { rollupDora, type DeployRow, type DoraRollup } from '../metrics/workforceMetrics';
@@ -531,7 +532,7 @@ export async function computePortfolioRollup(
 
   // ── outcomes (run_model_outcomes: did the AI approach actually ship?) ───────
   const [outcomeAgg] = projectIds.length
-    ? await db
+    ? await runTelemetryDatabase(db)
         .select({
           runs: sql<string>`count(*)`,
           avgScore: sql<string>`coalesce(avg(${runModelOutcomes.score}),0)`,

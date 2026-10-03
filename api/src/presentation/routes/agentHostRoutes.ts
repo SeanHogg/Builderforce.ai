@@ -36,6 +36,8 @@ import {
   platformPersonas,
   taskFileChanges,
 } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
+import { cascadeAgentHostDelete } from '../../application/shared/siblingCascade';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateAgentHostKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
@@ -459,7 +461,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .returning({ apiKeyHash: agentHosts.apiKeyHash });
     // Cache lives 365 days; explicit invalidation is what makes deletion take effect.
     // (Raw delete — not routed through the repo/service, so it invalidates here.)
-    if (deleted) await invalidateAgentHostKeyCache(c.env, deleted.apiKeyHash);
+    if (deleted) {
+      await invalidateAgentHostKeyCache(c.env, deleted.apiKeyHash);
+      // Its telemetry lives on the run-telemetry database, beyond the FK cascade.
+      await cascadeAgentHostDelete(db, tenantId, id);
+    }
     return c.body(null, 204);
   });
 
@@ -1838,7 +1844,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     const body = await parseBody(c, UsageSnapshotBody);
 
-    await db.insert(usageSnapshots).values({
+    await runTelemetryDatabase(db).insert(usageSnapshots).values({
       tenantId:         agentHost.tenantId,
       agentHostId,
       sessionKey:       body.sessionKey ?? 'default',
@@ -1867,7 +1873,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await agentHostService.getAgentHostForTenant(agentHostId, tenantId);
     if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
 
-    const snapshots = await db
+    const snapshots = await runTelemetryDatabase(db)
       .select({
         id:               usageSnapshots.id,
         agentHostId:      usageSnapshots.agentHostId,
@@ -1911,7 +1917,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       ...(executionId ? [eq(toolAuditEvents.executionId, executionId)] : []),
     ];
 
-    const rows = await db
+    const rows = await runTelemetryDatabase(db)
       .select({
         id:          toolAuditEvents.id,
         runId:       toolAuditEvents.runId,
@@ -1957,7 +1963,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     if (!body.toolName) return c.json({ error: 'toolName is required' }, 400);
 
-    await db.insert(toolAuditEvents).values({
+    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
       tenantId:    agentHost.tenantId,
       agentHostId,
       // Stamp the execution so the event is queryable per-run (the cloud Logs/
@@ -2178,7 +2184,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const rows = await db
+    const rows = await runTelemetryDatabase(db)
       .select({
         inputTokens:  usageSnapshots.inputTokens,
         outputTokens: usageSnapshots.outputTokens,

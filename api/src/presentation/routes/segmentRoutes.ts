@@ -28,6 +28,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, z } from './requestBody';
+import { cascadeSegmentDelete, collectSegmentTelemetryKeys } from '../../application/shared/siblingCascade';
 
 /** `displayName` stays optional so "displayName is required" still answers. */
 const CreateSegmentBody = z.object({
@@ -142,12 +143,16 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId');
     const id = c.req.param('id');
 
+    // Run telemetry lives on its own database, beyond the cascade: capture which runs and
+    // hosts were this segment's while core can still say so, erase them after.
+    const telemetryKeys = await collectSegmentTelemetryKeys(db, tenantId, id);
     const [deleted] = await db
       .delete(segments)
       .where(and(eq(segments.id, id), eq(segments.tenantId, tenantId), eq(segments.isDefault, false)))
       .returning({ id: segments.id });
 
     if (!deleted) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
+    await cascadeSegmentDelete(db, telemetryKeys);
     // Stop the warm isolate from resolving the now-deleted segment.
     await invalidateSegment(deleted.id, c.env);
     return c.json({ ok: true, id: deleted.id });

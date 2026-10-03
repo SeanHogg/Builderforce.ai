@@ -26,6 +26,7 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { usageDatabaseOf, usageRequestCount } from '../llm/usageLedger';
 import { memberMetricsPeriod, deploymentEvents, llmUsageLog, projects, runModelOutcomes, ticketAudits, tasks } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { computeDora, computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { notSystemTask } from '../task/taskScope';
@@ -258,7 +259,7 @@ const collectAgenticMaturity = async (db: Db, tenantId: number, days: number, pr
       ...(forProject ? [eq(deploymentEvents.projectId, projectId!)] : []),
     )),
 
-    db.select({
+    runTelemetryDatabase(db).select({
       runs: sql<number>`count(*)::int`,
       avgScore: sql<number | null>`avg(${runModelOutcomes.score})`,
       ciGreen: sql<number>`count(*) filter (where ${runModelOutcomes.ciGreen})::int`,

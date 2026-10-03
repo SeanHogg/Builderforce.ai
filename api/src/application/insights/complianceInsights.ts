@@ -21,6 +21,7 @@
 import { and, desc, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditDaily, toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { auditWindowDays, readAuditWindow, type AuditRow } from '../audit/toolAuditTrail';
 import { TOOL_AUDIT_ROLLUP_AFTER_DAYS } from '../maintenance/toolAuditRollup';
 import { csvMatrix } from '../export/tabularExport';
@@ -148,8 +149,9 @@ const agentKeyOf = (agentHostId: number | null, cloudAgentRef: string | null): s
  */
 export async function buildEvidencePack(db: Db, tenantId: number, days: number): Promise<EvidenceRow[]> {
   const { since, sinceDay } = auditWindowDays(days);
+  const auditDb = runTelemetryDatabase(db);
   const [raw, tallies] = await Promise.all([
-    db.select({
+    auditDb.select({
       ts: toolAuditEvents.ts,
       toolName: toolAuditEvents.toolName,
       category: toolAuditEvents.category,
@@ -162,7 +164,7 @@ export async function buildEvidencePack(db: Db, tenantId: number, days: number):
       .where(and(eq(toolAuditEvents.tenantId, tenantId), gte(toolAuditEvents.ts, since)))
       .orderBy(desc(toolAuditEvents.ts))
       .limit(EVIDENCE_PACK_LIMIT),
-    db.select({
+    auditDb.select({
       lastTs: toolAuditDaily.lastTs,
       toolName: toolAuditDaily.toolName,
       category: toolAuditDaily.category,

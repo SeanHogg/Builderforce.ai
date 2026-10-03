@@ -43,6 +43,7 @@ import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { lexicalEval } from '../eval/semanticEval';
 import { resolveUsageDatabase, usageDatabaseOf, usageRequestCount } from '../llm/usageLedger';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
@@ -202,7 +203,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
     });
     const plan = await resolveTenantPlan(env, tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const);
 
-    const inserted = await db
+    const inserted = await runTelemetryDatabase(db)
       .insert(runModelOutcomes)
       .values({
         tenantId,
@@ -390,12 +391,13 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     })();
 
     const usageDb = resolveUsageDatabase(env, db);
+    const telemetryDb = runTelemetryDatabase(db);
     const [{ model, steps, costMc }, pr, degraded, approval, toolCounts, plan] = await Promise.all([
       resolveRunModel(usageDb, args.executionId),
       resolveTaskPrSignal(db, exec.tenantId, exec.taskId),
-      runWasDegraded(db, args.executionId),
+      runWasDegraded(telemetryDb, args.executionId),
       resolveApprovalOutcome(db, args.executionId),
-      resolveToolCounts(db, args.executionId),
+      resolveToolCounts(telemetryDb, args.executionId),
       resolveTenantPlan(env, exec.tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const),
     ]);
     const approved = approval.approved;
@@ -453,14 +455,14 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     // Insert-once: a newly inserted row folds into the routing blobs; an existing one
     // only refreshes its mutable outcome fields (so a late merge/CI is captured) WITHOUT
     // re-incrementing the blob (which is not idempotent — the reconcile self-heals).
-    const inserted = await db
+    const inserted = await telemetryDb
       .insert(runModelOutcomes)
       .values(rowValues)
       .onConflictDoNothing({ target: runModelOutcomes.executionId })
       .returning({ id: runModelOutcomes.id });
 
     if (inserted.length === 0) {
-      await db
+      await telemetryDb
         .update(runModelOutcomes)
         .set({
           score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan, rateLimited,

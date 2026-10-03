@@ -34,7 +34,7 @@
 import { and, asc, count, desc, eq, getTableColumns, ilike, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
-import { databaseForTable } from '../ide/appsDatabase';
+import { databaseForTable } from '../shared/databaseForTable';
 import {
   bumpCacheVersion,
   getCacheVersion,

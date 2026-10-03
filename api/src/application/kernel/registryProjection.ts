@@ -36,7 +36,7 @@ import type { Env } from '../../env';
 import { registeredEntities } from '../domains/entityCatalog';
 import { DOMAINS, isDomain, type Domain } from './ObjectRegistry';
 import { resultRows, rowsTable, type RowsColumn } from './metricRollup';
-import { databaseForTable } from '../ide/appsDatabase';
+import { databaseForTable } from '../shared/databaseForTable';
 
 /**
  * The projection map: which existing table becomes which registry kind.

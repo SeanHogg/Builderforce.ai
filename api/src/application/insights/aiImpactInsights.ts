@@ -20,6 +20,7 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog, runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { normalizeByoProvider, usageDatabaseOf } from '../llm/usageLedger';
 import { vendorForModel } from '../llm/vendors/registry';
@@ -460,7 +461,8 @@ export async function computeAiImpact(db: Db, tenantId: number, days: number): P
     .from(llmUsageLog)
     .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since)))) as UsageRow[];
 
-  const outcomes = (await db
+  const outcomesDb = runTelemetryDatabase(db);
+  const outcomes = (await outcomesDb
     .select({
       resolvedModel: runModelOutcomes.resolvedModel,
       score: runModelOutcomes.score,
@@ -473,7 +475,7 @@ export async function computeAiImpact(db: Db, tenantId: number, days: number): P
     .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, since)))) as ImpactOutcomeRow[];
 
   // Preceding equal-length window — outcomes only (drives the productivity delta).
-  const prevOutcomes = (await db
+  const prevOutcomes = (await outcomesDb
     .select({
       resolvedModel: runModelOutcomes.resolvedModel,
       score: runModelOutcomes.score,

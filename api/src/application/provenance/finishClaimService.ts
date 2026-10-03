@@ -2,12 +2,20 @@ import { and, desc, eq } from 'drizzle-orm';
 import { executionClaimEvidence, executionClaims, toolAuditEvents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { supportsExecutionClaim, type ExecutionClaimKind } from '../../domain/provenance/finishEvidence';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 
-/** Persist an immutable completion claim and its exact supporting audit rows. */
+/**
+ * Persist an immutable completion claim and its exact supporting audit rows.
+ *
+ * Claims, their evidence edges and the audit trail they cite all live on the
+ * run-telemetry database — together, because the attach trigger reads the trail in the
+ * same statement that inserts the claim. Callers pass the core handle.
+ */
 export async function recordCodeCompletionClaim(
-  db: Db,
+  core: Db,
   args: { tenantId: number; executionId: number; statement: string },
 ): Promise<{ ok: true; claimId: string; evidenceIds: number[] } | { ok: false; error: string }> {
+  const db = runTelemetryDatabase(core);
   try {
     const candidates = await db
       .select({ id: toolAuditEvents.id, toolName: toolAuditEvents.toolName, category: toolAuditEvents.category, result: toolAuditEvents.result })
@@ -43,9 +51,10 @@ export async function recordCodeCompletionClaim(
 }
 
 export async function recordTypedExecutionClaim(
-  db: Db,
+  core: Db,
   args: { tenantId: number; executionId: number; kind: Exclude<ExecutionClaimKind, 'code_completion'>; statement: string },
 ): Promise<{ ok: true; claimId: string; evidenceIds: number[] } | { ok: false; error: string }> {
+  const db = runTelemetryDatabase(core);
   try {
     const candidates = await db.select({ id: toolAuditEvents.id, toolName: toolAuditEvents.toolName, category: toolAuditEvents.category, result: toolAuditEvents.result })
       .from(toolAuditEvents).where(and(eq(toolAuditEvents.tenantId, args.tenantId), eq(toolAuditEvents.executionId, args.executionId)))

@@ -9,6 +9,7 @@
  * `builderInsights.test.ts`.
  */
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { usageDatabaseOf } from '../llm/usageLedger';
@@ -184,7 +185,7 @@ async function computeCostPerMergedPrToday(
   const { runModelOutcomes } = await import('../../infrastructure/database/schema');
   const filters = [eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, dayStart)];
   if (projectId != null) filters.push(eq(runModelOutcomes.projectId, projectId));
-  const [agg] = await db
+  const [agg] = await runTelemetryDatabase(db)
     .select({
       merged: sql<string>`coalesce(sum(case when ${runModelOutcomes.merged} then 1 else 0 end), 0)`,
     })

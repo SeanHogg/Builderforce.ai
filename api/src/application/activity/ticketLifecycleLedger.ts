@@ -48,6 +48,7 @@ import {
   activityLog, executions, taskStatusTransitions, tasks, ticketParticipants,
   ticketRoleSignoffs, toolAuditEvents,
 } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -776,7 +777,7 @@ export async function buildTicketLifecycle(
       })
       .from(executions)
       .where(scopedToTenant(executions, args.tenantId, eq(executions.taskId, args.taskId), liveExecution())),
-    db
+    runTelemetryDatabase(db)
       .select({
         toolName: toolAuditEvents.toolName,
         args: toolAuditEvents.args,
@@ -861,7 +862,7 @@ export async function buildTicketLifecycle(
   // `idx_tool_audit_execution (execution_id)` index and bounded by the ticket's run
   // count. Skipped entirely for a ticket that never ran.
   const execIds = execRows.map((r) => Number(r.id));
-  const runLifecycleRows = execIds.length === 0 ? [] : await db
+  const runLifecycleRows = execIds.length === 0 ? [] : await runTelemetryDatabase(db)
     .select({
       toolName: toolAuditEvents.toolName,
       result: toolAuditEvents.result,
@@ -1215,7 +1216,7 @@ export async function summarizeAutonomy(
       .where(scopedToTenant(executions, args.tenantId, inArray(executions.taskId, ids), liveExecution()))
       .groupBy(executions.taskId, executions.status),
     // Latest auto-run refusal per ticket → the gate holding it.
-    db.execute(sql`
+    runTelemetryDatabase(db).execute(sql`
       SELECT DISTINCT ON (session_key) session_key, tool_name, args
       FROM tool_audit_events
       WHERE tenant_id = ${args.tenantId}

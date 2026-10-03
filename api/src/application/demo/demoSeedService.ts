@@ -15,7 +15,7 @@ import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { invalidateTenantPlan } from '../tenant/tenantPlanCache';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { deleteAppsForProjects } from '../../infrastructure/database/appsCascade';
+import { cascadeProjectDelete } from '../shared/siblingCascade';
 import {
   activityLog,
   errorEvents,
@@ -261,7 +261,7 @@ async function wipeTenantContent(env: Env, db: Db, tenantId: number, keepProject
   const dropped = await db.delete(projects)
     .where(and(eq(projects.tenantId, tenantId), notInArray(projects.key, keepProjectKeys)))
     .returning({ id: projects.id });
-  await deleteAppsForProjects(db, dropped.map((p) => p.id));
+  await cascadeProjectDelete(db, dropped.map((p) => p.id));
   const remaining = await db.select({ id: projects.id }).from(projects).where(eq(projects.tenantId, tenantId));
   const ids = remaining.map((p) => p.id);
   if (ids.length > 0) await db.delete(tasks).where(scopedToTenant(tasks, tenantId, inArray(tasks.projectId, ids)));

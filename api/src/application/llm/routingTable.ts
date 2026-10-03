@@ -23,6 +23,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { llmActionRatings, runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   blendedQualityScore,
@@ -180,8 +181,9 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
       mergeRate: sql<number>`(sum(case when ${runModelOutcomes.merged} then 1 else 0 end)::float8 / count(*))`,
       rateLimitRate: sql<number>`(sum(case when ${runModelOutcomes.rateLimited} then 1 else 0 end)::float8 / count(*))`,
     };
+    const outcomesDb = runTelemetryDatabase(db);
     const [rows, ratingRows, roleRows] = await Promise.all([
-      db
+      outcomesDb
         .select({ actionType: runModelOutcomes.actionType, ...outcomeAggregate })
         .from(runModelOutcomes)
         .where(
@@ -208,7 +210,7 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
         .catch(() => [] as Array<{ actionType: string; model: string; up: number; down: number }>),
       // The same outcomes by the ROLE their model played — a third grain, and only the
       // rows that recorded one (1169); an unknown role is not evidence about any role.
-      db
+      outcomesDb
         .select({ role: runModelOutcomes.role, ...outcomeAggregate })
         .from(runModelOutcomes)
         .where(

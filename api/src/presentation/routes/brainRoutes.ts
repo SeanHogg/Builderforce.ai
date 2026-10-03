@@ -420,7 +420,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const limit = limitParam(c.req.query('limit'), 500, 2000);
     const token = await getCacheVersion(c.env as Env, traceVersionKey(id));
     const key = `brain-trace:chat:${id}:v:${token}:l:${limit}`;
-    const trace = await getOrSetCached(c.env as Env, key, () => brainService.getTrace(id, limit));
+    const trace = await getOrSetCached(c.env as Env, key, () => brainService.getTrace(id, tenantId, limit));
     return c.json({ trace });
   });
 
@@ -434,7 +434,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
 
     const body = await parseOptionalBody(c, AppendTraceBody);
-    const result = await brainService.appendTrace(id, body.events ?? []);
+    const result = await brainService.appendTrace(id, tenantId, body.events ?? []);
     // Invalidate the cached read so the next GET reflects these events.
     await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });

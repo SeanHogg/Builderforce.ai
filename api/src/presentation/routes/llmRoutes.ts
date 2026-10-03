@@ -69,6 +69,7 @@ import {
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
+import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '../../application/llm/projectEvermind';
 import { recordClientRunOutcome } from '../../application/runtime/scoreRunOutcome';
@@ -2908,27 +2909,35 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       c.env,
       `recallseed:${access.tenantId}:${limit}`,
       async () => {
-        const rows = await db
+        // Outcomes live on the run-telemetry database and tasks on core, so the task
+        // text is read second, by id, and matched in memory.
+        const rows = await runTelemetryDatabase(db)
           .select({
             executionId: runModelOutcomes.executionId,
             model: runModelOutcomes.resolvedModel,
             score: runModelOutcomes.score,
-            title: tasks.title,
-            description: tasks.description,
+            taskId: runModelOutcomes.taskId,
           })
           .from(runModelOutcomes)
-          .leftJoin(tasks, eq(runModelOutcomes.taskId, tasks.id))
           .where(eq(runModelOutcomes.tenantId, access.tenantId))
           .orderBy(desc(runModelOutcomes.createdAt))
           .limit(limit);
-        return rows
-          .filter((r) => r.model && r.model !== 'unknown' && r.title)
-          .map((r) => ({
+        const taskIds = [...new Set(rows.flatMap((r) => (r.taskId == null ? [] : [r.taskId])))];
+        const taskRows = taskIds.length === 0 ? [] : await db
+          .select({ id: tasks.id, title: tasks.title, description: tasks.description })
+          .from(tasks)
+          .where(and(eq(tasks.tenantId, access.tenantId), inArray(tasks.id, taskIds)));
+        const taskById = new Map(taskRows.map((t) => [t.id, t]));
+        return rows.flatMap((r) => {
+          const task = r.taskId == null ? undefined : taskById.get(r.taskId);
+          if (!r.model || r.model === 'unknown' || !task?.title) return [];
+          return [{
             id: r.executionId,
-            taskText: `${r.title}\n${r.description ?? ''}`.trim(),
+            taskText: `${task.title}\n${task.description ?? ''}`.trim(),
             model: r.model,
             score: r.score,
-          }));
+          }];
+        });
       },
       { kvTtlSeconds: 120, l1TtlMs: 30_000 },
     );

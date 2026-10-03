@@ -1,11 +1,12 @@
 {
   "name": "builderforce-api",
-  "version": "2026.9.48",
+  "version": "2026.10.1",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
     "db:bootstrap": "node scripts/bootstrap-db.mjs && node scripts/migrate.mjs --transactional",
     "db:migrate": "node scripts/migrate.mjs && node scripts/migrate.mjs --transactional && node scripts/migrate.mjs --apps",
+    "db:copy-run-telemetry": "node scripts/copy-run-telemetry.mjs",
     "deploy": "npm run db:migrate && npm run deploy:worker",
     "deploy:worker": "wrangler deploy",
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",

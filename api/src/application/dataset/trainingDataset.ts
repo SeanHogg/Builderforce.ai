@@ -24,6 +24,7 @@
 import { and, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { runModelOutcomes, llmUsageLog, llmTraces } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { getOrSetCached, getCacheVersion, outcomesVersionKey } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import { resolveUsageDatabase } from '../llm/usageLedger';
@@ -247,7 +248,7 @@ function clampLimit(n: number | undefined, dflt: number): number {
 /**
  * Read labeled traces for a tenant (positive-side query for SFT).
  *
- * The labels (`run_model_outcomes`) live in the core `db`; the traces and the usage rows
+ * The labels (`run_model_outcomes`) live in the run-telemetry database; the traces and the usage rows
  * that key them to an execution (`llm_usage_log`, `llm_traces`) live in `usageDb` — the
  * operational database in production, a separate Neon account. They are read in two
  * steps and matched by execution id; the single join this replaced ran against the core
@@ -265,7 +266,7 @@ async function readLabeledTraces(
     gte(runModelOutcomes.score, where.minScore),
   ];
   if (where.actionType) conds.push(eq(runModelOutcomes.actionType, where.actionType));
-  const outcomes = await db
+  const outcomes = await runTelemetryDatabase(db)
     .select({
       executionId: runModelOutcomes.executionId,
       model: runModelOutcomes.resolvedModel,

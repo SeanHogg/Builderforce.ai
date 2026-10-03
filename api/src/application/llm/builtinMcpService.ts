@@ -63,6 +63,7 @@ import { parseJsonObject } from '../../domain/shared/json';
 import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { publicAgentScope } from '../marketplace/publicAgentScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
@@ -3546,17 +3547,20 @@ const CATALOG: BuiltinTool[] = [
       const id = num(a.id);
       const [execution] = await ctx.db.select().from(executions).where(and(eq(executions.id, id), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).limit(1);
       if (!execution) return null;
-      // Cloud runs are keyed by execution_id; host runs by (agent_host_id, session_key). All
-      // telemetry tables are tenant+segment-scoped, so guard tenant+segment in every filter.
+      // Cloud runs are keyed by execution_id; host runs by (agent_host_id, session_key).
+      // The run-telemetry tables are tenant-level (like the usage ledger) and live on
+      // their own database: the SEGMENT boundary is the execution read above, which is
+      // segment-checked on core, and every telemetry filter is keyed by that run.
       const isCloudRun = execution.agentHostId == null || !execution.sessionId;
       const tenantIdUsageFilter = isCloudRun
-        ? and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.executionId, id))
-        : and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.agentHostId, execution.agentHostId!), eq(usageSnapshots.sessionKey, execution.sessionId!));
+        ? and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.executionId, id))
+        : and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.agentHostId, execution.agentHostId!), eq(usageSnapshots.sessionKey, execution.sessionId!));
       const tenantIdToolFilter = isCloudRun
-        ? and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.executionId, id))
-        : and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.agentHostId, execution.agentHostId!), eq(toolAuditEvents.sessionKey, execution.sessionId!));
-      const usage = await ctx.db.select().from(usageSnapshots).where(tenantIdUsageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
-      const toolEvents = await ctx.db.select().from(toolAuditEvents).where(tenantIdToolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
+        ? and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.executionId, id))
+        : and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.agentHostId, execution.agentHostId!), eq(toolAuditEvents.sessionKey, execution.sessionId!));
+      const telemetryDb = runTelemetryDatabase(ctx.db);
+      const usage = await telemetryDb.select().from(usageSnapshots).where(tenantIdUsageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
+      const toolEvents = await telemetryDb.select().from(toolAuditEvents).where(tenantIdToolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
       const messages = await ctx.db.select().from(executionMessages).where(and(eq(executionMessages.executionId, id), eq(executionMessages.tenantId, ctx.tenantId))).orderBy(executionMessages.createdAt).limit(500);
       return { execution, trace: { source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback', usageSnapshots: usage, toolEvents, messages } };
     },
@@ -3588,8 +3592,9 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'agent_hosts.list', mutates: false, description: 'List registered self-hosted agent hosts.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHosts).where(and(eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).orderBy(desc(agentHosts.createdAt)).limit(200); } },
   // agent_host_projects is tenant- AND segment-scoped (composite PK tenantId+agentHostId+projectId).
   { tool: 'agent_host_projects.list', mutates: false, description: 'Projects associated with an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHostProjects).where(and(eq(agentHostProjects.tenantId, ctx.tenantId), eq(agentHostProjects.segmentId, seg), eq(agentHostProjects.agentHostId, num(a.agentHostId)))).limit(200); } },
-  // usage_snapshots is tenant- AND segment-scoped; filtered to one host's token telemetry.
-  { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(usageSnapshots).where(and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.agentHostId, num(a.agentHostId)))).orderBy(desc(usageSnapshots.ts)).limit(clampLimit(a.limit)); } },
+  // usage_snapshots is tenant-level run telemetry on its own database; the segment boundary
+  // is the host, which is checked against the caller's segment on core first.
+  { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const hostId = num(a.agentHostId); const [host] = await ctx.db.select({ id: agentHosts.id }).from(agentHosts).where(and(eq(agentHosts.id, hostId), eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).limit(1); if (!host) return []; return runTelemetryDatabase(ctx.db).select().from(usageSnapshots).where(and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.agentHostId, hostId))).orderBy(desc(usageSnapshots.ts)).limit(clampLimit(a.limit)); } },
 
   // =====================================================================
   // Web-Brain parity tail — every remaining web platformActions capability,

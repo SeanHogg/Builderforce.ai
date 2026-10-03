@@ -136,7 +136,8 @@ import { checkRunLimits } from '../../domain/containment/runLimits';
 import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
 import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { boards, executionLimits, executions, llmUsageLog, tasks, toolAuditEvents, usageSnapshots, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
+import { boards, executionLimits, executions, llmUsageLog, tasks, usageSnapshots, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { submittingUserId } from './dispatcherLabel';
@@ -189,7 +190,7 @@ export async function recordCloudUsage(
   const inputTokens = clampTokenCount(args.inputTokens);
   const outputTokens = clampTokenCount(args.outputTokens);
   try {
-    await db.insert(usageSnapshots).values({
+    await runTelemetryDatabase(db).insert(usageSnapshots).values({
       tenantId:      args.tenantId,
       agentHostId:   null,
       cloudAgentRef: args.cloudAgentRef ?? null,

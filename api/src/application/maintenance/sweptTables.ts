@@ -69,9 +69,10 @@ export interface SweptTable {
   relation: string;
   /** Every endpoint the relation physically exists on.
    *
-   *  USUALLY ONE. Four of these tables are the exception: `llm_*` and `api_error_log`
-   *  were born on the primary database and their writers moved to the transactional
-   *  endpoint when it was split out (2026-07-13). The relations were never dropped from
+   *  USUALLY ONE. The exceptions are tables whose writers moved to the transactional
+   *  endpoint: `llm_*` and `api_error_log` when it was split out (2026-07-13), and the
+   *  agent-run telemetry (`tool_audit_*`, `brain_chat_trace`) on 2026-10-03, grouped
+   *  with the usage ledger by when it is written. The relations were never dropped from
    *  primary, so a copy went on sitting there with no writer AND no sweep — 35 MB of
    *  rows frozen at the date of the split, invisible to a registry that could name only
    *  one endpoint per table. Declaring the endpoints as a LIST is what closes that hole:
@@ -334,7 +335,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'tool_audit_events',
-    connections: ['primary'],
+    connections: ['transactional', 'primary'],
     retentionDays: 90,
     rationale:
       'Agent tool-audit timeline. The 90d window is NOT arbitrary and must not be shortened to '
@@ -384,7 +385,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'tool_audit_daily',
-    connections: ['primary'],
+    connections: ['transactional', 'primary'],
     retentionDays: 400,
     rationale:
       'The compliance record `tool_audit_events` becomes at 45 days. Retained far LONGER than its '
@@ -492,13 +493,11 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'brain_chat_trace',
-    connections: ['primary'],
+    connections: ['transactional', 'primary'],
     retentionDays: 90,
     pressureFloorDays: 14,
-    // No tenant predicate to declare: this table is keyed by chat, not tenant, so there is
-    // no tenantId column for acrossTenants() to be scoped against in the first place.
     rationale: 'Per-turn Brain reasoning trace (llm/tool/recall/learn steps). Backs the expandable trace on a chat turn, which nobody opens on a chat older than a quarter.',
-    purge: (db, cutoff) => db.delete(brainChatTrace).where(lt(brainChatTrace.createdAt, cutoff)),
+    purge: (db, cutoff) => db.delete(brainChatTrace).where(acrossTenants(brainChatTrace, 'scheduled_sweep', lt(brainChatTrace.createdAt, cutoff))),
   },
   {
     relation: 'integration_sync_logs',

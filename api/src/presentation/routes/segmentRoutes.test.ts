@@ -12,6 +12,15 @@ vi.mock('../middleware/authMiddleware', () => ({
   requireRole: () => async (_c: any, next: any) => next(),
 }));
 
+// Run telemetry lives on its own database, so erasure is an explicit cascade the route
+// performs — captured here so the tests can assert it happens (and only on a real delete).
+const KEYS = { tenantId: TENANT, segmentId: 'seg-acme', executionIds: [7], agentHostIds: [3] };
+const cascade = vi.hoisted(() => ({
+  collectSegmentTelemetryKeys: vi.fn(),
+  cascadeSegmentDelete: vi.fn(async () => {}),
+}));
+vi.mock('../../application/shared/siblingCascade', () => cascade);
+
 import { createSegmentRoutes } from './segmentRoutes';
 
 /**
@@ -93,16 +102,24 @@ describe('segmentRoutes', () => {
     expect(res.status).toBe(400);
   });
 
-  it('DELETE /:id erases an owned non-default segment (cascade at the DB level)', async () => {
+  it('DELETE /:id erases an owned non-default segment, its run telemetry included', async () => {
+    cascade.collectSegmentTelemetryKeys.mockReset().mockResolvedValue(KEYS);
+    cascade.cascadeSegmentDelete.mockClear();
     const { db } = makeDb({ deleteRows: [{ id: 'seg-acme' }] });
     const res = await createSegmentRoutes(db).request('/seg-acme', { method: 'DELETE' });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, id: 'seg-acme' });
+    // Keys captured while core could still name the segment's runs, then erased.
+    expect(cascade.collectSegmentTelemetryKeys).toHaveBeenCalledWith(db, TENANT, 'seg-acme');
+    expect(cascade.cascadeSegmentDelete).toHaveBeenCalledWith(db, KEYS);
   });
 
-  it('DELETE /:id 404s when no owned, non-default row matches (default + tenant guard)', async () => {
+  it('DELETE /:id 404s when no owned, non-default row matches, and erases no telemetry', async () => {
+    cascade.collectSegmentTelemetryKeys.mockReset().mockResolvedValue({ ...KEYS, segmentId: 'seg-default' });
+    cascade.cascadeSegmentDelete.mockClear();
     const { db } = makeDb({ deleteRows: [] });
     const res = await createSegmentRoutes(db).request('/seg-default', { method: 'DELETE' });
     expect(res.status).toBe(404);
+    expect(cascade.cascadeSegmentDelete).not.toHaveBeenCalled();
   });
 });

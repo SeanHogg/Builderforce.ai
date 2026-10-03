@@ -147,7 +147,77 @@ Public copy describes evidence available today; stronger promises become roadmap
 
 - **The staffed-chat dispatch inversion and the chat run-history section have not been exercised end to end on a live chat (2026-09-22).** Built and unit-covered this pass (see DONE.md 2026-09-22): a work-mode chat with agents invited now gets `DISPATCH TO THEM` instead of `DO IT HERE WHEN YOU CAN`, and the diagnostics report gained an Execution history section fed by `GET /api/brain/chats/:id/runs`. What the tests cannot show is the behaviour that motivated it — whether a real IDE turn on a staffed chat actually calls `builtin_chats_dispatch_agent`, whether the dispatched agent's milestones land back in that chat, and whether the copied report's new section then names those runs. *Blocker: needs a deployed api carrying the `/runs` route, a packaged+installed VSIX, and one live cloud run against a staffed chat on a project with a bound repo — none of which exist in this environment.* Unblocks: knowing the chat #103 failure is actually closed rather than only made visible.
 
-- **🔴 Both Neon Free endpoints are near the 0.5 GB cap, and the fix that would reclaim space needs a deploy plus one force-run (2026-09-16).** Console: `builderforce-transactional` 478 MB, `builderforce-core` 446 MB. Measured read-only 01:46Z Sep 17: transactional `pg_database_size` 433 MiB — `llm_traces` 241 MB (**209 MB TOAST**, 18,283 rows, nearly all under 5 days old), `activity_log` 92.5 MB (visitor rows only 3,329 of 130,759), `llm_usage_log` 52 MB, `api_error_log` 37 MB; core 402 MiB — `tool_audit_events` 52 MB, `creation_session_events` 41 MB + `creation_session_snapshots` 32 MB (both almost all TOAST), `executions` 29 MB, `brain_chat_messages` 25 MB, `pr_reconciliation_items` 24 MB, `brain_chat_trace` 23 MB, `usage_snapshots` 19 MB, plus a writerless 11 MB `llm_usage_log` copy (newest row 2026-09-14). The 2026-09-15 storage pass never ran: its release failed at 03:59Z and nothing deployed until 12:34Z, after the 09:00Z cron. Three defects that would have kept it from freeing space even once it ran are fixed in api 2026.9.41 (DONE.md 2026-09-16). **Owed:** deploy 2026.9.41, then force-run `POST /api/admin/cron/db-pressure` (superadmin → Cron panel) instead of waiting for 09:00Z, then re-read both console figures. *Blocker: a production deploy and a superadmin force-run, both operator actions — this session's production access was refused by the permission classifier.* Unblocks: both endpoints back under 80%.
+- **🔴 $0 platform: Cloudflare Free plus Neon Free, with heavy compute brought by the tenant; no Oracle (plan 2026-10-03, Oracle rejected by the operator; research in `reports/Zero cost hosting alternatives.md`).** The operator will pay for neither Neon nor Cloudflare, and wants no feature lost.
+  - **What it costs and holds today.** Neon console on 2026-10-03: about 235 CU-hours a month across the org, roughly $25/mo at Launch rates, about 98% of it compute. Measured read-only the same day:
+    - Core: 437 MB. About 240 MB of that is telemetry, blobs and bloat: `tool_audit_events` 62 MB, `creation_session_*` 101 MB, `brain_chat_trace` 27 MB, a writerless `llm_usage_log` copy 12 MB, `usage_snapshots` 20 MB with 0 rows, and 19 MB of bloat.
+    - Transactional: 261 MB of telemetry.
+    - Apps: 8.3 MB, 2 rows.
+    - `builderforce-primary`: the rollback copy, still billing.
+  - **Facts that changed in 2026** (from the research; they correct this entry's previous version):
+    - Cloudflare removed the compressed Worker size limit on 2026-09-04. Only the 64 MiB uncompressed limit applies now, so the 4.58 MiB-gzip API fits Workers Free unsplit.
+    - Neon Free is 1 GB and 100 CU-hours per project, 100 projects, 20 GB per org. Confirm 1 GB on the console.
+  - **The Free limits that still bind:**
+    - Workers: 10 ms CPU and 50 external subrequests per invocation, 100k requests a day.
+    - Durable Objects: 100k rows written a day.
+    - KV: 1,000 writes a day.
+    - Containers: not available on Free. Browser Run gives only 10 browser-minutes a day.
+  - **Target: Architecture B.**
+    - **Cloudflare Free:** a thin router/auth Worker. It keeps the Durable Objects (with Hibernation), R2 and wildcard sites, Email Routing and small Workers AI calls. Its crons only enqueue work.
+    - **Coding agents:** use paths that already exist, in this order:
+      1. The user's own agent host (VSIX / agent-runtime through `AGENT_HOST_RELAY`). It has a real shell, builds and tests.
+      2. The tenant's GitHub Actions (`githubActionsDispatch.ts`).
+      3. The Durable Object runner. It has no shell, so it cannot build.
+      The default surface in `cloudDispatch.ts` becomes the agent host or GitHub Actions instead of `container`.
+    - **Previews:** in-browser WebContainers (`frontend/src/lib/browserRuntime/webcontainer.ts`), replacing `previewDevServer.ts`. *Check first: StackBlitz's WebContainer API terms for commercial production use may require a paid licence.*
+    - **QA runner and stage sandbox:** Playwright on the tenant's GitHub Actions or on the agent host. Browser Run Free (10 browser-minutes a day) is the small built-in fallback.
+    - **CPU-heavy routes** (pdf/pptx generation with `unpdf`, `pdf-lib`, `pptxgenjs`; document parsing): move to the browser client, or to a Durable Object or agent-host job, so the Worker stays within 10 ms of CPU.
+    - **Plan tiers (operator decision, 2026-10-03).**
+      - Free tenants run only on the $0 paths above, with canvas previews in WebContainers. The operator's position is that a free, uncharged canvas does not breach the WebContainer terms.
+      - Once tenants pay, the account moves to Workers Paid, and paid tenants get Containers through the existing `planFeatures.containerRuntime` gate (`cloudSurfaceEntitlement.ts`, `PAID_DEFAULT_CLOUD_SURFACE`).
+      - Deploy config must support both modes. A `[[containers]]` block will not deploy on Workers Free, so it goes in a paid wrangler environment while the default deploy has no containers. Runtime already falls back when `AGENT_CONTAINER` is unbound.
+      - The preview path must be chosen by entitlement: a container preview for paid tenants, WebContainers for free ones.
+    - **Free-tier previews move to our own runtime, `builderforce-webcontainers` (repo created 2026-10-03 at `../builderforce-webcontainers`).** It is MIT-licensed, needs no COOP/COEP headers and has no session cap. 40/40 tests pass.
+      - Until it ships, StackBlitz WebContainers keep the attribution (`WebContainerAttribution`) and the unmetered 25,000-sessions-a-month cap.
+      - Integration plan:
+        - Add `@seanhogg/builderforce-webcontainers`.
+        - Serve `dist/sw.js` at `/__bfwc/sw.js`.
+        - In `BuilderWorkspace`, for free tenants whose `runtime.profile().supported` is true, mount the files and set the preview iframe to `runtime.url` instead of `startDevServer`.
+        - Wire `runtime.onError` into the existing run log.
+        - Keep WebContainers or the container for unsupported projects (Next.js, Vue, Svelte, Node servers).
+      - *Blocker: first publish. The repo is live at github.com/SeanHogg/builderforce-webcontainers (pushed 2026-10-03). It still needs an `NPM_TOKEN` repo secret (a credential only the operator can add), then `git tag v2026.10.0 && git push --tags`, which runs the release workflow.*
+    - **Optional platform-owned compute:** the Google Cloud Run free tier (180k vCPU-seconds, 2M requests a month). It needs a billing account with a card and has no hard spending cap, so it is opt-in only.
+    - **Neon Free:** keep core and transactional, gated so the cron does not keep them awake. Nightly `pg_dump` to R2. Delete `builderforce-apps` and `builderforce-primary`.
+  - **Agent-run telemetry cutover to the operational endpoint: run it against production (code shipped 2026-10-03, api 2026.10.1, see DONE.md).** The Worker now reads and writes `tool_audit_*`, `execution_claim*`, `usage_snapshots`, `brain_chat_trace`, `run_context_state` and `run_model_outcomes` on `NEON_TRANSACTIONAL_DATABASE_URL`. Until the rows are copied, those surfaces start empty in production (routing stats, compliance window, lifecycle ledger).
+    - The push deploys it (migrate + Worker in one job). Then run `npm run db:copy-run-telemetry` (re-runnable), then `node scripts/copy-run-telemetry.mjs --purge-source` (verifies every row arrived, then empties the core copies). Copying after the deploy is safe: 0013 starts the operational sequences at 500M, above any core id.
+    - *Blocker: production database credentials to run the copy. This needs the operator.*
+  - **The 5th Neon slot: use it only for a workload that wakes on its own schedule.** The candidate is the background sync tables (`pr_reconciliation_*`, `activity_signals`, `lens_snapshots`), and only once the sweeps' config reads are served from cache. Otherwise keep it as overflow in case transactional nears 100 CU-hr, which is now more likely because it carries the run telemetry.
+    - *Blocker: per-project CU-hr figures from the Neon console's Usage page, measured after the cutover above.*
+  - **Known losses at $0:**
+    - About 2–4 concurrent cloud agents instead of 25.
+    - Fewer concurrent Chromium sessions.
+    - Tenants without an agent host or GitHub Actions get only the shell-less Durable Object runner.
+    - No SLA. Cloudflare can end free service.
+  - **Sequence.** The order is a gate, because Containers stop the moment the account drops to Free:
+    1. Measure per-route CPU, subrequests and daily quotas. Workers observability is currently `enabled = false`.
+    2. Cut telemetry writes at the source: per-run and per-day folds, trace bodies to R2, the error log to Workers Logs. Gate the cron and set `CRON_FLOOR_INTERVAL_MS=7200000`. Delete `builderforce-primary`.
+    3. Switch the default cloud surface to the agent host or GitHub Actions, and move previews to WebContainers.
+    4. Move the QA runner and stage sandbox to GitHub Actions or the agent host.
+    5. Move CPU-heavy routes to the client or to Durable Object jobs, and give each cron sweep its own Durable Object alarm.
+    6. Move the cache's second layer from KV to the Cache API or Durable Object SQLite.
+    7. Move card collection to Stripe-hosted Checkout. Cloudflare's terms forbid collecting cards on a Free-plan property.
+    8. Downgrade Cloudflare to Free.
+    9. Downgrade Neon to Free.
+  - **Blockers:**
+    - The WebContainer commercial licence terms.
+    - The Neon and Cloudflare consoles.
+    - Production CPU measurements, which need observability turned on.
+    - Operator acceptance of the reduced agent concurrency.
+- **Marketing claim `credential-encryption` passed its review date (2026-10-03), so `capabilityProof.test.ts` now fails.** The test is a deliberate gate: `frontend/src/lib/content/product.ts` claims must be re-reviewed by their owner before `reviewBy`. Pushing the date out without a review would defeat it. *Blocker: the claim owner re-reviews the copy and evidence, then sets a new `reviewBy`.* Unblocks: a green frontend suite.
+- **The free-site badge needs two operator actions before deploy (2026-10-03).** Every free tenant's published site starts showing "Made with Builderforce.ai" on the next api deploy.
+  - Add "Remove the Builderforce badge" to the Pro/Teams features in the superadmin pricing editor. The pricing page reads plan features from that config, not from code.
+  - Tell existing free publishers before the deploy, for example with an announcement or a `release_notes` row of category `improvement`.
+
+  *Blocker: both are admin-UI or production actions.*
 - **Core's large non-log relations have no retention policy and are not in scope for the sweep (2026-09-16).** `creation_session_events` (1,314 rows, ~31 KB each in TOAST) and `creation_session_snapshots` (946 rows, ~33 KB each) are 73 MB of canvas history on an endpoint near its cap; `usage_snapshots` is 97k rows. These are domain data, so the registry's "membership is the permission" rule rightly keeps them out, and nothing bounds them. *Blocker: an operator decision on how much canvas event/snapshot history a session keeps (e.g. snapshots beyond the latest N per session).* Unblocks: core headroom that does not depend on log tables alone.
 - **A cloud-agent burst drove most of Sep 16's growth — confirm whether it was intended (2026-09-16).** 19:15–22:30Z on tenant 1 / project 11: 639 executions across ~95 tickets (≈9–11 runs per ticket in three hours), 13,812 `task_execution` LLM calls (single executions made 196–370 calls each), 64,940 `tool_audit_events` on core (normal ≈400/day), 191 failed runs. It stopped by itself as providers refused: `xai-oauth` 403 `spending-limit` (649), MiniMax 429 (499), Opus 408 timeouts (152). Nothing was pending or running at 01:46Z Sep 17. Note the per-ticket re-dispatch rate, not the per-run call count, is the lever: the no-step-cap rule stands. *Blocker: the operator knows whether ~95 project-11 tickets were deliberately released at once; if not, the re-dispatch path needs a live trace like the one the open "What RE-OPENS a role slot" entry asks for.* Unblocks: knowing whether the next burst is expected load or the dispatch loop again.
 

@@ -33,7 +33,7 @@ import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollo
 import { startFollowUpRun } from '../../application/runtime/followUpRun';
 import { listExecutionLlmTurns } from '../../application/llm/executionTraces';
 import { executionUsageCost, taskUsageCost } from '../../application/llm/usageCostSummary';
-import { modelUsageByExecution } from '../../application/llm/executionModelUsage';
+import { auditedModelsByExecution, modelUsageByExecution } from '../../application/llm/executionModelUsage';
 import { invalidateAgentExecutionGate } from '../../application/runtime/agentExecutionGate';
 import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 import { notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
@@ -65,6 +65,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requireFeature } from '../middleware/featureGate';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { approvals } from '../../infrastructure/database/schema';
 import { agentPurchases, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
@@ -950,7 +951,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const ts = body.ts ? new Date(body.ts) : new Date();
     const safeTs = Number.isNaN(ts.getTime()) ? new Date() : ts;
 
-    await db.insert(usageSnapshots).values({
+    await runTelemetryDatabase(db).insert(usageSnapshots).values({
       tenantId: plain.tenantId,
       agentHostId: plain.agentHostId,
       sessionKey: plain.sessionId,
@@ -996,7 +997,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           eq(toolAuditEvents.sessionKey, sessionId!),
         );
 
-    const usage = await db
+    const usage = await runTelemetryDatabase(db)
       .select({
         id: usageSnapshots.id,
         ts: usageSnapshots.ts,
@@ -1011,7 +1012,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .orderBy(desc(usageSnapshots.ts))
       .limit(500);
 
-    const toolEvents = await db
+    const toolEvents = await runTelemetryDatabase(db)
       .select({
         id: toolAuditEvents.id,
         ts: toolAuditEvents.ts,
@@ -1071,7 +1072,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // (Still uncached by design: a debug surface that must reflect a run instantly,
     //  and caching would force a KV version-bump on the hot per-tool-call insert.)
     const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const rows = await db
+    const rows = await runTelemetryDatabase(db)
       .selectDistinct({ ref: toolAuditEvents.cloudAgentRef })
       .from(toolAuditEvents)
       .where(and(
@@ -1128,7 +1129,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         ? and(isNull(toolAuditEvents.cloudAgentRef), isNull(toolAuditEvents.agentHostId))
         : eq(toolAuditEvents.cloudAgentRef, ref);
 
-    const events = await db
+    const events = await runTelemetryDatabase(db)
       .select({
         id: toolAuditEvents.id,
         runId: toolAuditEvents.runId,
@@ -1600,18 +1601,6 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         agent: taskFileChanges.agent,
         executionId: taskFileChanges.executionId,
         createdAt: taskFileChanges.createdAt,
-        // NOTE: the outer-row references below interpolate the TABLE (`${taskFileChanges}`),
-        // not its columns. In a single-table select Drizzle renders an interpolated
-        // Column WITHOUT its table qualifier, so `${taskFileChanges.executionId}` would
-        // emit a bare `"execution_id"` that the correlated subquery resolves against its
-        // OWN table — silently turning the filter into a tautology.
-        models: sql<string[]>`ARRAY(
-          SELECT DISTINCT substring(a.args from '"model"\\s*:\\s*"([^"]+)"')
-          FROM tool_audit_events a
-          WHERE a.execution_id = ${taskFileChanges}.execution_id AND a.tenant_id = ${taskFileChanges}.tenant_id
-            AND a.tool_name = 'llm.complete'
-            AND substring(a.args from '"model"\\s*:\\s*"([^"]+)"') IS NOT NULL
-        )`,
       })
       .from(taskFileChanges)
       .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, c.get('tenantId'))))
@@ -1625,11 +1614,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const fromDispatches = await readDispatchFileChanges(db, c.get('tenantId'), taskId);
     // Which models each run used (BYO or platform) — from the database that owns the
     // usage ledger (operational in production), not a subquery against the core copy.
-    const usage = await modelUsageByExecution(
-      resolveUsageDatabase(c.env as Env, db), c.get('tenantId'), rows.map((r) => r.executionId),
-    );
+    // `models` (the run's llm.complete audit events) comes from the run-telemetry database
+    // the same way.
+    const executionIds = rows.map((r) => r.executionId);
+    const [usage, audited] = await Promise.all([
+      modelUsageByExecution(resolveUsageDatabase(c.env as Env, db), c.get('tenantId'), executionIds),
+      auditedModelsByExecution(db, c.get('tenantId'), executionIds),
+    ]);
     const withUsage = rows.map((r) => ({
-      ...r, modelUsage: r.executionId == null ? [] : usage.get(r.executionId) ?? [],
+      ...r,
+      models: r.executionId == null ? [] : audited.get(r.executionId) ?? [],
+      modelUsage: r.executionId == null ? [] : usage.get(r.executionId) ?? [],
     }));
     const seen = new Set(withUsage.map((r) => r.path));
     const changes = [...withUsage, ...fromDispatches.filter((d) => !seen.has(d.path))]

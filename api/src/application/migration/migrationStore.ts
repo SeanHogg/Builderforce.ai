@@ -27,7 +27,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
-import { deleteAppsForProjects } from '../../infrastructure/database/appsCascade';
+import { cascadeProjectDelete } from '../shared/siblingCascade';
 import type { Env } from '../../env';
 import { hasPendingInvite, invite } from '../kernel/InvitationService';
 import type {
@@ -331,7 +331,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
       });
       // After the commit: the apps database cannot take part in this transaction, and a
       // rollback that failed must not have taken the projects' sites with it.
-      await deleteAppsForProjects(db, projectIds);
+      await cascadeProjectDelete(db, projectIds);
       return removed;
     },
   };

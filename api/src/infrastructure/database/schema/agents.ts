@@ -1103,13 +1103,16 @@ export const workflowTriggers = pgTable('workflow_triggers', {
 // Usage snapshots — context window and token telemetry from the agentHost agent
 // ---------------------------------------------------------------------------
 
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
+// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
+// when it is written. References to core entities are plain ids, not foreign keys.
 export const usageSnapshots = pgTable('usage_snapshots', {
   id:               serial('id').primaryKey(),
-  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  tenantId:         integer('tenant_id').notNull(),
+  segmentId: uuid('segment_id'),
   // Telemetry belongs to EITHER a self-hosted host OR a cloud agent (0092), so
   // agent_host_id is nullable; cloud rows carry cloud_agent_ref + execution_id instead.
-  agentHostId:           integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
+  agentHostId:           integer('agent_host_id'),
   /** Raw-SQL ide_agents.id for cloud-agent runs (no FK; see task.assignedAgentRef). */
   cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
   /** Execution this snapshot belongs to — the trace key for cloud runs (no live session). */
@@ -1129,13 +1132,16 @@ export const usageSnapshots = pgTable('usage_snapshots', {
 // Tool audit events — immutable, append-only log of tool calls made by agents
 // ---------------------------------------------------------------------------
 
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
+// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
+// when it is written. References to core entities are plain ids, not foreign keys.
 export const toolAuditEvents = pgTable('tool_audit_events', {
   id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  tenantId:    integer('tenant_id').notNull(),
+  segmentId: uuid('segment_id'),
   // Telemetry belongs to EITHER a self-hosted host OR a cloud agent (0092), so
   // agent_host_id is nullable; cloud rows carry cloud_agent_ref + execution_id instead.
-  agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
+  agentHostId:      integer('agent_host_id'),
   /** Raw-SQL ide_agents.id for cloud-agent runs (no FK; see task.assignedAgentRef). */
   cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
   /** Execution this event belongs to — the trace key for cloud runs (no live session). */
@@ -1176,9 +1182,12 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
  * in SQL — drizzle 0.36 cannot express that qualifier) so a re-fold of a day
  * already folded ADDS to the tally instead of duplicating it.
  */
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
+// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
+// when it is written. References to core entities are plain ids, not foreign keys.
 export const toolAuditDaily = pgTable('tool_audit_daily', {
   id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  tenantId:    integer('tenant_id').notNull(),
   /** The UTC calendar day the folded events fall on. Whole days only — a partial
    *  day is never folded, so the boundary can never double-count. */
   day:         date('day').notNull(),
@@ -1203,10 +1212,13 @@ export const toolAuditDaily = pgTable('tool_audit_daily', {
 }));
 
 /** An agent assertion whose support is structural rather than inferred from prose. */
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
+// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
+// when it is written. References to core entities are plain ids, not foreign keys.
 export const executionClaims = pgTable('execution_claims', {
   id:          uuid('id').primaryKey().defaultRandom(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  executionId: integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  tenantId:    integer('tenant_id').notNull(),
+  executionId: integer('execution_id').notNull(),
   kind:        varchar('kind', { length: 32 }).notNull(),
   statement:   text('statement').notNull(),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
@@ -1218,7 +1230,7 @@ export const executionClaims = pgTable('execution_claims', {
 export const executionClaimEvidence = pgTable('execution_claim_evidence', {
   claimId:          uuid('claim_id').notNull().references(() => executionClaims.id, { onDelete: 'cascade' }),
   toolAuditEventId: integer('tool_audit_event_id').notNull().references(() => toolAuditEvents.id, { onDelete: 'restrict' }),
-  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  tenantId:         integer('tenant_id').notNull(),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.claimId, t.toolAuditEventId] }),
@@ -1462,11 +1474,16 @@ export const importRuns = pgTable('import_runs', {
 // composite 0..1 outcome score. The durable source of truth analytics + the
 // derived `routing:<scope>` KV blob read from. Idempotent on execution_id.
 // ---------------------------------------------------------------------------
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
+// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
+// when it is written. References to core entities are plain ids, not foreign keys.
 export const runModelOutcomes = pgTable('run_model_outcomes', {
   id:               serial('id').primaryKey(),
-  tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
-  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  taskId:           integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  tenantId:         integer('tenant_id'),
+  projectId:        integer('project_id'),
+  /** Dangles after the task is deleted (it used to be SET NULL); readers match it
+   *  against core by id and treat a missing task as none. */
+  taskId:           integer('task_id'),
   /** The terminal cloud run this outcome scores. Unique (the scorer upserts on it
    *  so it is idempotent across the multiple terminal paths). No FK — executions is
    *  pruned independently and a scored outcome should survive the run row. The
@@ -2166,9 +2183,16 @@ export const platformPersonas = pgTable('platform_personas', {
 // simple: one row per event, JSON args/result as text, durations for the UI.
 // ---------------------------------------------------------------------------
 
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
+// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
+// when it is written. References to core entities are plain ids, not foreign keys.
 export const brainChatTrace = pgTable('brain_chat_trace', {
   id:         serial('id').primaryKey(),
-  chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  chatId:     integer('chat_id').notNull(),
+  /** The chat's tenant (migration 1191 / transactional 0013). With no key into
+   *  `brain_chats` the row cannot inherit it, and tenant erasure has to find it.
+   *  NULL only on rows written before 1191. */
+  tenantId:   integer('tenant_id'),
   /** Monotonic per-run turn ordinal (groups events of the same assistant turn). */
   turnSeq:    integer('turn_seq'),
   /** 'llm'|'tool'|'message'|'recall'|'learn'|'reconcile'|'error'. */
@@ -2784,6 +2808,9 @@ export const workflowActions = pgTable('workflow_actions', {
  * (tenant_id, scope, subject_key) is what makes a write REPLACE rather than accumulate —
  * the single-incumbent guarantee, enforced by the database rather than by convention.
  */
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
+// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
+// when it is written. References to core entities are plain ids, not foreign keys.
 export const runContextState = pgTable('run_context_state', {
   id:         bigserial('id', { mode: 'number' }).primaryKey(),
   tenantId:   integer('tenant_id').notNull(),

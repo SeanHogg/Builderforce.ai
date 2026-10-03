@@ -2,6 +2,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Execution } from '../../domain/execution/Execution';
 import { toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 
 /**
  * Cloud-agent ref pinned in an execution's JSON payload, if any. Cloud runs carry
@@ -33,7 +34,7 @@ function cloudRefFromPayload(payload: string | null): string | null {
  */
 export async function recordRunFailureEvent(db: Db, e: Execution): Promise<void> {
   try {
-    await db.insert(toolAuditEvents).values({
+    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
       tenantId:      e.tenantId,
       agentHostId:   e.agentHostId ?? null,
       cloudAgentRef: cloudRefFromPayload(e.payload),

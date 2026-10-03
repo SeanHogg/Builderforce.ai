@@ -66,6 +66,7 @@ import { parseExecutor } from './cloudDispatch';
 import { QUEUED_DEADLINE_MS } from './staleExecutionReaper';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { executions, toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { Env } from '../../env';
 
@@ -386,7 +387,7 @@ async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): P
     });
   if (updated.length === 0) return false;
 
-  await db.insert(toolAuditEvents).values({
+  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
     tenantId: row.tenantId,
     agentHostId: null,
     cloudAgentRef: row.cloudAgentRef,

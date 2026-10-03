@@ -13,6 +13,7 @@
 import { and, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { HOUR_MS } from '../../domain/shared/time';
 
 export interface OutcomeRow {
@@ -117,7 +118,7 @@ export function summarizeOutcomes(rows: OutcomeRow[], windowDays: number): Engin
 
 export async function computeEngineeringInsights(db: Db, tenantId: number, days: number, projectId?: number): Promise<EngineeringInsights> {
   const since = new Date(Date.now() - days * 24 * HOUR_MS);
-  const rows = (await db
+  const rows = (await runTelemetryDatabase(db)
     .select({
       actionType: runModelOutcomes.actionType,
       resolvedModel: runModelOutcomes.resolvedModel,

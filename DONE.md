@@ -1,3 +1,27 @@
+## ✅ RESOLVED 2026-10-03 — Agent-run telemetry moves from core to the operational endpoint (Neon grouping rule)
+
+- **The gap.** Neon bills each project by its own awake time. Agent-run telemetry was written on core while every run also wrote the usage ledger on transactional, so each run kept both projects awake. `tool_audit_events` alone took ~77k writes between two of core's sleeps.
+- **What moved** (`transactional-migrations/0013_run_telemetry.sql`): `tool_audit_events`, `tool_audit_daily`, `usage_snapshots`, `brain_chat_trace`, `run_context_state` and `run_model_outcomes`. Two more went with them, beyond the roadmap's list:
+  - `execution_claims` and `execution_claim_evidence`. They are written at run finish, and their attach trigger reads the audit trail in the same statement. Leaving them on core would have rejected every completion claim once core's trail froze.
+- **Plain ids.** References to tenants, segments, projects, tasks, executions, agent hosts and chats are plain ids now. Only the claim → evidence → trail keys remain.
+  - `brain_chat_trace` gained a `tenant_id` (core 1191, backfilled), because it can no longer inherit its tenant through the chat.
+- **One primitive.** `application/shared/runTelemetryDatabase.ts` resolves the endpoint from the core handle. Its `RUN_TELEMETRY_TABLES` set feeds `application/shared/databaseForTable.ts`, which moved out of the apps module, for the generic entity and registry readers.
+  - A test pins that set to exactly the tables 0013 creates.
+- **Cross-database joins split** into two reads matched in memory:
+  - QA escaped-defect attribution (was a LATERAL join from `qa_findings`).
+  - The recall seed (was a join to `tasks`).
+  - The CI auto-fix loop guard (was a join to `executions`).
+  - The Changes tab's per-run models (was a correlated subquery). It is now `auditedModelsByExecution`, beside `modelUsageByExecution`.
+- **Cascades the foreign keys used to perform.** These are in `application/shared/siblingCascade.ts`, which replaces `infrastructure/database/appsCascade.ts`:
+  - Tenant, project and agent-host deletes.
+  - Segment erasure: the route collects the segment's run and host ids before the core delete. New rows carry no `segment_id` (there's no default-segment trigger on transactional), so segment filters on telemetry were dropped. The segment boundary is now the execution or host that is checked on core.
+  - Rows a claim cites are kept, as are the immutable claims themselves.
+- **Retention.** `tool_audit_events`, `tool_audit_daily` and `brain_chat_trace` are swept on both endpoints until the core copies are drained. The trace purge is now tenant-scoped.
+- **Data.** `scripts/copy-run-telemetry.mjs` (`npm run db:copy-run-telemetry`) copies with ids preserved and advances the transactional sequences past core's max + 1M. `--purge-source` verifies every row arrived, then truncates the core copies. The production run is still open in ROADMAP.md.
+- **Dead code.** Removed `forgetRunContextScope` (no callers) and an unused import in `cloudAgentEngine.ts`.
+- **Verified (Sonnet):** `tsgo` clean; `npm run check` 36/36 (the tenant-scope baseline was lowered after `agentHostRoutes` improved 3 → 2); vitest 885 files / 10,531 tests pass. The segment route tests now assert the erasure cascade, and that it does not run on a 404.
+- **Version.** api 2026.10.1.
+
 ## ✅ RESOLVED 2026-09-29 — One limbic implementation (P2 (f)), and the release/deploy CI failures
 
 - **Gap.** `packages/agent-tools/src/limbic.ts` and the engine's `limbic/regions.ts` each held the 8-dim affect schema and the personality → setpoint formula ("keep in sync" comments); agent-runtime re-exported agent-tools through a barrel; the frontend hand-copied `LimbicDimName`; api and agent-runtime each averaged setpoints across personas by hand.

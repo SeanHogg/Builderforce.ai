@@ -15,6 +15,7 @@ import {
   users,
   tenantMembers,
 } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { readTimelineTail } from '../../domain/shared/timelineTail';
 import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
@@ -1112,7 +1113,7 @@ export class BrainService {
    *  gates first). Neon-http has no interactive transactions, so this is a single
    *  multi-row INSERT (one statement). Bounds each JSON blob so a runaway tool
    *  result can't bloat a row. Returns the number of rows written. */
-  async appendTrace(chatId: number, events: BrainTraceEventInput[]): Promise<{ appended: number }> {
+  async appendTrace(chatId: number, tenantId: number, events: BrainTraceEventInput[]): Promise<{ appended: number }> {
     if (!Array.isArray(events) || events.length === 0) return { appended: 0 };
     const clamp = (v: unknown): string | null => {
       if (v == null) return null;
@@ -1123,6 +1124,7 @@ export class BrainService {
       .filter((e) => e && typeof e.kind === 'string' && e.kind.length > 0)
       .map((e) => ({
         chatId,
+        tenantId,
         turnSeq: Number.isFinite(e.turnSeq as number) ? Number(e.turnSeq) : null,
         kind: String(e.kind).slice(0, 24),
         label: e.label != null ? String(e.label).slice(0, 120) : null,
@@ -1136,7 +1138,7 @@ export class BrainService {
         occurredAt: parseInstant(e.ts),
       }));
     if (rows.length === 0) return { appended: 0 };
-    await this.db.insert(brainChatTrace).values(rows);
+    await runTelemetryDatabase(this.db).insert(brainChatTrace).values(rows);
     return { appended: rows.length };
   }
 
@@ -1144,12 +1146,12 @@ export class BrainService {
    *  its MOST RECENT `limit` steps so a long run keeps the steps that explain the
    *  reply on screen rather than the ones that opened the chat. NO access check —
    *  the route gates + wraps this in the read-through cache. */
-  async getTrace(chatId: number, limit = 500) {
+  async getTrace(chatId: number, tenantId: number, limit = 500) {
     return readTimelineTail(
-      (rows) => this.db
+      (rows) => runTelemetryDatabase(this.db)
         .select(traceColumns)
         .from(brainChatTrace)
-        .where(eq(brainChatTrace.chatId, chatId))
+        .where(and(eq(brainChatTrace.chatId, chatId), eq(brainChatTrace.tenantId, tenantId)))
         .orderBy(desc(brainChatTrace.id))
         .limit(rows),
       limit,
@@ -1749,7 +1751,7 @@ export class BrainService {
     // 400 came back describing a two-day-old, already-fixed defect. One bounded append;
     // best-effort by design — a trace failure must never cost an answer or a diagnosis.
     if (trace.length > 0) {
-      await this.appendTrace(chatId, trace).catch((error) => {
+      await this.appendTrace(chatId, tenantId, trace).catch((error) => {
         reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
       });
     }

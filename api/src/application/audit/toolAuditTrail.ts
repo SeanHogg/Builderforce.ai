@@ -22,6 +22,7 @@
 import { and, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditDaily, toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 
 /**
  * One unit of audit evidence — EITHER a single raw tool call or a day already folded
@@ -65,8 +66,9 @@ export const auditWindowDays = (days: number): { since: Date; sinceDay: string }
 /** Dimension rows for a tenant's window, across both grains, for aggregation. */
 export async function readAuditWindow(db: Db, tenantId: number, days: number): Promise<AuditRow[]> {
   const { since, sinceDay } = auditWindowDays(days);
+  const auditDb = runTelemetryDatabase(db);
   const [raw, tallies] = await Promise.all([
-    db.select({
+    auditDb.select({
       toolName: toolAuditEvents.toolName,
       category: toolAuditEvents.category,
       agentHostId: toolAuditEvents.agentHostId,
@@ -75,7 +77,7 @@ export async function readAuditWindow(db: Db, tenantId: number, days: number): P
     })
       .from(toolAuditEvents)
       .where(and(eq(toolAuditEvents.tenantId, tenantId), gte(toolAuditEvents.ts, since))),
-    db.select({
+    auditDb.select({
       toolName: toolAuditDaily.toolName,
       category: toolAuditDaily.category,
       agentHostId: toolAuditDaily.agentHostId,
@@ -113,8 +115,9 @@ export async function countAuditByAgentDay(
 ): Promise<AgentDayCount[]> {
   const { sinceDay } = auditWindow(from);
   const toDay = to.toISOString().slice(0, 10);
+  const auditDb = runTelemetryDatabase(db);
   const [raw, tallies] = await Promise.all([
-    db.select({
+    auditDb.select({
       agentHostId: toolAuditEvents.agentHostId,
       day: sql<string>`to_char(date_trunc('day', ${toolAuditEvents.ts}), 'YYYY-MM-DD')`,
       count: sql<number>`count(*)::int`,
@@ -126,7 +129,7 @@ export async function countAuditByAgentDay(
         lte(toolAuditEvents.ts, to),
       ))
       .groupBy(toolAuditEvents.agentHostId, sql`date_trunc('day', ${toolAuditEvents.ts})`),
-    db.select({
+    auditDb.select({
       agentHostId: toolAuditDaily.agentHostId,
       day: sql<string>`to_char(${toolAuditDaily.day}, 'YYYY-MM-DD')`,
       count: sql<number>`sum(${toolAuditDaily.events})::int`,

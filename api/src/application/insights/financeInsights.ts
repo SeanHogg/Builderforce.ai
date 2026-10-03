@@ -11,6 +11,7 @@
 import { and, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { budgets, initiatives, llmUsageLog, projects, runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { usageDatabaseOf } from '../llm/usageLedger';
 
@@ -168,7 +169,7 @@ export async function computeFinanceInsights(
   }
 
   // ── cost-per-merged-PR (join run_model_outcomes for the period) ────────────
-  const [outcomeAgg] = await db
+  const [outcomeAgg] = await runTelemetryDatabase(db)
     .select({ merged: sql<string>`coalesce(sum(case when ${runModelOutcomes.merged} then 1 else 0 end),0)` })
     .from(runModelOutcomes)
     .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, start), lt(runModelOutcomes.createdAt, end)));

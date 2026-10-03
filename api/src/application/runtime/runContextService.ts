@@ -33,6 +33,7 @@ import type { Env } from '../../env';
 import { assembleRunContext, runContextScope, type AssembleRunContextParams } from './runContextSource';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { projectInTenant } from '../project/projectOwnership';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 
 /** The minimal write-through store the cognition layer needs, over `run_context_state`. */
 export interface RunContextFactStore {
@@ -45,9 +46,11 @@ export interface RunContextFactStore {
  * A tenant + scope-bound fact store. Every statement is filtered on BOTH, so one run can
  * never read or clobber another's beliefs — the store is the tenant-scoping boundary for
  * this table (the row carries a scalar `tenant_id`, no FK, per the operational-database
- * convention this schema file follows).
+ * convention this schema file follows). Takes the core handle and resolves the
+ * run-telemetry database itself, where the table lives.
  */
-export function runContextFactStore(db: Db, tenantId: number, scope: string): RunContextFactStore {
+export function runContextFactStore(core: Db, tenantId: number, scope: string): RunContextFactStore {
+  const db = runTelemetryDatabase(core);
   const where = (key: string) =>
     and(eq(runContextState.tenantId, tenantId), eq(runContextState.scope, scope), eq(runContextState.subjectKey, key));
   return {
@@ -144,18 +147,6 @@ export async function buildRunContext(
     });
     return { envelope: full, full, unchanged: [] };
   }
-}
-
-/**
- * Drop everything a scope was told. Called when a ticket's run history is reset, so the
- * next run starts from a cold context rather than a delta against a run that no longer
- * exists. Best-effort.
- */
-export async function forgetRunContextScope(db: Db, tenantId: number, scope: string): Promise<void> {
-  await db
-    .delete(runContextState)
-    .where(and(eq(runContextState.tenantId, tenantId), eq(runContextState.scope, scope)))
-    .catch((error) => reportCaughtError(error, { source: 'application/runtime/runContextService.ts', operation: 'forgetRunContextScope', level: 'warning', context: { details: { tenantId, scope, error } } }));
 }
 
 /**

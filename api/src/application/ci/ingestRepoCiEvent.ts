@@ -16,8 +16,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * fix-run dispatch is performed by the caller (it owns the request/execution
  * context); this module only DECIDES and returns the intent.
  */
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { executions, tasks, projects, toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
@@ -130,13 +131,18 @@ async function latestExecutionId(db: Db, taskId: number, tenantId: number): Prom
  * attempt. A real second attempt always follows a fix commit, i.e. a new sha.
  */
 async function priorAutofixDispatches(db: Db, taskId: number, tenantId: number): Promise<{ attempts: number; shas: Set<string> }> {
-  const rows = await db
+  // The task's runs live on core and their audit trail on the run-telemetry database,
+  // so the run ids are read first and the dispatch events matched against them.
+  const runs = await db
+    .select({ id: executions.id })
+    .from(executions)
+    .where(and(eq(executions.taskId, taskId), eq(executions.tenantId, tenantId)));
+  const rows = runs.length === 0 ? [] : await runTelemetryDatabase(db)
     .select({ args: toolAuditEvents.args })
     .from(toolAuditEvents)
-    .innerJoin(executions, eq(executions.id, toolAuditEvents.executionId))
     .where(and(
-      eq(executions.taskId, taskId),
-      eq(executions.tenantId, tenantId),
+      eq(toolAuditEvents.tenantId, tenantId),
+      inArray(toolAuditEvents.executionId, runs.map((r) => r.id)),
       eq(toolAuditEvents.toolName, AUTOFIX_DISPATCH_EVENT),
     ));
   const shas = new Set<string>();
@@ -213,7 +219,7 @@ async function applyBuildOutcome(
     reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
   });
 
-  await db.insert(toolAuditEvents).values({
+  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
     tenantId, agentHostId: null, cloudAgentRef: agentRef,
     executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
     toolName: 'build.result', category: 'ci',
@@ -254,7 +260,7 @@ async function applyBuildOutcome(
   }
 
   if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
-    await db.insert(toolAuditEvents).values({
+    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
       tenantId, agentHostId: null, cloudAgentRef: agentRef,
       executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
       toolName: 'build.needs_human', category: 'ci',
@@ -364,7 +370,7 @@ async function ingestDesignerEvent(
     reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestDesignerEvent" });
   });
 
-  await db.insert(toolAuditEvents).values({
+  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
     tenantId: project.tenantId, agentHostId: null, cloudAgentRef: null,
     executionId: null, sessionKey: `project:${projectId}`,
     toolName: 'build.result', category: 'ci',
@@ -391,7 +397,7 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
   const execId = await latestExecutionId(db, taskId, task.tenantId);
 
   const result = `${evt.outcome ?? evt.rawState ?? 'unknown'}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`;
-  await db.insert(toolAuditEvents).values({
+  await runTelemetryDatabase(db).insert(toolAuditEvents).values({
     tenantId: task.tenantId, agentHostId: null, cloudAgentRef: task.assignedAgentRef ?? null,
     executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
     toolName: evt.eventType === 'deployment_status' ? 'deploy.status' : `ci.${evt.eventType}`,

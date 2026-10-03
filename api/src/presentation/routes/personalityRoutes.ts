@@ -79,6 +79,7 @@ import {
   traitReinforcements,
   runModelOutcomes,
 } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { limitParam } from './queryParams';
@@ -245,7 +246,7 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
       //    so the panel shows live "personality used, when" from run_model_outcomes.
       const derivedNeeded = Math.max(0, limit - events.length);
       if (derivedNeeded > 0 && compiled.count > 0) {
-        const runs = await db
+        const runs = await runTelemetryDatabase(db)
           .select({ executionId: runModelOutcomes.executionId, createdAt: runModelOutcomes.createdAt })
           .from(runModelOutcomes)
           .where(and(eq(runModelOutcomes.tenantId, tenantId), eq(runModelOutcomes.cloudAgentRef, agentRef)))
@@ -298,7 +299,7 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
       const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
       // Real terminal runs for this agent in the window → outcome signals.
-      const runs = await db
+      const runs = await runTelemetryDatabase(db)
         .select({
           terminalStatus: runModelOutcomes.terminalStatus,
           merged: runModelOutcomes.merged,

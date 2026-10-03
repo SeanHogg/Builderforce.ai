@@ -39,6 +39,7 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
 import { computeDevexInsights, devexSatisfaction } from './devexInsights';
@@ -263,7 +264,7 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
     ));
 
   // A/C/E — run_model_outcomes: runs, merged, avg steps in the window.
-  const [runAgg] = await db
+  const [runAgg] = await runTelemetryDatabase(db)
     .select({
       total: sql<string>`count(*)`,
       merged: sql<string>`coalesce(sum(case when ${runModelOutcomes.merged} then 1 else 0 end),0)`,

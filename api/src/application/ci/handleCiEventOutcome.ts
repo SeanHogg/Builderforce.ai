@@ -19,6 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Best-effort: never throws (a webhook must always 200 to stop provider retries).
  */
 import { toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, AUTOFIX_REFUSED_EVENT, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -80,7 +81,7 @@ export async function handleCiEventOutcome(
           // null nobody recorded. The reason now lands on the same audit stream, under
           // its OWN name -- `AUTOFIX_REFUSED_EVENT`, never the dispatch name the
           // loop-guard counts, so a refusal cannot spend the build's fix budget.
-          await db.insert(toolAuditEvents).values({
+          await runTelemetryDatabase(db).insert(toolAuditEvents).values({
             tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
             executionId: null, sessionKey: `task:${intent.taskId}`,
             toolName: AUTOFIX_REFUSED_EVENT, category: 'ci',
@@ -91,7 +92,7 @@ export async function handleCiEventOutcome(
             reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
           });
         } else {
-          await db.insert(toolAuditEvents).values({
+          await runTelemetryDatabase(db).insert(toolAuditEvents).values({
             tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
             executionId, sessionKey: `exec:${executionId}`,
             toolName: AUTOFIX_DISPATCH_EVENT, category: 'ci',
@@ -119,7 +120,7 @@ export async function handleCiEventOutcome(
   if (res.buildStatus === 'failure' && res.taskId != null && res.tenantId != null
       && res.reason && res.reason !== 'auto-fix attempts exhausted'
       && res.reason !== AUTOFIX_DEDUPED_REASON) {
-    await db.insert(toolAuditEvents).values({
+    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
       tenantId: res.tenantId, agentHostId: null, cloudAgentRef: null,
       executionId: res.executionId ?? null,
       sessionKey: res.executionId ? `exec:${res.executionId}` : `task:${res.taskId}`,

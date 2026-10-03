@@ -18,6 +18,7 @@
 import { and, eq, gte, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { getOrSetCached, getCacheVersion, outcomesVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { mean, stdev } from './driftMonitor';
 import type { Env } from '../../env';
@@ -152,7 +153,7 @@ async function scoresForModel(
     isNotNull(runModelOutcomes.score),
   ];
   if (actionType) conds.push(eq(runModelOutcomes.actionType, actionType));
-  const rows = await db.select({ score: runModelOutcomes.score }).from(runModelOutcomes).where(and(...conds));
+  const rows = await runTelemetryDatabase(db).select({ score: runModelOutcomes.score }).from(runModelOutcomes).where(and(...conds));
   return rows.map((r) => r.score as number);
 }
 

@@ -8,6 +8,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * engine.
  */
 import { toolAuditEvents } from '../../infrastructure/database/schema';
+import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import type { Db } from '../../infrastructure/database/connection';
 import { notifyExecutionSubscribers } from './executionEvents';
 
@@ -50,7 +51,7 @@ export async function recordCloudToolEvent(
 ): Promise<void> {
   const ts = new Date();
   try {
-    const [row] = await db.insert(toolAuditEvents).values({
+    const [row] = await runTelemetryDatabase(db).insert(toolAuditEvents).values({
       tenantId:     args.tenantId,
       agentHostId:  args.agentHostId ?? null,
       cloudAgentRef: args.cloudAgentRef ?? null,
