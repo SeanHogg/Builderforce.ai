@@ -1,6 +1,6 @@
 project: Builderforce.ai
-files: 12514
-languages: ".ts:7913, .tsx:1370, .md:1006, .sql:527, .swift:498, .png:229, .json:177, .mjs:146"
+files: 14451
+languages: ".ts:8696, .md:1571, .tsx:1571, .sql:593, .swift:499, .png:310, .json:196, .mjs:182"
 subProjects:
   - agent-runtime
   - agent-runtime/extensions/bluebubbles
@@ -43,22 +43,22 @@ subProjects:
   - browser-sdk
   - builderforce-embedded
   - clients/vscode
+  - desktop
+  - desktop/app/console
+  - desktop/app/src-tauri
+  - desktop/crates/bf-cloud
+  - desktop/crates/bf-context
+  - desktop/crates/bf-index
+  - desktop/crates/bf-memory
+  - desktop/crates/bf-teach
+  - desktop/crates/bf-vault
   - docs-site
   - feedback-sdk
   - frontend
+  - packages/agent-loop
   - packages/agent-stall
   - packages/agent-tools
   - packages/brain-ui
   - packages/canvas-widget-protocol
   - packages/creation-canvas-contract
-  - packages/ide-file-contract
-  - packages/ide-templates
-  - packages/learned-routing
-  - packages/run-context
-  - packages/tui
-  - qa-e2e
-  - sdk
-  - studio
-  - studio-embedded
-  - voice
-  - webdit
+  - packages/hono-wildcard-path

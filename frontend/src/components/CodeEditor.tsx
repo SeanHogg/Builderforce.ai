@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { getLanguage } from '@/lib/utils';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import type * as Y from 'yjs';
+import { onEditorRevealRequested, takeEditorReveal } from '@/lib/workspace/editorReveal';
 
 /** Localized editor-loading placeholder (dynamic's `loading` must be a component). */
 function EditorLoading() {
@@ -104,6 +105,22 @@ export function CodeEditor({ filePath, content, onChange, ydoc, modelNamespace }
     // only seed on (re)bind, not on edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, modelPath, ydoc, mountToken]);
+
+  // Show a requested line (a search result, a diagnostic): on mount for this file,
+  // or later while it is already open. See lib/workspace/editorReveal.ts.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!mountToken || !editor || !filePath) return undefined;
+    const reveal = () => {
+      const line = takeEditorReveal(filePath);
+      if (line === undefined) return;
+      editor.revealLineInCenter(line);
+      editor.setPosition({ lineNumber: line, column: 1 });
+      editor.focus();
+    };
+    reveal();
+    return onEditorRevealRequested((path) => { if (path === filePath) reveal(); });
+  }, [filePath, mountToken]);
 
   if (!filePath) {
     return (

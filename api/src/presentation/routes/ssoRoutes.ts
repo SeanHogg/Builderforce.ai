@@ -24,6 +24,7 @@ import { Hono, type Context } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveApiOrigin, resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { trustedReturnOrigin } from '../middleware/cors';
 import type { Db } from '../../infrastructure/database/connection';
 import { readSsoLoginState, signSsoLoginState } from '../../application/auth/ssoLoginState';
 import { mintSessionExchangeCode, safeRedirectPath } from '../../application/auth/sessionExchange';
@@ -112,10 +113,12 @@ export function createSsoLoginRoutes(db: Db): Hono<HonoEnv> {
     // authorization URL comes back without one precisely so the two cannot
     // disagree, and the callback rejects itself if they ever do.
     const started = await startSsoLogin(c.env as Env, connection, callbackUrl(c));
+    const returnOrigin = trustedReturnOrigin(c.req.query('return_origin'), c.env.CORS_ORIGINS);
     const state = await signSsoLoginState(c.env.JWT_SECRET, {
       cid: connection.id,
       nonce: started.nonce,
       redirect,
+      ...(returnOrigin ? { returnOrigin } : {}),
     });
     const url = new URL(started.url);
     url.searchParams.set('state', state);
@@ -136,14 +139,18 @@ export function createSsoLoginRoutes(db: Db): Hono<HonoEnv> {
     // invitation.
     const parsed = await readSsoLoginState(c.env.JWT_SECRET, state);
     if (!parsed) return fail('sso_invalid_state');
+    // The app that started the sign-in (re-checked against today's allow-list), else
+    // the canonical one; failures after this point land there too.
+    const landing = trustedReturnOrigin(parsed.returnOrigin, c.env.CORS_ORIGINS) ?? frontend;
+    const failHere = (reason: string) => c.redirect(`${landing}/login?error=${encodeURIComponent(reason)}`, 302);
 
     const connection = await connectionById(db, parsed.cid);
-    if (!connection) return fail('sso_connection_unavailable');
+    if (!connection) return failHere('sso_connection_unavailable');
 
     const completed = await completeSsoLogin(
       c.env as Env, db, connection, code, `${resolveApiOrigin(c.env)}/api/auth/sso/callback`, parsed.nonce,
     );
-    if (!completed.ok) return fail(completed.error);
+    if (!completed.ok) return failHere(completed.error);
 
     const { identity } = completed;
     // Checked AFTER the provider answers as well as before. The domain decided
@@ -151,7 +158,7 @@ export function createSsoLoginRoutes(db: Db): Hono<HonoEnv> {
     // came back is one this connection is allowed to assert — otherwise a
     // misconfigured multi-tenant gateway could return any address at all.
     if (!await identityIsInScope(db, connection, identity.email)) {
-      return fail('sso_domain_not_permitted');
+      return failHere('sso_domain_not_permitted');
     }
 
     // Everything that WRITES — provisioning, the provider binding, workspace
@@ -159,14 +166,14 @@ export function createSsoLoginRoutes(db: Db): Hono<HonoEnv> {
     // holding the account-creation rules for a whole authentication method is
     // exactly the seam `check:layering` guards.
     const signedIn = await signInWithSso(c.env as Env, db, identity);
-    if (!signedIn.ok) return fail(signedIn.error);
+    if (!signedIn.ok) return failHere(signedIn.error);
 
     const exchange = await mintSessionExchangeCode(c.env.JWT_SECRET, {
       uid: signedIn.userId,
       amr: 'sso',
       redirect: parsed.redirect,
     });
-    return c.redirect(`${frontend}/auth/callback?code=${encodeURIComponent(exchange)}`, 302);
+    return c.redirect(`${landing}/auth/callback?code=${encodeURIComponent(exchange)}`, 302);
   });
 
   return router;

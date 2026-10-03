@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredWebToken } from '@/lib/auth';
-import { resolveAndSelectTenant, requestMagicLink } from '@/lib/auth/credentials';
+import { getSsoStartUrl, resolveAndSelectTenant, requestMagicLink } from '@/lib/auth/credentials';
 import { safeRedirectPath } from '@/lib/safeRedirect';
 import { isPasskeyCancellation, isPasskeySupported } from '@/lib/passkeys';
 import { Icon } from '@/components/ui/Icon';
@@ -305,7 +305,7 @@ export default function LoginPageClient() {
               {ssoLabel && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <a
-                    href={`/api/auth/sso/start?email=${encodeURIComponent(email.trim().toLowerCase())}&redirect=${encodeURIComponent(safeRedirectPath(searchParams.get('next')))}`}
+                    href={getSsoStartUrl(email, safeRedirectPath(searchParams.get('next')))}
                     style={{
                       width: '100%',
                       boxSizing: 'border-box',

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { bumpAttention, readAttention } from './attentionSnapshot';
+import { readAttention } from './attentionSnapshot';
+import { bumpExecutionState } from './executionStateVersion';
 import { approvals, executions, projectManagerConfigs } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -8,7 +9,7 @@ import type { Env } from '../../env';
  * {@link readAttention} — the cached cross-surface "what's live / what needs me"
  * snapshot every open VS Code window and web tab polls. These tests exercise the
  * caching contract described on the module: a version-token cache keyed per
- * tenant, `fresh` bypassing and re-priming it, {@link bumpAttention} orphaning it,
+ * tenant, `fresh` bypassing and re-priming it, {@link bumpExecutionState} orphaning it,
  * and `recentlyActive` being derived from the clock at READ time rather than
  * baked into the cached payload.
  */
@@ -94,14 +95,14 @@ describe('readAttention', () => {
     expect(callsFor(executions)).toBe(2); // now served from the re-primed cache
   });
 
-  it('bumpAttention orphans the cached snapshot so the next read reloads (a new version)', async () => {
+  it('bumpExecutionState orphans the cached snapshot so the next read reloads (a new version)', async () => {
     const { env } = fakeEnv();
     const { db, callsFor } = fakeDb(EMPTY_ROWS);
 
     await readAttention(env, db, { tenantId: 1 });
     expect(callsFor(executions)).toBe(1);
 
-    await bumpAttention(env, 1);
+    await bumpExecutionState(env, 1);
 
     await readAttention(env, db, { tenantId: 1 });
     expect(callsFor(executions)).toBe(2);
@@ -112,7 +113,7 @@ describe('readAttention', () => {
     const { db, callsFor } = fakeDb(EMPTY_ROWS);
 
     await readAttention(env, db, { tenantId: 1 });
-    await bumpAttention(env, 2); // a different tenant
+    await bumpExecutionState(env, 2); // a different tenant
     await readAttention(env, db, { tenantId: 1 });
     expect(callsFor(executions)).toBe(1); // tenant 1's snapshot is untouched
   });

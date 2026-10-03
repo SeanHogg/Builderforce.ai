@@ -18501,7 +18501,9 @@
     "errorAlreadyLinkedOther": "此提供商账户已关联到另一个 Builderforce 账户。",
     "errorUnexpected": "发生了意外错误。请重试。",
     "errorNoCode": "未收到登录代码。请重试。",
-    "errorProfile": "无法加载您的账户资料。请重新登录。"
+    "errorProfile": "无法加载您的账户资料。请重新登录。",
+    "popupDoneTitle": "你已登录",
+    "popupDoneBody": "你可以关闭此窗口并返回 Builderforce。"
   },
   "footer": {
     "builtBy": "开发者",
@@ -32112,5 +32114,68 @@
   "siteBadge": {
     "body": "免费网站会显示一个小的“Made with Builderforce.ai”徽章。",
     "upgrade": "升级即可移除"
+  },
+  "signInDialog": {
+    "lead": "要使用 Studio，请登录你的账户，或通过以下任一方式创建账户。",
+    "google": "使用 Google 登录",
+    "github": "使用 GitHub 登录",
+    "email": "使用邮箱和密码登录",
+    "sso": "使用 SSO 登录",
+    "close": "关闭",
+    "waiting": "请在弹出窗口中完成登录。此页面会自动更新。",
+    "terms": "登录即表示你接受<terms>服务条款</terms>并知悉我们的<privacy>隐私政策</privacy>。",
+    "emailLabel": "邮箱",
+    "passwordLabel": "密码",
+    "submit": "登录",
+    "back": "返回",
+    "createAccount": "创建账户",
+    "failed": "登录失败。请检查你的信息后重试。",
+    "verifyLead": "我们已向 {email} 发送验证码。输入验证码即可完成登录。",
+    "codeLabel": "验证码",
+    "verify": "验证",
+    "ssoLead": "输入你的工作邮箱，我们会找到你所在组织的登录方式。",
+    "ssoContinue": "继续",
+    "ssoNotFound": "该地址未使用单点登录。请改用密码登录。"
+  },
+  "studio": {
+    "meta": {
+      "title": "Builderforce Studio",
+      "description": "描述一个应用，Studio 会构建它、在你的浏览器中运行并发布。"
+    },
+    "home": {
+      "title": "今天想构建什么？",
+      "subtitle": "描述一个应用。Studio 会编写代码、在你的浏览器中运行并发布。",
+      "promptLabel": "描述要构建的内容",
+      "placeholder": "我们来构建一个……",
+      "hint": "按 Enter 发送 · Shift+Enter 换行",
+      "submit": "开始构建",
+      "untitled": "未命名应用",
+      "startFailed": "无法创建项目，请重试。",
+      "recentTitle": "你的 Studio 项目",
+      "recentEmpty": "你在这里创建的项目会显示在这里。"
+    },
+    "topBar": {
+      "home": "Studio 首页",
+      "signIn": "登录",
+      "getStarted": "开始使用",
+      "signOut": "退出登录"
+    },
+    "workspace": {
+      "title": "选择工作区",
+      "lead": "Studio 项目位于工作区中。请选择一个工作区以继续。",
+      "none": "你还没有工作区。",
+      "create": "立即创建",
+      "loadFailed": "无法加载你的工作区。"
+    },
+    "project": {
+      "github": "GitHub",
+      "share": "分享",
+      "linkCopied": "链接已复制",
+      "upgrade": "升级",
+      "publish": "发布",
+      "loadFailed": "无法打开此项目。",
+      "loading": "正在打开你的项目……",
+      "signInLead": "登录后即可打开此项目。"
+    }
   }
 }

@@ -4,6 +4,7 @@ import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
 import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/config';
 import { isUnknownRootSlug, NOT_FOUND_REWRITE_PATH } from '@/lib/rootRoutes';
 import { isCanvasInvitationRoute } from '@/lib/shellRouting';
+import { isStudioHost, studioHostRedirect, STUDIO_ROUTE } from '@/lib/studio/studioHost';
 
 /**
  * Route protection rules:
@@ -73,7 +74,7 @@ const PROTECTED_PATHS = [
  * not on this list leaves with exactly the response it had before.
  */
 const MIDDLEWARE_ROOT_SEGMENTS = new Set<string>([
-  'webcontainer', 'embed', 'logs', 'timeline', 'observability', 'create', 'ide', 'tenants',
+  'webcontainer', 'embed', 'logs', 'timeline', 'observability', 'create', 'ide', 'tenants', 'studio',
   ...PROTECTED_PATHS.map((p) => p.slice(1)),
 ]);
 
@@ -113,6 +114,17 @@ function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextRespon
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // The Studio app (`studio.builderforce.ai`) lives under `/studio`; its host's
+  // root goes there (see `lib/studio/studioHost.ts` for why a redirect, not a rewrite).
+  if (isStudioHost(request.nextUrl.hostname)) {
+    const target = studioHostRedirect(pathname);
+    if (target) {
+      const url = request.nextUrl.clone();
+      url.pathname = target;
+      return NextResponse.redirect(url);
+    }
+  }
 
   // HARD 404 for unknown root-level slugs. `app/[burnrateDomain]/page.tsx` is a
   // catch-all over the whole root level, so every mistyped URL on the site
@@ -160,7 +172,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const needsCoi = pathname.startsWith('/create/') && !isCanvasInvitationRoute(pathname);
+  const needsCoi = (pathname.startsWith('/create/') && !isCanvasInvitationRoute(pathname))
+    || pathname.startsWith(`${STUDIO_ROUTE}/project/`);
 
   // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.
   // BurnRateOS). They authenticate via postMessage (not cookies), so we must NOT
@@ -238,6 +251,10 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    // The Studio host's root (redirected above), and the Studio route itself for
+    // its IDE page's isolation headers.
+    '/',
+    '/studio/:path*',
     // Single root-level segment: the surface `[burnrateDomain]` catches, and the
     // only reason middleware sees marketing paths at all. Known segments fall
     // through untouched (see `isUnknownRootSlug`), so behaviour for every

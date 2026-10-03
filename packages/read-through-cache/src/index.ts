@@ -58,12 +58,24 @@ export interface ReadThroughCacheOptions {
    * Default: a single attempt.
    */
   retryDelete?: (op: () => Promise<void>) => Promise<void>;
+  /**
+   * Hand the KV write-back of a {@link ReadThroughCache.getOrSet} miss to the
+   * runtime so it can finish AFTER the response (a Worker's `ctx.waitUntil`).
+   * Return true when the task was taken; false (or no hook) and the miss awaits the
+   * write itself, because an unattached promise in a Worker can be cancelled the
+   * moment the response goes out. Without it every miss pays a KV write's latency on
+   * top of its loader.
+   */
+  defer?: (task: Promise<unknown>) => boolean;
 }
 
 export interface ReadThroughCache {
   /**
    * Return the cached value for `key`, or compute it via `loader`, cache it in
    * both layers, and return it. KV/L1 errors degrade to a direct loader call.
+   *
+   * Single-flight per isolate: concurrent misses on one key share ONE KV read and
+   * ONE loader call, instead of every waiting request querying the source at once.
    */
   getOrSet<T>(kv: KvNamespaceLike | undefined, key: string, loader: () => Promise<T>, opts?: CacheTtlOptions): Promise<T>;
   /**
@@ -163,7 +175,12 @@ export function toJsonShape<T>(value: T): T {
  */
 export function createReadThroughCache(options: ReadThroughCacheOptions = {}): ReadThroughCache {
   const l1 = new Map<string, L1Entry>();
+  /** Misses currently being resolved, by key — what makes `getOrSet` single-flight.
+   *  `invalidate` drops the entry, and a load only writes back while it is still the
+   *  registered one, so a write racing an in-flight load cannot be overwritten by it. */
+  const inFlight = new Map<string, Promise<unknown>>();
   const onError = options.onError ?? (() => undefined);
+  const defer = options.defer ?? (() => false);
   const retryDelete = options.retryDelete ?? ((op) => op());
 
   const report = (error: unknown, operation: string, cacheOperation: CacheErrorContext['cacheOperation'], storageKey: string, key: string) =>
@@ -206,19 +223,36 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
       const l1Hit = l1Get(key, now);
       if (l1Hit) return l1Hit.value as T;
 
-      const l1Ttl = opts?.l1TtlMs ?? L1_TTL_MS;
-      if (kv) {
-        const cached = await kvGet<T>(kv, key, 'getOrSet');
-        if (cached != null) {
-          l1.set(key, { value: cached, expiresAt: now + l1Ttl });
-          return cached;
-        }
-      }
+      const pending = inFlight.get(key);
+      if (pending) return pending as Promise<T>;
 
-      const fresh = toJsonShape(await loader());
-      l1.set(key, { value: fresh, expiresAt: now + l1Ttl });
-      if (kv) await kvPut(kv, key, fresh, opts?.kvTtlSeconds, 'getOrSet');
-      return fresh;
+      const l1Ttl = opts?.l1TtlMs ?? L1_TTL_MS;
+      const load = (async (): Promise<T> => {
+        if (kv) {
+          const cached = await kvGet<T>(kv, key, 'getOrSet');
+          if (cached != null) {
+            if (inFlight.get(key) === load) l1.set(key, { value: cached, expiresAt: Date.now() + l1Ttl });
+            return cached;
+          }
+        }
+
+        const fresh = toJsonShape(await loader());
+        // Invalidated while loading: the value may predate the write that invalidated
+        // it, so it answers THIS caller but is not cached for the next one.
+        if (inFlight.get(key) !== load) return fresh;
+        l1.set(key, { value: fresh, expiresAt: Date.now() + l1Ttl });
+        if (kv) {
+          const write = kvPut(kv, key, fresh, opts?.kvTtlSeconds, 'getOrSet');
+          if (!defer(write)) await write;
+        }
+        return fresh;
+      })();
+      inFlight.set(key, load);
+      try {
+        return await load;
+      } finally {
+        if (inFlight.get(key) === load) inFlight.delete(key);
+      }
     },
 
     async peek<T>(kv: KvNamespaceLike | undefined, key: string): Promise<T | null> {
@@ -243,6 +277,7 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
 
     async invalidate(kv: KvNamespaceLike | undefined, key: string): Promise<void> {
       l1.delete(key);
+      inFlight.delete(key);
       if (!kv) return;
       const storageKey = await kvStorageKey(key);
       try {
@@ -254,6 +289,7 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
 
     clearL1(): void {
       l1.clear();
+      inFlight.clear();
     },
   };
 }

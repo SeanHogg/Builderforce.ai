@@ -1,8 +1,6 @@
 import { createServerCapture } from '@seanhogg/builderforce-quality/server';
-import type {
-  CaughtErrorRecord,
-  CaughtErrorRuntimeContext,
-} from '../../application/observability/caughtErrorReporter';
+import type { CaughtErrorRecord } from '../../application/observability/caughtErrorReporter';
+import type { RequestScope } from '../../application/shared/requestScope';
 import type { Env } from '../../env';
 import { API_VERSION } from '../../version';
 import { buildTransactionalDatabase } from '../database/connection';
@@ -15,7 +13,7 @@ function isEnv(value: unknown): value is Env {
 async function persistToDatabase(
   env: Env,
   record: CaughtErrorRecord,
-  runtime: CaughtErrorRuntimeContext,
+  runtime: RequestScope,
 ): Promise<void> {
   // api_error_log lives in the operational database. Guard on the URL that is
   // actually used, including the primary-database fallback in
@@ -38,7 +36,7 @@ async function persistToDatabase(
 async function persistToQuality(
   env: Env,
   record: CaughtErrorRecord,
-  runtime: CaughtErrorRuntimeContext,
+  runtime: RequestScope,
 ): Promise<void> {
   const key = env.BUILDERFORCE_ERROR_API_KEY;
   if (!key || runtime.path?.startsWith('/api/quality-ingest')) return;
@@ -72,7 +70,7 @@ async function persistToQuality(
  */
 export async function persistCaughtError(
   record: CaughtErrorRecord,
-  runtime: CaughtErrorRuntimeContext,
+  runtime: RequestScope,
 ): Promise<void> {
   if (!isEnv(runtime.env)) return;
   const env = runtime.env;

@@ -46,7 +46,7 @@ import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
 import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
-import { bumpAttention } from '../../application/runtime/attentionSnapshot';
+import { bumpExecutionState } from '../../application/runtime/executionStateVersion';
 import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../application/runtime/dispatchCloudRun';
 import { parseApprovalReplay } from '../../application/runtime/executionApprovalGate';
 import { approvalSubjectRef } from '../../application/approval/approvalGate';
@@ -366,7 +366,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       })
       .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
     // An answered run question clears an "awaiting input" flag on every attention poller.
-    if (existing.executionId && isAnswerableKind(kind)) await bumpAttention(env, tenantId);
+    if (existing.executionId && isAnswerableKind(kind)) await bumpExecutionState(env, tenantId);
 
     // Resume a paused CLOUD run: a cloud agent's question carries the execution it
     // paused (no agent_host_id). Deliver the answer the same way a steer is — as a

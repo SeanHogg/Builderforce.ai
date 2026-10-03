@@ -41,6 +41,9 @@ export interface SsoLoginState {
    *  captured from another login being replayed into this one. */
   nonce: string;
   redirect: string;
+  /** The app origin to land on when it is not the canonical one (the Studio
+   *  app). The route checks it against the app's origins before and after. */
+  returnOrigin?: string;
 }
 
 export async function signSsoLoginState(jwtSecret: string, state: SsoLoginState): Promise<string> {
@@ -48,6 +51,7 @@ export async function signSsoLoginState(jwtSecret: string, state: SsoLoginState)
     cid: state.cid,
     nonce: state.nonce,
     redirect: safeRedirectPath(state.redirect),
+    ...(state.returnOrigin ? { returnOrigin: state.returnOrigin } : {}),
   });
 }
 
@@ -55,11 +59,16 @@ export async function signSsoLoginState(jwtSecret: string, state: SsoLoginState)
  *  redirect is re-coerced on the way out: a value signed by an older build must
  *  not be honoured just because the signature is valid. */
 export async function readSsoLoginState(jwtSecret: string, value: string): Promise<SsoLoginState | null> {
-  const parsed = await verifyState<{ cid?: number; nonce?: string; redirect?: string }>(
+  const parsed = await verifyState<{ cid?: number; nonce?: string; redirect?: string; returnOrigin?: string }>(
     jwtSecret,
     value,
     SSO_STATE_TTL_MS,
   );
   if (!parsed?.cid || !parsed.nonce) return null;
-  return { cid: parsed.cid, nonce: parsed.nonce, redirect: safeRedirectPath(parsed.redirect) };
+  return {
+    cid: parsed.cid,
+    nonce: parsed.nonce,
+    redirect: safeRedirectPath(parsed.redirect),
+    ...(typeof parsed.returnOrigin === 'string' ? { returnOrigin: parsed.returnOrigin } : {}),
+  };
 }

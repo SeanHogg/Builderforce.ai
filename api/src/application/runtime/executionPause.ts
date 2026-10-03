@@ -25,7 +25,7 @@ import { and, eq } from 'drizzle-orm';
 import { approvals, executionPauseState, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import { notifyExecutionSubscribers } from './executionEvents';
-import { bumpAttention } from './attentionSnapshot';
+import { bumpExecutionState } from './executionStateVersion';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
 import { TaskService } from '../task/TaskService';
@@ -238,7 +238,7 @@ async function createCloudQuestion(
     updatedAt:    now,
   });
   // The run now needs a person — every attention poller should show it at once.
-  await bumpAttention(env, args.tenantId);
+  await bumpExecutionState(env, args.tenantId);
 
   await notifyApprovalRequested(env, db, {
     tenantId: args.tenantId, approvalId, kind: 'question',
@@ -381,7 +381,7 @@ export async function answerOpenExecutionQuestions(
   args: { tenantId: number; executionId: number; answer: string; userId?: string | null },
 ): Promise<void> {
   // The run stops needing a person — attention pollers drop the flag at once.
-  await bumpAttention(env, args.tenantId);
+  await bumpExecutionState(env, args.tenantId);
   await db.update(approvals)
     .set({
       status: 'answered',

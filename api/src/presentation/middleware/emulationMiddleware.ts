@@ -7,7 +7,7 @@ import { ForbiddenError, UnauthorizedError } from '../../domain/shared/errors';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { adminImpersonationSessions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { updateCaughtErrorContext } from '../../application/observability/caughtErrorReporter';
+import { updateRequestScope } from '../../application/shared/requestScope';
 
 // ---------------------------------------------------------------------------
 // Mutating HTTP methods that are blocked when emu_readonly: true
@@ -84,7 +84,7 @@ export const emulationMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) =
   c.set('tenantId',   payload.tid);
   c.set('role',       payload.role);
   c.set('isEmulation', true);
-  updateCaughtErrorContext({ tenantId: payload.tid, userId: payload.sub });
+  updateRequestScope({ tenantId: payload.tid, userId: payload.sub });
 
   await next();
 

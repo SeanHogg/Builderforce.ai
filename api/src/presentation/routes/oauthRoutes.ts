@@ -23,6 +23,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { persistWebSessionToken } from '../../application/auth/webSessionStore';
 import { randomHex } from '../../domain/shared/bytes';
 import { parseBody, parseOptionalBody, z } from './requestBody';
+import { trustedReturnOrigin } from '../middleware/cors';
 
 const ExchangeBody = z.object({ code: z.string().nullish() });
 
@@ -165,6 +166,9 @@ interface OAuthStateData {
   redirect: string;
   linkUserId?: string;
   locale?: EmailLocale;
+  /** The app origin the sign-in returns to, when it is not the canonical one
+   *  (the Studio app at `studio.`). Already checked against `appOrigins`. */
+  returnOrigin?: string;
   /** `verifyState<T>` is constrained to `Record<string, unknown>` because it
    *  hands back a decoded JWT payload, which is exactly that. Without this the
    *  generic does not accept the interface and the whole API typecheck goes red
@@ -177,11 +181,13 @@ async function createOAuthState(
   redirect: string,
   linkUserId?: string,
   locale?: EmailLocale | null,
+  returnOrigin?: string,
 ): Promise<string> {
   return signState(jwtSecret, {
     redirect: redirect || '/dashboard',
     ...(linkUserId ? { linkUserId } : {}),
     ...(locale ? { locale } : {}),
+    ...(returnOrigin ? { returnOrigin } : {}),
   });
 }
 
@@ -194,8 +200,10 @@ async function verifyOAuthState(jwtSecret: string, state: string): Promise<OAuth
     // Re-narrow rather than trusting the envelope: the signature proves WE minted
     // it, not that the value is still a locale we can render.
     locale: normalizeLocale(parsed.locale) ?? undefined,
+    returnOrigin: typeof parsed.returnOrigin === 'string' ? parsed.returnOrigin : undefined,
   };
 }
+
 
 // ---------------------------------------------------------------------------
 // OAuth code exchange + user info fetch
@@ -333,7 +341,8 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     // back; falling through to the request headers keeps a direct hit working.
     const chosenLocale = normalizeLocale(c.req.query('locale')) ?? localeFromHeaders(headerHints(c.req));
 
-    const state = await createOAuthState(c.env.JWT_SECRET, redirect, linkUserId, chosenLocale);
+    const returnOrigin = trustedReturnOrigin(c.req.query('return_origin'), c.env.CORS_ORIGINS);
+    const state = await createOAuthState(c.env.JWT_SECRET, redirect, linkUserId, chosenLocale, returnOrigin);
 
     // Build callback URL from the incoming request's origin so it works in
     // both local dev and production without an extra env var.
@@ -368,6 +377,9 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
 
     const stateData = await verifyOAuthState(c.env.JWT_SECRET, state);
     if (!stateData) return c.redirect(`${frontendBase}/login?error=invalid_state`);
+    // Where the user lands: the app that started the sign-in (re-checked, since the
+    // allow-list may have changed since the state was signed), else the canonical one.
+    const returnBase = trustedReturnOrigin(stateData.returnOrigin, c.env.CORS_ORIGINS) ?? frontendBase;
 
     const origin = new URL(c.req.url).origin;
     const callbackUrl = `${origin}/api/auth/oauth/${name}/callback`;
@@ -386,12 +398,12 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
         providerUser.email = await getGitHubEmail(accessToken);
       }
     } catch {
-      return c.redirect(`${frontendBase}/login?error=auth_failed`);
+      return c.redirect(`${returnBase}/login?error=auth_failed`);
     }
 
     // Email is required for new login/signup; the connect flow (linkUserId) can proceed without it
     if (!providerUser.email && !stateData.linkUserId) {
-      return c.redirect(`${frontendBase}/login?error=no_email`);
+      return c.redirect(`${returnBase}/login?error=no_email`);
     }
 
     // Resolve the account (link existing / create new) and issue the web JWT.
@@ -524,8 +536,8 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     }
 
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) return c.redirect(`${frontendBase}/login?error=account_not_found`);
-    if (user.isSuspended) return c.redirect(`${frontendBase}/login?error=account_suspended`);
+    if (!user) return c.redirect(`${returnBase}/login?error=account_not_found`);
+    if (user.isSuspended) return c.redirect(`${returnBase}/login?error=account_suspended`);
 
     // M6: NEVER put the 24h session JWT in the URL — GTM captures page_location
     // and would ship it to third-party analytics, plus it leaks via Referer and
@@ -542,10 +554,10 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     });
 
     return c.redirect(
-      `${frontendBase}/auth/callback?code=${encodeURIComponent(exchangeCodeValue)}`,
+      `${returnBase}/auth/callback?code=${encodeURIComponent(exchangeCodeValue)}`,
     );
     } catch {
-      return c.redirect(`${frontendBase}/login?error=auth_failed`);
+      return c.redirect(`${returnBase}/login?error=auth_failed`);
     }
   });
 

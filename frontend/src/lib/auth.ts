@@ -35,6 +35,15 @@ const LAST_PROJECT_KEY = 'bf_last_project_id';
 /** Default tenant for auto-selection when user has multiple workspaces (BuilderForceAgentsLink-style). */
 const DEFAULT_TENANT_KEY = 'bf_default_tenant_id';
 
+/**
+ * Is this storage key part of the session? Another window writing one of these
+ * (a sign-in pop-up, a sign-out in another tab) is a session change this window
+ * must pick up. `null` is a whole-storage clear.
+ */
+export function isSessionStorageKey(key: string | null): boolean {
+  return key === null || key === WEB_TOKEN_KEY || key === TENANT_TOKEN_KEY || key === USER_KEY || key === TENANT_KEY;
+}
+
 function isBrowser(): boolean {
   return typeof window !== 'undefined';
 }

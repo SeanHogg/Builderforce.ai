@@ -18501,7 +18501,9 @@
     "errorAlreadyLinkedOther": "Dieses Anbieterkonto ist bereits mit einem anderen Builderforce-Konto verknüpft.",
     "errorUnexpected": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
     "errorNoCode": "Kein Anmeldecode empfangen. Bitte versuchen Sie es erneut.",
-    "errorProfile": "Das Profil Ihres Kontos konnte nicht geladen werden. Bitte melden Sie sich erneut an."
+    "errorProfile": "Das Profil Ihres Kontos konnte nicht geladen werden. Bitte melden Sie sich erneut an.",
+    "popupDoneTitle": "Du bist angemeldet",
+    "popupDoneBody": "Du kannst dieses Fenster schließen und zu Builderforce zurückkehren."
   },
   "footer": {
     "builtBy": "Entwickelt von",
@@ -32112,5 +32114,68 @@
   "siteBadge": {
     "body": "Kostenlose Websites zeigen ein kleines „Made with Builderforce.ai“-Abzeichen.",
     "upgrade": "Upgrade, um es zu entfernen"
+  },
+  "signInDialog": {
+    "lead": "Um Studio zu nutzen, melde dich bei deinem Konto an oder erstelle eines mit einer der folgenden Optionen.",
+    "google": "Mit Google anmelden",
+    "github": "Mit GitHub anmelden",
+    "email": "Mit E-Mail und Passwort anmelden",
+    "sso": "Mit SSO anmelden",
+    "close": "Schließen",
+    "waiting": "Schließe die Anmeldung im Pop-up-Fenster ab. Diese Seite aktualisiert sich von selbst.",
+    "terms": "Mit der Anmeldung akzeptierst du die <terms>Nutzungsbedingungen</terms> und nimmst unsere <privacy>Datenschutzerklärung</privacy> zur Kenntnis.",
+    "emailLabel": "E-Mail",
+    "passwordLabel": "Passwort",
+    "submit": "Anmelden",
+    "back": "Zurück",
+    "createAccount": "Konto erstellen",
+    "failed": "Anmeldung fehlgeschlagen. Prüfe deine Angaben und versuche es erneut.",
+    "verifyLead": "Wir haben einen Code an {email} gesendet. Gib ihn ein, um die Anmeldung abzuschließen.",
+    "codeLabel": "Code",
+    "verify": "Bestätigen",
+    "ssoLead": "Gib deine geschäftliche E-Mail-Adresse ein, und wir finden die Anmeldung deiner Organisation.",
+    "ssoContinue": "Weiter",
+    "ssoNotFound": "Diese Adresse nutzt kein Single Sign-on. Melde dich stattdessen mit deinem Passwort an."
+  },
+  "studio": {
+    "meta": {
+      "title": "Builderforce Studio",
+      "description": "Beschreibe eine App, und Studio baut sie, führt sie in deinem Browser aus und veröffentlicht sie."
+    },
+    "home": {
+      "title": "Was baust du heute?",
+      "subtitle": "Beschreibe eine App. Studio schreibt sie, führt sie in deinem Browser aus und veröffentlicht sie.",
+      "promptLabel": "Beschreibe, was gebaut werden soll",
+      "placeholder": "Lass uns … bauen",
+      "hint": "Enter zum Senden · Umschalt+Enter für eine neue Zeile",
+      "submit": "Bauen",
+      "untitled": "Unbenannte App",
+      "startFailed": "Das Projekt konnte nicht erstellt werden. Versuche es erneut.",
+      "recentTitle": "Deine Studio-Projekte",
+      "recentEmpty": "Projekte, die du hier startest, erscheinen hier."
+    },
+    "topBar": {
+      "home": "Studio-Startseite",
+      "signIn": "Anmelden",
+      "getStarted": "Loslegen",
+      "signOut": "Abmelden"
+    },
+    "workspace": {
+      "title": "Arbeitsbereich wählen",
+      "lead": "Studio-Projekte liegen in einem Arbeitsbereich. Wähle einen, um fortzufahren.",
+      "none": "Du hast noch keinen Arbeitsbereich.",
+      "create": "Jetzt einrichten",
+      "loadFailed": "Deine Arbeitsbereiche konnten nicht geladen werden."
+    },
+    "project": {
+      "github": "GitHub",
+      "share": "Teilen",
+      "linkCopied": "Link kopiert",
+      "upgrade": "Upgrade",
+      "publish": "Veröffentlichen",
+      "loadFailed": "Dieses Projekt konnte nicht geöffnet werden.",
+      "loading": "Dein Projekt wird geöffnet …",
+      "signInLead": "Melde dich an, um dieses Projekt zu öffnen."
+    }
   }
 }

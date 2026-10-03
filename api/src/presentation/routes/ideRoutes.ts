@@ -67,6 +67,7 @@ import {
   listWorkspaceHistory,
   restoreWorkspaceVersion,
 } from '../../application/ide/workspaceStore';
+import { searchWorkspace, SEARCH_QUERY_MAX, SEARCH_QUERY_MIN } from '../../application/ide/searchWorkspace';
 import { onCanvasWrite } from '../../application/backend';
 import { HOSTING_APEX, publishedSiteRecord } from '../../application/ide/siteHosting';
 import { listSiteReleases, restoreSiteRelease } from '../../application/ide/siteReleases';
@@ -442,6 +443,22 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     }
 
     return c.json(rel.map((f) => ({ path: f.path, type: 'file' as const, content: '' })));
+  });
+
+  // Project-wide text search (the IDE's Search panel). Bounded, uncached by design:
+  // see application/ide/searchWorkspace.ts.
+  router.get('/projects/:projectId/search', async (c) => {
+    const db = requestDb(c);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    const query = (c.req.query('q') ?? '').trim();
+    if (query.length < SEARCH_QUERY_MIN || query.length > SEARCH_QUERY_MAX) {
+      return c.json({ error: `Search for ${SEARCH_QUERY_MIN} to ${SEARCH_QUERY_MAX} characters.` }, 400);
+    }
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    return c.json(await searchWorkspace(bucket, projectId, query));
   });
 
   router.get('/projects/:projectId/files/*', async (c) => {

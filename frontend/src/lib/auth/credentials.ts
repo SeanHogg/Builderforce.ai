@@ -237,12 +237,27 @@ function localeHeader(): Record<string, string> {
  * under the OS language, which is the account's locale until the user happens to
  * visit Settings.
  */
-export function getOAuthUrl(provider: string, redirect = '/dashboard', linkToken?: string): string {
+export function getOAuthUrl(provider: string, redirect = '/dashboard', linkToken?: string, returnOrigin?: string): string {
   const params = new URLSearchParams({ redirect });
   if (linkToken) params.set('link_token', linkToken);
+  // Land back on the app that started the sign-in (the Studio app at `studio.`)
+  // rather than the canonical one. The API honours only the app's own origins.
+  if (returnOrigin) params.set('return_origin', returnOrigin);
   const locale = readLocaleCookie();
   if (locale) params.set('locale', locale);
   return `${AUTH_API_URL}/api/auth/oauth/${provider}?${params.toString()}`;
+}
+
+/**
+ * The single sign-on initiate URL for an institution address. Absolute, on the
+ * API origin: the frontend host has no `/api` route, so a relative link (as the
+ * login page used) reached the app's 404, not the API. `returnOrigin` lands the
+ * sign-in back on the app that started it, as in `getOAuthUrl`.
+ */
+export function getSsoStartUrl(email: string, redirect: string, returnOrigin?: string): string {
+  const params = new URLSearchParams({ email: email.trim().toLowerCase(), redirect });
+  if (returnOrigin) params.set('return_origin', returnOrigin);
+  return `${AUTH_API_URL}/api/auth/sso/start?${params.toString()}`;
 }
 
 /**

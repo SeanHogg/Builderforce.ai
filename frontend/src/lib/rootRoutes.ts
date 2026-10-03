@@ -33,7 +33,7 @@ export const APP_ROUTE_SEGMENTS: readonly string[] = [
   'method', 'models', 'monitoring', 'p', 'personas', 'pmo', 'pricing', 'product', 'projects', 'prompts',
   'quality', 'realize', 'references', 'register', 'resume', 'reviews', 'salary', 'sales', 'seat',
   'security', 'sell-builderforce', 'settings', 'sign', 'skills', 'soc2', 'surveys',
-  'talent', 'tasks', 'templates', 'tenants', 'timeline', 'tools', 'training', 'tutorials',
+  'studio', 'talent', 'tasks', 'templates', 'tenants', 'timeline', 'tools', 'training', 'tutorials',
   'webcontainer', 'workflows', 'workforce',
 ];
 

@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { deferPastResponse } from '../../application/shared/requestScope';
 /**
  * The API's read-through cache — a thin adapter over the ONE cache core in
  * `@builderforce/read-through-cache` (L1 in-isolate Map + L2 Workers KV).
@@ -47,6 +48,10 @@ const cache = createReadThroughCache({
   // serving stale reads for a day. Retrying past the per-key window is what
   // makes invalidation actually hold.
   retryDelete: (op) => retryTransient(op, isKvRateLimit),
+  // A miss's KV write-back finishes after the response, on the invocation's
+  // waitUntil — the caller already has its value, and making it also wait out a KV
+  // write put that latency on every cache miss in the API.
+  defer: (task) => deferPastResponse(task),
 });
 
 /** The reporter's `operation` keeps this module's public names, so dashboards

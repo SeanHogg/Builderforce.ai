@@ -335,8 +335,8 @@ import {
   reportCaughtError,
   reportUnhandledError,
   configureCaughtErrorReporter,
-  runWithCaughtErrorContext,
 } from './application/observability/caughtErrorReporter';
+import { runInRequestScope } from './application/shared/requestScope';
 import { persistCaughtError } from './infrastructure/observability/persistCaughtError';
 import { taskCreatedHook } from './application/task/taskCreationHook';
 
@@ -455,7 +455,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // --- Presentation ---
   const app = new Hono<HonoEnv>();
 
-  app.use('*', (c, next) => runWithCaughtErrorContext({
+  app.use('*', (c, next) => runInRequestScope({
     env: c.env,
     method: c.req.method,
     path: new URL(c.req.url).pathname,
@@ -1283,7 +1283,7 @@ export default {
    * CONSTRUCTION instead of keeping a second copy of this fan-out in step.
   */
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    return runWithCaughtErrorContext({
+    return runInRequestScope({
       env,
       method: 'CRON',
       path: `cron:${event.cron}`,
@@ -1335,7 +1335,7 @@ export default {
    * the build doesn't depend on the email-types being present.
   */
   async email(message: ForwardableEmailLike, env: Env, ctx: ExecutionContext): Promise<void> {
-    return runWithCaughtErrorContext({
+    return runInRequestScope({
       env,
       method: 'EMAIL',
       path: `email:${message.to}`,

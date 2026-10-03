@@ -18501,7 +18501,9 @@
     "errorAlreadyLinkedOther": "This provider account is already connected to a different Builderforce account.",
     "errorUnexpected": "An unexpected error occurred. Please try again.",
     "errorNoCode": "No sign-in code received. Please try again.",
-    "errorProfile": "Failed to load your account profile. Please try signing in again."
+    "errorProfile": "Failed to load your account profile. Please try signing in again.",
+    "popupDoneTitle": "You're signed in",
+    "popupDoneBody": "You can close this window and go back to Builderforce."
   },
   "footer": {
     "builtBy": "Built by",
@@ -32112,5 +32114,68 @@
   "siteBadge": {
     "body": "Free sites show a small “Made with Builderforce.ai” badge.",
     "upgrade": "Upgrade to remove it"
+  },
+  "signInDialog": {
+    "lead": "To use Studio, sign in to your account or create one with one of the options below.",
+    "google": "Sign in with Google",
+    "github": "Sign in with GitHub",
+    "email": "Sign in with email and password",
+    "sso": "Sign in with SSO",
+    "close": "Close",
+    "waiting": "Finish signing in in the pop-up window. This page updates by itself.",
+    "terms": "By signing in, you accept the <terms>Terms of Service</terms> and acknowledge our <privacy>Privacy Policy</privacy>.",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "submit": "Sign in",
+    "back": "Back",
+    "createAccount": "Create an account",
+    "failed": "Sign-in failed. Check your details and try again.",
+    "verifyLead": "We emailed a code to {email}. Enter it to finish signing in.",
+    "codeLabel": "Code",
+    "verify": "Verify",
+    "ssoLead": "Enter your work email and we'll find your organisation's sign-in.",
+    "ssoContinue": "Continue",
+    "ssoNotFound": "That address doesn't use single sign-on. Sign in with your password instead."
+  },
+  "studio": {
+    "meta": {
+      "title": "Builderforce Studio",
+      "description": "Describe an app and Studio builds it, runs it in your browser and publishes it."
+    },
+    "home": {
+      "title": "What will you build today?",
+      "subtitle": "Describe an app. Studio writes it, runs it in your browser and publishes it.",
+      "promptLabel": "Describe what to build",
+      "placeholder": "Let's build a…",
+      "hint": "Enter to send · Shift+Enter for a new line",
+      "submit": "Build it",
+      "untitled": "Untitled app",
+      "startFailed": "Couldn't create the project. Try again.",
+      "recentTitle": "Your Studio projects",
+      "recentEmpty": "Projects you start here will appear here."
+    },
+    "topBar": {
+      "home": "Studio home",
+      "signIn": "Sign in",
+      "getStarted": "Get started",
+      "signOut": "Sign out"
+    },
+    "workspace": {
+      "title": "Choose a workspace",
+      "lead": "Studio projects live in a workspace. Pick one to continue.",
+      "none": "You don't have a workspace yet.",
+      "create": "Set one up",
+      "loadFailed": "Couldn't load your workspaces."
+    },
+    "project": {
+      "github": "GitHub",
+      "share": "Share",
+      "linkCopied": "Link copied",
+      "upgrade": "Upgrade",
+      "publish": "Publish",
+      "loadFailed": "Couldn't open this project.",
+      "loading": "Opening your project…",
+      "signInLead": "Sign in to open this project."
+    }
   }
 }

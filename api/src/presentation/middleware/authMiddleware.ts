@@ -10,7 +10,7 @@ import { resolveActiveToken, sessionVersionOf } from '../../application/auth/ses
 import { background } from './background';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import type { TransitionActorInput } from '../../application/task/taskLifecycle';
-import { updateCaughtErrorContext } from '../../application/observability/caughtErrorReporter';
+import { updateRequestScope } from '../../application/shared/requestScope';
 
 /**
  * JWT authentication middleware.
@@ -125,7 +125,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // write can credit the agent rather than the ref parked in `sub`.
   if (payload.agt) c.set('agentActorRef', payload.agt);
   if (payload.src === 'vscode') c.set('clientSurface', 'vscode');
-  updateCaughtErrorContext({ tenantId: payload.tid, userId: payload.sub });
+  updateRequestScope({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 
   // Resolve the active segment (the isolation tier below the tenant). For a

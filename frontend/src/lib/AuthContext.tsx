@@ -15,6 +15,7 @@ import {
   getStoredTenantToken,
   getStoredUser,
   getStoredWebToken,
+  isSessionStorageKey,
   persistSession,
   persistTenantSession,
 } from './auth';
@@ -99,14 +100,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [tenantToken, setTenantToken] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  // Rehydrate from localStorage on mount
+  // Rehydrate from localStorage on mount, and again whenever ANOTHER window changes
+  // the session: a sign-in pop-up (the Studio app) or a sign-out in another tab.
+  // The `storage` event never fires in the window that wrote, so this cannot loop.
   useEffect(() => {
+    const rehydrate = () => {
+      setWebToken(getStoredWebToken());
+      setTenantToken(getStoredTenantToken());
+      setUser(getStoredUser());
+      setTenant(getStoredTenant());
+    };
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setWebToken(getStoredWebToken());
-    setTenantToken(getStoredTenantToken());
-    setUser(getStoredUser());
-    setTenant(getStoredTenant());
+    rehydrate();
     setInitialized(true);
+    const onStorage = (event: StorageEvent) => {
+      if (isSessionStorageKey(event.key)) rehydrate();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   /**

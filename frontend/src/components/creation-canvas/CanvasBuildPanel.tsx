@@ -1,13 +1,10 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { fetchFiles, fetchProject } from '@/lib/api';
-import type { FileEntry, Project } from '@/lib/types';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
-import { faultMessage } from '@/lib/apiClient';
+import { useBuildProject } from '@/hooks/useBuildProject';
+import { LazyBuilderWorkspace as BuilderWorkspace } from '@/components/builder/LazyBuilderWorkspace';
 /**
  * The full Builder workspace, mounted inside the Creation Canvas.
  *
@@ -22,7 +19,6 @@ import { faultMessage } from '@/lib/apiClient';
  * no second surface to drift. It is lazy so the editor + WebGPU bundles do not
  * ship until a Builder object is opened.
  */
-const BuilderWorkspace = dynamic(() => import('@/components/BuilderWorkspace').then((m) => m.BuilderWorkspace), { ssr: false });
 
 interface CanvasBuildPanelProps {
   /** Backing storage project id of the bound Canvas build. */
@@ -36,25 +32,7 @@ interface CanvasBuildPanelProps {
 
 export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed, initialChatId, initialTicket }: CanvasBuildPanelProps) {
   const t = useTranslations('creationCanvas.build');
-  const [project, setProject] = useState<Project | null>(null);
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setProject(null);
-    setError(null);
-    Promise.all([fetchProject(storageProjectId), fetchFiles(storageProjectId)])
-      .then(([loadedProject, loadedFiles]) => {
-        if (cancelled) return;
-        setProject(loadedProject);
-        setFiles(loadedFiles);
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setError(faultMessage(cause, t('loadFailed')));
-      });
-    return () => { cancelled = true; };
-  }, [storageProjectId, t]);
+  const { project, files, error, setProject } = useBuildProject(storageProjectId, t('loadFailed'));
 
   return (
     <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>

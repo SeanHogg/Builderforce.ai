@@ -4,9 +4,8 @@ import {
   reportCaughtError,
   reportUnhandledError,
   resetCaughtErrorReporterForTests,
-  runWithCaughtErrorContext,
-  updateCaughtErrorContext,
 } from './caughtErrorReporter';
+import { runInRequestScope, updateRequestScope } from '../shared/requestScope';
 
 afterEach(() => {
   resetCaughtErrorReporterForTests();
@@ -20,13 +19,13 @@ describe('caughtErrorReporter', () => {
     const pending: Promise<unknown>[] = [];
     configureCaughtErrorReporter(sink);
 
-    runWithCaughtErrorContext({
+    runInRequestScope({
       env: { test: true },
       method: 'POST',
       path: '/api/tasks',
       waitUntil: (task) => pending.push(task),
     }, () => {
-      updateCaughtErrorContext({ tenantId: 42, userId: 'user-1' });
+      updateRequestScope({ tenantId: 42, userId: 'user-1' });
       reportCaughtError(new Error('cache unavailable'), {
         source: 'application/cache',
         operation: 'invalidate',

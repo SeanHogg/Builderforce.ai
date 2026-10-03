@@ -36,6 +36,9 @@ import { MobileDevicePanel } from './builder/MobileDevicePanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useLazyShell } from '@/hooks/useLazyShell';
 import { useInstantPreview } from '@/hooks/useInstantPreview';
+import { useWorkspaceCommands } from '@/lib/workspace/workspaceCommands';
+import { FilesPanel } from '@/components/builder/FilesPanel';
+import { WorkspaceBottomPanel } from '@/components/builder/WorkspaceBottomPanel';
 import { WebContainerAttribution } from '@/components/webcontainer/WebContainerAttribution';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
@@ -137,7 +140,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Mobile: the "preview on your phone" slide-out (QR of the published build).
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
-  const [terminalExpanded, setTerminalExpanded] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   // Bumped when a corpus is registered from outside the Train panel (the Brain
   // writing a .jsonl into the workspace), so the dataset picker re-reads.
@@ -188,6 +190,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modality]);
+
+  // A surface around the workspace (the Studio header) opening one of its panels.
+  useWorkspaceCommands(project.id, (command) => {
+    if (command.type === 'openSettings') setSettingsOpen(true);
+    else if (command.type === 'openTab' && allowedRightTabs.includes(command.tab)) setRightTab(command.tab);
+  });
 
   const { state: wcState, mountFiles, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer } = useWebContainer();
   const { start: startInstantPreview, write: writeInstantPreview } = useInstantPreview();
@@ -1643,60 +1651,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             </div>
           </div>
 
-          {/* Terminal at bottom — collapsible panel with tab */}
-          <div
-            style={{
-              height: terminalExpanded ? 220 : 36,
-              borderTop: '1px solid var(--border-subtle)',
-              display: 'flex',
-              flexDirection: 'column',
-              flexShrink: 0,
-              background: 'var(--bg-deep)',
-              transition: 'height 0.2s ease',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setTerminalExpanded((e) => !e)}
-              aria-expanded={terminalExpanded}
-              aria-label={terminalExpanded ? 'Collapse terminal' : 'Expand terminal'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                width: '100%',
-                background: 'rgba(0,0,0,0.25)',
-                border: 'none',
-                borderBottom: terminalExpanded ? '1px solid rgba(255,255,255,0.08)' : 'none',
-                padding: '6px 10px',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-display)',
-                textAlign: 'left',
-              }}
-            >
-              <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Terminal
-              </span>
-              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
-                {terminalExpanded ? '▼' : <Icon source="▶" size="1em" />}
-              </span>
-            </button>
-            <div
-              style={{
-                flex: 1,
-                overflow: 'hidden',
-                minHeight: 0,
-                minWidth: 0,
-                width: '100%',
-                display: terminalExpanded ? 'flex' : 'none',
-              }}
-            >
-              <Terminal
-                onReady={handleTerminalReady}
-                onInput={handleTerminalInput}
-              />
-            </div>
-          </div>
+          <WorkspaceBottomPanel
+            projectId={project.id}
+            onTerminalReady={handleTerminalReady}
+            onTerminalInput={handleTerminalInput}
+            onOutputReady={handleOutputReady}
+          />
           </>
           )}
         </div>
@@ -1724,13 +1684,19 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'files' ? 'visible' : 'hidden', pointerEvents: rightTab === 'files' ? 'auto' : 'none' }}>
-              <FileExplorer
-                files={files}
-                activeFile={activeFile}
-                onFileSelect={openFile}
-                onFileCreate={async (path) => { await handleFileCreate(path); refreshFiles(); }}
-                onFileDelete={async (path) => { await handleFileDelete(path); refreshFiles(); }}
-                showHeader={false}
+              <FilesPanel
+                projectId={project.id}
+                onOpenFile={openFile}
+                explorer={(
+                  <FileExplorer
+                    files={files}
+                    activeFile={activeFile}
+                    onFileSelect={openFile}
+                    onFileCreate={async (path) => { await handleFileCreate(path); refreshFiles(); }}
+                    onFileDelete={async (path) => { await handleFileDelete(path); refreshFiles(); }}
+                    showHeader={false}
+                  />
+                )}
               />
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'agent' ? 'visible' : 'hidden', pointerEvents: rightTab === 'agent' ? 'auto' : 'none' }}>

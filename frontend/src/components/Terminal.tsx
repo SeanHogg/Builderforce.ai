@@ -8,9 +8,11 @@ import { observeResizeOnAnimationFrame } from '../lib/observeResize';
 interface TerminalProps {
   onReady?: (write: (data: string) => void) => void;
   onInput?: (data: string) => void;
+  /** An output pane (build and publish logs): no banner, no prompt, no typing. */
+  readOnly?: boolean;
 }
 
-export function Terminal({ onReady, onInput }: TerminalProps) {
+export function Terminal({ onReady, onInput, readOnly = false }: TerminalProps) {
   const t = useTranslations('ide');
   const containerRef = useRef<HTMLDivElement>(null);
   // Read through a ref so the mount effect (which must run once) never has to
@@ -45,7 +47,8 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
         },
         fontSize: 13,
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-        cursorBlink: true,
+        cursorBlink: !readOnly,
+        disableStdin: readOnly,
         convertEol: true,
       });
 
@@ -71,14 +74,16 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
 
       terminalRef.current = term;
 
-      term.writeln(`\x1b[32m${tRef.current('runLog.terminalBanner')}\x1b[0m`);
-      term.writeln(tRef.current('runLog.terminalReady'));
-      term.write('\r\n$ ');
+      if (!readOnly) {
+        term.writeln(`\x1b[32m${tRef.current('runLog.terminalBanner')}\x1b[0m`);
+        term.writeln(tRef.current('runLog.terminalReady'));
+        term.write('\r\n$ ');
 
-      term.onData((data) => {
-        term!.write(data);
-        onInput?.(data);
-      });
+        term.onData((data) => {
+          term!.write(data);
+          onInput?.(data);
+        });
+      }
 
       onReady?.((data: string) => {
         term!.write(data);

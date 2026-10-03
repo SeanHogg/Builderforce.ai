@@ -222,6 +222,23 @@ export async function fetchFileContent(
   return res.text();
 }
 
+export interface ProjectSearchMatch {
+  path: string;
+  /** 1-based. */
+  line: number;
+  /** 1-based. */
+  column: number;
+  preview: string;
+}
+
+/** Project-wide text search (the IDE's Search panel). Always the API: the search is its use case. */
+export async function searchProjectFiles(
+  projectId: number | string,
+  query: string,
+): Promise<{ matches: ProjectSearchMatch[]; truncated: boolean }> {
+  return apiRequest(`${IDE}/projects/${projectId}/search?q=${encodeURIComponent(query)}`);
+}
+
 export async function saveFile(
   projectId: number | string,
   filePath: string,

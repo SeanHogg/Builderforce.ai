@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
-import { ALLOWED_REQUEST_HEADERS, corsMiddleware, EXPOSED_HEADERS, resolveAllowedOrigin } from './cors';
+import { ALLOWED_REQUEST_HEADERS, appOrigins, corsMiddleware, EXPOSED_HEADERS, resolveAllowedOrigin, trustedReturnOrigin } from './cors';
 import type { HonoEnv } from '../../env';
 
 /**
@@ -134,5 +134,28 @@ describe('resolveAllowedOrigin — the one decision both paths make', () => {
       expect(res.headers.get('Access-Control-Allow-Origin'), origin)
         .toBe(resolveAllowedOrigin(origin, LIST, '/thing'));
     }
+  });
+});
+
+describe('app origins — the Studio app beside the apex', () => {
+  const LIST = 'https://builderforce.ai,https://www.builderforce.ai';
+
+  it('derives studio. from each two-label apex, not from www or dev origins', () => {
+    const origins = appOrigins(LIST);
+    expect(origins).toContain('https://studio.builderforce.ai');
+    expect(origins).not.toContain('https://studio.www.builderforce.ai');
+    expect(origins.filter((o) => o.startsWith('http://localhost')).every((o) => !o.includes('studio'))).toBe(true);
+  });
+
+  it('lets the browser call the API from the Studio app', () => {
+    expect(resolveAllowedOrigin('https://studio.builderforce.ai', LIST, '/api/projects')).toBe('https://studio.builderforce.ai');
+  });
+
+  it('returns a sign-in only to an app origin, never to a look-alike', () => {
+    expect(trustedReturnOrigin('https://studio.builderforce.ai', LIST)).toBe('https://studio.builderforce.ai');
+    expect(trustedReturnOrigin('https://studio.builderforce.ai.evil.com', LIST)).toBeUndefined();
+    expect(trustedReturnOrigin('https://mysite.builderforce.ai', LIST)).toBeUndefined();
+    expect(trustedReturnOrigin('http://studio.builderforce.ai', LIST)).toBeUndefined();
+    expect(trustedReturnOrigin(undefined, LIST)).toBeUndefined();
   });
 });

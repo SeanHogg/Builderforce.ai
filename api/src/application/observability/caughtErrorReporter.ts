@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { currentRequestScope, deferPastResponse, type RequestScope } from '../shared/requestScope';
 
 export interface CaughtErrorDetails {
   source: string;
@@ -7,14 +7,6 @@ export interface CaughtErrorDetails {
   level?: 'error' | 'warning';
 }
 
-export interface CaughtErrorRuntimeContext {
-  env: unknown;
-  method?: string;
-  path?: string;
-  tenantId?: number;
-  userId?: string;
-  waitUntil?: (task: Promise<unknown>) => void;
-}
 
 export interface CaughtErrorRecord extends Required<Pick<CaughtErrorDetails, 'source' | 'operation'>> {
   error: unknown;
@@ -27,10 +19,9 @@ export interface CaughtErrorRecord extends Required<Pick<CaughtErrorDetails, 'so
 
 export type CaughtErrorSink = (
   record: CaughtErrorRecord,
-  runtime: CaughtErrorRuntimeContext,
+  runtime: RequestScope,
 ) => Promise<void>;
 
-const runtimeStorage = new AsyncLocalStorage<CaughtErrorRuntimeContext>();
 let configuredSink: CaughtErrorSink | null = null;
 const SENSITIVE_CONTEXT_KEY = /(authorization|cookie|credential|password|secret|token|api[-_]?key)/i;
 const MAX_CONTEXT_DEPTH = 5;
@@ -108,7 +99,7 @@ function recordFor(
 
 async function deliver(
   record: CaughtErrorRecord,
-  runtime: CaughtErrorRuntimeContext | undefined,
+  runtime: RequestScope | undefined,
 ): Promise<void> {
   if (!configuredSink || !runtime) return;
   try {
@@ -129,22 +120,6 @@ export function configureCaughtErrorReporter(sink: CaughtErrorSink): void {
   configuredSink = sink;
 }
 
-/** Run one request/event inside an isolated error-reporting context. */
-export function runWithCaughtErrorContext<T>(
-  runtime: CaughtErrorRuntimeContext,
-  work: () => T,
-): T {
-  return runtimeStorage.run(runtime, work);
-}
-
-/** Add identity discovered later by auth middleware to the current request context. */
-export function updateCaughtErrorContext(
-  update: Pick<CaughtErrorRuntimeContext, 'tenantId' | 'userId'>,
-): void {
-  const current = runtimeStorage.getStore();
-  if (current) Object.assign(current, update);
-}
-
 /**
  * Report an exception that the caller intentionally handled.
  *
@@ -155,7 +130,7 @@ export function updateCaughtErrorContext(
 export function reportCaughtError(
   error: unknown,
   details: CaughtErrorDetails,
-  runtimeOverride?: CaughtErrorRuntimeContext,
+  runtimeOverride?: RequestScope,
 ): void {
   const record = recordFor(error, details, true);
   console.error('[caught-error]', {
@@ -166,29 +141,16 @@ export function reportCaughtError(
     error,
   });
 
-  const runtime = runtimeOverride ?? runtimeStorage.getStore();
+  const runtime = runtimeOverride ?? currentRequestScope();
   const delivery = deliver(record, runtime);
-  if (runtime?.waitUntil) {
-    try {
-      runtime.waitUntil(delivery);
-    } catch (schedulingError) {
-      console.error('[caught-error:wait-until-failed]', {
-        source: record.source,
-        operation: record.operation,
-        schedulingError,
-      });
-      void delivery;
-    }
-  } else {
-    void delivery;
-  }
+  if (!deferPastResponse(delivery, runtime)) void delivery;
 }
 
 /** Use the same durable sinks for an exception that will become an HTTP 500. */
 export async function reportUnhandledError(
   error: unknown,
   details: CaughtErrorDetails,
-  runtime: CaughtErrorRuntimeContext,
+  runtime: RequestScope,
 ): Promise<void> {
   const record = recordFor(error, details, false);
   console.error('[unhandled-error]', {

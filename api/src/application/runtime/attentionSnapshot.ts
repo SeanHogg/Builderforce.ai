@@ -17,7 +17,7 @@
  * difference between fitting the Free plan and not (ROADMAP, 2026-09-15). The snapshot
  * is served from the read-through cache under a per-tenant version token:
  *
- *   - {@link bumpAttention} orphans every cached snapshot of a tenant. It is called
+ *   - {@link bumpExecutionState} orphans every cached snapshot of a tenant. It is called
  *     where the HEADLINE states change: the execution-lifecycle outbox drain (inline
  *     for every `RuntimeService` transition), a run pausing on a question, and that
  *     question being answered.
@@ -36,7 +36,8 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { approvals, chatTicketLinks, executions, projectManagerConfigs, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { bumpCacheVersion, getCacheVersion, getOrSetCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { executionStateVersion } from './executionStateVersion';
 import { liveExecution } from '../rehearsal/executionMode';
 import { unreadCountsForUser } from '../brain/chatReadState';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -68,18 +69,6 @@ const LIMIT = 500;
 /** "Manager active" = a pass landed in the last 3 min (cron cadence is 5 min, a pass is seconds). */
 const MANAGER_ACTIVE_WINDOW_MS = 3 * 60_000;
 
-export const attentionVersionKey = (tenantId: number): string => `attention:tenant:${tenantId}`;
-
-/** Orphan every cached attention snapshot of `tenantId`. Best-effort — the TTL is the backstop. */
-export async function bumpAttention(env: Env | undefined, tenantId: number): Promise<void> {
-  if (!env) return;
-  try {
-    await bumpCacheVersion(env, attentionVersionKey(tenantId));
-  } catch (error) {
-    reportCaughtError(error, { source: 'application/runtime/attentionSnapshot.ts', operation: 'bumpAttention', context: { details: { tenantId } } });
-  }
-}
-
 export async function readAttention(
   env: Env | undefined,
   db: Db,
@@ -88,7 +77,7 @@ export async function readAttention(
   const load = () => loadAttention(db, args.tenantId, args.projectId, args.userId);
   if (!env) return finalize(await load());
 
-  const version = await getCacheVersion(env, attentionVersionKey(args.tenantId));
+  const version = await executionStateVersion(env, args.tenantId);
   const key = `attention:v:${version}:${args.tenantId}:${args.projectId ?? 'all'}:${args.userId ?? '-'}`;
   if (args.fresh) {
     const value = await load();

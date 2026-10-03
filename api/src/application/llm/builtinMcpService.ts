@@ -73,7 +73,7 @@ import { integrationCredentials } from '../../infrastructure/database/schema';
 import { fetchWebDocumentCached } from '../web/webFetch';
 import { geocodeBatch, MAX_BATCH } from '../web/geocode';
 import { normalizeSearchQuery } from '../runtime/cloudWeb';
-import { bumpAttention } from '../runtime/attentionSnapshot';
+import { bumpExecutionState } from '../runtime/executionStateVersion';
 import { buildInternetSearch } from '../webSearch/factory';
 import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
 import { encryptCredentials } from '../integrations/credentialCrypto';
@@ -1876,7 +1876,7 @@ const CATALOG: BuiltinTool[] = [
       const [row] = await ctx.db.update(approvals).set(patch).where(and(eq(approvals.id, str(a.id)), eq(approvals.tenantId, ctx.tenantId), eq(approvals.segmentId, seg))).returning();
       if (!row) throw new Error('approval not found');
       // Deciding a run's question clears (or keeps) its "awaiting input" flag everywhere.
-      if (row.executionId != null) await bumpAttention(ctx.env, ctx.tenantId);
+      if (row.executionId != null) await bumpExecutionState(ctx.env, ctx.tenantId);
       return row;
     },
   },

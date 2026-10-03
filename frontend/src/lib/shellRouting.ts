@@ -87,7 +87,7 @@ function underPrefix(pathname: string, prefix: string): boolean {
  * grant has no session by construction — the token IS the credential — so the
  * page it lands on must not carry the operator shell of a workspace it is not in.
  */
-const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/investor/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
+const NO_CHROME_PREFIXES = ['/embed', '/studio', '/webcontainer', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/investor/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.

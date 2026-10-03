@@ -18501,7 +18501,9 @@
     "errorAlreadyLinkedOther": "Esta cuenta del proveedor ya está conectada a otra cuenta de Builderforce.",
     "errorUnexpected": "Se ha producido un error inesperado. Inténtalo de nuevo.",
     "errorNoCode": "No se recibió ningún código de inicio de sesión. Inténtalo de nuevo.",
-    "errorProfile": "No se pudo cargar el perfil de tu cuenta. Vuelve a iniciar sesión."
+    "errorProfile": "No se pudo cargar el perfil de tu cuenta. Vuelve a iniciar sesión.",
+    "popupDoneTitle": "Has iniciado sesión",
+    "popupDoneBody": "Puedes cerrar esta ventana y volver a Builderforce."
   },
   "footer": {
     "builtBy": "Creado por",
@@ -32112,5 +32114,68 @@
   "siteBadge": {
     "body": "Los sitios gratuitos muestran una pequeña insignia «Made with Builderforce.ai».",
     "upgrade": "Mejora tu plan para quitarla"
+  },
+  "signInDialog": {
+    "lead": "Para usar Studio, inicia sesión en tu cuenta o crea una con una de las opciones siguientes.",
+    "google": "Iniciar sesión con Google",
+    "github": "Iniciar sesión con GitHub",
+    "email": "Iniciar sesión con correo y contraseña",
+    "sso": "Iniciar sesión con SSO",
+    "close": "Cerrar",
+    "waiting": "Termina de iniciar sesión en la ventana emergente. Esta página se actualiza sola.",
+    "terms": "Al iniciar sesión, aceptas los <terms>Términos del servicio</terms> y reconoces nuestra <privacy>Política de privacidad</privacy>.",
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña",
+    "submit": "Iniciar sesión",
+    "back": "Volver",
+    "createAccount": "Crear una cuenta",
+    "failed": "No se pudo iniciar sesión. Revisa tus datos e inténtalo de nuevo.",
+    "verifyLead": "Enviamos un código a {email}. Introdúcelo para terminar de iniciar sesión.",
+    "codeLabel": "Código",
+    "verify": "Verificar",
+    "ssoLead": "Introduce tu correo de trabajo y encontraremos el inicio de sesión de tu organización.",
+    "ssoContinue": "Continuar",
+    "ssoNotFound": "Esa dirección no usa inicio de sesión único. Inicia sesión con tu contraseña."
+  },
+  "studio": {
+    "meta": {
+      "title": "Builderforce Studio",
+      "description": "Describe una app y Studio la crea, la ejecuta en tu navegador y la publica."
+    },
+    "home": {
+      "title": "¿Qué vas a crear hoy?",
+      "subtitle": "Describe una app. Studio la escribe, la ejecuta en tu navegador y la publica.",
+      "promptLabel": "Describe qué crear",
+      "placeholder": "Creemos un…",
+      "hint": "Intro para enviar · Mayús+Intro para nueva línea",
+      "submit": "Crear",
+      "untitled": "App sin título",
+      "startFailed": "No se pudo crear el proyecto. Inténtalo de nuevo.",
+      "recentTitle": "Tus proyectos de Studio",
+      "recentEmpty": "Los proyectos que empieces aquí aparecerán aquí."
+    },
+    "topBar": {
+      "home": "Inicio de Studio",
+      "signIn": "Iniciar sesión",
+      "getStarted": "Empezar",
+      "signOut": "Cerrar sesión"
+    },
+    "workspace": {
+      "title": "Elige un espacio de trabajo",
+      "lead": "Los proyectos de Studio viven en un espacio de trabajo. Elige uno para continuar.",
+      "none": "Todavía no tienes un espacio de trabajo.",
+      "create": "Configura uno",
+      "loadFailed": "No se pudieron cargar tus espacios de trabajo."
+    },
+    "project": {
+      "github": "GitHub",
+      "share": "Compartir",
+      "linkCopied": "Enlace copiado",
+      "upgrade": "Mejorar plan",
+      "publish": "Publicar",
+      "loadFailed": "No se pudo abrir este proyecto.",
+      "loading": "Abriendo tu proyecto…",
+      "signInLead": "Inicia sesión para abrir este proyecto."
+    }
   }
 }

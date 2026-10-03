@@ -73,6 +73,54 @@ describe('createReadThroughCache · read-through + invalidate', () => {
   });
 });
 
+describe('createReadThroughCache · single-flight and deferred write-back', () => {
+  it('shares ONE loader call between concurrent misses on a key', async () => {
+    const cache = createReadThroughCache();
+    const kv = memoryKv();
+    let release!: (v: number) => void;
+    const loader = vi.fn(() => new Promise<number>((resolve) => { release = resolve; }));
+    const a = cache.getOrSet(kv, 'hot', loader);
+    const b = cache.getOrSet(kv, 'hot', loader);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
+    release(7);
+    expect(await Promise.all([a, b])).toEqual([7, 7]);
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers a miss without waiting for the KV write when the runtime takes it', async () => {
+    const deferred: Promise<unknown>[] = [];
+    const cache = createReadThroughCache({ defer: (task) => { deferred.push(task); return true; } });
+    const kv = memoryKv();
+    let releasePut!: () => void;
+    kv.put = vi.fn(() => new Promise<void>((resolve) => { releasePut = resolve; }));
+    // Resolves even though the put never has: the write was handed off, not awaited.
+    expect(await cache.getOrSet(kv, 'k', async () => 'v')).toBe('v');
+    expect(deferred).toHaveLength(1);
+    releasePut();
+    await deferred[0];
+  });
+
+  it('awaits the write itself when there is no runtime to hand it to', async () => {
+    const cache = createReadThroughCache({ defer: () => false });
+    const kv = memoryKv();
+    await cache.getOrSet(kv, 'k', async () => 'v');
+    expect(kv.store.size).toBe(1);
+  });
+
+  it('does not cache a load that an invalidate overtook', async () => {
+    const cache = createReadThroughCache();
+    const kv = memoryKv();
+    let release!: (v: string) => void;
+    const stale = cache.getOrSet(kv, 'k', () => new Promise<string>((resolve) => { release = resolve; }));
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await cache.invalidate(kv, 'k');
+    release('before-the-write');
+    // The racing caller still gets its answer, but it is not served to the next one.
+    expect(await stale).toBe('before-the-write');
+    expect(await cache.getOrSet(kv, 'k', async () => 'after-the-write')).toBe('after-the-write');
+  });
+});
+
 /**
  * Workers KV rejects any expirationTtl below 60 seconds. Eleven call sites asked
  * for 10–45s, so every one of their KV writes threw into the best-effort catch

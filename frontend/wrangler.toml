@@ -23,6 +23,17 @@ custom_domain = true
 pattern = "www.builderforce.ai"
 custom_domain = true
 
+# The Studio app (standalone IDE), served by this same app under /studio; the
+# middleware sends the host's root there. A ZONE route, not a custom domain: the
+# api worker's greedy `*.builderforce.ai/*` zone route would otherwise take the
+# host (a Custom Domain does not reliably beat it), and a more specific zone
+# pattern does. DNS is already covered by the proxied wildcard record the api's
+# site hosting needs. `studio` is a reserved site label (siteHosting.ts), so no
+# user site can claim it.
+[[routes]]
+pattern = "studio.builderforce.ai/*"
+zone_name = "builderforce.ai"
+
 [observability.logs]
 enabled = true
 invocation_logs = true

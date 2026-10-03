@@ -2,7 +2,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { bumpAttention } from './attentionSnapshot';
+import { bumpExecutionState } from './executionStateVersion';
 import { activityLog, executionLifecycleOutbox } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -181,7 +181,7 @@ export async function drainExecutionLifecycleOutbox(
 
   await Promise.all([...touchedTenants].map(async (tenantId) => {
     // An execution changed state: the tenant's attention snapshot is stale too.
-    await bumpAttention(env as Env, tenantId);
+    await bumpExecutionState(env as Env, tenantId);
     try {
       await bumpCacheVersion(env as Env, activityLogVersionKey(tenantId));
     } catch (error) {
