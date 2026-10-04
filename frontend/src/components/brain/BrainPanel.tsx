@@ -1456,7 +1456,9 @@ export function BrainPanel({
           )}
         />
       </>}
-      modeControls={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
+      // Memory status is a standing fact, not a mode: it sits beside the plan chip in
+      // the composer's last row, never in the tool row competing with Send.
+      meta={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
     />
   );
 

@@ -3,7 +3,19 @@ import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 export interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   /** Text entry for the prompt. Always occupies the first, full-width row. */
   input: ReactNode;
-  /** Context, mode, model and voice controls for the second row. They wrap. */
+  /**
+   * WHO is answering and WHAT you are addressing — "Acting as", the capability,
+   * "To", a canvas scope. Its own row between the text entry and the tools.
+   *
+   * These used to ride in `actions`, interleaved with `+`, `/`, the plan chip and
+   * the mic in one wrapping row. In a ~320px side panel that row broke into four
+   * lines at whatever widths the chips happened to have, so "Acting as" landed
+   * between the model menu and the upgrade chip and the mic ended up alone on the
+   * last line. A row per kind of thing is the only layout that stays legible at
+   * every width: context wraps among context, tools among tools.
+   */
+  context?: ReactNode;
+  /** The tools: `+`, the `/` options menu, voice, host modes. They wrap. */
   actions: ReactNode;
   /**
    * The ONE primary control for the composer — Send, Stop, or Queue.
@@ -17,6 +29,12 @@ export interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, '
    * place it differently again, and it never wraps onto a second line.
    */
   primaryAction?: ReactNode;
+  /**
+   * Standing facts about the composer — which plan funds it, whether memory is
+   * on. The last row, right-aligned and quiet: they are read, rarely clicked, and
+   * must not compete with Send for the tool row's width.
+   */
+  meta?: ReactNode;
   /** Chips, queued turns, or other state shown above the text entry. */
   status?: ReactNode;
   /** Popovers such as the shared @-mention picker. */
@@ -34,7 +52,9 @@ export interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, '
  */
 export function PromptPanel({
   input,
+  context,
   actions,
+  meta,
   primaryAction,
   status,
   overlay,
@@ -73,6 +93,14 @@ export function PromptPanel({
       {overlay}
       {status ? <div className="bf-prompt-panel__status">{status}</div> : null}
       <div className="bf-prompt-panel__input" style={{ display: 'flex', width: '100%', minWidth: 0 }}>{input}</div>
+      {context ? (
+        <div
+          className="bf-prompt-panel__context"
+          style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: actionGap, minWidth: 0 }}
+        >
+          {context}
+        </div>
+      ) : null}
       <div
         className="bf-prompt-panel__actions"
         style={{ display: 'flex', alignItems: 'center', gap: actionGap, minWidth: 0 }}
@@ -94,6 +122,14 @@ export function PromptPanel({
           </div>
         ) : null}
       </div>
+      {meta ? (
+        <div
+          className="bf-prompt-panel__meta"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: actionGap, minWidth: 0 }}
+        >
+          {meta}
+        </div>
+      ) : null}
     </div>
   );
 }

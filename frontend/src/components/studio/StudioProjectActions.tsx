@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Button, ButtonLink } from '@/components/ui';
-import { useConsumption } from '@/lib/useConsumption';
+import { Button } from '@/components/ui';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 
 const COPIED_MS = 2000;
@@ -11,7 +10,11 @@ const COPIED_MS = 2000;
 /**
  * A Studio project's header actions. Publish and GitHub open the workspace's own
  * panels (through the workspace command channel) rather than second copies of
- * them; Share copies the project link; Upgrade shows only on the free plan.
+ * them; Share copies the project link.
+ *
+ * There is no Upgrade here. The Brain composer directly below already carries the
+ * plan chip ("Free · Upgrade"), so a second upgrade button in the bar put the same
+ * call to action on screen twice, a few hundred pixels apart.
  */
 export function StudioProjectActions({ projectId }: { projectId: number }) {
   const t = useTranslations('studio.project');
@@ -21,7 +24,6 @@ export function StudioProjectActions({ projectId }: { projectId: number }) {
         {t('github')}
       </Button>
       <ShareButton />
-      <UpgradeLink />
       <Button type="button" variant="primary" size="sm" onClick={() => sendWorkspaceCommand(projectId, { type: 'openTab', tab: 'publish' })}>
         {t('publish')}
       </Button>
@@ -47,15 +49,5 @@ function ShareButton() {
     <Button type="button" variant="secondary" size="sm" onClick={share} aria-live="polite">
       {copied ? t('linkCopied') : t('share')}
     </Button>
-  );
-}
-
-/** The upgrade prompt is a plan fact, not an entitlement: it shows on the free plan only. */
-function UpgradeLink() {
-  const t = useTranslations('studio.project');
-  const plan = useConsumption()?.plan.effective;
-  if (plan !== 'free') return null;
-  return (
-    <ButtonLink href="/pricing" variant="secondary" size="sm">{t('upgrade')}</ButtonLink>
   );
 }

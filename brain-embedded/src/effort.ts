@@ -102,6 +102,37 @@ export function effortProfile(effort: Effort | undefined): EffortProfile {
   return EFFORT_PROFILES[effort as Effort] ?? EFFORT_PROFILES.balanced;
 }
 
+/**
+ * The smallest output ceiling a turn that can CALL TOOLS may have.
+ *
+ * `maxTokens` above is an answer-length lever, and for prose that is what it
+ * should be. But a tool call's arguments are output too: writing a file means
+ * emitting the whole file as one JSON string, and a reasoning model spends part
+ * of the same budget thinking first. At Balanced's 4096 a Studio build on
+ * 2026-10-03 hit the ceiling on three consecutive `canvas_write_build_file`
+ * calls (~12 KB each, `completionTokens` exactly 4096 every time), every call
+ * was cut off mid-JSON, and the agent ended by handing the user CSS to paste
+ * by hand. Quick's 2048 is worse. The Grok adapter had already dropped the cap
+ * for its own vendor for exactly this reason; this fixes it at the source, for
+ * every model.
+ *
+ * It is Thorough's ceiling, so it is a value every vendor already receives. A
+ * ceiling is not a spend — providers bill the tokens generated — so this costs
+ * nothing on a turn that doesn't need it; Effort still shapes prose through its
+ * directive and the Thinking budget.
+ */
+export const TOOL_TURN_MIN_MAX_TOKENS = EFFORT_PROFILES.thorough.maxTokens;
+
+/**
+ * `max_tokens` for one turn: the Effort level's ceiling, raised to
+ * {@link TOOL_TURN_MIN_MAX_TOKENS} when the turn advertises tools. A tool-less
+ * turn (conversation, the forced closing answer) keeps the Effort ceiling.
+ */
+export function turnMaxTokens(effortMaxTokens: number | undefined, canCallTools: boolean): number | undefined {
+  if (!canCallTools) return effortMaxTokens;
+  return Math.max(effortMaxTokens ?? 0, TOOL_TURN_MIN_MAX_TOKENS);
+}
+
 /** Is this a known effort level? Guards a persisted/user-supplied string. */
 export function isEffort(value: unknown): value is Effort {
   return value === 'quick' || value === 'balanced' || value === 'thorough';

@@ -1555,15 +1555,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             </button>
           )}
         </div>}
-        actions={<>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => { attachFiles(e.target.files); e.target.value = ''; }}
-          />
-
+        // Who answers and who is addressed get the shell's context row; the tool row
+        // below holds only `+`, `/` and Auto, with Send pinned right.
+        context={<>
           {/* Acting as — WHO the Brain answers as. The shared brain-ui control the web
               composer renders too; see `personaOverlay` for how it shapes the turn. */}
           <PersonaPicker
@@ -1581,6 +1575,15 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             recipient={recipient}
             onChoose={chooseRecipient}
             labels={recipientLabels}
+          />
+        </>}
+        actions={<>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => { attachFiles(e.target.files); e.target.value = ''; }}
           />
 
           {/* + : add content to the message (upload, workspace context, or web). */}

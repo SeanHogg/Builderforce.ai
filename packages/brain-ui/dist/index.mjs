@@ -1427,7 +1427,9 @@ function ChatErrorBanner({
 import { jsx as jsx9, jsxs as jsxs8 } from "react/jsx-runtime";
 function PromptPanel({
   input,
+  context,
   actions,
+  meta,
   primaryAction,
   status,
   overlay,
@@ -1464,6 +1466,14 @@ function PromptPanel({
         overlay,
         status ? /* @__PURE__ */ jsx9("div", { className: "bf-prompt-panel__status", children: status }) : null,
         /* @__PURE__ */ jsx9("div", { className: "bf-prompt-panel__input", style: { display: "flex", width: "100%", minWidth: 0 }, children: input }),
+        context ? /* @__PURE__ */ jsx9(
+          "div",
+          {
+            className: "bf-prompt-panel__context",
+            style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: actionGap, minWidth: 0 },
+            children: context
+          }
+        ) : null,
         /* @__PURE__ */ jsxs8(
           "div",
           {
@@ -1488,7 +1498,15 @@ function PromptPanel({
               ) : null
             ]
           }
-        )
+        ),
+        meta ? /* @__PURE__ */ jsx9(
+          "div",
+          {
+            className: "bf-prompt-panel__meta",
+            style: { display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: actionGap, minWidth: 0 },
+            children: meta
+          }
+        ) : null
       ]
     }
   );

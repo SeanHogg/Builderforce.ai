@@ -420,6 +420,7 @@ export type { PoolAgent, PoolWorkforceAgentRow, PoolRegisteredAgentRow, PoolRequ
 export {
   PERSONA_MODALITY_IDS,
   MODALITY_PERSONAS,
+  FILE_DELIVERY_RULE,
   DEFAULT_PERSONA,
   BRAIN_AGENT_ASSIGNMENTS_PATH,
   modalityPersonaChoice,

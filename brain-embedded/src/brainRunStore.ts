@@ -39,7 +39,7 @@ import {
   type StreamHandlers,
   type StreamChatResult,
 } from './streamChatCompletion';
-import type { ReasoningIntent } from './effort';
+import { turnMaxTokens, type ReasoningIntent } from './effort';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { chatErrorAction, type ChatErrorAction } from './chatError';
 import { asProvenanceAccount, withProvenanceMetadata } from './provenance';
@@ -2415,7 +2415,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const request = (role: string, excludeModels: string[]): Promise<StreamChatResult> => asLiveTurn(c, () => stream(
         {
           messages: working, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
-          routingMode, maxTokens, reasoning, metadata, role,
+          // Raised to the tool-turn floor when tools are on offer: a file write is
+          // output, and the Effort ceiling cut every one of them off mid-JSON.
+          routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata, role,
           ...(excludeModels.length > 0 ? { excludeModels } : {}),
           signal: c.abort?.signal,
         },

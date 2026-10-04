@@ -559,6 +559,18 @@ function openAiChatCodec(serialize = defaultToolRowSerializer) {
   };
 }
 
+// ../packages/agent-loop/src/malformedCall.ts
+var MALFORMED_CALL_RESULT = "This tool call's arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.";
+var TRUNCATED_CALL_RESULT = "This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON \u2014 never several calls in one response. If the content is long, write it in parts: create it with its essential fields first, then extend it with follow-up calls.";
+function malformedCallOutcome(call, truncated, retryHint) {
+  if (!call.malformed) return null;
+  const base = truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT;
+  return { error: retryHint ? `${base} ${retryHint}` : base };
+}
+function malformedCallLabel(name, truncated) {
+  return truncated ? `${name} (cut off by the output limit)` : `${name} (unparseable arguments)`;
+}
+
 // ../packages/agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
 var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
@@ -1191,6 +1203,11 @@ var EFFORT_PROFILES = {
 };
 function effortProfile(effort) {
   return EFFORT_PROFILES[effort] ?? EFFORT_PROFILES.balanced;
+}
+var TOOL_TURN_MIN_MAX_TOKENS = EFFORT_PROFILES.thorough.maxTokens;
+function turnMaxTokens(effortMaxTokens, canCallTools) {
+  if (!canCallTools) return effortMaxTokens;
+  return Math.max(effortMaxTokens ?? 0, TOOL_TURN_MIN_MAX_TOKENS);
 }
 function isEffort(value) {
   return value === "quick" || value === "balanced" || value === "thorough";
@@ -7649,6 +7666,7 @@ ${continuationDirective()}`;
   const codec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
   let pendingReplay = null;
   let pendingRun = null;
+  let lastTurnInterruption = null;
   const settleReply = async (rawText, result, requested) => {
     const text = canonicalTurnText(rawText);
     convo.push({ role: "assistant", content: replayTextOf(text) });
@@ -8049,8 +8067,10 @@ ${revisit}` : covered.note;
           tool_choice: tools ? turnToolChoice ?? "auto" : void 0,
           model: activeModel,
           modelStrict: !!activeModel && modelStrict,
+          // Raised to the tool-turn floor when tools are on offer: a file write is
+          // output, and the Effort ceiling cut every one of them off mid-JSON.
           routingMode,
-          maxTokens,
+          maxTokens: turnMaxTokens(maxTokens, !!tools),
           reasoning,
           metadata,
           role,
@@ -8198,6 +8218,7 @@ ${revisit}` : covered.note;
       if (result.text.trim()) {
         pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
       }
+      lastTurnInterruption = turnInterruption(result.finishReason);
       const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
       const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
       return { content: replayTextOf(result.text), toolCalls, meta };
@@ -8205,6 +8226,20 @@ ${revisit}` : covered.note;
     dispatch: async (call, ctx) => {
       const iter = ctx.step;
       const args = call.args;
+      const declined = malformedCallOutcome(call, lastTurnInterruption === "truncated");
+      if (declined) {
+        const truncated = lastTurnInterruption === "truncated";
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "error",
+          isError: true,
+          durationMs: 0,
+          label: malformedCallLabel(call.name, truncated),
+          args: { arguments: String(call.raw?.arguments ?? "").slice(0, 200) },
+          result: declined
+        });
+        return { data: declined, isError: true };
+      }
       const isReadTool = isDedupableRead(call.name);
       const toolStart = nowMs2();
       setActivity(c, toolActivity(call.name, args, iter, Date.now()));
@@ -9116,15 +9151,20 @@ async function loadAgentPoolVia(request) {
 // src/brainPersona.ts
 var PERSONA_MODALITY_IDS = ["designer", "mobile", "webmobile", "evermind", "finetune", "voice"];
 var STRATEGY_OKR_NOTE = 'Strategy and goals live as OKRs/Objectives (Objectives + Key Results) in their own tables \u2014 not as tasks on the Kanban board. When the user talks about goals, outcomes, or strategy, you can create and link Objectives and Key Results, and promote an epic titled like "OKR \u2026" into a real Objective, using the platform tools.';
+var FILE_DELIVERY_RULE = [
+  "DELIVER CODE BY WRITING IT. Every file you produce goes into the project through your file tools: create new files, and change existing ones in place with the edit tool rather than rewriting them. The user is looking at a live Preview that shows only what you have written.",
+  'NEVER hand the user code to copy, paste, add or apply by hand, and never answer with a code block in place of a file write \u2014 not for a stylesheet, not for "the rest of the file", not as a last resort after a failed write.',
+  "When a write fails, read its error, fix the call and issue it again. When a file is too long for one call, write a smaller working first version and extend it with further edits.",
+  "Only if you have NO tool that writes files at all, give each file as a code block whose language tag is its path (```src/App.jsx), and say that this surface cannot write files."
+].join("\n");
 var BASE_PERSONAS = {
   designer: {
     icon: "\u{1F310}",
     prompt: [
       "You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.",
-      "When the user describes an app to build, SCAFFOLD IT COMPLETELY in this turn: call the `create_file` tool for every file the app needs to actually run \u2014 an index.html entry, a package.json with real dependencies and a `build` script, and all of the src/ components \u2014 so the live Preview renders a working app immediately, not a single snippet. Default to a Vite + React app unless the user asks for something else. Prefer `create_file` over pasting code the user must apply by hand. When you have scaffolded the app, tell the user in one line what you built and that Preview is live and it is ready to Publish.",
-      "Use markdown for your response: headings, lists, bold, and fenced code blocks.",
-      "If the file tools are unavailable, fall back to suggesting files as a code block with the file path as the language tag so the user can create the file in one click. Examples: ```package.json (then JSON content), ```src/index.js (then JS content), ```.gitignore (then content).",
-      "When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it."
+      "When the user describes an app to build, SCAFFOLD IT COMPLETELY in this turn: write every file the app needs to actually run \u2014 an index.html entry, a package.json with real dependencies and a `build` script, and all of the src/ components \u2014 so the live Preview renders a working app immediately, not a single snippet. Default to a Vite + React app unless the user asks for something else. List the project's files before writing, so you build on the starter rather than over it. When you have scaffolded the app, tell the user in one line what you built and that Preview is live and it is ready to Publish.",
+      "Use markdown for your prose: headings, lists and bold.",
+      FILE_DELIVERY_RULE
     ].join("\n")
   },
   mobile: {
@@ -9134,8 +9174,7 @@ var BASE_PERSONAS = {
       'The project is a React Native app rendered for the web through react-native-web, so it runs in the browser preview AND stays portable to Expo. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
       "Style with StyleSheet.create and flexbox. Remember there is no hover: design for touch, keep tap targets at least 44 points, and respect safe areas at the top and bottom of the screen.",
       "Design for a narrow portrait viewport (roughly 390 x 850 points) first. Prefer native navigation patterns \u2014 tab bars, stack headers, bottom sheets \u2014 over desktop patterns like sidebars and hover menus.",
-      "When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.",
-      "When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it."
+      FILE_DELIVERY_RULE
     ].join("\n")
   },
   webmobile: {
@@ -9144,8 +9183,7 @@ var BASE_PERSONAS = {
       "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
       'The project is a React app rendered through react-native-web, so the SAME source runs full-width as a website AND inside a phone-sized device simulator, and stays portable to Expo for native iOS/Android. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" \u2014 never use HTML elements like div, span or button, and never use CSS files or className.',
       "Style with StyleSheet.create and flexbox, and make layouts RESPONSIVE: use flex, percentage widths and useWindowDimensions to adapt between a wide desktop viewport and a narrow phone one. Keep tap targets at least 44 points and respect safe areas \u2014 there is no hover on mobile.",
-      "When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.",
-      "When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it."
+      FILE_DELIVERY_RULE
     ].join("\n")
   },
   evermind: {
@@ -10020,6 +10058,7 @@ export {
   DEFAULT_TOOL_LIMIT,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
+  FILE_DELIVERY_RULE,
   FailureTally,
   HISTORY_TOKEN_BUDGET,
   LOCAL_WORKSPACE_TOOLS,

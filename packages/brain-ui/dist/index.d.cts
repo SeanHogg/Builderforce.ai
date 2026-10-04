@@ -529,7 +529,19 @@ declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgr
 interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
     /** Text entry for the prompt. Always occupies the first, full-width row. */
     input: ReactNode;
-    /** Context, mode, model and voice controls for the second row. They wrap. */
+    /**
+     * WHO is answering and WHAT you are addressing — "Acting as", the capability,
+     * "To", a canvas scope. Its own row between the text entry and the tools.
+     *
+     * These used to ride in `actions`, interleaved with `+`, `/`, the plan chip and
+     * the mic in one wrapping row. In a ~320px side panel that row broke into four
+     * lines at whatever widths the chips happened to have, so "Acting as" landed
+     * between the model menu and the upgrade chip and the mic ended up alone on the
+     * last line. A row per kind of thing is the only layout that stays legible at
+     * every width: context wraps among context, tools among tools.
+     */
+    context?: ReactNode;
+    /** The tools: `+`, the `/` options menu, voice, host modes. They wrap. */
     actions: ReactNode;
     /**
      * The ONE primary control for the composer — Send, Stop, or Queue.
@@ -543,6 +555,12 @@ interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'childre
      * place it differently again, and it never wraps onto a second line.
      */
     primaryAction?: ReactNode;
+    /**
+     * Standing facts about the composer — which plan funds it, whether memory is
+     * on. The last row, right-aligned and quiet: they are read, rarely clicked, and
+     * must not compete with Send for the tool row's width.
+     */
+    meta?: ReactNode;
     /** Chips, queued turns, or other state shown above the text entry. */
     status?: ReactNode;
     /** Popovers such as the shared @-mention picker. */
@@ -557,7 +575,7 @@ interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'childre
  * focus treatment, spacing, and panel shape live here so web, Canvas, marketing,
  * and editor integrations cannot grow different composer markup again.
  */
-declare function PromptPanel({ input, actions, primaryAction, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
+declare function PromptPanel({ input, context, actions, meta, primaryAction, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
 
 /**
  * The contract for the composer's `/` control — the ONE place a prompt panel

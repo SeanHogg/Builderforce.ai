@@ -31,6 +31,8 @@
  * prompts are model-facing and stay in English here.
  */
 
+import { FILE_DELIVERY_RULE } from '@seanhogg/builderforce-brain-embedded';
+
 export type BrainCapabilitySurface = 'brainstorm' | 'build';
 
 export type BrainCapabilityId =
@@ -54,9 +56,8 @@ export interface BrainCapabilityDef {
   /**
    * File a reply in this capability can be exported as. `docx`/`pptx` render
    * server-side (`/api/exports`); `csv` saves straight from the reply's table.
-   * Absent = nothing to export: the build capabilities already emit real files
-   * via path-tagged code blocks, so a download button there would be a worse copy
-   * of "create file".
+   * Absent = nothing to export: the build capabilities WRITE their files into the
+   * project, so a download button there would be a worse copy of the file tree.
    */
   exportFormat?: 'docx' | 'pptx' | 'csv';
   /**
@@ -143,7 +144,7 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
     expects: 'code',
     systemPrompt: [
       'CAPABILITY: WEBSITE. The user is building a web app or site in this workspace.',
-      'Produce real files, not snippets: use a code block whose language tag is the file path (```src/App.tsx, ```package.json) so each one can be created in a click.',
+      'Produce real, complete files, not snippets.',
       'Cover routing, responsive layout, and both light and dark themes. Prefer the stack already present in the workspace over introducing a new one.',
     ].join('\n'),
   },
@@ -155,7 +156,7 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
     systemPrompt: [
       'CAPABILITY: DESIGN. The user is designing the interface before/while building it.',
       'Work at the design-system level: layout structure, spacing scale, type scale, and a token palette expressed as CSS custom properties with light and dark values.',
-      'Deliver the design as real CSS/markup files (path-tagged code blocks) plus a short rationale. Check contrast in both themes and keep tap targets at least 44px.',
+      'Deliver the design as real CSS/markup files written into the project, plus a short rationale. Check contrast in both themes and keep tap targets at least 44px.',
     ].join('\n'),
   },
   {
@@ -166,7 +167,7 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
     systemPrompt: [
       'CAPABILITY: MOBILE. The user is building a mobile app in this workspace.',
       'Design for a phone first: single-column layouts, thumb-reachable actions, native-feeling navigation, offline and slow-network states.',
-      'Produce real files with path-tagged code blocks, and call out any platform permission or store requirement the feature implies.',
+      'Produce real, complete files, and call out any platform permission or store requirement the feature implies.',
     ].join('\n'),
   },
   {
@@ -187,17 +188,20 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
     expects: 'code',
     systemPrompt: [
       'CAPABILITY: 3D GAME. The user is building a 3D game in this workspace.',
-      'Think in scene, camera, lighting, meshes, materials, input, and a game loop. Implement with WebGL/WebGPU via the library already in the workspace (Three.js unless told otherwise), in real path-tagged files.',
+      'Think in scene, camera, lighting, meshes, materials, input, and a game loop. Implement with WebGL/WebGPU via the library already in the workspace (Three.js unless told otherwise), in real files written into the project.',
       'Keep the render loop allocation-free, dispose GPU resources on teardown, and state the target frame budget for any effect you add.',
     ].join('\n'),
   },
 ];
 
 /** The public registry — every capability prompt carries the shared artifact
- *  contract, baked in once here so no entry can drift from it. */
+ *  contract, baked in once here so no entry can drift from it, and every BUILD
+ *  capability carries the file-delivery rule the builder personas carry: these
+ *  five used to tell the model to answer in path-tagged code blocks, beside a file
+ *  tree and the tools that write to it. */
 const CAPABILITIES: BrainCapabilityDef[] = BASE_CAPABILITIES.map((c) => ({
   ...c,
-  systemPrompt: `${c.systemPrompt}\n${ARTIFACT_CONTRACT}`,
+  systemPrompt: [c.systemPrompt, ...(c.surface === 'build' ? [FILE_DELIVERY_RULE] : []), ARTIFACT_CONTRACT].join('\n'),
 }));
 
 /** Every capability offered on a surface, in display order. */

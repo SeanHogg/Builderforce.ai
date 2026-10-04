@@ -67,6 +67,7 @@ import { VoiceConfigPanel } from './builder/VoiceConfigPanel';
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
+import { projectSubtitle } from '@/lib/projectSubtitle';
 interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
@@ -1025,6 +1026,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   }, [initialChatId, initialPrompt, initialTicket, hasDockedBrain, setBrainContext, setBrainOpen]);
 
   const statusLabel = runtimeState.status === 'idle' ? '' : t(`runtimeStatus.${runtimeState.status}`);
+  const subtitle = projectSubtitle(project.name, project.description);
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>
@@ -1102,9 +1104,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             outline: 'none',
           }}
         />
-        {project.description && (
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
-            — {project.description}
+        {/* Only when it adds something: a prompt-started project's description IS
+            the sentence its name was cut from, and the two side by side read as the
+            title printed twice. */}
+        {subtitle && (
+          <span title={subtitle} style={{ color: 'var(--text-muted)', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, minWidth: 0 }}>
+            — {subtitle}
           </span>
         )}
 
@@ -1130,7 +1135,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             title={t('projectDetailsTitle')}
           >
             <Icon name="project" size={16} />
-            Details
+            {t('details')}
           </button>
         )}
 

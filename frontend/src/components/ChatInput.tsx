@@ -140,10 +140,10 @@ export interface ChatInputProps {
   ticketables?: TicketTag[];
   /** Called when a ticket is picked from the #tag typeahead. */
   onTicketTag?: (ticket: TicketTag) => void;
-  /** Context selectors rendered first in the canonical action row. */
+  /** Who answers / what is addressed ("Acting as", capability, "To", scope) — the composer's context row. */
   contextControls?: React.ReactNode;
-  /** Host-specific modes rendered after the shared mode/model controls. */
-  modeControls?: React.ReactNode;
+  /** Host-specific standing facts (e.g. the memory status) shown beside the plan chip in the last row. */
+  meta?: React.ReactNode;
   className?: string;
   /**
    * Change this to any new value to focus the composer and put the caret at the
@@ -345,7 +345,7 @@ export function ChatInput({
   ticketables,
   onTicketTag,
   contextControls,
-  modeControls,
+  meta,
   className,
   focusToken,
 }: ChatInputProps) {
@@ -464,14 +464,10 @@ export function ChatInput({
     [t, effort],
   );
 
-  // The textarea always takes its own full-width row on top (so typed text is
-  // never crushed into a sliver in a narrow side-panel), and the control buttons
-  // sit on a second row below — matching the VS Code composer across modalities.
-  // The trailing group (plan · host modes · brain / voice / send) is pushed right
-  // by marginLeft:auto on the plan-chip wrapper, so Send always lands bottom-right,
-  // Claude-style. The wrapper renders even when the chip self-gates to nothing,
-  // which is exactly why it — and not a conditional icon — owns the anchor.
-  const trailingShift: React.CSSProperties = { marginLeft: 'auto' };
+  // Rows, top to bottom: the textarea (full width, so typed text is never crushed
+  // into a sliver), the context row (who answers, what is addressed), the tools
+  // with Send pinned right, and the standing facts (plan, memory). The shell owns
+  // the rows; this file only says which control is which kind.
 
   // @-mention typeahead — active only when the host supplies participants. Picking
   // one routes the next turn (via onMention) and strips the "@query" from the text.
@@ -653,6 +649,18 @@ export function ChatInput({
             style={{ ...inputStyle, flexBasis: '100%', minWidth: '100%' }}
           />
         )}
+        // A fragment, not the bare node: the shell's ReactNode comes from a second copy
+        // of React's types, and only an element is assignable across the two.
+        context={contextControls ? <>{contextControls}</> : undefined}
+        // Which plan is funding this chat (and, when metered, what allowance is
+        // left), then the host's own standing facts. Self-gating: the chip renders
+        // nothing without a tenant session.
+        meta={(
+          <>
+            <PlanBadge />
+            {meta}
+          </>
+        )}
         actions={(
           <>
             {onAttach && (
@@ -706,15 +714,6 @@ export function ChatInput({
                 : undefined}
               onAccountSettings={accountSettingsHref ? () => router.push(accountSettingsHref) : undefined}
             />
-            {contextControls}
-            {/* Which plan is funding this chat (and, when metered, what allowance is
-                left) — the same chip, in the same place, as the VS Code composer.
-                Self-gating: it renders nothing without a tenant session, so the
-                wrapper carries the right-alignment anchor instead of the chip. */}
-            <span style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0, ...trailingShift }}>
-              <PlanBadge />
-            </span>
-            {modeControls}
             {showBrainIcon && (
           <Link
             href="/brainstorm"
