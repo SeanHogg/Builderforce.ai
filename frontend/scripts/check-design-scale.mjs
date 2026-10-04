@@ -277,8 +277,14 @@ const BASELINE = {
    * in the delta are the page-split MOVES of the "3,473 -> 3,470" entry again, not
    * work. Net −29 below the drifted tally, −25 below the old floor, and the floor
    * follows it down.
+   *
+   * 3392 → 3389 (2026-10-04): the video-scene pass (`scene/Scene.module.css`, 6) and
+   * three composer/Brain literals (`ComposerMenu`, `composerStyles`, `BrainEmptyState`)
+   * had taken the tree to 3398 and turned the deploy red. All nine name roles now, on
+   * the same mapping as above (12/13 = small, 0.9375rem = body, the 20/26 glyphs =
+   * section); the stylesheet's shorthand `font:` sizes went onto roles with them.
    */
-  offScaleFontSizes: 3392,
+  offScaleFontSizes: 3389,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

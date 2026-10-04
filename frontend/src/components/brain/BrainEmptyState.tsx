@@ -59,7 +59,7 @@ export function BrainEmptyState({ layout, mode, onModeChange, controls, composer
     return (
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-          <span aria-hidden style={{ fontSize: 26, lineHeight: 1, color: 'var(--accent)' }}><BrainMark /></span>
+          <span aria-hidden style={{ fontSize: 'var(--font-size-section)', lineHeight: 1, color: 'var(--accent)' }}><BrainMark /></span>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 600, color: 'var(--text-primary)' }}>{t('emptyGreeting')}</div>
             <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>{hint}</div>

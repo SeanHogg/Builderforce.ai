@@ -3,7 +3,7 @@ import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEff
 import type { TeammatePayload } from '@/lib/team/teammate';
 import type { CreationNodeData, CreationObjectKind } from '../types';
 import { canvasObjectTwin } from '@/domains/canvas/domain/canvasBoard';
-import { TITLE_IS_CONTENT_KINDS } from '../creationObjectRegistry';
+import { TITLE_IS_CONTENT_KINDS } from '../creationObjectAuthorship';
 import { newNode } from '../canvasNodeHelpers';
 import type { useTranslations } from 'next-intl';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';

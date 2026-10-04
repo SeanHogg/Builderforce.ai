@@ -24,7 +24,7 @@ const inputStyle: CSSProperties = {
   minWidth: 0,
   background: 'transparent',
   color: 'var(--chat-input-text)',
-  fontSize: '0.9375rem',
+  fontSize: 'var(--font-size-body)',
   borderRadius: 0,
   padding: '6px 4px',
   outline: 'none',

@@ -1,5 +1,6 @@
 import type { CreationObjectKind } from './types';
-import { creationObjectContentFields, creationObjectMutableFields, isAuthored, isSensitiveMutationKey } from './creationObjectRegistry';
+import { creationObjectContentFields, creationObjectMutableFields, isSensitiveMutationKey } from './creationObjectRegistry';
+import { isAuthored } from './creationObjectAuthorship';
 
 /**
  * Authored work sent under field names the kind does not declare, kept as the kind's

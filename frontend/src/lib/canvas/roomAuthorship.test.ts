@@ -7,7 +7,7 @@ import {
   ROOM_LAYOUT_IDS,
   canvasRoomDesignFrom,
 } from '@builderforce/creation-canvas-contract';
-import { emptyShellProblem } from '@/components/creation-canvas/creationObjectRegistry';
+import { emptyShellProblem } from '@/components/creation-canvas/creationObjectAuthorship';
 import {
   THEATER_SEAT_MAX,
   THEATER_SEAT_MIN,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationPaletteGroupsFor, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, creationObjectName, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationPaletteGroupsFor, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, creationObjectName, sanitizeCreationObjectPatch } from './creationObjectRegistry';
+import { emptyShellProblem, TITLE_IS_CONTENT_KINDS } from './creationObjectAuthorship';
 import { CREATION_CONNECTION_KINDS, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {

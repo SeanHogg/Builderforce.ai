@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { emptyShellProblem, sanitizeCreationObjectPatch } from './creationObjectRegistry';
+import { sanitizeCreationObjectPatch } from './creationObjectRegistry';
+import { emptyShellProblem } from './creationObjectAuthorship';
 import { salvageUnrecognizedContent } from './unrecognizedContentSalvage';
 
 /** The two calls refused on 2026-09-27 (ui 2026.9.39) for "show me evermind training". */

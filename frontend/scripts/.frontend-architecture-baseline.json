@@ -16,7 +16,7 @@
     "components/TaskMgmtContent.tsx": 2762,
     "components/agent/AgentExecutionPanel.tsx": 1097,
     "components/creation-canvas/CreationCanvas.tsx": 1172,
-    "components/creation-canvas/creationObjectRegistry.ts": 1167,
+    "components/creation-canvas/creationObjectRegistry.ts": 1039,
     "components/manager/ManagerContent.tsx": 1182,
     "components/reliability/MonitoringSections.tsx": 954,
     "components/workforce/WorkforceAgents.tsx": 900,

@@ -4,7 +4,7 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { CanvasNodePanel } from '../CanvasNodePanel';
 import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData } from '../types';
-import { emptyShellProblem } from '../creationObjectRegistry';
+import { emptyShellProblem } from '../creationObjectAuthorship';
 import { Inspector } from '../inspector/CanvasInspector';
 import { CanvasInspectorProvider, type CanvasInspectorValue } from '../inspector/inspectorContext';
 import type { useCanvasNodePanels } from '../hooks/useCanvasNodePanels';

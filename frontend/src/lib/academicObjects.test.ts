@@ -7,10 +7,9 @@ import {
 } from './specObjects';
 import { specValueInEnglish } from './specVerdict';
 import {
-  CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData,
-  creationObjectDefinition, creationObjectAiContext, creationObjectMutableFields,
-  emptyShellProblem,
+  CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, creationObjectAiContext, creationObjectMutableFields,
 } from '@/components/creation-canvas/creationObjectRegistry';
+import { emptyShellProblem } from '@/components/creation-canvas/creationObjectAuthorship';
 import en from '@/i18n/messages/en.json';
 import zh from '@/i18n/messages/zh.json';
 import es from '@/i18n/messages/es.json';

@@ -64,7 +64,7 @@ export function MenuRow({ icon, label, hint, active, onClick }: {
     borderRadius: 'var(--radius-md)',
     background: hover ? 'var(--surface-interactive, var(--bg-base))' : 'transparent',
     color: 'var(--text-primary)',
-    fontSize: 13,
+    fontSize: 'var(--font-size-small)',
     textAlign: 'left',
     cursor: 'pointer',
     textDecoration: 'none',

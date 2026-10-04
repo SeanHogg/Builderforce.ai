@@ -6,7 +6,8 @@ import type { CreationNodeData } from './types';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 import { FlowStepOutletRail, flowStepHasNamedOutlets } from './FlowStepBody';
 import styles from './CreationCanvas.module.css';
-import { creationObjectDefinition, emptyShellProblem } from './creationObjectRegistry';
+import { creationObjectDefinition } from './creationObjectRegistry';
+import { emptyShellProblem } from './creationObjectAuthorship';
 import {
   canvasNodeMessages,
   canvasNodeSchedule,

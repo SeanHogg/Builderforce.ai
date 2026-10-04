@@ -4,7 +4,8 @@ import { COURSE_AUTHORING_CONTRACT, COURSE_AUTHORING_SCHEMA, GUIDED_TOUR_AUTHORI
 import { sheetFormulaGuidance } from '@/lib/canvasSheet';
 import { FORMULA_FUNCTIONS } from '@/lib/canvasFormula';
 import { approvalGuidance, type ApprovalMode, evaluateGate, readProvenance } from '@/lib/canvasApprovalGate';
-import { CREATION_OBJECT_REGISTRY, creationObjectDefinition, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS } from '../creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, creationObjectDefinition, sanitizeCreationObjectPatch } from '../creationObjectRegistry';
+import { emptyShellProblem, TITLE_IS_CONTENT_KINDS } from '../creationObjectAuthorship';
 import type { CreationObjectKind } from '../types';
 import { duplicateAddUpdateTarget } from '@/domains/canvas/domain/selection';
 import { canvasObjectTwin } from '@/domains/canvas/domain/canvasBoard';
