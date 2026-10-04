@@ -1,6 +1,6 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { coerceFileContent } from '@builderforce/ide-file-contract';
 import { canvasBuildActions } from '@/lib/canvasBuildTools';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
@@ -40,7 +40,10 @@ export function useWorkspaceBrainActions({ projectId, projectName, modality, tar
   };
 }): void {
   const liveRef = useRef({ targets, modality, projectId, review });
-  liveRef.current = { targets, modality, projectId, review };
+  // Synced after commit, never during render; a tool runs long after either.
+  useEffect(() => {
+    liveRef.current = { targets, modality, projectId, review };
+  });
 
   const buildToolActions = useMemo<BrainAction[]>(() => canvasBuildActions({
     builds: () => [{

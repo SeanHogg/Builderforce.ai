@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installPhoneViewport } from '@/test/phoneViewport';
-import { CREATION_CANVAS_TOUR, CreationCanvas, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse } from './CreationCanvas';
+import { CREATION_CANVAS_TOUR, CreationCanvas } from './CreationCanvas';
+import { scoreAgentTestResponse } from './canvasAgentTest';
+import { persistCanonicalProjectPrd, projectEvermindNodePatch } from './canvasProjectSync';
 // The five pure rules that used to be asserted HERE — auto-apply, connected actions,
 // the object lock, Brain association and the duplicate-vs-update target — moved to
 // `domains/canvas/domain/*.test.ts` with their coverage widened. Each one cost a full

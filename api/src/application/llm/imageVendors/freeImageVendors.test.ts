@@ -109,8 +109,10 @@ describe('hugging face image vendor', () => {
 
 describe('pollinations image vendor', () => {
   it('puts the prompt in the path and keeps generations private', () => {
-    const url = new URL(pollinationsImageUrl({ apiKey: 'k', model: 'flux', prompt: 'a red fox', size: '768x512' }));
-    expect(url.pathname).toBe('/prompt/a%20red%20fox');
+    const url = new URL(pollinationsImageUrl({ apiKey: 'k', model: 'black-forest-labs/flux.1-schnell', prompt: 'a red fox', size: '768x512' }));
+    expect(url.host).toBe('gen.pollinations.ai');
+    expect(url.pathname).toBe('/image/a%20red%20fox');
+    expect(url.searchParams.get('model')).toBe('black-forest-labs/flux.1-schnell');
     expect(url.searchParams.get('private')).toBe('true');
     expect(url.searchParams.get('width')).toBe('768');
   });
@@ -119,11 +121,12 @@ describe('pollinations image vendor', () => {
     expect(pollinationsImageModule.apiKeyFrom({})).toBeNull();
   });
 
-  it('GETs without a body and reads the bytes', async () => {
+  it('GETs without a body, sends the secret key as a Bearer token, and reads the bytes', async () => {
     const fetchFn = mockFetch(() => new Response(PNG_BYTES, { status: 200, headers: { 'Content-Type': 'image/jpeg' } }));
-    const result = await pollinationsImageModule.generate({ apiKey: 'pk', model: 'flux', prompt: 'p' });
+    const result = await pollinationsImageModule.generate({ apiKey: 'sk_test', model: 'black-forest-labs/flux.1-schnell', prompt: 'p' });
     const init = fetchFn.mock.calls[0]![1]!;
     expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer sk_test');
     expect(init.body).toBeUndefined();
     expect(result.data[0]!.url).toMatch(/^data:image\/jpeg;base64,/);
   });

@@ -58,7 +58,7 @@ export interface ImageVendorEnv {
   GOOGLE_API_KEY?: string | null;
   /** Hugging Face Inference Providers token (`hf_*`). */
   HF_API_TOKEN?: string | null;
-  /** Pollinations token (free, from auth.pollinations.ai). Opt-in: unbound → skipped. */
+  /** Pollinations SECRET key (`sk_…`, enter.pollinations.ai). Unbound → skipped. */
   POLLINATIONS_API_KEY?: string | null;
 }
 

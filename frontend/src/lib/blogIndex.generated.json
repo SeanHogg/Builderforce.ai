@@ -1,5 +1,19 @@
 [
   {
+    "slug": "studio-makes-the-images-your-app-needs",
+    "title": "Studio makes the images your app needs",
+    "date": "2026-10-04",
+    "description": "Builderforce Studio now generates the hero art, illustrations and product shots in the apps it builds, stores them in your workspace, and writes permanent links into the code, so a first draft looks like the real thing.",
+    "tags": [
+      "studio",
+      "images",
+      "ai-images",
+      "app-development",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "builderforce-studio-describe-it-run-it",
     "title": "Builderforce Studio — describe an app, watch it run, keep every version",
     "date": "2026-10-03",

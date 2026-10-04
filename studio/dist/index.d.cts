@@ -162,20 +162,11 @@ declare class VideoEngine {
 }
 
 /**
- * DiffusionEngine — hybrid ORT + transformers.js denoising pipeline.
- *
- * Layered architecture:
- *   • transformers.js (extension layer) — owns the CLIP BPE tokenizer + the
- *     text-encoder ONNX session. We do NOT hand-roll BPE.
- *   • raw onnxruntime-web (base layer) — owns the UNet + VAE-decoder sessions.
- *     We keep direct control here so Mamba latent-residual coherence can
- *     inject biases between scheduler steps without going through an opaque
- *     pipeline wrapper.
- *
- * The shared denoise() primitive runs an LCM-style consistency-model step
- * that works for both backbones — SD-Turbo with timesteps=[999] degrades to
- * the standard single-step formulation, LCM with timesteps=[999,759,519,259]
- * uses the same formula 4× with the right alpha schedule.
+ * The diffusion model registry — single source of truth for per-model dims,
+ * timesteps, VAE scale factors, ONNX file paths and the declared ORT input
+ * contracts. Pure data: no ORT, no I/O, so the frame engine, the video
+ * orchestrator, the device-fit hints and the contract tests all read it
+ * without pulling in a runtime.
  */
 
 declare const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor>;

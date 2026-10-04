@@ -160,7 +160,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const edit = usePointAndEdit({ projectId: projectIdNum, previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, setFileContents });
   const editor = useWorkspaceFiles({
     projectId: projectIdNum, modality, setFiles, fileContents, setFileContents,
-    previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, refLog: logs.refLog, onOpenInEditor: showEditor,
+    previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, refLog: logs.log, onOpenInEditor: showEditor,
   });
   const handleTerminalInput = useLazyShell(runner.startShell, logs.writeTerminal);
 

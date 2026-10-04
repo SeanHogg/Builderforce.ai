@@ -32,7 +32,9 @@ describe('generate_image_asset', () => {
   });
 
   it('relays the gateway refusal as a tool error', async () => {
-    generateImage.mockRejectedValue(new Error('Daily image credits exhausted'));
+    // Throw lazily, at call time: a pre-built rejected promise is reported by the
+    // runner as an unhandled rejection even though the action catches it.
+    generateImage.mockImplementation(async () => { throw new Error('Daily image credits exhausted'); });
     expect(await action.run({ prompt: 'p' })).toEqual({ error: expect.stringContaining('Daily image credits exhausted') });
   });
 });

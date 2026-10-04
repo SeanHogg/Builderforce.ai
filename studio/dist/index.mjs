@@ -4,7 +4,7 @@ import {
 } from "./chunk-Q5Y27QLY.mjs";
 
 // src/engine/diffusion-engine.ts
-import * as ort2 from "onnxruntime-web";
+import * as ort3 from "onnxruntime-web";
 import { AutoTokenizer } from "@huggingface/transformers";
 
 // src/engine/weight-cache.ts
@@ -107,30 +107,7 @@ async function writeToIdb(key, value) {
   });
 }
 
-// src/engine/onnx-runtime-config.ts
-import * as ort from "onnxruntime-web";
-import { env as hfEnv } from "@huggingface/transformers";
-function versionMatchedCdn() {
-  const version = ort.env?.versions?.common;
-  return version ? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${version}/dist/` : "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
-}
-var configured = false;
-function configureOnnxRuntime(opts = {}) {
-  if (configured) return;
-  configured = true;
-  const wasmCdn = opts.wasmCdn ?? versionMatchedCdn();
-  const numThreads = opts.numThreads ?? 1;
-  hfEnv.allowLocalModels = false;
-  if (hfEnv.backends?.onnx?.wasm) {
-    hfEnv.backends.onnx.wasm.numThreads = numThreads;
-    hfEnv.backends.onnx.wasm.wasmPaths = wasmCdn;
-  }
-  ort.env.wasm.wasmPaths = wasmCdn;
-  ort.env.wasm.numThreads = numThreads;
-}
-
-// src/engine/diffusion-engine.ts
-configureOnnxRuntime();
+// src/engine/diffusion-models.ts
 var MODEL_REGISTRY = {
   "lcm-tiny-sd": {
     id: "lcm-tiny-sd",
@@ -242,11 +219,34 @@ var MODEL_REGISTRY = {
     id: "cogvideox-2b",
     engine: "webdit-dit",
     architecture: "cogvideox-2b",
-    bundleUrl: null,
-    available: false,
-    // ~2B DiT (Tsinghua/Zhipu) + CLIP-L text encoder + VAE, fp16 — the
-    // smallest of the 4 DiT families (webdit/converter/src/architectures/cogvideox.ts).
-    minVramMb: 8 * 1024,
+    // A real bundle IS uploaded (2026-08) — `studio-weights/webdit/cogvideox-2b/`
+    // in the `builderforce-uploads` R2 bucket. This is the studio weights
+    // proxy's own base URL, NOT `.../webdit/cogvideox-2b` — the
+    // `webdit/<architecture>/` path segment is added by `webdit-engine.ts`'s
+    // `fetchBundleFile` (its `cacheKey`, `webdit/${architecture}/${relPath}`,
+    // is appended to this base by `getOrFetchWeight`'s r2-proxy resolver —
+    // see `weight-cache.ts`'s `resolveSource`). Setting this to the
+    // architecture-specific-looking URL the old comment on
+    // `WebDitModelDescriptor.bundleUrl` suggested would double the path
+    // segment and 404.
+    bundleUrl: "https://api.builderforce.ai/api/studio/weights",
+    available: true,
+    // Real ~1.7B-param DiT (THUDM/CogVideoX-2b) + real T5-XXL text encoder
+    // (encoder-only, ~4.7B params) + VAE, all fp32 ONNX graphs — NOT the
+    // CLIP-L swap the original placeholder comment assumed (see
+    // webdit/converter/src/architectures/cogvideox.ts's header comment for
+    // the full real-weights writeup). fp32 (not fp16) because CPU export
+    // tracing needs it (PyTorch CPU doesn't run fp16 matmul); that plus the
+    // real T5-XXL size makes the actual uploaded graph+external-data total
+    // ~26.6 GB (dit 7.05 GB, text encoder 19.05 GB, vae 0.50 GB — MEASURED
+    // from the real 2026-08 export, not estimated). This is almost
+    // certainly too large for real-world WebGPU/browser use on typical
+    // consumer VRAM (8-24 GB) — flagging honestly rather than
+    // under-stating it: the bundle is genuinely wired end-to-end and
+    // verified numerically correct, but practical in-browser usability
+    // would need a follow-up fp16-graph pass (post-export precision
+    // conversion) or real quantization-aware export, neither done here.
+    minVramMb: 28 * 1024,
     defaultSteps: 50,
     defaultGuidance: 6,
     defaultFrames: 49,
@@ -304,43 +304,75 @@ var MODEL_REGISTRY = {
     defaultHeight: 512
   }
 };
-var UNET_INPUT_BUILDERS = {
-  sample: (ctx) => ({ data: ctx.sample, shape: ctx.latentShape }),
-  timestep: (ctx) => ({ data: Float32Array.from([ctx.timestep]), shape: [1] }),
-  encoder_hidden_states: (ctx) => ({
-    data: ctx.condEmbedding,
-    shape: [1, ctx.descriptor.sequenceLength, ctx.descriptor.textEmbedDim]
-  }),
-  timestep_cond: (ctx) => ({
-    // LCM consistency-model guidance-scale embedding. The embedded scale is the
-    // model's DISTILLATION guidance scale (descriptor.lcmGuidanceScale, diffusers
-    // default 8.5), NOT the runtime cond/uncond mix `ctx.guidance` (~1 for LCM).
-    // Embedding the mix scale gave w = 1 - 1 = 0 → a degenerate all-[sin0=0,cos0=1]
-    // vector, conditioning the UNet as if guidance≈1 and producing washed,
-    // out-of-range latents on the refinement pass. See lcmGuidanceCondEmbedding.
-    data: lcmGuidanceCondEmbedding(ctx.descriptor),
-    shape: [1, ctx.descriptor.lcmGuidanceEmbedDim ?? 256]
-  })
-};
-var KNOWN_UNET_INPUTS = new Set(
-  Object.keys(UNET_INPUT_BUILDERS)
-);
-function materializeTensor(dtype, raw) {
-  const shape = [...raw.shape];
-  if (dtype === "float32") {
-    return new ort2.Tensor("float32", raw.data, shape);
+
+// src/engine/diffusion-schedule.ts
+var TRAIN_TIMESTEPS = 1e3;
+var ALPHAS_CUMPROD = computeAlphasCumprod(85e-5, 0.012, TRAIN_TIMESTEPS);
+function computeAlphasCumprod(betaStart, betaEnd, T) {
+  const out = new Float32Array(T);
+  const sqrtStart = Math.sqrt(betaStart);
+  const sqrtEnd = Math.sqrt(betaEnd);
+  let running = 1;
+  for (let t = 0; t < T; t++) {
+    const sqrtBeta = sqrtStart + (sqrtEnd - sqrtStart) * (t / (T - 1));
+    const beta = sqrtBeta * sqrtBeta;
+    running *= 1 - beta;
+    out[t] = running;
   }
-  if (dtype === "int32") {
-    const out = new Int32Array(raw.data.length);
-    for (let i = 0; i < raw.data.length; i++) out[i] = raw.data[i] | 0;
-    return new ort2.Tensor("int32", out, shape);
+  return out;
+}
+function alphaCumprodAt(timestep) {
+  const t = Number.isFinite(timestep) ? Math.round(timestep) : TRAIN_TIMESTEPS - 1;
+  return ALPHAS_CUMPROD[Math.min(TRAIN_TIMESTEPS - 1, Math.max(0, t))];
+}
+function noiseScaleAt(timestep) {
+  return Math.sqrt(1 - alphaCumprodAt(timestep));
+}
+function gaussianNoise(length, seed) {
+  const out = new Float32Array(length);
+  let state = seed >>> 0 || 1;
+  for (let i = 0; i < length; i++) {
+    state = state * 1664525 + 1013904223 >>> 0;
+    const u1 = (state + 1) / 4294967296;
+    state = state * 1664525 + 1013904223 >>> 0;
+    const u2 = (state + 1) / 4294967296;
+    out[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
   }
-  if (dtype === "int64") {
-    const out = new BigInt64Array(raw.data.length);
-    for (let i = 0; i < raw.data.length; i++) out[i] = BigInt(raw.data[i] | 0);
-    return new ort2.Tensor("int64", out, shape);
+  return out;
+}
+function forwardDiffuse(clean, timestep, seed) {
+  const alpha = alphaCumprodAt(timestep);
+  const sqrtAlpha = Math.sqrt(alpha);
+  const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
+  const noise = gaussianNoise(clean.length, seed);
+  const out = new Float32Array(clean.length);
+  for (let i = 0; i < clean.length; i++) out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
+  return out;
+}
+var RENOISE_SEED_STRIDE = 7919;
+function lcmStep(sample, noisePred, timestep, nextTimestep, seed, stepIndex) {
+  const alpha = alphaCumprodAt(timestep);
+  const sqrtAlpha = Math.sqrt(alpha);
+  const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
+  if (nextTimestep === null) {
+    for (let j = 0; j < sample.length; j++) {
+      sample[j] = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
+    }
+    return;
   }
-  throw new Error(`Unsupported dtype: ${dtype}`);
+  const alphaNext = alphaCumprodAt(nextTimestep);
+  const sqrtAlphaNext = Math.sqrt(alphaNext);
+  const sqrtOneMinusAlphaNext = Math.sqrt(1 - alphaNext);
+  const noise = gaussianNoise(sample.length, seed + stepIndex * RENOISE_SEED_STRIDE);
+  for (let j = 0; j < sample.length; j++) {
+    const x0 = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
+    sample[j] = sqrtAlphaNext * x0 + sqrtOneMinusAlphaNext * noise[j];
+  }
+}
+function applyGuidance(cond, uncond, guidance) {
+  for (let i = 0; i < cond.length; i++) {
+    cond[i] = uncond[i] + guidance * (cond[i] - uncond[i]);
+  }
 }
 var DEFAULT_LCM_GUIDANCE_SCALE = 8.5;
 function lcmGuidanceCondEmbedding(descriptor) {
@@ -360,434 +392,50 @@ function guidanceScaleEmbedding(w, dim) {
   }
   return out;
 }
-var ALPHAS_CUMPROD = computeAlphasCumprod(85e-5, 0.012, 1e3);
-function computeAlphasCumprod(betaStart, betaEnd, T) {
-  const out = new Float32Array(T);
-  const sqrtStart = Math.sqrt(betaStart);
-  const sqrtEnd = Math.sqrt(betaEnd);
-  let running = 1;
-  for (let t = 0; t < T; t++) {
-    const sqrtBeta = sqrtStart + (sqrtEnd - sqrtStart) * (t / (T - 1));
-    const beta = sqrtBeta * sqrtBeta;
-    running *= 1 - beta;
-    out[t] = running;
-  }
-  return out;
+
+// src/engine/ort-session.ts
+import * as ort2 from "onnxruntime-web";
+
+// src/engine/onnx-runtime-config.ts
+import * as ort from "onnxruntime-web";
+import { env as hfEnv } from "@huggingface/transformers";
+function versionMatchedCdn() {
+  const version = ort.env?.versions?.common;
+  return version ? `https://cdn.jsdelivr.net/npm/onnxruntime-web@${version}/dist/` : "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
 }
-function reportProgress(label, onProgress) {
-  console.info(`[builderforce-studio] ${label}`);
-  onProgress?.(label);
+var configured = false;
+function configureOnnxRuntime(opts = {}) {
+  if (configured) return;
+  configured = true;
+  const wasmCdn = opts.wasmCdn ?? versionMatchedCdn();
+  const numThreads = opts.numThreads ?? 1;
+  hfEnv.allowLocalModels = false;
+  if (hfEnv.backends?.onnx?.wasm) {
+    hfEnv.backends.onnx.wasm.numThreads = numThreads;
+    hfEnv.backends.onnx.wasm.wasmPaths = wasmCdn;
+  }
+  ort.env.wasm.wasmPaths = wasmCdn;
+  ort.env.wasm.numThreads = numThreads;
 }
-var DiffusionEngine = class {
-  constructor(opts) {
-    this.opts = opts;
+
+// src/engine/ort-session.ts
+configureOnnxRuntime();
+function materializeTensor(dtype, raw) {
+  const shape = [...raw.shape];
+  if (dtype === "float32") {
+    return new ort2.Tensor("float32", raw.data, shape);
   }
-  opts;
-  tokenizer = null;
-  textEncoderSession = null;
-  unetSession = null;
-  vaeSession = null;
-  disposed = false;
-  // -------------------------------------------------------------------------
-  async init() {
-    const d = this.descriptor;
-    const sessionOptions = this.buildSessionOptions();
-    const onProgress = this.opts.onProgress;
-    const memoryError = checkMemoryForModel(
-      this.opts.probed.approxMemoryMb,
-      d.minVramMb,
-      d.id
-    );
-    if (memoryError) {
-      throw new Error(memoryError);
-    }
-    if (this.opts.probed.kind === "webgpu" && this.opts.probed.gpuDevice) {
-      this.opts.probed.gpuDevice.lost.then((info) => {
-        reportProgress(
-          `GPU device LOST (${info.reason}): ${info.message}. Reload the page; pick a lower resolution or lighter model on retry.`,
-          onProgress
-        );
-      }).catch(() => {
-      });
-    }
-    reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})\u2026`, onProgress);
-    this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
-    reportProgress("Tokenizer ready.", onProgress);
-    reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)\u2026`, onProgress);
-    const downloads = await Promise.all([
-      this.fetchSessionBuffers(d.files.textEncoder, "text_encoder"),
-      this.fetchSessionBuffers(d.files.unet, "unet"),
-      this.fetchSessionBuffers(d.files.vaeDecoder, "vae_decoder")
-    ]);
-    this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
-    this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
-    this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
-    reportProgress("All ORT sessions created.", onProgress);
-    assertSessionMatchesSpec("unet", this.unetSession, d.unetInputs);
-    assertSessionMatchesSpec("text_encoder", this.textEncoderSession, d.textEncoderInputs);
-    reportProgress("Model graph contract verified \u2014 engine ready.", onProgress);
+  if (dtype === "int32") {
+    const out = new Int32Array(raw.data.length);
+    for (let i = 0; i < raw.data.length; i++) out[i] = raw.data[i] | 0;
+    return new ort2.Tensor("int32", out, shape);
   }
-  // -------------------------------------------------------------------------
-  // Public surface
-  // -------------------------------------------------------------------------
-  /**
-   * Release ORT sessions + destroy the engine's GPU device. Idempotent and
-   * safe to await even on a never-fully-init'd engine. After dispose() the
-   * engine cannot be reused — create a new one.
-   *
-   * ORT sessions hold large WASM heaps + WebGPU buffers (the LCM UNet
-   * alone is ~1.7 GB). Without release(), those stay allocated even after
-   * the React tree unmounts — exactly the leak the user surfaced.
-   */
-  async dispose() {
-    if (this.disposed) return;
-    this.disposed = true;
-    const sessions = [this.textEncoderSession, this.unetSession, this.vaeSession];
-    this.textEncoderSession = null;
-    this.unetSession = null;
-    this.vaeSession = null;
-    this.tokenizer = null;
-    await Promise.all(
-      sessions.map(async (s) => {
-        if (!s) return;
-        try {
-          await s.release();
-        } catch {
-        }
-      })
-    );
-    if (this.opts.probed.kind === "webgpu" && this.opts.probed.gpuDevice) {
-      try {
-        this.opts.probed.gpuDevice.destroy();
-      } catch {
-      }
-    }
+  if (dtype === "int64") {
+    const out = new BigInt64Array(raw.data.length);
+    for (let i = 0; i < raw.data.length; i++) out[i] = BigInt(raw.data[i] | 0);
+    return new ort2.Tensor("int64", out, shape);
   }
-  /**
-   * `DiffusionEngine` only ever implements the lcm-diffusion frame-by-frame
-   * primitives (embed/denoise/decode) — a webdit-dit model is never handed
-   * to this class (VideoEngine.create dispatches those to webdit-engine.ts
-   * instead). Narrowing here, once, means every other method on this class
-   * can read LCM-only fields (`hfRepo`, `unetInputs`, `files`, …) without
-   * repeating the guard.
-   */
-  get descriptor() {
-    const d = MODEL_REGISTRY[this.opts.model];
-    if (d.engine !== "lcm-diffusion") {
-      throw new Error(
-        `DiffusionEngine only supports lcm-diffusion models; got '${d.id}' (engine: ${d.engine}). webdit-dit models are handled by webdit-engine.ts / VideoEngine's webdit dispatch.`
-      );
-    }
-    return d;
-  }
-  get activeDevice() {
-    return this.opts.probed.kind;
-  }
-  /** Tokenise (transformers.js) then run the CLIP text encoder (raw ORT) →
-   *  conditioning embedding [1, seqLen, embedDim]. */
-  async embedPrompt(prompt) {
-    if (!this.tokenizer || !this.textEncoderSession) {
-      throw new Error("DiffusionEngine.init() not called");
-    }
-    const { textEmbedDim, sequenceLength } = this.descriptor;
-    const encoded = await this.tokenizer(prompt, {
-      padding: "max_length",
-      max_length: sequenceLength,
-      truncation: true
-    });
-    const rawIds = encoded.input_ids.data;
-    const idFloats = new Float32Array(sequenceLength);
-    for (let i = 0; i < sequenceLength; i++) {
-      idFloats[i] = i < rawIds.length ? Number(rawIds[i]) : 0;
-    }
-    const inputIdsSpec = this.descriptor.textEncoderInputs.find((s) => s.name === "input_ids");
-    if (!inputIdsSpec) {
-      throw new Error(`Model '${this.descriptor.id}' textEncoderInputs missing 'input_ids' spec.`);
-    }
-    const idTensor = materializeTensor(inputIdsSpec.dtype, {
-      data: idFloats,
-      shape: [1, sequenceLength]
-    });
-    const out = await this.runSession(
-      this.textEncoderSession,
-      { [inputIdsSpec.name]: idTensor },
-      "text_encoder"
-    );
-    const hidden = out.last_hidden_state?.data ?? pickFirstFloat32(out);
-    if (!hidden) {
-      throw new Error("Text encoder returned no Float32 output");
-    }
-    if (hidden.length !== sequenceLength * textEmbedDim) {
-      throw new Error(
-        `Text encoder dim mismatch: expected ${sequenceLength * textEmbedDim}, got ${hidden.length}. Check ${this.descriptor.hfRepo} text_encoder config.`
-      );
-    }
-    return new Float32Array(hidden);
-  }
-  /** Sample a fresh latent from deterministic gaussian noise. */
-  sampleInitialLatent(seed) {
-    const latentH = this.opts.height / 8;
-    const latentW = this.opts.width / 8;
-    return gaussianNoise(1 * 4 * latentH * latentW, seed);
-  }
-  /**
-   * Shared denoise primitive for both LCM and SD-Turbo. Uses the LCMScheduler
-   * consistency-model step formula at the chosen timesteps; SD-Turbo with
-   * timesteps=[999] degenerates to a single step that's equivalent to its
-   * native one-shot generation up to a small numerical constant.
-   */
-  async denoise(inputs) {
-    if (!this.unetSession || !this.vaeSession) {
-      throw new Error("DiffusionEngine.init() not called");
-    }
-    const latentH = this.opts.height / 8;
-    const latentW = this.opts.width / 8;
-    const latentShape = [1, 4, latentH, latentW];
-    const timesteps = inputs.timesteps ?? this.descriptor.defaultTimesteps;
-    let sample = new Float32Array(inputs.latent);
-    for (let i = 0; i < timesteps.length; i++) {
-      inputs.onStep?.(i + 1, timesteps.length);
-      const t = timesteps[i];
-      const alpha = ALPHAS_CUMPROD[t] ?? 1e-3;
-      const sqrtAlpha = Math.sqrt(alpha);
-      const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
-      const noisePred = await this.runUnet({
-        sample,
-        condEmbedding: inputs.condEmbedding,
-        uncondEmbedding: inputs.uncondEmbedding,
-        timestep: t,
-        guidance: inputs.guidance,
-        latentShape
-      });
-      const predictedX0 = new Float32Array(sample.length);
-      for (let j = 0; j < sample.length; j++) {
-        predictedX0[j] = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
-      }
-      if (i < timesteps.length - 1) {
-        const tNext = timesteps[i + 1];
-        const alphaNext = ALPHAS_CUMPROD[tNext] ?? 1e-3;
-        const sqrtAlphaNext = Math.sqrt(alphaNext);
-        const sqrtOneMinusAlphaNext = Math.sqrt(1 - alphaNext);
-        const noise = gaussianNoise(sample.length, inputs.seed + i * 7919);
-        for (let j = 0; j < sample.length; j++) {
-          sample[j] = sqrtAlphaNext * predictedX0[j] + sqrtOneMinusAlphaNext * noise[j];
-        }
-      } else {
-        sample = predictedX0;
-      }
-    }
-    const pixels = await this.runVaeDecode(sample, latentH, latentW);
-    return { pixels, latent: sample };
-  }
-  /**
-   * Forward-noise a clean latent to the noise level corresponding to `timestep`.
-   * Used by VideoEngine's img2img recursion: take the previous frame's clean
-   * latent, re-noise it to a partial-schedule timestep, then run the remaining
-   * denoise steps. Result is scene-content carried forward + prompt-driven
-   * evolution, instead of "fresh interpretation per frame".
-   *
-   *   noised = sqrt(alpha_cumprod[t]) * clean + sqrt(1 - alpha_cumprod[t]) * noise
-   *
-   * — the standard DDPM forward diffusion at timestep t.
-   */
-  addNoiseToLatent(clean, timestep, seed) {
-    const sqrtOneMinusAlpha = this.noiseScaleForTimestep(timestep);
-    const sqrtAlpha = Math.sqrt(Math.max(0, 1 - sqrtOneMinusAlpha * sqrtOneMinusAlpha));
-    const noise = gaussianNoise(clean.length, seed);
-    const out = new Float32Array(clean.length);
-    for (let i = 0; i < clean.length; i++) {
-      out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
-    }
-    return out;
-  }
-  /**
-   * The noise fraction `sqrt(1 - ᾱ_t)` of a latent re-noised to `timestep` via
-   * the shared DDPM schedule — i.e. the coefficient on the noise term in
-   * `addNoiseToLatent`. Exposed so the coherence layer can scale the
-   * latent-residual Mamba bias by the same noise level the engine actually
-   * injected, letting that bias compose with img2img recursion (see
-   * `latentResidualBiasScale`). Single source of truth for the schedule.
-   */
-  noiseScaleForTimestep(timestep) {
-    const alpha = ALPHAS_CUMPROD[timestep] ?? 1e-3;
-    return Math.sqrt(1 - alpha);
-  }
-  /**
-   * VAE-decode a clean latent to RGB pixels ([-1..1], layout [3, h, w]) WITHOUT
-   * running the UNet denoise loop. This is the cheap half of `denoise()` and is
-   * what makes keyframe interpolation worthwhile: the FrameInterpolator slerps
-   * two keyframe latents into a tween latent, and the engine turns that tween
-   * into a frame with one VAE decode instead of a full multi-step denoise.
-   */
-  async decodeLatent(latent) {
-    if (!this.vaeSession) {
-      throw new Error("DiffusionEngine.init() not called");
-    }
-    const latentH = this.opts.height / 8;
-    const latentW = this.opts.width / 8;
-    const expected = 4 * latentH * latentW;
-    if (latent.length !== expected) {
-      throw new Error(
-        `decodeLatent: latent length ${latent.length} != expected ${expected} for ${this.opts.width}x${this.opts.height}.`
-      );
-    }
-    return this.runVaeDecode(latent, latentH, latentW);
-  }
-  // -------------------------------------------------------------------------
-  // Internals
-  // -------------------------------------------------------------------------
-  buildSessionOptions() {
-    return buildOrtSessionOptions(this.opts.probed.kind);
-  }
-  /** Fetch the model + (optional) external-data buffers for one session.
-   *  Pure I/O — no ORT calls. Split from session creation so the engine can
-   *  parallelize downloads while still serialising the ORT create step. */
-  async fetchSessionBuffers(file, label) {
-    const onProgress = this.opts.onProgress;
-    reportProgress(`Downloading ${label} (${file.model})\u2026`, onProgress);
-    const modelBuf = await this.fetchWeight(file.model);
-    let externalData = null;
-    if (file.externalData) {
-      reportProgress(`Downloading ${label} weight data (${file.externalData})\u2026`, onProgress);
-      const dataBuf = await this.fetchWeight(file.externalData);
-      externalData = { name: basename(file.externalData), buf: dataBuf };
-    }
-    return { label, modelBuf, externalData };
-  }
-  /** Create an ORT session from already-downloaded buffers. Caller MUST call
-   *  this serially across sessions when any of them carry external data —
-   *  ORT-web's external-data mount Map is global and the `finally` of every
-   *  session create unmounts it, so concurrent creates race. The init() call
-   *  site enforces serial creation. */
-  async createSessionFromBuffers(bufs, baseOptions) {
-    const onProgress = this.opts.onProgress;
-    const options = { ...baseOptions };
-    if (bufs.externalData) {
-      options.externalData = [
-        { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) }
-      ];
-    }
-    reportProgress(`Creating ${bufs.label} ORT session\u2026`, onProgress);
-    try {
-      const session = await ort2.InferenceSession.create(
-        new Uint8Array(bufs.modelBuf),
-        options
-      );
-      reportProgress(`${bufs.label} ready.`, onProgress);
-      return session;
-    } catch (err) {
-      throw explainOrtError(
-        err,
-        `${bufs.label} session create`,
-        this.descriptor.id,
-        this.descriptor.minVramMb,
-        this.opts.probed.approxMemoryMb
-      );
-    }
-  }
-  /** Wrap session.run() so DXGI_ERROR_DEVICE_HUNG, std::bad_alloc, "Device is
-   *  lost", and similar runtime ORT failures become actionable messages
-   *  instead of raw WebGPU stack traces. Single sink — every session.run
-   *  call in the engine goes through here. */
-  async runSession(session, feeds, label) {
-    try {
-      return await session.run(feeds);
-    } catch (err) {
-      throw explainOrtError(
-        err,
-        `${label} session run`,
-        this.descriptor.id,
-        this.descriptor.minVramMb,
-        this.opts.probed.approxMemoryMb
-      );
-    }
-  }
-  async fetchWeight(file) {
-    return getOrFetchWeight({
-      cacheKey: `${this.opts.model}/${file}`,
-      hfRepo: this.descriptor.hfRepo,
-      hfPath: file,
-      sources: this.opts.weightSources,
-      apiKey: this.opts.apiKey,
-      r2Base: this.opts.r2Base,
-      onProgress: (loaded, total) => this.opts.onWeightProgress?.(file, loaded, total)
-    });
-  }
-  buildUnetFeeds(args) {
-    const ctx = {
-      descriptor: this.descriptor,
-      sample: args.sample,
-      condEmbedding: args.condEmbedding,
-      timestep: args.timestep,
-      guidance: args.guidance,
-      latentShape: args.latentShape
-    };
-    const feeds = {};
-    for (const spec of this.descriptor.unetInputs) {
-      const builder = UNET_INPUT_BUILDERS[spec.name];
-      if (!builder) {
-        throw new Error(
-          `Model '${this.descriptor.id}' declares UNet input '${spec.name}' but no builder is registered. Add it to UNET_INPUT_BUILDERS in diffusion-engine.ts.`
-        );
-      }
-      feeds[spec.name] = materializeTensor(spec.dtype, builder(ctx));
-    }
-    return feeds;
-  }
-  async runUnet(args) {
-    const session = this.unetSession;
-    const condFeeds = this.buildUnetFeeds({
-      sample: args.sample,
-      condEmbedding: args.condEmbedding,
-      timestep: args.timestep,
-      guidance: args.guidance,
-      latentShape: args.latentShape
-    });
-    const condOut = await this.runSession(session, condFeeds, "unet (conditional)");
-    const condNoise = pickFirstFloat32(condOut);
-    if (!condNoise) throw new Error("UNet returned no Float32 output");
-    if (!args.uncondEmbedding || args.guidance <= 0) {
-      return condNoise;
-    }
-    const uncondFeeds = this.buildUnetFeeds({
-      sample: args.sample,
-      condEmbedding: args.uncondEmbedding,
-      timestep: args.timestep,
-      guidance: args.guidance,
-      latentShape: args.latentShape
-    });
-    const uncondOut = await this.runSession(session, uncondFeeds, "unet (unconditional)");
-    const uncondNoise = pickFirstFloat32(uncondOut);
-    if (!uncondNoise) throw new Error("UNet unconditional pass returned no Float32 output");
-    const guided = new Float32Array(condNoise.length);
-    for (let i = 0; i < condNoise.length; i++) {
-      guided[i] = uncondNoise[i] + args.guidance * (condNoise[i] - uncondNoise[i]);
-    }
-    return guided;
-  }
-  async runVaeDecode(latent, h, w) {
-    const session = this.vaeSession;
-    const scaled = new Float32Array(latent.length);
-    const scale = this.descriptor.vaeScalingFactor;
-    for (let i = 0; i < latent.length; i++) scaled[i] = latent[i] / scale;
-    const input = new ort2.Tensor("float32", scaled, [1, 4, h, w]);
-    const out = await this.runSession(session, { latent_sample: input }, "vae_decoder");
-    const pixels = pickFirstFloat32(out);
-    if (!pixels) throw new Error("VAE decoder returned no Float32 output");
-    return pixels;
-  }
-};
-function gaussianNoise(length, seed) {
-  const out = new Float32Array(length);
-  let state = seed >>> 0 || 1;
-  for (let i = 0; i < length; i++) {
-    state = state * 1664525 + 1013904223 >>> 0;
-    const u1 = (state + 1) / 4294967296;
-    state = state * 1664525 + 1013904223 >>> 0;
-    const u2 = (state + 1) / 4294967296;
-    out[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-  }
-  return out;
+  throw new Error(`Unsupported dtype: ${dtype}`);
 }
 function pickFirstFloat32(result) {
   for (const value of Object.values(result)) {
@@ -853,10 +501,460 @@ function assertSessionMatchesSpec(sessionLabel, session, specs) {
   const missing = declared.filter((n) => !actual.includes(n));
   if (missing.length > 0) {
     throw new Error(
-      `Registry/model mismatch on ${sessionLabel}: declared input(s) [${missing.join(", ")}] are not in the model's inputNames [${actual.join(", ")}]. Update MODEL_REGISTRY in diffusion-engine.ts to match the actual export.`
+      `Registry/model mismatch on ${sessionLabel}: declared input(s) [${missing.join(", ")}] are not in the model's inputNames [${actual.join(", ")}]. Update MODEL_REGISTRY in diffusion-models.ts to match the actual export.`
     );
   }
 }
+
+// src/engine/progress.ts
+function reportProgress(label, onProgress) {
+  console.info(`[builderforce-studio] ${label}`);
+  onProgress?.(label);
+}
+
+// src/engine/abort.ts
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+}
+
+// src/engine/diffusion-engine.ts
+var UNET_INPUT_BUILDERS = {
+  sample: (ctx) => ({ data: ctx.sample, shape: ctx.latentShape }),
+  timestep: (ctx) => ({ data: Float32Array.from([ctx.timestep]), shape: [1] }),
+  encoder_hidden_states: (ctx) => ({
+    data: ctx.condEmbedding,
+    shape: [1, ctx.descriptor.sequenceLength, ctx.descriptor.textEmbedDim]
+  }),
+  timestep_cond: (ctx) => ({
+    // LCM consistency-model guidance-scale embedding. The embedded scale is the
+    // model's DISTILLATION guidance scale (descriptor.lcmGuidanceScale, diffusers
+    // default 8.5), NOT the runtime cond/uncond mix `ctx.guidance` (~1 for LCM).
+    // Embedding the mix scale gave w = 1 - 1 = 0 → a degenerate all-[sin0=0,cos0=1]
+    // vector, conditioning the UNet as if guidance≈1 and producing washed,
+    // out-of-range latents on the refinement pass. See lcmGuidanceCondEmbedding.
+    data: lcmGuidanceCondEmbedding(ctx.descriptor),
+    shape: [1, ctx.descriptor.lcmGuidanceEmbedDim ?? 256]
+  })
+};
+var KNOWN_UNET_INPUTS = new Set(
+  Object.keys(UNET_INPUT_BUILDERS)
+);
+var PROMPT_EMBEDDING_CACHE_SIZE = 8;
+var DiffusionEngine = class {
+  constructor(opts) {
+    this.opts = opts;
+  }
+  opts;
+  tokenizer = null;
+  textEncoderSession = null;
+  unetSession = null;
+  vaeSession = null;
+  disposed = false;
+  /** Insertion-ordered, so the first key is the least recently used. */
+  promptEmbeddings = /* @__PURE__ */ new Map();
+  // -------------------------------------------------------------------------
+  async init() {
+    const d = this.descriptor;
+    const sessionOptions = buildOrtSessionOptions(this.opts.probed.kind);
+    const onProgress = this.opts.onProgress;
+    const memoryError = checkMemoryForModel(
+      this.opts.probed.approxMemoryMb,
+      d.minVramMb,
+      d.id
+    );
+    if (memoryError) {
+      throw new Error(memoryError);
+    }
+    if (this.opts.probed.kind === "webgpu" && this.opts.probed.gpuDevice) {
+      this.opts.probed.gpuDevice.lost.then((info) => {
+        reportProgress(
+          `GPU device LOST (${info.reason}): ${info.message}. Reload the page; pick a lower resolution or lighter model on retry.`,
+          onProgress
+        );
+      }).catch(() => {
+      });
+    }
+    try {
+      reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})\u2026`, onProgress);
+      this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
+      reportProgress("Tokenizer ready.", onProgress);
+      reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)\u2026`, onProgress);
+      const downloads = await Promise.all([
+        this.fetchSessionBuffers(d.files.textEncoder, "text_encoder"),
+        this.fetchSessionBuffers(d.files.unet, "unet"),
+        this.fetchSessionBuffers(d.files.vaeDecoder, "vae_decoder")
+      ]);
+      this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
+      this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
+      this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
+      reportProgress("All ORT sessions created.", onProgress);
+      assertSessionMatchesSpec("unet", this.unetSession, d.unetInputs);
+      assertSessionMatchesSpec("text_encoder", this.textEncoderSession, d.textEncoderInputs);
+      reportProgress("Model graph contract verified \u2014 engine ready.", onProgress);
+    } catch (err) {
+      await this.releaseSessions();
+      throw err;
+    }
+  }
+  // -------------------------------------------------------------------------
+  // Public surface
+  // -------------------------------------------------------------------------
+  /**
+   * Release ORT sessions + destroy the engine's GPU device. Idempotent and
+   * safe to await even on a never-fully-init'd engine. After dispose() the
+   * engine cannot be reused — create a new one.
+   *
+   * ORT sessions hold large WASM heaps + WebGPU buffers (the LCM UNet
+   * alone is ~1.7 GB). Without release(), those stay allocated even after
+   * the React tree unmounts — exactly the leak the user surfaced.
+   */
+  async dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    await this.releaseSessions();
+    if (this.opts.probed.kind === "webgpu" && this.opts.probed.gpuDevice) {
+      try {
+        this.opts.probed.gpuDevice.destroy();
+      } catch {
+      }
+    }
+  }
+  /**
+   * `DiffusionEngine` only ever implements the lcm-diffusion frame-by-frame
+   * primitives (embed/denoise/decode) — a webdit-dit model is never handed
+   * to this class (VideoEngine.create dispatches those to webdit-engine.ts
+   * instead). Narrowing here, once, means every other method on this class
+   * can read LCM-only fields (`hfRepo`, `unetInputs`, `files`, …) without
+   * repeating the guard.
+   */
+  get descriptor() {
+    const d = MODEL_REGISTRY[this.opts.model];
+    if (d.engine !== "lcm-diffusion") {
+      throw new Error(
+        `DiffusionEngine only supports lcm-diffusion models; got '${d.id}' (engine: ${d.engine}). webdit-dit models are handled by webdit-engine.ts / VideoEngine's webdit dispatch.`
+      );
+    }
+    return d;
+  }
+  get activeDevice() {
+    return this.opts.probed.kind;
+  }
+  /** Tokenise (transformers.js) then run the CLIP text encoder (raw ORT) →
+   *  conditioning embedding [1, seqLen, embedDim]. Memoised per prompt (see
+   *  {@link PROMPT_EMBEDDING_CACHE_SIZE}); every call returns its own copy, so a
+   *  caller that blends or biases the embedding cannot corrupt the cache. */
+  async embedPrompt(prompt) {
+    const cached = this.promptEmbeddings.get(prompt);
+    if (cached) {
+      this.promptEmbeddings.delete(prompt);
+      this.promptEmbeddings.set(prompt, cached);
+      return new Float32Array(cached);
+    }
+    const embedding = await this.encodePrompt(prompt);
+    this.promptEmbeddings.set(prompt, embedding);
+    if (this.promptEmbeddings.size > PROMPT_EMBEDDING_CACHE_SIZE) {
+      const oldest = this.promptEmbeddings.keys().next().value;
+      if (oldest !== void 0) this.promptEmbeddings.delete(oldest);
+    }
+    return new Float32Array(embedding);
+  }
+  /** Sample a fresh latent from deterministic gaussian noise. */
+  sampleInitialLatent(seed) {
+    return gaussianNoise(this.latentLength, seed);
+  }
+  /**
+   * Shared denoise primitive for both LCM and SD-Turbo. Uses the LCMScheduler
+   * consistency-model step formula at the chosen timesteps; SD-Turbo with
+   * timesteps=[999] degenerates to a single step that's equivalent to its
+   * native one-shot generation up to a small numerical constant.
+   */
+  async denoise(inputs) {
+    if (!this.unetSession || !this.vaeSession) {
+      throw new Error("DiffusionEngine.init() not called");
+    }
+    this.assertDenoiseInputs(inputs);
+    const { latentH, latentW } = this.latentDims;
+    const latentShape = [1, 4, latentH, latentW];
+    const timesteps = inputs.timesteps ?? this.descriptor.defaultTimesteps;
+    const sample = new Float32Array(inputs.latent);
+    for (let i = 0; i < timesteps.length; i++) {
+      throwIfAborted(inputs.signal);
+      inputs.onStep?.(i + 1, timesteps.length);
+      const t = timesteps[i];
+      const noisePred = await this.runUnet({
+        sample,
+        condEmbedding: inputs.condEmbedding,
+        uncondEmbedding: inputs.uncondEmbedding,
+        timestep: t,
+        guidance: inputs.guidance,
+        latentShape
+      });
+      const next = i < timesteps.length - 1 ? timesteps[i + 1] : null;
+      lcmStep(sample, noisePred, t, next, inputs.seed, i);
+    }
+    throwIfAborted(inputs.signal);
+    const pixels = await this.runVaeDecode(sample, latentH, latentW);
+    return { pixels, latent: sample };
+  }
+  /**
+   * Forward-noise a clean latent to the noise level corresponding to `timestep`.
+   * Used by VideoEngine's img2img recursion: take the previous frame's clean
+   * latent, re-noise it to a partial-schedule timestep, then run the remaining
+   * denoise steps. Result is scene-content carried forward + prompt-driven
+   * evolution, instead of "fresh interpretation per frame".
+   *
+   *   noised = sqrt(alpha_cumprod[t]) * clean + sqrt(1 - alpha_cumprod[t]) * noise
+   *
+   * — the standard DDPM forward diffusion at timestep t.
+   */
+  addNoiseToLatent(clean, timestep, seed) {
+    return forwardDiffuse(clean, timestep, seed);
+  }
+  /**
+   * The noise fraction `sqrt(1 - ᾱ_t)` of a latent re-noised to `timestep` via
+   * the shared DDPM schedule — i.e. the coefficient on the noise term in
+   * `addNoiseToLatent`. Exposed so the coherence layer can scale the
+   * latent-residual Mamba bias by the same noise level the engine actually
+   * injected, letting that bias compose with img2img recursion (see
+   * `latentResidualBiasScale`). Single source of truth for the schedule.
+   */
+  noiseScaleForTimestep(timestep) {
+    return noiseScaleAt(timestep);
+  }
+  /**
+   * VAE-decode a clean latent to RGB pixels ([-1..1], layout [3, h, w]) WITHOUT
+   * running the UNet denoise loop. This is the cheap half of `denoise()` and is
+   * what makes keyframe interpolation worthwhile: the FrameInterpolator slerps
+   * two keyframe latents into a tween latent, and the engine turns that tween
+   * into a frame with one VAE decode instead of a full multi-step denoise.
+   */
+  async decodeLatent(latent) {
+    if (!this.vaeSession) {
+      throw new Error("DiffusionEngine.init() not called");
+    }
+    if (latent.length !== this.latentLength) {
+      throw new Error(
+        `decodeLatent: latent length ${latent.length} != expected ${this.latentLength} for ${this.opts.width}x${this.opts.height}.`
+      );
+    }
+    const { latentH, latentW } = this.latentDims;
+    return this.runVaeDecode(latent, latentH, latentW);
+  }
+  // -------------------------------------------------------------------------
+  // Internals
+  // -------------------------------------------------------------------------
+  get latentDims() {
+    return { latentH: this.opts.height / 8, latentW: this.opts.width / 8 };
+  }
+  /** Elements in one [1, 4, h/8, w/8] latent. */
+  get latentLength() {
+    const { latentH, latentW } = this.latentDims;
+    return 4 * latentH * latentW;
+  }
+  /**
+   * Shape-check the denoise feeds BEFORE the first UNet run. A latent made at
+   * another resolution, or an embedding from another backbone (768-wide SD1.5
+   * vs 1024-wide SD2.1), otherwise surfaces as ORT's opaque "invalid
+   * dimensions" from deep inside the WASM runtime.
+   */
+  assertDenoiseInputs(inputs) {
+    if (inputs.latent.length !== this.latentLength) {
+      throw new Error(
+        `denoise: latent length ${inputs.latent.length} != expected ${this.latentLength} for ${this.opts.width}x${this.opts.height}.`
+      );
+    }
+    const { sequenceLength, textEmbedDim, id } = this.descriptor;
+    const embedLength = sequenceLength * textEmbedDim;
+    const embeddings = [
+      ["condEmbedding", inputs.condEmbedding],
+      ["uncondEmbedding", inputs.uncondEmbedding]
+    ];
+    for (const [name, embedding] of embeddings) {
+      if (embedding && embedding.length !== embedLength) {
+        throw new Error(
+          `denoise: ${name} length ${embedding.length} != expected ${embedLength} ([1, ${sequenceLength}, ${textEmbedDim}] for ${id}) \u2014 was it embedded by a different model?`
+        );
+      }
+    }
+  }
+  /** Release every ORT session, the tokenizer and the prompt memo. Shared by
+   *  dispose() and the init() failure path; safe on a partially-built engine. */
+  async releaseSessions() {
+    const sessions = [this.textEncoderSession, this.unetSession, this.vaeSession];
+    this.textEncoderSession = null;
+    this.unetSession = null;
+    this.vaeSession = null;
+    this.tokenizer = null;
+    this.promptEmbeddings.clear();
+    await Promise.all(
+      sessions.map(async (s) => {
+        if (!s) return;
+        try {
+          await s.release();
+        } catch {
+        }
+      })
+    );
+  }
+  /** The uncached text-encoder pass behind {@link embedPrompt}. */
+  async encodePrompt(prompt) {
+    if (!this.tokenizer || !this.textEncoderSession) {
+      throw new Error("DiffusionEngine.init() not called");
+    }
+    const { textEmbedDim, sequenceLength } = this.descriptor;
+    const encoded = await this.tokenizer(prompt, {
+      padding: "max_length",
+      max_length: sequenceLength,
+      truncation: true
+    });
+    const rawIds = encoded.input_ids.data;
+    const idFloats = new Float32Array(sequenceLength);
+    for (let i = 0; i < sequenceLength; i++) {
+      idFloats[i] = i < rawIds.length ? Number(rawIds[i]) : 0;
+    }
+    const inputIdsSpec = this.descriptor.textEncoderInputs.find((s) => s.name === "input_ids");
+    if (!inputIdsSpec) {
+      throw new Error(`Model '${this.descriptor.id}' textEncoderInputs missing 'input_ids' spec.`);
+    }
+    const idTensor = materializeTensor(inputIdsSpec.dtype, {
+      data: idFloats,
+      shape: [1, sequenceLength]
+    });
+    const out = await this.runSession(
+      this.textEncoderSession,
+      { [inputIdsSpec.name]: idTensor },
+      "text_encoder"
+    );
+    const hidden = out.last_hidden_state?.data ?? pickFirstFloat32(out);
+    if (!hidden) {
+      throw new Error("Text encoder returned no Float32 output");
+    }
+    if (hidden.length !== sequenceLength * textEmbedDim) {
+      throw new Error(
+        `Text encoder dim mismatch: expected ${sequenceLength * textEmbedDim}, got ${hidden.length}. Check ${this.descriptor.hfRepo} text_encoder config.`
+      );
+    }
+    return new Float32Array(hidden);
+  }
+  /** Fetch the model + (optional) external-data buffers for one session.
+   *  Pure I/O — no ORT calls. Split from session creation so the engine can
+   *  parallelize downloads while still serialising the ORT create step. */
+  async fetchSessionBuffers(file, label) {
+    const onProgress = this.opts.onProgress;
+    reportProgress(`Downloading ${label} (${file.model})\u2026`, onProgress);
+    const modelBuf = await this.fetchWeight(file.model);
+    let externalData = null;
+    if (file.externalData) {
+      reportProgress(`Downloading ${label} weight data (${file.externalData})\u2026`, onProgress);
+      const dataBuf = await this.fetchWeight(file.externalData);
+      externalData = { name: basename(file.externalData), buf: dataBuf };
+    }
+    return { label, modelBuf, externalData };
+  }
+  /** Create an ORT session from already-downloaded buffers. Caller MUST call
+   *  this serially across sessions when any of them carry external data —
+   *  ORT-web's external-data mount Map is global and the `finally` of every
+   *  session create unmounts it, so concurrent creates race. The init() call
+   *  site enforces serial creation. */
+  async createSessionFromBuffers(bufs, baseOptions) {
+    const onProgress = this.opts.onProgress;
+    const options = { ...baseOptions };
+    if (bufs.externalData) {
+      options.externalData = [
+        { path: bufs.externalData.name, data: new Uint8Array(bufs.externalData.buf) }
+      ];
+    }
+    reportProgress(`Creating ${bufs.label} ORT session\u2026`, onProgress);
+    try {
+      const session = await ort3.InferenceSession.create(
+        new Uint8Array(bufs.modelBuf),
+        options
+      );
+      reportProgress(`${bufs.label} ready.`, onProgress);
+      return session;
+    } catch (err) {
+      throw explainOrtError(
+        err,
+        `${bufs.label} session create`,
+        this.descriptor.id,
+        this.descriptor.minVramMb,
+        this.opts.probed.approxMemoryMb
+      );
+    }
+  }
+  /** Wrap session.run() so DXGI_ERROR_DEVICE_HUNG, std::bad_alloc, "Device is
+   *  lost", and similar runtime ORT failures become actionable messages
+   *  instead of raw WebGPU stack traces. Single sink — every session.run
+   *  call in the engine goes through here. */
+  async runSession(session, feeds, label) {
+    try {
+      return await session.run(feeds);
+    } catch (err) {
+      throw explainOrtError(
+        err,
+        `${label} session run`,
+        this.descriptor.id,
+        this.descriptor.minVramMb,
+        this.opts.probed.approxMemoryMb
+      );
+    }
+  }
+  async fetchWeight(file) {
+    return getOrFetchWeight({
+      cacheKey: `${this.opts.model}/${file}`,
+      hfRepo: this.descriptor.hfRepo,
+      hfPath: file,
+      sources: this.opts.weightSources,
+      apiKey: this.opts.apiKey,
+      r2Base: this.opts.r2Base,
+      onProgress: (loaded, total) => this.opts.onWeightProgress?.(file, loaded, total)
+    });
+  }
+  buildUnetFeeds(args) {
+    const ctx = { descriptor: this.descriptor, ...args };
+    const feeds = {};
+    for (const spec of this.descriptor.unetInputs) {
+      const builder = UNET_INPUT_BUILDERS[spec.name];
+      if (!builder) {
+        throw new Error(
+          `Model '${this.descriptor.id}' declares UNet input '${spec.name}' but no builder is registered. Add it to UNET_INPUT_BUILDERS in diffusion-engine.ts.`
+        );
+      }
+      feeds[spec.name] = materializeTensor(spec.dtype, builder(ctx));
+    }
+    return feeds;
+  }
+  async runUnet(args) {
+    const session = this.unetSession;
+    const { uncondEmbedding, ...condArgs } = args;
+    const condOut = await this.runSession(session, this.buildUnetFeeds(condArgs), "unet (conditional)");
+    const condNoise = pickFirstFloat32(condOut);
+    if (!condNoise) throw new Error("UNet returned no Float32 output");
+    if (!uncondEmbedding || args.guidance <= 0) {
+      return condNoise;
+    }
+    const uncondOut = await this.runSession(
+      session,
+      this.buildUnetFeeds({ ...condArgs, condEmbedding: uncondEmbedding }),
+      "unet (unconditional)"
+    );
+    const uncondNoise = pickFirstFloat32(uncondOut);
+    if (!uncondNoise) throw new Error("UNet unconditional pass returned no Float32 output");
+    applyGuidance(condNoise, uncondNoise, args.guidance);
+    return condNoise;
+  }
+  async runVaeDecode(latent, h, w) {
+    const session = this.vaeSession;
+    const scaled = new Float32Array(latent.length);
+    const scale = this.descriptor.vaeScalingFactor;
+    for (let i = 0; i < latent.length; i++) scaled[i] = latent[i] / scale;
+    const input = new ort3.Tensor("float32", scaled, [1, 4, h, w]);
+    const out = await this.runSession(session, { latent_sample: input }, "vae_decoder");
+    const pixels = pickFirstFloat32(out);
+    if (!pixels) throw new Error("VAE decoder returned no Float32 output");
+    return pixels;
+  }
+};
 
 // src/engine/frame-interpolator.ts
 function slerp(a, b, t) {
@@ -1818,7 +1916,7 @@ async function runWebDitDenoise(bundle, args) {
   const frames = new Array(result.frames.length);
   const muxFrames = new Array(result.frames.length);
   for (let i = 0; i < result.frames.length; i++) {
-    if (args.signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+    throwIfAborted(args.signal);
     const rgba = result.frames[i];
     const bitmap = await createImageBitmap(
       new ImageData(rgba, result.width, result.height)
@@ -2120,7 +2218,7 @@ var VideoEngine = class _VideoEngine {
     const maxRetries = args.validate ? Math.max(0, Math.floor(args.maxValidationRetries ?? 1)) : 0;
     let globalIdx = 0;
     for (let s = 0; s < storyboard.shots.length; s++) {
-      if (args.signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+      throwIfAborted(args.signal);
       const shot = storyboard.shots[s];
       const shotPrompt = composeShotPrompt(shot, storyboard.characters);
       reportProgress(
@@ -2224,7 +2322,7 @@ var VideoEngine = class _VideoEngine {
     const allMuxFrames = [];
     let globalIdx = 0;
     for (let s = 0; s < storyboard.shots.length; s++) {
-      if (args.signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+      throwIfAborted(args.signal);
       const shot = storyboard.shots[s];
       const shotPrompt = composeShotPrompt(shot, storyboard.characters);
       reportProgress(
@@ -2281,7 +2379,7 @@ var VideoEngine = class _VideoEngine {
     const stateBefore = this.mambaState;
     let best = null;
     for (let attempt = 0; attempt <= args.maxRetries; attempt++) {
-      if (args.signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+      throwIfAborted(args.signal);
       this.mambaState = stateBefore;
       if (attempt > 0) {
         reportProgress(
@@ -2386,7 +2484,7 @@ var VideoEngine = class _VideoEngine {
     const keyframes = [];
     const keyframeOutputs = [];
     for (let k = 0; k < keyframeIndices.length; k++) {
-      if (signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+      throwIfAborted(signal);
       const frameIdx = keyframeIndices[k];
       const conditionedPrompt = coherenceMode === "prompt-bias" ? applyToPrompt({
         ctx: { mode: coherenceMode, strength: coherenceStrength, state: this.mambaState },
@@ -2445,6 +2543,7 @@ var VideoEngine = class _VideoEngine {
         timesteps: frameTimesteps,
         guidance,
         seed: seed + frameIdx,
+        signal,
         onStep: (step, total) => reportProgress(`${label} ${frameIdx + 1}/${frameCount}: denoise step ${step}/${total}\u2026`, onProgress)
       });
       prevLatent = finalLatent;
@@ -2465,7 +2564,7 @@ var VideoEngine = class _VideoEngine {
     const motionFields = /* @__PURE__ */ new Map();
     let leftKi = 0;
     for (const slot of slots) {
-      if (signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+      throwIfAborted(signal);
       if (!slot.isTween) {
         const ki = slot.keyframeIndex;
         leftKi = ki;
@@ -2562,7 +2661,7 @@ var VideoEngine = class _VideoEngine {
     const outLatents = new Array(latents.length);
     let refinedCount = 0;
     for (let i = 0; i < latents.length; i++) {
-      if (opts.signal?.aborted) throw new DOMException("Generation aborted", "AbortError");
+      throwIfAborted(opts.signal);
       const latent = latents[i];
       if (latent === null) {
         frames[i] = clip.frames[i];
@@ -2578,7 +2677,8 @@ var VideoEngine = class _VideoEngine {
         uncondEmbedding: null,
         timesteps: partialTimesteps,
         guidance: refinedDescriptor.defaultGuidance,
-        seed: opts.seed + i
+        seed: opts.seed + i,
+        signal: opts.signal
       });
       const rgba = pixelsToRgba(pixels, opts.width, opts.height);
       const bitmap = await createImageBitmap(

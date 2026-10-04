@@ -1,303 +1,24 @@
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, useTicketAutocomplete, type ChatModelOptions, type ChatModelSelection, type ModelIdentityContext, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
-import { effortProfile, type DirectedRecipient, type TicketTag } from '@seanhogg/builderforce-brain-embedded';
-import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
+import { PromptPanel, useMentionAutocomplete, useTicketAutocomplete } from '@seanhogg/builderforce-brain-ui';
 import { PlanBadge } from '@/components/PlanBadge';
 import { Icon } from '@/components/ui/Icon';
 import { useAssistantGate } from '@/lib/academic/useAssistantGate';
+import { iconButtonStyle, textareaStyle } from './chat-input/composerStyles';
+import { ComposerAddMenu } from './chat-input/ComposerAddMenu';
+import { ComposerOptionsMenu } from './chat-input/ComposerOptionsMenu';
+import { ComposerPrimaryAction } from './chat-input/ComposerPrimaryAction';
+import { AssessmentGateNotice, PendingAttachmentChips, QueuedTurnsReceipt } from './chat-input/ComposerNotices';
+import { VoiceDictationButton } from './chat-input/VoiceDictationButton';
+import { useAttachmentDropAndPaste } from './chat-input/useAttachmentDropAndPaste';
+import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
+export type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
 
-/** Browser Web Speech API (not in all TS libs). */
-type SpeechRecognitionInstance = {
-  start(): void;
-  stop(): void;
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((e: { resultIndex: number; results: { length: number; [i: number]: { isFinal: boolean; [0]: { transcript: string } } } }) => void) | null;
-  onend: (() => void) | null;
-};
-
-export interface ChatInputAttachment {
-  key: string;
-  name: string;
-  type: string;
-}
-
-export interface ChatInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  placeholder?: string;
-  /** Accessible name when it should differ from the visible placeholder. */
-  ariaLabel?: string;
-  disabled?: boolean;
-  /** Send button label/title. */
-  submitLabel?: string;
-  /**
-   * When true, a run is in flight: the Send button is replaced by a Stop button
-   * that calls {@link onStop}. Requires `onStop` to render (otherwise the Send
-   * button shows as before). Lets the user interrupt a streaming reply.
-   */
-  running?: boolean;
-  /** Interrupt the in-flight run (shown as a Stop button while `running`). */
-  onStop?: () => void;
-  /**
-   * Turns the user typed while a run was in flight and this composer is holding
-   * (see `useQueuedTurns`). Rendered as a receipt under the input — the composer
-   * owns this chrome so every host says the same sentence in the same place.
-   * Zero renders nothing.
-   */
-  queuedCount?: number;
-  /** Number of rows for the text area. Default 2. */
-  rows?: number;
-  /** If false, Enter does not submit (send only via button). Default true. */
-  submitOnEnter?: boolean;
-  /** Show + attach artifacts button and call onAttach when file selected. */
-  onAttach?: (file: File) => void | Promise<void>;
-  /**
-   * When set, the `+` button becomes a Claude-style menu with an "Add context"
-   * item that invokes this (e.g. attach a project/page reference). Needs `onAttach`
-   * for the menu to render (Upload lives in the same menu).
-   */
-  onAddContext?: () => void;
-  /** When set, the `+` menu shows a "Browse the web" toggle bound to this state. */
-  webBrowsing?: boolean;
-  onWebBrowsingChange?: (on: boolean) => void;
-  /** When set, a `/` options menu exposes an Effort selector bound to this state. */
-  effort?: BrainEffort;
-  onEffortChange?: (effort: BrainEffort) => void;
-  /** When set, the `/` options menu shows a "Thinking" toggle bound to this state. */
-  thinking?: boolean;
-  onThinkingChange?: (on: boolean) => void;
-  /** When set, the `/` options menu shows an "Account settings" link to this href. */
-  accountSettingsHref?: string;
-  /** Model routing for the next turn, shown and changed in the `/` menu. A named
-   *  model is sent as a strict pin. */
-  modelSelection?: ChatModelSelection;
-  modelOptions?: ChatModelOptions;
-  onModelSelectionChange?: (selection: ChatModelSelection) => void;
-  /** The model the gateway will actually use while the selection is `auto`, when
-   *  the host knows it — so the menu names what is running, not just "Auto". */
-  effectiveModel?: string;
-  /** Who is reading: the routing product funding their turns, and whether the gateway
-   *  would accept a pin from them. A viewer who may not pin is named by product rather
-   *  than by upstream model, and the `/` menu says why instead of offering a dead list.
-   *  Comes from `useModelIdentity()` — never re-derived per surface. */
-  modelIdentity?: ModelIdentityContext;
-  /**
-   * Conversation mode for this turn — Chat (answer it) or Work (open it, staff it,
-   * dispatch it). Shown and changed in the `/` menu, and named on its trigger: this
-   * is the setting that decides whether a turn can leave real work behind, so it is
-   * readable without opening anything but does not cost the action row a control.
-   */
-  chatMode?: ChatMode;
-  onChatModeChange?: (mode: ChatMode) => void;
-  /** Persistent memory for this conversation, shown and changed in the `/` menu. */
-  memoryEnabled?: boolean;
-  onMemoryChange?: (on: boolean) => void;
-  /** Why memory is unusable right now — the `/` menu states it rather than offering
-   *  a toggle that would do nothing. */
-  memoryUnavailableReason?: string;
-  /**
-   * Consolidate / fork THIS chat, shown in the `/` menu (never as pills in the
-   * action row — they are inert for most of a chat's life and would crowd out Send
-   * on a narrow panel). Needs both handlers to render.
-   */
-  canConsolidate?: boolean;
-  consolidating?: boolean;
-  forking?: boolean;
-  onConsolidate?: () => void;
-  onFork?: () => void;
-  /** When set, the `/` options menu toggles auto-approval of tool actions. */
-  autoMode?: boolean;
-  onAutoModeChange?: (on: boolean) => void;
-  /** Show brain storm (ideation) icon — link to /brainstorm or callback. */
-  showBrainIcon?: boolean;
-  /** Show voice (dictate) button. Uses browser Speech Recognition when available. */
-  showVoice?: boolean;
-  /** Pending attachments to display (e.g. before send). */
-  pendingAttachments?: ChatInputAttachment[];
-  onRemoveAttachment?: (key: string) => void;
-  /** Optional content rendered right-aligned below the input row (e.g. agent-connection status). */
-  secondaryContent?: React.ReactNode;
-  /**
-   * Invited chat participants (agents + humans). When non-empty the composer gets
-   * an @-mention typeahead: typing `@` opens a picker; choosing one calls
-   * {@link onMention} (wire to the recipient choice) and clears the `@query`.
-   */
-  mentionables?: DirectedRecipient[];
-  /** Called when a participant is picked from the @-mention typeahead. */
-  onMention?: (recipient: DirectedRecipient) => void;
-  /**
-   * Available tickets that can be #tagged. When non-empty the composer gets
-   * a #tag typeahead: typing `#` opens a picker; choosing one calls
-   * {@link onTicketTag} and clears the `#query`.
-   */
-  ticketables?: TicketTag[];
-  /** Called when a ticket is picked from the #tag typeahead. */
-  onTicketTag?: (ticket: TicketTag) => void;
-  /** Who answers / what is addressed ("Acting as", capability, "To", scope) — the composer's context row. */
-  contextControls?: React.ReactNode;
-  /** Host-specific standing facts (e.g. the memory status) shown beside the plan chip in the last row. */
-  meta?: React.ReactNode;
-  /**
-   * `compact` folds the composer to two rows — the text, then one tool row — for a
-   * host whose own chrome already shows the plan (a workspace header): the context
-   * controls join the tool row and the standing-facts row (plan chip, `meta`) is
-   * not rendered. Defaults to `comfortable`, the four-row layout.
-   */
-  density?: 'comfortable' | 'compact';
-  className?: string;
-  /**
-   * Change this to any new value to focus the composer and put the caret at the
-   * end of the text. Used when something else seeds the composer (e.g. picking a
-   * capability), so the seeded line reads as a sentence to finish rather than a
-   * finished message to send.
-   */
-  focusToken?: number | string;
-}
-
-/* Theme-aware: uses --chat-input-* from globals.css (light and dark).
-   Sizing comes from the shared --chat-ctl-* metrics so every control in the
-   composer (and the toolbars around it) stays one size, and coarse pointers get
-   the touch-friendly variant without a second set of numbers here. */
-const iconButtonStyle = (disabled?: boolean): React.CSSProperties => ({
-  width: 'var(--chat-ctl-size, 32px)',
-  height: 'var(--chat-ctl-size, 32px)',
-  minWidth: 'var(--chat-ctl-size, 32px)',
-  flexShrink: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: '50%',
-  border: '1px solid var(--chat-input-border)',
-  background: 'var(--chat-input-bg)',
-  color: disabled ? 'var(--chat-input-disabled-icon)' : 'var(--chat-input-icon)',
-  cursor: disabled ? 'not-allowed' : 'pointer',
-});
-
-const inputStyle: React.CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  background: 'transparent',
-  color: 'var(--chat-input-text)',
-  fontSize: '0.9375rem',
-  borderRadius: 0,
-  padding: '6px 4px',
-  outline: 'none',
-  border: 'none',
-  fontFamily: 'var(--font-body)',
-  lineHeight: 1.4,
-  resize: 'none',
-};
-
-const sendButtonStyle = (disabled: boolean): React.CSSProperties => ({
-  width: 'var(--chat-ctl-size, 32px)',
-  height: 'var(--chat-ctl-size, 32px)',
-  minWidth: 'var(--chat-ctl-size, 32px)',
-  flexShrink: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: '50%',
-  border: 'none',
-  background: disabled ? 'var(--chat-input-disabled-send-bg)' : 'var(--chat-input-send-bg)',
-  color: 'var(--chat-input-send-icon)',
-  cursor: disabled ? 'not-allowed' : 'pointer',
-});
-
-const menuPopStyle: React.CSSProperties = {
-  position: 'absolute',
-  bottom: 'calc(100% + 8px)',
-  left: 0,
-  zIndex: 50,
-  minWidth: 224,
-  padding: 5,
-  borderRadius: 'var(--radius-lg)',
-  border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-elevated)',
-  boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
-};
-
-/**
- * A popover menu anchored to a composer icon button. Opens upward (the composer
- * sits at the bottom of the panel). Closes on outside click or Escape. Shared by
- * the `+` (add) and `/` (options) affordances — DRY.
- */
-function ComposerMenu({ trigger, title, disabled, children }: {
-  trigger: React.ReactNode;
-  title: string;
-  disabled?: boolean;
-  children: (close: () => void) => React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-  return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        disabled={disabled}
-        title={title}
-        aria-label={title}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        style={{ ...iconButtonStyle(disabled), background: open ? 'var(--surface-interactive, var(--bg-elevated))' : iconButtonStyle(disabled).background }}
-      >
-        {trigger}
-      </button>
-      {open && <div role="menu" style={menuPopStyle}>{children(() => setOpen(false))}</div>}
-    </div>
-  );
-}
-
-/** One row in a {@link ComposerMenu}: icon + label, optional hint/active check. */
-function MenuRow({ icon, label, hint, active, onClick }: {
-  icon: React.ReactNode;
-  label: string;
-  hint?: string;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  const [hover, setHover] = useState(false);
-  const style: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 9,
-    width: '100%',
-    padding: '8px 9px',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    background: hover ? 'var(--surface-interactive, var(--bg-base))' : 'transparent',
-    color: 'var(--text-primary)',
-    fontSize: 13,
-    textAlign: 'left',
-    cursor: 'pointer',
-    textDecoration: 'none',
-  };
-  const body = (
-    <>
-      <span aria-hidden style={{ width: 18, textAlign: 'center', flexShrink: 0 }}><Icon source={icon} size={18} /></span>
-      <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
-      {hint != null && <span style={{ fontSize: 'var(--font-size-field-label)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{hint}</span>}
-      {active && <span aria-hidden style={{ color: 'var(--coral-bright)', width: 12 }}><Icon name="check" size={14} /></span>}
-    </>
-  );
-  const shared = { style, role: 'menuitem' as const, onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) };
-  return <button type="button" onClick={onClick} {...shared}>{body}</button>;
-}
+/** One stable empty list, so an omitted `pendingAttachments` never looks like a change. */
+const NO_ATTACHMENTS: ChatInputAttachment[] = [];
+const noop = () => {};
 
 /**
  * Reusable chat input: + attach, brain (ideation), voice (dictate), send arrow.
@@ -344,7 +65,7 @@ export function ChatInput({
   onAutoModeChange,
   showBrainIcon = false,
   showVoice = false,
-  pendingAttachments = [],
+  pendingAttachments = NO_ATTACHMENTS,
   onRemoveAttachment,
   secondaryContent,
   mentionables,
@@ -359,19 +80,13 @@ export function ChatInput({
 }: ChatInputProps) {
   const compact = density === 'compact';
   const t = useTranslations('chatInput');
-  // The two mode names are the conversation's vocabulary, not the composer's — they
-  // are the SAME words the Brain empty state uses, from the same catalog namespace.
-  const tModes = useTranslations('brain.modes');
-  // The queued-turns receipt speaks the conversation's vocabulary, from the same
-  // catalog the Brain surface reads — one sentence, not one per host.
-  const tBrain = useTranslations('brain');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const valueRef = useRef(value);
   // eslint-disable-next-line react-hooks/refs
   valueRef.current = value;
-  const [recording, setRecording] = useState(false);
+  // Dictation reads the text at the moment a phrase lands; a stable reader keeps
+  // the voice button out of every keystroke's render.
+  const getValue = useCallback(() => valueRef.current, []);
   const [focused, setFocused] = useState(false);
   // Externally-seeded text: focus and drop the caret at the end so the user
   // continues the sentence instead of sending the seed verbatim.
@@ -383,7 +98,6 @@ export function ChatInput({
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, [focusToken]);
-  const router = useRouter();
   // THE exam gate (`lib/academic/assessment.ts`): a closed-book assessment live on the
   // board on stage refuses every turn from every composer — this one included.
   const gate = useAssistantGate();
@@ -393,86 +107,6 @@ export function ChatInput({
   // the experience matches across every modality.
   const active = focused || value.trim().length > 0;
 
-  // The `/` menu's copy. Localized here (next-intl) and handed to the SHARED
-  // control, so the web and the editor render the same menu from their own bundles.
-  // The per-row funding lines that interpolate a value (the BYO vendor, the metered
-  // price) are formatted by the options builder instead — see useChatModelOptions.
-  const optionLabels = useMemo<Partial<PromptOptionsLabels>>(() => ({
-    options: t('options'),
-    mode: tModes('pickerAria'),
-    memory: t('memory'),
-    autoMode: t('autoMode'),
-    autoModeHint: t('autoModeHint'),
-    conversation: t('conversation'),
-    consolidate: t('consolidate'),
-    consolidating: t('consolidating'),
-    consolidateHint: t('consolidateHint'),
-    fork: t('fork'),
-    forking: t('forking'),
-    forkHint: t('forkHint'),
-    sessionUnavailable: t('sessionUnavailable'),
-    effort: t('effort'),
-    effortQuick: t('effort_quick'),
-    effortBalanced: t('effort_balanced'),
-    effortThorough: t('effort_thorough'),
-    thinking: t('thinking'),
-    on: t('on'),
-    off: t('off'),
-    model: t('model'),
-    modelInUse: t('modelInUse'),
-    searchModels: t('searchModels'),
-    filterModels: t('filterModels'),
-    chooseModel: t('chooseModel'),
-    noModels: t('noModels'),
-    all: t('all'),
-    categoryAuto: t('categoryAuto'),
-    categoryByo: t('categoryByo'),
-    categoryFree: t('categoryFree'),
-    categoryPlan: t('categoryPlan'),
-    categoryPaid: t('categoryPaid'),
-    categoryConfigured: t('categoryConfigured'),
-    // Present for type completeness and parity of wording: the browser cannot reach a
-    // runtime on the user’s own machine, so this group only ever populates in the
-    // editor. Keeping the strings here means the two hosts describe it identically if
-    // the web app ever gains a route to one.
-    categoryLocal: t('categoryLocal'),
-    localDetail: t('localDetail'),
-    autoDetail: t('autoDetail'),
-    poolLabel: t('poolLabel'),
-    poolDetail: t('poolDetail'),
-    freeDetail: t('freeDetail'),
-    planDetail: t('planDetail'),
-    paidDetail: t('paidDetail'),
-    configuredDetail: t('configuredDetail'),
-    evermindLabel: t('evermindLabel'),
-    evermindDetail: t('evermindDetail'),
-    modelLocked: t('modelLocked'),
-    accountSettings: t('accountSettings'),
-    status: t('status'),
-  }), [t]);
-
-  // Chat | Work, built from the SHARED mode list so a mode cannot exist in the
-  // vocabulary and be missing from the control that arms it.
-  const modeChoices = useMemo(
-    () => CHAT_MODES.map((mode) => ({ value: mode, label: tModes(`${mode}.label`), hint: tModes(`${mode}.hint`), icon: CHAT_MODE_ICON[mode] })),
-    [tModes],
-  );
-  const describeMemory = useCallback((on: boolean) => t(on ? 'memoryOnHint' : 'memoryOffHint'), [t]);
-
-  // What each control really costs, read from the SHARED effort table so the copy
-  // can never promise a budget the request does not send.
-  const describeEffort = useCallback((level: BrainEffort) => {
-    const { maxTokens, thinkingBudgetTokens } = effortProfile(level);
-    const base = t(`effortDesc_${level}`, { answer: maxTokens });
-    return thinking ? `${base} ${t('effortDescThinking', { thinking: thinkingBudgetTokens })}` : base;
-  }, [t, thinking]);
-  const describeThinking = useCallback(
-    (on: boolean) => (on
-      ? t('thinkingOnDesc', { budget: effortProfile(effort ?? 'balanced').thinkingBudgetTokens })
-      : t('thinkingOffDesc')),
-    [t, effort],
-  );
-
   // Rows, top to bottom: the textarea (full width, so typed text is never crushed
   // into a sliver), the context row (who answers, what is addressed), the tools
   // with Send pinned right, and the standing facts (plan, memory). The shell owns
@@ -481,29 +115,29 @@ export function ChatInput({
   // @-mention typeahead — active only when the host supplies participants. Picking
   // one routes the next turn (via onMention) and strips the "@query" from the text.
   // Works in every modality: the participant set comes from the chat, not the persona.
-  const noopMention = useCallback(() => {}, []);
   const mention = useMentionAutocomplete({
     textareaRef,
     value,
     setValue: onChange,
     participants: mentionables ?? [],
-    onPick: onMention ?? noopMention,
+    onPick: onMention ?? noop,
     disabled,
     labels: { title: t('mentionTitle'), agent: t('mentionAgent'), human: t('mentionHuman') },
   });
 
   // #-ticket typeahead — active when ticketables are provided. Picking one replaces
   // "#query" with the ticket ref and calls onTicketTag.
-  const noopTicket = useCallback(() => {}, []);
   const ticket = useTicketAutocomplete({
     textareaRef,
     value,
     setValue: onChange,
     tickets: ticketables ?? [],
-    onPick: onTicketTag ?? noopTicket,
+    onPick: onTicketTag ?? noop,
     disabled,
     labels: { title: t('ticketTagTitle'), status: t('ticketTagStatus'), noMatches: t('ticketTagNoMatches') },
   });
+
+  const attachHandlers = useAttachmentDropAndPaste(onAttach);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -522,125 +156,20 @@ export function ChatInput({
     // When submitOnEnter is false, Enter adds a new line (default textarea behavior); only Up arrow submits
   };
 
-  const handleAttachClick = () => {
-    if (disabled || !onAttach) return;
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? []);
-      if (onAttach) void (async () => {
-        for (const file of files) await onAttach(file);
-      })();
-      e.target.value = '';
-    },
-    [onAttach]
-  );
-
-  // Paste an image straight from the clipboard (e.g. a screenshot) — same path
-  // as the + button, so it flows through onAttach → vision content part.
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      if (!onAttach) return;
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            e.preventDefault();
-            void onAttach(file);
-          }
-        }
-      }
-    },
-    [onAttach]
-  );
-
-  // Drag-and-drop image files onto the input.
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      if (!onAttach) return;
-      const files = e.dataTransfer?.files;
-      if (!files || files.length === 0) return;
-      e.preventDefault();
-      void (async () => {
-        for (let i = 0; i < files.length; i++) await onAttach(files[i]);
-      })();
-    },
-    [onAttach]
-  );
-
-  const startVoice = useCallback(() => {
-    const Win = typeof window !== 'undefined' ? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionInstance; SpeechRecognition?: new () => SpeechRecognitionInstance }) : null;
-    const Recognition = Win?.SpeechRecognition ?? Win?.webkitSpeechRecognition;
-    if (!Recognition) return;
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-      setRecording(false);
-      return;
-    }
-    const r = new Recognition();
-    recognitionRef.current = r;
-    r.continuous = true;
-    r.interimResults = true;
-    r.lang = 'en-US';
-    let lastFinal = '';
-    r.onresult = (event: { resultIndex: number; results: { length: number; [i: number]: { isFinal: boolean; [0]: { transcript: string } } } }) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) lastFinal += transcript;
-      }
-      if (lastFinal) {
-        const current = valueRef.current;
-        onChange(current + (current ? ' ' : '') + lastFinal);
-        lastFinal = '';
-      }
-    };
-    r.onend = () => {
-      recognitionRef.current = null;
-      setRecording(false);
-    };
-    r.start();
-    setRecording(true);
-  }, [onChange]);
-
-  const stopVoice = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-    setRecording(false);
-  }, []);
+  const handleFocus = useCallback(() => setFocused(true), []);
+  const handleBlur = useCallback(() => setFocused(false), []);
 
   return (
     <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
-      {/* Why the composer refuses, or that it is being recorded — said in words, never
-          left to a greyed box a learner has to guess the reason for. */}
-      {gate.mode !== 'open' && (
-        <p role="status" data-testid="composer-assessment-gate" data-mode={gate.mode} style={{ margin: 0, fontSize: 'var(--font-size-small)', color: gate.assistantAllowed ? 'var(--text-secondary)' : 'var(--error-text)' }}>
-          {gate.assistantAllowed ? t('assessmentAssisted') : t('assessmentClosedBook')}
-        </p>
-      )}
+      <AssessmentGateNotice gate={gate} />
       <PromptPanel
         active={active}
-        onDrop={onAttach ? handleDrop : undefined}
-        onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
+        onDrop={attachHandlers.onDrop}
+        onDragOver={attachHandlers.onDragOver}
         overlay={ticket.open ? ticket.popup : mention.popup}
-        status={pendingAttachments.length > 0 && onRemoveAttachment ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {pendingAttachments.map((a) => (
-              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--surface-coral-soft)', fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
-                
-                <Icon source="📎" size="1em" /> {a.name}
-                <button type="button" onClick={() => onRemoveAttachment(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', padding: 0 }} aria-label={t('removeAttachment')}>×</button>
-              </span>
-            ))}
-          </div>
-        ) : undefined}
+        status={pendingAttachments.length > 0 && onRemoveAttachment
+          ? <PendingAttachmentChips attachments={pendingAttachments} onRemove={onRemoveAttachment} />
+          : undefined}
         input={(
           <textarea
             ref={textareaRef}
@@ -648,14 +177,14 @@ export function ChatInput({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onSelect={() => { mention.onSelect(); ticket.onSelect(); }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            onPaste={onAttach ? handlePaste : undefined}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onPaste={attachHandlers.onPaste}
             placeholder={placeholder}
             aria-label={ariaLabel ?? placeholder}
             disabled={disabled || !gate.assistantAllowed}
             rows={rows}
-            style={{ ...inputStyle, flexBasis: '100%', minWidth: '100%' }}
+            style={textareaStyle}
           />
         )}
         // A fragment, not the bare node: the shell's ReactNode comes from a second copy
@@ -672,118 +201,57 @@ export function ChatInput({
         )}
         actions={(
           <>
-            {onAttach && (
-              <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,.pdf,.txt,.md,.csv,.tsv,.json,.docx,.rtf,.xlsx,.pptx"
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-            />
-            {/* `+` becomes a Claude-style menu: Upload, Add context, Browse the web. */}
-            <ComposerMenu title={t('add')} disabled={disabled} trigger={<Icon name="plus" size={19} />}>
-              {(close) => (
-                <>
-                  <MenuRow icon="💻" label={t('upload')} onClick={() => { close(); handleAttachClick(); }} />
-                  {onAddContext && <MenuRow icon="◧" label={t('addContext')} onClick={() => { close(); onAddContext(); }} />}
-                  {onWebBrowsingChange && (
-                    <MenuRow
-                      icon="🌐"
-                      label={t('browseWeb')}
-                      hint={webBrowsing ? t('on') : t('off')}
-                      active={!!webBrowsing}
-                      onClick={() => onWebBrowsingChange(!webBrowsing)}
-                    />
-                  )}
-                </>
-              )}
-            </ComposerMenu>
-              </>
-            )}
-            {/* `/` : effort, thinking, WHICH MODEL IS RUNNING and how to change it,
-                and account settings — the one shared control, so this composer can
-                never grow a second "which model" chip beside it again. */}
-            <PromptOptionsMenu
-              labels={optionLabels}
+            <ComposerAddMenu
+              onAttach={onAttach}
+              onAddContext={onAddContext}
+              webBrowsing={webBrowsing}
+              onWebBrowsingChange={onWebBrowsingChange}
               disabled={disabled}
-              mode={chatMode && onChatModeChange ? { value: chatMode, onChange: (next) => onChatModeChange(next as ChatMode), choices: modeChoices } : undefined}
-              memory={onMemoryChange ? { enabled: !!memoryEnabled, onChange: onMemoryChange, unavailableReason: memoryUnavailableReason, describe: describeMemory } : undefined}
-              autoMode={onAutoModeChange ? { enabled: !!autoMode, onChange: onAutoModeChange, description: t('autoModeHint') } : undefined}
-              session={onConsolidate && onFork ? { canConsolidate, consolidating, forking, onConsolidate, onFork } : undefined}
+            />
+            <ComposerOptionsMenu
+              disabled={disabled}
               effort={effort}
               onEffortChange={onEffortChange}
-              describeEffort={describeEffort}
               thinking={thinking}
               onThinkingChange={onThinkingChange}
-              describeThinking={describeThinking}
-              model={onModelSelectionChange && modelOptions && modelSelection
-                ? { selection: modelSelection, options: modelOptions, onChange: onModelSelectionChange, effective: effectiveModel, identity: modelIdentity }
-                : undefined}
-              onAccountSettings={accountSettingsHref ? () => router.push(accountSettingsHref) : undefined}
+              accountSettingsHref={accountSettingsHref}
+              modelSelection={modelSelection}
+              modelOptions={modelOptions}
+              onModelSelectionChange={onModelSelectionChange}
+              effectiveModel={effectiveModel}
+              modelIdentity={modelIdentity}
+              chatMode={chatMode}
+              onChatModeChange={onChatModeChange}
+              memoryEnabled={memoryEnabled}
+              onMemoryChange={onMemoryChange}
+              memoryUnavailableReason={memoryUnavailableReason}
+              canConsolidate={canConsolidate}
+              consolidating={consolidating}
+              forking={forking}
+              onConsolidate={onConsolidate}
+              onFork={onFork}
+              autoMode={autoMode}
+              onAutoModeChange={onAutoModeChange}
             />
             {showBrainIcon && (
-          <Link
-            href="/brainstorm"
-            style={iconButtonStyle(false)}
-            title={t('brainstorm')}
-          >
-            <Icon name="message" size={20} />
-          </Link>
+              <Link
+                href="/brainstorm"
+                style={iconButtonStyle(false)}
+                title={t('brainstorm')}
+              >
+                <Icon name="message" size={20} />
+              </Link>
             )}
             {compact && contextControls}
-            {showVoice && (
-          <button
-            type="button"
-            onClick={recording ? stopVoice : startVoice}
-            disabled={disabled}
-            title={recording ? t('stopDictation') : t('dictate')}
-            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined }}
-          >
-            <Icon name="mic" size={20} />
-          </button>
-            )}
+            {showVoice && <VoiceDictationButton getValue={getValue} onChange={onChange} disabled={disabled} />}
           </>
         )}
         // Send/Stop is handed to the shell's trailing slot, which pins it to the far
         // right edge — the same placement the editor composer now gets from the same
         // prop, instead of each surface anchoring it by hand.
-        primaryAction={running && onStop && !canSubmit ? (
-          // Streaming with an empty composer → the button interrupts the run.
-          // When the composer HAS submittable text (e.g. the queue-while-thinking
-          // path where the host keeps the input editable), the Send button below
-          // renders instead so the typed turn can be queued.
-          <button
-            type="button"
-            onClick={onStop}
-            title={t('stop')}
-            aria-label={t('stop')}
-            style={sendButtonStyle(false)}
-          >
-            <Icon name="stop" size={14} />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            title={submitLabel}
-            style={sendButtonStyle(!canSubmit)}
-          >
-            {/* The send arrow sits on a filled accent plate, so it keeps the heavier
-                stroke it needs to read there rather than the set's 1.8. */}
-            <Icon name="arrow-up" size={18} strokeWidth={2.5} />
-          </button>
-        )}
+        primaryAction={<ComposerPrimaryAction running={running} onStop={onStop} canSubmit={canSubmit} submitLabel={submitLabel} />}
       />
-      {/* Turns held behind the running one. The receipt for a composer that never
-          refuses input — same sentence, same place, on every surface. */}
-      {queuedCount > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-          <span aria-hidden><Icon source="⏳" size="1em" /></span>
-          {tBrain('queuedCount', { count: queuedCount })}
-        </div>
-      )}
+      <QueuedTurnsReceipt count={queuedCount} />
       {secondaryContent && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           {secondaryContent}

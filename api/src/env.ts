@@ -229,8 +229,9 @@ export interface Env {
    *  (Flux Schnell, SDXL) paid from the account's monthly credit; a spent credit
    *  answers 402 and the cascade moves on. Set via `wrangler secret put HF_API_TOKEN`. */
   HF_API_TOKEN?: string;
-  /** Pollinations token (free, auth.pollinations.ai) — opt-in free image vendor;
-   *  unbound → skipped, because the anonymous tier has no SLA. Set via
+  /** Pollinations SECRET key (`sk_…`, created at enter.pollinations.ai with only
+   *  Image generation scoped and a pollen budget) — free-tier image vendor;
+   *  unbound → skipped. Never a publishable `pk_…` key. Set via
    *  `wrangler secret put POLLINATIONS_API_KEY`. */
   POLLINATIONS_API_KEY?: string;
 

@@ -1,14 +1,17 @@
 /**
  * Pollinations image-generation vendor module.
  *
- * Endpoint: `GET https://image.pollinations.ai/prompt/<prompt>?width&height&model…`
- * — the whole request is the URL; the answer is the image bytes. Free, with a
- * token (`POLLINATIONS_API_KEY`, issued free at auth.pollinations.ai) lifting the
- * anonymous rate limit and the watermark.
+ * Endpoint: `GET https://gen.pollinations.ai/image/<prompt>?model&width&height…`
+ * — the whole request is the URL; the answer is the image bytes. Authenticated
+ * with a SECRET key (`sk_…`, created at enter.pollinations.ai) as a Bearer token;
+ * a publishable `pk_…` key is for browsers and must never be used here. Each
+ * image spends "pollen" from the account balance; the catalog below keeps to the
+ * cheapest models that are not `paid_only` (verified against
+ * `GET https://gen.pollinations.ai/image/models`, 2026-10-04).
  *
- * OPT-IN on purpose: the anonymous tier has no SLA, so the vendor is bound only
- * when an operator sets the token. We fetch the bytes server-side rather than
- * handing back the Pollinations URL, because that URL renders lazily — a failure
+ * Unbound without `POLLINATIONS_API_KEY`, like every other keyed vendor.
+ *
+ * We fetch the bytes server-side rather than handing back the Pollinations URL, because that URL renders lazily — a failure
  * would surface as a broken image in the customer's page instead of a cascade
  * step on to the next vendor.
  */
@@ -26,11 +29,12 @@ import {
   type ImageVendorModule,
 } from './types';
 
-const ENDPOINT_BASE = 'https://image.pollinations.ai/prompt/';
+const ENDPOINT_BASE = 'https://gen.pollinations.ai/image/';
 
 const CATALOG: ReadonlyArray<ImageVendorModelEntry> = [
-  { id: 'flux',  tier: 'FREE', label: 'Flux (Pollinations)',  brand: 'Black Forest Labs' },
-  { id: 'turbo', tier: 'FREE', label: 'Turbo (Pollinations)', brand: 'Pollinations' },
+  { id: 'black-forest-labs/flux.1-schnell', tier: 'FREE', label: 'Flux Schnell (Pollinations)',     brand: 'Black Forest Labs' },
+  { id: 'tongyi-mai/z-image-turbo',          tier: 'FREE', label: 'Z-Image Turbo (Pollinations)',   brand: 'Tongyi-MAI' },
+  { id: 'lykon/dreamshaper-8-lcm',           tier: 'FREE', label: 'DreamShaper 8 LCM (Pollinations)', brand: 'Lykon' },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
