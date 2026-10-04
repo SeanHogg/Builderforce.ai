@@ -5,8 +5,8 @@ import { useTranslations } from 'next-intl';
 import { StudioTopBar } from './StudioTopBar';
 import { StudioPromptBox } from './StudioPromptBox';
 import { StudioRecentProjects } from './StudioRecentProjects';
-import { StudioWorkspacePicker } from './StudioWorkspacePicker';
-import { useStudioWorkspace } from './useStudioWorkspace';
+import { WorkspacePicker } from '@/components/auth/WorkspacePicker';
+import { useWorkspaceSession } from '@/lib/auth/useWorkspaceSession';
 import { useStartStudioProject } from './useStartStudioProject';
 import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
 import { studioDraft } from '@/lib/studio/promptHandoff';
@@ -20,7 +20,7 @@ import { studioDraft } from '@/lib/studio/promptHandoff';
 export function StudioHome() {
   const t = useTranslations('studio.home');
   const { requestSignIn } = useSignInDialog();
-  const workspace = useStudioWorkspace();
+  const workspace = useWorkspaceSession();
   const { start, busy, error } = useStartStudioProject(t('untitled'), t('startFailed'));
   const [prompt, setPrompt] = useState('');
   const [wantsToStart, setWantsToStart] = useState(false);
@@ -53,7 +53,7 @@ export function StudioHome() {
         </div>
         <StudioPromptBox value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} />
         {error && <p role="alert" style={{ margin: 0, color: 'var(--error-text)' }}>{error}</p>}
-        <StudioWorkspacePicker state={workspace} onChoose={(tenant) => { void workspace.choose(tenant); }} />
+        <WorkspacePicker state={workspace} onChoose={(tenant) => { void workspace.choose(tenant); }} />
         <StudioRecentProjects />
       </main>
     </div>

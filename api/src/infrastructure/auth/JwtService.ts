@@ -1,5 +1,6 @@
 import { decodeJwtPayload, signHs256, verifyHs256 } from '@builderforce/hs256-jwt';
 import { TenantRole } from '../../domain/shared/types';
+import type { DeviceClient } from '@builderforce/creation-canvas-contract';
 
 export { decodeJwtPayload };
 
@@ -32,9 +33,10 @@ export interface JwtPayload {
    * through `update_task` was recorded as a person whose id nobody could resolve.
    */
   agt?: string;
-  /** Trusted client surface. Minted by the server for editor sessions; never
-   * inferred from a request header because it controls kill-switch exemptions. */
-  src?: 'vscode';
+  /** Trusted client surface — the device-flow app the session was minted for
+   * (`DEVICE_CLIENTS`). Minted by the server; never inferred from a request header
+   * because it controls kill-switch exemptions. */
+  src?: DeviceClient;
   iat:  number;
   exp:  number;
 }

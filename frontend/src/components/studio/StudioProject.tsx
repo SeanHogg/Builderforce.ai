@@ -11,8 +11,8 @@ import { StudioTopBar, StudioBrand } from './StudioTopBar';
 import { StudioAccountControl } from './StudioAccountControl';
 import { StudioProjectActions } from './StudioProjectActions';
 import { OpenOnCanvasLink } from './OpenOnCanvasLink';
-import { StudioWorkspacePicker } from './StudioWorkspacePicker';
-import { useStudioWorkspace } from './useStudioWorkspace';
+import { WorkspacePicker } from '@/components/auth/WorkspacePicker';
+import { useWorkspaceSession } from '@/lib/auth/useWorkspaceSession';
 
 /**
  * A Studio project: the full Builder workspace under Studio's bar. Signed out, it
@@ -27,7 +27,7 @@ export function StudioProject({ projectId, initialChatId = null, initialTicket =
 }) {
   const t = useTranslations('studio.project');
   const { requestSignIn } = useSignInDialog();
-  const workspace = useStudioWorkspace();
+  const workspace = useWorkspaceSession();
   const ready = workspace.status === 'ready';
   const { project, files, error, setProject } = useBuildProject(ready ? projectId : null, t('loadFailed'));
   const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
@@ -54,7 +54,7 @@ export function StudioProject({ projectId, initialChatId = null, initialTicket =
         {workspace.status === 'signedOut' ? (
           <Centered>{t('signInLead')}</Centered>
         ) : !ready ? (
-          <Centered><StudioWorkspacePicker state={workspace} onChoose={(tenant) => { void workspace.choose(tenant); }} /></Centered>
+          <Centered><WorkspacePicker state={workspace} onChoose={(tenant) => { void workspace.choose(tenant); }} /></Centered>
         ) : error ? (
           <Centered><span role="alert">{error}</span></Centered>
         ) : !project ? (

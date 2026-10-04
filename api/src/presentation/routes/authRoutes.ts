@@ -86,6 +86,7 @@ import {
   WebLoginBody,
   WebRegisterBody,
 } from './authRoutes.schemas';
+import { isDeviceClient } from '@builderforce/creation-canvas-contract';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -430,6 +431,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
         tenantId: tenantApiKeys.tenantId,
         revokedAt: tenantApiKeys.revokedAt,
         createdByUserId: tenantApiKeys.createdByUserId,
+        client: tenantApiKeys.client,
       })
       .from(tenantApiKeys)
       .where(eq(tenantApiKeys.keyHash, keyHash))
@@ -452,7 +454,8 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId: row.createdByUserId,
       tenantId: row.tenantId,
-      clientSurface: 'vscode',
+      // The app the key was minted for; a hand-made key keeps the editor surface.
+      clientSurface: isDeviceClient(row.client) ? row.client : 'vscode',
       userAgent: getUserAgent(c),
       ipAddress: getClientIp(c),
     });

@@ -50,6 +50,13 @@ custom_domain = true
 pattern = "studio.builderforce.ai/*"
 zone_name = "builderforce.ai"
 
+# Spawn, the Roblox game builder, under /spawn — the same zone-route pattern and
+# reasoning as Studio above (`lib/productHosts.ts` sends the host's root there).
+# `spawn` is a reserved site label (siteHosting.ts).
+[[routes]]
+pattern = "spawn.builderforce.ai/*"
+zone_name = "builderforce.ai"
+
 [observability.logs]
 enabled = true
 invocation_logs = true

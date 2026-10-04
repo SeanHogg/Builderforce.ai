@@ -32,7 +32,7 @@ export const APP_ROUTE_SEGMENTS: readonly string[] = [
   'learning', 'legal', 'legal-documents', 'login', 'logs', 'lti', 'marketplace', 'media', 'meetings',
   'method', 'models', 'monitoring', 'p', 'personas', 'pmo', 'pricing', 'product', 'projects', 'prompts',
   'quality', 'realize', 'references', 'register', 'resume', 'reviews', 'salary', 'sales', 'seat',
-  'security', 'sell-builderforce', 'settings', 'sign', 'skills', 'soc2', 'surveys',
+  'security', 'sell-builderforce', 'settings', 'sign', 'skills', 'soc2', 'spawn', 'surveys',
   'studio', 'talent', 'tasks', 'templates', 'tenants', 'timeline', 'tools', 'training', 'tutorials',
   'workflows', 'workforce',
 ];

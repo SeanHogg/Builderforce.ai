@@ -18460,6 +18460,10 @@
       },
       "signIn": {
         "title": "Anmelden"
+      },
+      "spawn": {
+        "title": "Spawn",
+        "tagline": "Roblox-Spiele bauen, indem du redest."
       }
     },
     "tagline": {
@@ -32339,13 +32343,6 @@
       "settings": "Einstellungen",
       "feedback": "Feedback senden"
     },
-    "workspace": {
-      "title": "Arbeitsbereich wählen",
-      "lead": "Studio-Projekte liegen in einem Arbeitsbereich. Wähle einen, um fortzufahren.",
-      "none": "Du hast noch keinen Arbeitsbereich.",
-      "create": "Jetzt einrichten",
-      "loadFailed": "Deine Arbeitsbereiche konnten nicht geladen werden."
-    },
     "project": {
       "share": "Teilen",
       "linkCopied": "Link kopiert",
@@ -32451,6 +32448,314 @@
       "suspend": "Sperren",
       "suspendConfirm": "Sperren bestätigen",
       "suspendHint": "Die Person wird überall abgemeldet und kann sich erst nach dem Entsperren wieder anmelden."
+    }
+  },
+  "workspaceChooser": {
+    "title": "Arbeitsbereich wählen",
+    "lead": "Deine Arbeit liegt in einem Workspace. Wähle einen aus, um fortzufahren.",
+    "none": "Du hast noch keinen Arbeitsbereich.",
+    "create": "Jetzt einrichten",
+    "loadFailed": "Deine Arbeitsbereiche konnten nicht geladen werden."
+  },
+  "spawn": {
+    "meta": {
+      "title": "Spawn — Roblox-Spiele bauen, indem du redest",
+      "description": "Spawn ist der KI-Spielebaukasten für Roblox-Creator ab 13. Beschreibe dein Spiel, und Spawn baut Teile, Skripte und Oberfläche direkt in Roblox Studio."
+    },
+    "shell": {
+      "home": "Spawn-Startseite",
+      "navLabel": "Spawn",
+      "how": "So funktioniert's",
+      "safety": "Sicherheit",
+      "pricing": "Preise",
+      "download": "Download",
+      "account": "Mein Konto",
+      "signIn": "Anmelden",
+      "madeBy": "Spawn wird von Builderforce.ai entwickelt",
+      "terms": "Bedingungen",
+      "privacy": "Datenschutz",
+      "notAffiliated": "Nicht mit der Roblox Corporation verbunden oder von ihr unterstützt."
+    },
+    "hero": {
+      "eyebrow": "Für Roblox-Creator ab 13",
+      "titleLead": "Sag es.",
+      "titleAccent": "Spawn es.",
+      "lede": "Sag Spawn, welches Spiel du willst: ein Obby, ein Tycoon, ein Haustier-Simulator, eine Rennstrecke. Spawn baut die Welt, schreibt die Skripte und erstellt die Oberfläche, direkt in Roblox Studio. Drück auf Play und probier's aus.",
+      "start": "Jetzt bauen",
+      "download": "App herunterladen",
+      "fine": "1,99 $ im Monat. Tokens gibt es in Paketen ab 10 $. Fehlgeschlagene Builds kosten nichts.",
+      "pictureLabel": "Die Spawn-App im Chat neben einem Roblox-Obby, das sie gerade gebaut hat",
+      "chatAsk": "Bau ein Obby mit 5 Stufen, die immer schwerer werden, und einem Checkpoint auf jeder",
+      "chatReply": "Fertig! 5 Stufen, aufsteigende Plattformen, ein drehender Balken auf Stufe 4 und Checkpoints, die deine Stufe speichern. Drück auf Play zum Testen.",
+      "chatAsk2": "Füg einen Timer und eine Bestenliste hinzu"
+    },
+    "how": {
+      "eyebrow": "So funktioniert's",
+      "title": "Von der Idee zum spielbaren Spiel in Minuten",
+      "lede": "Kein Einrichtungsassistent und keine Server zum Starten. Spawn verbindet sich für dich mit Roblox Studio.",
+      "steps": [
+        {
+          "icon": "⬇️",
+          "title": "Spawn installieren",
+          "body": "Lade die App herunter und melde dich an. Spawn installiert sein Roblox-Studio-Plugin selbst. Nichts zu kopieren, kein Server zu starten."
+        },
+        {
+          "icon": "💬",
+          "title": "Sag, was gebaut werden soll",
+          "body": "Öffne einen beliebigen Ort in Studio und schreib, was du willst, so wie du es einem Freund sagen würdest. Spawn liest zuerst dein Spiel, damit Neues zum Vorhandenen passt."
+        },
+        {
+          "icon": "▶️",
+          "title": "Spielen, dann reparieren",
+          "body": "Drück auf Play. Wenn etwas einen Fehler wirft, liest Spawn die Ausgabe und bietet eine Reparatur an. Jeder Build ist ein einziger Rückgängig-Schritt, du kannst also immer zurück."
+        }
+      ]
+    },
+    "features": {
+      "eyebrow": "Was es baut",
+      "title": "Alles, was ein Roblox-Spiel braucht",
+      "cards": [
+        {
+          "icon": "🧱",
+          "title": "Welten und Karten",
+          "body": "Obby-Stufen, Tycoon-Grundstücke, Arenen, Rennstrecken und Lobbys aus echten Teilen, die du verschieben und umfärben kannst."
+        },
+        {
+          "icon": "📜",
+          "title": "Echte Luau-Skripte",
+          "body": "Server-Regeln, Client-Steuerung und gemeinsame Module in modernem Luau, so geordnet, dass du sie lesen und daraus lernen kannst."
+        },
+        {
+          "icon": "🏆",
+          "title": "Bestenlisten und Speichern",
+          "body": "Münzen, Punkte und Stufen auf der Bestenliste, zwischen Besuchen gespeichert mit sicher genutzten DataStores."
+        },
+        {
+          "icon": "🖥️",
+          "title": "Oberflächen und Menüs",
+          "body": "Shops, Timer, Lebensbalken und Buttons als echte ScreenGuis, die auf Handy, Tablet und PC funktionieren."
+        },
+        {
+          "icon": "✨",
+          "title": "Effekte und Licht",
+          "body": "Partikel, Spuren, Leuchten, Himmel und Atmosphäre, damit dein Spiel fertig aussieht und nicht wie eine graue Grundplatte."
+        },
+        {
+          "icon": "🛠️",
+          "title": "Reparaturen nach dem Testen",
+          "body": "Spawn liest die Fehler aus deinem letzten Test und repariert das Skript, das sie verursacht hat."
+        }
+      ]
+    },
+    "compare": {
+      "eyebrow": "Warum Spawn",
+      "title": "Gebaut, um das Einfachste zu sein",
+      "lede": "Die meisten Roblox-KI-Tools brauchen eine lange Einrichtung und berechnen dir auch fehlgeschlagene Builds. Spawn wurde gebaut, um beides zu lösen.",
+      "colWhat": "Funktion",
+      "colTypical": "Typisches Roblox-KI-Tool",
+      "yes": "Ja",
+      "no": "Nein",
+      "rows": [
+        {
+          "label": "Richtet das Studio-Plugin selbst ein",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "Kein lokaler Server oder Sync-Tool nötig",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "Fehlgeschlagene Builds sind kostenlos",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "Jeder Build ist ein Rückgängig-Schritt",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "Eingebaute Sicherheitsregeln für Spieler ab 13",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "Blockiert Hintertüren und versteckten Code",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "Liest dein Spiel, bevor es etwas ändert",
+          "spawn": true,
+          "typical": true
+        }
+      ]
+    },
+    "safety": {
+      "eyebrow": "Sicherheit",
+      "title": "Für junge Creator gemacht",
+      "lede": "Spawn ist für Spieler ab 13 und hält sich bei allem, was es baut, an die Roblox-Community-Standards.",
+      "cards": [
+        {
+          "icon": "🛡️",
+          "title": "Altersgerecht von Anfang an",
+          "body": "Spawn baut keine brutalen Szenen, keine Romantik, kein Glücksspiel, keine gruseligen Inhalte und nichts, was persönliche Daten sammelt. Stattdessen schlägt es eine lustige Version vor, die okay ist."
+        },
+        {
+          "icon": "🔒",
+          "title": "Keine Hintertüren",
+          "body": "Spawn lehnt Skripte ab, die ins Internet gehen, versteckten Code ausführen oder Code über eine Asset-ID laden: die Tricks, mit denen Gratis-Modelle Spiele übernehmen."
+        },
+        {
+          "icon": "🖼️",
+          "title": "Nichts, was du nicht siehst",
+          "body": "Spawn baut aus Teilen, Farben, Lichtern und Effekten, die du in Studio siehst. Es lädt nie unsichtbare Bilder, Sounds oder Meshes per ID."
+        },
+        {
+          "icon": "🎂",
+          "title": "Ab 13",
+          "body": "Wir fragen einmal nach Geburtsmonat und -jahr, nie nach dem vollen Geburtsdatum. Unter 13 kann man kein Konto anlegen."
+        }
+      ],
+      "parents": "Für Eltern: Mitgliedschaft und Token-Pakete werden auf dieser Website über den sicheren Stripe-Checkout gekauft, und Sie entscheiden über jede Aufladung. In der App wird nichts abgebucht, und außer der monatlichen Mitgliedschaft für 1,99 $, die jederzeit kündbar ist, gibt es keine überraschenden Verlängerungen."
+    },
+    "pricing": {
+      "eyebrow": "Preise",
+      "title": "Einfach, und du behältst die Kontrolle",
+      "lede": "Eine kleine Mitgliedschaft öffnet den Baukasten. Tokens bezahlen das Bauen, und du kaufst nur nach, wenn du willst.",
+      "loadFailed": "Die Preise konnten nicht geladen werden. Lade die Seite neu, um es erneut zu versuchen.",
+      "planName": "Spawn-Mitgliedschaft",
+      "perMonth": "/ Monat",
+      "planBody": "Öffnet den Spawn-Baukasten und die Desktop-App für Spieler ab {age}. Jederzeit kündbar.",
+      "join": "Spawn beitreten",
+      "packsTitle": "Token-Pakete",
+      "packsLede": "Jeder Build verbraucht Tokens für das, was die KI liest und schreibt. Größere Pakete enthalten Bonus-Tokens, und fehlgeschlagene Builds werden nie berechnet.",
+      "tokens": "{count} Tokens",
+      "builds": "Etwa {count} Builds",
+      "buy": "Tokens holen",
+      "opening": "Checkout wird geöffnet…"
+    },
+    "download": {
+      "eyebrow": "Download",
+      "title": "Hol dir die Spawn-App",
+      "lede": "Spawn läuft auf deinem Computer neben Roblox Studio und übernimmt das Verbinden für dich.",
+      "points": [
+        "Installiert und aktualisiert sein Roblox-Studio-Plugin selbst",
+        "Verbindet sich nur auf deinem Computer mit Studio, ohne offene Ports und ohne dass etwas nach außen sichtbar ist",
+        "Meldet sich einmal im Browser mit deinem Spawn-Konto an"
+      ],
+      "button": "Für Windows oder Mac herunterladen",
+      "readMore": "Die Geschichte lesen",
+      "requirements": "Benötigt Windows 10/11 oder macOS 12+ mit installiertem Roblox Studio."
+    },
+    "faq": {
+      "eyebrow": "Fragen",
+      "title": "Gut zu wissen",
+      "items": [
+        {
+          "q": "Muss ich programmieren können?",
+          "a": "Nein. Du beschreibst, was du willst, und Spawn schreibt das Luau. Die Skripte sind ordentlich und klar benannt. Wenn du lernen willst, kannst du sie öffnen und nachsehen, wie sie funktionieren."
+        },
+        {
+          "q": "Funktioniert es mit einem Spiel, das ich schon angefangen habe?",
+          "a": "Ja. Spawn liest den geöffneten Ort (den Explorer und die Skripte), bevor es baut, damit neue Teile und Skripte zum Vorhandenen passen."
+        },
+        {
+          "q": "Was ist ein Token?",
+          "a": "Ein Token ist ein kleines Stück Text, das die KI liest oder schreibt. Ein typischer Build braucht etwa 12.000. Dein Guthaben siehst du immer in der App und auf deiner Kontoseite."
+        },
+        {
+          "q": "Was, wenn ein Build schiefgeht?",
+          "a": "Wenn Spawn einen Build nicht fertigstellen kann, kostet er nichts. Wenn er dir nicht gefällt, drück in Studio auf Rückgängig, und der ganze Build verschwindet in einem Schritt."
+        },
+        {
+          "q": "Darf ich veröffentlichen, was ich baue?",
+          "a": "Ja. Es ist dein Spiel. Veröffentliche es wie gewohnt aus Roblox Studio."
+        },
+        {
+          "q": "Ist Spawn von Roblox?",
+          "a": "Nein. Spawn wird von Builderforce.ai entwickelt und ist weder mit der Roblox Corporation verbunden noch von ihr unterstützt. Es arbeitet über ein normales Studio-Plugin mit Roblox Studio."
+        }
+      ]
+    },
+    "account": {
+      "eyebrow": "Spawn",
+      "title": "Dein Konto",
+      "signInBody": "Melde dich an, um Spawn beizutreten, Tokens zu holen und die Desktop-App zu verbinden.",
+      "signIn": "Anmelden",
+      "loading": "Dein Konto wird geladen…",
+      "tooYoungTitle": "Spawn ist für Spieler ab 13",
+      "tooYoungBody": "Danke für deine Ehrlichkeit! Spawn ist nur für Spieler ab {age} Jahren. Komm wieder, wenn du {age} bist. Wir sind dann da.",
+      "notice": {
+        "joined": "Willkommen bei Spawn! Deine Mitgliedschaft ist aktiv.",
+        "tokensAdded": "Tokens hinzugefügt. Viel Spaß beim Bauen!",
+        "cancelled": "Der Checkout wurde abgebrochen. Es wurde nichts berechnet."
+      },
+      "errors": {
+        "generic": "Etwas ist schiefgelaufen. Bitte versuch es erneut.",
+        "age_required": "Sag uns zuerst deinen Geburtsmonat und dein Geburtsjahr.",
+        "too_young": "Spawn ist für Spieler ab 13.",
+        "membership_required": "Tritt zuerst Spawn bei, um das zu tun.",
+        "insufficient_tokens": "Deine Tokens sind aufgebraucht. Hol dir ein Paket, um weiterzubauen.",
+        "pack_not_found": "Dieses Token-Paket ist nicht mehr verfügbar.",
+        "payments_unavailable": "Zahlungen sind gerade nicht verfügbar. Bitte versuch es später erneut.",
+        "payment_not_found": "Wir konnten diese Zahlung nicht finden.",
+        "payment_not_paid": "Diese Zahlung ist noch nicht durchgegangen.",
+        "payment_wrong_kind": "Diese Zahlung war nicht für Spawn.",
+        "payment_not_yours": "Diese Zahlung gehört zu einem anderen Konto.",
+        "payment_short": "Diese Zahlung hat nicht den vollen Preis gedeckt."
+      },
+      "age": {
+        "title": "Wann bist du geboren?",
+        "body": "Spawn ist für Spieler ab {age}. Wir fragen nur einmal nach Monat und Jahr.",
+        "month": "Monat",
+        "year": "Jahr",
+        "choose": "Auswählen…",
+        "confirm": "Weiter",
+        "why": "Wir fragen nie nach deinem vollen Geburtsdatum, und du kannst diese Antwort später nicht ändern. Wähle also sorgfältig."
+      },
+      "membership": {
+        "title": "Mitgliedschaft",
+        "status": {
+          "none": "Kein Mitglied",
+          "active": "Aktiv",
+          "past_due": "Zahlung offen",
+          "cancelled": "Gekündigt"
+        },
+        "activeBody": "Du bist Mitglied ({price} im Monat). Baukasten und Desktop-App sind freigeschaltet.",
+        "body": {
+          "none": "Tritt für {price} im Monat bei, um den Baukasten freizuschalten.",
+          "past_due": "Deine letzte Zahlung ist nicht durchgegangen. Tritt für {price} im Monat erneut bei, um weiterzubauen.",
+          "cancelled": "Deine Mitgliedschaft ist beendet. Du kannst jederzeit für {price} im Monat wieder beitreten."
+        },
+        "join": "Für {price}/Monat beitreten",
+        "opening": "Checkout wird geöffnet…",
+        "parentNote": "Die Bezahlung wird sicher von Stripe abgewickelt. Frag vor dem Kauf ein Elternteil oder deinen Erziehungsberechtigten."
+      },
+      "tokens": {
+        "title": "Tokens",
+        "balanceLabel": "Tokens übrig",
+        "joinFirst": "Tritt Spawn bei, um Token-Pakete zu kaufen.",
+        "noChargeOnFail": "Fehlgeschlagene Builds verbrauchen nie Tokens.",
+        "activity": "Letzte Aktivitäten",
+        "kind": {
+          "grant": "Tokens hinzugefügt",
+          "spend": "Build"
+        }
+      },
+      "desktop": {
+        "title": "Los geht's",
+        "ready": "Bereit",
+        "steps": [
+          "Lade die Spawn-App herunter und öffne sie.",
+          "Klick auf Anmelden. Dein Browser öffnet sich; bestätige den angezeigten Code.",
+          "Öffne Roblox Studio und einen beliebigen Ort. Spawn verbindet sich selbst.",
+          "Schreib, was du bauen willst, und drück dann auf Play."
+        ],
+        "download": "Spawn herunterladen"
+      }
     }
   }
 }

@@ -83,7 +83,8 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId,
       tenantId,
-      clientSurface: 'vscode',
+      // The app that asked keeps its own surface across the switch (Synapse, Spawn).
+      clientSurface: c.get('clientSurface') ?? 'vscode',
       userAgent: c.req.header('User-Agent') ?? null,
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });

@@ -18460,6 +18460,10 @@
       },
       "signIn": {
         "title": "登录"
+      },
+      "spawn": {
+        "title": "Spawn",
+        "tagline": "动动嘴就能做 Roblox 游戏。"
       }
     },
     "tagline": {
@@ -32339,13 +32343,6 @@
       "settings": "设置",
       "feedback": "发送反馈"
     },
-    "workspace": {
-      "title": "选择工作区",
-      "lead": "Studio 项目位于工作区中。请选择一个工作区以继续。",
-      "none": "你还没有工作区。",
-      "create": "立即创建",
-      "loadFailed": "无法加载你的工作区。"
-    },
     "project": {
       "share": "分享",
       "linkCopied": "链接已复制",
@@ -32451,6 +32448,314 @@
       "suspend": "停用",
       "suspendConfirm": "确认停用",
       "suspendHint": "对方将在所有设备上退出登录，恢复前无法再次登录。"
+    }
+  },
+  "workspaceChooser": {
+    "title": "选择工作区",
+    "lead": "你的作品保存在工作区中。选择一个工作区以继续。",
+    "none": "你还没有工作区。",
+    "create": "立即创建",
+    "loadFailed": "无法加载你的工作区。"
+  },
+  "spawn": {
+    "meta": {
+      "title": "Spawn — 动动嘴就能做 Roblox 游戏",
+      "description": "Spawn 是为 13 岁及以上 Roblox 创作者打造的 AI 游戏制作工具。描述你的游戏，Spawn 就会直接在 Roblox Studio 里搭建零件、编写脚本、制作界面。"
+    },
+    "shell": {
+      "home": "Spawn 首页",
+      "navLabel": "Spawn",
+      "how": "使用方法",
+      "safety": "安全",
+      "pricing": "价格",
+      "download": "下载",
+      "account": "我的账户",
+      "signIn": "登录",
+      "madeBy": "Spawn 由 Builderforce.ai 打造",
+      "terms": "条款",
+      "privacy": "隐私",
+      "notAffiliated": "与 Roblox Corporation 无关联，亦未获其认可。"
+    },
+    "hero": {
+      "eyebrow": "面向 13 岁以上的 Roblox 创作者",
+      "titleLead": "说出来，",
+      "titleAccent": "就生成。",
+      "lede": "告诉 Spawn 你想要的游戏：跑酷关卡、大亨经营、宠物模拟、赛车地图都行。它会直接在 Roblox Studio 里搭建世界、编写脚本、制作界面。按下 Play 就能试玩。",
+      "start": "开始创作",
+      "download": "下载应用",
+      "fine": "每月 1.99 美元。代币按包购买，10 美元起。失败的生成不收费。",
+      "pictureLabel": "Spawn 应用在聊天，旁边是它刚搭好的 Roblox 跑酷关卡",
+      "chatAsk": "做一个 5 关的跑酷，越往后越难，每关都有检查点",
+      "chatReply": "搞定！5 个关卡、逐级升高的平台、第 4 关有旋转横杆，检查点会保存你的进度。按 Play 试试吧。",
+      "chatAsk2": "加一个计时器和排行榜"
+    },
+    "how": {
+      "eyebrow": "使用方法",
+      "title": "几分钟就能从点子变成可玩的游戏",
+      "lede": "没有繁琐的设置向导，也不用启动服务器。Spawn 会帮你连接 Roblox Studio。",
+      "steps": [
+        {
+          "icon": "⬇️",
+          "title": "安装 Spawn",
+          "body": "下载应用并登录。Spawn 会自动安装它的 Roblox Studio 插件，不用复制任何东西，也不用运行服务器。"
+        },
+        {
+          "icon": "💬",
+          "title": "说出你想做什么",
+          "body": "在 Studio 中打开任意场景，像跟朋友聊天一样写下你想要的。Spawn 会先读懂你的游戏，让新内容和已有内容衔接得上。"
+        },
+        {
+          "icon": "▶️",
+          "title": "试玩，再修复",
+          "body": "按下 Play。如果出现错误，Spawn 会读取输出并帮你修复。每次生成都只算一步撤销，随时可以退回。"
+        }
+      ]
+    },
+    "features": {
+      "eyebrow": "它能做什么",
+      "title": "Roblox 游戏需要的一切",
+      "cards": [
+        {
+          "icon": "🧱",
+          "title": "世界与地图",
+          "body": "跑酷关卡、大亨地块、竞技场、赛道和大厅，全由真实零件搭成，可以随意移动和改色。"
+        },
+        {
+          "icon": "📜",
+          "title": "真正的 Luau 脚本",
+          "body": "服务器规则、客户端操作和共享模块，用现代 Luau 编写，条理清晰，方便你阅读和学习。"
+        },
+        {
+          "icon": "🏆",
+          "title": "排行榜与存档",
+          "body": "金币、分数和关卡显示在排行榜上，并用安全的 DataStore 在每次游玩之间保存。"
+        },
+        {
+          "icon": "🖥️",
+          "title": "界面与菜单",
+          "body": "商店、计时器、血条和按钮都是真正的 ScreenGui，手机、平板和电脑上都能用。"
+        },
+        {
+          "icon": "✨",
+          "title": "特效与灯光",
+          "body": "粒子、拖尾、发光、天空和大气效果，让你的游戏看起来像成品，而不只是一块灰色底板。"
+        },
+        {
+          "icon": "🛠️",
+          "title": "试玩后自动修复",
+          "body": "Spawn 会读取上次试玩的错误，并修好出问题的脚本。"
+        }
+      ]
+    },
+    "compare": {
+      "eyebrow": "为什么选 Spawn",
+      "title": "生来就要简单",
+      "lede": "大多数 Roblox AI 工具都要漫长的设置，生成失败也照样收费。Spawn 就是为解决这两点而生的。",
+      "colWhat": "功能",
+      "colTypical": "常见的 Roblox AI 工具",
+      "yes": "是",
+      "no": "否",
+      "rows": [
+        {
+          "label": "自动安装 Studio 插件",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "无需运行本地服务器或同步工具",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "失败的生成免费",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "每次生成只算一步撤销",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "内置面向 13 岁以上玩家的安全规则",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "拦截后门和隐藏代码",
+          "spawn": true,
+          "typical": false
+        },
+        {
+          "label": "修改前先读懂你的游戏",
+          "spawn": true,
+          "typical": true
+        }
+      ]
+    },
+    "safety": {
+      "eyebrow": "安全",
+      "title": "专为年轻创作者设计",
+      "lede": "Spawn 面向 13 岁及以上的玩家，所生成的一切都遵守 Roblox 社区准则。",
+      "cards": [
+        {
+          "icon": "🛡️",
+          "title": "从设计上就适合青少年",
+          "body": "Spawn 不会制作血腥、恋爱、赌博、恐怖内容，也不会做任何收集个人信息的东西，而是会建议一个合适又好玩的版本。"
+        },
+        {
+          "icon": "🔒",
+          "title": "没有后门",
+          "body": "Spawn 会拒绝联网、运行隐藏代码或通过资源 ID 加载代码的脚本——这些正是免费模型用来劫持游戏的手段。"
+        },
+        {
+          "icon": "🖼️",
+          "title": "没有你看不见的东西",
+          "body": "Spawn 只用你在 Studio 里看得见的零件、颜色、灯光和特效来搭建，绝不会通过 ID 引入看不见的图片、声音或网格。"
+        },
+        {
+          "icon": "🎂",
+          "title": "13 岁及以上",
+          "body": "我们只问一次你的出生年月，从不问完整生日。未满 13 岁无法创建账户。"
+        }
+      ],
+      "parents": "致家长：会员和代币包都在本网站通过 Stripe 安全结账购买，每次充值都由您决定。应用内不会产生任何扣费，除了每月 1.99 美元、可随时取消的会员外，没有任何意外续费。"
+    },
+    "pricing": {
+      "eyebrow": "价格",
+      "title": "简单明了，一切由你掌控",
+      "lede": "小额会员费即可开启制作器。代币用于支付生成，想用时再买就行。",
+      "loadFailed": "价格加载失败，请刷新重试。",
+      "planName": "Spawn 会员",
+      "perMonth": "/ 月",
+      "planBody": "为 {age} 岁及以上玩家开启 Spawn 制作器和桌面应用。可随时取消。",
+      "join": "加入 Spawn",
+      "packsTitle": "代币包",
+      "packsLede": "每次生成会按 AI 读取和写入的内容消耗代币。大包附赠额外代币，失败的生成从不收费。",
+      "tokens": "{count} 个代币",
+      "builds": "约 {count} 次生成",
+      "buy": "获取代币",
+      "opening": "正在打开结账页…"
+    },
+    "download": {
+      "eyebrow": "下载",
+      "title": "获取 Spawn 应用",
+      "lede": "Spawn 在你的电脑上与 Roblox Studio 并排运行，并替你完成连接。",
+      "points": [
+        "自动安装并更新它的 Roblox Studio 插件",
+        "只在你的电脑上连接 Studio，不开放端口，不对外暴露任何内容",
+        "只需在浏览器中用 Spawn 账户登录一次"
+      ],
+      "button": "下载 Windows 或 Mac 版",
+      "readMore": "阅读背后的故事",
+      "requirements": "需要 Windows 10/11 或 macOS 12 及以上，并已安装 Roblox Studio。"
+    },
+    "faq": {
+      "eyebrow": "常见问题",
+      "title": "你可能想知道",
+      "items": [
+        {
+          "q": "我需要会编程吗？",
+          "a": "不需要。你描述想要什么，Spawn 来写 Luau。脚本整洁、命名清楚，想学的话可以打开看看它们是怎么运作的。"
+        },
+        {
+          "q": "能用在我已经开始做的游戏上吗？",
+          "a": "可以。Spawn 会在生成前读取你打开的场景（资源管理器和脚本），让新零件和脚本与已有内容衔接。"
+        },
+        {
+          "q": "代币是什么？",
+          "a": "代币是 AI 读取或写入的一小段文字。一次典型的生成大约用 12,000 个。你的余额会一直显示在应用和账户页面上。"
+        },
+        {
+          "q": "如果生成出了问题怎么办？",
+          "a": "如果 Spawn 没能完成生成，不收任何费用。如果你不喜欢结果，在 Studio 里按撤销，整次生成会一步撤回。"
+        },
+        {
+          "q": "我能发布自己做的游戏吗？",
+          "a": "可以。这是你的游戏，像平常一样在 Roblox Studio 中发布即可。"
+        },
+        {
+          "q": "Spawn 是 Roblox 官方做的吗？",
+          "a": "不是。Spawn 由 Builderforce.ai 打造，与 Roblox Corporation 无关联，亦未获其认可。它通过普通的 Studio 插件与 Roblox Studio 配合使用。"
+        }
+      ]
+    },
+    "account": {
+      "eyebrow": "Spawn",
+      "title": "你的账户",
+      "signInBody": "登录后即可加入 Spawn、获取代币并连接桌面应用。",
+      "signIn": "登录",
+      "loading": "正在加载你的账户…",
+      "tooYoungTitle": "Spawn 面向 13 岁及以上的玩家",
+      "tooYoungBody": "谢谢你的诚实！Spawn 只面向 {age} 岁及以上的玩家。等你满 {age} 岁再来吧，我们会一直在这里。",
+      "notice": {
+        "joined": "欢迎加入 Spawn！你的会员已生效。",
+        "tokensAdded": "代币已到账，尽情创作吧！",
+        "cancelled": "结账已取消，没有产生任何费用。"
+      },
+      "errors": {
+        "generic": "出了点问题，请重试。",
+        "age_required": "请先告诉我们你的出生年月。",
+        "too_young": "Spawn 面向 13 岁及以上的玩家。",
+        "membership_required": "请先加入 Spawn 才能这样做。",
+        "insufficient_tokens": "你的代币用完了。买一个代币包继续创作吧。",
+        "pack_not_found": "这个代币包已不再提供。",
+        "payments_unavailable": "当前无法付款，请稍后再试。",
+        "payment_not_found": "找不到这笔付款。",
+        "payment_not_paid": "这笔付款尚未完成。",
+        "payment_wrong_kind": "这笔付款不是用于 Spawn 的。",
+        "payment_not_yours": "这笔付款属于另一个账户。",
+        "payment_short": "这笔付款不足以支付全价。"
+      },
+      "age": {
+        "title": "你是什么时候出生的？",
+        "body": "Spawn 面向 {age} 岁及以上的玩家。我们只问一次年份和月份。",
+        "month": "月份",
+        "year": "年份",
+        "choose": "请选择…",
+        "confirm": "继续",
+        "why": "我们从不询问你的完整生日，而且这个回答之后无法修改，请仔细选择。"
+      },
+      "membership": {
+        "title": "会员",
+        "status": {
+          "none": "非会员",
+          "active": "有效",
+          "past_due": "待付款",
+          "cancelled": "已取消"
+        },
+        "activeBody": "你是会员（每月 {price}）。制作器和桌面应用已开启。",
+        "body": {
+          "none": "每月 {price} 加入，即可开启制作器。",
+          "past_due": "你上一次付款没有成功。以每月 {price} 重新加入即可继续创作。",
+          "cancelled": "你的会员已结束。随时可以每月 {price} 重新加入。"
+        },
+        "join": "以 {price}/月 加入",
+        "opening": "正在打开结账页…",
+        "parentNote": "付款由 Stripe 安全处理。购买前请先征得家长或监护人的同意。"
+      },
+      "tokens": {
+        "title": "代币",
+        "balanceLabel": "剩余代币",
+        "joinFirst": "加入 Spawn 后即可购买代币包。",
+        "noChargeOnFail": "失败的生成从不消耗代币。",
+        "activity": "最近动态",
+        "kind": {
+          "grant": "代币到账",
+          "spend": "生成"
+        }
+      },
+      "desktop": {
+        "title": "开始创作",
+        "ready": "就绪",
+        "steps": [
+          "下载并打开 Spawn 应用。",
+          "点击登录。浏览器会打开，确认页面上显示的代码。",
+          "打开 Roblox Studio 和任意场景，Spawn 会自动连接。",
+          "写下你想做的东西，然后按 Play。"
+        ],
+        "download": "下载 Spawn"
+      }
     }
   }
 }

@@ -4,6 +4,7 @@ import { parseTokenTimeToDate } from './MfaService';
 import { authTokens, tenantMembers } from '../database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import type { Db } from '../database/connection';
+import type { DeviceClient } from '@builderforce/creation-canvas-contract';
 
 /** Map a persisted tenant_members.role string to a TenantRole; unknown → DEVELOPER. */
 function toTenantRole(role: string | null | undefined): TenantRole {
@@ -57,7 +58,8 @@ export async function mintTenantSessionToken(
     userAgent?: string | null;
     ipAddress?: string | null;
     expiresIn?: number;
-    clientSurface?: 'vscode';
+    /** The device-flow app this session belongs to (`DEVICE_CLIENTS`). */
+    clientSurface?: DeviceClient;
   },
 ): Promise<{ token: string; expiresIn: number }> {
   const expiresIn = opts.expiresIn ?? 3600;

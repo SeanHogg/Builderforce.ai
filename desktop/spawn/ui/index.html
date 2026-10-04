@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spawn</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand"><span class="mark" aria-hidden="true">⚡</span><strong>Spawn</strong></div>
+      <div class="pills">
+        <span class="pill" id="studio-pill" role="status"></span>
+        <button class="pill pill-tokens" id="tokens-pill" type="button" hidden></button>
+        <button class="pill" id="account-pill" type="button" hidden data-i18n="account.menu"></button>
+      </div>
+    </header>
+
+    <main id="screen" class="screen"></main>
+
+    <template id="tpl-signin">
+      <section class="center card">
+        <div class="hero-mark" aria-hidden="true">⚡</div>
+        <h1 data-i18n="signin.title"></h1>
+        <p class="muted" data-i18n="signin.body"></p>
+        <div id="signin-state"></div>
+        <button class="cta" id="signin-btn" type="button" data-i18n="signin.button"></button>
+        <p class="small muted" data-i18n="signin.fine"></p>
+      </section>
+    </template>
+
+    <template id="tpl-gate">
+      <section class="center card">
+        <h1 id="gate-title"></h1>
+        <p class="muted" id="gate-body"></p>
+        <button class="cta" id="gate-open" type="button" data-i18n="gate.openAccount"></button>
+        <button class="ghost" id="gate-check" type="button" data-i18n="gate.checkAgain"></button>
+      </section>
+    </template>
+
+    <template id="tpl-build">
+      <section class="build">
+        <div class="banner" id="errors-banner" hidden>
+          <span id="errors-text"></span>
+          <button class="ghost small-btn" id="errors-fix" type="button" data-i18n="build.fixErrors"></button>
+        </div>
+        <ol class="log" id="log" aria-live="polite"></ol>
+        <div class="starters" id="starters"></div>
+        <form class="composer" id="composer">
+          <textarea id="prompt" rows="2" data-i18n-placeholder="build.placeholder" data-i18n-aria="build.placeholder"></textarea>
+          <button class="cta" id="send" type="submit" data-i18n="build.send"></button>
+        </form>
+        <p class="small muted hint" data-i18n="build.hint"></p>
+      </section>
+    </template>
+
+    <dialog id="account-menu" class="menu">
+      <form method="dialog">
+        <button type="button" id="menu-account" data-i18n="account.open"></button>
+        <button type="button" id="menu-plugin" data-i18n="account.reinstallPlugin"></button>
+        <button type="button" id="menu-signout" data-i18n="account.signOut"></button>
+        <button value="close" data-i18n="account.close"></button>
+      </form>
+    </dialog>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

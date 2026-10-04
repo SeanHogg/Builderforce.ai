@@ -809,8 +809,8 @@ export interface Vars {
    * {@link requestActor} so the write is credited to the agent.
    */
   agentActorRef?: string;
-  /** Server-signed client surface from JwtPayload.src. */
-  clientSurface?: 'vscode';
+  /** Server-signed client surface from JwtPayload.src (a `DeviceClient`). */
+  clientSurface?: import('@builderforce/creation-canvas-contract').DeviceClient;
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
   /**

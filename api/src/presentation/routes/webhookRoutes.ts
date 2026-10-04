@@ -23,7 +23,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
 import type { Db } from '../../infrastructure/database/connection';
 import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
-import { recordBusinessPhoneEvent } from '../../application/tenant/businessPhoneSubscription';
+import { addonRecorderFor, oneOffSettlerFor } from '../../application/billing/purchaseRegistry';
 import { completeListingCheckout } from '../../application/marketplace/listingCommerce';
 import { settleInvoiceCheckout } from '../../application/finance/receivables';
 import { completeKnowledgeCheckout } from '../../application/knowledge/knowledgeCommerce';
@@ -333,10 +333,34 @@ export function createWebhookRoutes(
       });
     }
 
+    /**
+     * A pay-once purchase of one of the platform's own flows — a credit pack, a
+     * workforce agent. Settled through the purchase registry, which re-reads the
+     * session from the processor; a kind with no settler is settled only by its
+     * redirect and is acknowledged here.
+     */
+    if (event.type === 'checkout.completed') {
+      const settle = oneOffSettlerFor(event.purchaseKind);
+      const checkoutSessionId = event.checkoutSessionId;
+      if (!settle || !checkoutSessionId) return c.json({ received: true, processed: false });
+      return settleOneOff(c, {
+        operation: `checkout:${event.purchaseKind}`,
+        noun: `${event.purchaseKind} purchase`,
+        complete: (db, env) => settle(db, env, {
+          checkoutSessionId,
+          ...(event.tenantId ? { tenantId: event.tenantId } : {}),
+          metadata: event.metadata ?? {},
+        }),
+      });
+    }
+
     try {
-      if (event.purchaseKind === 'business_phone') {
-        await recordBusinessPhoneEvent(requestDb(c), event);
-        return c.json({ received: true, processed: true });
+      // A recurring add-on of its own flow (Business Phone, a Spawn membership). It
+      // never reaches the plan handler below, whatever its kind.
+      if (event.purchaseKind) {
+        const record = addonRecorderFor(event.purchaseKind);
+        const processed = record ? await record(requestDb(c), c.env as Env, event) : false;
+        return c.json({ received: true, processed });
       }
       await tenantService.handleWebhookEvent(event);
       await recordReferralConversion(requestDb(c), c.env as Env, event);

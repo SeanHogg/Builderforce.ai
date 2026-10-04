@@ -18,6 +18,7 @@ import {
   hasScope as sharedHasScope,
   serializeScopes as sharedSerializeScopes,
 } from '../shared/scopeList';
+import type { DeviceClient } from '@builderforce/creation-canvas-contract';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Endpoint scopes — single source of truth for the per-scope service-token model
@@ -109,6 +110,8 @@ export interface MintTenantApiKeyInput {
   name:            string;
   /** User minting the key. Null for system / admin-on-behalf calls. */
   createdByUserId: string | null;
+  /** The device-flow app the key is minted for; null for a key made by hand. */
+  client?: DeviceClient | null;
   /**
    * Browser origin allowlist:
    *   - undefined / null  → server-only key (any request with `Origin` header is rejected at auth time)
@@ -151,6 +154,7 @@ export async function mintTenantApiKey(
       name:            input.name,
       keyHash,
       createdByUserId: input.createdByUserId,
+      client:          input.client ?? null,
       allowedOrigins:  serializeOrigins(input.allowedOrigins),
       scopes:          serializeScopes(input.scopes),
     })

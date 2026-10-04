@@ -10,8 +10,10 @@ pub enum CloudError {
     KeyRejected,
     /// The platform could not be reached (offline, DNS, timeout).
     Unreachable(String),
-    /// The platform answered with an error.
-    Status { code: u16, message: String },
+    /// The platform answered with an error. `reason` is the body's stable `code`, when
+    /// it sent one (`membership_required`, `insufficient_tokens`, …), for a window that
+    /// says it in the person's language rather than echoing `message`.
+    Status { code: u16, message: String, reason: Option<String> },
 }
 
 impl fmt::Display for CloudError {
@@ -20,7 +22,7 @@ impl fmt::Display for CloudError {
             CloudError::SignedOut => write!(f, "not signed in to Builderforce"),
             CloudError::KeyRejected => write!(f, "Builderforce no longer accepts this sign-in; sign in again"),
             CloudError::Unreachable(e) => write!(f, "Builderforce could not be reached: {e}"),
-            CloudError::Status { code, message } => write!(f, "Builderforce answered {code}: {message}"),
+            CloudError::Status { code, message, .. } => write!(f, "Builderforce answered {code}: {message}"),
         }
     }
 }
@@ -33,13 +35,20 @@ impl CloudError {
         match err {
             ureq::Error::Status(code, resp) => {
                 let text = resp.into_string().unwrap_or_default();
-                let message = serde_json::from_str::<serde_json::Value>(&text)
-                    .ok()
-                    .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
-                    .unwrap_or_else(|| text.chars().take(200).collect());
-                CloudError::Status { code, message }
+                let body = serde_json::from_str::<serde_json::Value>(&text).ok();
+                let field = |name: &str| body.as_ref().and_then(|v| v.get(name)).and_then(|e| e.as_str()).map(str::to_string);
+                let message = field("error").unwrap_or_else(|| text.chars().take(200).collect());
+                CloudError::Status { code, message, reason: field("code") }
             }
             ureq::Error::Transport(t) => CloudError::Unreachable(t.to_string()),
+        }
+    }
+
+    /// The platform's stable refusal code, when it sent one.
+    pub fn reason(&self) -> Option<&str> {
+        match self {
+            CloudError::Status { reason, .. } => reason.as_deref(),
+            _ => None,
         }
     }
 

@@ -11,6 +11,7 @@ import { background } from './background';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import type { TransitionActorInput } from '../../application/task/taskLifecycle';
 import { updateRequestScope } from '../../application/shared/requestScope';
+import { isDeviceClient } from '@builderforce/creation-canvas-contract';
 
 /**
  * JWT authentication middleware.
@@ -124,7 +125,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // …and a cloud agent replaying a route as itself publishes the agent it acts as, so a
   // write can credit the agent rather than the ref parked in `sub`.
   if (payload.agt) c.set('agentActorRef', payload.agt);
-  if (payload.src === 'vscode') c.set('clientSurface', 'vscode');
+  if (isDeviceClient(payload.src)) c.set('clientSurface', payload.src);
   updateRequestScope({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 

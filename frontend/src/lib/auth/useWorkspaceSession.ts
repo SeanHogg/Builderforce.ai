@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { autoSelectTenant, rememberWorkspaceChoice } from '@/lib/auth/credentials';
 import type { Tenant } from '@/lib/types';
 
-export type StudioWorkspaceState =
+export type WorkspaceSessionState =
   | { status: 'signedOut' }
   | { status: 'loading' }
   | { status: 'ready' }
@@ -15,14 +15,15 @@ export type StudioWorkspaceState =
   | { status: 'failed' };
 
 /**
- * Studio projects live in a workspace, so a session is not enough on its own: a
+ * A session WITH a workspace — what Studio and Spawn both need before they can do
+ * anything, since projects, purchases and builds all belong to a workspace. A
  * visitor who signed in with a password (no workspace chosen yet) is put in their
  * only workspace (or their default) automatically, and asked only when they have
  * several and no default. That first pick becomes the default, so it is asked once.
  */
-export function useStudioWorkspace(): StudioWorkspaceState & { choose: (tenant: Tenant) => Promise<void> } {
+export function useWorkspaceSession(): WorkspaceSessionState & { choose: (tenant: Tenant) => Promise<void> } {
   const { authReady, isAuthenticated, hasTenant, webToken, fetchTenants, selectTenant } = useAuth();
-  const [state, setState] = useState<StudioWorkspaceState>({ status: 'loading' });
+  const [state, setState] = useState<WorkspaceSessionState>({ status: 'loading' });
 
   useEffect(() => {
     if (!authReady) return undefined;

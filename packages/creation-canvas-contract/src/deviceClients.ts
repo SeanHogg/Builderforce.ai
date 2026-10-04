@@ -7,6 +7,7 @@
 export const DEVICE_CLIENTS = {
   vscode: 'VS Code',
   synapse: 'Synapse',
+  spawn: 'Spawn',
 } as const;
 
 export type DeviceClient = keyof typeof DEVICE_CLIENTS;

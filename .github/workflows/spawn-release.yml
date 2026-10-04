@@ -1,0 +1,130 @@
+# Spawn — builds the Spawn desktop installers (the Roblox game builder) and publishes
+# them as a GitHub release. Release-only, like Synapse's: it runs on a `spawn-v*` tag or by
+# hand, never on every push.
+#
+# Windows and macOS only: Roblox Studio runs nowhere else, and Spawn is useless without it.
+#
+# Signing follows desktop-release.yml exactly: the jobs sign when the secrets exist and
+# ship unsigned when they do not, so a release never fails for a missing certificate.
+#   macOS  — APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (Developer ID + notarization)
+#   Windows — WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD
+name: Spawn Release
+
+on:
+  push:
+    tags: ['spawn-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create (spawn-vYYYY.M.D) — defaults to spawn-v<workspace version>'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spawn-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      # The bridge and the account carry Spawn's logic; the app crate is exercised by the build below.
+      - run: cargo test -p bf-roblox -p bf-cloud
+
+  tag:
+    runs-on: ubuntu-22.04
+    needs: test
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+      version: ${{ steps.t.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: t
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '^version' desktop/Cargo.toml | sed -E 's/.*"(.*)"/\1/')
+          if [[ "${GITHUB_REF}" == refs/tags/spawn-v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="spawn-v${version}"
+          fi
+          if [[ "${tag#spawn-v}" != "${version}" ]]; then
+            echo "::error::tag ${tag} does not match desktop/Cargo.toml version ${version}"
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  app:
+    needs: tag
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ''
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+    runs-on: ${{ matrix.os }}
+    env:
+      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+          key: spawn-${{ matrix.target }}
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force)
+          $conf = 'desktop/spawn/src-tauri/tauri.conf.json'
+          $json = Get-Content $conf -Raw | ConvertFrom-Json
+          $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } -Force
+          $json | ConvertTo-Json -Depth 20 | Set-Content $conf
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: desktop/spawn
+          tagName: ${{ needs.tag.outputs.tag }}
+          releaseName: 'Spawn ${{ needs.tag.outputs.version }}'
+          releaseBody: 'Spawn builds Roblox games from what you describe, right inside Roblox Studio. Download the installer for your computer below, sign in with your Spawn account (spawn.builderforce.ai), and open Studio. Spawn installs its Studio plugin by itself. For creators 13 and up.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

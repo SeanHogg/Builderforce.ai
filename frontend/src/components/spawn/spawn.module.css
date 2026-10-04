@@ -1,0 +1,287 @@
+/*
+ * Spawn's look: bright and game-like, built only from the platform's themed
+ * tokens (`--purple-bright`, `--pink-bright`, `--cyan-bright` are redefined for
+ * light mode in globals.css), so every surface reads in both themes.
+ */
+.root {
+  --spawn-a: var(--purple-bright, #8b5cf6);
+  --spawn-b: var(--pink-bright, #ec4899);
+  --spawn-c: var(--cyan-bright, #00e5cc);
+  --spawn-glow: color-mix(in srgb, var(--spawn-a) 22%, transparent);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, color-mix(in srgb, var(--spawn-a) 18%, transparent), transparent 60%),
+    radial-gradient(900px 400px at 100% 0%, color-mix(in srgb, var(--spawn-c) 12%, transparent), transparent 60%),
+    var(--bg-deep);
+  color: var(--text-primary);
+  overflow-x: hidden;
+}
+
+/* ── Bar ─────────────────────────────────────────────────────────────── */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px clamp(16px, 4vw, 32px);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-deep) 85%, transparent);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+.brandMark {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--spawn-a), var(--spawn-b));
+  color: var(--text-on-accent, #fff);
+  font-size: 1.1rem;
+  box-shadow: 0 6px 20px var(--spawn-glow);
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 4px 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.navLink {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--font-size-small);
+  padding: 8px 4px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+.navLink:hover { color: var(--text-primary); }
+
+/* ── Layout ──────────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 0 16px 64px;
+  display: grid;
+  gap: clamp(48px, 8vw, 96px);
+}
+.section { display: grid; gap: 20px; scroll-margin-top: 80px; }
+.sectionHead { display: grid; gap: 8px; max-width: 720px; }
+.eyebrow {
+  margin: 0;
+  color: var(--spawn-a);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--font-size-eyebrow);
+}
+.h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.6rem, 4vw, 2.4rem); line-height: 1.1; }
+.lede { margin: 0; color: var(--text-secondary); font-size: clamp(1rem, 2vw, 1.15rem); line-height: 1.55; }
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: clamp(24px, 5vw, 56px);
+  align-items: center;
+  padding-top: clamp(32px, 8vh, 88px);
+}
+.heroTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 7vw, 4.4rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.heroAccent {
+  background: linear-gradient(90deg, var(--spawn-a), var(--spawn-b), var(--spawn-c));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.ctaRow { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-weight: 800;
+  text-decoration: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 1rem;
+  background: linear-gradient(135deg, var(--spawn-a), var(--spawn-b));
+  color: var(--text-on-accent, #fff);
+  box-shadow: 0 10px 30px var(--spawn-glow);
+}
+.cta:disabled { opacity: 0.6; cursor: progress; }
+.ctaGhost {
+  composes: cta;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  box-shadow: none;
+}
+.fine { margin: 0; color: var(--text-muted); font-size: var(--font-size-small); }
+
+/* The hero's "app window" picture: a chat beside a Studio viewport. */
+.window {
+  border-radius: 18px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card, var(--bg-elevated));
+  box-shadow: 0 30px 80px var(--spawn-glow);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  min-height: 300px;
+}
+.windowChat { padding: 16px; display: grid; gap: 10px; align-content: start; border-right: 1px solid var(--border-subtle); }
+.bubble {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+  background: var(--bg-elevated, var(--surface-card));
+  color: var(--text-primary);
+}
+.bubbleMe { composes: bubble; background: color-mix(in srgb, var(--spawn-a) 22%, var(--bg-elevated, transparent)); justify-self: end; }
+.windowScene {
+  position: relative;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--spawn-c) 20%, transparent), color-mix(in srgb, var(--spawn-a) 10%, transparent));
+}
+.block {
+  position: absolute;
+  border-radius: 4px;
+  box-shadow: inset 0 -6px 0 color-mix(in srgb, var(--bg-deep) 35%, transparent);
+}
+@media (max-width: 560px) {
+  .window { grid-template-columns: 1fr; }
+  .windowChat { border-right: 0; border-bottom: 1px solid var(--border-subtle); }
+  .windowScene { min-height: 180px; }
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+}
+.card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card, var(--bg-elevated));
+}
+.cardIcon { font-size: 1.6rem; line-height: 1; }
+.cardTitle { margin: 0; font-size: 1.05rem; font-weight: 800; }
+.cardBody { margin: 0; color: var(--text-secondary); line-height: 1.5; font-size: var(--font-size-small); }
+.step { composes: card; position: relative; padding-top: 44px; }
+.stepNumber {
+  position: absolute;
+  top: 14px;
+  left: 20px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 0.8rem;
+  background: linear-gradient(135deg, var(--spawn-a), var(--spawn-b));
+  color: var(--text-on-accent, #fff);
+}
+
+/* ── Compare table ───────────────────────────────────────────────────── */
+.tableWrap { overflow-x: auto; border-radius: 16px; border: 1px solid var(--border-subtle); }
+.table { width: 100%; border-collapse: collapse; min-width: 520px; background: var(--surface-card, var(--bg-elevated)); }
+.table th, .table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-small); }
+.table th { color: var(--text-secondary); font-weight: 700; }
+.table tr:last-child td { border-bottom: 0; }
+.yes { color: var(--success-text, var(--success)); font-weight: 800; }
+.no { color: var(--text-muted); }
+
+/* ── Pricing ─────────────────────────────────────────────────────────── */
+.plan {
+  composes: card;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--surface-card, var(--bg-elevated)), var(--surface-card, var(--bg-elevated))) padding-box,
+    linear-gradient(135deg, var(--spawn-a), var(--spawn-b)) border-box;
+}
+.price { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; }
+.priceUnit { font-size: 1rem; color: var(--text-secondary); font-weight: 600; }
+.pack { composes: card; text-align: center; justify-items: center; }
+.packPrice { margin: 0; font-size: 1.6rem; font-weight: 900; font-family: var(--font-display); }
+.packTokens { margin: 0; font-weight: 700; color: var(--spawn-a); }
+.packButton { composes: cta; width: 100%; min-height: 44px; font-size: 0.95rem; }
+
+/* ── FAQ ─────────────────────────────────────────────────────────────── */
+.faq { display: grid; gap: 10px; }
+.faqItem {
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card, var(--bg-elevated));
+  padding: 4px 16px;
+}
+.faqItem summary { cursor: pointer; font-weight: 700; padding: 12px 0; min-height: 44px; }
+.faqItem p { margin: 0 0 14px; color: var(--text-secondary); line-height: 1.55; }
+
+/* ── Account ─────────────────────────────────────────────────────────── */
+.account { width: min(760px, 100%); margin: 0 auto; padding: clamp(24px, 6vh, 56px) 16px 64px; display: grid; gap: 20px; }
+.panel { composes: card; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.balance { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 6vw, 2.8rem); font-weight: 900; }
+.select {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated, var(--surface-card));
+  color: var(--text-primary);
+  font: inherit;
+}
+.status { padding: 4px 10px; border-radius: 999px; font-weight: 800; font-size: var(--font-size-eyebrow); }
+.statusOk { composes: status; background: var(--success-bg); color: var(--success-text, var(--success)); }
+.statusWarn { composes: status; background: var(--warning-bg); color: var(--warning-text, var(--warning)); }
+.notice { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--info-bg); color: var(--text-primary); }
+.error { margin: 0; color: var(--error-text); }
+.activity { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.activity li { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; font-size: var(--font-size-small); color: var(--text-secondary); }
+.plus { color: var(--success-text, var(--success)); font-weight: 700; }
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+.footer {
+  border-top: 1px solid var(--border-subtle);
+  padding: 24px clamp(16px, 4vw, 32px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+.footer a { color: var(--text-secondary); }

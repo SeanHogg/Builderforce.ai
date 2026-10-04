@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/bf-index", "crates/bf-context", "crates/bf-memory", "crates/bf-teach", "crates/bf-vault", "crates/bf-cloud", "app/src-tauri"]
+members = ["crates/bf-index", "crates/bf-context", "crates/bf-memory", "crates/bf-teach", "crates/bf-vault", "crates/bf-cloud", "crates/bf-roblox", "app/src-tauri", "spawn/src-tauri"]
 
 [workspace.package]
 version = "2026.9.31"

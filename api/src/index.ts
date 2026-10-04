@@ -254,6 +254,7 @@ import { createDashboardRoutes }       from './presentation/routes/dashboardRout
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
 import { createPointsRoutes }          from './presentation/routes/pointsRoutes';
 import { createPhoneRoutes }           from './presentation/routes/phoneRoutes';
+import { createSpawnRoutes }           from './presentation/routes/spawnRoutes';
 import { createSourcingRoutes }        from './presentation/routes/sourcingRoutes';
 import { createReviewRoutes }          from './presentation/routes/reviewRoutes';
 import { createEvalRoutes }            from './presentation/routes/evalRoutes';
@@ -1127,6 +1128,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/consumption',     createConsumptionRoutes(db));
   app.route('/api/points',          createPointsRoutes(db));
   app.route('/api/phone',           createPhoneRoutes(db));
+  app.route('/api/spawn',           createSpawnRoutes(db));            // Spawn — the Roblox game builder
   app.route('/api/sourcing',        createSourcingRoutes(db));
   app.route('/api/employers',       createReviewRoutes(db));
   app.route('/api/eval',            createEvalRoutes(db));

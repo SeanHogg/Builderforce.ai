@@ -95,7 +95,7 @@ export class DeviceAuthService {
   async mintEditorKey(opts: {
     userId: string;
     tenantId?: number;
-    /** The device client that asked (`vscode`, `synapse`); names the key after the app. */
+    /** The device client that asked (`vscode`, `synapse`, `spawn`); names the key after the app and is kept on it. */
     client?: string | null;
   }): Promise<{ ok: true; key: string; tenantId: number } | { ok: false; error: string }> {
     const tenantId = await this.resolveTenant(opts.userId, opts.tenantId);
@@ -104,6 +104,7 @@ export class DeviceAuthService {
       tenantId,
       name: deviceClientName(opts.client),
       createdByUserId: opts.userId,
+      client: isDeviceClient(opts.client) ? opts.client : 'vscode',
     });
     return { ok: true, key: minted.key, tenantId };
   }

@@ -185,6 +185,12 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'pricing', seat: 'CFO', icon: '💳', marketingHref: '/pricing', appHref: '/pricing', kind: 'link', placement: 'bar', panel: false },
   { id: 'about', seat: 'CEO', icon: '🏛', marketingHref: '/about', appHref: '/about', kind: 'link', placement: 'bar', panel: false },
   // ── Footer only ──────────────────────────────────────────────────────────
+  // Spawn (`spawn.builderforce.ai`, served at `/spawn` — `lib/productHosts.ts`):
+  // the Roblox game builder for players 13+. A product of its own with its own
+  // chrome and audience, so it is reached from the footer's Product column rather
+  // than the builder-facing bar; `marketingHref` is the path for the reason
+  // Studio's row gives.
+  { id: 'spawn', seat: 'CTO', icon: '🎮', marketingHref: '/spawn', appHref: '/spawn', kind: 'link', placement: 'account', panel: false },
   { id: 'demo', seat: 'CRO', icon: '▶', marketingHref: '/demo', appHref: '/create', kind: 'link', placement: 'account', panel: false },
   { id: 'sell', seat: 'CRO', icon: '🤝', marketingHref: '/sell-builderforce', appHref: '/sales', kind: 'link', placement: 'account', panel: false },
   { id: 'media', seat: 'CMO', icon: '🗂', marketingHref: '/media', appHref: '/media', kind: 'link', placement: 'account', panel: false },
@@ -342,7 +348,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   // `compare` sits under Product, not Learn: "how does this compare to what I
   // already use" is a question asked while choosing the product, alongside
   // Pricing — not an article you go and read afterwards.
-  { titleKey: 'colProduct', ids: ['canvas', 'studio', 'marketplace', 'features', 'pricing', 'compare', 'about'] },
+  { titleKey: 'colProduct', ids: ['canvas', 'studio', 'spawn', 'marketplace', 'features', 'pricing', 'compare', 'about'] },
   { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'embedded', 'models', 'prompts'] },
   { titleKey: 'colLearn', ids: ['method', 'blog', 'tutorials', 'diagnostics', 'soc2', 'media'] },
   { titleKey: 'colGetStarted', ids: ['demo', 'sell', 'signIn'] },

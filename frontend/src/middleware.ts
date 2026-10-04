@@ -4,7 +4,8 @@ import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
 import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/config';
 import { isUnknownRootSlug, NOT_FOUND_REWRITE_PATH } from '@/lib/rootRoutes';
 import { isCanvasInvitationRoute } from '@/lib/shellRouting';
-import { canvasAppPath, isStudioHost, studioHostRedirect, STUDIO_ROUTE } from '@/lib/studio/studioHost';
+import { canvasAppPath, STUDIO_ROUTE } from '@/lib/studio/studioHost';
+import { productHostRedirect } from '@/lib/productHosts';
 
 /**
  * Route protection rules:
@@ -101,15 +102,13 @@ function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextRespon
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // The Studio app (`studio.builderforce.ai`) lives under `/studio`; its host's
-  // root goes there (see `lib/studio/studioHost.ts` for why a redirect, not a rewrite).
-  if (isStudioHost(request.nextUrl.hostname)) {
-    const target = studioHostRedirect(pathname);
-    if (target) {
-      const url = request.nextUrl.clone();
-      url.pathname = target;
-      return NextResponse.redirect(url);
-    }
+  // A product host (`studio.`, `spawn.`) sends its root to the product's route
+  // (see `lib/productHosts.ts` for why a redirect, not a rewrite).
+  const productTarget = productHostRedirect(request.nextUrl.hostname, pathname);
+  if (productTarget) {
+    const url = request.nextUrl.clone();
+    url.pathname = productTarget;
+    return NextResponse.redirect(url);
   }
 
   // HARD 404 for unknown root-level slugs. `app/[burnrateDomain]/page.tsx` is a
@@ -230,8 +229,8 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // The Studio host's root (redirected above), and the Studio route itself for
-    // its IDE page's isolation headers.
+    // Every product host's root (redirected above — `lib/productHosts.ts`), and the
+    // Studio route itself for its IDE page's isolation headers.
     '/',
     '/studio/:path*',
     // Single root-level segment: the surface `[burnrateDomain]` catches, and the

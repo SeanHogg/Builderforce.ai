@@ -1,0 +1,21 @@
+[package]
+name = "spawn"
+description = "Spawn — build Roblox games by talking: a desktop builder that connects to Roblox Studio by itself"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+bf-cloud = { path = "../../crates/bf-cloud" }
+bf-roblox = { path = "../../crates/bf-roblox" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dirs.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"

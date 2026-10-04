@@ -90,6 +90,8 @@ export const RESERVED_SUBDOMAINS: ReadonlySet<string> = new Set([
   'status', 'health', 'dashboard', 'portal', 'auth', 'login', 'account', 'billing',
   'support', 'help', 'blog', 'dev', 'staging', 'test', 'preview', 'internal',
   'builderforce', 'gateway', 'llm', 'brain', 'ide', 'studio', 'workforce',
+  // Spawn, the Roblox game builder — a zone route on the frontend Worker.
+  'spawn',
   // `worker.builderforce.ai` is the builderforce-worker Custom Domain. It was
   // NOT reserved, so a user could claim `worker` as a published-site subdomain
   // and shadow a platform hostname — the wildcard route delivers that Host here,

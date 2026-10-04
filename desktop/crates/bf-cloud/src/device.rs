@@ -2,7 +2,7 @@
 //! extension uses. `start` asks for a code pair; the person approves the code on
 //! `/activate` (which names this app); `poll` hands the minted key over exactly once.
 
-use crate::{gateway_base, CloudError, CLIENT, TIMEOUT};
+use crate::{gateway_base, AppIdentity, CloudError, TIMEOUT};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -35,10 +35,10 @@ pub enum DevicePoll {
     Expired,
 }
 
-pub fn start() -> Result<DeviceStart, CloudError> {
+pub fn start(app: &AppIdentity) -> Result<DeviceStart, CloudError> {
     ureq::post(&format!("{}/api/auth/device/code", gateway_base()))
         .timeout(TIMEOUT)
-        .send_json(json!({ "client": CLIENT }))
+        .send_json(json!({ "client": app.client }))
         .map_err(CloudError::from_ureq)?
         .into_json()
         .map_err(|e| CloudError::Unreachable(e.to_string()))
