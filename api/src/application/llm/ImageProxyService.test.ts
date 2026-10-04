@@ -7,7 +7,7 @@ import {
   type ImageProxyEnv,
 } from './ImageProxyService';
 import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
-import { FREE_IMAGE_MODEL_POOL, _resetImageCursor } from './ImageProxyService';
+import { FREE_IMAGE_ATTEMPT_BUDGET, FREE_IMAGE_MODEL_POOL, _resetImageCursor } from './ImageProxyService';
 import type { VendorId } from './vendors';
 
 // The image cascade now consults/writes the shared cooldown store [1438]; with
@@ -90,10 +90,10 @@ describe('plan → image product/pool wiring', () => {
     // would force an ambiguous catalog lookup that breaks the moment two vendors
     // register the same model id.
     for (const m of imageModelPoolForPlan('free')) {
-      expect(m).toMatch(/^(together|fluxapi)\//);
+      expect(m).toMatch(/^(cloudflare|together|huggingface|pollinations|googleai|fluxapi)\//);
     }
     for (const m of imageModelPoolForPlan('pro')) {
-      expect(m).toMatch(/^(together|fluxapi)\//);
+      expect(m).toMatch(/^(cloudflare|together|huggingface|pollinations|googleai|fluxapi)\//);
     }
   });
 });
@@ -219,13 +219,14 @@ describe('ImageProxyService.generate — cascade', () => {
 
 describe('ImageProxyService — FREE cap enforcement', () => {
   beforeEach(() => {
-    // Sanity check that the proxy's free pool has > 2 entries so the cap
-    // actually matters. Today Together ships two free models — if a future
-    // change adds more, this test continues to exercise the cap.
-    expect(imageModelPoolForPlan('free').length).toBeGreaterThanOrEqual(2);
+    // Sanity check that the proxy's free pool is larger than the budget so the
+    // cap actually matters (four free vendors ship several models each).
+    expect(imageModelPoolForPlan('free').length).toBeGreaterThan(FREE_IMAGE_ATTEMPT_BUDGET);
   });
 
-  it('attempts at most FREE_IMAGE_ATTEMPT_BUDGET (2) Together calls before falling through', async () => {
+  it('attempts every bound free model up to FREE_IMAGE_ATTEMPT_BUDGET before falling through', async () => {
+    // Only Together is bound here, and it ships two free models — both are
+    // tried (2 < budget 3), then the premium fallback.
     let togetherCalls = 0;
     let fluxCalls = 0;
     installFetchRouter({
@@ -295,5 +296,41 @@ describe('ImageProxyService — paid-overflow classification & cap', () => {
     const proxy = imageProxyForPlan(env, 'free', false, { disablePaidOverflow: true });
     await proxy.generate({ prompt: 'a duck' });
     expect(fluxCalls).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Free-vendor interleaving — one vendor's outage never eats the free budget
+// ---------------------------------------------------------------------------
+
+describe('ImageProxyService — free vendors interleaved', () => {
+  const CLOUDFLARE_FLUX = 'https://api.cloudflare.com/client/v4/accounts/acct/ai/run/@cf/black-forest-labs/flux-1-schnell';
+
+  it('the FREE pool leads with one model per vendor before any vendor repeats', () => {
+    const vendors = FREE_IMAGE_MODEL_POOL.slice(0, 4).map((m) => m.split('/')[0]);
+    expect(new Set(vendors).size).toBe(4);
+  });
+
+  it('a Cloudflare outage falls to Together on the very next attempt, not Cloudflare again', async () => {
+    const order: string[] = [];
+    installFetchRouter({
+      [CLOUDFLARE_FLUX]: () => { order.push('cloudflare'); return new Response('{"errors":[]}', { status: 503 }); },
+      [TOGETHER_ENDPOINT]: () => { order.push('together'); return new Response(JSON.stringify({ created: 1, data: [{ url: 'https://together/img.png' }] }), { status: 200 }); },
+    });
+    const proxy = new ImageProxyService({ ...env, CLOUDFLARE_AI_API_TOKEN: 'cf', CLOUDFLARE_ACCOUNT_ID: 'acct' });
+    const result = await proxy.generate({ prompt: 'a duck' });
+    expect(order).toEqual(['cloudflare', 'together']);
+    expect(result.resolvedVendor).toBe('together');
+  });
+
+  it('normalises Cloudflare JSON base64 into a data: URL with the real mime type', async () => {
+    installFetchRouter({
+      [CLOUDFLARE_FLUX]: () => new Response(JSON.stringify({ success: true, result: { image: 'QUJD' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    });
+    const proxy = new ImageProxyService({ CLOUDFLARE_AI_API_TOKEN: 'cf', CLOUDFLARE_ACCOUNT_ID: 'acct' });
+    const result = await proxy.generate({ prompt: 'a duck', response_format: 'url' });
+    expect(result.resolvedVendor).toBe('cloudflare');
+    expect(result.body.data).toEqual([{ url: 'data:image/jpeg;base64,QUJD' }]);
+    expect(result.paidOverflow).toBe(false);
   });
 });

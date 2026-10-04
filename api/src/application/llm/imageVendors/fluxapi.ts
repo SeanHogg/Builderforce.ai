@@ -26,6 +26,7 @@ import {
   executeImageGeneration,
   fetchWithVendorTimeout,
   imageVendorTimeoutMs,
+  sizeToAspectRatio,
   type ImageGenParams,
   type ImageGenResult,
   type ImageModelTier,
@@ -47,34 +48,11 @@ function tierForFluxApiModel(modelId: string): ImageModelTier {
   return CATALOG_BY_ID.get(modelId)?.tier ?? 'PREMIUM';
 }
 
-/**
- * Convert an OpenAI-style "WxH" size into FluxAPI's `aspectRatio` ratio string.
- * FluxAPI accepts "16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21".
- *
- * Maps "1024x1024" → "1:1", "1792x1024" → "16:9" (approx). Unknown ratios
- * fall back to "1:1" so the request still succeeds.
- */
-export function sizeToAspectRatio(size?: string): string {
-  if (!size) return '1:1';
-  const m = /^(\d+)x(\d+)$/.exec(size.trim());
-  if (!m) return '1:1';
-  const w = Number(m[1]);
-  const h = Number(m[2]);
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w === 0 || h === 0) return '1:1';
-  const r = w / h;
-  if (r >= 2.2)  return '21:9';
-  if (r >= 1.6)  return '16:9';
-  if (r >= 1.25) return '4:3';
-  if (r >= 0.85) return '1:1';
-  if (r >= 0.65) return '3:4';
-  if (r >= 0.45) return '9:16';
-  return '9:21';
-}
-
 function buildBody(params: ImageGenParams): Record<string, unknown> {
   return {
     model: params.model,
     prompt: params.prompt,
+    // FluxAPI accepts exactly the shared ladder ("21:9" … "9:21").
     aspectRatio: sizeToAspectRatio(params.size),
     outputFormat: 'jpeg',
     enableTranslation: true,

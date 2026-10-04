@@ -9,17 +9,14 @@ import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
 import { STUDIO_ROUTE } from '@/lib/studio/studioHost';
 
 /**
- * Studio's one bar: the mark (home), whatever the page puts on the right
- * (`children`, e.g. a project's actions), and the account control, which owns
- * its own signed-in / signed-out decision.
+ * Studio's bar for pages that are not a project: the mark (home), whatever the
+ * page puts on the right (`children`), and the account control.
  *
- * It does NOT name the project. It used to take a `title`, which put the name
- * in the bar while the workspace directly below was already showing it in its
- * rename field and again in its description — one string, three places, two
- * rows apart. Naming the thing you are looking at is the workspace's job.
+ * An OPEN project does not render this bar at all: it hands {@link StudioBrand}
+ * and its actions to the workspace header, so there is one row of actions, not
+ * a Studio row stacked on a workspace row.
  */
 export function StudioTopBar({ children }: { children?: ReactNode }) {
-  const t = useTranslations('studio.topBar');
   return (
     <header
       style={{
@@ -32,23 +29,37 @@ export function StudioTopBar({ children }: { children?: ReactNode }) {
         background: 'var(--bg-deep)',
       }}
     >
-      {/* The mark is not optional and `Studio` is not the accent colour: both
-          halves of the wordmark are `--text-primary`, so it reads white on the
-          dark bar and dark on a light one. */}
-      <BrandLockup href={STUDIO_ROUTE} label={t('home')} size={26}>
-        <span style={{ color: 'var(--text-primary)', fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
-          Builderforce Studio
-        </span>
-      </BrandLockup>
+      <StudioBrand />
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {children}
-        <AccountControl />
+        <StudioAccountControl />
       </div>
     </header>
   );
 }
 
-function AccountControl() {
+/**
+ * The Studio mark, linking home. `compact` drops the wordmark — inside the
+ * workspace header the project's name is the title, and the mark alone says
+ * where you are.
+ */
+export function StudioBrand({ compact = false }: { compact?: boolean }) {
+  const t = useTranslations('studio.topBar');
+  // Both halves of the wordmark are `--text-primary`, so it reads on a dark
+  // bar and a light one; `Studio` is never the accent colour.
+  return (
+    <BrandLockup href={STUDIO_ROUTE} label={t('home')} size={compact ? 24 : 26}>
+      {!compact && (
+        <span style={{ color: 'var(--text-primary)', fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
+          Builderforce Studio
+        </span>
+      )}
+    </BrandLockup>
+  );
+}
+
+/** Signed out: sign in / get started. Signed in: the avatar and sign out. */
+export function StudioAccountControl() {
   const t = useTranslations('studio.topBar');
   const { authReady, isAuthenticated, user, logout } = useAuth();
   const { requestSignIn } = useSignInDialog();
@@ -69,7 +80,7 @@ function AccountControl() {
       <span
         aria-hidden
         title={user?.email ?? undefined}
-        style={{ width: 32, height: 32, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', fontWeight: 700 }}
+        style={{ width: 32, height: 32, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', fontWeight: 700 }}
       >
         {initial}
       </span>

@@ -1376,13 +1376,12 @@
     "openProjectsAria": "Open projects",
     "editNameHint": "Edit project name (saves on blur or Enter)",
     "projectDetailsTitle": "Builder project details",
-    "projectSettingsAria": "Project settings",
     "settingsRepoTitle": "Settings & repository",
-    "blockOnFailHint": "When on, Run is blocked while the last checks are failing",
+    "blockOnFailHint": "When on, the preview won't start while the last checks are failing",
     "runChecksHint": "Run type-check, lint and build in the browser to validate the code",
     "checksFailed": "{count, plural, one {# check failed} other {# checks failed}}",
     "checksPassed": "{count, plural, one {# check passed} other {# checks passed}}",
-    "gateRun": "Gate Run",
+    "gateRun": "Block preview on failed checks",
     "checking": "Checking…",
     "check": "Check",
     "detailedConfigHint": "Memory, model, inference, personality and voice for this project are configured in the Builder's panels. This is where you rename it and set its parent Project.",
@@ -1490,8 +1489,6 @@
     "askAi": "Ask AI",
     "previewWeb": "Web",
     "previewMobile": "Mobile",
-    "previewEmpty": "Run your project to see a preview",
-    "previewOpen": "Open",
     "previewTitle": "Preview",
     "visualEdit": "Point & edit",
     "visualEditHint": "Click any element in the preview to change its text or styling without asking the agent.",
@@ -1525,11 +1522,6 @@
       }
     },
     "centerDatabase": "Database",
-    "runtimeStatus": {
-      "booting": "⏳ Starting…",
-      "ready": "✅ Ready",
-      "error": "⚠️ Runtime error"
-    },
     "brainContext": {
       "codingAgent": "Coding agent",
       "voiceDirector": "Voice director",
@@ -1537,6 +1529,43 @@
       "voice": "Voice",
       "wholeProject": "whole project",
       "noVoice": "none selected"
+    },
+    "workspace": {
+      "more": "More",
+      "panels": "Panels",
+      "viewSwitch": "Workspace view",
+      "chat": "Chat",
+      "restart": "Restart preview",
+      "previewSize": "Preview size",
+      "size": {
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "phone": "Phone"
+      },
+      "openInTab": "Open in a new tab",
+      "statusLive": "Live",
+      "statusStarting": "Starting…",
+      "statusStopped": "Stopped",
+      "statusIdle": "Not running",
+      "startingTitle": "Starting your preview…",
+      "startingHint": "This happens by itself when you open the project and whenever its files change.",
+      "step": {
+        "preparing": "Preparing files",
+        "installing": "Installing packages",
+        "starting": "Starting the dev server"
+      },
+      "failedTitle": "The preview stopped",
+      "failedHint": "The last change broke the build. The terminal shows why, and Brain can see the error too — ask it in the chat to fix it.",
+      "blockedTitle": "Preview paused by failing checks",
+      "blockedHint": "Fix the failing checks, or turn off “Block preview on failed checks” in the bar below.",
+      "tryAgain": "Try again",
+      "showTerminal": "Show terminal",
+      "emptyTitle": "Your app will appear here",
+      "emptyHint": "Describe what you want in the chat. The preview starts as soon as there's something to show.",
+      "closePanel": "Close panel",
+      "collabConnected": "Collaborators connected",
+      "voiceNeedsClone": "Create or select a voice first",
+      "generating": "Generating…"
     }
   },
   "references": {
@@ -32174,7 +32203,6 @@
       "loadFailed": "Couldn't load your workspaces."
     },
     "project": {
-      "github": "GitHub",
       "share": "Share",
       "linkCopied": "Link copied",
       "publish": "Publish",

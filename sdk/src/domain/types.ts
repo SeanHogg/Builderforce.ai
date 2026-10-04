@@ -491,14 +491,16 @@ export interface EmbeddingsResponse {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Image generation (`POST /v1/images/generations`) — OpenAI-compatible shape.
-// Cascades free Together vendors → premium FluxAPI fallback so callers always
-// see a successful response unless every upstream is saturated.
+// Cascades the free vendors (Cloudflare Workers AI, Together, Hugging Face,
+// Pollinations — interleaved) → paid Gemini / FluxAPI → premium FluxAPI fallback,
+// so callers always see a successful response unless every upstream is saturated.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ImageGenerationCreateParams extends PerCallOptions {
   /**
    * Model hint — gateway-owned routing. Bare ids resolve via catalog lookup;
-   * vendor-prefixed ids (`together/<id>`, `fluxapi/flux-kontext-pro`) pin to a
+   * vendor-prefixed ids (`cloudflare/@cf/black-forest-labs/flux-1-schnell`,
+   * `together/<id>`, `googleai/gemini-2.5-flash-image`, `fluxapi/flux-kontext-pro`) pin to a
    * specific vendor. When unset, the gateway picks from the tenant-plan image
    * pool starting with the free tier.
    */
@@ -506,13 +508,15 @@ export interface ImageGenerationCreateParams extends PerCallOptions {
   /** Required text prompt. */
   prompt: string;
   /** OpenAI-compatible size string: "1024x1024", "1792x1024", "1024x1792", etc.
-   *  Mapped to each vendor's native dimension format (FluxAPI receives an
-   *  `aspectRatio`; Together receives `width`/`height`). */
+   *  Mapped to each vendor's native dimension format (FluxAPI and Gemini receive
+   *  an aspect ratio; the others receive `width`/`height`). */
   size?: string;
   /** Number of images to generate (default 1). Vendors that don't support
    *  batching silently clamp to 1 — read `data.length` to confirm. */
   n?: number;
-  /** "url" (default) returns hosted URLs; "b64_json" returns base64-encoded image bytes. */
+  /** "url" (default) returns hosted URLs — images a vendor returns as bytes are
+   *  stored in the tenant's asset store and served from `/api/assets/…`;
+   *  "b64_json" returns base64-encoded image bytes. */
   response_format?: 'url' | 'b64_json';
   /** Opaque telemetry slug — same semantics as chat. Persisted to `llm_usage_log.use_case`. */
   useCase?: string;
@@ -541,7 +545,8 @@ export interface ImageGenerationResponse {
     traceId?: string;
     /** The model the gateway dispatched against. */
     resolvedModel?: string;
-    /** Vendor that owns the resolved model — `'together' | 'fluxapi'`. */
+    /** Vendor that owns the resolved model — `'cloudflare' | 'together' |
+     *  'huggingface' | 'pollinations' | 'googleai' | 'fluxapi'`. */
     resolvedVendor?: string;
     /** How many vendor retries happened before the resolved vendor succeeded. */
     retries?: number;

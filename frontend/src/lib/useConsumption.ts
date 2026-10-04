@@ -49,8 +49,8 @@ export function invalidateConsumption(): void {
 }
 
 export function useConsumption(): ConsumptionSnapshot | null {
-  // Non-throwing auth read: the plan chip now rides in the composer, which also
-  // renders in isolated trees (tests, the marketing hero) that have no
+  // Non-throwing auth read: the plan chip rides in composers and the workspace
+  // header, which also render in isolated trees (tests, the marketing hero) with no
   // AuthProvider above them. No provider ⇒ no tenant ⇒ no snapshot, not a crash.
   const hasTenant = useOptionalAuth()?.hasTenant ?? false;
   const [snapshot, setSnapshot] = useState<ConsumptionSnapshot | null>(

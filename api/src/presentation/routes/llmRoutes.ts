@@ -59,14 +59,17 @@ import {
 import { VendorFatalError } from '../../application/llm/vendors/types';
 import { getCatalogCached } from '../../application/llm/modelCatalog';
 import {
+  anyImageVendorBound,
   imageProxyForPlan,
   imageProductNameForPlan,
+  NO_IMAGE_VENDOR_MESSAGE,
   FREE_IMAGE_MODEL_POOL,
   PAID_IMAGE_MODEL_POOL,
   IMAGE_TOKEN_COST,
   IMAGE_PRODUCT_NAMES,
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
+import { persistGeneratedImages } from '../../application/llm/persistGeneratedImages';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
 import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
@@ -3310,7 +3313,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
   // -----------------------------------------------------------------------
   // POST /v1/images/generations — OpenAI-compatible image generation.
-  // Cascades free Together → premium FluxAPI fallback.
+  // Cascades the free vendors (Cloudflare / Together / Hugging Face / Pollinations,
+  // interleaved) → paid Gemini / FluxAPI → premium FluxAPI fallback.
   // -----------------------------------------------------------------------
   router.post('/v1/images/generations', async (c) => {
     let access: TenantAccess;
@@ -3330,11 +3334,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const body: ImageGenerationRequest = parsed;
 
-    // Validate that at least one image vendor key is bound before dispatching.
-    if (!c.env.TOGETHER_API_KEY && !c.env.FLUX_API_KEY) {
-      return c.json({
-        error: 'Image generation not configured (missing TOGETHER_API_KEY and FLUX_API_KEY)',
-      }, 503);
+    // Validate that at least one image vendor key is bound before dispatching —
+    // derived from the vendor registry so it never lags a newly added vendor.
+    if (!anyImageVendorBound(c.env)) {
+      return c.json({ error: NO_IMAGE_VENDOR_MESSAGE }, 503);
     }
 
     // Independent image-credit budget (migration 0131) — gate BEFORE dispatch so
@@ -3434,9 +3437,18 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }, 429);
     }
 
+    // Byte-producing vendors come back as `data:` URLs; store them once in the
+    // tenant asset pipeline so the caller gets a compact, durable link.
+    const data = await persistGeneratedImages({
+      bucket: c.env.UPLOADS,
+      entries: result.body.data,
+      actor: { tenantId: access.tenantId, userId: access.userId ?? `agent-host-${access.agentHostId ?? 'gateway'}` },
+      publicOrigin: new URL(c.req.url).origin,
+    });
+
     return c.json({
       created: result.body.created,
-      data: result.body.data,
+      data,
       model: result.body.model,
       _builderforce: {
         traceId,

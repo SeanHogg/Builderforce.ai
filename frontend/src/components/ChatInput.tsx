@@ -144,6 +144,13 @@ export interface ChatInputProps {
   contextControls?: React.ReactNode;
   /** Host-specific standing facts (e.g. the memory status) shown beside the plan chip in the last row. */
   meta?: React.ReactNode;
+  /**
+   * `compact` folds the composer to two rows — the text, then one tool row — for a
+   * host whose own chrome already shows the plan (a workspace header): the context
+   * controls join the tool row and the standing-facts row (plan chip, `meta`) is
+   * not rendered. Defaults to `comfortable`, the four-row layout.
+   */
+  density?: 'comfortable' | 'compact';
   className?: string;
   /**
    * Change this to any new value to focus the composer and put the caret at the
@@ -346,9 +353,11 @@ export function ChatInput({
   onTicketTag,
   contextControls,
   meta,
+  density = 'comfortable',
   className,
   focusToken,
 }: ChatInputProps) {
+  const compact = density === 'compact';
   const t = useTranslations('chatInput');
   // The two mode names are the conversation's vocabulary, not the composer's — they
   // are the SAME words the Brain empty state uses, from the same catalog namespace.
@@ -651,11 +660,11 @@ export function ChatInput({
         )}
         // A fragment, not the bare node: the shell's ReactNode comes from a second copy
         // of React's types, and only an element is assignable across the two.
-        context={contextControls ? <>{contextControls}</> : undefined}
+        context={contextControls && !compact ? <>{contextControls}</> : undefined}
         // Which plan is funding this chat (and, when metered, what allowance is
         // left), then the host's own standing facts. Self-gating: the chip renders
-        // nothing without a tenant session.
-        meta={(
+        // nothing without a tenant session. Compact hosts show the plan themselves.
+        meta={compact ? undefined : (
           <>
             <PlanBadge />
             {meta}
@@ -723,6 +732,7 @@ export function ChatInput({
             <Icon name="message" size={20} />
           </Link>
             )}
+            {compact && contextControls}
             {showVoice && (
           <button
             type="button"

@@ -25,8 +25,9 @@ function splitTransportOptions(params: ImageGenerationCreateParams): {
 
 /**
  * `client.images.generate({ prompt, ... })` — OpenAI-compatible image generation
- * routed through the Builderforce gateway. The gateway cascades free Together
- * vendors → premium FluxAPI fallback so callers always see a successful
+ * routed through the Builderforce gateway. The gateway cascades its free vendors
+ * (Cloudflare Workers AI, Together, Hugging Face, Pollinations) → paid Gemini /
+ * FluxAPI → premium FluxAPI fallback so callers always see a successful
  * response unless every upstream is saturated. Read
  * `_builderforce.resolvedModel` / `resolvedVendor` to detect which vendor
  * served the request.

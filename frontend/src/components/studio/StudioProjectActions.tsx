@@ -8,21 +8,17 @@ import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 const COPIED_MS = 2000;
 
 /**
- * A Studio project's header actions. Publish and GitHub open the workspace's own
- * panels (through the workspace command channel) rather than second copies of
- * them; Share copies the project link.
+ * A Studio project's header actions, at the end of the workspace's header row.
+ * Publish opens the workspace's own Publish panel (through the workspace command
+ * channel) rather than a second copy of it; Share copies the project link.
  *
- * There is no Upgrade here. The Brain composer directly below already carries the
- * plan chip ("Free · Upgrade"), so a second upgrade button in the bar put the same
- * call to action on screen twice, a few hundred pixels apart.
+ * GitHub is not here: it is the workspace's settings, one entry in its ⋯ menu,
+ * and a second button for it put the same panel behind two controls.
  */
 export function StudioProjectActions({ projectId }: { projectId: number }) {
   const t = useTranslations('studio.project');
   return (
     <>
-      <Button type="button" variant="ghost" size="sm" onClick={() => sendWorkspaceCommand(projectId, { type: 'openSettings' })}>
-        {t('github')}
-      </Button>
       <ShareButton />
       <Button type="button" variant="primary" size="sm" onClick={() => sendWorkspaceCommand(projectId, { type: 'openTab', tab: 'publish' })}>
         {t('publish')}

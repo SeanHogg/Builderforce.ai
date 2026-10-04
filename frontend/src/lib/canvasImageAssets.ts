@@ -1,5 +1,6 @@
 import type { CanvasViewport } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
+import { generateImage } from './imageGenerationApi';
 
 /**
  * The three ways real pixels reach the canvas.
@@ -41,12 +42,6 @@ export interface CanvasImageAsset {
 }
 
 interface SearchResponse { results: Array<CanvasImageAsset & { providerAssetId: string }> }
-interface GenerateResponse {
-  data: Array<{ url?: string; b64_json?: string; revised_prompt?: string }>;
-  model?: string;
-  _builderforce?: { resolvedModel?: string; resolvedVendor?: string };
-}
-
 interface ScreenshotResponse {
   url: string;
   imageDataUrl: string;
@@ -65,19 +60,12 @@ export async function findCanvasImage(query: string): Promise<CanvasImageAsset |
 }
 
 export async function generateCanvasImage(prompt: string): Promise<CanvasImageAsset> {
-  const response = await apiRequest<GenerateResponse>('/llm/v1/images/generations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, n: 1, size: '1024x1024', response_format: 'url', useCase: 'canvas_image_create' }),
-  });
-  const first = response.data[0];
-  const url = first?.url || (first?.b64_json ? `data:image/png;base64,${first.b64_json}` : '');
-  if (!url) throw new Error('The image generator returned no image');
+  const image = await generateImage({ prompt, size: '1024x1024', useCase: 'canvas_image_create' });
   return {
-    url, thumbnailUrl: url, source: 'ai',
-    provider: response._builderforce?.resolvedVendor ?? 'builderforce-image',
-    model: response._builderforce?.resolvedModel ?? response.model,
-    title: first?.revised_prompt,
+    url: image.url, thumbnailUrl: image.url, source: 'ai',
+    provider: image.vendor ?? 'builderforce-image',
+    model: image.model,
+    title: image.revisedPrompt,
   };
 }
 

@@ -7,7 +7,7 @@ import { LazyBuilderWorkspace } from '@/components/builder/LazyBuilderWorkspace'
 import { useBuildProject } from '@/hooks/useBuildProject';
 import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
 import { takeHandedOffPrompt } from '@/lib/studio/promptHandoff';
-import { StudioTopBar } from './StudioTopBar';
+import { StudioTopBar, StudioBrand, StudioAccountControl } from './StudioTopBar';
 import { StudioProjectActions } from './StudioProjectActions';
 import { StudioWorkspacePicker } from './StudioWorkspacePicker';
 import { useStudioWorkspace } from './useStudioWorkspace';
@@ -37,14 +37,11 @@ export function StudioProject({ projectId }: { projectId: number }) {
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
-      {/* No `title` here. The workspace below already names the project twice —
-          its rename field and the description beside it — so putting the name in
-          the bar as well made three copies of one string across two stacked rows,
-          each truncated differently. The bar carries the brand and the actions;
-          the workspace owns the project's identity. */}
-      <StudioTopBar>
-        {project && <StudioProjectActions projectId={project.id} />}
-      </StudioTopBar>
+      {/* An open project has ONE header row: the workspace's. Studio hands it the
+          mark and its actions (Share, Publish, the account) instead of stacking its
+          own bar above — two rows of actions was what people found confusing. The
+          Studio bar is only for the states before a project is open. */}
+      {!(ready && project && !error) && <StudioTopBar />}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {workspace.status === 'signedOut' ? (
           <Centered>{t('signInLead')}</Centered>
@@ -56,7 +53,19 @@ export function StudioProject({ projectId }: { projectId: number }) {
           <Centered>{t('loading')}</Centered>
         ) : (
           <ChunkErrorBoundary>
-            <LazyBuilderWorkspace project={project} initialFiles={files} initialPrompt={initialPrompt} onProjectUpdate={setProject} />
+            <LazyBuilderWorkspace
+              project={project}
+              initialFiles={files}
+              initialPrompt={initialPrompt}
+              onProjectUpdate={setProject}
+              headerLeading={<StudioBrand compact />}
+              headerTrailing={(
+                <>
+                  <StudioProjectActions projectId={project.id} />
+                  <StudioAccountControl />
+                </>
+              )}
+            />
           </ChunkErrorBoundary>
         )}
       </div>

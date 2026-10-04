@@ -1,6 +1,6 @@
 // No `'use client'`: imported only by client components, so it is already on the client side of the boundary.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Terminal } from '@/components/Terminal';
 import { useWorkspaceCommands, type BottomPanelTab } from '@/lib/workspace/workspaceCommands';
@@ -15,16 +15,22 @@ const COLLAPSED_HEIGHT = 36;
  * the shell), Output (what a publish build printed, kept apart so it is not lost
  * among shell lines), and Problems (the recorded build and runtime failures).
  * Every pane stays mounted so a terminal keeps its scrollback across tab changes.
+ *
+ * It starts COLLAPSED to a status bar: the preview starts by itself, so the
+ * terminal is something you open to look into a problem, not a third of the
+ * screen held back from the app. `status` is the host's standing facts and
+ * controls (the checks) on the right of that bar.
  */
-export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInput, onOutputReady }: {
+export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInput, onOutputReady, status }: {
   projectId: number;
   onTerminalReady: (write: (data: string) => void) => void;
   onTerminalInput: (data: string) => void;
   onOutputReady: (write: (data: string) => void) => void;
+  status?: ReactNode;
 }) {
   const t = useTranslations('builderPanels');
   const [tab, setTab] = useState<BottomPanelTab>('terminal');
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const failures = useBuildFailures(projectId);
 
   useWorkspaceCommands(projectId, (command) => {
@@ -74,14 +80,15 @@ export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInp
             {label}
           </button>
         ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>{status}</div>
         <button
           type="button"
           onClick={() => setExpanded((open) => !open)}
           aria-expanded={expanded}
           aria-label={t(expanded ? 'collapse' : 'expand')}
-          style={{ marginLeft: 'auto', padding: '0 12px', border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+          style={{ padding: '0 12px', border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}
         >
-          <span aria-hidden>{expanded ? '▾' : '▸'}</span>
+          <span aria-hidden>{expanded ? '▾' : '▴'}</span>
         </button>
       </div>
       <div role="tabpanel" style={pane('terminal')}>

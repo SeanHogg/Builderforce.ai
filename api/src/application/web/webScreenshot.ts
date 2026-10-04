@@ -47,6 +47,7 @@ import {
 import { assertSafeUrl, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
 import { withPublicHostGuard } from '../../infrastructure/net/fetchPublic';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { bytesToBase64 } from '../../domain/shared/bytes';
 import type { Env } from '../../env';
 
 /**
@@ -198,13 +199,6 @@ function renderCredentials(env: Env | undefined): { accountId: string; token: st
   return { accountId, token };
 }
 
-/** Base64 without blowing the stack on a multi-hundred-KB image. */
-export function bytesToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
-  }
   return btoa(binary);
 }
 

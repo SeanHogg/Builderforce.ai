@@ -38,7 +38,10 @@ import type {
   WeightSource,
 } from '../types';
 import { probeDevice } from './device-router';
-import { DiffusionEngine, MODEL_REGISTRY, reportProgress } from './diffusion-engine';
+import { DiffusionEngine } from './diffusion-engine';
+import { MODEL_REGISTRY } from './diffusion-models';
+import { reportProgress } from './progress';
+import { throwIfAborted } from './abort';
 import {
   advanceState,
   anchorWalkLatent,
@@ -411,7 +414,7 @@ export class VideoEngine {
     let globalIdx = 0;
 
     for (let s = 0; s < storyboard.shots.length; s++) {
-      if (args.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      throwIfAborted(args.signal);
       const shot = storyboard.shots[s];
       const shotPrompt = composeShotPrompt(shot, storyboard.characters);
       reportProgress(
@@ -536,7 +539,7 @@ export class VideoEngine {
     let globalIdx = 0;
 
     for (let s = 0; s < storyboard.shots.length; s++) {
-      if (args.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      throwIfAborted(args.signal);
       const shot = storyboard.shots[s];
       const shotPrompt = composeShotPrompt(shot, storyboard.characters);
       reportProgress(
@@ -627,7 +630,7 @@ export class VideoEngine {
     } | null = null;
 
     for (let attempt = 0; attempt <= args.maxRetries; attempt++) {
-      if (args.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      throwIfAborted(args.signal);
       // Each attempt starts from the same pre-shot state so retries don't stack
       // Mamba drift; vary the seed so the re-render actually differs.
       this.mambaState = stateBefore;
@@ -766,7 +769,7 @@ export class VideoEngine {
     }[] = [];
 
     for (let k = 0; k < keyframeIndices.length; k++) {
-      if (signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      throwIfAborted(signal);
       const frameIdx = keyframeIndices[k];
 
       const conditionedPrompt =
@@ -844,6 +847,7 @@ export class VideoEngine {
         timesteps: frameTimesteps,
         guidance,
         seed: seed + frameIdx,
+        signal,
         onStep: (step, total) =>
           reportProgress(`${label} ${frameIdx + 1}/${frameCount}: denoise step ${step}/${total}…`, onProgress),
       });
@@ -881,7 +885,7 @@ export class VideoEngine {
     let leftKi = 0; // updated as we pass each keyframe slot; brackets the tweens
 
     for (const slot of slots) {
-      if (signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      throwIfAborted(signal);
       if (!slot.isTween) {
         const ki = slot.keyframeIndex!;
         leftKi = ki;
@@ -1004,7 +1008,7 @@ export class VideoEngine {
     const outLatents: (Float32Array | null)[] = new Array(latents.length);
     let refinedCount = 0;
     for (let i = 0; i < latents.length; i++) {
-      if (opts.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      throwIfAborted(opts.signal);
       const latent = latents[i];
       if (latent === null) {
         // Motion-warp tween — carry the draft frame through untouched.
@@ -1022,6 +1026,7 @@ export class VideoEngine {
         timesteps: partialTimesteps,
         guidance: refinedDescriptor.defaultGuidance,
         seed: opts.seed + i,
+        signal: opts.signal,
       });
       const rgba = pixelsToRgba(pixels, opts.width, opts.height);
       const bitmap = await createImageBitmap(

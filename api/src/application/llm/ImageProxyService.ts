@@ -2,8 +2,10 @@
  * builderforceImage — image-generation proxy.
  *
  * Routes `POST /v1/images/generations` calls through the image vendor registry
- * with the same 2-free-then-premium cascade pattern as `LlmProxyService`:
- *   - Try at most `FREE_ATTEMPT_BUDGET` FREE-tier image models from the seed
+ * with the same free-then-premium cascade pattern as `LlmProxyService`:
+ *   - Try at most `FREE_IMAGE_ATTEMPT_BUDGET` FREE-tier image models from the
+ *     seed — interleaved across Cloudflare / Together / Hugging Face /
+ *     Pollinations, so one vendor's outage never consumes the whole budget
  *   - Always append `PREMIUM_IMAGE_FALLBACK_MODELS` (Flux Kontext Pro) so a
  *     fully-saturated free pool still resolves to a successful response.
  *
@@ -15,6 +17,7 @@
 
 import {
   ImageCascadeExhaustedError,
+  anyImageVendorBound,
   dispatchImageVendor,
   imageModelsByTierPrefixed,
   imageVendorKeyBound,
@@ -25,6 +28,8 @@ import {
   type ImageVendorEnv,
   type ImageVendorId,
 } from './imageVendors';
+
+export { anyImageVendorBound };
 import { composeFreeCappedCascade } from './cascadeComposer';
 import { loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
 import type { VendorId } from './vendors';
@@ -40,12 +45,12 @@ const imageCooldownKey = (m: string): string => `${imageCooldownVendor(vendorFor
 // Pool composition — derived from the image vendor catalog
 // ---------------------------------------------------------------------------
 
-/** Free-tier image model ids (Together) — VENDOR-PREFIXED so the dispatcher
+/** Free-tier image model ids (Cloudflare, Together, Hugging Face, Pollinations) — VENDOR-PREFIXED so the dispatcher
  *  resolves the owning vendor by prefix, never by an ambiguous bare-id lookup
  *  (id-clash safe as the registry grows). */
 export const FREE_IMAGE_MODEL_POOL: readonly string[] = imageModelsByTierPrefixed('FREE');
 
-/** Paid-tier image model ids (FluxAPI) — vendor-prefixed (see above). */
+/** Paid-tier image model ids (Cloudflare Leonardo, Gemini, FluxAPI) — vendor-prefixed (see above). */
 export const PAID_IMAGE_MODEL_POOL: readonly string[] = imageModelsByTierPrefixed('STANDARD', 'PREMIUM', 'ULTRA');
 
 /** Pro tries free first (cost-optimised), falls over to paid. */
@@ -78,8 +83,10 @@ export function isImagePaidOverflowModel(model: string | undefined | null): bool
  * Maximum number of FREE-tier image attempts before falling through to the
  * premium fallback. Mirrors `FREE_ATTEMPT_BUDGET` in LlmProxyService — same
  * "successful response or premium fallback, never cascade-exhausted" guarantee.
+ * Three, not chat's two: with four free image vendors interleaved, a third free
+ * attempt reaches a third VENDOR before the request lands on funded FluxAPI.
  */
-export const FREE_IMAGE_ATTEMPT_BUDGET = 2;
+export const FREE_IMAGE_ATTEMPT_BUDGET = 3;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -136,6 +143,11 @@ export interface ImageProxyEnv extends ImageVendorEnv {
   AUTH_CACHE_KV?: KVNamespace;
 }
 
+/** The one sentence for "no image vendor is configured" — the proxy's exhausted
+ *  envelope and the gateway route's 503 both say it. */
+export const NO_IMAGE_VENDOR_MESSAGE =
+  'Image generation is not configured: bind at least one image vendor (CLOUDFLARE_AI_API_TOKEN + CLOUDFLARE_ACCOUNT_ID, TOGETHER_API_KEY, HF_API_TOKEN, POLLINATIONS_API_KEY, GOOGLE_API_KEY or FLUX_API_KEY).';
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -187,12 +199,12 @@ export class ImageProxyService {
     );
     const candidates = this.buildCandidateChain(seed, cooled);
     if (candidates.length === 0) {
-      return this.exhaustedResult(seed, new Error('No image vendor keys are bound. Configure TOGETHER_API_KEY and/or FLUX_API_KEY.'), []);
+      return this.exhaustedResult(seed, new Error(NO_IMAGE_VENDOR_MESSAGE), []);
     }
 
     try {
       const result = await dispatchImageVendor({
-        env: this.imageVendorEnv(),
+        env: this.env,
         modelChain: candidates,
         prompt: body.prompt,
         ...(body.size ? { size: body.size } : {}),
@@ -235,8 +247,7 @@ export class ImageProxyService {
    * `${vendor}/${model}` keys from `loadCooldowns`).
    */
   private buildCandidateChain(seed: readonly string[], cooled: ReadonlySet<string> = new Set()): string[] {
-    const env = this.imageVendorEnv();
-    const keyBound = (m: string) => imageVendorKeyBound(env, vendorForImageModel(m));
+    const keyBound = (m: string) => imageVendorKeyBound(this.env, vendorForImageModel(m));
     return composeFreeCappedCascade({
       seed,
       premiumFallback: this.disablePaidOverflow ? [] : PREMIUM_IMAGE_FALLBACK_MODELS,
@@ -245,13 +256,6 @@ export class ImageProxyService {
       isUnavailable: (m) => !keyBound(m) || cooled.has(imageCooldownKey(m)),
       cursor: imageRequestCursor,
     });
-  }
-
-  private imageVendorEnv(): ImageVendorEnv {
-    return {
-      TOGETHER_API_KEY: this.env.TOGETHER_API_KEY ?? null,
-      FLUX_API_KEY:     this.env.FLUX_API_KEY     ?? null,
-    };
   }
 
   private exhaustedResult(

@@ -1,12 +1,8 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { repairScaffold } from '@/lib/scaffoldRepair';
-import { scaffoldForModality, isScaffoldPath } from '@builderforce/ide-templates';
-import { createRunLog, RUN_LOG_RULE, type RunLog } from '@/lib/runLog';
-import { datasetNameForPath, looksLikeDatasetPath, parseJsonlDataset } from '@/lib/datasetFromFile';
-import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
+import { FileExplorer } from './FileExplorer';
 // WebGPU LoRA training — onnxruntime-web, the tokenizer and the whole training
 // loop, behind ONE tab of this workspace. Statically imported it shipped to
 // every builder who only ever edits files; `CreationCanvas` already defers the
@@ -19,55 +15,51 @@ import { AgentPublishPanel } from './AgentPublishPanel';
 import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
 import { Icon } from '@/components/ui/Icon';
+import { PlanBadge } from '@/components/PlanBadge';
 import { EvermindStudioPanel } from './EvermindStudioPanel';
 import { FinetuneStudioPanel } from './FinetuneStudioPanel';
-import { PreviewFrame } from './PreviewFrame';
 import { BuilderProjectsSlideOutPanel } from './builder/BuilderProjectsSlideOutPanel';
 import { WorkspaceBrainColumn } from './builder/WorkspaceBrainColumn';
 import { TeamChatButton } from './brain/TeamChatButton';
 import { BuilderSettingsPanel } from './BuilderSettingsPanel';
-import { useToast } from '@/components/ToastProvider';
 import { BuilderAgentPanel } from './builder/BuilderAgentPanel';
-import { DevicePreview } from './builder/DevicePreview';
 import { MobileDevicePanel } from './builder/MobileDevicePanel';
-import { useProjectRuntime } from '@/hooks/useProjectRuntime';
 import { useLazyShell } from '@/hooks/useLazyShell';
-import { useInstantPreview } from '@/hooks/useInstantPreview';
-import { sendWorkspaceCommand, useWorkspaceCommands } from '@/lib/workspace/workspaceCommands';
+import { useWorkspaceCommands } from '@/lib/workspace/workspaceCommands';
 import { FilesPanel } from '@/components/builder/FilesPanel';
 import { WorkspaceBottomPanel } from '@/components/builder/WorkspaceBottomPanel';
 import { VersionsPanel } from '@/components/builder/VersionsPanel';
 import { PaneLayer } from '@/components/builder/PaneLayer';
 import { DatabasePanel } from '@/components/builder/database/DatabasePanel';
-import { buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/siteTools';
-import { runProjectChecks, type CheckResult } from '@/lib/browserRuntime/projectChecks';
+import { WorkspaceHeader } from '@/components/builder/WorkspaceHeader';
+import { ProjectTitleField } from '@/components/builder/ProjectTitleField';
+import { WorkspaceMoreMenu } from '@/components/builder/WorkspaceMoreMenu';
+import { CenterViewSwitch, centerViewsFor, type CenterView } from '@/components/builder/CenterViewSwitch';
+import { PreviewPane, type PreviewFraming } from '@/components/builder/PreviewPane';
+import { ChecksControl } from '@/components/builder/ChecksControl';
+import { WorkspaceRail } from '@/components/builder/WorkspaceRail';
+import { VoiceGenerateButton } from '@/components/builder/VoiceGenerateButton';
+import { useWorkspaceLogs } from '@/components/builder/useWorkspaceLogs';
+import { useWorkspaceRun } from '@/components/builder/useWorkspaceRun';
+import { useWorkspaceFiles } from '@/components/builder/useWorkspaceFiles';
+import { useAutoRun, hasRunnableEntry } from '@/components/builder/useAutoRun';
+import { usePointAndEdit } from '@/components/builder/usePointAndEdit';
+import { useArtifactReviews } from '@/components/builder/useArtifactReviews';
+import { useWorkspaceBrainActions } from '@/components/builder/useWorkspaceBrainActions';
+import { useWorkspaceBrainContext } from '@/components/builder/useWorkspaceBrainContext';
+import styles from '@/components/builder/workspaceChrome.module.css';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
-import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject, importCanvasDataset } from '@/lib/api';
-import { validateFileContentForPath, coerceFileContent } from '@builderforce/ide-file-contract';
-import { clearBuildFailures, previewErrorFrom, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
-import { canvasBuildActions } from '@/lib/canvasBuildTools';
-import { notifyWorkspaceFilesChanged, subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
-import {
-  VISUAL_ARM_MESSAGE,
-  replaceClassNameAtLine,
-  replaceTextAtLine,
-  visualSelectionFrom,
-  withVisualEditor,
-  type VisualSelection,
-} from '@/lib/visualEditor';
-import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
-import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
-import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
-import { getModality, type ProjectModality, type RightTab } from '@/lib/modality';
-import { useModalityCopy, useRightTabLabels } from '@/lib/useModalityCopy';
+import { getModality, hasLivePreview, type RightTab } from '@/lib/modality';
+import { useModalityCopy } from '@/lib/useModalityCopy';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { VoiceOutput } from './builder/VoiceOutput';
 import { VoiceConfigPanel } from './builder/VoiceConfigPanel';
-import { faultMessage } from '@/lib/apiClient';
-import { useErrorMessage } from '@/i18n/useErrorMessage';
-import { toolErrorMessage } from '@/lib/toolErrorMessage';
-import { projectSubtitle } from '@/lib/projectSubtitle';
+
+/** Below this width the chat and the workspace take turns instead of sitting side by side. */
+const NARROW_LAYOUT_PX = 760;
+
 interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
@@ -80,123 +72,70 @@ interface IDEProps {
   initialPrompt?: string;
   /** One-shot work item to auto-link the opened chat to (`?ticket=<kind>:<ref>`). */
   initialTicket?: { kind: string; ref: string };
+  /** A host's mark, at the start of the workspace's header (Studio's brand). */
+  headerLeading?: ReactNode;
+  /** A host's actions, at the end of the workspace's header (Share, Publish, the account). */
+  headerTrailing?: ReactNode;
 }
 
-type CenterView = 'preview' | 'code' | 'database';
-
-/** A project that publishes a site has a database (its tables, sign-ins and server functions); the rest have only preview and code. */
-const centerViewsFor = (publishPanel: string): CenterView[] =>
-  publishPanel === 'site' ? ['preview', 'code', 'database'] : ['preview', 'code'];
-
-/** Glyph + label key for the views that are not the preview (whose glyph follows the device). */
-const CENTER_VIEW_META: Record<Exclude<CenterView, 'preview'>, { icon: string; label: 'centerCode' | 'centerDatabase' }> = {
-  code: { icon: '💻', label: 'centerCode' },
-  database: { icon: '🗄️', label: 'centerDatabase' },
-};
-
-/** Cheap, stable string hash (djb2) — used to skip npm install when package.json
- *  is unchanged since the last install in this runtime session. */
-function hashString(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return String(h >>> 0);
-}
-
-export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
+/**
+ * The Builder workspace: one header row, the docked Brain, the centre (a live
+ * preview that starts by itself, code, data — or a studio panel for the types
+ * that are not apps), and a side panel opened on demand.
+ *
+ * It composes; the work lives in hooks beside it — the run pipeline
+ * (`useWorkspaceRun` + `useAutoRun`), the editor's files (`useWorkspaceFiles`),
+ * point & edit, the Brain's tools and context, and the review dialogs.
+ */
+export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket, headerLeading, headerTrailing }: IDEProps) {
   const t = useTranslations('ide');
-  const tc = useTranslations('common');
-  const errorMessage = useErrorMessage();
-  const toast = useToast();
   // Builder is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modalityDef = getModality(project.modality);
-  const modality: ProjectModality = modalityDef.id;
-  // Localized modality copy (label / runLabel) for the header + run button.
+  const modality = modalityDef.id;
   const modalityCopy = useModalityCopy()(modality);
-  // Right-panel tab labels: glyph from the registry, word from the catalogs.
-  const rightTabLabel = useRightTabLabels();
-  // Layout comes from the modality registry, not from `modality === '…'` checks
-  // scattered through this file — see the CenterPanel/dockBrain notes there.
+  // Layout comes from the modality registry, not from `modality === '…'` checks.
   const hasDockedBrain = modalityDef.dockBrain;
+  const livePreview = hasLivePreview(modalityDef);
+  const allowedRightTabs = modalityDef.rightTabs;
+  const narrow = useIsMobile(NARROW_LAYOUT_PX);
+  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
+
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
-  const [openFiles, setOpenFiles] = useState<string[]>([]);
-  const [activeFile, setActiveFile] = useState<string | undefined>();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [centerView, setCenterView] = useState<CenterView>('preview');
-  // For the combined Web + Mobile type: which preview to render in the code-preview
-  // centre — full-width web, or the phone bezel. (Pure `device` modalities are
-  // always the bezel and don't show this toggle.)
-  const [previewDevice, setPreviewDevice] = useState<'web' | 'mobile'>('web');
+  // Narrow screens show one pane at a time: the chat, or the workspace.
+  const [narrowPane, setNarrowPane] = useState<'chat' | 'work'>('work');
   const [rightTab, setRightTab] = useState<RightTab>(() => getModality(project.modality).rightTabs[0]);
-  const [previewUrl, setPreviewUrl] = useState<string | undefined>();
-  // Point-and-edit. `previewFrameRef` is how the host reaches the overlay injected
-  // into the preview document — it is cross-origin, so postMessage is the channel.
-  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
-  const [visualArmed, setVisualArmed] = useState(false);
-  const [visualSelection, setVisualSelection] = useState<VisualSelection | null>(null);
-  const [visualDraft, setVisualDraft] = useState<{ text: string; className: string }>({ text: '', className: '' });
-  const [visualError, setVisualError] = useState<string | null>(null);
-  const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
-  const [isRunning, setIsRunning] = useState(false);
+  // A live preview gets the whole width by default; the panel opens on demand
+  // (and by itself for Code, which needs the file tree). Types whose centre IS a
+  // panel's subject (Evermind, Fine-tune, Voice) keep it open.
+  const [railOpen, setRailOpen] = useState(() => !hasLivePreview(getModality(project.modality)));
   const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
-  const [projectTitle, setProjectTitle] = useState(project.name);
-  const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Mobile: the "preview on your phone" slide-out (QR of the published build).
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
-  const [isChecking, setIsChecking] = useState(false);
-  // Bumped when a corpus is registered from outside the Train panel (the Brain
-  // writing a .jsonl into the workspace), so the dataset picker re-reads.
-  const [datasetsRegistered, setDatasetsRegistered] = useState(0);
-  const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
-  // When on, a Run is hard-gated on the last check pass — "code must be good
-  // before it runs". When off, failed checks only warn (a toast) while serving.
-  const [gateRunOnChecks, setGateRunOnChecks] = useState(true);
-  // Pending Brain-tool artifact reviews. The `generate_prd`/`generate_tasks`
-  // tools surface the generated artifact here and await the user's confirm/cancel
-  // (parity with the message-action button path), so nothing saves unreviewed.
-  const [prdReview, setPrdReview] = useState<{ prd: string; resolve: (saved: boolean) => void } | null>(null);
-  const [tasksReview, setTasksReview] = useState<
-    { titles: string[]; descriptions: string[]; resolve: (saved: boolean) => void } | null
-  >(null);
-  const [reviewSaving, setReviewSaving] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const terminalWriteRef = useRef<((data: string) => void) | null>(null);
-  /**
-   * The run/check terminal's narration. Every line the pipeline authors goes
-   * through here so it is (a) translated and (b) formatted by one colour/glyph
-   * vocabulary. `npm`/`vite`/`tsc` output is teed through `log.raw` untouched —
-   * the tool's own words stay verbatim so they remain searchable.
-   */
-  const log = useMemo(
-    () => createRunLog(terminalWriter, (key, values) => t(`runLog.${key}` as never, values as never)),
-    [terminalWriter, t],
-  );
-  /** The Output tab's narration: what a publish build prints, apart from the shell. */
-  const outputWriteRef = useRef<((data: string) => void) | null>(null);
-  const publishLog = useMemo(
-    () => createRunLog((data) => outputWriteRef.current?.(data), (key, values) => t(`runLog.${key}` as never, values as never)),
-    [t],
-  );
-  /** Same narration bound to the mount-time writer ref (used before a run). */
-  const refLog = useMemo(
-    () => createRunLog((data) => terminalWriteRef.current?.(data), (key, values) => t(`runLog.${key}` as never, values as never)),
-    [t],
-  );
-  // package.json hash of the last successful npm install in this WC session, so
-  // Run/Check/Build can skip a redundant install when dependencies are unchanged.
-  const lastInstallHashRef = useRef<string | null>(null);
 
-  // Keep title in sync when project prop changes (e.g. after save elsewhere)
-  useEffect(() => {
-    setProjectTitle(project.name);
-  }, [project.name]);
+  const openRail = useCallback((tab: RightTab) => {
+    if (!allowedRightTabs.includes(tab)) return;
+    setRightTab(tab);
+    setRailOpen(true);
+    setNarrowPane('work');
+  }, [allowedRightTabs]);
+
+  const selectView = useCallback((view: CenterView) => {
+    setCenterView(view);
+    setNarrowPane('work');
+    // Code without a file tree is a dead end, so it brings the tree with it.
+    if (view === 'code' && !railOpen) openRail('files');
+  }, [railOpen, openRail]);
+  const showEditor = useCallback(() => selectView('code'), [selectView]);
 
   // When modality changes, clamp the active right-panel tab to the allowed set.
-  const allowedRightTabs = modalityDef.rightTabs;
   useEffect(() => {
     if (!allowedRightTabs.includes(rightTab)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRightTab(allowedRightTabs[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,1080 +144,104 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   // A surface around the workspace (the Studio header) opening one of its panels.
   useWorkspaceCommands(project.id, (command) => {
     if (command.type === 'openSettings') setSettingsOpen(true);
-    else if (command.type === 'openTab' && allowedRightTabs.includes(command.tab)) setRightTab(command.tab);
+    else if (command.type === 'openTab') openRail(command.tab);
   });
 
-  const { state: runtimeState, mountFiles, runCommandAndWait, writeFile: writeRuntimeFile, startShell, startDevServer } = useProjectRuntime();
-  const { start: startInstantPreview, write: writeInstantPreview } = useInstantPreview();
-  /** An edit reaches whichever runtime is showing the preview. */
-  const writePreviewFile = useCallback(
-    (path: string, contents: string): Promise<void> =>
-      writeInstantPreview(path, contents) ? Promise.resolve() : writeRuntimeFile(path, contents),
-    [writeInstantPreview, writeRuntimeFile],
-  );
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
-  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
-  // Voice studio state (clones, selected voice, lines, generation). Always called
-  // for hook stability but only does work for Voice projects; the green Run button
-  // calls voice.synth() and the center/right panels render its state.
+  // Voice studio state. Always called for hook stability; only works for Voice.
   const voice = useVoiceStudio({ enabled: modality === 'voice', storageProjectId: projectIdNum });
 
-  // When Terminal mounts, store its write function in a ref so the single shell's output reaches it
-  const handleTerminalReady = useCallback((write: (data: string) => void) => {
-    terminalWriteRef.current = write;
-    setTerminalWriter(() => write);
-  }, []);
-  const handleOutputReady = useCallback((write: (data: string) => void) => {
-    outputWriteRef.current = write;
-  }, []);
+  const logs = useWorkspaceLogs();
+  const runner = useWorkspaceRun({
+    projectId: projectIdNum, modality, files, setFiles, fileContents, setFileContents,
+    log: logs.log, publishLog: logs.publishLog,
+  });
+  useAutoRun({ enabled: livePreview, files, phase: runner.phase, run: runner.run });
+  const edit = usePointAndEdit({ projectId: projectIdNum, previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, setFileContents });
+  const editor = useWorkspaceFiles({
+    projectId: projectIdNum, modality, setFiles, fileContents, setFileContents,
+    previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, refLog: logs.refLog, onOpenInEditor: showEditor,
+  });
+  const handleTerminalInput = useLazyShell(runner.startShell, logs.writeTerminal);
 
-  const openFile = useCallback(async (path: string) => {
-    setCenterView('code');
-    if (fileContents[path] !== undefined) {
-      setActiveFile(path);
-      if (!openFiles.includes(path)) {
-        setOpenFiles(prev => [...prev, path]);
-      }
-      return;
-    }
-    try {
-      const content = await fetchFileContent(project.id, path);
-      setFileContents(prev => ({ ...prev, [path]: content }));
-      setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
-      setActiveFile(path);
-    } catch (e) {
-      // Do NOT cache '' on failure: that poisons fileContents so the cached
-      // branch above short-circuits every future open and the file shows blank
-      // forever. Leave the path uncached so the next click re-fetches; still
-      // open the tab so the user sees something happened.
-      console.error(`Failed to load ${path}:`, e);
-      refLog.error('fileLoadFailed', { path });
-      setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
-      setActiveFile(path);
-    }
-  }, [openFiles, fileContents, project.id, refLog]);
+  const reviews = useArtifactReviews(projectIdNum);
+  useWorkspaceBrainActions({
+    projectId: projectIdNum,
+    projectName: project.name,
+    modality,
+    targets: { activeFile: editor.activeFile, applyCodeToActiveFile: editor.applyCodeToActiveFile, createProjectFile: editor.createProjectFile, setVoiceText: voice.setText },
+    review: reviews,
+  });
+  const brain = useWorkspaceBrainContext({
+    projectId: projectIdNum,
+    modality,
+    activeFile: editor.activeFile,
+    activeFileContent: editor.activeFile ? (fileContents[editor.activeFile] ?? '') : undefined,
+    docked: hasDockedBrain,
+    initialChatId,
+    initialPrompt,
+    initialTicket,
+  });
 
-  const closeTab = useCallback((path: string) => {
-    setOpenFiles(prev => {
-      const next = prev.filter(f => f !== path);
-      if (activeFile === path) {
-        setActiveFile(next[next.length - 1]);
-      }
-      return next;
-    });
-  }, [activeFile]);
-
-  const handleEditorChange = useCallback(async (value: string) => {
-    if (!activeFile) return;
-    // Always reflect the keystroke locally (never lose typing).
-    setFileContents(prev => ({ ...prev, [activeFile]: value }));
-    // But NEVER PERSIST structurally-invalid content to disk/container — the same
-    // guard apply_code_to_active_file uses. This is the editor onChange path that
-    // previously had no guard, so a cross-wired/agent write of the wrong file's
-    // content (e.g. HTML landing in the package.json model) was saved straight to
-    // disk and broke Run with "Invalid package.json" [1315]. A human mid-typing an
-    // invalid JSON state just defers the save until it parses again.
-    if (!validateFileContentForPath(activeFile, value).ok) return;
-    // Live reload: when a dev server is running, push the edit straight into the
-    // container FS so Vite HMR refreshes the preview without a full re-run.
-    if (previewUrl) writePreviewFile(activeFile, value).catch(() => { /* best-effort */ });
-    try {
-      await saveFile(project.id, activeFile, value);
-    } catch (e) {
-      console.error('Failed to save:', e);
-    }
-  }, [activeFile, project.id, previewUrl, writePreviewFile]);
-
-  const handleFileCreate = useCallback(async (path: string) => {
-    // Creating a file posts an EMPTY body by construction — which is exactly the
-    // 0-byte write the API now refuses at a scaffold path (an empty package.json
-    // only ever breaks Run). At such a path "create" means "restore the starter
-    // file", so seed the template content instead of sending a doomed write.
-    const seed = isScaffoldPath(path) ? (scaffoldForModality(modality)?.[path] ?? '') : '';
-    try {
-      await saveFile(project.id, path, seed);
-      setFiles(prev => [...prev, { path, content: seed, type: 'file' }]);
-      setFileContents(prev => ({ ...prev, [path]: seed }));
-      openFile(path);
-    } catch (e) {
-      console.error('Failed to create file:', e);
-    }
-  }, [project.id, openFile, modality]);
-
-  const handleFileDelete = useCallback(async (path: string) => {
-    try {
-      await deleteFile(project.id, path);
-      setFiles(prev => prev.filter(f => f.path !== path));
-      closeTab(path);
-    } catch (e) {
-      console.error('Failed to delete file:', e);
-    }
-  }, [project.id, closeTab]);
-
-  /**
-   * Assemble the path→content map to mount into the runtime: the project's
-   * current contents (fetching any not yet loaded into state) plus the starter
-   * scaffold for any missing/empty required file. Returns null if a present
-   * package.json is invalid JSON. Shared by Run, Check and the publish build so
-   * the gather/defaults/validate logic lives in exactly one place.
-   *
-   * A scaffold file that has to be substituted is also SAVED back to the project.
-   * These used to be run-only, which meant a workspace the server never seeded
-   * ran fine but opened blank in the editor — every file 0 bytes, nothing to edit,
-   * and the substitution repeated on every Run forever. Writing them makes the
-   * repair stick and is safe by the same rule the server seeds by: only a path
-   * with NO content is ever written, so real work is never overwritten.
-   */
-  const assembleMountContents = useCallback(async (
-    onLog?: RunLog,
-  ): Promise<Record<string, string> | null> => {
-    const allContents: Record<string, string> = { ...fileContents };
-    const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
-    if (unfetched.length > 0) {
-      const fetched: Record<string, string> = {};
-      await Promise.all(unfetched.map(async (f) => {
-        try {
-          const content = await fetchFileContent(project.id, f.path);
-          allContents[f.path] = content;
-          fetched[f.path] = content;
-        } catch (error) {
-          onLog?.error('fileFetchFailed', { path: f.path });
-          console.error(`Failed to fetch ${f.path}:`, error);
-        }
-      }));
-      // Persist only real project data (never the run-only defaults below).
-      if (Object.keys(fetched).length > 0) {
-        setFileContents(prev => ({ ...prev, ...fetched }));
-        setFiles(prev => {
-          const have = new Set(prev.map(f => f.path));
-          const add = Object.keys(fetched)
-            .filter(p => !have.has(p))
-            .map(path => ({ path, content: fetched[path], type: 'file' as const }));
-          return add.length > 0 ? [...prev, ...add] : prev;
-        });
-      }
-    }
-
-    // Repair the scaffold: fill empty files AND replace structurally cross-wired
-    // ones (another file's content written to this path — package.json's JSON in
-    // vite.config.js, source text in index.html, …). Shared pure helper so Run,
-    // Check and the publish build agree and the logic is unit-tested.
-    const { repaired: mount, restored } = repairScaffold(allContents, modality);
-    if (restored.length > 0) {
-      for (const { path, reason } of restored) {
-        onLog?.warn(reason === 'corrupt' ? 'scaffoldRestoredCorrupt' : 'scaffoldRestoredEmpty', { path });
-      }
-      const restoredMap = Object.fromEntries(restored.map(({ path }) => [path, mount[path]!]));
-      setFileContents(prev => ({ ...prev, ...restoredMap }));
-      setFiles(prev => {
-        const have = new Set(prev.map(f => f.path));
-        const add = Object.keys(restoredMap)
-          .filter(p => !have.has(p))
-          .map(path => ({ path, content: restoredMap[path]!, type: 'file' as const }));
-        return add.length > 0 ? [...prev, ...add] : prev;
-      });
-      // Best-effort: a save failure (offline, 503) must never block the run —
-      // the mount already has the content either way.
-      await Promise.all(
-        Object.entries(restoredMap).map(([path, content]) =>
-          saveFile(project.id, path, content).catch((e) => console.error(`Failed to restore ${path}:`, e)),
-        ),
-      );
-    }
-    if (mount['package.json']) {
-      try {
-        JSON.parse(mount['package.json']);
-      } catch (e) {
-        onLog?.error('invalidPackageJson');
-        return null;
-      }
-    }
-    return mount;
-  }, [fileContents, files, project.id, modality]);
-
-  /**
-   * Run `npm install` only when package.json changed since the last install in
-   * this runtime session (the shared runtime keeps node_modules across
-   * runs). Returns the install exit code (0 when skipped). Cuts the dominant cost
-   * of every Run/Check after the first.
-   */
-  const ensureInstalled = useCallback(async (
-    mount: Record<string, string>,
-    onOutput?: (data: string) => void,
-    onLog?: RunLog,
-  ): Promise<number> => {
-    if (!mount['package.json']) return 0;
-    const hash = hashString(mount['package.json']);
-    if (lastInstallHashRef.current === hash) {
-      // Our own narration, not npm's — so it goes through the translated log
-      // rather than the raw output tee.
-      onLog?.ok('depsUnchanged');
-      return 0;
-    }
-    const code = await runCommandAndWait('npm', ['install'], onOutput);
-    if (code === 0) lastInstallHashRef.current = hash;
-    return code;
-  }, [runCommandAndWait]);
-
-  const handleRun = useCallback(async () => {
-    if (isRunning) return;
-    // Gate on the last check result so a known-broken build isn't served as a
-    // preview. Hard-gate when enabled; otherwise warn and let the user override.
-    const failedChecks = checkResults?.filter((r) => r.status === 'fail') ?? [];
-    if (failedChecks.length > 0) {
-      const summary = failedChecks.map((r) => r.label).join(', ');
-      if (gateRunOnChecks) {
-        log.error('runBlocked', { summary });
-        log.hint('runBlockedHint');
-        return;
-      }
-      // Serving a preview of a failing build loses nothing — the run proceeds and
-      // the warning says why it may misbehave (a toast, never a modal).
-      toast.warning(tc('servingPreviewAnyway', { summary }));
-    }
-    setIsRunning(true);
-    // A new run is judged on its own output: clear the previous attempt's failures
-    // so a repair turn is never handed an error the user has already fixed. A run
-    // that fails the same way immediately re-records it.
-    clearBuildFailures(projectIdNum);
-    try {
-      log.banner('runStarted');
-
-      log.step('stepPreparing');
-      const mountContents = await assembleMountContents(log);
-      if (!mountContents) {
-        throw new Error(t('runLog.invalidPackageJsonFix'));
-      }
-      log.ok('filesReady');
-      log.blank();
-
-      // Both overlays go into the MOUNTED copy only — never the files on disk and
-      // never the publish path — so a runtime error inside the preview reaches the
-      // agent, and any element in it can be pointed at, while the user's source and
-      // their published build stay exactly what they wrote.
-      const overlaid = withVisualEditor(withPreviewErrorReporter(mountContents));
-
-      // Instant preview first: served from memory, no install and no dev server.
-      // Projects it cannot serve (a Node server) run their own `npm run dev` below.
-      const instant = await startInstantPreview(overlaid);
-      if (instant.kind === 'ready') {
-        log.ok('instantPreviewReady');
-        log.raw(`\x1b[36m${RUN_LOG_RULE}\x1b[0m\r\n\r\n`);
-        setPreviewUrl(instant.url);
-        setCenterView('preview');
-        return;
-      }
-      log.hint('instantPreviewDeclined', { reason: instant.reason });
-      log.blank();
-
-      log.step('stepMounting');
-      await mountFiles(overlaid);
-      log.ok('mounted', { count: Object.keys(mountContents).length });
-      log.blank();
-
-      log.step('stepInstalling');
-      // Tee the install output: the terminal shows it to a human, the tail is what
-      // an agent needs to know WHY it failed. Before this, only the exit code
-      // survived and the cause stayed in pixels.
-      const installLog = teeOutput((data) => log.raw(data));
-      const installCode = await ensureInstalled(mountContents, installLog.write, log);
-      if (installCode !== 0) {
-        log.error('installFailed', { code: installCode });
-        recordBuildFailure(projectIdNum, {
-          source: 'build',
-          command: 'npm install',
-          exitCode: installCode,
-          message: `npm install failed (exit ${installCode}).`,
-          detail: installLog.text(),
-        });
-        return;
-      }
-      log.blank();
-      log.ok('depsReady');
-      log.blank();
-
-      log.step('startingDevServer');
-      const url = await startDevServer((data) => log.raw(data));
-      log.blank();
-      log.ok('devServerReady', { url });
-      log.raw(`\x1b[36m${RUN_LOG_RULE}\x1b[0m\r\n\r\n`);
-      setPreviewUrl(url);
-      setCenterView('preview');
-    } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
-      console.error('Run failed:', e);
-      // Recorded BEFORE the terminal formatting below, so the agent's copy is the
-      // raw message rather than whichever branch happened to render it.
-      recordBuildFailure(projectIdNum, {
-        source: 'build',
-        command: 'npm run dev',
-        message: errorMsg.split('\n')[0] || 'The dev server failed to start.',
-        detail: errorMsg,
-      });
-
-      // Always surface the error in the terminal so the user sees it
-      // `Invalid package.json` is matched against the ENGLISH marker npm emits
-      // (EJSONPARSE) as well as our own localized text, so the branch survives
-      // translation of the message we throw ourselves.
-      if (errorMsg.includes('EJSONPARSE') || errorMsg === t('runLog.invalidPackageJsonFix')) {
-        log.errorBlock('packageJsonErrorTitle', ['packageJsonErrorBody', 'packageJsonErrorHint']);
-        // The example is code, not prose — it is what must be typed, so it is
-        // shown verbatim rather than translated.
-        log.step('expectedFormat');
-        log.raw('{\r\n  "name": "my-app",\r\n  "version": "1.0.0",\r\n  "scripts": { "dev": "vite" },\r\n  "dependencies": { ... }\r\n}\r\n');
-      } else if (errorMsg.includes('output:')) {
-        const outputMatch = errorMsg.match(/output:\n([\s\S]+)/);
-        if (outputMatch) {
-          log.errorBlock('devServerErrorTitle', []);
-          log.raw(outputMatch[1]);
-          log.raw(`\r\n\x1b[31m${RUN_LOG_RULE}\x1b[0m\r\n`);
-        } else {
-          log.error('errorPrefix', { message: errorMsg });
-        }
-      } else {
-        log.error('errorPrefix', { message: errorMsg });
-      }
-    } finally {
-      setIsRunning(false);
-    }
-  }, [isRunning, startDevServer, startInstantPreview, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, toast, t, tc, projectIdNum]);
-
-  /**
-   * Build the project for publishing, in the browser: its files in, a static
-   * site out (index.html, hashed assets, public/). No install and no dev
-   * server, and the running preview is left alone. The base is relative, so the
-   * site works at `<sub>.builderforce.ai/` and under the `/api/sites/<sub>/` path.
-   */
-  const handlePublishBuild = useCallback(async (): Promise<Array<{ path: string; data: Uint8Array }>> => {
-    sendWorkspaceCommand(project.id, { type: 'showPanel', panel: 'output' });
-    publishLog.bannerInline('buildingForPublish');
-
-    const mount = await assembleMountContents(publishLog);
-    if (!mount) throw new Error(t('runLog.invalidPackageJsonFix'));
-
-    // `npm run build` is the COMMAND this stands for — shown verbatim.
-    publishLog.raw('\x1b[36mnpm run build…\x1b[0m\r\n');
-    const assets = await buildSite(mount);
-    if (assets.length === 0) {
-      throw new Error(t('runLog.noDistOutput'));
-    }
-    publishLog.blank();
-    publishLog.ok('capturedFiles', { count: assets.length });
-    return assets;
-  }, [assembleMountContents, publishLog, t, project.id]);
-
-  /**
-   * Check the project the way its own toolchain would: type-check and build
-   * straight from the files (no install), then the project's `lint` script on
-   * the Node runtime when it defines one. The Run button reads the result to
-   * warn before serving a broken preview; failures reach the agent.
-   */
-  const handleCheck = useCallback(async () => {
-    if (isChecking || isRunning) return;
-    setIsChecking(true);
-    setCheckResults(null);
-    try {
-      log.bannerInline('runningChecks');
-      const mount = await assembleMountContents(log);
-      if (!mount) {
-        setCheckResults([{ label: 'package.json', status: 'fail', detail: 'Invalid JSON' }]);
-        return;
-      }
-      let scripts: Record<string, string> = {};
-      try {
-        scripts = (JSON.parse(mount['package.json'] ?? '{}') as { scripts?: Record<string, string> }).scripts ?? {};
-      } catch { /* validated above */ }
-
-      const { results, failures } = await runProjectChecks({
-        typecheck: hasTypeScript(mount) ? () => typecheckFiles(mount) : null,
-        build: () => buildSite(mount),
-        lint: scripts['lint']
-          ? async () => {
-            await mountFiles(mount);
-            const installLog = teeOutput((d) => log.raw(d));
-            const installCode = await ensureInstalled(mount, installLog.write, log);
-            if (installCode !== 0) return { step: 'npm install' as const, code: installCode, output: installLog.text() };
-            const lintLog = teeOutput((d) => log.raw(d));
-            return { step: 'lint' as const, code: await runCommandAndWait('npm', ['run', 'lint'], lintLog.write), output: lintLog.text() };
-          }
-          : null,
-        // `label` names the step (type-check / build / lint) — an identifier, interpolated verbatim.
-        onStep: (label) => log.section('checkStep', { label }),
-        onOutput: (text) => log.raw(text),
-      });
-      for (const failure of failures) recordBuildFailure(projectIdNum, failure);
-      setCheckResults(results);
-      const failed = results.filter(r => r.status === 'fail').length;
-      if (failed === 0) {
-        log.blank();
-        log.ok('allChecksPassed');
-      } else {
-        log.error('checksFailed', { count: failed });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      log.error('checkError', { message: msg });
-      setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
-      recordBuildFailure(projectIdNum, { source: 'build', message: msg.split('\n')[0] || 'Checks failed.', detail: msg });
-    } finally {
-      setIsChecking(false);
-    }
-  }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, log, projectIdNum]);
-
-  const handleTerminalInput = useLazyShell(startShell, (data) => terminalWriteRef.current?.(data));
-
-  // Refresh file list after create/delete
-  const refreshFiles = useCallback(async () => {
-    try {
-      const updated = await fetchFiles(project.id);
-      setFiles(updated);
-    } catch { /* silent */ }
-  }, [project.id]);
-
-  /**
-   * Runtime errors thrown INSIDE the preview, reported by the shim injected into
-   * the mounted `index.html`. Without this an app that compiles and then throws
-   * left a blank frame and no signal the agent could read.
-   *
-   * `event.source` is deliberately not checked against the preview iframe: the
-   * dev server is a cross-origin document whose `contentWindow` this frame cannot
-   * compare, so the message TYPE plus the shape check in `previewErrorFrom` is
-   * the identification. Both are namespaced, and the payload is only ever read as
-   * three strings, so a hostile sender's best case is a spurious diagnostic line.
-   */
-  useEffect(() => {
-    if (!previewUrl) return;
-    const onMessage = (event: MessageEvent) => {
-      const failure = previewErrorFrom(event.data);
-      if (failure) { recordBuildFailure(projectIdNum, failure); return; }
-      // The other half of the preview conversation: an element the user pointed at.
-      const selected = visualSelectionFrom(event.data);
-      if (selected) { setVisualSelection(selected); setVisualDraft({ text: selected.text ?? '', className: selected.className }); }
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [previewUrl, projectIdNum]);
-
-  /**
-   * Point-and-edit: change what you can see without spending a model turn.
-   *
-   * The overlay is injected into the mounted preview (see `lib/visualEditor.ts`);
-   * this is the host half — arming it, holding the selection, and applying the two
-   * edits that are safe to make without a model checking them.
-   */
-  const armVisual = useCallback((armed: boolean) => {
-    setVisualArmed(armed);
-    if (!armed) setVisualSelection(null);
-    previewFrameRef.current?.contentWindow?.postMessage({ type: VISUAL_ARM_MESSAGE, armed }, '*');
-  }, []);
-
-  // Re-arm after a reload: the overlay is a fresh script in a fresh document and
-  // has no memory of having been armed before the dev server restarted it.
-  useEffect(() => {
-    if (!visualArmed || !previewUrl) return;
-    const id = window.setTimeout(
-      () => previewFrameRef.current?.contentWindow?.postMessage({ type: VISUAL_ARM_MESSAGE, armed: true }, '*'),
-      400,
-    );
-    return () => window.clearTimeout(id);
-  }, [visualArmed, previewUrl]);
-
-  const applyVisualEdit = useCallback(async () => {
-    const selection = visualSelection;
-    if (!selection) return;
-    setVisualError(null);
-    try {
-      let content = await fetchFileContent(project.id, selection.file);
-      if (selection.text !== null && visualDraft.text !== selection.text) {
-        const edited = replaceTextAtLine(content, selection.line, selection.text, visualDraft.text);
-        if (!edited.ok) { setVisualError(edited.reason); return; }
-        content = edited.content;
-      }
-      if (visualDraft.className !== selection.className) {
-        const edited = replaceClassNameAtLine(content, selection.line, visualDraft.className);
-        if (!edited.ok) { setVisualError(edited.reason); return; }
-        content = edited.content;
-      }
-      const valid = validateFileContentForPath(selection.file, content);
-      if (!valid.ok) { setVisualError(valid.reason); return; }
-      await saveFile(project.id, selection.file, content);
-      setFileContents((prev) => ({ ...prev, [selection.file]: content }));
-      if (previewUrl) await writePreviewFile(selection.file, content).catch(() => { /* best-effort */ });
-      setVisualSelection(null);
-    } catch (error) {
-      setVisualError(faultMessage(error, t('visualNoPreview')));
-    }
-  }, [project.id, previewUrl, t, visualDraft, visualSelection, writePreviewFile]);
-
-  /**
-   * A file this workspace has open was written from the BOARD.
-   *
-   * The canvas build tools write over the API whether or not this panel is
-   * mounted, so without this the editor would keep showing the pre-edit buffer
-   * over post-edit content — and the next manual save would write the stale text
-   * back over the agent's work. Re-reads the changed file, refreshes the tree, and
-   * pushes it into the running dev server so the preview updates too.
-   */
-  useEffect(() => subscribeWorkspaceFiles((storageProjectId, paths) => {
-    if (storageProjectId !== projectIdNum) return;
-    void refreshFiles();
-    for (const path of paths) {
-      void fetchFileContent(project.id, path)
-        .then((content) => {
-          setFileContents((prev) => (prev[path] === content ? prev : { ...prev, [path]: content }));
-          if (previewUrl) void writePreviewFile(path, content).catch(() => { /* best-effort */ });
-        })
-        .catch(() => { /* the file may have been deleted between write and read */ });
-    }
-  }), [projectIdNum, project.id, previewUrl, refreshFiles, writePreviewFile]);
-
-  // --- Brain integration ----------------------------------------------------
-  // Builder's AI lives in the global Brain drawer. Builder exposes its
-  // capabilities as MCP-style actions the Brain can call via tool-calling, and
-  // publishes ambient context (project, modality, open file) the Brain reads.
-  const brainCtx = useBrainContext();
-
-  const applyCodeToActiveFile = useCallback((code: string): { ok: true } | { ok: false; reason: string } => {
-    if (!activeFile) return { ok: false, reason: 'No file is open in the editor.' };
-    // Block structurally-invalid writes (e.g. CSS into package.json) before they
-    // corrupt the file and break Run [1315].
-    const valid = validateFileContentForPath(activeFile, code);
-    if (!valid.ok) { console.error(valid.reason); return valid; }
-    setFileContents(prev => ({ ...prev, [activeFile]: code }));
-    if (previewUrl) writePreviewFile(activeFile, code).catch(() => { /* best-effort */ });
-    saveFile(project.id, activeFile, code).catch(console.error);
-    return { ok: true };
-  }, [activeFile, project.id, previewUrl, writePreviewFile]);
-
-  const createProjectFile = useCallback((path: string, content: string): { ok: true } | { ok: false; reason: string } => {
-    const valid = validateFileContentForPath(path, content);
-    if (!valid.ok) { console.error(valid.reason); return valid; }
-    setFileContents(prev => ({ ...prev, [path]: content }));
-    if (previewUrl) writePreviewFile(path, content).catch(() => { /* best-effort */ });
-    saveFile(project.id, path, content)
-      .then(() => {
-        // A corpus written as a FILE must also become a registered dataset.
-        // Otherwise a `data/train.jsonl` the Brain produced is invisible to the
-        // fine-tune picker and ungoverned by `trainingDatasetGate` — the user
-        // watches the file appear and then cannot train on it anywhere. Strictly
-        // detected (every row must be an instruction/output pair), best-effort
-        // (a registration failure must never lose the file the user just got).
-        if (looksLikeDatasetPath(path)) {
-          const examples = parseJsonlDataset(content);
-          if (examples && examples.length > 0) {
-            importCanvasDataset({
-              projectId: project.id,
-              name: datasetNameForPath(path),
-              examples,
-              capabilityPrompt: `Written into the workspace as ${path}`,
-            })
-              .then(() => setDatasetsRegistered((n) => n + 1))
-              .catch((e) => console.error(`Created ${path} but could not register it as a dataset:`, e));
-          }
-        }
-        refreshFiles();
-        if (!openFiles.includes(path)) {
-          setOpenFiles(prev => [...prev, path]);
-          setActiveFile(path);
-        }
-      })
-      .catch(console.error);
-    return { ok: true };
-  }, [project.id, refreshFiles, openFiles, previewUrl, writePreviewFile]);
-
-  // Latest Builder state for action handlers, so the registered action array stays
-  // stable (no re-registration churn) while `run()` reads current values.
-  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText });
-  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText };
-
-  /**
-   * The workspace's own copy of the canvas BUILD vocabulary.
-   *
-   * The same seven tools the board gets (`lib/canvasBuildTools.ts`), bound to
-   * THIS project, minus `canvas_create_build` — a workspace that is already open
-   * has nothing to create. Registering them here is what gives the docked Brain
-   * the ability to LIST, READ and SEARCH the project it is editing, and to make a
-   * surgical edit instead of regenerating a whole file. Before this, the docked
-   * Brain could only write, and only ever whole files.
-   *
-   * It is the same implementation rather than a second one so an edit behaves
-   * identically whether it was asked for on the board or in the panel.
-   */
-  const buildToolActions = useMemo<BrainAction[]>(() => canvasBuildActions({
-    builds: () => [{
-      objectId: String(projectIdNum),
-      title: project.name,
-      binding: { ideProjectId: projectIdNum, storageProjectId: projectIdNum, storageProjectPublicId: String(projectIdNum), modality },
-    }],
-    createBuild: async () => { throw new Error('This workspace is already open — edit its files instead of creating another build.'); },
-    onFilesChanged: notifyWorkspaceFilesChanged,
-  }).filter((action) => action.name !== 'canvas_create_build'), [modality, project.name, projectIdNum]);
-
-  const brainActions = useMemo<BrainAction[]>(() => [
-    ...buildToolActions,
-    {
-      name: 'create_file',
-      // Steered at the surgical editor deliberately: this action also backs the
-      // "Create file" button on a code block in a chat reply, so it cannot be
-      // removed — but a model choosing between it and `canvas_edit_build_file`
-      // for an EXISTING file should choose the one that cannot drop code.
-      description: 'Create a NEW file in the current project and open it in the editor. To change a file that already exists, use canvas_edit_build_file instead — this action replaces the whole file and silently drops anything you did not reproduce.',
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'Project-relative file path, e.g. src/App.jsx' },
-          content: { type: 'string', description: 'Full file contents' },
-        },
-        required: ['path', 'content'],
-      },
-      run: async ({ path, content }: { path: string; content: unknown }) => {
-        if (!path) return { error: 'A file path is required.' };
-        // Models often emit a structured body (e.g. package.json) as an object —
-        // coerce to text so the write never crashes on `.trim()` of a non-string.
-        const res = liveRef.current.createProjectFile(path, coerceFileContent(content));
-        return res.ok ? { created: path } : { error: res.reason };
-      },
-    },
-    {
-      name: 'apply_code_to_active_file',
-      description: "Replace the entire contents of the file currently open in the editor. Prefer canvas_edit_build_file, which changes only the part you name and costs a fraction of a rewrite; use this only when the whole file genuinely is being replaced.",
-      parameters: {
-        type: 'object',
-        properties: { code: { type: 'string', description: 'New full contents for the open file' } },
-        required: ['code'],
-      },
-      run: async ({ code }: { code: unknown }) => {
-        const res = liveRef.current.applyCodeToActiveFile(coerceFileContent(code));
-        return res.ok ? { applied: liveRef.current.activeFile } : { error: res.reason };
-      },
-    },
-    {
-      name: 'set_narration_text',
-      description: 'Load the lines to synthesize into the voice studio (voice modality only). The user presses Generate to render them.',
-      parameters: {
-        type: 'object',
-        properties: { text: { type: 'string', description: 'The lines to narrate in the selected voice' } },
-        required: ['text'],
-      },
-      run: async ({ text }: { text: string }) => {
-        if (liveRef.current.modality !== 'voice') return { error: 'The project is not in Voice modality.' };
-        liveRef.current.setVoiceText(text ?? '');
-        return { loaded: true };
-      },
-    },
-    {
-      name: 'generate_prd',
-      description: 'Save a Product Requirements Document (markdown) to the project specs.',
-      parameters: {
-        type: 'object',
-        properties: { prd: { type: 'string', description: 'The full PRD in markdown' } },
-        required: ['prd'],
-      },
-      run: async ({ prd }: { prd: string }) => {
-        if (!prd?.trim()) return { error: 'PRD content is empty.' };
-        // Auto-approve skips the review modal — the user already opted out of
-        // per-action prompts, so save straight through.
-        if (isBrainAutoApprove()) {
-          try {
-            await savePrd(liveRef.current.projectIdNum, prd.trim());
-            return { saved: true };
-          } catch (e) {
-            return { error: toolErrorMessage(e, 'Failed to save PRD') };
-          }
-        }
-        // Surface for review; resolve once the user saves or cancels.
-        const saved = await new Promise<boolean>((resolve) => {
-          setReviewError(null);
-          setPrdReview({ prd: prd.trim(), resolve });
-        });
-        return saved ? { saved: true } : { saved: false, note: 'User declined to save the PRD.' };
-      },
-    },
-    {
-      name: 'generate_tasks',
-      description: 'Add a list of actionable tasks to the project.',
-      parameters: {
-        type: 'object',
-        properties: {
-          tasks: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { title: { type: 'string' }, description: { type: 'string' } },
-              required: ['title'],
-            },
-          },
-        },
-        required: ['tasks'],
-      },
-      run: async ({ tasks }: { tasks: Array<{ title: string; description?: string }> }) => {
-        const list = Array.isArray(tasks) ? tasks.filter(t => t?.title?.trim()) : [];
-        if (list.length === 0) return { error: 'No tasks provided.' };
-        const titles = list.map(t => t.title);
-        const descriptions = list.map(t => t.description ?? '');
-        // Auto-approve skips the review modal — the user already opted out of
-        // per-action prompts, so add the tasks straight through.
-        if (isBrainAutoApprove()) {
-          try {
-            await saveTasks(liveRef.current.projectIdNum, { titles, descriptions });
-            return { added: list.length };
-          } catch (e) {
-            return { error: toolErrorMessage(e, 'Failed to add tasks') };
-          }
-        }
-        // Surface for review; resolve once the user adds or cancels.
-        const saved = await new Promise<boolean>((resolve) => {
-          setReviewError(null);
-          setTasksReview({ titles, descriptions, resolve });
-        });
-        return saved ? { added: list.length } : { added: 0, note: 'User declined to add the tasks.' };
-      },
-    },
-    // Closures read only stable refs/setters + module imports; the actual save
-    // (which needs projectIdNum) happens in the review-confirm handlers below.
-    // `buildToolActions` is the one real dependency: it rebinds when the project
-    // or modality changes, and the tools must follow the workspace they edit.
-  ], [buildToolActions]);
-
-  useRegisterBrainActions(brainActions);
-
-  // Review-modal handlers for the Brain `generate_prd`/`generate_tasks` tools.
-  const confirmPrdReview = useCallback(async () => {
-    if (!prdReview) return;
-    setReviewSaving(true);
-    setReviewError(null);
-    try {
-      await savePrd(projectIdNum, prdReview.prd);
-      prdReview.resolve(true);
-      setPrdReview(null);
-    } catch (e) {
-      setReviewError(errorMessage(e));
-    } finally {
-      setReviewSaving(false);
-    }
-  }, [prdReview, projectIdNum, errorMessage]);
-
-  const cancelPrdReview = useCallback(() => {
-    if (!prdReview) return;
-    prdReview.resolve(false);
-    setPrdReview(null);
-    setReviewError(null);
-  }, [prdReview]);
-
-  const confirmTasksReview = useCallback(async () => {
-    if (!tasksReview) return;
-    setReviewSaving(true);
-    setReviewError(null);
-    try {
-      await saveTasks(projectIdNum, { titles: tasksReview.titles, descriptions: tasksReview.descriptions });
-      tasksReview.resolve(true);
-      setTasksReview(null);
-    } catch (e) {
-      setReviewError(errorMessage(e));
-    } finally {
-      setReviewSaving(false);
-    }
-  }, [tasksReview, projectIdNum, errorMessage]);
-
-  const cancelTasksReview = useCallback(() => {
-    if (!tasksReview) return;
-    tasksReview.resolve(false);
-    setTasksReview(null);
-    setReviewError(null);
-  }, [tasksReview]);
-
-  // Publish ambient context so the Brain knows the active project/modality and
-  // can see the open file.
-  const activeFileContent = activeFile ? (fileContents[activeFile] ?? '') : undefined;
-  // The open-file context fed to the LLM. Shared by the global Brain (via
-  // BrainContext) and the Designer left-panel <BrainPanel> so they speak with
-  // identical project awareness.
-  const extraSystem = useMemo(
-    () =>
-      activeFile
-        ? `The user currently has the file \`${activeFile}\` open.${activeFileContent ? `\n\nCurrent content of that file:\n\`\`\`\n${activeFileContent.slice(0, 4000)}\n\`\`\`` : ''}`
-        : undefined,
-    [activeFile, activeFileContent],
+  const codePane = (
+    <CodePane
+      openFiles={editor.openFiles}
+      activeFile={editor.activeFile}
+      fileContents={fileContents}
+      onTabSelect={editor.setActiveFile}
+      onTabClose={editor.closeTab}
+      onChange={editor.editActiveFile}
+      ydoc={ydoc}
+      projectId={project.id}
+    />
   );
-  const setBrainContext = brainCtx.setContext;
-  useEffect(() => {
-    setBrainContext({ projectId: projectIdNum, modality, extraSystem });
-  }, [setBrainContext, projectIdNum, modality, extraSystem]);
-
-  // Deep link: when opened with ?chat=, surface that chat. In Designer the chat
-  // lives in the left panel (so we just select it); other modalities have no
-  // left panel, so we pop the floating drawer instead.
-  const setBrainOpen = brainCtx.setOpen;
-  useEffect(() => {
-    if (initialChatId == null && !initialPrompt && !initialTicket) return;
-    // Only the non-docked path needs the context publish + drawer pop; the docked
-    // Brain receives initialChatId/initialPrompt/initialTicket as direct props below.
-    if (hasDockedBrain) {
-      if (initialChatId != null) setBrainContext({ initialChatId });
-      return;
-    }
-    setBrainContext({
-      ...(initialChatId != null ? { initialChatId } : {}),
-      ...(initialPrompt ? { initialPrompt } : {}),
-      ...(initialTicket ? { initialTicket } : {}),
-    });
-    setBrainOpen(true);
-  }, [initialChatId, initialPrompt, initialTicket, hasDockedBrain, setBrainContext, setBrainOpen]);
-
-  const statusLabel = runtimeState.status === 'idle' ? '' : t(`runtimeStatus.${runtimeState.status}`);
-  const subtitle = projectSubtitle(project.name, project.description);
+  const framing: PreviewFraming = modalityDef.center === 'device' ? 'bezel' : modalityDef.enableMobilePreview ? 'both' : 'frame';
+  const showChat = hasDockedBrain && (!narrow || narrowPane === 'chat');
+  const showWork = !narrow || !hasDockedBrain || narrowPane === 'work';
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>
-      {/* Top bar — editable project title, theme toggle, run button */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px',
-        background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)',
-        flexShrink: 0, minHeight: 40,
-      }}>
-        {/* Left: hamburger (projects panel) */}
-        <button
-          type="button"
-          onClick={() => setProjectsPanelOpen(true)}
-          aria-label={t('openProjectsAria')}
-          style={{
-            background: 'var(--bg-elevated)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '6px 10px',
-            cursor: 'pointer',
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 3,
-          }}
-          title={t('yourIdeProjects')}
-        >
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 'var(--radius-sm)' }} />
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 'var(--radius-sm)' }} />
-          <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 'var(--radius-sm)' }} />
-        </button>
-        {/* Editable project title */}
-        <input
-          type="text"
-          value={projectTitle}
-          onChange={e => setProjectTitle(e.target.value)}
-          onBlur={async (e) => {
-            e.currentTarget.style.borderColor = 'var(--border-subtle)';
-            const name = projectTitle.trim() || project.name;
-            if (name === project.name) {
-              setProjectTitle(project.name);
-              return;
-            }
-            setIsSavingTitle(true);
-            try {
-              const updated = await updateProject(project.id, { name });
-              onProjectUpdate?.({ ...project, ...updated });
-              setProjectTitle(updated.name);
-            } catch {
-              setProjectTitle(project.name);
-            } finally {
-              setIsSavingTitle(false);
-            }
-          }}
-          onKeyDown={e => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
-          onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; }}
-          disabled={isSavingTitle}
-          title={t('editNameHint')}
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontWeight: 700,
-            fontSize: '0.9rem',
-            color: 'var(--text-primary)',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '6px 10px',
-            minWidth: 120,
-            maxWidth: 320,
-            outline: 'none',
-          }}
-        />
-        {/* Only when it adds something: a prompt-started project's description IS
-            the sentence its name was cut from, and the two side by side read as the
-            title printed twice. */}
-        {subtitle && (
-          <span title={subtitle} style={{ color: 'var(--text-muted)', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, minWidth: 0 }}>
-            — {subtitle}
-          </span>
-        )}
-
-        {/* Next to title: Details */}
-        {onOpenProjectDetails && (
-          <button
-            type="button"
-            onClick={onOpenProjectDetails}
-            style={{
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              padding: '5px 10px',
-              fontSize: '0.82rem',
-              cursor: 'pointer',
-              flexShrink: 0,
-              fontFamily: 'var(--font-display)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-            title={t('projectDetailsTitle')}
-          >
-            <Icon name="project" size={16} />
-            {t('details')}
-          </button>
-        )}
-
-        {/* Settings cog — repo / source-control configuration slide-out */}
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          aria-label={t('projectSettingsAria')}
-          title={t('settingsRepoTitle')}
-          style={{
-            background: 'var(--bg-elevated)',
-            color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '5px 9px',
-            fontSize: '0.95rem',
-            cursor: 'pointer',
-            flexShrink: 0,
-            lineHeight: 1,
-          }}
-        >
-          
-          <Icon source="⚙️" size="1em" />
-        </button>
-
-        {/* Team Chat — the project's group conversation (humans + agents) */}
-        {Number.isFinite(projectIdNum) && <TeamChatButton projectId={projectIdNum} />}
-
-        {/* Modality label — Builder is scoped to this project's type (set at
-            creation), so it's shown, not switchable. */}
-        <span
-          title={t('modalityProject', { label: modalityCopy.label })}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5, marginLeft: 8, flexShrink: 0,
-            padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
-            fontFamily: 'var(--font-display)', color: 'var(--text-secondary)',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
-          }}
-        >
-          <span><Icon source={modalityCopy.icon} size={20} /></span>
-          {modalityCopy.label}
-        </span>
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Right: collab status, run */}
-        {collabConnected && (
-          <span style={{ fontSize: '0.72rem', color: 'var(--success-text)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 6, height: 6, background: 'var(--emerald-bright)', borderRadius: '50%', display: 'inline-block' }} />
-            Live
-          </span>
-        )}
-        {statusLabel && (
-          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
-        )}
-        {modalityDef.showChecks && checkResults && (() => {
-          const failed = checkResults.filter(r => r.status === 'fail').length;
-          const passed = checkResults.filter(r => r.status === 'pass').length;
-          return (
-            <span
-              title={checkResults.map(r => `${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ''}`).join('\n')}
-              style={{
-                fontSize: '0.72rem', fontWeight: 600, flexShrink: 0,
-                color: failed > 0 ? 'var(--error)' : 'var(--emerald-bright)',
-              }}
-            >
-              <Icon name={failed > 0 ? 'close' : 'check'} size={14} /> {failed > 0 ? t('checksFailed', { count: failed }) : t('checksPassed', { count: passed })}
-            </span>
-          );
-        })()}
-        {modalityDef.showChecks && (
-          <label
-            title={t('blockOnFailHint')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
-              fontSize: '0.72rem', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={gateRunOnChecks}
-              onChange={(e) => setGateRunOnChecks(e.target.checked)}
-              style={{ cursor: 'pointer' }}
+      <WorkspaceHeader
+        leading={headerLeading}
+        title={<ProjectTitleField project={project} onProjectUpdate={onProjectUpdate} />}
+        typeIcon={modalityCopy.icon}
+        typeLabel={modalityCopy.label}
+        onOpenProjects={() => setProjectsPanelOpen(true)}
+        center={livePreview || (narrow && hasDockedBrain) ? (
+          <CenterViewSwitch
+            views={livePreview ? centerViewsFor(modalityDef.publishPanel) : []}
+            value={centerView}
+            onChange={selectView}
+            chat={narrow && hasDockedBrain ? { active: narrowPane === 'chat', onSelect: () => setNarrowPane('chat') } : undefined}
+            workLabel={modalityCopy.label}
+          />
+        ) : undefined}
+        actions={(
+          <>
+            {collabConnected && (
+              <span role="status" aria-label={t('workspace.collabConnected')} title={t('workspace.collabConnected')} style={{ display: 'inline-flex', padding: '0 4px' }}>
+                <span className={styles.dot} />
+              </span>
+            )}
+            {/* The plan funding this workspace's chat. It used to sit in the composer's
+                last row, where "FREE · UPGRADE" read as part of the message being typed. */}
+            <PlanBadge />
+            {Number.isFinite(projectIdNum) && <TeamChatButton projectId={projectIdNum} />}
+            {/* A type with no live preview (Voice) keeps an explicit button for its one action. */}
+            {modalityDef.showRunButton && !livePreview && <VoiceGenerateButton voice={voice} label={modalityCopy.runLabel} />}
+            <WorkspaceMoreMenu
+              tabs={allowedRightTabs}
+              onOpenTab={openRail}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenDetails={onOpenProjectDetails}
             />
-            {t('gateRun')}
-          </label>
+          </>
         )}
-        {modalityDef.showChecks && (
-          <button
-            onClick={handleCheck}
-            disabled={isChecking || isRunning}
-            title={t('runChecksHint')}
-            style={{
-              background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
-              padding: '5px 12px', fontSize: '0.82rem', fontWeight: 600,
-              cursor: (isChecking || isRunning) ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
-              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-              opacity: (isChecking || isRunning) ? 0.6 : 1,
-            }}
-          >
-            {!isChecking && <Icon name="check" size={14} />} {isChecking ? t('checking') : t('check')}
-          </button>
-        )}
-        {modalityDef.showRunButton && (() => {
-          // Voice generates speech (voice.synth); Designer runs the dev server.
-          const isVoice = modality === 'voice';
-          const label = modalityCopy.runLabel;
-          const active = isVoice ? voice.busy : isRunning;
-          const disabled = active || (isVoice && !voice.selectedCloneId);
-          return (
-            <button
-              onClick={isVoice ? () => void voice.synth() : handleRun}
-              disabled={disabled}
-              title={isVoice && !voice.selectedCloneId ? 'Create or select a voice first' : undefined}
-              style={{
-                background: active ? 'var(--bg-elevated)' : 'linear-gradient(135deg, var(--success), var(--success))',
-                color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)',
-                padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
-                cursor: active ? 'wait' : (disabled ? 'not-allowed' : 'pointer'), fontFamily: 'var(--font-display)',
-                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-                opacity: disabled ? 0.6 : 1,
-              }}
-            >
-              {active ? `${isVoice ? 'Generating': 'Running'}…` : `${label}`}
-            </button>
-          );
-        })()}
-      </div>
-
-      <BuilderProjectsSlideOutPanel
-        open={projectsPanelOpen}
-        onClose={() => setProjectsPanelOpen(false)}
-        currentStorageProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
+        trailing={headerTrailing}
       />
 
-      <BuilderSettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        projectId={projectIdNum}
-        onImported={refreshFiles}
-      />
+      <BuilderProjectsSlideOutPanel open={projectsPanelOpen} onClose={() => setProjectsPanelOpen(false)} currentStorageProjectId={projectIdNum} />
+      <BuilderSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} projectId={projectIdNum} onImported={editor.refreshFiles} />
 
       {/* Mobile: scan-to-open-on-a-real-phone. Mounted only where the device
           simulator is, since it hands off that modality's published build. */}
@@ -1287,61 +250,41 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           open={devicePanelOpen}
           onClose={() => setDevicePanelOpen(false)}
           projectId={projectIdNum}
-          onGoToPublish={() => setRightTab('publish')}
+          onGoToPublish={() => openRail('publish')}
         />
       )}
 
-      {/* Brain-tool artifact reviews — the agent's generate_prd/generate_tasks
-          surface here for confirm-before-save, matching the button-action path. */}
-      {prdReview && (
-        <PrdReviewModal
-          prd={prdReview.prd}
-          onCancel={cancelPrdReview}
-          onConfirm={confirmPrdReview}
-          saving={reviewSaving}
-          error={reviewError}
-        />
-      )}
-      {tasksReview && (
-        <TasksReviewModal
-          titles={tasksReview.titles}
-          descriptions={tasksReview.descriptions}
-          onCancel={cancelTasksReview}
-          onConfirm={confirmTasksReview}
-          saving={reviewSaving}
-          error={reviewError}
-        />
-      )}
+      {/* Brain-tool artifact reviews (generate_prd / generate_tasks). */}
+      {reviews.modals}
 
-      {/* Main content. In Designer and Voice the agent lives in the left panel
-          (the shared <BrainPanel> wired to this project's brain actions); other
-          modalities use the global floating Brain drawer. Either way Builder
-          registers the same actions, so the agent can create/apply files or set
-          the narration lines. */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Docked left panel (Designer + Voice): the shared Brain, naming what it sees. */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {/* Docked left panel (Designer + Voice): the shared Brain, naming what it sees.
+            Hidden rather than unmounted on a narrow screen, so switching to the
+            preview and back never drops the conversation. */}
         {hasDockedBrain && (
-          <WorkspaceBrainColumn
-            projectId={projectIdNum}
-            modality={modality}
-            extraSystem={extraSystem}
-            activeFile={activeFile}
-            voiceName={voice.clones.find((c) => c.id === voice.selectedCloneId)?.name}
-            initialChatId={initialChatId}
-            initialPrompt={initialPrompt}
-            initialTicket={initialTicket}
-          />
+          <div style={{ display: showChat ? 'contents' : 'none' }}>
+            <WorkspaceBrainColumn
+              projectId={projectIdNum}
+              modality={modality}
+              extraSystem={brain.extraSystem}
+              activeFile={editor.activeFile}
+              voiceName={voice.clones.find((c) => c.id === voice.selectedCloneId)?.name}
+              initialChatId={initialChatId}
+              initialPrompt={initialPrompt}
+              initialTicket={initialTicket}
+              fill={narrow}
+            />
+          </div>
         )}
-        {/* Center panel — content depends on the active modality, chrome stays consistent */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
-          {/* Center Brain chat affordance — modalities that DON'T dock the agent
-              in the left panel (Video / Evermind / Fine-tune) otherwise only have
-              the corner launcher, so surface a prominent brain button in the middle
-              of the Builder that opens the AI chat scoped to this project. */}
+
+        {/* Centre — content depends on the project type, chrome stays consistent. */}
+        <div style={{ display: showWork && !(narrow && railOpen) ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
+          {/* Types that DON'T dock the agent (Evermind / Fine-tune) get a prominent
+              button that opens the AI chat scoped to this project. */}
           {!hasDockedBrain && (
             <button
               type="button"
-              onClick={() => { setBrainContext({ projectId: projectIdNum, modality }); setBrainOpen(true); }}
+              onClick={brain.openDrawer}
               title={t('askAi')}
               aria-label={t('askAi')}
               style={{
@@ -1354,313 +297,127 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                 boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
               }}
             >
-              <span aria-hidden style={{ fontSize: '1.2rem', lineHeight: 1 }}><Icon source="🧠" size="1em" /></span>
+              <Icon name="brain" size={18} />
               {t('askAi')}
             </button>
           )}
           {modalityDef.center === 'voice' ? (
-            <VoiceOutput
-              result={voice.result}
-              audioUrl={voice.audioUrl}
-              busy={voice.busy}
-              unavailable={voice.unavailable}
-            />
+            <VoiceOutput result={voice.result} audioUrl={voice.audioUrl} busy={voice.busy} unavailable={voice.unavailable} />
           ) : modalityDef.center === 'evermind' || modalityDef.center === 'finetune' ? (
-            activeFile ? (
-              <CodePane
-                openFiles={openFiles}
-                activeFile={activeFile}
-                fileContents={fileContents}
-                onTabSelect={setActiveFile}
-                onTabClose={closeTab}
-                onChange={handleEditorChange}
-                ydoc={ydoc}
-                projectId={project.id}
-              />
-            ) : (
+            editor.activeFile ? codePane : (
               <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
                 {modalityDef.center === 'evermind' ? (
                   <EvermindStudioPanel projectId={project.id} />
                 ) : (
-                  <FinetuneStudioPanel
-                    projectId={project.id}
-                    files={files}
-                    onGoToTab={setRightTab}
-                    onOpenFile={openFile}
-                  />
+                  <FinetuneStudioPanel projectId={project.id} files={files} onGoToTab={openRail} onOpenFile={editor.openFile} />
                 )}
               </div>
             )
           ) : (
-          <>
-          {/* Preview/Code toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '2px 6px', gap: 6, flexShrink: 0 }}>
-            {centerViewsFor(modalityDef.publishPanel).map(view => (
-              <button
-                key={view}
-                onClick={() => setCenterView(view)}
-                style={{
-                  padding: '6px 16px', fontSize: '0.8rem', fontWeight: 600,
-                  background: centerView === view ? 'var(--bg-elevated)' : 'transparent',
-                  color: centerView === view ? 'var(--text-primary)' : 'var(--text-muted)',
-                  border: 'none', borderBottom: centerView === view ? '2px solid var(--coral-bright)' : '2px solid transparent',
-                  cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  borderRadius: 'var(--radius-sm)',
-                }}
-              >
-                {view === 'preview' ? (
-                  <>
-                    <span aria-hidden>{modalityDef.center === 'device' ? <Icon source="📱" size="1em" /> : <Icon source="🌐" size="1em" />}</span>
-                    {t('centerPreview')}
-                    {previewUrl && <span style={{ color: 'var(--success-text)' }}><Icon name="activity" size={12} /></span>}
-                  </>
-                ) : (
-                  <>
-                    <span aria-hidden><Icon source={CENTER_VIEW_META[view].icon} size="1em" /></span>
-                    {t(CENTER_VIEW_META[view].label)}
-                  </>
-                )}
-              </button>
-            ))}
-            {/* Web ⇄ Mobile preview target — only the combined Web + Mobile type,
-                and only while previewing. Lets one project render as both a
-                full-width website and a phone-bezel handset app. */}
-            {modalityDef.enableMobilePreview && centerView === 'preview' && (
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-                {(['web', 'mobile'] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setPreviewDevice(d)}
-                    aria-pressed={previewDevice === d}
-                    title={d === 'web' ? t('previewWeb') : t('previewMobile')}
-                    style={{
-                      padding: '4px 12px', fontSize: '0.75rem', fontWeight: 600, borderRadius: 'var(--radius-sm)',
-                      cursor: 'pointer', border: '1px solid var(--border-subtle)',
-                      background: previewDevice === d ? 'var(--bg-elevated)' : 'transparent',
-                      color: previewDevice === d ? 'var(--text-primary)' : 'var(--text-muted)',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}
-                  >
-                    <span aria-hidden>{d === 'web' ? <Icon source="🌐" size="1em" /> : <Icon source="📱" size="1em" />}</span>
-                    {d === 'web' ? t('previewWeb') : t('previewMobile')}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Main content area */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-            {/* Preview */}
-            <PaneLayer active={centerView === 'preview'} style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-                {/* Mobile previews inside a device bezel at the handset's real
-                    viewport size; every other code modality fills the pane. The
-                    combined Web + Mobile type switches between the two via the
-                    Web/Mobile toggle above. */}
-                {modalityDef.center === 'device' || (modalityDef.enableMobilePreview && previewDevice === 'mobile') ? (
-                  <DevicePreview url={previewUrl} onOpenDevicePanel={() => setDevicePanelOpen(true)} />
-                ) : (
-                  <PreviewFrame url={previewUrl} frameRef={previewFrameRef} />
+            <>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+                <PaneLayer active={centerView === 'preview'} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <PreviewPane
+                    projectId={projectIdNum}
+                    url={runner.previewUrl}
+                    phase={runner.phase}
+                    step={runner.step}
+                    runnable={hasRunnableEntry(files)}
+                    onRestart={() => { void runner.run(); }}
+                    edit={edit}
+                    framing={framing}
+                    onOpenDevicePanel={() => setDevicePanelOpen(true)}
+                  />
+                </PaneLayer>
+                <PaneLayer active={centerView === 'code'} style={{ display: 'flex', flexDirection: 'column' }}>
+                  {codePane}
+                </PaneLayer>
+                {/* Database — mounted only while open, so it re-reads each time it is shown */}
+                {centerView === 'database' && (
+                  <PaneLayer active>
+                    <DatabasePanel projectId={project.id} />
+                  </PaneLayer>
                 )}
               </div>
-              {/* Point-and-edit: the cheap half of changing an app. A class or a
-                  line of copy is an exact, single-line source edit anchored to the
-                  element React itself reported — no model turn, no tokens. */}
-              {previewUrl && (
-                <div
-                  style={{
-                    borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
-                    padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 8,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => armVisual(!visualArmed)}
-                      aria-pressed={visualArmed}
-                      title={t('visualEditHint')}
-                      style={{
-                        padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-                        borderRadius: 'var(--radius-md)', minHeight: 32,
-                        border: `1px solid ${visualArmed ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                        background: visualArmed ? 'var(--accent)' : 'var(--bg-deep)',
-                        color: visualArmed ? 'var(--text-on-accent)' : 'var(--text-secondary)',
-                      }}
-                    >
-                      {visualArmed ? t('visualEditOn') : t('visualEdit')}
-                    </button>
-                    {visualSelection && (
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        {t('visualSelected', { tag: visualSelection.tag, file: visualSelection.file, line: visualSelection.line })}
-                      </span>
-                    )}
-                  </div>
-                  {visualSelection && (
-                    <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))' }}>
-                      {visualSelection.text !== null && (
-                        <label style={{ display: 'grid', gap: 4, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                          {t('visualText')}
-                          <input
-                            value={visualDraft.text}
-                            onChange={(event) => setVisualDraft((draft) => ({ ...draft, text: event.target.value }))}
-                            style={visualFieldStyle}
-                          />
-                        </label>
-                      )}
-                      <label style={{ display: 'grid', gap: 4, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                        {t('visualClasses')}
-                        <input
-                          value={visualDraft.className}
-                          onChange={(event) => setVisualDraft((draft) => ({ ...draft, className: event.target.value }))}
-                          style={visualFieldStyle}
-                        />
-                      </label>
-                    </div>
-                  )}
-                  {visualSelection && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <button type="button" onClick={() => { void applyVisualEdit(); }} style={visualPrimaryButton}>
-                        {t('visualApply')}
-                      </button>
-                      <button type="button" onClick={() => { setVisualSelection(null); setVisualError(null); }} style={visualSecondaryButton}>
-                        {t('visualCancel')}
-                      </button>
-                      {visualError && (
-                        <span role="alert" style={{ fontSize: '0.72rem', color: 'var(--error)' }}>{visualError}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </PaneLayer>
 
-            {/* Code Editor */}
-            <PaneLayer active={centerView === 'code'} style={{ display: 'flex', flexDirection: 'column' }}>
-              <CodePane
-                openFiles={openFiles}
-                activeFile={activeFile}
-                fileContents={fileContents}
-                onTabSelect={setActiveFile}
-                onTabClose={closeTab}
-                onChange={handleEditorChange}
-                ydoc={ydoc}
+              <WorkspaceBottomPanel
                 projectId={project.id}
+                onTerminalReady={logs.onTerminalReady}
+                onTerminalInput={handleTerminalInput}
+                onOutputReady={logs.onOutputReady}
+                status={modalityDef.showChecks ? (
+                  <ChecksControl
+                    results={runner.checkResults}
+                    checking={runner.isChecking}
+                    disabled={runner.phase === 'starting'}
+                    onCheck={() => { void runner.check(); }}
+                    gate={runner.gateRunOnChecks}
+                    onGateChange={runner.setGateRunOnChecks}
+                  />
+                ) : undefined}
               />
-            </PaneLayer>
-
-            {/* Database — mounted only while open, so it re-reads each time it is shown */}
-            {centerView === 'database' && (
-              <PaneLayer active>
-                <DatabasePanel projectId={project.id} />
-              </PaneLayer>
-            )}
-          </div>
-
-          <WorkspaceBottomPanel
-            projectId={project.id}
-            onTerminalReady={handleTerminalReady}
-            onTerminalInput={handleTerminalInput}
-            onOutputReady={handleOutputReady}
-          />
-          </>
+            </>
           )}
         </div>
 
-        {/* Right panel: Files / Train / Publish */}
-        <div style={{ width: 300, flexShrink: 0, borderLeft: '1px solid var(--border-subtle)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-            {allowedRightTabs.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setRightTab(tab)}
-                style={{
-                  flex: 1, padding: '5px 4px', fontSize: '0.72rem', fontWeight: 600,
-                  background: rightTab === tab ? 'var(--bg-elevated)' : 'transparent',
-                  color: rightTab === tab ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  border: 'none', borderTop: rightTab === tab ? '2px solid var(--coral-bright)' : '2px solid transparent',
-                  cursor: 'pointer', fontFamily: 'var(--font-display)',
-                  whiteSpace: 'nowrap',
-                }}
-              >{rightTabLabel(tab)}</button>
-            ))}
-          </div>
-          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-            <PaneLayer active={rightTab === 'voice'}>
-              {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
+        {/* Side panel: Files / Versions / Agent / Train / Publish / State */}
+        <WorkspaceRail
+          tabs={allowedRightTabs}
+          active={rightTab}
+          open={railOpen && showWork}
+          fill={narrow}
+          onSelect={setRightTab}
+          onClose={() => setRailOpen(false)}
+        >
+          <PaneLayer active={rightTab === 'voice'}>
+            {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
+          </PaneLayer>
+          <PaneLayer active={rightTab === 'files'}>
+            <FilesPanel
+              projectId={project.id}
+              onOpenFile={editor.openFile}
+              explorer={(
+                <FileExplorer
+                  files={files}
+                  activeFile={editor.activeFile}
+                  onFileSelect={editor.openFile}
+                  onFileCreate={editor.createFile}
+                  onFileDelete={editor.removeFile}
+                  showHeader={false}
+                />
+              )}
+            />
+          </PaneLayer>
+          {/* Always mounted where the modality has versions: the panel is also what records one per agent turn. */}
+          {allowedRightTabs.includes('versions') && (
+            <PaneLayer active={rightTab === 'versions'}>
+              <VersionsPanel projectId={project.id} />
             </PaneLayer>
-            <PaneLayer active={rightTab === 'files'}>
-              <FilesPanel
-                projectId={project.id}
-                onOpenFile={openFile}
-                explorer={(
-                  <FileExplorer
-                    files={files}
-                    activeFile={activeFile}
-                    onFileSelect={openFile}
-                    onFileCreate={async (path) => { await handleFileCreate(path); refreshFiles(); }}
-                    onFileDelete={async (path) => { await handleFileDelete(path); refreshFiles(); }}
-                    showHeader={false}
-                  />
-                )}
-              />
-            </PaneLayer>
-            {/* Always mounted where the modality has versions: the panel is also what records one per agent turn. */}
-            {allowedRightTabs.includes('versions') && (
-              <PaneLayer active={rightTab === 'versions'}>
-                <VersionsPanel projectId={project.id} />
-              </PaneLayer>
-            )}
-            <PaneLayer active={rightTab === 'agent'}>
-              {rightTab === 'agent' && <BuilderAgentPanel projectId={project.id} />}
-            </PaneLayer>
-            <PaneLayer active={rightTab === 'train'}>
-              <AITrainingPanel
-                projectId={project.id}
-                datasetsVersion={datasetsRegistered}
-                onLog={(msg) => log.raw(`\r\n\x1b[35m[${t('runLog.trainTag')}]\x1b[0m ${msg}`)}
-                onJobCompleted={(job) => setCompletedJobs(prev => {
-                  const exists = prev.some(j => j.id === job.id);
-                  return exists ? prev.map(j => j.id === job.id ? job : j) : [job, ...prev];
-                })}
-              />
-            </PaneLayer>
-            <PaneLayer active={rightTab === 'publish'} style={{ overflow: 'auto' }}>
-              {modalityDef.publishPanel === 'site'
-                ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={handlePublishBuild} />
-                : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
-            </PaneLayer>
-            <PaneLayer active={rightTab === 'state'}>
-              <AgentStateViewer projectId={project.id} />
-            </PaneLayer>
-          </div>
-        </div>
+          )}
+          <PaneLayer active={rightTab === 'agent'}>
+            {rightTab === 'agent' && <BuilderAgentPanel projectId={project.id} />}
+          </PaneLayer>
+          <PaneLayer active={rightTab === 'train'}>
+            <AITrainingPanel
+              projectId={project.id}
+              datasetsVersion={editor.datasetsRegistered}
+              onLog={(msg) => logs.log.raw(`\r\n\x1b[35m[${t('runLog.trainTag')}]\x1b[0m ${msg}`)}
+              onJobCompleted={(job) => setCompletedJobs(prev => {
+                const exists = prev.some(j => j.id === job.id);
+                return exists ? prev.map(j => j.id === job.id ? job : j) : [job, ...prev];
+              })}
+            />
+          </PaneLayer>
+          <PaneLayer active={rightTab === 'publish'} style={{ overflow: 'auto' }}>
+            {modalityDef.publishPanel === 'site'
+              ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={runner.publishBuild} />
+              : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
+          </PaneLayer>
+          <PaneLayer active={rightTab === 'state'}>
+            <AgentStateViewer projectId={project.id} />
+          </PaneLayer>
+        </WorkspaceRail>
       </div>
     </div>
   );
 }
-
-/**
- * Point-and-edit field chrome. Every colour is a theme token so the panel reads
- * in both themes, and the fields are fluid so the row wraps rather than
- * overflowing on a narrow viewport.
- */
-const visualFieldStyle: React.CSSProperties = {
-  width: '100%', minWidth: 0, padding: '6px 8px', fontSize: '0.78rem', minHeight: 32,
-  borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-deep)', color: 'var(--text-primary)',
-};
-
-const visualPrimaryButton: React.CSSProperties = {
-  padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: 32,
-  borderRadius: 'var(--radius-md)', border: 'none',
-  background: 'var(--accent)', color: 'var(--text-on-accent)',
-};
-
-const visualSecondaryButton: React.CSSProperties = {
-  padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: 32,
-  borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-deep)', color: 'var(--text-secondary)',
-};

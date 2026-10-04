@@ -38,7 +38,8 @@ import type {
 import { configureOnnxRuntime } from './onnx-runtime-config';
 import { getOrFetchWeight } from './weight-cache';
 import { muxFramesToMp4, type MuxFrame } from './webcodecs-muxer';
-import { reportProgress } from './diffusion-engine';
+import { reportProgress } from './progress';
+import { throwIfAborted } from './abort';
 
 /** Default weight-source chain for webdit bundles — R2 only. Unlike the
  *  lcm-diffusion path (which falls back to the HuggingFace CDN because its
@@ -228,7 +229,7 @@ export async function runWebDitDenoise(
   const frames: ImageBitmap[] = new Array(result.frames.length);
   const muxFrames: MuxFrame[] = new Array(result.frames.length);
   for (let i = 0; i < result.frames.length; i++) {
-    if (args.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+    throwIfAborted(args.signal);
     const rgba = result.frames[i];
     const bitmap = await createImageBitmap(
       new ImageData(rgba as Uint8ClampedArray<ArrayBuffer>, result.width, result.height),

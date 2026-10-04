@@ -29,18 +29,16 @@ vi.mock('./weight-cache', () => ({
 }));
 
 import type { LcmModelDescriptor } from '../types';
+import { MODEL_REGISTRY } from './diffusion-models';
+import { KNOWN_UNET_INPUTS, DiffusionEngine } from './diffusion-engine';
 import {
-  MODEL_REGISTRY,
-  KNOWN_UNET_INPUTS,
   SUPPORTED_DTYPES,
   materializeTensor,
   buildOrtSessionOptions,
   checkMemoryForModel,
-  explainSessionCreateError,
-  lcmGuidanceCondEmbedding,
-  DEFAULT_LCM_GUIDANCE_SCALE,
-  DiffusionEngine,
-} from './diffusion-engine';
+  explainOrtError,
+} from './ort-session';
+import { lcmGuidanceCondEmbedding, DEFAULT_LCM_GUIDANCE_SCALE } from './diffusion-schedule';
 
 /**
  * MODEL_REGISTRY now also carries 4 webdit-dit entries (see
@@ -207,7 +205,7 @@ describe('reportProgress (no-silent-phase invariant)', () => {
   // do minutes of model downloads + session creation + denoise without emitting
   // anything else, so the UI looked frozen. Every long phase must report.
   it('fans out to both console.info and the consumer callback', async () => {
-    const { reportProgress } = await import('./diffusion-engine');
+    const { reportProgress } = await import('./progress');
     const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const sink = vi.fn();
     reportProgress('hello', sink);
@@ -217,7 +215,7 @@ describe('reportProgress (no-silent-phase invariant)', () => {
   });
 
   it('handles a missing callback without throwing (console.info still fires)', async () => {
-    const { reportProgress } = await import('./diffusion-engine');
+    const { reportProgress } = await import('./progress');
     const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     expect(() => reportProgress('no-sink', undefined)).not.toThrow();
     expect(consoleSpy).toHaveBeenCalled();
@@ -322,9 +320,9 @@ describe('checkMemoryForModel (pre-flight OOM guard)', () => {
   });
 });
 
-describe('explainSessionCreateError (opaque ORT crash → actionable message)', () => {
+describe('explainOrtError (opaque ORT crash → actionable message)', () => {
   it("rewraps a std::bad_alloc into a memory-shortage explanation", () => {
-    const wrapped = explainSessionCreateError(
+    const wrapped = explainOrtError(
       new Error('Can\'t create a session. ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc'),
       'unet',
       'lcm-dreamshaper-v7',
@@ -337,7 +335,7 @@ describe('explainSessionCreateError (opaque ORT crash → actionable message)', 
   });
 
   it('rewraps a DXGI_ERROR_DEVICE_HUNG (Windows TDR) into a lower-resolution / lighter-model hint', () => {
-    const wrapped = explainSessionCreateError(
+    const wrapped = explainOrtError(
       new Error('ID3D12Device::GetDeviceRemovedReason failed with DXGI_ERROR_DEVICE_HUNG (0x887A0006)'),
       'unet (conditional) session run',
       'lcm-tiny-sd',
@@ -349,7 +347,7 @@ describe('explainSessionCreateError (opaque ORT crash → actionable message)', 
   });
 
   it("rewraps a 'Device is lost' mapAsync failure", () => {
-    const wrapped = explainSessionCreateError(
+    const wrapped = explainOrtError(
       new Error("Failed to execute 'mapAsync' on 'GPUBuffer': [Device] is lost."),
       'unet session run',
       'lcm-dreamshaper-v7',
@@ -359,7 +357,7 @@ describe('explainSessionCreateError (opaque ORT crash → actionable message)', 
   });
 
   it('rewraps the SimplifiedLayerNormFusion crash into a graph-options hint', () => {
-    const wrapped = explainSessionCreateError(
+    const wrapped = explainOrtError(
       new Error('graph_utils.cc:30 InsertedPrecisionFreeCast_/text_model/...'),
       'text_encoder',
       'sd-turbo',
@@ -371,14 +369,14 @@ describe('explainSessionCreateError (opaque ORT crash → actionable message)', 
 
   it('passes through unrelated errors unchanged', () => {
     const orig = new Error('totally different problem');
-    expect(explainSessionCreateError(orig, 'unet', 'lcm', 6 * 1024)).toBe(orig);
+    expect(explainOrtError(orig, 'unet', 'lcm', 6 * 1024)).toBe(orig);
   });
 
   // Same regression guard as checkMemoryForModel — the OOM message must not
   // tell the user to switch TO the model they're already running.
   it('never recommends the failing model itself in the OOM message', () => {
     for (const id of Object.keys(MODEL_REGISTRY)) {
-      const wrapped = explainSessionCreateError(
+      const wrapped = explainOrtError(
         new Error('std::bad_alloc'),
         'unet',
         id,

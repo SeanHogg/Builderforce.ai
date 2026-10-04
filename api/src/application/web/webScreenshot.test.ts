@@ -2,7 +2,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   SCREENSHOT_REASON_STATUS,
   ScreenshotUnavailableError,
-  bytesToBase64,
   captureWebScreenshot,
   isScreenshotViewport,
   readProviderError,
@@ -223,12 +222,5 @@ describe('readProviderError', () => {
   it('falls back to the raw body, then to the status', async () => {
     expect(await readProviderError(new Response('gateway exploded', { status: 502 }))).toBe('gateway exploded');
     expect(await readProviderError(new Response('', { status: 503 }))).toBe('The page renderer returned HTTP 503');
-  });
-});
-
-describe('bytesToBase64', () => {
-  it('encodes a buffer larger than one chunk without blowing the stack', () => {
-    const bytes = new Uint8Array(0x8000 * 2 + 7).fill(65);
-    expect(atob(bytesToBase64(bytes.buffer)).length).toBe(bytes.length);
   });
 });

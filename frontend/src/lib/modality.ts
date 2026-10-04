@@ -202,6 +202,16 @@ export const MODALITIES: ModalityDef[] = BASE_MODALITIES.map((m) => ({
 
 export const DEFAULT_MODALITY: ProjectModality = 'designer';
 
+/**
+ * Whether the project runs as a live app preview (a web page or a phone app).
+ * Such a preview starts by itself and restarts from its own toolbar, so these
+ * types carry no Run button; `showRunButton` still says the type HAS a dev
+ * server, which is what the canvas pill reads.
+ */
+export function hasLivePreview(def: Pick<ModalityDef, 'center'>): boolean {
+  return def.center === 'code-preview' || def.center === 'device';
+}
+
 /** Resolve a modality id (possibly stale/unknown/legacy) to its definition, defaulting
  *  to Designer. Legacy ids (e.g. the retired combined `llm`) map through the alias table. */
 export function getModality(id: ProjectModality | string | null | undefined): ModalityDef {

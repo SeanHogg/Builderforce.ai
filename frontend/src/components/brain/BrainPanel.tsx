@@ -190,6 +190,15 @@ export interface BrainPanelProps {
    * file, the voice director's clone). Rendered as the header's subtitle.
    */
   headerContext?: React.ReactNode;
+  /**
+   * `compact` — a composer beside a workspace that already names the project and
+   * its type, and whose header carries the plan: the context pickers ride in the
+   * tool row instead of a row of their own, the plan/memory row is dropped (memory
+   * is in the `/` menu), and "Acting as" / "Making" appear only when they are a
+   * real choice (there are agents to act as; a capability is set and can be
+   * cleared). Defaults to `comfortable`.
+   */
+  composerDensity?: 'comfortable' | 'compact';
 }
 
 export function BrainPanel({
@@ -204,9 +213,11 @@ export function BrainPanel({
   capabilitySurface = 'brainstorm',
   onClose,
   headerContext,
+  composerDensity = 'comfortable',
 }: BrainPanelProps) {
   const fmt = useFormat();
   const isPage = variant === 'page';
+  const compactComposer = composerDensity === 'compact';
   // No close handler => the Brain is part of the page's own layout, not the drawer;
   // the floating launcher stands down rather than offer a second copy of this chat.
   useRegisterInlineBrain(!onClose);
@@ -1429,10 +1440,13 @@ export function BrainPanel({
       ticketables={ticketables}
       onTicketTag={handleTicketTag}
       focusToken={composerFocusToken}
+      density={composerDensity}
       contextControls={<>
         {/* "Acting as" and "To" are the shared brain-ui pickers — the SAME controls the
-            editor's composer renders, so the two surfaces offer and word them alike. */}
-        <PersonaPicker
+            editor's composer renders, so the two surfaces offer and word them alike.
+            Compact: "Acting as" only when there is someone else to act as, or the
+            person already moved off the project's own persona. */}
+        {(!compactComposer || personaAgents.length > 0 || personaSel !== dockedPersona) && <PersonaPicker
           value={personaSel}
           onChange={choosePersona}
           modalities={localizedModalities}
@@ -1444,8 +1458,8 @@ export function BrainPanel({
             personas: tBrain('personas'),
             assignedAgents: tBrain('assignedAgents'),
           }}
-        />
-        {chats.activeChatId != null && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
+        />}
+        {chats.activeChatId != null && (!compactComposer || capabilityId != null) && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
         {/* WHO YOU ARE ADDRESSING, with their personality. The shared hovercard showed
             on /settings, the Workforce card and task-assignee chips — everywhere except
             the surface where you actually choose which agent to talk to. It reads the

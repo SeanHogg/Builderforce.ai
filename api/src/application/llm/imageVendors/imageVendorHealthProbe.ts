@@ -2,7 +2,8 @@
  * Image-vendor health probe — the image-gen twin of `../vendorHealthProbe.ts`.
  *
  * The daily vendor-health cron probes only CHAT vendors (`getAllVendorIds()`),
- * so a quiet outage on an IMAGE upstream (Together, FluxAPI) surfaced only when
+ * so a quiet outage on an IMAGE upstream (Cloudflare, Together, Hugging Face,
+ * Pollinations, Gemini, FluxAPI) surfaced only when
  * a customer triggered an image gen and it 502'd. This probes each image vendor
  * with one minimal generation per catalog model and classifies the outcome the
  * same way the chat probe does:
@@ -21,7 +22,7 @@
  * discarded — we only care that the upstream accepted the call.
  */
 
-import { getImageModule } from './registry';
+import { getAllImageVendorIds, getImageModule } from './registry';
 import {
   type ImageVendorEnv,
   type ImageVendorId,
@@ -33,8 +34,9 @@ import {
   type VendorHealthStatus,
 } from '../vendorHealthProbe';
 
-/** The image vendors probed by the daily health cron, in registry order. */
-export const IMAGE_PROBE_VENDOR_IDS: readonly ImageVendorId[] = ['together', 'fluxapi'];
+/** The image vendors probed by the daily health cron — every registered vendor,
+ *  in registry order (derived, so a new vendor is probed without an edit here). */
+export const IMAGE_PROBE_VENDOR_IDS: readonly ImageVendorId[] = getAllImageVendorIds();
 
 /** `image:<vendor>` — keeps image health rows distinct from same-named chat
  *  vendors in `llm_health_probes` (mirrors `ImageProxyService`'s cooldown keys). */

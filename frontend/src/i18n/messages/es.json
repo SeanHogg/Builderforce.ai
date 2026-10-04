@@ -1376,13 +1376,12 @@
     "openProjectsAria": "Abrir proyectos",
     "editNameHint": "Editar el nombre del proyecto (se guarda al perder el foco o con Enter)",
     "projectDetailsTitle": "Detalles del proyecto de Builder",
-    "projectSettingsAria": "Ajustes del proyecto",
     "settingsRepoTitle": "Ajustes y repositorio",
-    "blockOnFailHint": "Cuando está activado, se bloquea Ejecutar si las últimas comprobaciones fallan",
+    "blockOnFailHint": "Si está activado, la vista previa no se inicia mientras fallen las últimas comprobaciones",
     "runChecksHint": "Ejecuta comprobación de tipos, linting y compilación en el navegador para validar el código",
     "checksFailed": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
     "checksPassed": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
-    "gateRun": "Bloquear ejecución",
+    "gateRun": "Bloquear la vista previa si fallan las comprobaciones",
     "checking": "Comprobando…",
     "check": "Comprobar",
     "detailedConfigHint": "La memoria, el modelo, la inferencia, la personalidad y la voz de este proyecto se configuran en los paneles del Builder. Aquí puedes cambiarle el nombre y establecer su Proyecto padre.",
@@ -1490,8 +1489,6 @@
     "askAi": "Preguntar a la IA",
     "previewWeb": "Web",
     "previewMobile": "Móvil",
-    "previewEmpty": "Ejecuta tu proyecto para ver una vista previa",
-    "previewOpen": "Abrir",
     "previewTitle": "Vista previa",
     "visualEdit": "Señalar y editar",
     "visualEditHint": "Haz clic en cualquier elemento de la vista previa para cambiar su texto o estilo sin pedírselo al agente.",
@@ -1525,11 +1522,6 @@
       }
     },
     "centerDatabase": "Base de datos",
-    "runtimeStatus": {
-      "booting": "⏳ Iniciando…",
-      "ready": "✅ Listo",
-      "error": "⚠️ Error del entorno"
-    },
     "brainContext": {
       "codingAgent": "Agente de código",
       "voiceDirector": "Director de voz",
@@ -1537,6 +1529,43 @@
       "voice": "Voz",
       "wholeProject": "todo el proyecto",
       "noVoice": "ninguna seleccionada"
+    },
+    "workspace": {
+      "more": "Más",
+      "panels": "Paneles",
+      "viewSwitch": "Vista del espacio de trabajo",
+      "chat": "Chat",
+      "restart": "Reiniciar vista previa",
+      "previewSize": "Tamaño de la vista previa",
+      "size": {
+        "desktop": "Escritorio",
+        "tablet": "Tableta",
+        "phone": "Teléfono"
+      },
+      "openInTab": "Abrir en una pestaña nueva",
+      "statusLive": "En vivo",
+      "statusStarting": "Iniciando…",
+      "statusStopped": "Detenida",
+      "statusIdle": "Sin ejecutar",
+      "startingTitle": "Iniciando tu vista previa…",
+      "startingHint": "Ocurre automáticamente al abrir el proyecto y cada vez que cambian sus archivos.",
+      "step": {
+        "preparing": "Preparando archivos",
+        "installing": "Instalando paquetes",
+        "starting": "Iniciando el servidor de desarrollo"
+      },
+      "failedTitle": "La vista previa se detuvo",
+      "failedHint": "El último cambio rompió la compilación. La terminal muestra por qué, y Brain también ve el error: pídele en el chat que lo corrija.",
+      "blockedTitle": "Vista previa en pausa por comprobaciones fallidas",
+      "blockedHint": "Corrige las comprobaciones fallidas o desactiva «Bloquear la vista previa si fallan las comprobaciones» en la barra inferior.",
+      "tryAgain": "Reintentar",
+      "showTerminal": "Mostrar terminal",
+      "emptyTitle": "Tu app aparecerá aquí",
+      "emptyHint": "Describe en el chat lo que quieres. La vista previa se inicia en cuanto haya algo que mostrar.",
+      "closePanel": "Cerrar panel",
+      "collabConnected": "Colaboradores conectados",
+      "voiceNeedsClone": "Primero crea o selecciona una voz",
+      "generating": "Generando…"
     }
   },
   "references": {
@@ -32174,7 +32203,6 @@
       "loadFailed": "No se pudieron cargar tus espacios de trabajo."
     },
     "project": {
-      "github": "GitHub",
       "share": "Compartir",
       "linkCopied": "Enlace copiado",
       "publish": "Publicar",

@@ -212,9 +212,12 @@ export interface Env {
   // Image generation (`POST /v1/images/generations`)
   // ---------------------------------------------------------------------------
 
-  /** Together.ai API key — free-tier image-generation vendor. Drives the
-   *  primary attempts for `POST /v1/images/generations` (Flux Schnell free,
-   *  DreamShaper, etc.) before falling through to the premium FluxAPI fallback.
+  // The cascade also reuses CLOUDFLARE_AI_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+  // (Workers AI Flux Schnell / SDXL Lightning / DreamShaper — free neurons) and
+  // GOOGLE_API_KEY (Gemini image models, paid pool) declared above.
+
+  /** Together.ai API key — free-tier image-generation vendor (Flux Schnell free,
+   *  DreamShaper), one of the free vendors interleaved ahead of the paid pool.
    *  Set via `wrangler secret put TOGETHER_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   TOGETHER_API_KEY?: string;
   /** FluxAPI (fluxapi.ai) API key — premium image-generation fallback. After the
@@ -222,6 +225,14 @@ export interface Env {
    *  here so image-gen callers always see a successful response.
    *  Set via `wrangler secret put FLUX_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   FLUX_API_KEY?: string;
+  /** Hugging Face Inference Providers token (`hf_*`) — free-tier image vendor
+   *  (Flux Schnell, SDXL) paid from the account's monthly credit; a spent credit
+   *  answers 402 and the cascade moves on. Set via `wrangler secret put HF_API_TOKEN`. */
+  HF_API_TOKEN?: string;
+  /** Pollinations token (free, auth.pollinations.ai) — opt-in free image vendor;
+   *  unbound → skipped, because the anonymous tier has no SLA. Set via
+   *  `wrangler secret put POLLINATIONS_API_KEY`. */
+  POLLINATIONS_API_KEY?: string;
 
   /** Optional stock-image providers used by Canvas image search. */
   UNSPLASH_ACCESS_KEY?: string;

@@ -10,7 +10,8 @@ export type IconName =
   | 'link' | 'lock' | 'mail' | 'maximize' | 'megaphone' | 'menu' | 'message' | 'mic' | 'minus' | 'mobile'
   | 'monitor' | 'more-horizontal' | 'pause' | 'people' | 'person' | 'pin' | 'play' | 'plus' | 'project' | 'quality' | 'search'
   | 'settings' | 'shield' | 'sign-out' | 'sparkles' | 'stop' | 'sun' | 'moon' | 'cart' | 'target' | 'template' | 'tools' | 'trash' | 'archive'
-  | 'video' | 'volume' | 'warning' | 'workflow' | 'workspace';
+  | 'video' | 'volume' | 'warning' | 'workflow' | 'workspace'
+  | 'refresh' | 'tablet' | 'eye' | 'database' | 'cursor';
 
 /**
  * Legacy icon values are data, not presentation. Keeping the translation here
@@ -75,6 +76,11 @@ const PATHS: Record<IconName, ReactNode> = {
   activity: <><path d="M3 12h4l2-6 4 12 2-6h6"/></>,
   admin: <><path d="M12 3 4.5 6v5c0 4.7 3.2 8.2 7.5 10 4.3-1.8 7.5-5.3 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></>,
   alert: <><path d="M6 16.5h12l-1.6-2.1V10a4.4 4.4 0 0 0-8.8 0v4.4L6 16.5Z"/><path d="M10 19a2.2 2.2 0 0 0 4 0"/></>,
+  cursor: <path d="M5 4l6.5 16 2.4-6.6L20.5 11 5 4Z"/>,
+  database: <><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/></>,
+  eye: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></>,
+  refresh: <><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></>,
+  tablet: <><rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M11 18h2"/></>,
   apps: <><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></>,
   /* Send. Straight up — the composer's own direction of travel, not the diagonal
      `arrow-up-right` that means "leave this page". */

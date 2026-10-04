@@ -9,7 +9,11 @@ import { reportCaughtError } from '../../observability/caughtErrorReporter';
  * the rest.
  */
 
+import { cloudflareImageModule } from './cloudflare';
 import { fluxApiModule } from './fluxapi';
+import { googleImageModule } from './googleai';
+import { huggingFaceImageModule } from './huggingface';
+import { pollinationsImageModule } from './pollinations';
 import { togetherImageModule } from './together';
 import {
   VendorRetryableError,
@@ -23,16 +27,22 @@ import {
 } from './types';
 
 /**
- * Vendor priority — free Together first (cost-optimised), FluxAPI premium last.
- * This is the order the pool composer walks, and the order the proxy uses for
- * the candidate chain when no caller-pinned model is supplied.
+ * Vendor priority — the ONE list everything else derives from. Free vendors
+ * first (Cloudflare's daily neuron allowance, Together, Hugging Face's monthly
+ * credit, Pollinations), then the billed ones (Gemini, FluxAPI). Within a pool
+ * the composer interleaves vendors (see {@link imageModelsByTierPrefixed}), so
+ * this order decides who LEADS each round, not who monopolises it.
  */
-const MODULES: ReadonlyArray<ImageVendorModule> = [togetherImageModule, fluxApiModule];
+const MODULES: ReadonlyArray<ImageVendorModule> = [
+  cloudflareImageModule,
+  togetherImageModule,
+  huggingFaceImageModule,
+  pollinationsImageModule,
+  googleImageModule,
+  fluxApiModule,
+];
 
-const MODULES_BY_ID: Record<ImageVendorId, ImageVendorModule> = {
-  together: togetherImageModule,
-  fluxapi:  fluxApiModule,
-};
+const MODULES_BY_ID = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<ImageVendorId, ImageVendorModule>;
 
 /** Used when a model id isn't in any vendor's catalog (treats as Together). */
 const DEFAULT_VENDOR: ImageVendorId = 'together';
@@ -44,10 +54,21 @@ for (const mod of MODULES) {
   }
 }
 
-const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: ImageVendorId }> = [
-  { prefix: 'together/', vendor: 'together' },
-  { prefix: 'fluxapi/',  vendor: 'fluxapi' },
-];
+/** `<vendor>/` for every registered vendor — derived, so a new module needs no edit here. */
+const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: ImageVendorId }> =
+  MODULES.map((m) => ({ prefix: `${m.id}/`, vendor: m.id }));
+
+/** Every registered image vendor id, in priority order (health probe, admin views). */
+export function getAllImageVendorIds(): ImageVendorId[] {
+  return MODULES.map((m) => m.id);
+}
+
+/** True when at least one image vendor has its credentials bound — the gateway's
+ *  "is image generation configured at all" check, derived from the registry so
+ *  it never lags a newly added vendor. */
+export function anyImageVendorBound(env: ImageVendorEnv): boolean {
+  return MODULES.some((m) => !!m.apiKeyFrom(env));
+}
 
 /**
  * Parse an explicit vendor-prefixed model id (`fluxapi/flux-kontext-pro`,
@@ -81,29 +102,33 @@ export function getImageModule(id: ImageVendorId): ImageVendorModule {
   return MODULES_BY_ID[id];
 }
 
-/** All catalog model ids of a given tier, in registry order (bare ids). */
-export function imageModelsByTier(...tiers: ImageModelTier[]): string[] {
-  const set = new Set(tiers);
-  return MODULES.flatMap((mod) =>
-    mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
-  );
-}
-
 /**
- * Same as {@link imageModelsByTier} but each id is VENDOR-PREFIXED
- * (`<vendor>/<modelId>`). Used to compose the proxy's pools so the dispatcher
- * always resolves a model to its OWNING vendor by prefix — never by an
- * ambiguous bare-id catalog lookup. This makes the registry safe to grow with
- * an id that collides across vendors (e.g. the same `flux-schnell` on two
- * vendors): the prefix disambiguates instead of `INDEX.get(id)` picking one
- * arbitrarily. `parseImageVendorPrefix` / `resolveImageVendorAndModel` already
- * strip the prefix back to the vendor-native id before dispatch.
+ * Catalog ids of the given tiers, VENDOR-PREFIXED (`<vendor>/<modelId>`) and
+ * INTERLEAVED across vendors: round 1 takes each vendor's first model in
+ * registry order, round 2 each vendor's second, and so on.
+ *
+ * Prefixed so the dispatcher always resolves a model to its OWNING vendor by
+ * prefix — never by an ambiguous bare-id catalog lookup (the same `flux-schnell`
+ * can live on several vendors). Interleaved because the cascade composer caps
+ * the FREE slice at a small budget: in registry order the whole budget would go
+ * to one vendor's models, so a single outage or rate limit would burn every
+ * free attempt and drop the request onto a paid fallback while other free
+ * vendors sat idle.
  */
 export function imageModelsByTierPrefixed(...tiers: ImageModelTier[]): string[] {
   const set = new Set(tiers);
-  return MODULES.flatMap((mod) =>
+  const perVendor = MODULES.map((mod) =>
     mod.catalog.filter((m) => set.has(m.tier)).map((m) => `${mod.id}/${m.id}`),
   );
+  const rounds = Math.max(0, ...perVendor.map((ids) => ids.length));
+  const out: string[] = [];
+  for (let round = 0; round < rounds; round++) {
+    for (const ids of perVendor) {
+      const id = ids[round];
+      if (id) out.push(id);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

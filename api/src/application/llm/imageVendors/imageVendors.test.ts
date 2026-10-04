@@ -6,8 +6,8 @@ import {
   extractFluxTaskId,
   fluxApiModule,
   pollFluxTask,
-  sizeToAspectRatio,
 } from './fluxapi';
+import { sizeToAspectRatio } from './types';
 import { togetherImageModule } from './together';
 
 // ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ afterEach(() => {
 // FluxAPI vendor
 // ===========================================================================
 
-describe('fluxapi: sizeToAspectRatio', () => {
+describe('shared: sizeToAspectRatio', () => {
   it.each([
     ['1024x1024', '1:1'],
     ['1792x1024', '16:9'],

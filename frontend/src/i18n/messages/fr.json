@@ -1376,13 +1376,12 @@
     "openProjectsAria": "Ouvrir les projets",
     "editNameHint": "Modifier le nom du projet (enregistré à la perte du focus ou avec Entrée)",
     "projectDetailsTitle": "Détails du projet Builder",
-    "projectSettingsAria": "Paramètres du projet",
     "settingsRepoTitle": "Paramètres et dépôt",
-    "blockOnFailHint": "Lorsque activé, l'exécution est bloquée tant que les dernières vérifications échouent",
+    "blockOnFailHint": "Activé, l’aperçu ne démarre pas tant que les dernières vérifications échouent",
     "runChecksHint": "Exécuter la vérification de types, le linting et la compilation dans le navigateur pour valider le code",
     "checksFailed": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
     "checksPassed": "{count, plural, one {# vérification réussie} other {# vérifications réussies}}",
-    "gateRun": "Bloquer l'exécution",
+    "gateRun": "Bloquer l’aperçu si les vérifications échouent",
     "checking": "Vérification…",
     "check": "Vérifier",
     "detailedConfigHint": "La mémoire, le modèle, l'inférence, la personnalité et la voix de ce projet se configurent dans les panneaux de l'Builder. C'est ici que vous le renommez et définissez son Projet parent.",
@@ -1490,8 +1489,6 @@
     "askAi": "Demander à l’IA",
     "previewWeb": "Web",
     "previewMobile": "Mobile",
-    "previewEmpty": "Lancez votre projet pour voir un aperçu",
-    "previewOpen": "Ouvrir",
     "previewTitle": "Aperçu",
     "visualEdit": "Pointer et modifier",
     "visualEditHint": "Cliquez sur n'importe quel élément de l'aperçu pour changer son texte ou son style sans passer par l'agent.",
@@ -1525,11 +1522,6 @@
       }
     },
     "centerDatabase": "Base de données",
-    "runtimeStatus": {
-      "booting": "⏳ Démarrage…",
-      "ready": "✅ Prêt",
-      "error": "⚠️ Erreur d’exécution"
-    },
     "brainContext": {
       "codingAgent": "Agent de code",
       "voiceDirector": "Directeur vocal",
@@ -1537,6 +1529,43 @@
       "voice": "Voix",
       "wholeProject": "tout le projet",
       "noVoice": "aucune sélection"
+    },
+    "workspace": {
+      "more": "Plus",
+      "panels": "Panneaux",
+      "viewSwitch": "Vue de l’espace de travail",
+      "chat": "Chat",
+      "restart": "Redémarrer l’aperçu",
+      "previewSize": "Taille de l’aperçu",
+      "size": {
+        "desktop": "Ordinateur",
+        "tablet": "Tablette",
+        "phone": "Téléphone"
+      },
+      "openInTab": "Ouvrir dans un nouvel onglet",
+      "statusLive": "En direct",
+      "statusStarting": "Démarrage…",
+      "statusStopped": "Arrêté",
+      "statusIdle": "Non démarré",
+      "startingTitle": "Démarrage de votre aperçu…",
+      "startingHint": "Cela se fait tout seul à l’ouverture du projet et à chaque modification de ses fichiers.",
+      "step": {
+        "preparing": "Préparation des fichiers",
+        "installing": "Installation des paquets",
+        "starting": "Démarrage du serveur de développement"
+      },
+      "failedTitle": "L’aperçu s’est arrêté",
+      "failedHint": "La dernière modification a cassé le build. Le terminal indique pourquoi, et Brain voit aussi l’erreur : demandez-lui dans le chat de la corriger.",
+      "blockedTitle": "Aperçu en pause : des vérifications échouent",
+      "blockedHint": "Corrigez les vérifications en échec, ou désactivez « Bloquer l’aperçu si les vérifications échouent » dans la barre ci-dessous.",
+      "tryAgain": "Réessayer",
+      "showTerminal": "Afficher le terminal",
+      "emptyTitle": "Votre application apparaîtra ici",
+      "emptyHint": "Décrivez ce que vous voulez dans le chat. L’aperçu démarre dès qu’il y a quelque chose à montrer.",
+      "closePanel": "Fermer le panneau",
+      "collabConnected": "Collaborateurs connectés",
+      "voiceNeedsClone": "Créez ou sélectionnez d’abord une voix",
+      "generating": "Génération…"
     }
   },
   "references": {
@@ -32174,7 +32203,6 @@
       "loadFailed": "Impossible de charger vos espaces de travail."
     },
     "project": {
-      "github": "GitHub",
       "share": "Partager",
       "linkCopied": "Lien copié",
       "publish": "Publier",

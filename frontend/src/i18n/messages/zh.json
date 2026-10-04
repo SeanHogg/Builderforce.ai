@@ -1376,13 +1376,12 @@
     "openProjectsAria": "打开项目",
     "editNameHint": "编辑项目名称（失焦或按回车保存）",
     "projectDetailsTitle": "Builder 项目详情",
-    "projectSettingsAria": "项目设置",
     "settingsRepoTitle": "设置与代码库",
-    "blockOnFailHint": "开启后，当上次检查失败时将阻止运行",
+    "blockOnFailHint": "开启后，只要最近一次检查未通过，预览就不会启动",
     "runChecksHint": "在浏览器中运行类型检查、代码检查和构建以验证代码",
     "checksFailed": "{count} 项检查未通过",
     "checksPassed": "{count} 项检查已通过",
-    "gateRun": "检查通过才运行",
+    "gateRun": "检查失败时阻止预览",
     "checking": "检查中…",
     "check": "检查",
     "detailedConfigHint": "该项目的记忆、模型、推理、个性和语音在 Builder 的面板中配置。在此可重命名并设置其父项目。",
@@ -1490,8 +1489,6 @@
     "askAi": "问 AI",
     "previewWeb": "网页",
     "previewMobile": "移动端",
-    "previewEmpty": "运行你的项目以查看预览",
-    "previewOpen": "打开",
     "previewTitle": "预览",
     "visualEdit": "点选编辑",
     "visualEditHint": "点击预览中的任意元素，即可直接修改其文本或样式，无需询问智能体。",
@@ -1525,11 +1522,6 @@
       }
     },
     "centerDatabase": "数据库",
-    "runtimeStatus": {
-      "booting": "⏳ 正在启动……",
-      "ready": "✅ 就绪",
-      "error": "⚠️ 运行环境错误"
-    },
     "brainContext": {
       "codingAgent": "编码智能体",
       "voiceDirector": "语音导演",
@@ -1537,6 +1529,43 @@
       "voice": "语音",
       "wholeProject": "整个项目",
       "noVoice": "未选择"
+    },
+    "workspace": {
+      "more": "更多",
+      "panels": "面板",
+      "viewSwitch": "工作区视图",
+      "chat": "聊天",
+      "restart": "重新启动预览",
+      "previewSize": "预览尺寸",
+      "size": {
+        "desktop": "桌面",
+        "tablet": "平板",
+        "phone": "手机"
+      },
+      "openInTab": "在新标签页中打开",
+      "statusLive": "运行中",
+      "statusStarting": "正在启动…",
+      "statusStopped": "已停止",
+      "statusIdle": "未运行",
+      "startingTitle": "正在启动预览…",
+      "startingHint": "打开项目时以及项目文件每次变化时，预览都会自动启动。",
+      "step": {
+        "preparing": "正在准备文件",
+        "installing": "正在安装依赖包",
+        "starting": "正在启动开发服务器"
+      },
+      "failedTitle": "预览已停止",
+      "failedHint": "最近的更改导致构建失败。终端会显示原因，Brain 也能看到这个错误——在聊天中让它修复即可。",
+      "blockedTitle": "检查未通过，预览已暂停",
+      "blockedHint": "请修复未通过的检查，或在下方栏中关闭“检查失败时阻止预览”。",
+      "tryAgain": "重试",
+      "showTerminal": "显示终端",
+      "emptyTitle": "你的应用将显示在这里",
+      "emptyHint": "在聊天中描述你想要的内容。一旦有内容可以显示，预览就会启动。",
+      "closePanel": "关闭面板",
+      "collabConnected": "协作者已连接",
+      "voiceNeedsClone": "请先创建或选择一个声音",
+      "generating": "正在生成…"
     }
   },
   "references": {
@@ -32174,7 +32203,6 @@
       "loadFailed": "无法加载你的工作区。"
     },
     "project": {
-      "github": "GitHub",
       "share": "分享",
       "linkCopied": "链接已复制",
       "publish": "发布",

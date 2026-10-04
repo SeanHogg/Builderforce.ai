@@ -15,6 +15,8 @@ export interface WorkspaceBrainColumnProps {
   initialChatId?: number | null;
   initialPrompt?: string;
   initialTicket?: { kind: string; ref: string };
+  /** Take the whole row (a narrow screen, where chat and workspace take turns). */
+  fill?: boolean;
 }
 
 /**
@@ -28,15 +30,15 @@ export interface WorkspaceBrainColumnProps {
  * Width is fluid (`clamp`) rather than a fixed 340px, so a wide screen gives the
  * conversation room and a narrow one keeps the editor usable.
  */
-export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeFile, voiceName, initialChatId, initialPrompt, initialTicket }: WorkspaceBrainColumnProps) {
+export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeFile, voiceName, initialChatId, initialPrompt, initialTicket, fill = false }: WorkspaceBrainColumnProps) {
   const t = useTranslations('ide.brainContext');
   const voice = modality === 'voice';
   const subject = voice ? (voiceName || t('noVoice')) : (activeFile || t('wholeProject'));
 
   return (
     <div style={{
-      width: 'clamp(300px, 28vw, 420px)', flexShrink: 0,
-      borderRight: '1px solid var(--border-subtle)',
+      width: fill ? 'auto' : 'clamp(300px, 28vw, 420px)', flex: fill ? 1 : '0 0 auto', minWidth: 0,
+      borderRight: fill ? 'none' : '1px solid var(--border-subtle)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       background: 'var(--bg-base)',
     }}>
@@ -49,6 +51,8 @@ export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeF
         initialPrompt={initialPrompt}
         initialTicket={initialTicket}
         capabilitySurface="build"
+        // The workspace header already names the project, its type and the plan.
+        composerDensity="compact"
         headerContext={(
           <>
             <span aria-hidden title={t(voice ? 'voiceDirector' : 'codingAgent')} style={{ display: 'inline-flex' }}>

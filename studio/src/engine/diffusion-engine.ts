@@ -2,12 +2,18 @@
  * DiffusionEngine — hybrid ORT + transformers.js denoising pipeline.
  *
  * Layered architecture:
- *   • transformers.js (extension layer) — owns the CLIP BPE tokenizer + the
- *     text-encoder ONNX session. We do NOT hand-roll BPE.
- *   • raw onnxruntime-web (base layer) — owns the UNet + VAE-decoder sessions.
- *     We keep direct control here so Mamba latent-residual coherence can
- *     inject biases between scheduler steps without going through an opaque
- *     pipeline wrapper.
+ *   • transformers.js (extension layer) — owns the CLIP BPE tokenizer. We do
+ *     NOT hand-roll BPE.
+ *   • raw onnxruntime-web (base layer) — owns the text-encoder, UNet and
+ *     VAE-decoder sessions. We keep direct control here so Mamba latent-residual
+ *     coherence can inject biases between scheduler steps without going
+ *     through an opaque pipeline wrapper.
+ *
+ * This module is the SESSION OWNER only. What it composes lives beside it:
+ *   • `diffusion-models.ts`   — the model registry (pure data)
+ *   • `diffusion-schedule.ts` — DDPM schedule, noise, the LCM step (pure math)
+ *   • `ort-session.ts`        — tensor typing, session options, error translation
+ *   • `progress.ts` / `abort.ts` — the shared progress sink and cancel check
  *
  * The shared denoise() primitive runs an LCM-style consistency-model step
  * that works for both backbones — SD-Turbo with timesteps=[999] degrades to
@@ -17,222 +23,34 @@
 
 import * as ort from 'onnxruntime-web';
 import { AutoTokenizer, type PreTrainedTokenizer } from '@huggingface/transformers';
-import type {
-  ActiveDevice,
-  DiffusionModelId,
-  LcmModelDescriptor,
-  ModelDescriptor,
-  OnnxFile,
-  OrtInputSpec,
-  OrtTensorDtype,
-  WeightSource,
-} from '../types';
+import type { ActiveDevice, DiffusionModelId, LcmModelDescriptor, OnnxFile, WeightSource } from '../types';
 import type { ProbedDevice } from './device-router';
 import { getOrFetchWeight } from './weight-cache';
-import { configureOnnxRuntime } from './onnx-runtime-config';
-
-// Apply shared ONNX runtime config (WASM CDN paths, thread count) once at
-// module load. Idempotent — safe to call from multiple modules.
-configureOnnxRuntime();
-
-// ---------------------------------------------------------------------------
-// Model registry — single source of truth for per-model dims, timesteps,
-// VAE scale factors, and ONNX file paths. Every difference between
-// LCM-Dreamshaper-v7 and SD-Turbo lives here, not in the denoise loop.
-// ---------------------------------------------------------------------------
-
-export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
-  'lcm-tiny-sd': {
-    id: 'lcm-tiny-sd',
-    engine: 'lcm-diffusion',
-    defaultSteps: 4,
-    defaultGuidance: 1.0,
-    minVramMb: 2 * 1024, // BK-SDM Tiny UNet (~0.3 GB fp16) + text-encoder + VAE
-    hfRepo: 'akameswa/lcm-tiny-sd-onnx-fp16',
-    tokenizerRepo: 'Xenova/clip-vit-large-patch14',
-    textEmbedDim: 768, // SD1.5 base
-    sequenceLength: 77,
-    vaeScalingFactor: 0.18215,
-    defaultTimesteps: [999, 759, 519, 259],
-    files: {
-      textEncoder: { model: 'text_encoder/model.onnx' },
-      unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
-      vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
-    },
-    // The akameswa export omits the LCM `timestep_cond` input (the "LCM" aspect
-    // here is just the 4-step scheduler, not the consistency-embedding), but
-    // it DOES keep the LCM-family float32 timestep — declaring int64 here
-    // surfaces at first denoise as "Unexpected input data type. Actual:
-    // (tensor(int64)), expected: (tensor(float))". The lcmFamilyTimestepIsFloat32
-    // test in diffusion-engine.test.ts locks both LCM-family models on float32.
-    unetInputs: [
-      { name: 'sample', dtype: 'float32' },
-      { name: 'timestep', dtype: 'float32' },
-      { name: 'encoder_hidden_states', dtype: 'float32' },
-    ],
-    textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
-    // lcmGuidanceEmbedDim intentionally omitted — see the unetInputs comment.
-  },
-  'lcm-dreamshaper-v7': {
-    id: 'lcm-dreamshaper-v7',
-    engine: 'lcm-diffusion',
-    defaultSteps: 4,
-    defaultGuidance: 1.0, // LCM works best with CFG ~1
-    minVramMb: 6 * 1024,
-    hfRepo: 'aislamov/lcm-dreamshaper-v7-onnx',
-    tokenizerRepo: 'Xenova/clip-vit-large-patch14',
-    textEmbedDim: 768, // SD1.5 base
-    sequenceLength: 77,
-    vaeScalingFactor: 0.18215,
-    defaultTimesteps: [999, 759, 519, 259],
-    files: {
-      textEncoder: { model: 'text_encoder/model.onnx' },
-      unet: { model: 'unet/model.onnx', externalData: 'unet/model.onnx_data' },
-      vaeDecoder: { model: 'vae_decoder/model.onnx', externalData: 'vae_decoder/model.onnx_data' },
-    },
-    // LCM Dreamshaper (aislamov) UNet expects timestep as float32 (NOT int64).
-    // Drift here surfaces as: "Unexpected input data type. Actual: int64, expected: float".
-    unetInputs: [
-      { name: 'sample', dtype: 'float32' },
-      { name: 'timestep', dtype: 'float32' },
-      { name: 'encoder_hidden_states', dtype: 'float32' },
-      { name: 'timestep_cond', dtype: 'float32' },
-    ],
-    textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
-    lcmGuidanceEmbedDim: 256, // standard for LCM-LoRA-derived exports
-    lcmGuidanceScale: 8.5, // diffusers LCM default — embedded into timestep_cond (NOT defaultGuidance)
-  },
-  'sd-turbo': {
-    id: 'sd-turbo',
-    engine: 'lcm-diffusion',
-    defaultSteps: 1,
-    defaultGuidance: 0.0, // SD-Turbo is unconditional
-    minVramMb: 4 * 1024,
-    hfRepo: 'schmuell/sd-turbo-ort-web', // ORT-team browser demo build (single-file ONNX)
-    tokenizerRepo: 'Xenova/clip-vit-large-patch14',
-    textEmbedDim: 1024, // SD2.1 base
-    sequenceLength: 77,
-    vaeScalingFactor: 0.18215,
-    defaultTimesteps: [999],
-    files: {
-      textEncoder: { model: 'text_encoder/model.onnx' },
-      unet: { model: 'unet/model.onnx' },
-      vaeDecoder: { model: 'vae_decoder/model.onnx' },
-    },
-    // schmuell/sd-turbo-ort-web export uses int64 timestep (standard SD UNet).
-    unetInputs: [
-      { name: 'sample', dtype: 'float32' },
-      { name: 'timestep', dtype: 'int64' },
-      { name: 'encoder_hidden_states', dtype: 'float32' },
-    ],
-    textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
-  },
-
-  // ---------------------------------------------------------------------
-  // WebDiT diffusion-transformer entries — the whole-clip `webdit-engine.ts`
-  // generation path (see WebDitModelDescriptor in types.ts). All 4 register
-  // `available: false, bundleUrl: null`: the models are wired end-to-end
-  // (this registry entry, VideoEngine dispatch, webdit-engine.ts) but no
-  // pretrained bundle has been exported + uploaded to R2 yet — see the
-  // ROADMAP gap-register entry. `defaultSteps`/`defaultGuidance`/
-  // `defaultFrames`/`defaultWidth`/`defaultHeight` are copied from each
-  // architecture's `SamplingDefaults` in webdit/converter/src/architectures/
-  // (read from those files directly, not assumed). `minVramMb` are rough
-  // estimates (no real bundle exists yet to measure) noted per entry.
-  // ---------------------------------------------------------------------
-  'cogvideox-2b': {
-    id: 'cogvideox-2b',
-    engine: 'webdit-dit',
-    architecture: 'cogvideox-2b',
-    // A real bundle IS uploaded (2026-08) — `studio-weights/webdit/cogvideox-2b/`
-    // in the `builderforce-uploads` R2 bucket. This is the studio weights
-    // proxy's own base URL, NOT `.../webdit/cogvideox-2b` — the
-    // `webdit/<architecture>/` path segment is added by `webdit-engine.ts`'s
-    // `fetchBundleFile` (its `cacheKey`, `webdit/${architecture}/${relPath}`,
-    // is appended to this base by `getOrFetchWeight`'s r2-proxy resolver —
-    // see `weight-cache.ts`'s `resolveSource`). Setting this to the
-    // architecture-specific-looking URL the old comment on
-    // `WebDitModelDescriptor.bundleUrl` suggested would double the path
-    // segment and 404.
-    bundleUrl: 'https://api.builderforce.ai/api/studio/weights',
-    available: true,
-    // Real ~1.7B-param DiT (THUDM/CogVideoX-2b) + real T5-XXL text encoder
-    // (encoder-only, ~4.7B params) + VAE, all fp32 ONNX graphs — NOT the
-    // CLIP-L swap the original placeholder comment assumed (see
-    // webdit/converter/src/architectures/cogvideox.ts's header comment for
-    // the full real-weights writeup). fp32 (not fp16) because CPU export
-    // tracing needs it (PyTorch CPU doesn't run fp16 matmul); that plus the
-    // real T5-XXL size makes the actual uploaded graph+external-data total
-    // ~26.6 GB (dit 7.05 GB, text encoder 19.05 GB, vae 0.50 GB — MEASURED
-    // from the real 2026-08 export, not estimated). This is almost
-    // certainly too large for real-world WebGPU/browser use on typical
-    // consumer VRAM (8-24 GB) — flagging honestly rather than
-    // under-stating it: the bundle is genuinely wired end-to-end and
-    // verified numerically correct, but practical in-browser usability
-    // would need a follow-up fp16-graph pass (post-export precision
-    // conversion) or real quantization-aware export, neither done here.
-    minVramMb: 28 * 1024,
-    defaultSteps: 50,
-    defaultGuidance: 6.0,
-    defaultFrames: 49,
-    defaultFps: 8,
-    defaultWidth: 720,
-    defaultHeight: 480,
-  },
-  'wan2.5': {
-    id: 'wan2.5',
-    engine: 'webdit-dit',
-    architecture: 'wan2.5',
-    bundleUrl: null,
-    available: false,
-    // Full Wan2.5 is ~14B — only usable in-browser via a distilled/pruned
-    // export (webdit/converter/src/architectures/wan.ts); estimate assumes
-    // that distilled variant, not the full checkpoint.
-    minVramMb: 10 * 1024,
-    defaultSteps: 20,
-    defaultGuidance: 5.0,
-    defaultFrames: 81,
-    defaultFps: 16,
-    defaultWidth: 832,
-    defaultHeight: 480,
-  },
-  'mochi-1': {
-    id: 'mochi-1',
-    engine: 'webdit-dit',
-    architecture: 'mochi-1',
-    bundleUrl: null,
-    available: false,
-    // 10B AsymmDiT (Genmo), distilled/quantized for browser use
-    // (webdit/converter/src/architectures/mochi.ts) — the heaviest of the 4.
-    minVramMb: 12 * 1024,
-    defaultSteps: 64,
-    defaultGuidance: 4.5,
-    defaultFrames: 163,
-    defaultFps: 24,
-    defaultWidth: 848,
-    defaultHeight: 480,
-  },
-  'ltx2-distilled': {
-    id: 'ltx2-distilled',
-    engine: 'webdit-dit',
-    architecture: 'ltx2-distilled',
-    bundleUrl: null,
-    available: false,
-    // ~2B DiT, rectified-flow, distilled to 8 steps — the fastest of the 4
-    // (webdit/converter/src/architectures/ltx.ts).
-    minVramMb: 6 * 1024,
-    defaultSteps: 8,
-    defaultGuidance: 1.0,
-    defaultFrames: 121,
-    defaultFps: 24,
-    defaultWidth: 768,
-    defaultHeight: 512,
-  },
-};
+import { MODEL_REGISTRY } from './diffusion-models';
+import {
+  applyGuidance,
+  forwardDiffuse,
+  gaussianNoise,
+  lcmGuidanceCondEmbedding,
+  lcmStep,
+  noiseScaleAt,
+} from './diffusion-schedule';
+import {
+  assertSessionMatchesSpec,
+  basename,
+  buildOrtSessionOptions,
+  checkMemoryForModel,
+  explainOrtError,
+  materializeTensor,
+  pickFirstFloat32,
+  type RawTensor,
+} from './ort-session';
+import { reportProgress } from './progress';
+import { throwIfAborted } from './abort';
 
 // ---------------------------------------------------------------------------
 // UNet input builders — single registry of "this is how you compute each
-// declared input." A model whose `unetInputNames` references a name not in
+// declared input." A model whose `unetInputs` references a name not in
 // this registry fails the [contract unit test](./diffusion-engine.test.ts),
 // catching the missing-feed regression before it can throw at runtime.
 // ---------------------------------------------------------------------------
@@ -241,7 +59,7 @@ interface UnetInputContext {
   // UNet feed-building is an lcm-diffusion-only concern (webdit's DiT graph
   // has its own, entirely different I/O contract — see BUNDLE_IO in
   // @webdit/shared) — narrowed rather than the full ModelDescriptor union so
-  // lcmGuidanceCondEmbedding below can read LCM-only fields without a guard.
+  // the builders below can read LCM-only fields without a guard.
   descriptor: LcmModelDescriptor;
   sample: Float32Array;
   condEmbedding: Float32Array;
@@ -250,14 +68,6 @@ interface UnetInputContext {
   latentShape: [number, number, number, number];
 }
 
-/** A builder produces the raw payload + shape; the engine wraps it in a Tensor
- *  of the descriptor's declared dtype via `materializeTensor`. Splitting "compute
- *  the value" from "type the tensor" lets one builder serve every dtype that
- *  makes sense for that input (e.g. `timestep` is float32 in LCM, int64 in SD). */
-interface RawTensor {
-  data: Float32Array;
-  shape: readonly number[];
-}
 type UnetInputBuilder = (ctx: UnetInputContext) => RawTensor;
 
 const UNET_INPUT_BUILDERS: Record<string, UnetInputBuilder> = {
@@ -285,98 +95,6 @@ export const KNOWN_UNET_INPUTS: ReadonlySet<string> = new Set(
   Object.keys(UNET_INPUT_BUILDERS),
 );
 
-/** Dtypes the engine can materialize. Exported for the registry contract test. */
-export const SUPPORTED_DTYPES: ReadonlySet<OrtTensorDtype> = new Set<OrtTensorDtype>([
-  'float32',
-  'int32',
-  'int64',
-]);
-
-/** Wrap a Float32Array payload as an ORT Tensor of the requested dtype.
- *  Single conversion site — every dtype change happens here, no duplication. */
-export function materializeTensor(
-  dtype: OrtTensorDtype,
-  raw: RawTensor,
-): ort.Tensor {
-  const shape = [...raw.shape];
-  if (dtype === 'float32') {
-    return new ort.Tensor('float32', raw.data, shape);
-  }
-  if (dtype === 'int32') {
-    const out = new Int32Array(raw.data.length);
-    for (let i = 0; i < raw.data.length; i++) out[i] = raw.data[i] | 0;
-    return new ort.Tensor('int32', out, shape);
-  }
-  if (dtype === 'int64') {
-    const out = new BigInt64Array(raw.data.length);
-    for (let i = 0; i < raw.data.length; i++) out[i] = BigInt(raw.data[i] | 0);
-    return new ort.Tensor('int64', out, shape);
-  }
-  // Exhaustive on OrtTensorDtype — adding a new dtype to the type forces this.
-  throw new Error(`Unsupported dtype: ${dtype satisfies never}`);
-}
-
-/**
- * Default LCM distillation guidance scale embedded into `timestep_cond` when a
- * model descriptor doesn't override it. Matches diffusers
- * `LatentConsistencyModelPipeline`'s default `guidance_scale = 8.5` (the embedded
- * `w` is `guidance_scale - 1`). This is the scale the UNet was DISTILLED with —
- * unrelated to the runtime cond/uncond mix scale (`defaultGuidance`, ~1 for LCM).
- */
-export const DEFAULT_LCM_GUIDANCE_SCALE = 8.5;
-
-/**
- * Build the `timestep_cond` guidance-scale embedding feed for an LCM model.
- * Embeds `(descriptor.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE) - 1` — the
- * DISTILLATION scale — into a `lcmGuidanceEmbedDim`-wide sinusoidal vector.
- *
- * Exported so the registry contract test can lock that the embedded scale is
- * non-degenerate (w ≠ 0). The prior code embedded `runtimeGuidance - 1` which is
- * 0 for LCM's CFG≈1, yielding an all-[0…,1…] vector that under-conditions the
- * UNet — the root cause of the washed / distorted two-pass refinement output.
- */
-export function lcmGuidanceCondEmbedding(descriptor: LcmModelDescriptor): Float32Array {
-  const dim = descriptor.lcmGuidanceEmbedDim ?? 256;
-  const w = (descriptor.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE) - 1;
-  return guidanceScaleEmbedding(w, dim);
-}
-
-/** Sinusoidal guidance-scale embedding (diffusers parity). */
-function guidanceScaleEmbedding(w: number, dim: number): Float32Array {
-  const half = Math.floor(dim / 2);
-  const out = new Float32Array(dim);
-  const logBase = Math.log(10000) / Math.max(1, half - 1);
-  const wScaled = w * 1000;
-  for (let i = 0; i < half; i++) {
-    const freq = Math.exp(-logBase * i);
-    out[i] = Math.sin(wScaled * freq);
-    if (half + i < dim) out[half + i] = Math.cos(wScaled * freq);
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// DDPM noise schedule — precomputed alpha_cumprod for the standard SD beta
-// schedule (scaled_linear, beta_start=0.00085, beta_end=0.012, T=1000).
-// Used by BOTH models since both fine-tuned on the same base schedule.
-// ---------------------------------------------------------------------------
-
-const ALPHAS_CUMPROD = computeAlphasCumprod(0.00085, 0.012, 1000);
-
-function computeAlphasCumprod(betaStart: number, betaEnd: number, T: number): Float32Array {
-  const out = new Float32Array(T);
-  const sqrtStart = Math.sqrt(betaStart);
-  const sqrtEnd = Math.sqrt(betaEnd);
-  let running = 1.0;
-  for (let t = 0; t < T; t++) {
-    const sqrtBeta = sqrtStart + (sqrtEnd - sqrtStart) * (t / (T - 1));
-    const beta = sqrtBeta * sqrtBeta;
-    running *= 1 - beta;
-    out[t] = running;
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
@@ -394,19 +112,8 @@ export interface DiffusionEngineOptions {
   onProgress?: (label: string) => void;
 }
 
-/** Single emit point: log to console AND fan out to the consumer callback.
- *  No silent phases — if the engine is doing something, this fires. */
-export function reportProgress(
-  label: string,
-  onProgress: ((label: string) => void) | undefined,
-): void {
-  // eslint-disable-next-line no-console
-  console.info(`[builderforce-studio] ${label}`);
-  onProgress?.(label);
-}
-
 export interface DenoiseInputs {
-  /** Initial latent of shape [1, 4, height/8, width/8]. */
+  /** Initial latent of shape [1, 4, height/8, width/8]. Not mutated. */
   latent: Float32Array;
   /** Text-conditioning embedding [1, seqLen, embedDim]. */
   condEmbedding: Float32Array;
@@ -418,6 +125,9 @@ export interface DenoiseInputs {
   guidance: number;
   /** Seed used for stochastic LCM noise injection between steps. */
   seed: number;
+  /** Cancels BETWEEN UNet steps — a multi-second step at high resolution no
+   *  longer has to finish the whole frame before a Stop takes effect. */
+  signal?: AbortSignal;
   /** Optional per-step progress callback ("denoise step 2/4 for frame 3/24"). */
   onStep?: (step: number, totalSteps: number) => void;
 }
@@ -437,12 +147,22 @@ interface SessionBuffers {
   externalData: { name: string; buf: ArrayBuffer } | null;
 }
 
+/**
+ * How many distinct prompt embeddings an engine remembers. A storyboard reuses
+ * its negative prompt on every shot and often repeats a shot prompt; the CLIP
+ * text encoder is a full ORT session run each time, so a small memo removes
+ * those repeats while holding at most ~3 MB (8 × 77 × 1024 floats).
+ */
+const PROMPT_EMBEDDING_CACHE_SIZE = 8;
+
 export class DiffusionEngine {
   private tokenizer: PreTrainedTokenizer | null = null;
   private textEncoderSession: ort.InferenceSession | null = null;
   private unetSession: ort.InferenceSession | null = null;
   private vaeSession: ort.InferenceSession | null = null;
   private disposed = false;
+  /** Insertion-ordered, so the first key is the least recently used. */
+  private readonly promptEmbeddings = new Map<string, Float32Array>();
 
   constructor(private readonly opts: DiffusionEngineOptions) {}
 
@@ -450,7 +170,7 @@ export class DiffusionEngine {
 
   async init(): Promise<void> {
     const d = this.descriptor;
-    const sessionOptions = this.buildSessionOptions();
+    const sessionOptions = buildOrtSessionOptions(this.opts.probed.kind);
     const onProgress = this.opts.onProgress;
 
     // Fail fast before downloading 1.7GB if the device clearly can't run it.
@@ -480,39 +200,49 @@ export class DiffusionEngine {
         .catch(() => {});
     }
 
-    reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})…`, onProgress);
-    this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
-    reportProgress('Tokenizer ready.', onProgress);
+    try {
+      reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})…`, onProgress);
+      this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
+      reportProgress('Tokenizer ready.', onProgress);
 
-    reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)…`, onProgress);
+      reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)…`, onProgress);
 
-    // Phase 1: download all model + sidecar weights in parallel (network-bound).
-    const downloads = await Promise.all([
-      this.fetchSessionBuffers(d.files.textEncoder, 'text_encoder'),
-      this.fetchSessionBuffers(d.files.unet, 'unet'),
-      this.fetchSessionBuffers(d.files.vaeDecoder, 'vae_decoder'),
-    ]);
+      // Phase 1: download all model + sidecar weights in parallel (network-bound).
+      const downloads = await Promise.all([
+        this.fetchSessionBuffers(d.files.textEncoder, 'text_encoder'),
+        this.fetchSessionBuffers(d.files.unet, 'unet'),
+        this.fetchSessionBuffers(d.files.vaeDecoder, 'vae_decoder'),
+      ]);
 
-    // Phase 2: create ORT sessions SERIALLY. ORT-web mounts external-data
-    // sidecars on a GLOBAL Map (`f.Xc`) on the wasm Module, and the `finally`
-    // block of every session create calls `unmountExternalData()` which wipes
-    // that map. Three concurrent `Promise.all` creates with sidecars therefore
-    // race: the first session's finally wipes the data the second is still
-    // mid-deserialize. Symptom is "Module.MountedFiles is not available" on a
-    // tensor like `up_blocks.2.resnets.1.conv2.weight`.
-    // The runSessionCreatesSequentially regression test in diffusion-engine.test.ts
-    // locks this invariant — do not switch back to Promise.all here.
-    this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
-    this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
-    this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
-    reportProgress('All ORT sessions created.', onProgress);
+      // Phase 2: create ORT sessions SERIALLY. ORT-web mounts external-data
+      // sidecars on a GLOBAL Map (`f.Xc`) on the wasm Module, and the `finally`
+      // block of every session create calls `unmountExternalData()` which wipes
+      // that map. Three concurrent `Promise.all` creates with sidecars therefore
+      // race: the first session's finally wipes the data the second is still
+      // mid-deserialize. Symptom is "Module.MountedFiles is not available" on a
+      // tensor like `up_blocks.2.resnets.1.conv2.weight`.
+      // The runSessionCreatesSequentially regression test in diffusion-engine.test.ts
+      // locks this invariant — do not switch back to Promise.all here.
+      this.textEncoderSession = await this.createSessionFromBuffers(downloads[0], sessionOptions);
+      this.unetSession = await this.createSessionFromBuffers(downloads[1], sessionOptions);
+      this.vaeSession = await this.createSessionFromBuffers(downloads[2], sessionOptions);
+      reportProgress('All ORT sessions created.', onProgress);
 
-    // Validate the loaded models' input names match what the registry declares.
-    // Catches model-vs-registry drift at init time with a clear error instead
-    // of an opaque "input 'X' is missing in 'feeds'" on the first run.
-    assertSessionMatchesSpec('unet', this.unetSession, d.unetInputs);
-    assertSessionMatchesSpec('text_encoder', this.textEncoderSession, d.textEncoderInputs);
-    reportProgress('Model graph contract verified — engine ready.', onProgress);
+      // Validate the loaded models' input names match what the registry declares.
+      // Catches model-vs-registry drift at init time with a clear error instead
+      // of an opaque "input 'X' is missing in 'feeds'" on the first run.
+      assertSessionMatchesSpec('unet', this.unetSession, d.unetInputs);
+      assertSessionMatchesSpec('text_encoder', this.textEncoderSession, d.textEncoderInputs);
+      reportProgress('Model graph contract verified — engine ready.', onProgress);
+    } catch (err) {
+      // A failed init used to leave whichever sessions DID get created holding
+      // their WASM heap + GPU buffers until the caller disposed an engine it
+      // never got to use. Release them here so a failed attempt (OOM on the
+      // UNet, a contract mismatch) leaves memory as it found it, and the user's
+      // retry with a lighter model gets the whole budget.
+      await this.releaseSessions();
+      throw err;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -532,24 +262,7 @@ export class DiffusionEngine {
     if (this.disposed) return;
     this.disposed = true;
 
-    // ORT sessions: release the WASM heap + GPU buffers each one allocated.
-    const sessions = [this.textEncoderSession, this.unetSession, this.vaeSession];
-    this.textEncoderSession = null;
-    this.unetSession = null;
-    this.vaeSession = null;
-    this.tokenizer = null;
-
-    await Promise.all(
-      sessions.map(async (s) => {
-        if (!s) return;
-        try {
-          await s.release();
-        } catch {
-          // release() can throw if the session was never fully created;
-          // we still want to continue tearing down the other resources.
-        }
-      }),
-    );
+    await this.releaseSessions();
 
     // GPUDevice owns the WebGPU command queue + uploaded weights buffers.
     // destroy() is sync, idempotent, and releases everything immediately.
@@ -586,8 +299,189 @@ export class DiffusionEngine {
   }
 
   /** Tokenise (transformers.js) then run the CLIP text encoder (raw ORT) →
-   *  conditioning embedding [1, seqLen, embedDim]. */
+   *  conditioning embedding [1, seqLen, embedDim]. Memoised per prompt (see
+   *  {@link PROMPT_EMBEDDING_CACHE_SIZE}); every call returns its own copy, so a
+   *  caller that blends or biases the embedding cannot corrupt the cache. */
   async embedPrompt(prompt: string): Promise<Float32Array> {
+    const cached = this.promptEmbeddings.get(prompt);
+    if (cached) {
+      // Refresh recency: re-inserting moves the key to the end of the Map.
+      this.promptEmbeddings.delete(prompt);
+      this.promptEmbeddings.set(prompt, cached);
+      return new Float32Array(cached);
+    }
+    const embedding = await this.encodePrompt(prompt);
+    this.promptEmbeddings.set(prompt, embedding);
+    if (this.promptEmbeddings.size > PROMPT_EMBEDDING_CACHE_SIZE) {
+      const oldest = this.promptEmbeddings.keys().next().value;
+      if (oldest !== undefined) this.promptEmbeddings.delete(oldest);
+    }
+    return new Float32Array(embedding);
+  }
+
+  /** Sample a fresh latent from deterministic gaussian noise. */
+  sampleInitialLatent(seed: number): Float32Array {
+    return gaussianNoise(this.latentLength, seed);
+  }
+
+  /**
+   * Shared denoise primitive for both LCM and SD-Turbo. Uses the LCMScheduler
+   * consistency-model step formula at the chosen timesteps; SD-Turbo with
+   * timesteps=[999] degenerates to a single step that's equivalent to its
+   * native one-shot generation up to a small numerical constant.
+   */
+  async denoise(inputs: DenoiseInputs): Promise<DenoiseResult> {
+    if (!this.unetSession || !this.vaeSession) {
+      throw new Error('DiffusionEngine.init() not called');
+    }
+    this.assertDenoiseInputs(inputs);
+
+    const { latentH, latentW } = this.latentDims;
+    const latentShape: [number, number, number, number] = [1, 4, latentH, latentW];
+
+    const timesteps = inputs.timesteps ?? this.descriptor.defaultTimesteps;
+    // One working buffer for the whole run — lcmStep updates it in place.
+    const sample = new Float32Array(inputs.latent);
+
+    for (let i = 0; i < timesteps.length; i++) {
+      throwIfAborted(inputs.signal);
+      inputs.onStep?.(i + 1, timesteps.length);
+      const t = timesteps[i]!;
+
+      const noisePred = await this.runUnet({
+        sample,
+        condEmbedding: inputs.condEmbedding,
+        uncondEmbedding: inputs.uncondEmbedding,
+        timestep: t,
+        guidance: inputs.guidance,
+        latentShape,
+      });
+
+      const next = i < timesteps.length - 1 ? timesteps[i + 1]! : null;
+      lcmStep(sample, noisePred, t, next, inputs.seed, i);
+    }
+
+    throwIfAborted(inputs.signal);
+    const pixels = await this.runVaeDecode(sample, latentH, latentW);
+    return { pixels, latent: sample };
+  }
+
+  /**
+   * Forward-noise a clean latent to the noise level corresponding to `timestep`.
+   * Used by VideoEngine's img2img recursion: take the previous frame's clean
+   * latent, re-noise it to a partial-schedule timestep, then run the remaining
+   * denoise steps. Result is scene-content carried forward + prompt-driven
+   * evolution, instead of "fresh interpretation per frame".
+   *
+   *   noised = sqrt(alpha_cumprod[t]) * clean + sqrt(1 - alpha_cumprod[t]) * noise
+   *
+   * — the standard DDPM forward diffusion at timestep t.
+   */
+  addNoiseToLatent(clean: Float32Array, timestep: number, seed: number): Float32Array {
+    return forwardDiffuse(clean, timestep, seed);
+  }
+
+  /**
+   * The noise fraction `sqrt(1 - ᾱ_t)` of a latent re-noised to `timestep` via
+   * the shared DDPM schedule — i.e. the coefficient on the noise term in
+   * `addNoiseToLatent`. Exposed so the coherence layer can scale the
+   * latent-residual Mamba bias by the same noise level the engine actually
+   * injected, letting that bias compose with img2img recursion (see
+   * `latentResidualBiasScale`). Single source of truth for the schedule.
+   */
+  noiseScaleForTimestep(timestep: number): number {
+    return noiseScaleAt(timestep);
+  }
+
+  /**
+   * VAE-decode a clean latent to RGB pixels ([-1..1], layout [3, h, w]) WITHOUT
+   * running the UNet denoise loop. This is the cheap half of `denoise()` and is
+   * what makes keyframe interpolation worthwhile: the FrameInterpolator slerps
+   * two keyframe latents into a tween latent, and the engine turns that tween
+   * into a frame with one VAE decode instead of a full multi-step denoise.
+   */
+  async decodeLatent(latent: Float32Array): Promise<Float32Array> {
+    if (!this.vaeSession) {
+      throw new Error('DiffusionEngine.init() not called');
+    }
+    if (latent.length !== this.latentLength) {
+      throw new Error(
+        `decodeLatent: latent length ${latent.length} != expected ${this.latentLength} ` +
+          `for ${this.opts.width}x${this.opts.height}.`,
+      );
+    }
+    const { latentH, latentW } = this.latentDims;
+    return this.runVaeDecode(latent, latentH, latentW);
+  }
+
+  // -------------------------------------------------------------------------
+  // Internals
+  // -------------------------------------------------------------------------
+
+  private get latentDims(): { latentH: number; latentW: number } {
+    return { latentH: this.opts.height / 8, latentW: this.opts.width / 8 };
+  }
+
+  /** Elements in one [1, 4, h/8, w/8] latent. */
+  private get latentLength(): number {
+    const { latentH, latentW } = this.latentDims;
+    return 4 * latentH * latentW;
+  }
+
+  /**
+   * Shape-check the denoise feeds BEFORE the first UNet run. A latent made at
+   * another resolution, or an embedding from another backbone (768-wide SD1.5
+   * vs 1024-wide SD2.1), otherwise surfaces as ORT's opaque "invalid
+   * dimensions" from deep inside the WASM runtime.
+   */
+  private assertDenoiseInputs(inputs: DenoiseInputs): void {
+    if (inputs.latent.length !== this.latentLength) {
+      throw new Error(
+        `denoise: latent length ${inputs.latent.length} != expected ${this.latentLength} ` +
+          `for ${this.opts.width}x${this.opts.height}.`,
+      );
+    }
+    const { sequenceLength, textEmbedDim, id } = this.descriptor;
+    const embedLength = sequenceLength * textEmbedDim;
+    const embeddings: Array<[string, Float32Array | null]> = [
+      ['condEmbedding', inputs.condEmbedding],
+      ['uncondEmbedding', inputs.uncondEmbedding],
+    ];
+    for (const [name, embedding] of embeddings) {
+      if (embedding && embedding.length !== embedLength) {
+        throw new Error(
+          `denoise: ${name} length ${embedding.length} != expected ${embedLength} ` +
+            `([1, ${sequenceLength}, ${textEmbedDim}] for ${id}) — was it embedded by a different model?`,
+        );
+      }
+    }
+  }
+
+  /** Release every ORT session, the tokenizer and the prompt memo. Shared by
+   *  dispose() and the init() failure path; safe on a partially-built engine. */
+  private async releaseSessions(): Promise<void> {
+    const sessions = [this.textEncoderSession, this.unetSession, this.vaeSession];
+    this.textEncoderSession = null;
+    this.unetSession = null;
+    this.vaeSession = null;
+    this.tokenizer = null;
+    this.promptEmbeddings.clear();
+
+    await Promise.all(
+      sessions.map(async (s) => {
+        if (!s) return;
+        try {
+          await s.release();
+        } catch {
+          // release() can throw if the session was never fully created;
+          // we still want to continue tearing down the other resources.
+        }
+      }),
+    );
+  }
+
+  /** The uncached text-encoder pass behind {@link embedPrompt}. */
+  private async encodePrompt(prompt: string): Promise<Float32Array> {
     if (!this.tokenizer || !this.textEncoderSession) {
       throw new Error('DiffusionEngine.init() not called');
     }
@@ -632,139 +526,6 @@ export class DiffusionEngine {
       );
     }
     return new Float32Array(hidden);
-  }
-
-  /** Sample a fresh latent from deterministic gaussian noise. */
-  sampleInitialLatent(seed: number): Float32Array {
-    const latentH = this.opts.height / 8;
-    const latentW = this.opts.width / 8;
-    return gaussianNoise(1 * 4 * latentH * latentW, seed);
-  }
-
-  /**
-   * Shared denoise primitive for both LCM and SD-Turbo. Uses the LCMScheduler
-   * consistency-model step formula at the chosen timesteps; SD-Turbo with
-   * timesteps=[999] degenerates to a single step that's equivalent to its
-   * native one-shot generation up to a small numerical constant.
-   */
-  async denoise(inputs: DenoiseInputs): Promise<DenoiseResult> {
-    if (!this.unetSession || !this.vaeSession) {
-      throw new Error('DiffusionEngine.init() not called');
-    }
-
-    const latentH = this.opts.height / 8;
-    const latentW = this.opts.width / 8;
-    const latentShape: [number, number, number, number] = [1, 4, latentH, latentW];
-
-    const timesteps = inputs.timesteps ?? this.descriptor.defaultTimesteps;
-    let sample = new Float32Array(inputs.latent);
-
-    for (let i = 0; i < timesteps.length; i++) {
-      inputs.onStep?.(i + 1, timesteps.length);
-      const t = timesteps[i];
-      const alpha = ALPHAS_CUMPROD[t] ?? 0.001;
-      const sqrtAlpha = Math.sqrt(alpha);
-      const sqrtOneMinusAlpha = Math.sqrt(1 - alpha);
-
-      // 1) UNet predicts noise (with optional CFG)
-      const noisePred = await this.runUnet({
-        sample,
-        condEmbedding: inputs.condEmbedding,
-        uncondEmbedding: inputs.uncondEmbedding,
-        timestep: t,
-        guidance: inputs.guidance,
-        latentShape,
-      });
-
-      // 2) Compute predicted_x0 (LCM consistency model output)
-      const predictedX0 = new Float32Array(sample.length);
-      for (let j = 0; j < sample.length; j++) {
-        predictedX0[j] = (sample[j] - sqrtOneMinusAlpha * noisePred[j]) / sqrtAlpha;
-      }
-
-      // 3) Re-noise to next timestep (or finalise on last step)
-      if (i < timesteps.length - 1) {
-        const tNext = timesteps[i + 1];
-        const alphaNext = ALPHAS_CUMPROD[tNext] ?? 0.001;
-        const sqrtAlphaNext = Math.sqrt(alphaNext);
-        const sqrtOneMinusAlphaNext = Math.sqrt(1 - alphaNext);
-        const noise = gaussianNoise(sample.length, inputs.seed + i * 7919);
-        for (let j = 0; j < sample.length; j++) {
-          sample[j] = sqrtAlphaNext * predictedX0[j] + sqrtOneMinusAlphaNext * noise[j];
-        }
-      } else {
-        sample = predictedX0;
-      }
-    }
-
-    const pixels = await this.runVaeDecode(sample, latentH, latentW);
-    return { pixels, latent: sample };
-  }
-
-  /**
-   * Forward-noise a clean latent to the noise level corresponding to `timestep`.
-   * Used by VideoEngine's img2img recursion: take the previous frame's clean
-   * latent, re-noise it to a partial-schedule timestep, then run the remaining
-   * denoise steps. Result is scene-content carried forward + prompt-driven
-   * evolution, instead of "fresh interpretation per frame".
-   *
-   *   noised = sqrt(alpha_cumprod[t]) * clean + sqrt(1 - alpha_cumprod[t]) * noise
-   *
-   * — the standard DDPM forward diffusion at timestep t.
-   */
-  addNoiseToLatent(clean: Float32Array, timestep: number, seed: number): Float32Array {
-    const sqrtOneMinusAlpha = this.noiseScaleForTimestep(timestep);
-    const sqrtAlpha = Math.sqrt(Math.max(0, 1 - sqrtOneMinusAlpha * sqrtOneMinusAlpha));
-    const noise = gaussianNoise(clean.length, seed);
-    const out = new Float32Array(clean.length);
-    for (let i = 0; i < clean.length; i++) {
-      out[i] = sqrtAlpha * clean[i] + sqrtOneMinusAlpha * noise[i];
-    }
-    return out;
-  }
-
-  /**
-   * The noise fraction `sqrt(1 - ᾱ_t)` of a latent re-noised to `timestep` via
-   * the shared DDPM schedule — i.e. the coefficient on the noise term in
-   * `addNoiseToLatent`. Exposed so the coherence layer can scale the
-   * latent-residual Mamba bias by the same noise level the engine actually
-   * injected, letting that bias compose with img2img recursion (see
-   * `latentResidualBiasScale`). Single source of truth for the schedule.
-   */
-  noiseScaleForTimestep(timestep: number): number {
-    const alpha = ALPHAS_CUMPROD[timestep] ?? 0.001;
-    return Math.sqrt(1 - alpha);
-  }
-
-  /**
-   * VAE-decode a clean latent to RGB pixels ([-1..1], layout [3, h, w]) WITHOUT
-   * running the UNet denoise loop. This is the cheap half of `denoise()` and is
-   * what makes keyframe interpolation worthwhile: the FrameInterpolator slerps
-   * two keyframe latents into a tween latent, and the engine turns that tween
-   * into a frame with one VAE decode instead of a full multi-step denoise.
-   */
-  async decodeLatent(latent: Float32Array): Promise<Float32Array> {
-    if (!this.vaeSession) {
-      throw new Error('DiffusionEngine.init() not called');
-    }
-    const latentH = this.opts.height / 8;
-    const latentW = this.opts.width / 8;
-    const expected = 4 * latentH * latentW;
-    if (latent.length !== expected) {
-      throw new Error(
-        `decodeLatent: latent length ${latent.length} != expected ${expected} ` +
-          `for ${this.opts.width}x${this.opts.height}.`,
-      );
-    }
-    return this.runVaeDecode(latent, latentH, latentW);
-  }
-
-  // -------------------------------------------------------------------------
-  // Internals
-  // -------------------------------------------------------------------------
-
-  private buildSessionOptions(): ort.InferenceSession.SessionOptions {
-    return buildOrtSessionOptions(this.opts.probed.kind);
   }
 
   /** Fetch the model + (optional) external-data buffers for one session.
@@ -864,14 +625,7 @@ export class DiffusionEngine {
     guidance: number;
     latentShape: [number, number, number, number];
   }): Record<string, ort.Tensor> {
-    const ctx: UnetInputContext = {
-      descriptor: this.descriptor,
-      sample: args.sample,
-      condEmbedding: args.condEmbedding,
-      timestep: args.timestep,
-      guidance: args.guidance,
-      latentShape: args.latentShape,
-    };
+    const ctx: UnetInputContext = { descriptor: this.descriptor, ...args };
     const feeds: Record<string, ort.Tensor> = {};
     for (const spec of this.descriptor.unetInputs) {
       const builder = UNET_INPUT_BUILDERS[spec.name];
@@ -895,246 +649,38 @@ export class DiffusionEngine {
     latentShape: [number, number, number, number];
   }): Promise<Float32Array> {
     const session = this.unetSession!;
-    const condFeeds = this.buildUnetFeeds({
-      sample: args.sample,
-      condEmbedding: args.condEmbedding,
-      timestep: args.timestep,
-      guidance: args.guidance,
-      latentShape: args.latentShape,
-    });
-    const condOut = await this.runSession(session, condFeeds, 'unet (conditional)');
+    const { uncondEmbedding, ...condArgs } = args;
+    const condOut = await this.runSession(session, this.buildUnetFeeds(condArgs), 'unet (conditional)');
     const condNoise = pickFirstFloat32(condOut);
     if (!condNoise) throw new Error('UNet returned no Float32 output');
 
-    if (!args.uncondEmbedding || args.guidance <= 0) {
+    if (!uncondEmbedding || args.guidance <= 0) {
       return condNoise;
     }
 
-    const uncondFeeds = this.buildUnetFeeds({
-      sample: args.sample,
-      condEmbedding: args.uncondEmbedding,
-      timestep: args.timestep,
-      guidance: args.guidance,
-      latentShape: args.latentShape,
-    });
-    const uncondOut = await this.runSession(session, uncondFeeds, 'unet (unconditional)');
+    const uncondOut = await this.runSession(
+      session,
+      this.buildUnetFeeds({ ...condArgs, condEmbedding: uncondEmbedding }),
+      'unet (unconditional)',
+    );
     const uncondNoise = pickFirstFloat32(uncondOut);
     if (!uncondNoise) throw new Error('UNet unconditional pass returned no Float32 output');
 
-    const guided = new Float32Array(condNoise.length);
-    for (let i = 0; i < condNoise.length; i++) {
-      guided[i] = uncondNoise[i] + args.guidance * (condNoise[i] - uncondNoise[i]);
-    }
-    return guided;
+    // ORT hands back a fresh output buffer per run, so mixing into it in place
+    // allocates nothing extra.
+    applyGuidance(condNoise, uncondNoise, args.guidance);
+    return condNoise;
   }
 
   private async runVaeDecode(latent: Float32Array, h: number, w: number): Promise<Float32Array> {
     const session = this.vaeSession!;
     const scaled = new Float32Array(latent.length);
     const scale = this.descriptor.vaeScalingFactor;
-    for (let i = 0; i < latent.length; i++) scaled[i] = latent[i] / scale;
+    for (let i = 0; i < latent.length; i++) scaled[i] = latent[i]! / scale;
     const input = new ort.Tensor('float32', scaled, [1, 4, h, w]);
     const out = await this.runSession(session, { latent_sample: input }, 'vae_decoder');
     const pixels = pickFirstFloat32(out);
     if (!pixels) throw new Error('VAE decoder returned no Float32 output');
     return pixels;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Float32 gaussian noise via Box-Muller. Single deterministic helper used by
- * both `sampleInitialLatent` and the LCM re-noise step so the seed contract
- * is consistent across the pipeline.
- */
-function gaussianNoise(length: number, seed: number): Float32Array {
-  const out = new Float32Array(length);
-  let state = seed >>> 0 || 1;
-  for (let i = 0; i < length; i++) {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    const u1 = (state + 1) / 0x100000000;
-    state = (state * 1664525 + 1013904223) >>> 0;
-    const u2 = (state + 1) / 0x100000000;
-    out[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-  }
-  return out;
-}
-
-/**
- * ORT sessions in transformers-exported SD models use varying output names
- * (`out_sample`, `sample`, `predicted_noise`). Pick the first Float32 tensor
- * the session emits so we don't fragile-match on a specific key.
- */
-function pickFirstFloat32(result: ort.InferenceSession.OnnxValueMapType): Float32Array | null {
-  for (const value of Object.values(result)) {
-    const data = (value as ort.Tensor).data;
-    if (data instanceof Float32Array) return data;
-  }
-  return null;
-}
-
-/**
- * Pre-flight memory check. Returns null when memory is sufficient (or unknown);
- * returns an error message when the probed memory is below the model's declared
- * minimum. Caller throws if the message is non-null.
- *
- * Why this exists: skipping the check sends the user into a multi-minute model
- * download that ends with the opaque ORT `std::bad_alloc` (ERROR_CODE 6). A
- * pre-flight check fails in milliseconds with an actionable message instead.
- *
- * `approxMemoryMb` of `null` means the device didn't report — we don't refuse
- * in that case (better to attempt and surface a real error than block on
- * unknowns), but a logged warning is the right shape.
- */
-export function checkMemoryForModel(
-  approxMemoryMb: number | null,
-  minVramMb: number,
-  modelId: string,
-): string | null {
-  if (approxMemoryMb === null) return null;
-  if (approxMemoryMb >= minVramMb) return null;
-  return (
-    `Insufficient memory for ${modelId}: device reports ` +
-    `~${(approxMemoryMb / 1024).toFixed(1)} GB available, ` +
-    `model needs at least ~${(minVramMb / 1024).toFixed(1)} GB. ` +
-    `${lighterModelHint(modelId, approxMemoryMb)}`
-  );
-}
-
-/**
- * Suggest a genuinely lighter model from the registry. A candidate qualifies
- * only if it needs *strictly less* memory than the failing model AND — when the
- * device's available memory is known — would actually fit. This avoids the
- * self-defeating advice the naive "just exclude the failing id" version gave:
- * when sd-turbo (the lightest at 4 GB) OOMs on a 2 GB device, the only other
- * registry entry (lcm-dreamshaper-v7, 6 GB) is heavier and won't fit either, so
- * recommending it just reproduces the failure. Never suggests the failing one.
- *
- * @param availableMb device memory if known, else null (OOM path can't measure
- *   it) — when null we filter on "lighter than failing" alone.
- */
-function lighterModelHint(failingModelId: string, availableMb: number | null): string {
-  const failing = MODEL_REGISTRY[failingModelId as DiffusionModelId];
-  const failingMin = failing?.minVramMb ?? Infinity;
-  const alternatives = Object.values(MODEL_REGISTRY)
-    .filter((m) => m.id !== failingModelId)
-    // Stay within the same generation family: lcm-diffusion and webdit-dit
-    // are incompatible pipelines (different weights, different call sites —
-    // see VideoEngine.create's refinementModel guard), so recommending one
-    // as a "lighter alternative" to the other would be actionable-sounding
-    // but wrong advice.
-    .filter((m) => failing === undefined || m.engine === failing.engine)
-    .filter((m) => m.minVramMb < failingMin)
-    .filter((m) => availableMb === null || m.minVramMb <= availableMb)
-    .sort((a, b) => a.minVramMb - b.minVramMb)
-    .map((m) => m.id);
-  if (alternatives.length === 0) {
-    return 'No lighter model is available — close other GPU-heavy tabs and retry.';
-  }
-  return `Try a lighter model (${alternatives.join(', ')}) or close other GPU-heavy tabs.`;
-}
-
-/**
- * Translate ORT/WebGPU's opaque errors into actionable diagnostics. Used
- * everywhere ORT can throw — `InferenceSession.create()` AND every `session.run()`.
- * A raw `std::bad_alloc` / `DXGI_ERROR_DEVICE_HUNG` / `Device is lost` becomes
- * a sentence the user can act on, not a stack trace into the WASM runtime.
- */
-export function explainOrtError(
-  err: unknown,
-  label: string,
-  modelId: string,
-  minVramMb: number,
-  availableMemoryMb: number | null = null,
-): Error {
-  const message = err instanceof Error ? err.message : String(err);
-  if (/bad_alloc|out of memory|memory access out of bounds/i.test(message)) {
-    return new Error(
-      `Out of memory during ${label} for ${modelId} ` +
-        `(needs ~${(minVramMb / 1024).toFixed(1)} GB). ` +
-        `${lighterModelHint(modelId, availableMemoryMb)} ` +
-        `Original error: ${message}`,
-    );
-  }
-  if (/DXGI_ERROR_DEVICE_HUNG|Device.*is lost|GPUDevice.*lost|mapAsync.*lost/i.test(message)) {
-    return new Error(
-      `GPU device was lost during ${label} for ${modelId} — typically a Windows TDR ` +
-        `(driver timeout, ~2 s per kernel). The model is too heavy for this GPU at the current ` +
-        `resolution. Try a lower resolution (e.g. 256×256), pick a lighter model, or switch ` +
-        `the device target to CPU. Original error: ${message}`,
-    );
-  }
-  if (/InsertedPrecisionFreeCast|SimplifiedLayerNormFusion|graph_utils\.cc/.test(message)) {
-    return new Error(
-      `${label} ORT session refused to load due to a graph-fusion crash. ` +
-        `This usually means graphOptimizationLevel is too aggressive — verify ` +
-        `buildOrtSessionOptions still pins 'basic'. Original error: ${message}`,
-    );
-  }
-  return err instanceof Error ? err : new Error(message);
-}
-
-/** @deprecated Use explainOrtError. Kept as an alias for the existing tests. */
-export const explainSessionCreateError = explainOrtError;
-
-/**
- * Build ORT session options for a probed device.
- *
- * `graphOptimizationLevel: 'basic'` is critical — ORT-web's default `'all'`
- * runs extended fusions (SimplifiedLayerNormFusion, ConstantFolding for
- * inserted Casts) that crash on most browser-exported SD / SD-Turbo / LCM
- * text-encoders with errors like:
- *
- *   "Attempting to get index by a name which does not exist:
- *    InsertedPrecisionFreeCast_/text_model/final_layer_norm/Constant_output_0
- *    for node /text_model/encoder/layers.0/layer_norm1/Mul/SimplifiedLayerNormFusion/"
- *
- * `'basic'` skips the entire extended-fusion pass while keeping the cheap
- * constant-folding optimizations that don't touch the layout. Matches what
- * Microsoft's ORT-web SD-Turbo demo and aislamov's diffusers-js demos use.
- */
-export function buildOrtSessionOptions(
-  device: ActiveDevice,
-): ort.InferenceSession.SessionOptions {
-  const base: ort.InferenceSession.SessionOptions = {
-    graphOptimizationLevel: 'basic',
-    // Drop ORT's `[W:` warnings (e.g. "VerifyEachNodeIsAssignedToAnEp: some
-    // nodes were not assigned to the preferred EP"). These are informational
-    // — every shape-op fallback to CPU logs one per session. With 3 sessions
-    // and per-frame reuse, the console becomes unreadable. Severity 3 = error,
-    // so real failures still log; warnings are silenced.
-    logSeverityLevel: 3,
-  };
-  if (device === 'webnn') return { ...base, executionProviders: ['webnn', 'wasm'] };
-  if (device === 'webgpu') return { ...base, executionProviders: ['webgpu', 'wasm'] };
-  return { ...base, executionProviders: ['wasm'] };
-}
-
-/** Last path segment — the name an .onnx graph uses to reference its sidecar. */
-function basename(path: string): string {
-  const i = path.lastIndexOf('/');
-  return i === -1 ? path : path.slice(i + 1);
-}
-
-/** Init-time drift check: every input the registry declares for `session`
- *  must exist in `session.inputNames`. Throws with a clear, actionable error
- *  if the model and the registry disagree. */
-function assertSessionMatchesSpec(
-  sessionLabel: string,
-  session: ort.InferenceSession,
-  specs: readonly OrtInputSpec[],
-): void {
-  const declared = specs.map((s) => s.name);
-  const actual = session.inputNames;
-  const missing = declared.filter((n) => !actual.includes(n));
-  if (missing.length > 0) {
-    throw new Error(
-      `Registry/model mismatch on ${sessionLabel}: declared input(s) [${missing.join(', ')}] ` +
-        `are not in the model's inputNames [${actual.join(', ')}]. ` +
-        `Update MODEL_REGISTRY in diffusion-engine.ts to match the actual export.`,
-    );
   }
 }

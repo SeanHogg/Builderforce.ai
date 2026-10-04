@@ -60,6 +60,10 @@ const SECRET_KEYS = [
   'PEXELS_API_KEY',
   'PIXABAY_API_KEY',
   'FLUX_API_KEY',
+  // Free image-generation vendors (Hugging Face Inference Providers credit,
+  // Pollinations token). Unset → the image cascade simply skips that vendor.
+  'HF_API_TOKEN',
+  'POLLINATIONS_API_KEY',
   // Transactional account email (verification codes, magic links, welcomes).
   // Keep this in the deployment list: EmailService intentionally reads it from
   // the Worker secret binding, not from wrangler.toml vars.

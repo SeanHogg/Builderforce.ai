@@ -1,4 +1,3 @@
-import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 
 interface PreviewFrameProps {
@@ -12,45 +11,21 @@ interface PreviewFrameProps {
   frameRef?: React.Ref<HTMLIFrameElement>;
 }
 
+/**
+ * The running app, and nothing else. Its address, reload and open-in-tab live in
+ * the preview toolbar, and what to show before there is a URL (starting,
+ * failed, nothing yet) is `PreviewStatus` — so this renders nothing without one.
+ */
 export function PreviewFrame({ url, frameRef }: PreviewFrameProps) {
   const t = useTranslations('ide');
-
-  if (!url) {
-    return (
-      <div
-        className="h-full flex items-center justify-center"
-        style={{ background: 'var(--bg-deep)', color: 'var(--text-muted)' }}
-      >
-        <div className="text-center">
-          <div className="text-4xl mb-3"><Icon source="🌐" size="1em" /></div>
-          <p className="text-sm">{t('previewEmpty')}</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (!url) return null;
   return (
-    <div className="h-full flex flex-col" style={{ background: 'var(--surface)' }}>
-      <div
-        className="flex items-center gap-2 px-3 py-1.5"
-        style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}
-      >
-        <span className="text-xs flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>{url}</span>
-        <button
-          onClick={() => window.open(url, '_blank')}
-          className="text-xs whitespace-nowrap"
-          style={{ color: 'var(--accent)' }}
-        >
-          {t('previewOpen')} <Icon source="↗" size="1em" />
-        </button>
-      </div>
-      <iframe
-        ref={frameRef}
-        src={url}
-        className="flex-1 w-full"
-        title={t('previewTitle')}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-      />
-    </div>
+    <iframe
+      ref={frameRef}
+      src={url}
+      title={t('previewTitle')}
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      style={{ display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--bg-surface)' }}
+    />
   );
 }

@@ -145,4 +145,29 @@ describe('BuilderWorkspace center-panel modality switch', () => {
     render(<BuilderWorkspace project={makeProject('mobile')} initialFiles={[]} />);
     expect(screen.getByTestId('mobile-device-panel')).toBeTruthy();
   });
+
+  // The preview starts by itself, so a website project carries no Run button,
+  // and before there is anything to run the preview says so instead of asking
+  // the person to press one.
+  it('designer has no Run button and an empty project explains the preview', () => {
+    render(<BuilderWorkspace project={makeProject('designer')} initialFiles={[]} />);
+    expect(screen.queryByText('ide.modality.designer.runLabel')).toBeNull();
+    expect(screen.getByText('ide.workspace.emptyTitle')).toBeTruthy();
+  });
+
+  // One header row: a host (Studio) hands its actions to the workspace header
+  // instead of stacking a second bar of actions above it.
+  it('renders the host actions inside the workspace header', () => {
+    render(
+      <BuilderWorkspace
+        project={makeProject('designer')}
+        initialFiles={[]}
+        headerLeading={<span data-testid="host-brand" />}
+        headerTrailing={<span data-testid="host-actions" />}
+      />,
+    );
+    const header = screen.getByRole('banner');
+    expect(header.contains(screen.getByTestId('host-brand'))).toBe(true);
+    expect(header.contains(screen.getByTestId('host-actions'))).toBe(true);
+  });
 });

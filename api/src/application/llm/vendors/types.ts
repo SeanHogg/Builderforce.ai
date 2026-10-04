@@ -1130,6 +1130,17 @@ export async function executeVendorPost<T>(args: {
   signal?: AbortSignal;
   /** Alternate origin for this call — see {@link VendorEgress}. */
   egress?: VendorEgress;
+  /** HTTP method. `GET` sends no body (the request is fully described by the
+   *  endpoint URL — e.g. Pollinations' prompt-in-path image API). Default `POST`. */
+  method?: 'POST' | 'GET';
+  /** `Authorization` header value. Default `Bearer <apiKey>`; `null` omits the
+   *  header for vendors that authenticate another way (Google's `x-goog-api-key`,
+   *  passed through `headers`). */
+  authorization?: string | null;
+  /** Reads a 2xx body into the value `parseResponse` receives. Default
+   *  `resp.json()`; the image surface overrides it for vendors that answer with
+   *  raw image bytes rather than JSON. */
+  readOk?: (resp: Response) => Promise<unknown>;
   /** Console log prefix for the auth-failure line, e.g. `vendors` / `imageVendors`. */
   logPrefix: string;
   /** Noun in the "Failing over to next <noun>." auth message (`model` / `vendor`). */
@@ -1145,21 +1156,23 @@ export async function executeVendorPost<T>(args: {
     vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal, egress,
     logPrefix, authFailoverNoun, parseResponse, onEmbeddedError, onFatal,
   } = args;
+  const method = args.method ?? 'POST';
+  const authorization = args.authorization === undefined ? `Bearer ${apiKey}` : args.authorization;
 
   // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
   // VendorRetryableError on timeout/network, so there's no catch block here.
   const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
-    method: 'POST',
+    method,
     headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+      ...(authorization ? { Authorization: authorization } : {}),
+      ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
       ...(headers ?? {}),
     },
-    body: JSON.stringify(body),
+    ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
   }, timeoutMs, signal, egress);
 
   if (resp.ok) {
-    const raw = await resp.json();
+    const raw = args.readOk ? await args.readOk(resp) : await resp.json();
     // Some providers (notably OpenRouter) return 200 with { error: ... } embedded.
     if (onEmbeddedError && raw && typeof raw === 'object' && 'error' in raw && (raw as Record<string, unknown>)['error'] != null) {
       const errObj = (raw as Record<string, unknown>)['error'];
