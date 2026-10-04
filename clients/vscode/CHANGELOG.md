@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.4] — The BuilderForce sidebar is five sections, not eight
+
+- **Work** puts your workspace and project at the top, then Sessions and Tasks as two groups underneath. The header shows which workspace and project you are in, and Sessions and Tasks each have their own buttons on the group heading (new session, show archived, filter, hide done, flat or hierarchy).
+- **Inbox** holds what needs you now: requests waiting on an answer, then meetings (live ones first, with Join on the row), then quick actions. The badge counts open requests plus live meetings, so you see it with the section closed.
+- **Health** shows today's spend and the audits for the current project. Each group heading carries its summary, such as `$4.12 · 62% of cap` and `2 of 5 run`.
+- Changes and Evermind are unchanged.
+
 ## [2026.9.80] — A running agent now joins the chat it reports into
 
 - **A running agent now joins the chat it reports into** — the Agents list names whoever is posting progress, and updates live when a run starts.

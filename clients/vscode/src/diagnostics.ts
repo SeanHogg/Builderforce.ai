@@ -34,26 +34,19 @@ function scoreIcon(score: number | null): vscode.ThemeIcon {
 }
 
 /**
- * Owns the Diagnostics sidebar: a tree of security & compliance diagnostics that
- * run against the active project's connected repos, showing each one's latest
- * rating. Scoped to the selected project (like Insights); re-fetches on project
+ * Owns the Health view's "Audits" rows (`treeProvider`): security & compliance
+ * diagnostics that run against the active project's connected repos, showing each
+ * one's latest rating. Scoped to the selected project (like Insights); re-fetches on project
  * change and on sign-in. Disposable.
  */
 export class DiagnosticsController implements vscode.Disposable {
-  private readonly treeProvider = new DiagnosticsTreeProvider();
-  private readonly treeView: vscode.TreeView<DiagnosticRow>;
+  /** The "Audits" rows; the Health view composes it as a section. */
+  readonly treeProvider = new DiagnosticsTreeProvider();
   private readonly projectSub: vscode.Disposable;
   private disposed = false;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
-    this.treeView = vscode.window.createTreeView("builderforce.diagnostics", {
-      treeDataProvider: this.treeProvider,
-    });
-    this.applyProjectScope();
-    this.projectSub = onProjectChange(() => {
-      this.applyProjectScope();
-      void this.refresh();
-    });
+    this.projectSub = onProjectChange(() => void this.refresh());
     void this.refresh();
   }
 
@@ -61,9 +54,11 @@ export class DiagnosticsController implements vscode.Disposable {
     return getSelectedProject()?.id;
   }
 
-  /** Reflect the active project in the Diagnostics header. */
-  private applyProjectScope(): void {
-    this.treeView.description = getSelectedProject()?.name;
+  /** One-line summary for the "Audits" header, e.g. "2 of 5 run". */
+  summary(): string | undefined {
+    const rows = this.treeProvider.rows;
+    if (rows.length === 0) return undefined;
+    return vscode.l10n.t("{0} of {1} run", rows.filter((r) => r.score != null).length, rows.length);
   }
 
   /** Re-fetch the audit catalog + this project's scores and repaint. */
@@ -161,25 +156,28 @@ export class DiagnosticsController implements vscode.Disposable {
   dispose(): void {
     this.disposed = true;
     this.projectSub.dispose();
-    this.treeView.dispose();
   }
 }
 
-/** Tree view rendering the diagnostics as flat rows, or a sign-in welcome. */
+/** The diagnostics as flat rows (empty when signed out). */
 class DiagnosticsTreeProvider implements vscode.TreeDataProvider<DiagnosticRow> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private rows: DiagnosticRow[] = [];
+  private _rows: DiagnosticRow[] = [];
+
+  get rows(): readonly DiagnosticRow[] {
+    return this._rows;
+  }
 
   setRows(rows: DiagnosticRow[]): void {
-    this.rows = rows;
+    this._rows = rows;
     this._onDidChangeTreeData.fire();
   }
 
   getTreeItem(row: DiagnosticRow): vscode.TreeItem {
     const item = new vscode.TreeItem(`${row.emoji} ${row.name}`, vscode.TreeItemCollapsibleState.None);
     item.description =
-      row.score != null ? `${row.score.toFixed(1)}/5${row.scoreLabel ? ` — ${row.scoreLabel}` : ""}` : "Not run";
+      row.score != null ? `${row.score.toFixed(1)}/5${row.scoreLabel ? ` — ${row.scoreLabel}` : ""}` : vscode.l10n.t("Not run");
     const tip = new vscode.MarkdownString(undefined, true);
     tip.appendMarkdown(`**${row.name}**\n\n${row.blurb}`);
     if (row.headline) tip.appendMarkdown(`\n\n_${row.headline}_`);
@@ -189,13 +187,13 @@ class DiagnosticsTreeProvider implements vscode.TreeDataProvider<DiagnosticRow> 
     // Primary click opens the report when there is one.
     item.command = {
       command: "builderforce.openDiagnosticReport",
-      title: "Open Diagnostic Report",
+      title: vscode.l10n.t("Open Diagnostic Report"),
       arguments: [row],
     };
     return item;
   }
 
-  getChildren(): DiagnosticRow[] {
-    return this.rows;
+  getChildren(element?: DiagnosticRow): DiagnosticRow[] {
+    return element ? [] : [...this._rows];
   }
 }

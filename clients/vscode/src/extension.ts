@@ -34,11 +34,13 @@ import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
 import { archive, unarchive } from "./sessionsArchive";
-import { InboxTreeProvider } from "./inboxTree";
+import { InboxQuickActionsProvider, InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, onLocalRunsChange, managerAttention } from "./attention";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
 import { appUrl } from "./auth";
-import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
+import { MeetingsTreeProvider, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
+import { ProjectContextTreeProvider } from "./projectContextTree";
+import { registerSidebarViews } from "./sidebarViews";
 import { PendingChangesController } from "./pendingChangesTree";
 import { posixShellReport } from "./posixShell";
 import { buildIdentityReport } from "./buildIdentityReport";
@@ -74,9 +76,9 @@ type TaskNode = { kind: "task"; task: bfApi.BfTask };
 /** Persisted (per-machine) id of the workspace the editor is acting as. */
 const SELECTED_TENANT_KEY = "builderforce.selectedTenantId";
 
-/** The Project & Tasks tree view — held so its header can show the active workspace.
- *  Typed to just what we use (description + disposal) to avoid TreeView<T> variance. */
-let projectView: (vscode.Disposable & { description?: string }) | undefined;
+/** The Work view's workspace + project rows; re-resolved after a workspace switch or
+ *  platform write so the rows and the view header show the active workspace. */
+let projectContext: ProjectContextTreeProvider | undefined;
 
 /** Live builder-insights surface (status bar + tree); restarted on auth change. */
 let insights: InsightsController | undefined;
@@ -87,23 +89,8 @@ let evermindView: EvermindViewProvider | undefined;
 /** Security & compliance Diagnostics sidebar; re-fetched on auth/project change. */
 let diagnostics: DiagnosticsController | undefined;
 
-/** Meetings sidebar (upcoming/live video calls); refreshed on auth change. */
-let meetings: MeetingsController | undefined;
-
-/** Show the active workspace (tenant) name next to the Project & Tasks view title. */
-async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise<void> {
-  if (!projectView) return;
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    projectView.description = undefined;
-    return;
-  }
-  try {
-    const ws = await bfApi.getCurrentWorkspace(context.secrets);
-    projectView.description = ws?.name;
-  } catch {
-    projectView.description = undefined;
-  }
-}
+/** The Inbox view's Meetings group (upcoming/live video calls); refreshed on auth change. */
+let meetings: MeetingsTreeProvider | undefined;
 
 /**
  * Mirror the signed-in state into the `builderforce.signedIn` context key so the
@@ -145,6 +132,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const tree = new SessionsTreeProvider(context.secrets, context);
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
+  projectContext = new ProjectContextTreeProvider(context.secrets);
 
   // Cross-surface live-status poller: one fetch of `GET /api/runtime/attention`
   // feeds BOTH the Sessions and Project trees so a running / question-blocked
@@ -237,37 +225,19 @@ export function activate(context: vscode.ExtensionContext): void {
   // run, so re-poll attention immediately rather than waiting for the next tick.
   // The Brain's agent loop runs HERE, in the extension host — a chat tab can be closed
   // or switched away from while its run carries on (see `brainRunHost.ts`).
-  const runHost = createVsCodeRunHost(context, {
-    onChatsChanged: () => { tree.refresh(); attention.refresh(); },
-    onPlatformWrite: () => {
-      bfApi.invalidateTasks();
-      projects.refresh();
-      attention.refresh();
-      void refreshWorkspaceHeader(context);
-    },
-  });
+  const onChatsChanged = () => { tree.refresh(); attention.refresh(); };
+  const onPlatformWrite = () => {
+    bfApi.invalidateTasks();
+    projects.refresh();
+    attention.refresh();
+    projectContext?.refresh();
+  };
+  const runHost = createVsCodeRunHost(context, { onChatsChanged, onPlatformWrite });
   context.subscriptions.push({ dispose: () => runHost.dispose() });
-  BuilderForcePanel.configure({
-    runHost,
-    onChatsChanged: () => { tree.refresh(); attention.refresh(); },
-    onPlatformWrite: () => {
-      bfApi.invalidateTasks();
-      projects.refresh();
-      attention.refresh();
-      void refreshWorkspaceHeader(context);
-    },
-  });
-  projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
-  context.subscriptions.push(projectView);
-  // The Sessions list is scoped by the active project — surface that in its header so
-  // it's obvious you're looking at one project's chats vs. every conversation.
-  const sessionsView = vscode.window.createTreeView("builderforce.sessions", { treeDataProvider: tree });
-  sessionsView.description = getSelectedProject()?.name;
-  context.subscriptions.push(sessionsView);
+  BuilderForcePanel.configure({ runHost, onChatsChanged, onPlatformWrite });
   // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
   const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
-  void refreshWorkspaceHeader(context);
   const auth = BuilderForceAuthProvider.register(context);
   // The ONE log surface, owned by errorReporter so any module can write to it and
   // so "log it" and "file it in Quality" can never drift apart.
@@ -305,16 +275,26 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.openDiagnosticReport", (row) => diagnostics?.openReport(row)),
   );
 
-  // Meetings sidebar — upcoming/live video calls for the workspace. Join in the
-  // browser (reliable camera) or natively in a VS Code webview.
-  meetings = new MeetingsController(context);
+  // Meetings — upcoming/live video calls for the workspace, a group in the Inbox view.
+  // Join in the browser (reliable camera) or natively in a VS Code webview.
+  meetings = new MeetingsTreeProvider(context.secrets);
   context.subscriptions.push(
-    meetings,
-    vscode.commands.registerCommand("builderforce.refreshMeetings", () => meetings?.refresh()),
     vscode.commands.registerCommand("builderforce.joinMeetingBrowser", (item: MeetingItem) => joinMeetingInBrowser(item)),
     vscode.commands.registerCommand("builderforce.joinMeetingNative", (item: MeetingItem) => joinMeetingNative(context, item)),
     vscode.commands.registerCommand("builderforce.scheduleMeeting", () => openMeetingsWeb()),
   );
+
+  // The merged sidebar views (Work, Inbox, Health), each composed from the providers above.
+  context.subscriptions.push(registerSidebarViews({
+    projectContext,
+    sessions: tree,
+    tasks: projects,
+    approvals: inbox,
+    meetings,
+    quickActions: new InboxQuickActionsProvider(),
+    insights,
+    diagnostics,
+  }));
 
   // Changes sidebar — what the agent (or you) changed and hasn't committed, with a
   // count badge and one click per file to the editor's own diff. Self-contained: it
@@ -327,8 +307,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     participant,
-    vscode.window.registerTreeDataProvider("builderforce.inbox", inbox),
-    vscode.commands.registerCommand("builderforce.refreshInbox", () => inbox.refresh()),
+    vscode.commands.registerCommand("builderforce.refreshInbox", () => { inbox.refresh(); meetings?.refresh(); }),
     // Work Inbox entry points — each hands the unified Brain a job to do with its
     // shared platform + git tools (one Brain, one tool catalog; no bespoke dashboards).
     vscode.commands.registerCommand("builderforce.reviewPullRequests", () =>
@@ -377,7 +356,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.refreshProjects", () => {
       bfApi.invalidateTasks();
       projects.refresh();
-      void refreshWorkspaceHeader(context);
+      projectContext?.refresh();
     }),
     vscode.commands.registerCommand("builderforce.hideDoneTasks", () => projects.setHideDone(true)),
     vscode.commands.registerCommand("builderforce.showDoneTasks", () => projects.setHideDone(false)),
@@ -565,12 +544,11 @@ export function activate(context: vscode.ExtensionContext): void {
     // Keep the find_symbol / file_outline definition index current as files change.
     ...watchWorkspaceSymbols(),
     // Switching the active project re-pushes Brain init so an open chat's system
-    // prompt (and new-chat scoping) tracks the current project without a reopen, and
-    // re-labels the Sessions header to show which project's chats are in view.
+    // prompt (and new-chat scoping) tracks the current project without a reopen.
+    // (The Work view relabels its own header from the same selection.)
     onProjectChange(() => {
       BuilderForcePanel.refresh();
       evermindView?.refresh();
-      sessionsView.description = getSelectedProject()?.name;
       // The workspace digest belongs in the project the user is now working in.
       void syncWorkspaceFacts(context.secrets);
     }),
@@ -657,7 +635,7 @@ async function pollAssignedTasks(
   const action = await vscode.window.showInformationMessage(msg, show);
   if (action === show) {
     projects.setAssignedToMe(true);
-    await vscode.commands.executeCommand('builderforce.project.focus');
+    await vscode.commands.executeCommand('builderforce.work.focus');
   }
 }
 
@@ -840,7 +818,7 @@ async function applyWorkspace(
   bfApi.invalidateTasks();
   setSelectedProject(undefined); // projects belong to a workspace — pick one in the new one
   projects.refresh();
-  void refreshWorkspaceHeader(context);
+  projectContext?.refresh();
 }
 
 /** Workspace onboarding on the web (fallback when the in-editor endpoints are absent). */

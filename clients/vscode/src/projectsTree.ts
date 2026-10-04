@@ -4,7 +4,6 @@ import {
   BfTask,
   DEFAULT_HIDE_DONE,
   getCurrentUserId,
-  getCurrentWorkspace,
   isDoneStatus,
   listProjectObjectives,
   listTasks,
@@ -65,8 +64,6 @@ interface TreeConfig {
 const DEFAULT_CONFIG: TreeConfig = { hierarchy: false, groupBy: "none", sortBy: "status", statusFilter: null, needsAttention: false, assignedToMe: false };
 
 type Node =
-  | { kind: "workspace"; name?: string }
-  | { kind: "project"; name: string }
   | { kind: "group"; label: string; groupKey: string; tasks: BfTask[] }
   | { kind: "objective"; objective: BfObjective; tasks: BfTask[] }
   | { kind: "task"; task: BfTask; hasChildren: boolean }
@@ -104,8 +101,8 @@ function humanLabel(raw: string | undefined, kind: "status" | "priority"): strin
 }
 
 /**
- * The "Project" view: the working context, top-down — the workspace (tenant), then the
- * project, then its tasks. The task list is arrangeable (the toolbar drives this
+ * The Tasks section of the Work view: the selected project's tasks (the workspace and
+ * project rows above it are `ProjectContextTreeProvider`). The list is arrangeable (the toolbar drives this
  * provider): a **Flat** or **Hierarchy** (epic → child tasks) view, optional **group by**
  * status/priority (flat mode), a **sort**, and a **status filter** ("show In progress").
  * Clicking a task starts a chat session; right-click sets status. Every other panel keys
@@ -241,26 +238,6 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       if (node.command) item.command = { command: node.command, title: node.label };
       return item;
     }
-    if (node.kind === "workspace") {
-      const item = new vscode.TreeItem(
-        node.name ?? vscode.l10n.t("Select workspace"),
-        vscode.TreeItemCollapsibleState.None,
-      );
-      item.description = vscode.l10n.t("switch");
-      item.iconPath = new vscode.ThemeIcon("organization");
-      item.contextValue = "builderforceWorkspace";
-      item.tooltip = vscode.l10n.t("Switch or create a workspace");
-      item.command = { command: "builderforce.createWorkspace", title: vscode.l10n.t("Switch Workspace") };
-      return item;
-    }
-    if (node.kind === "project") {
-      const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.None);
-      item.description = vscode.l10n.t("change");
-      item.iconPath = new vscode.ThemeIcon("folder-active");
-      item.contextValue = "builderforceProject";
-      item.command = { command: "builderforce.selectProject", title: vscode.l10n.t("Change Project") };
-      return item;
-    }
     if (node.kind === "group") {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Expanded);
       item.description = String(node.tasks.length);
@@ -324,25 +301,16 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     if (!signedIn) {
       return [
-        { kind: "info", label: "Sign in to your workspace", command: "builderforce.signIn" },
-        { kind: "info", label: "Create a workspace…", command: "builderforce.createWorkspace" },
+        { kind: "info", label: vscode.l10n.t("Sign in to your workspace"), command: "builderforce.signIn" },
+        { kind: "info", label: vscode.l10n.t("Create a workspace…"), command: "builderforce.createWorkspace" },
       ];
     }
 
-    let workspaceName: string | undefined;
-    try {
-      workspaceName = (await getCurrentWorkspace(this.ctx.secrets))?.name;
-    } catch {
-      /* name unresolved (older API) — the row still switches; label falls back */
-    }
-    const nodes: Node[] = [{ kind: "workspace", name: workspaceName }];
-
     const project = getSelectedProject();
     if (!project) {
-      nodes.push({ kind: "info", label: "Select or create a project…", command: "builderforce.selectProject" });
-      return nodes;
+      return [{ kind: "info", label: vscode.l10n.t("Select or create a project…"), command: "builderforce.selectProject" }];
     }
-    nodes.push({ kind: "project", name: project.name });
+    const nodes: Node[] = [];
 
     try {
       // In Hierarchy mode, also load the project's OKR objectives (the top tier); when
@@ -356,7 +324,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       this.objectives = objectives;
       this.currentUserId = userId;
       if (tasks.length === 0 && objectives.length === 0) {
-        nodes.push({ kind: "info", label: "No tasks in this project" });
+        nodes.push({ kind: "info", label: vscode.l10n.t("No tasks in this project") });
         return nodes;
       }
       const visible = this.applyFilters(tasks);
@@ -373,7 +341,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
 
       // Nothing to show — unless Hierarchy mode still has objectives to render.
       if (visible.length === 0 && !(this.config.hierarchy && this.objectives.length > 0)) {
-        nodes.push({ kind: "info", label: "No tasks match the current filter", command: "builderforce.projectFilterStatus" });
+        nodes.push({ kind: "info", label: vscode.l10n.t("No tasks match the current filter"), command: "builderforce.projectFilterStatus" });
         return nodes;
       }
 
@@ -403,7 +371,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
         nodes.push(...this.buildGroups(visible, this.config.groupBy));
       }
     } catch (e) {
-      nodes.push({ kind: "info", label: `Tasks unavailable — ${(e as Error).message}`, command: "builderforce.diagnose" });
+      nodes.push({ kind: "info", label: vscode.l10n.t("Tasks unavailable — {0}", (e as Error).message), command: "builderforce.diagnose" });
     }
     return nodes;
   }

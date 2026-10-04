@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-10-04 — VS Code sidebar: eight sections merged into five (Work, Inbox, Changes, Health, Evermind)
+
+- Sessions + Project & Tasks → **Work**; Inbox + Meetings → **Inbox**; Insights + Diagnostics → **Health**. VSIX 2026.10.4.
+- New primitive `clients/vscode/src/sectionedTreeView.ts`: one view composed from existing tree providers as collapsible groups. It hands each provider's own elements to VS Code (no wrapping), so every context-menu command still receives its original argument, and it scopes item ids per group so two providers can never collide on an id.
+- `sidebarViews.ts` assembles the three views; `projectContextTree.ts` takes the workspace/project rows out of `projectsTree.ts`; `inboxTree.ts` splits quick actions into their own provider; Insights/Diagnostics/Meetings stop creating views of their own. `MeetingsController`, `refreshWorkspaceHeader`, the `refreshMeetings` command and the old view ids, welcome texts and nls keys are removed.
+- Also fixed while there: the duplicated run-host/panel callbacks in `extension.ts` are one pair; the tasks and insights rows that were hardcoded English now go through `vscode.l10n.t` with de/es/fr/zh-cn translations.
+
 ## ✅ RESOLVED 2026-10-03 — Studio, round two: the agent handed over CSS instead of writing it, the name printed twice, the composer was four scrambled rows, and Upgrade was on screen twice
 
 The first pass removed the name from the Studio bar but missed the real duplicate one row down.

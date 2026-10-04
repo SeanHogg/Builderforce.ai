@@ -26,32 +26,33 @@ export class MeetingItem extends vscode.TreeItem {
   }
 }
 
+/** The Inbox view's "Meetings" group: upcoming and live meetings, live first. */
 export class MeetingsTreeProvider implements vscode.TreeDataProvider<MeetingItem> {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChange.event;
+  private _liveCount = 0;
   constructor(private readonly secrets: vscode.SecretStorage) {}
+
+  /** Meetings live right now, as of the last load (counts toward the Inbox badge). */
+  get liveCount(): number { return this._liveCount; }
+
   refresh(): void { this._onDidChange.fire(); }
   getTreeItem(el: MeetingItem): vscode.TreeItem { return el; }
-  async getChildren(): Promise<MeetingItem[]> {
-    if (!(await this.secrets.get(SECRET_KEY))) return [];
+  async getChildren(element?: MeetingItem): Promise<MeetingItem[]> {
+    if (element) return [];
+    if (!(await this.secrets.get(SECRET_KEY))) {
+      this._liveCount = 0;
+      return [];
+    }
     try {
       const meetings = await bfApi.listMeetings(this.secrets);
-      return meetings.map((d) => new MeetingItem(d));
+      const isLive = (d: bfApi.BfMeetingDetail) => d.meeting.status === "live";
+      this._liveCount = meetings.filter(isLive).length;
+      return [...meetings.filter(isLive), ...meetings.filter((d) => !isLive(d))].map((d) => new MeetingItem(d));
     } catch {
       return [];
     }
   }
-}
-
-export class MeetingsController implements vscode.Disposable {
-  private readonly provider: MeetingsTreeProvider;
-  private readonly view: vscode.TreeView<MeetingItem>;
-  constructor(private readonly ctx: vscode.ExtensionContext) {
-    this.provider = new MeetingsTreeProvider(ctx.secrets);
-    this.view = vscode.window.createTreeView("builderforce.meetings", { treeDataProvider: this.provider });
-  }
-  refresh(): void { this.provider.refresh(); }
-  dispose(): void { this.view.dispose(); }
 }
 
 /** Open the authenticated web meeting in the external browser. */

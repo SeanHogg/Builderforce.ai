@@ -27,15 +27,15 @@ function fmtUsd(n: number): string {
 }
 
 /**
- * Owns the live Insights surface: a status-bar item + a tree view, both fed by
- * the gateway SSE stream. Auto-reconnects with backoff, degrades gracefully when
+ * Owns the live Insights surface: a status-bar item + the Health view's "Spend
+ * today" rows (`treeProvider`), both fed by the gateway SSE stream. Auto-reconnects with backoff, degrades gracefully when
  * signed out, and exposes a manual refresh. Disposable (aborts the stream +
  * disposes its UI).
  */
 export class InsightsController implements vscode.Disposable {
   private readonly statusBar: vscode.StatusBarItem;
-  private readonly treeProvider: InsightsTreeProvider;
-  private readonly treeView: vscode.TreeView<InsightRow>;
+  /** The "Spend today" rows; the Health view composes it as a section. */
+  readonly treeProvider = new InsightsTreeProvider();
   private controller: AbortController | undefined;
   private disposed = false;
   private snapshot: BuilderInsightsSnapshot | undefined;
@@ -46,17 +46,9 @@ export class InsightsController implements vscode.Disposable {
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.statusBar.command = "builderforce.refreshInsights";
-    this.treeProvider = new InsightsTreeProvider();
-    this.treeView = vscode.window.createTreeView("builderforce.insights", {
-      treeDataProvider: this.treeProvider,
-    });
-    this.applyProjectScope();
-    // Insights key off the active project: restart the stream against the new scope
-    // and label the view header so it's clear the spend is for one project vs. all.
-    this.projectSub = onProjectChange(() => {
-      this.applyProjectScope();
-      void this.start();
-    });
+    // Insights key off the active project: restart the stream against the new scope.
+    // (The Health view header names the project, so the scope stays visible.)
+    this.projectSub = onProjectChange(() => void this.start());
     void this.start();
   }
 
@@ -65,9 +57,12 @@ export class InsightsController implements vscode.Disposable {
     return getSelectedProject()?.id;
   }
 
-  /** Reflect the active project in the Insights header. */
-  private applyProjectScope(): void {
-    this.treeView.description = getSelectedProject()?.name;
+  /** One-line summary for the "Spend today" header, e.g. "$4.12 · 62% of cap". */
+  summary(): string | undefined {
+    const s = this.snapshot;
+    if (!s) return undefined;
+    const cap = s.pctOfDailyCap == null ? "" : ` · ${vscode.l10n.t("{0}% of cap", Math.round(s.pctOfDailyCap))}`;
+    return `${fmtUsd(s.todayCostUsd)}${cap}`;
   }
 
   /** Begin (or restart) the SSE subscription. Safe to call repeatedly. */
@@ -184,11 +179,10 @@ export class InsightsController implements vscode.Disposable {
     this.projectSub.dispose();
     this.stopStream();
     this.statusBar.dispose();
-    this.treeView.dispose();
   }
 }
 
-/** Tree view rendering the latest snapshot as flat rows, or a sign-in welcome. */
+/** The latest snapshot as flat rows (empty until the first frame or when signed out). */
 class InsightsTreeProvider implements vscode.TreeDataProvider<InsightRow> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -201,26 +195,26 @@ class InsightsTreeProvider implements vscode.TreeDataProvider<InsightRow> {
       return;
     }
     this.rows = [
-      { label: "Today tokens", value: fmtTokens(s.todayTokens), icon: "symbol-number" },
-      { label: "Today cost", value: fmtUsd(s.todayCostUsd), icon: "credit-card" },
+      { label: vscode.l10n.t("Today tokens"), value: fmtTokens(s.todayTokens), icon: "symbol-number" },
+      { label: vscode.l10n.t("Today cost"), value: fmtUsd(s.todayCostUsd), icon: "credit-card" },
       {
-        label: "% of cap",
-        value: s.pctOfDailyCap == null ? "no cap" : `${s.pctOfDailyCap}%`,
+        label: vscode.l10n.t("% of cap"),
+        value: s.pctOfDailyCap == null ? vscode.l10n.t("no cap") : `${s.pctOfDailyCap}%`,
         icon: "dashboard",
       },
       {
-        label: "Top model",
+        label: vscode.l10n.t("Top model"),
         value: s.topModel ? s.topModel.model : "—",
         icon: "chip",
         tooltip: s.topModel ? `${s.topModel.tokens.toLocaleString()} tokens today` : undefined,
       },
       {
-        label: "Cost / merged PR",
+        label: vscode.l10n.t("Cost / merged PR"),
         value: s.costPerMergedPrUsd == null ? "—" : fmtUsd(s.costPerMergedPrUsd),
         icon: "git-merge",
       },
     ];
-    if (s.tip) this.rows.push({ label: "Tip", value: s.tip, icon: "lightbulb" });
+    if (s.tip) this.rows.push({ label: vscode.l10n.t("Tip"), value: s.tip, icon: "lightbulb" });
     this._onDidChangeTreeData.fire();
   }
 
@@ -232,7 +226,7 @@ class InsightsTreeProvider implements vscode.TreeDataProvider<InsightRow> {
     return item;
   }
 
-  getChildren(): InsightRow[] {
-    return this.rows;
+  getChildren(element?: InsightRow): InsightRow[] {
+    return element ? [] : this.rows;
   }
 }

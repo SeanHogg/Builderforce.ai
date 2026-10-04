@@ -6,11 +6,12 @@ import { getProjectNames, projectLabel } from "./projectNames";
 
 /**
  * The Work Inbox (Activity Bar → BuilderForce → Inbox) — the proactive "what needs
- * you" surface that keeps the team's work in the editor instead of a dashboard. It
- * lists pending human-in-the-loop approvals (live, server-side) and the action entry
- * points that hand the unified Brain a job to do with its shared platform + git tools:
- * review pull requests + CI, fix production errors, and open a pull request. The
- * approvals are the only items NOT already shown elsewhere (the Project & Tasks tree
+ * you" surface that keeps the team's work in the editor instead of a dashboard.
+ * `InboxTreeProvider` is its "Needs you" group: pending human-in-the-loop approvals
+ * (live, server-side). `InboxQuickActionsProvider` is its "Quick actions" group: the
+ * entry points that hand the unified Brain a job with its shared platform + git tools
+ * (review pull requests + CI, fix production errors, open a pull request). The
+ * approvals are the only items NOT already shown elsewhere (the Work view's Tasks
  * covers tasks), so this never duplicates another view.
  *
  * Like the Sessions list, the approvals key off the active project: with a project
@@ -20,8 +21,30 @@ import { getProjectNames, projectLabel } from "./projectNames";
 
 type InboxNode =
   | { kind: "approval"; approval: BfApproval }
-  | { kind: "action"; label: string; tooltip: string; icon: string; command: string }
   | { kind: "empty"; label: string };
+
+interface QuickAction { label: string; tooltip: string; icon: string; command: string }
+
+/** The always-present Brain entry points, in priority order. Static: no fetch. */
+export class InboxQuickActionsProvider implements vscode.TreeDataProvider<QuickAction> {
+  getTreeItem(node: QuickAction): vscode.TreeItem {
+    const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+    item.iconPath = new vscode.ThemeIcon(node.icon);
+    item.tooltip = node.tooltip;
+    item.command = { command: node.command, title: node.label };
+    item.contextValue = "builderforceInboxAction";
+    return item;
+  }
+
+  getChildren(element?: QuickAction): QuickAction[] {
+    if (element) return [];
+    return [
+      { label: vscode.l10n.t("Review pull requests"), tooltip: vscode.l10n.t("List your open PRs and their CI status, and triage them"), icon: "git-pull-request", command: "builderforce.reviewPullRequests" },
+      { label: vscode.l10n.t("Fix production errors"), tooltip: vscode.l10n.t("See your unresolved runtime errors and fix the top one"), icon: "bug", command: "builderforce.fixErrors" },
+      { label: vscode.l10n.t("Open a pull request"), tooltip: vscode.l10n.t("Review your changes, commit on a branch, and open a PR"), icon: "git-commit", command: "builderforce.openPullRequest" },
+    ];
+  }
+}
 
 export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
@@ -34,6 +57,12 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
   // project: unfiltered lists show the project; a project-scoped list implies it.
   private filtered = false;
   private projectNameById = new Map<number, string>();
+  private _pendingCount = 0;
+
+  /** Requests waiting on you in the current scope, as of the last load. */
+  get pendingCount(): number {
+    return this._pendingCount;
+  }
 
   constructor(private readonly secrets: vscode.SecretStorage) {
     // The active project scopes this list — repaint when it changes.
@@ -46,27 +75,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
     this._onDidChangeTreeData.fire();
   }
 
-  /** The always-present action entry points, in priority order. */
-  private actions(): InboxNode[] {
-    return [
-      { kind: "action", label: vscode.l10n.t("Review pull requests"), tooltip: vscode.l10n.t("List your open PRs and their CI status, and triage them"), icon: "git-pull-request", command: "builderforce.reviewPullRequests" },
-      { kind: "action", label: vscode.l10n.t("Fix production errors"), tooltip: vscode.l10n.t("See your unresolved runtime errors and fix the top one"), icon: "bug", command: "builderforce.fixErrors" },
-      { kind: "action", label: vscode.l10n.t("Open a pull request"), tooltip: vscode.l10n.t("Review your changes, commit on a branch, and open a PR"), icon: "git-commit", command: "builderforce.openPullRequest" },
-    ];
-  }
-
   getTreeItem(node: InboxNode): vscode.TreeItem {
     if (node.kind === "empty") {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
       item.iconPath = new vscode.ThemeIcon("check");
-      return item;
-    }
-    if (node.kind === "action") {
-      const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
-      item.iconPath = new vscode.ThemeIcon(node.icon);
-      item.tooltip = node.tooltip;
-      item.command = { command: node.command, title: node.label };
-      item.contextValue = "builderforceInboxAction";
       return item;
     }
     const a = node.approval;
@@ -89,8 +101,12 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
     return item;
   }
 
-  async getChildren(): Promise<InboxNode[]> {
-    if (!(await this.secrets.get(SECRET_KEY))) return [];
+  async getChildren(element?: InboxNode): Promise<InboxNode[]> {
+    if (element) return [];
+    if (!(await this.secrets.get(SECRET_KEY))) {
+      this._pendingCount = 0;
+      return [];
+    }
     if (!this.cache || Date.now() - this.cache.ts >= InboxTreeProvider.TTL) {
       this.cache = { ts: Date.now(), approvals: await listHumanRequests(this.secrets, { status: "pending" }) };
     }
@@ -102,10 +118,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
       : this.cache.approvals;
     // Unfiltered: resolve project names for the per-row labels (best-effort, cached).
     this.projectNameById = project ? new Map() : await getProjectNames(this.secrets);
+    this._pendingCount = approvals.length;
 
-    const top: InboxNode[] = approvals.length
+    return approvals.length
       ? approvals.map((approval) => ({ kind: "approval" as const, approval }))
       : [{ kind: "empty" as const, label: vscode.l10n.t("Nothing needs you right now") }];
-    return [...top, ...this.actions()];
   }
 }
