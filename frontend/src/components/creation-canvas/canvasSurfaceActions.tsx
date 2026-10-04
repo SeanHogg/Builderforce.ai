@@ -46,6 +46,11 @@ export interface CanvasSurfaceContribution {
   controls?: ReactNode;
   /** What the runtime is doing — survives a collapse, because that is the point. */
   status?: ReactNode;
+  /**
+   * The bar's ONE Publish, when this surface ships something of its own (the App surface's
+   * site). It replaces what Publish does rather than adding a second Publish beside it.
+   */
+  publish?: { run: () => void; active: boolean };
 }
 
 export interface CanvasSurfaceActionsValue {

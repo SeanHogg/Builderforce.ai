@@ -61,6 +61,8 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
   const { runner, store, storageProjectId, modalityDef, modalityCopy, livePreview } = ws;
   const runLabel = RUN_LABEL[runner.phase];
   const filesOpen = ws.railOpen && ws.rightTab === 'files';
+  const publishes = ws.rightTabs.includes('publish');
+  const publishOpen = ws.railOpen && ws.rightTab === 'publish';
   // The switcher's content, as a value: `apps` is a fresh array on every board change.
   // The voice studio returns a fresh object every render; publishing on its identity would
   // re-render the bar, and with it this workspace, forever. Only what Generate reads matters,
@@ -69,6 +71,9 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
   const appChoices = JSON.stringify(apps.map((candidate) => [candidate.nodeId, candidate.title]));
 
   useCanvasSurfaceActions(() => ({
+    // ONE Publish door: while the app is open, the bar's own Publish ships the app's site
+    // instead of a second glyph beside it (operator decision, 2026-10-04).
+    publish: publishes ? { run: () => ws.openRail('publish'), active: publishOpen } : undefined,
     status: (
       <span className={styles.appAddress} data-running={runner.phase === 'live'} role="status" aria-live="polite">
         {t(`phase.${runner.phase}` as 'phase.idle')}
@@ -115,11 +120,6 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
                 <ConsoleReadingIcon />
               </button>
             )}
-            {ws.rightTabs.includes('publish') && (
-              <button type="button" aria-pressed={ws.railOpen && ws.rightTab === 'publish'} aria-label={t('publish')} title={t('publish')} onClick={() => ws.openRail('publish')}>
-                <Icon name="arrow-up" size={15} />
-              </button>
-            )}
             {storageProjectId !== null && (
               <a className={styles.appBarLink} href={studioProjectPath(storageProjectId)} target="_blank" rel="noreferrer" aria-label={t('openInStudio')} title={t('openInStudio')}>
                 <Icon name="external-link" size={15} />
@@ -139,7 +139,7 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
         </div>
       </CanvasBarGroup>
     ),
-  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, ws.railOpen, ws.rightTab, ws.rightTabs, appChoices, app.nodeId, storageProjectId, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
+  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, publishes, publishOpen, appChoices, app.nodeId, storageProjectId, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
 
   return (
     <div className={styles.appWorkspace} data-testid="canvas-app-workspace">

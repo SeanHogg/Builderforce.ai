@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import type { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
 import type { CanvasSessionActionHandler } from '../CanvasSessionActions';
+import { useContributedSurfaceActions } from '../canvasSurfaceActions';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import { readDrawingPreferences, type DrawingPreferences } from '../drawingPreferences';
 import { useCanvasStandupAction, type CanvasStandupActionInput } from '../useCanvasStandupAction';
@@ -63,6 +64,9 @@ export function useCanvasSessionActionHandlers({
   // board's), owns the ceremony and asks the agents at the table for their updates
   // through the ordinary turn path; this file learns one handler.
   const standupAction = useCanvasStandupAction(standup);
+  // A surface that ships something of its own (the App surface's site) takes over the ONE
+  // Publish door while it is open, rather than adding a second Publish beside this one.
+  const surfacePublish = useContributedSurfaceActions().publish;
   return useMemo(() => {
     // Every one of these can be pressed from the command bar, the phone's "+" sheet, or
     // (for a few) the board menu, and a sheet that stays open over the panel it just
@@ -132,7 +136,7 @@ export function useCanvasSessionActionHandlers({
       // door that was previously reachable only from a selected object's inspector
       // under "Sell in the marketplace". Same lifecycle, same gate — `openReleasesPanel`
       // already refuses a board with nothing on a server and says why.
-      publish: act(() => openReleasesPanel(), releaseOpen),
+      publish: surfacePublish ? act(surfacePublish.run, surfacePublish.active) : act(() => openReleasesPanel(), releaseOpen),
       // PROVE. Hands this board's own idea to the proof picker and names the
       // session, which is what lets the loop — Read, Prove, Build, Measure — be
       // recorded against it. A local-only board withdraws instead of gating: the
@@ -147,5 +151,5 @@ export function useCanvasSessionActionHandlers({
         available: persistence !== 'local',
       },
     };
-  }, [closeActionMenus, diagnosticsOpen, drawingMode, fullscreen, hasAccount, liveRoom, openDiagnostics, openOutcomeMetrics, openReleasesPanel, outcomeMetricsOpen, persistence, presentMode, redo, releaseOpen, requireAccount, router, runWorkflow, sessionId, setDrawing, setPresentMode, setShareOpen, setTalktrackOpen, shareOpen, standupAction, t, talktrackOpen, timeline, title, toggleFullscreen, undo, walkthroughRef, walkthroughStopCount]);
+  }, [closeActionMenus, diagnosticsOpen, drawingMode, fullscreen, hasAccount, liveRoom, openDiagnostics, openOutcomeMetrics, openReleasesPanel, outcomeMetricsOpen, persistence, presentMode, redo, releaseOpen, requireAccount, router, runWorkflow, sessionId, surfacePublish, setDrawing, setPresentMode, setShareOpen, setTalktrackOpen, shareOpen, standupAction, t, talktrackOpen, timeline, title, toggleFullscreen, undo, walkthroughRef, walkthroughStopCount]);
 }

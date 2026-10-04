@@ -14,7 +14,7 @@ Pressing **App** on a canvas now opens the full Studio workspace in place. It re
 - **Deep links.** `?chat` and `?ticket` links to a build go to Studio (`lib/studio/studioDeepLink.ts`). Plain build links open the canvas App surface. `buildChatId` and `buildTicket` are gone from `ActiveCanvasContext` and the session client.
 - **Retired.** The canvas build dialog (`CanvasBuildPanel`), `canvasApp`/`canvasAppDocument`/the frame sandbox, the runner CSS and the `.buildFocusBody` CSS, plus ten orphaned `creationCanvas.build.*` keys in all five catalogs.
 - **Shipped with:** release note migration `1194` (2026.10.5) and the blog post `your-canvas-app-is-a-real-project`, with update banners on `run-your-app-on-the-canvas` in all five locales.
-- **Still open (ROADMAP):** the App surface shows two Publish doors (the app's site publish and the board's release). This is blocked on an operator decision.
+- **One Publish door** (operator decision, 2026-10-04; closes the "two Publish doors" gap opened earlier the same day). The surface-actions seam gained `publish?: { run, active }`. While App is open on a durable app, the bar's ONE Publish (`useCanvasSessionActionHandlers`, so the desktop bar, Make it real menu and phone sheet all use it) opens the app's `SitePublishPanel` and not the board's release lifecycle. The App surface's own Publish glyph and the `surface.app.publish` key are gone. A browser-held app contributes nothing, so Publish keeps the board's account gate.
 
 ## ✅ RESOLVED 2026-10-04 — Image generation: four more free vendors, durable links, Studio's agent can make pictures, and a split + hardened diffusion engine
 
