@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import Image from 'next/image';
+import { BrandLockup } from '@/components/BrandLockup';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
@@ -136,12 +136,11 @@ export default function RegisterPageClient() {
         padding: '0 24px',
       }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            <Image src="/agentHost.png" alt="" width={28} height={28} style={{ filter: 'drop-shadow(0 0 8px var(--logo-glow))' }} />
+          <BrandLockup href="/" label="Builderforce.ai" size={28}>
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
               Builderforce.ai
             </span>
-          </Link>
+          </BrandLockup>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ThemeToggleButton />
             <Link href="/login" style={{

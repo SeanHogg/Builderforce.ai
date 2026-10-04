@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
+import { BrandLockup } from '@/components/BrandLockup';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalDocType } from './legal/LegalDocModal';
@@ -70,16 +70,15 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
         {variant === 'full' && (
           <div className="global-footer-full">
             <div className="global-footer-brand">
-              <Link href="/" aria-label={`${BRAND.name} home`} className="global-footer-brand-mark">
-                <Image
-                  src="/agentHost.png"
-                  alt=""
-                  width={32}
-                  height={32}
-                  className="global-footer-mascot"
-                />
+              <BrandLockup
+                href="/"
+                label={`${BRAND.name} home`}
+                size={32}
+                className="global-footer-brand-mark"
+                markClassName="global-footer-mascot"
+              >
                 <span>{BRAND.name}</span>
-              </Link>
+              </BrandLockup>
               <p className="global-footer-summary">{tRoot('marketing.content.quotable.creativeCanvas')}</p>
               <p className="global-footer-credit">
                 {t('builtBy')}{' '}

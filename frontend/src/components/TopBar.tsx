@@ -2,7 +2,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import Link from 'next/link';
-import Image from 'next/image';
+import { BrandLockup } from '@/components/BrandLockup';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
@@ -49,18 +49,10 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <Link href={isAuthenticated ? '/dashboard' : '/'} className="brand" style={{ textDecoration: 'none' }}>
-          <Image
-            src="/agentHost.png"
-            alt={t('brandAlt')}
-            width={28}
-            height={28}
-            className="brand-logo"
-            style={{ filter: 'drop-shadow(0 0 8px var(--logo-glow))' }}
-          />
+        <BrandLockup href={isAuthenticated ? '/dashboard' : '/'} label={t('brandAlt')} size={28} className="brand">
           <span className="brand-name">{t('brandName')}</span>
           <span className="brand-badge">{t('betaBadge')}</span>
-        </Link>
+        </BrandLockup>
       </div>
       <div className="topbar-center">
         {previewRole ? (

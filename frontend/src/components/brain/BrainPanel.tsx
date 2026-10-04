@@ -1700,8 +1700,10 @@ export function BrainPanel({
       <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
         <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}><BrainMark /> {tBrain('brainTitle')}</span>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-          {/* Plan + remaining allowance (see the page header). */}
-          <PlanBadge />
+          {/* No plan chip here. The composer at the bottom of THIS panel renders
+              the same one, a few hundred pixels below and at the point where the
+              allowance is actually spent — two chips saying "FREE · UPGRADE" in
+              one drawer read as a dunning notice, not as status. */}
           {captureButton}
           <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tBrain('newChat')}</button>
           {/* Expand → full Brain Storm page. Carry the ACTIVE chat id (and the

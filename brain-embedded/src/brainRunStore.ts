@@ -82,7 +82,8 @@ import {
   stallRecoveryToolChoice,
 } from '@builderforce/agent-stall';
 import { resolveToolAlias } from '@builderforce/agent-tools';
-import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
+import { turnInterruption } from './finishReason.js';
+import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, type CompactMemo } from './workingTranscript';
@@ -1850,6 +1851,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   let pendingReplay: { name: string; args: unknown; result: unknown } | null = null;
   /** What dispatch learned about the call it just ran — for the durable step + the read cache. */
   let pendingRun: { out: unknown; toolStart: number; isReadTool: boolean; threw: boolean; bytes?: number; truncated?: boolean } | null = null;
+  // The finish reason of the turn that produced the call being dispatched. A
+  // malformed call is either the tail of a response that hit the output ceiling
+  // or JSON the model simply got wrong, and the advice for the two is opposite.
+  let lastTurnInterruption: ReturnType<typeof turnInterruption> = null;
 
   /**
    * Commit a turn's text as THE reply of this run: into the model transcript, into
@@ -2610,6 +2615,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       if (result.text.trim()) {
         pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.message', args: { step: iter }, result: result.text });
       }
+      lastTurnInterruption = turnInterruption(result.finishReason);
       const meta: TurnMeta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
       // A host that advertised tools but cannot run them gets the turn as a final
       // answer — a tool call nobody can execute is not a tool call.
@@ -2622,6 +2628,24 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     dispatch: async (call, ctx) => {
       const iter = ctx.step;
       const args = call.args;
+      // A call whose arguments never parsed is NOT run. The kernel's policy is that
+      // bad JSON never aborts a run, so it hands the call over with `args: {}` and
+      // `malformed: true` — and dispatching that anyway is how four 12 KB
+      // `canvas_write_build_file` calls reached the tool with an empty bag and came
+      // back "A path is required.", telling the model nothing about the real cause
+      // (its response had hit the output ceiling) so it re-sent the same call until
+      // the run was spent. Not counted as a tool failure: the tool never ran.
+      const declined = malformedCallOutcome(call, lastTurnInterruption === 'truncated');
+      if (declined) {
+        const truncated = lastTurnInterruption === 'truncated';
+        pushTrace(c, {
+          ts: nowIso(), category: 'error', isError: true, durationMs: 0,
+          label: malformedCallLabel(call.name, truncated),
+          args: { arguments: String(call.raw?.arguments ?? '').slice(0, 200) },
+          result: declined,
+        });
+        return { data: declined, isError: true };
+      }
       const isReadTool = isDedupableRead(call.name);
       const toolStart = nowMs();
       // Name the tool AND what it is working on, before it runs. This is the

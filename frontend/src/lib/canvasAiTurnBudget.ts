@@ -82,9 +82,15 @@ export const MAX_CANVAS_BUILD_TURNS = 16;
  */
 export const CANVAS_TOOL_LIMIT = 96;
 
-/** The tool result a call that arrived with unusable arguments gets INSTEAD of being run. */
-export const TRUNCATED_CALL_RESULT = 'This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON — one file or one object per response, never several. If that one object is itself long, create it with its essential fields first and add the rest with canvas_update_object.';
-export const MALFORMED_CALL_RESULT = 'This tool call\'s arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.';
+/**
+ * The tool result a call that arrived with unusable arguments gets INSTEAD of
+ * being run. The wording, and the truncated-vs-malformed decision, belong to the
+ * kernel that sets the flag (`@builderforce/agent-loop`), so this loop and the
+ * Brain loop cannot drift — they did, and only this one declined to run the call.
+ * What stays here is the CANVAS's own retry advice, true of no other surface:
+ * `canvas_update_object` is how a long object gets the rest of itself.
+ */
+export const CANVAS_TRUNCATED_RETRY_HINT = 'Write one file or one object per response, never several; if that one object is itself long, create it with its essential fields first and add the rest with canvas_update_object.';
 
 /** Pushed once after a round whose LAST call was cut off while the complete ones ran —
  * the whole-response directive below would be false here (most of the response was

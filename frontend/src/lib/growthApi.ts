@@ -36,8 +36,15 @@ export interface CustomDomainState {
 const siteBase = (projectId: number | string) => `/api/projects/${projectId}/site`;
 
 export const siteDomainApi = {
+  // A project with no published site answers 404 on both of these READS, and that
+  // is a normal state, not a fault: the Database view and the domain card open on
+  // every project, published or not. Undeclared, each one raised a red error toast
+  // AND filed a support ticket every time the Studio workspace opened — three on
+  // screen at once in the 2026-10-03 report, for a project that simply had not been
+  // published. Declared here so the caller still gets the 404 and renders its own
+  // empty state. The WRITES are not listed: a 404 there is a real failure.
   get: (projectId: number | string): Promise<CustomDomainState> =>
-    apiRequest(`${siteBase(projectId)}/domain`),
+    apiRequest(`${siteBase(projectId)}/domain`, { expectedErrors: [404] }),
 
   claim: (projectId: number | string, hostname: string): Promise<CustomDomainState> =>
     apiRequest(`${siteBase(projectId)}/domain`, {
@@ -82,8 +89,9 @@ export interface SiteRecord {
 }
 
 export const siteDataApi = {
+  /** 404 = no published site yet; see `siteDomainApi.get`. */
   listCollections: (projectId: number | string): Promise<{ collections: SiteCollection[] }> =>
-    apiRequest(`${siteBase(projectId)}/collections`),
+    apiRequest(`${siteBase(projectId)}/collections`, { expectedErrors: [404] }),
 
   createCollection: (projectId: number | string, name: string): Promise<SiteCollection> =>
     apiRequest(`${siteBase(projectId)}/collections`, {

@@ -45,6 +45,16 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   331 → 332 files (2026-10-03, one brand lockup) — `components/BrandLockup.tsx`
+ *   (~70 lines). It is the mark plus the wordmark, and `MarketingHeader` — already in
+ *   the closure, and the thing that renders on every marketing first paint — is one of
+ *   its six callers, so there is no `import()` that would help: the header's own logo
+ *   cannot arrive in a later chunk without the brand popping in after paint. It adds no
+ *   first-paint WORK either; it REMOVES markup, composing `MascotIcon` (already in the
+ *   closure via the mobile nav) in place of the `<Image src="/agentHost.png">` each of
+ *   the six surfaces had written out by hand. The closure's line count went DOWN.
+ *   Studio shipping with no mark at all, and the bar's `Studio` in the accent blue,
+ *   is what a sixth hand-rolled copy buys.
  *   329 → 331 files (2026-09-16, the board in the editor panel) — `lib/viewerSession.ts`
  *   (65 lines) and `lib/tokenClaims.ts` (41 lines). No new first-paint WORK: the shell's
  *   `SessionGate` / `RoleGate` already asked `useSampleWorkspace` "is someone signed in"

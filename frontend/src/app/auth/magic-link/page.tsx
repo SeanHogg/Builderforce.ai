@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Image from 'next/image';
+import MascotIcon from '@/components/MascotIcon';
 import Link from 'next/link';
 import { AUTH_API_URL, persistSession } from '@/lib/auth';
 import { resolveAndSelectTenant } from '@/lib/auth/credentials';
@@ -65,13 +65,7 @@ export default function MagicLinkVerifyPage() {
             backdropFilter: 'blur(12px)',
           }}
         >
-          <Image
-            src="/agentHost.png"
-            alt=""
-            width={48}
-            height={48}
-            style={{ marginBottom: 16, opacity: 0.5 }}
-          />
+          <MascotIcon size={48} className="bf-mark-muted" />
           <h2
             style={{
               fontFamily: 'var(--font-display)',
@@ -118,17 +112,7 @@ export default function MagicLinkVerifyPage() {
       }}
     >
       <div style={{ textAlign: 'center' }}>
-        <Image
-          src="/agentHost.png"
-          alt=""
-          width={56}
-          height={56}
-          style={{
-            filter: 'drop-shadow(0 0 16px var(--logo-glow))',
-            animation: 'float 4s ease-in-out infinite',
-            marginBottom: 16,
-          }}
-        />
+        <MascotIcon size={56} className="bf-mark-pulse" />
         <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>
           Verifying your magic link…
         </p>

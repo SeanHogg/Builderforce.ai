@@ -3,6 +3,10 @@ export { DEFAULT_TOOL_FAILURE_STREAK } from "./types.js";
 export { runSubagent, subagentSystemPrompt, SUBAGENT_MAX_STEPS, SUBAGENT_WRITE_MAX_STEPS, subagentStepBudget, SUBAGENT_OUTPUT_CHARS } from "./subagent.js";
 export type { SubagentPersona, SubagentRunArgs, SubagentRunResult } from "./subagent.js";
 export { asToolArgs, parseToolArgs, parseToolCall } from "./parseToolCall.js";
+// The other half of the kernel's bad-JSON policy: `parseToolCall` sets the flag,
+// this decides what to do with it. Exported together so a consumer cannot take
+// the parse without the handling (which is how the Brain loop ran `{}` calls).
+export { malformedCallOutcome, malformedCallLabel, MALFORMED_CALL_RESULT, TRUNCATED_CALL_RESULT } from "./malformedCall.js";
 // A model stuck repeating one block of prose. The kernel trims looped turns itself; the
 // Brain's stream client cuts a live stream with it; the api trims its tool-free replies.
 export { detectRepetitionLoop, trimRepetitionLoop } from "./repetitionLoop.js";

@@ -1430,6 +1430,7 @@ html[data-theme='light'] .nebula {
   display: flex;
   align-items: center;
   gap: 10px;
+  text-decoration: none;
 }
 
 .brand-name {
@@ -4652,6 +4653,17 @@ select.input option {
   align-items: center;
   gap: 18px;
 }
+/* The brand mark's glow. One declaration: it was the same drop-shadow string
+   inline in the header, both auth pages, login and register. */
+.bf-mark-glow { filter: drop-shadow(0 0 8px var(--logo-glow)); }
+/* The mark as an auth-screen state: dimmed for an error, breathing while a
+   sign-in is in flight. Both appear on the callback and magic-link pages. */
+.bf-mark-muted { opacity: 0.5; margin-bottom: 16px; }
+.bf-mark-pulse {
+  filter: drop-shadow(0 0 16px var(--logo-glow));
+  animation: float 4s ease-in-out infinite;
+  margin-bottom: 16px;
+}
 .mh-brand {
   display: inline-flex;
   align-items: center;
@@ -4659,7 +4671,6 @@ select.input option {
   text-decoration: none;
   flex-shrink: 0;
 }
-.mh-brand-logo { filter: drop-shadow(0 0 8px var(--logo-glow)); }
 .mh-brand-name {
   font-family: var(--font-display);
   font-weight: 700;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { BrandLockup } from '@/components/BrandLockup';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
@@ -317,19 +317,13 @@ export default function MarketingHeader() {
   return (
     <header className="mh">
       <div className="mh-inner">
-        {/* Brand. This IS the Home link — there is no second one. */}
-        <Link href="/" className="mh-brand" onClick={closeNav} aria-label={t('home')}>
-          <Image
-            src="/agentHost.png"
-            alt=""
-            width={30}
-            height={30}
-            priority
-            className="mh-brand-logo"
-          />
+        {/* Brand. This IS the Home link — there is no second one. The mark and
+            the glow come from `BrandLockup`, shared with the Studio bar so the
+            two cannot drift; `.mh-brand` still owns this bar's spacing. */}
+        <BrandLockup href="/" label={t('home')} className="mh-brand" onClick={closeNav}>
           <span className="mh-brand-name">Builderforce.ai</span>
           <span className="mh-brand-badge">{t('beta')}</span>
-        </Link>
+        </BrandLockup>
 
         {/* Desktop nav */}
         <nav className="mh-nav" aria-label={t('primaryNav')} ref={navRef}>

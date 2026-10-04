@@ -1,19 +1,24 @@
 // No `'use client'`: imported only by client components, so it is already on the client side of the boundary.
 
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { BrandLockup } from '@/components/BrandLockup';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/lib/AuthContext';
 import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
 import { STUDIO_ROUTE } from '@/lib/studio/studioHost';
 
 /**
- * Studio's one bar: the mark (home), whatever the page puts in the middle and on
- * the right (`children`, e.g. a project's actions), and the account control,
- * which owns its own signed-in / signed-out decision.
+ * Studio's one bar: the mark (home), whatever the page puts on the right
+ * (`children`, e.g. a project's actions), and the account control, which owns
+ * its own signed-in / signed-out decision.
+ *
+ * It does NOT name the project. It used to take a `title`, which put the name
+ * in the bar while the workspace directly below was already showing it in its
+ * rename field and again in its description — one string, three places, two
+ * rows apart. Naming the thing you are looking at is the workspace's job.
  */
-export function StudioTopBar({ title, children }: { title?: string; children?: ReactNode }) {
+export function StudioTopBar({ children }: { children?: ReactNode }) {
   const t = useTranslations('studio.topBar');
   return (
     <header
@@ -27,14 +32,14 @@ export function StudioTopBar({ title, children }: { title?: string; children?: R
         background: 'var(--bg-deep)',
       }}
     >
-      <Link href={STUDIO_ROUTE} aria-label={t('home')} style={{ color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 800, fontFamily: 'var(--font-display)' }}>
-        Builderforce <span style={{ color: 'var(--accent)' }}>Studio</span>
-      </Link>
-      {title && (
-        <span style={{ color: 'var(--text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 120px' }}>
-          / {title}
+      {/* The mark is not optional and `Studio` is not the accent colour: both
+          halves of the wordmark are `--text-primary`, so it reads white on the
+          dark bar and dark on a light one. */}
+      <BrandLockup href={STUDIO_ROUTE} label={t('home')} size={26}>
+        <span style={{ color: 'var(--text-primary)', fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
+          Builderforce Studio
         </span>
-      )}
+      </BrandLockup>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {children}
         <AccountControl />

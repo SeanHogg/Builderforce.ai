@@ -37,7 +37,12 @@ export function StudioProject({ projectId }: { projectId: number }) {
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
-      <StudioTopBar title={project?.name}>
+      {/* No `title` here. The workspace below already names the project twice —
+          its rename field and the description beside it — so putting the name in
+          the bar as well made three copies of one string across two stacked rows,
+          each truncated differently. The bar carries the brand and the actions;
+          the workspace owns the project's identity. */}
+      <StudioTopBar>
         {project && <StudioProjectActions projectId={project.id} />}
       </StudioTopBar>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

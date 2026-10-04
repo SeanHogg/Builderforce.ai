@@ -44,7 +44,7 @@ import {
   CANVAS_BUILD_RESPONSE_TOKENS,
   CANVAS_RESPONSE_TOKENS,
   CANVAS_TOOL_LIMIT,
-  MALFORMED_CALL_RESULT,
+  CANVAS_TRUNCATED_RETRY_HINT,
   MALFORMED_TOOL_CALL_DIRECTIVE,
   MAX_CANVAS_BUILD_TURNS,
   MAX_CANVAS_TOOL_TURNS,
@@ -53,11 +53,10 @@ import {
   MAX_NARROW_SEARCHES,
   MAX_STALLED_STREAMS,
   RESERVED_AUTHORING_TURNS,
-  TRUNCATED_CALL_RESULT,
   TRUNCATED_ROUND_DIRECTIVE,
   TRUNCATED_TURN_DIRECTIVE,
 } from '@/lib/canvasAiTurnBudget';
-import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, malformedCallOutcome, malformedCallLabel } from '@builderforce/agent-loop';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 type CanvasAiOptions = {
@@ -511,10 +510,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           discardedCallThisRound = true;
           const truncated = lastTurnInterruption === 'truncated';
           if (truncated) truncatedOnce = true;
-          const outcome = { error: truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT };
+          const outcome = malformedCallOutcome(call, truncated, truncated ? CANVAS_TRUNCATED_RETRY_HINT : undefined)!;
           options.onTrace?.({
             ts: new Date().toISOString(), category: 'error', isError: true, durationMs: 0,
-            label: truncated ? `${call.name} (cut off by the output limit)` : `${call.name} (unparseable arguments)`,
+            label: malformedCallLabel(call.name, truncated),
             args: { arguments: call.raw.arguments.slice(0, 200) }, result: outcome,
           });
           return { data: outcome, isError: true };
