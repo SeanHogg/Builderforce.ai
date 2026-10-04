@@ -1,3 +1,31 @@
+## ✅ RESOLVED 2026-10-04 — Studio: one chat panel, and generated media is previewed before the app uses it (api 2026.10.8 · frontend 2026.10.10)
+
+Operator report: the 💬 in the Studio header opened a second chat panel on the right while the Brain was already docked on the left. Also asked: how do people see generated images and video before they go into the app? Decision: **always preview first**.
+
+- **One chat panel.** `TeamChatButton` opened the floating Brain drawer even where the Brain is docked.
+  - `lib/brain/dockedBrain.tsx` (`DockedBrainProvider`, mounted by `BuilderWorkspace` when the modality docks the Brain) tells the button to select the team chat in the docked panel and reveal it instead.
+  - The drawer only opens on surfaces with no docked panel.
+  - The same context lets a neighbouring surface seed the docked composer (`useDockedComposerSeed`). It never sends.
+- **The Media panel** is a new rail tab `media`, on Designer, Mobile and Web+Mobile, and in browser-held workspaces too.
+  - `useMediaStudio`, owned by `useBuilderWorkspace`, so Studio and the canvas App surface share it: the library plus the review broker.
+  - `useProjectMediaLibrary`: generate, record, resume rendering videos, mark used, remove.
+  - The panel itself is `MediaPanel` (composition) with `MediaReviewCard`, `MediaGenerateForm`, `MediaLibraryGrid` and `MediaPreview`.
+- **Preview first.** `generate_image_asset` and `generate_video_asset` now run through `generateReviewedMedia`:
+  - Generate, then show the item in the panel, then wait for the person.
+  - **Use it** returns the URL and marks it in use. **Try again** re-renders with the edited prompt, up to 4 times. **Discard** returns a decline the model must respect.
+  - "Use in app" on any library item seeds the docked composer with a ready-made request.
+- **Storage.** There is no new table. Each item is a `kernel.artifacts` row (kind `image`/`video`) on the project's registry object (`objects` kind `project`), via `application/media/projectMedia.ts` and `/api/projects/:projectId/media` (GET/POST/PATCH/DELETE).
+  - Status is `rendering`, `ready` or `failed`; `attrs` holds url, prompt, model, jobId, error and usedAt.
+  - The list is read-through cached per project and invalidated on every write.
+  - The ownership gate is `projectInTenantCached` / `loadProjectInTenant`.
+- **i18n.** `ide.rightTab.media` and `ide.media.*` are in all five catalogs.
+- **Shipped with:** release note migration `1197`, plus a "You see it first" section and update banner in the blog post `studio-makes-the-images-your-app-needs`.
+- **Verified (targeted):**
+  - api type-check and nine guards (layering, application-layering, project-ownership, unvalidated-bodies, db-access, tenant-scope, signature-duplication, domain-boundary, source).
+  - `projectMedia.test.ts`.
+  - Frontend typecheck, `check:i18n-keys`, `check:architecture`, redundant-use-client and silent-catches.
+  - Frontend vitest: 6 files, 28 tests, plus `canvasAppSurface.test.tsx` (13).
+
 ## ✅ RESOLVED 2026-10-04 — Go back and forth between a canvas app and Studio (frontend 2026.10.9)
 
 Request: "from the canvas you should be able to launch the app directly into the studio as well => go back and forth as needed."
