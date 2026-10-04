@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-04 — Image generation: four more free vendors, durable links, Studio's agent can make pictures, and a split + hardened diffusion engine
+
+- **More image vendors in the gateway cascade** (`api/src/application/llm/imageVendors/`). New modules: `cloudflare.ts` (Workers AI: Flux Schnell, SDXL Lightning, DreamShaper 8 LCM FREE; Leonardo Lucid Origin / Phoenix STANDARD), `huggingface.ts` (Inference Providers: Flux Schnell, SDXL; FREE), `pollinations.ts` (gen.pollinations.ai with an `sk_` secret key: Flux Schnell, Z-Image Turbo, DreamShaper LCM; FREE) and `googleai.ts` (Gemini 2.5 Flash Image STANDARD, Gemini 3 Pro Image PREMIUM, on the existing `GOOGLE_API_KEY`). Together and FluxAPI are kept. NVIDIA was left out at the operator's request.
+- **One copy of everything.** The registry derives its by-id map, its vendor prefixes and the health-probe vendor list from ONE `MODULES` array. A new `anyImageVendorBound(env)` replaces the route's hardcoded "Together or Flux" check. `ImageProxyService` passes env straight through (the hand-written key mapping is gone). The size parser and aspect-ratio ladder moved to `types.ts` (Together and FluxAPI migrated). `readImageBody` / `imageResultFromBase64` / `noImageError` normalise byte-producing vendors. Unused `imageModelsByTier` and the unused module re-exports in the barrel were deleted. `webScreenshot.ts`'s private `bytesToBase64` was migrated to `domain/shared/bytes`.
+- **Transport.** `executeVendorPost` gained `method` (GET), `authorization` (override or omit, for Google's `x-goog-api-key`) and `readOk` (bytes). For images only, 402 (credit spent) now cascades to the next vendor instead of failing the request.
+- **Cascade.** Pools are interleaved by vendor, so one vendor's outage can't use up the free budget, and the FREE budget went from 2 to 3 attempts.
+- **Durable links.** `persistGeneratedImages` stores `data:` results in the tenant asset store (`storeTenantAsset`) and returns `/api/assets/<key>`, so consumers never persist megabytes of base64.
+- **Studio can make images.** New `generate_image_asset` Brain action (`components/builder/generateImageAssetAction.ts`, registered in `useWorkspaceBrainActions`) returns a durable URL the agent writes into the app. The canvas and Studio share ONE client, `lib/imageGenerationApi.ts` (`generateCanvasImage` migrated). Release note: migration 1193. Blog: `studio-makes-the-images-your-app-needs`.
+- **Diffusion engine** (`studio/src/engine/`). The 1,140-line `diffusion-engine.ts` is now five modules: `diffusion-models.ts` (registry), `diffusion-schedule.ts` (pure schedule, noise, the in-place LCM step, guidance), `ort-session.ts` (tensor/session helpers, error translation), `progress.ts` and `abort.ts`. The engine class kept the session lifecycle. Behaviour changes:
+  - A failed `init()` now releases the sessions it had already created.
+  - Prompt embeddings are memoised per engine (LRU of 8, copy-on-read).
+  - `denoise` takes an `AbortSignal` and checks it between UNet steps. Video-engine passes it through, and its seven inline abort checks now use `throwIfAborted`.
+  - `denoise` validates latent and embedding shapes before the first UNet run.
+  - The step loop and the CFG mix work in place.
+  - `alphaCumprodAt` clamps and rounds timesteps instead of falling back to ᾱ=0.001.
+  - The deprecated `explainSessionCreateError` alias was removed.
+- **Tests.** `freeImageVendors.test.ts`, `persistGeneratedImages.test.ts`, new interleave/Cloudflare cases in `ImageProxyService.test.ts`, `generateImageAssetAction.test.ts`, `diffusion-schedule.test.ts`, `diffusion-engine.lifecycle.test.ts`.
+- **Versions.** api 2026.10.5 · studio 2026.10.1.
+
 ## ✅ RESOLVED 2026-10-04 — Studio workspace: one header row, a preview that starts by itself, a two-row composer
 
 From operator screenshots of project #67: two stacked header rows of actions, a preview squeezed between a 300px file rail and a 240px terminal that said "Run your project to see a preview", and a composer with nine controls in four rows.
