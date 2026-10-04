@@ -1,7 +1,7 @@
 import { IUserRepository } from '../../domain/user/IUserRepository';
 import { User } from '../../domain/user/User';
 import { AuditEventType, UserId, asTenantId } from '../../domain/shared/types';
-import { UnauthorizedError, ConflictError } from '../../domain/shared/errors';
+import { UnauthorizedError, ConflictError, ForbiddenError } from '../../domain/shared/errors';
 import { signJwt, signWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret, generateApiKey, hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
@@ -65,6 +65,8 @@ export interface MyTenantsResult {
     effectivePlan: string;
     billingStatus: string;
   }>;
+  /** The workspace to open without asking — null when unset or no longer a member. */
+  defaultTenantId: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,8 +143,15 @@ export class AuthService {
    * No JWT is issued – the caller uses the result to pick a tenant and then calls /token.
    */
   async myTenants(userId: string): Promise<MyTenantsResult> {
-    const userTenants = await this.tenants.findByUserId(userId);
+    const [userTenants, storedDefault] = await Promise.all([
+      this.tenants.findByUserId(userId),
+      this.users.getDefaultTenantId(userId as UserId),
+    ]);
+    // A default only counts while the person still belongs to it — leaving a
+    // workspace must not leave them auto-landed on a token exchange that fails.
+    const defaultTenantId = storedDefault !== null && userTenants.some(t => t.id === storedDefault) ? storedDefault : null;
     return {
+      defaultTenantId,
       tenants: userTenants.map(t => {
         const member = t.getMember(userId);
         return {
@@ -158,6 +167,18 @@ export class AuthService {
         };
       }),
     };
+  }
+
+  /**
+   * Set (or clear, with null) the workspace this user opens automatically. Only a
+   * workspace they belong to can be their default.
+   */
+  async setDefaultTenant(userId: string, tenantId: number | null): Promise<void> {
+    if (tenantId !== null) {
+      const tenant = await this.tenants.findById(asTenantId(tenantId));
+      if (!tenant?.getMember(userId)) throw new ForbiddenError('User is not a member of this tenant');
+    }
+    await this.users.setDefaultTenantId(userId as UserId, tenantId);
   }
 
   /**

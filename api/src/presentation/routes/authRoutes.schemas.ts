@@ -112,6 +112,9 @@ export const OnboardingCompleteBody = z.object({ intent: z.array(z.string()).nul
 
 export const TenantTokenBody = z.object({ tenantId: z.number().nullish() });
 
+/** PUT /api/auth/default-tenant — null clears the default (always ask). */
+export const DefaultTenantBody = z.object({ tenantId: z.number().int().positive().nullable() });
+
 // ── MFA management ───────────────────────────────────────────────────────────
 
 export const MfaEnableBody = z.object({ code: z.string().nullish() });

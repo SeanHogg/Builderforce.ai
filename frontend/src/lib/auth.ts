@@ -32,8 +32,6 @@ const TENANT_TOKEN_KEY = 'bf_tenant_token';
 const USER_KEY = 'bf_user';
 const TENANT_KEY = 'bf_tenant';
 const LAST_PROJECT_KEY = 'bf_last_project_id';
-/** Default tenant for auto-selection when user has multiple workspaces (BuilderForceAgentsLink-style). */
-const DEFAULT_TENANT_KEY = 'bf_default_tenant_id';
 
 /**
  * Is this storage key part of the session? Another window writing one of these
@@ -128,21 +126,6 @@ export function persistLastProjectId(projectId: string): void {
   localStorage.setItem(LAST_PROJECT_KEY, projectId);
 }
 
-export function getDefaultTenantId(): string | null {
-  if (!isBrowser()) return null;
-  return localStorage.getItem(DEFAULT_TENANT_KEY);
-}
-
-export function setDefaultTenantId(id: string): void {
-  if (!isBrowser()) return;
-  localStorage.setItem(DEFAULT_TENANT_KEY, id);
-}
-
-export function clearDefaultTenantId(): void {
-  if (!isBrowser()) return;
-  localStorage.removeItem(DEFAULT_TENANT_KEY);
-}
-
 export function persistSession(
   webToken: string,
   user: AuthUser,
@@ -179,7 +162,6 @@ export function clearSession(): void {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(TENANT_KEY);
   localStorage.removeItem(LAST_PROJECT_KEY);
-  localStorage.removeItem(DEFAULT_TENANT_KEY);
   // Clear cookies (path and expires required for reliable removal)
   document.cookie = `bf_web_token=; path=/; expires=${COOKIE_EXPIRE}; Max-Age=0`;
   document.cookie = `bf_tenant_token=; path=/; expires=${COOKIE_EXPIRE}; Max-Age=0`;

@@ -178,4 +178,11 @@ export const workspacesApi = {
     });
     return { id: String(data.id), name: data.name, slug: data.slug };
   },
+
+  /** Make a workspace this account's default (opened without asking), or clear it with null. */
+  async setDefault(tenantId: string | null): Promise<void> {
+    await apiRequest('/api/auth/default-tenant', {
+      ...WEB, method: 'PUT', body: JSON.stringify({ tenantId: tenantId === null ? null : Number(tenantId) }), raw: true,
+    });
+  },
 };

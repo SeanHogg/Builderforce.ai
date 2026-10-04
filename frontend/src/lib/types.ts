@@ -40,6 +40,9 @@ export interface Tenant {
   slug?: string;
   /** The authenticated user's role in this workspace (from the tenant JWT claim). */
   role?: string;
+  /** This account's default workspace — opened without asking when the person
+   *  belongs to several. Held on the account (`PUT /api/auth/default-tenant`). */
+  isDefault?: boolean;
 }
 
 // ---------------------------------------------------------------------------

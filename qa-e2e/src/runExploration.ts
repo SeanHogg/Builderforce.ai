@@ -35,7 +35,6 @@ function selfTestState(session: BfSession, origin: string) {
     { name: 'bf_tenant_token', value: session.tenantToken },
     { name: 'bf_user', value: JSON.stringify(session.user) },
     { name: 'bf_tenant', value: JSON.stringify(session.tenant) },
-    { name: 'bf_default_tenant_id', value: String(session.tenant.id) },
   ];
   const cookie = (name: string, value: string) => ({
     name, value, domain: hostname, path: '/',

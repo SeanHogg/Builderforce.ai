@@ -26,7 +26,6 @@ import { fetchWithTransportReport } from '../errors/transportFailure';
 import {
   AUTH_API_URL,
   checkUnauthorizedAndRedirect,
-  getDefaultTenantId,
   persistTenantSession,
 } from '../auth';
 
@@ -135,7 +134,10 @@ export async function resendVerificationCode(email: string): Promise<{ cooldownS
   return { cooldownSeconds: body.cooldownSeconds };
 }
 
-/** API returns { tenants: [...] }; normalizes to Tenant[]. */
+/**
+ * API returns { tenants: [...], defaultTenantId }; normalizes to Tenant[] with the
+ * account's default workspace marked `isDefault`.
+ */
 export async function getMyTenants(webToken: string): Promise<Tenant[]> {
   const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/my-tenants`, {
     headers: { Authorization: `Bearer ${webToken}` },
@@ -145,15 +147,29 @@ export async function getMyTenants(webToken: string): Promise<Tenant[]> {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? 'Failed to fetch tenants');
   }
-  const data = await res.json() as { tenants?: Array<{ id?: unknown; name?: string; slug?: string; role?: string }> };
+  const data = await res.json() as {
+    tenants?: Array<{ id?: unknown; name?: string; slug?: string; role?: string }>;
+    defaultTenantId?: number | null;
+  };
   const arr = Array.isArray(data) ? data : data?.tenants;
   if (!Array.isArray(arr)) return [];
+  const defaultId = Array.isArray(data) || data.defaultTenantId == null ? null : String(data.defaultTenantId);
   return arr.map((t) => ({
     id: String(t.id ?? ''),
     name: t.name ?? '',
     slug: t.slug,
     role: t.role,
+    isDefault: defaultId !== null && String(t.id ?? '') === defaultId,
   }));
+}
+
+/**
+ * The workspace to open without asking: the only one, or the account's default.
+ * Null when the person has to pick. The ONE rule — sign-in and the picker both use it.
+ */
+export function autoSelectTenant(tenants: Tenant[]): Tenant | null {
+  if (tenants.length === 1) return tenants[0];
+  return tenants.find((t) => t.isDefault) ?? null;
 }
 
 export async function getTenantToken(
@@ -190,15 +206,7 @@ export async function resolveAndSelectTenant(webToken: string): Promise<Tenant |
     return null;
   }
 
-  let target: Tenant | null = null;
-
-  if (tenants.length === 1) {
-    target = tenants[0];
-  } else if (tenants.length > 1) {
-    const defaultId = getDefaultTenantId();
-    target = defaultId ? (tenants.find((t) => String(t.id) === defaultId) ?? null) : null;
-  }
-
+  const target = autoSelectTenant(tenants);
   if (!target) return null;
 
   try {

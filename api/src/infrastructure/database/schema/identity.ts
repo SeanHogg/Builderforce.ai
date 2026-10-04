@@ -111,6 +111,10 @@ export const users = pgTable('users', {
    *  before 'en', so a pre-existing account is not permanently pinned to English. Held
    *  as a BCP-47 tag; narrowed to a supported EmailLocale at read time. (0351) */
   locale:                 varchar('locale', { length: 5 }),
+  /** The workspace this person opens automatically when they belong to several —
+   *  "Set as default" on /tenants. Applies only while they are still a member;
+   *  NULL = always ask. FK declared in SQL (tenants is defined below). (1196) */
+  defaultTenantId:        integer('default_tenant_id'),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });

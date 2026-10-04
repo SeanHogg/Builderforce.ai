@@ -31,7 +31,6 @@ export default async function globalSetup(): Promise<void> {
     { name: 'bf_tenant_token', value: session.tenantToken },
     { name: 'bf_user', value: JSON.stringify(session.user) },
     { name: 'bf_tenant', value: JSON.stringify(session.tenant) },
-    { name: 'bf_default_tenant_id', value: String(session.tenant.id) },
   ];
 
   // SameSite=Lax, path=/ — mirrors what the SPA sets so the middleware accepts

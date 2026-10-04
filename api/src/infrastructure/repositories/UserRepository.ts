@@ -69,6 +69,20 @@ export class UserRepository implements IUserRepository {
     if (!updated) throw new Error('User not found');
     return toDomain(updated);
   }
+
+  async getDefaultTenantId(userId: UserId): Promise<number | null> {
+    const [row] = await this.db
+      .select({ defaultTenantId: usersTable.defaultTenantId }).from(usersTable)
+      .where(eq(usersTable.id, userId)).limit(1);
+    return row?.defaultTenantId ?? null;
+  }
+
+  async setDefaultTenantId(userId: UserId, tenantId: number | null): Promise<void> {
+    await this.db
+      .update(usersTable)
+      .set({ defaultTenantId: tenantId, updatedAt: sql`now()` })
+      .where(eq(usersTable.id, userId));
+  }
 }
 
 function toDomain(row: typeof usersTable.$inferSelect): User {

@@ -6,20 +6,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { hasSession, useRequireSession } from '@/lib/useRequireSession';
-import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId } from '@/lib/auth';
+import { autoSelectTenant } from '@/lib/auth/credentials';
 import { workspacesApi } from '@/lib/auth/session';
 import type { Tenant } from '@/lib/types';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
-
-/** Auto-select tenant when there is only one or a default is set (BuilderForceAgentsLink-style). Returns the tenant to select or null. */
-function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
-  if (list.length === 0) return null;
-  if (list.length === 1) return list[0];
-  const defaultId = getDefaultTenantId();
-  if (!defaultId) return null;
-  const match = list.find((t) => String(t.id) === defaultId);
-  return match ?? null;
-}
 
 // Theme tokens only — this page renders in whichever theme the person signed in
 // from, and the Tailwind gray scale it used to be written in is remapped per theme.
@@ -88,7 +78,7 @@ export default function TenantsPage() {
   // Auto-select tenant only when user has no tenant (e.g. just from login). If they already have a tenant, they're visiting to switch or create one — don't redirect.
   useEffect(() => {
     if (!signedIn || hasTenant || isLoading || tenants.length === 0 || autoSelectAttempted.current) return;
-    const target = resolveAutoSelectTenant(tenants);
+    const target = autoSelectTenant(tenants);
     if (!target) return;
     autoSelectAttempted.current = true;
     selectTenant(target)
@@ -114,24 +104,32 @@ export default function TenantsPage() {
     }
   };
 
-  const [defaultTenantId, setDefaultTenantIdState] = useState<string | null>(() => getDefaultTenantId());
+  // The default lives on the ACCOUNT (`/my-tenants` marks it), so it survives
+  // sign-out and follows the person to every device. Applied optimistically and
+  // rolled back if the save fails.
+  const defaultTenantId = tenants.find((x) => x.isDefault)?.id ?? null;
+  const saveDefault = async (id: string | null) => {
+    const previous = defaultTenantId;
+    const mark = (target: string | null) => setTenants((prev) => prev.map((x) => ({ ...x, isDefault: x.id === target })));
+    setError(null);
+    mark(id);
+    try {
+      await workspacesApi.setDefault(id);
+    } catch (err) {
+      mark(previous);
+      setError(errorMessage(err));
+    }
+  };
   const handleSetDefault = (e: React.MouseEvent, tenant: Tenant) => {
     e.preventDefault();
     e.stopPropagation();
-    const id = String(tenant.id);
-    setDefaultTenantId(id);
-    setDefaultTenantIdState(id);
+    void saveDefault(String(tenant.id));
   };
   const handleClearDefault = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    clearDefaultTenantId();
-    setDefaultTenantIdState(null);
+    void saveDefault(null);
   };
-  // Sync default from storage on mount / when tenants change (e.g. after navigation)
-  useEffect(() => {
-    setDefaultTenantIdState(getDefaultTenantId());
-  }, [tenants.length]);
 
   // Prevent default-action clicks from triggering the parent select button
   const preventSelectBubble = (e: React.MouseEvent) => {
@@ -261,7 +259,7 @@ export default function TenantsPage() {
                 </div>
               )}
               {tenants.map((x) => {
-                const isDefault = String(x.id) === defaultTenantId;
+                const isDefault = !!x.isDefault;
                 const isEditing = renamingId === x.id;
                 return (
                   <div key={x.id} style={s.card}>

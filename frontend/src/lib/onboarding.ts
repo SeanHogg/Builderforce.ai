@@ -15,27 +15,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { onTermsGate } from './errors/termsGateEvent';
 import { useAuth } from './AuthContext';
-import { getMyTenants } from './auth/credentials';
+import { autoSelectTenant, getMyTenants } from './auth/credentials';
 import { profileApi, type OnboardingProgress } from './auth/session';
 import { creationSessionsApi } from './builderforceApi';
 
 /**
- * Adopt the user's workspace when they have exactly one, so the tenant picker is
- * never shown to somebody with nothing to pick. Both entry points into the
+ * Adopt the user's workspace when they have exactly one (or have set a default),
+ * so the tenant picker is never shown to somebody with nothing to pick. Both entry points into the
  * "we now have a web token but no tenant token" state need this — the zero-setup
  * landing and the post-terms-bump resume — so it lives here once.
  *
  * Returns true when a workspace was selected. Zero workspaces (server-side
- * provisioning still in flight) or several both fall through to the picker.
+ * provisioning still in flight) or several with no default fall through to the picker.
  */
 async function selectSoleTenant(
   webToken: string,
   selectTenant: (tenant: Awaited<ReturnType<typeof getMyTenants>>[number]) => Promise<void>,
 ): Promise<boolean> {
   const tenants = await getMyTenants(webToken);
-  const sole = tenants.length === 1 ? tenants[0] : undefined;
-  if (!sole) return false;
-  await selectTenant(sole); // mints the tenant JWT (persisted synchronously)
+  const target = autoSelectTenant(tenants);
+  if (!target) return false;
+  await selectTenant(target); // mints the tenant JWT (persisted synchronously)
   return true;
 }
 

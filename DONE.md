@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-10-04 — Default workspace forgotten on every sign-in; `/tenants` crash (api 2026.10.7 · frontend 2026.10.7)
+
+Report: "Setting a default tenant is not being saved — users consistently have to select their tenant even though a default has been set." A second ticket the same day: `/tenants` crashed with `TypeError: useEffectEvent is not a function`.
+
+- **Default workspace: root cause.** "Set as default" only wrote `bf_default_tenant_id` to localStorage, and `clearSession()` deleted that key on every sign-out and every 401/expired session. That is exactly when the default is needed to skip the picker. It also never left the browser, so a second device always asked.
+- **Default workspace: fix.** The default now lives on the account.
+  - Migration 1196 adds `users.default_tenant_id` (FK to tenants, ON DELETE SET NULL).
+  - `IUserRepository.get/setDefaultTenantId` and `AuthService.setDefaultTenant` handle the write; only a member can set a workspace as their default.
+  - `PUT /api/auth/default-tenant` sets or clears it, and `GET /api/auth/my-tenants` returns `defaultTenantId`, which applies only while the person is still a member.
+  - Frontend: `getMyTenants` marks `Tenant.isDefault`. ONE `autoSelectTenant` rule (the only workspace, else the default) is used by sign-in (`resolveAndSelectTenant`), the `/tenants` picker, onboarding (`selectSoleTenant`) and Studio (`useStudioWorkspace`). The last two had their own "exactly one" copy that ignored the default. `workspacesApi.setDefault` saves it, applied optimistically with rollback.
+  - The localStorage helpers and the QA harnesses' seeded key were deleted.
+- **Crash (shipped first, `4c8f15e99`).** Next 15.5's App Router renders with its vendored React (`19.2.0-canary-20250818`), which does not export `useEffectEvent`. The `react@19.2.8` in package.json type-checks it but is not what runs. `CreationCanvas` and `useCanvasSessionSync` now use `@/hooks/useEffectEvent`, built on `useLatestRef`. An eslint `no-restricted-imports` rule bans importing it from `react`.
+
 ## ✅ RESOLVED 2026-10-04 — Video: clips, planned scenes and movies on the canvas and in Studio (api 2026.10.6 · frontend 2026.10.6)
 
 Request: "Because we generate images, we now need to generate video and scenes and movies." Operator decisions: cheap models first, quality models on Pro; assembly in the browser, plus an offline server render on paid plans; surfaces are canvas scene and video objects, Studio agent tools and canvas Brain tools.

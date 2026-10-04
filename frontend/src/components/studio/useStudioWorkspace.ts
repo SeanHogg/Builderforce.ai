@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { autoSelectTenant } from '@/lib/auth/credentials';
 import type { Tenant } from '@/lib/types';
 
 export type StudioWorkspaceState =
@@ -32,7 +33,8 @@ export function useStudioWorkspace(): StudioWorkspaceState & { choose: (tenant: 
     fetchTenants()
       .then(async (workspaces) => {
         if (cancelled) return;
-        if (workspaces.length === 1) await selectTenant(workspaces[0]!);
+        const target = autoSelectTenant(workspaces);
+        if (target) await selectTenant(target);
         else setState(workspaces.length ? { status: 'choose', workspaces } : { status: 'none' });
       })
       .catch(() => { if (!cancelled) setState({ status: 'failed' }); });

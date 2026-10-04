@@ -109,7 +109,6 @@ function selfTestState(token, origin) {
     { name: 'bf_tenant_token', value: token },
     { name: 'bf_user', value: JSON.stringify({ id: claims.sub ?? 'agent:qa-tester', email: 'agent@builderforce.ai' }) },
     { name: 'bf_tenant', value: JSON.stringify({ id: claims.tid ?? 0, name: 'agent' }) },
-    { name: 'bf_default_tenant_id', value: String(claims.tid ?? '') },
   ];
   const cookie = (name) => ({
     name, value: token, domain: hostname, path: '/',

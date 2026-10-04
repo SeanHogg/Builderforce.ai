@@ -68,6 +68,7 @@ import {
   ApiKeyBody,
   ApiKeyRegisterBody,
   ApiKeyTokenBody,
+  DefaultTenantBody,
   DeviceApproveBody,
   DeviceCodeBody,
   DeviceTokenBody,
@@ -255,6 +256,7 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
  *   POST /api/auth/web/register   – create account, returns WebJWT + user
  *   POST /api/auth/web/login      – verify password, returns WebJWT + user
  *   GET  /api/auth/my-tenants     – list tenants the caller belongs to (WebJWT required)
+ *   PUT  /api/auth/default-tenant – set/clear the workspace opened automatically (WebJWT required)
  *   POST /api/auth/tenant-token   – exchange WebJWT + tenantId for tenant-scoped JWT
  *   GET  /api/auth/me             – return caller's profile (WebJWT required)
  */
@@ -1106,6 +1108,15 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     await landPendingInvitations(db, c.env as Env, tenantService, userId);
     const result = await authService.myTenants(userId);
     return c.json(result);
+  });
+
+  // PUT /api/auth/default-tenant  (requires WebJWT + body: { tenantId | null })
+  // The workspace this account opens automatically — returned by /my-tenants.
+  router.put('/default-tenant', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = await parseBody(c, DefaultTenantBody);
+    await authService.setDefaultTenant(userId, body.tenantId);
+    return c.json({ defaultTenantId: body.tenantId });
   });
 
   // POST /api/auth/tenant-token  (requires WebJWT + body: { tenantId })

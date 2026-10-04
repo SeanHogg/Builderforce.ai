@@ -7,6 +7,7 @@ import {
   resendVerificationCode,
   getMyTenants,
   getTenantToken,
+  autoSelectTenant,
 } from './auth/credentials';
 import {
   persistSession,
@@ -231,6 +232,23 @@ describe('getMyTenants', () => {
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(401, 'Unauthorized'));
     await expect(getMyTenants('bad-token')).rejects.toThrow('Session expired');
+  });
+});
+
+describe('the account default workspace', () => {
+  it('marks the tenant the server names as the default', async () => {
+    fetchSpy.mockResolvedValueOnce(mockOk({ tenants: [{ id: 3, name: 'Hogg' }, { id: 9, name: 'Enterprise' }], defaultTenantId: 9 }));
+    const result = await getMyTenants('web-token-123');
+    expect(result.map((t) => t.isDefault)).toEqual([false, true]);
+  });
+
+  it('auto-selects the only workspace, else the default, else nothing', () => {
+    const a: Tenant = { id: '3', name: 'Hogg' };
+    const b: Tenant = { id: '9', name: 'Enterprise' };
+    expect(autoSelectTenant([a])).toBe(a);
+    expect(autoSelectTenant([a, { ...b, isDefault: true }])?.id).toBe('9');
+    expect(autoSelectTenant([a, b])).toBeNull();
+    expect(autoSelectTenant([])).toBeNull();
   });
 });
 
