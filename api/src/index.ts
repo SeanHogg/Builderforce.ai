@@ -143,6 +143,7 @@ import { createLimbicRoutes }           from './presentation/routes/limbicRoutes
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createPersonalityRoutes }      from './presentation/routes/personalityRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
+import { createVideoRoutes }        from './presentation/routes/videoRoutes';
 import { createMcpServerRoutes }    from './presentation/routes/mcpServerRoutes';
 import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
 import { createLlmRatingRoutes }   from './presentation/routes/llmRatingRoutes';
@@ -353,6 +354,8 @@ export { ProjectEvermindCoordinatorDO } from './infrastructure/relay/ProjectEver
 export { AgentContainerDO } from './infrastructure/relay/AgentContainerDO';
 export { QaRunnerContainerDO } from './infrastructure/relay/QaRunnerContainerDO';
 export { StageSandboxContainerDO } from './infrastructure/relay/StageSandboxContainerDO';
+export { MediaJobDO } from './infrastructure/relay/MediaJobDO';
+export { MediaRenderContainerDO } from './infrastructure/relay/MediaRenderContainerDO';
 export { CollaborationRoomDO } from './infrastructure/relay/CollaborationRoomDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
@@ -601,6 +604,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   });
 
   // builderforceLLM — OpenAI-compatible multi-vendor LLM proxy (tenant or agentHost API key auth)
+  // Video generation + server movie render — async media jobs (see videoRoutes.ts).
+  // Mounted before the generic gateway so `/llm/v1/videos/*` resolves here.
+  app.route('/llm/v1/videos', createVideoRoutes());
   app.route('/llm', createLlmRoutes());
 
   // Tenant "LLM" objects — named, reusable model configs selectable anywhere by

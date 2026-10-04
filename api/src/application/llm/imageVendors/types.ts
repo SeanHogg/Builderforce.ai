@@ -22,6 +22,7 @@
  */
 
 import { bytesToBase64 } from '../../../domain/shared/bytes';
+import type { MediaModelEntry, MediaModelTier, MediaVendorModuleBase } from '../mediaVendorRegistry';
 import {
   AUTH_STATUSES,
   CASCADE_STATUSES,
@@ -44,9 +45,9 @@ export {
 
 export type ImageVendorId = 'cloudflare' | 'together' | 'huggingface' | 'pollinations' | 'googleai' | 'fluxapi';
 
-/** Tier classification per image model. Mirrors AiModelTier so the same
- *  FREE/PREMIUM cap pattern applies. */
-export type ImageModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
+/** Tier classification per image model — the shared media tier, so the same
+ *  FREE/PREMIUM cap pattern applies to image and video. */
+export type ImageModelTier = MediaModelTier;
 
 export interface ImageVendorEnv {
   TOGETHER_API_KEY?: string | null;
@@ -97,18 +98,9 @@ export interface ImageGenResult {
   model: string;
 }
 
-export interface ImageVendorModelEntry {
-  id: string;
-  label: string;
-  brand: string;
-  tier: ImageModelTier;
-}
+export type ImageVendorModelEntry = MediaModelEntry;
 
-export interface ImageVendorModule {
-  id: ImageVendorId;
-  apiKeyFrom(env: ImageVendorEnv): string | null;
-  catalog: ReadonlyArray<ImageVendorModelEntry>;
-  tierFor(modelId: string): ImageModelTier;
+export interface ImageVendorModule extends MediaVendorModuleBase<ImageVendorId, ImageVendorEnv> {
   generate(params: ImageGenParams): Promise<ImageGenResult>;
 }
 

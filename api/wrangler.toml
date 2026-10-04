@@ -99,6 +99,17 @@ class_name = "QaRunnerContainerDO"
 name = "STAGE_SANDBOX_CONTAINER"
 class_name = "StageSandboxContainerDO"
 
+# One media job (a generated video clip or a server-rendered movie), advanced on
+# its own alarm so no request waits minutes on a vendor. See
+# infrastructure/relay/MediaJobDO.ts and application/llm/video/mediaJob.ts.
+[[durable_objects.bindings]]
+name = "MEDIA_JOB"
+class_name = "MediaJobDO"
+
+[[durable_objects.bindings]]
+name = "MEDIA_RENDER_CONTAINER"
+class_name = "MediaRenderContainerDO"
+
 # Real-time co-editing (Yjs). One instance per admitted room, named
 # `collab:t<tenantId>:<scope>:<id>` by application/collab/collabScopes.ts. This
 # used to live in the never-deployed `worker/` script, which is why co-editing was
@@ -144,6 +155,15 @@ class_name = "StageSandboxContainerDO"
 image = "./stage-sandbox/Dockerfile"
 max_instances = 3
 name = "builderforce-stage-sandbox"
+
+# Media Render — ffmpeg renders a canvas video timeline to MP4 for paid plans
+# ("render on the server", finishes with the tab closed). One instance per render
+# job; self-contained under api/media-render. `max_instances` is the cost guard.
+[[containers]]
+class_name = "MediaRenderContainerDO"
+image = "./media-render/Dockerfile"
+max_instances = 3
+name = "builderforce-media-render"
 
 [[r2_buckets]]
 binding = "UPLOADS"
@@ -250,6 +270,13 @@ tag = "v12"
 # opens the document an hour later — gets the document rather than a blank one.
 # Storage requires a SQLite-backed class.
 new_sqlite_classes = ["CollaborationRoomDO"]
+
+[[migrations]]
+tag = "v13"
+# MediaJobDO persists one media job's state and drives it with storage alarms
+# (alarms require SQLite-backed DOs); MediaRenderContainerDO is the ffmpeg render
+# container's control DO. Container-control DOs are SQLite-backed.
+new_sqlite_classes = ["MediaJobDO", "MediaRenderContainerDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

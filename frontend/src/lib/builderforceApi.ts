@@ -3317,7 +3317,7 @@ export type PlanFeatureKey =
   | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
   | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
   | 'voiceCloning' | 'advancedInsights' | 'evermindTraining' | 'livePreview'
-  | 'containerRuntime' | 'removeBranding';
+  | 'containerRuntime' | 'removeBranding' | 'serverVideoRender';
 
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };

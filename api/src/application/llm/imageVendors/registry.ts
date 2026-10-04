@@ -5,8 +5,8 @@ import { reportCaughtError } from '../../observability/caughtErrorReporter';
  * `vendors/registry.ts` shape so future shared tooling (admin UI, health
  * probes) can iterate both surfaces uniformly.
  *
- * Adding a new image vendor: add to `MODULES` below and the registry derives
- * the rest.
+ * Adding a new image vendor: add to `MODULES` below; the shared media
+ * registry (`../mediaVendorRegistry.ts`) derives the rest.
  */
 
 import { cloudflareImageModule } from './cloudflare';
@@ -22,9 +22,9 @@ import {
   type ImageModelTier,
   type ImageVendorEnv,
   type ImageVendorId,
-  type ImageVendorModelEntry,
   type ImageVendorModule,
 } from './types';
+import { createMediaVendorRegistry } from '../mediaVendorRegistry';
 
 /**
  * Vendor priority — the ONE list everything else derives from. Free vendors
@@ -42,93 +42,46 @@ const MODULES: ReadonlyArray<ImageVendorModule> = [
   fluxApiModule,
 ];
 
-const MODULES_BY_ID = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<ImageVendorId, ImageVendorModule>;
-
-/** Used when a model id isn't in any vendor's catalog (treats as Together). */
-const DEFAULT_VENDOR: ImageVendorId = 'together';
-
-const INDEX: Map<string, { vendor: ImageVendorId; entry: ImageVendorModelEntry }> = new Map();
-for (const mod of MODULES) {
-  for (const entry of mod.catalog) {
-    INDEX.set(entry.id, { vendor: mod.id, entry });
-  }
-}
-
-/** `<vendor>/` for every registered vendor — derived, so a new module needs no edit here. */
-const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: ImageVendorId }> =
-  MODULES.map((m) => ({ prefix: `${m.id}/`, vendor: m.id }));
+/** Everything derived from {@link MODULES} — see `mediaVendorRegistry.ts`. */
+const REGISTRY = createMediaVendorRegistry<ImageVendorId, ImageVendorEnv, ImageVendorModule>(MODULES, 'together');
 
 /** Every registered image vendor id, in priority order (health probe, admin views). */
 export function getAllImageVendorIds(): ImageVendorId[] {
-  return MODULES.map((m) => m.id);
+  return REGISTRY.ids();
 }
 
 /** True when at least one image vendor has its credentials bound — the gateway's
- *  "is image generation configured at all" check, derived from the registry so
- *  it never lags a newly added vendor. */
+ *  "is image generation configured at all" check. */
 export function anyImageVendorBound(env: ImageVendorEnv): boolean {
-  return MODULES.some((m) => !!m.apiKeyFrom(env));
+  return REGISTRY.anyBound(env);
 }
 
-/**
- * Parse an explicit vendor-prefixed model id (`fluxapi/flux-kontext-pro`,
- * `together/black-forest-labs/FLUX.1-schnell-Free`). Returns `null` for bare
- * ids — callers fall back to catalog lookup via `vendorForImageModel`.
- */
+/** Parse `fluxapi/flux-kontext-pro`-style ids; null for a bare id. */
 export function parseImageVendorPrefix(modelId: string): { vendor: ImageVendorId; modelId: string } | null {
-  for (const { prefix, vendor } of VENDOR_PREFIXES) {
-    if (modelId.startsWith(prefix)) {
-      return { vendor, modelId: modelId.slice(prefix.length) };
-    }
-  }
-  return null;
+  return REGISTRY.parsePrefix(modelId);
 }
 
 export function vendorForImageModel(modelId: string): ImageVendorId {
-  const prefix = parseImageVendorPrefix(modelId);
-  if (prefix) return prefix.vendor;
-  return INDEX.get(modelId)?.vendor ?? DEFAULT_VENDOR;
+  return REGISTRY.vendorFor(modelId);
 }
 
 export function imageVendorKeyBound(env: ImageVendorEnv, vendor: ImageVendorId): boolean {
-  return !!MODULES_BY_ID[vendor].apiKeyFrom(env);
+  return REGISTRY.keyBound(env, vendor);
 }
 
+/** Tier of a (prefixed or bare) model id — the prefix is stripped before the
+ *  catalog lookup, so a prefixed paid model is never misread as the default tier. */
 export function tierForImageModel(modelId: string): ImageModelTier {
-  return MODULES_BY_ID[vendorForImageModel(modelId)].tierFor(modelId);
+  return REGISTRY.tierFor(modelId);
 }
 
 export function getImageModule(id: ImageVendorId): ImageVendorModule {
-  return MODULES_BY_ID[id];
+  return REGISTRY.module(id);
 }
 
-/**
- * Catalog ids of the given tiers, VENDOR-PREFIXED (`<vendor>/<modelId>`) and
- * INTERLEAVED across vendors: round 1 takes each vendor's first model in
- * registry order, round 2 each vendor's second, and so on.
- *
- * Prefixed so the dispatcher always resolves a model to its OWNING vendor by
- * prefix — never by an ambiguous bare-id catalog lookup (the same `flux-schnell`
- * can live on several vendors). Interleaved because the cascade composer caps
- * the FREE slice at a small budget: in registry order the whole budget would go
- * to one vendor's models, so a single outage or rate limit would burn every
- * free attempt and drop the request onto a paid fallback while other free
- * vendors sat idle.
- */
+/** Vendor-prefixed, vendor-interleaved model ids of the given tiers. */
 export function imageModelsByTierPrefixed(...tiers: ImageModelTier[]): string[] {
-  const set = new Set(tiers);
-  const perVendor = MODULES.map((mod) =>
-    mod.catalog.filter((m) => set.has(m.tier)).map((m) => `${mod.id}/${m.id}`),
-  );
-  const rounds = Math.max(0, ...perVendor.map((ids) => ids.length));
-  const out: string[] = [];
-  for (let round = 0; round < rounds; round++) {
-    for (const ids of perVendor) {
-      const id = ids[round];
-      if (id) out.push(id);
-    }
-  }
-  return out;
+  return REGISTRY.modelsByTierPrefixed(...tiers);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,13 +129,6 @@ export interface ImageDispatchResult extends ImageGenResult {
   attempts: ImageDispatchAttempt[];
 }
 
-/** Resolve a model id to its vendor + the un-prefixed id the vendor expects. */
-function resolveImageVendorAndModel(model: string): { vendorId: ImageVendorId; vendorModel: string } {
-  const prefix = parseImageVendorPrefix(model);
-  if (prefix) return { vendorId: prefix.vendor, vendorModel: prefix.modelId };
-  return { vendorId: vendorForImageModel(model), vendorModel: model };
-}
-
 /** Walk a model chain. Throws ImageCascadeExhaustedError if every model fails. */
 export async function dispatchImageVendor(params: ImageDispatchParams): Promise<ImageDispatchResult> {
   const { env, modelChain, ...rest } = params;
@@ -194,8 +140,8 @@ export async function dispatchImageVendor(params: ImageDispatchParams): Promise<
   const skippedNoKey: string[] = [];
 
   for (const model of modelChain) {
-    const { vendorId, vendorModel } = resolveImageVendorAndModel(model);
-    const mod = MODULES_BY_ID[vendorId];
+    const { vendorId, vendorModel } = REGISTRY.resolve(model);
+    const mod = REGISTRY.module(vendorId);
     const apiKey = mod.apiKeyFrom(env);
     if (!apiKey) {
       skippedNoKey.push(`${vendorId}:${model}`);

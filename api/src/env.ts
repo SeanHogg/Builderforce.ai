@@ -404,6 +404,19 @@ export interface Env {
    *  `STAGE_SANDBOX_CONTAINER`. */
   STAGE_SANDBOX_CONTAINER?: DurableObjectNamespace;
 
+  /** Durable Object that owns one media job — a generated video clip or a
+   *  server-rendered movie — and advances it on its own alarm, so no request ever
+   *  waits minutes on a vendor. One instance per job (`idFromName('media-job:<id>')`).
+   *  Optional: when unset the `/llm/v1/videos/*` routes answer 503.
+   *    [[durable_objects.bindings]] name = "MEDIA_JOB" class_name = "MediaJobDO" */
+  MEDIA_JOB?: DurableObjectNamespace;
+
+  /** Cloudflare Container that renders a canvas video timeline to MP4 with ffmpeg
+   *  (image at api/media-render) — the paid-plan "render on the server" path.
+   *  Optional: when unset, server render answers 503 and the browser render
+   *  remains available. Backed by MediaRenderContainerDO via `[[containers]]`. */
+  MEDIA_RENDER_CONTAINER?: DurableObjectNamespace;
+
   /** Durable Object holding the authoritative `Y.Doc` for one co-edited document
    *  (real-time co-editing, Yjs). One instance per admitted room, named
    *  `collab:t<tenantId>:<scope>:<id>` — see application/collab/collabScopes.ts.

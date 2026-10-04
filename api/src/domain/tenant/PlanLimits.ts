@@ -101,6 +101,11 @@ export interface PlanLimits {
   /** Image-generation credits per calendar day (1 credit = 1 returned image);
    *  -1 = unlimited. Independent of the text token budget. */
   imageCreditsDailyLimit: number;
+  /** Seconds of generated video per UTC day; -1 = unlimited. Its own budget,
+   *  like images: a cloud clip is paid per second at the vendor, so the unit the
+   *  tenant spends is the unit we pay for. Free gets a taste (a few 5s clips on
+   *  the cheapest model), paid plans get real headroom on better models. */
+  videoSecondsDailyLimit: number;
   /**
    * Upper bound on a single request's `max_tokens` (output cap). Guards against
    * a misconfigured client requesting a huge generation that bills a full
@@ -185,6 +190,12 @@ export interface PlanLimits {
    * it is one of the reasons to upgrade. See `application/ide/siteAttribution.ts`.
    */
   removeBranding: boolean;
+  /**
+   * Whether a movie can be rendered on the SERVER (the ffmpeg render container),
+   * so the tab can close while it renders. Every plan can export in the browser;
+   * the offline render is a paid convenience. See `presentation/routes/videoRoutes.ts`.
+   */
+  serverVideoRender: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -208,6 +219,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     cloudRunsMonthly: 25, // 25 cloud-agent runs/mo — enough to try it, then upgrade
     stageSandboxRunsMonthly: 15, // 15 sandbox runs/mo
     imageCreditsDailyLimit: 10,
+    videoSecondsDailyLimit: 15,
     maxTokensPerRequest: 4_096,
     approvalWorkflows: false,
     fleetMesh: false,
@@ -222,6 +234,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     livePreview: false,
     containerRuntime: false,
     removeBranding: false,
+    serverVideoRender: false,
   },
   [TenantPlan.PRO]: {
     maxCreationSessions: 500,
@@ -243,6 +256,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     cloudRunsMonthly: 2_000, // 2K cloud-agent runs/mo
     stageSandboxRunsMonthly: 500, // 500 sandbox runs/mo
     imageCreditsDailyLimit: 1_000,
+    videoSecondsDailyLimit: 120,
     maxTokensPerRequest: 16_384,
     approvalWorkflows: true,
     fleetMesh: true,
@@ -257,6 +271,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     livePreview: true,
     containerRuntime: true,
     removeBranding: true,
+    serverVideoRender: true,
   },
   [TenantPlan.TEAMS]: {
     maxCreationSessions: -1,
@@ -278,6 +293,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     cloudRunsMonthly: -1, // unlimited
     stageSandboxRunsMonthly: -1, // unlimited
     imageCreditsDailyLimit: 5_000,
+    videoSecondsDailyLimit: 600,
     maxTokensPerRequest: 64_000,
     approvalWorkflows: true,
     fleetMesh: true,
@@ -292,6 +308,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     livePreview: true,
     containerRuntime: true,
     removeBranding: true,
+    serverVideoRender: true,
   },
 };
 
@@ -591,4 +608,11 @@ export function resolveImageCreditsDailyLimit(
   if (override === -1) return -1;
   if (override != null && override >= 0) return override;
   return getLimits(plan).imageCreditsDailyLimit;
+}
+
+/** A tenant's daily video-seconds allowance; -1 = unlimited. Plan default only —
+ *  there is no per-tenant override column (yet), so the superadmin bypass in the
+ *  media gate is the only lift. */
+export function resolveVideoSecondsDailyLimit(plan: TenantPlan): number {
+  return getLimits(plan).videoSecondsDailyLimit;
 }

@@ -16,7 +16,7 @@ import { and, eq, gte, lt, notInArray, sql, type SQL } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount, usageDatabaseOf } from './usageLedger';
-import { IMAGE_PRODUCT_NAMES } from './ImageProxyService';
+import { MEDIA_PRODUCT_NAMES } from './mediaProducts';
 
 /**
  * Per-row cache-discounted effective text-token weight. Defined ONCE; every
@@ -30,9 +30,10 @@ const rowWeight: SQL = sql`(
   + (${llmUsageLog.cacheCreationTokens} * ${CACHE_CREATION_MULTIPLIER - 1}::float8)
 )`;
 
-/** Image generation meters against its OWN credit budget (migration 0131) — its
- *  rows never consume the text-token cap (and vice-versa). */
-const notImageRow = notInArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES]);
+/** Image and video generation each meter against their OWN credit budget
+ *  (migration 0131; video seconds) — their rows never consume the text-token cap
+ *  (and vice-versa). See `mediaProducts.ts`. */
+const notMediaRow = notInArray(llmUsageLog.llmProduct, [...MEDIA_PRODUCT_NAMES]);
 
 /**
  * BYO exemption: a row served by the tenant's OWN provider credential (`byo`)
@@ -45,10 +46,10 @@ const notImageRow = notInArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES])
  */
 const notFreeByoRow: SQL = sql`NOT (${llmUsageLog.byo} AND ${llmUsageLog.surface} IN ('on_prem', 'vsix'))`;
 
-/** The single billable-row predicate every usage window reuses: exclude image
- *  rows (own budget) AND own-machine BYO rows (free). One definition so no window
+/** The single billable-row predicate every usage window reuses: exclude media
+ *  rows (own budgets) AND own-machine BYO rows (free). One definition so no window
  *  can drift from the enforced total. */
-const billableRow: SQL = and(notImageRow, notFreeByoRow)!;
+const billableRow: SQL = and(notMediaRow, notFreeByoRow)!;
 
 // Coerce a SQL SUM result (number, or a numeric string from pg/drizzle, or null
 // from an empty window) to a non-negative integer via the SAME clamp the billing
@@ -72,6 +73,14 @@ export function utcDayStart(now: Date = new Date()): Date {
   const d = new Date(now);
   d.setUTCHours(0, 0, 0, 0);
   return d;
+}
+
+/** Seconds remaining until the next UTC midnight — when every daily cap resets.
+ *  Surfaced on cap-exhausted 429s as both `Retry-After` and `retryAfter`. */
+export function secondsUntilNextUtcMidnight(now: Date = new Date()): number {
+  const next = new Date(now);
+  next.setUTCHours(24, 0, 0, 0);
+  return Math.max(1, Math.ceil((next.getTime() - now.getTime()) / 1000));
 }
 
 /** Start of the current UTC calendar month — the monthly-allowance window start. */

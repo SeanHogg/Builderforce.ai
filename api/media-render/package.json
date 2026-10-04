@@ -1,0 +1,11 @@
+{
+  "name": "builderforce-media-render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Container that renders a canvas video timeline to MP4 with ffmpeg (paid-plan server render).",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

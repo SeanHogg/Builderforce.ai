@@ -1,0 +1,44 @@
+/* The scene surface's own pieces (engine switch, actions, shot list). Every colour
+   is a canvas token, so the surface follows the canvas's light and dark palettes. */
+
+.engineSwitch { display:inline-flex; border:1px solid var(--canvas-line); border-radius:999px; padding:2px; gap:2px; background:var(--canvas-panel); }
+.engineSwitch button { border:0; background:transparent; color:var(--canvas-muted); font:600 12px var(--font-sans); padding:6px 12px; border-radius:999px; min-height:32px; cursor:pointer; }
+.engineSwitch button[aria-pressed="true"] { background:var(--canvas-brain-accent); color:var(--canvas-on-accent, #fff); }
+.engineSwitch button:disabled { opacity:.5; cursor:not-allowed; }
+
+.actions { display:flex; flex-wrap:wrap; gap:8px; }
+.primary,.secondary { min-height:36px; padding:8px 14px; border-radius:8px; font:600 13px var(--font-sans); cursor:pointer; }
+.primary { border:1px solid var(--canvas-brain-accent); background:var(--canvas-brain-accent); color:var(--canvas-on-accent, #fff); }
+.secondary { border:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); }
+.primary:disabled,.secondary:disabled { opacity:.5; cursor:not-allowed; }
+.linkButton { border:0; background:transparent; color:var(--canvas-muted); font:600 12px var(--font-sans); text-decoration:underline; cursor:pointer; padding:6px 0; min-height:32px; }
+
+.hint { margin:0; color:var(--canvas-muted); font-size:12px; line-height:1.45; }
+.status { margin:0; color:var(--canvas-ink); font-size:13px; }
+.error { margin:0; color:var(--error-text); font-size:13px; }
+.empty { margin:0; color:var(--canvas-muted); font-size:13px; }
+
+.shotsHeader { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.shotsHeader h3 { margin:0; color:var(--canvas-ink); font:650 13px var(--font-sans); }
+
+.shotList { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+.shot { border:1px solid var(--canvas-line); border-radius:10px; background:var(--canvas-panel); padding:10px; display:flex; flex-direction:column; gap:8px; }
+.shot[data-status="failed"] { border-color:var(--error-text); }
+.shotHead { display:flex; align-items:center; gap:8px; min-width:0; }
+.shotIndex { flex:none; width:22px; height:22px; border-radius:999px; display:grid; place-items:center; background:var(--canvas-board-background); color:var(--canvas-ink); font:650 11px var(--font-sans); }
+.shotAction { flex:1; min-width:0; color:var(--canvas-ink); font:600 13px var(--font-sans); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.shotStatus { flex:none; color:var(--canvas-muted); font:600 11px var(--font-sans); text-transform:uppercase; letter-spacing:.04em; }
+.shotBody { display:grid; grid-template-columns:minmax(120px,180px) minmax(0,1fr); gap:10px; }
+.shotClip,.shotClipPlaceholder { width:100%; aspect-ratio:16/9; border-radius:6px; background:var(--canvas-board-background); object-fit:contain; }
+.shotClipPlaceholder { display:grid; place-items:center; color:var(--canvas-muted); font-size:20px; }
+.shotFields { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.shotRow { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.field { display:flex; flex-direction:column; gap:4px; color:var(--canvas-muted); font:650 10px var(--font-sans); letter-spacing:.04em; text-transform:uppercase; min-width:0; }
+.field textarea,.field select { font:400 13px var(--font-sans); text-transform:none; letter-spacing:0; color:var(--canvas-ink); background:var(--canvas-board-background); border:1px solid var(--canvas-line); border-radius:6px; padding:6px 8px; min-height:32px; width:100%; box-sizing:border-box; resize:vertical; }
+.field textarea:focus,.field select:focus { border-color:var(--canvas-brain-accent); outline:none; }
+.shotError { margin:0; color:var(--error-text); font-size:12px; }
+
+@media (max-width: 640px) {
+  .shotBody { grid-template-columns:1fr; }
+  .actions > button { flex:1 1 auto; }
+}

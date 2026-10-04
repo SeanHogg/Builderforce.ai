@@ -31,6 +31,7 @@ import {
 
 export { anyImageVendorBound };
 import { composeFreeCappedCascade } from './cascadeComposer';
+import { IMAGE_PRODUCT_NAMES, mediaProductForPlan, type ImageProductName } from './mediaProducts';
 import { loadCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
 import type { VendorId } from './vendors';
 
@@ -125,19 +126,6 @@ export interface ImageProxyResult {
    *  row so it counts against the tenant's paid-overflow daily cap. */
   paidOverflow: boolean;
 }
-
-export type ImageProductName = 'builderforceImage' | 'builderforceImagePro';
-
-/** Flat per-image charge against the legacy `total_tokens` ledger (retained for
- *  cost rollups). Image GENERATION is now capped by image credits, not these
- *  tokens — see `resolveImageCreditsDailyLimit`. Exported so the charge site and
- *  the credit-count query divide by the SAME constant (DRY). */
-export const IMAGE_TOKEN_COST = 1000;
-
-/** The `llm_product` labels image rows are logged under. Used to (a) EXCLUDE
- *  image rows from the chat token-cap sum and (b) sum them for the image-credit
- *  cap — one definition so the two never drift. */
-export const IMAGE_PRODUCT_NAMES = ['builderforceImage', 'builderforceImagePro'] as const;
 
 export interface ImageProxyEnv extends ImageVendorEnv {
   AUTH_CACHE_KV?: KVNamespace;
@@ -300,7 +288,7 @@ export type { EffectivePlan } from '../../domain/tenant/effectivePlan';
 import type { EffectivePlan } from '../../domain/tenant/effectivePlan';
 
 export function imageProductNameForPlan(effectivePlan: EffectivePlan, premiumOverride = false): ImageProductName {
-  return premiumOverride || effectivePlan !== 'free' ? 'builderforceImagePro' : 'builderforceImage';
+  return mediaProductForPlan(IMAGE_PRODUCT_NAMES, premiumOverride || effectivePlan !== 'free');
 }
 
 export function imageModelPoolForPlan(effectivePlan: EffectivePlan, premiumOverride = false): readonly string[] {

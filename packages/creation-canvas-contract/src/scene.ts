@@ -31,8 +31,8 @@
  * to prevent for the timeline; this reuses it rather than repeating the argument.
  */
 
-import type { CanvasVideoSource } from './video';
-import { canvasVideoSourcesFrom } from './video';
+import type { CanvasVideoSource, CanvasVideoTimeline } from './video';
+import { canvasVideoSourcesFrom, emptyCanvasVideoTimeline } from './video';
 
 export const CANVAS_SCENE_SPEC_VERSION = 1;
 
@@ -52,8 +52,55 @@ export function defaultCanvasSceneGenerationParams(): CanvasSceneGenerationParam
   return { frames: 16, fps: 8 };
 }
 
+/**
+ * WHERE a scene's video is made.
+ *   - `cloud`  — hosted video models through the gateway (`/llm/v1/videos`):
+ *                real motion, any device, billed in video seconds.
+ *   - `device` — the studio engine in this browser (WebGPU): free and private,
+ *                lower fidelity, needs a capable GPU.
+ * An absent value reads as `device`, which is what every scene saved before the
+ * cloud engine existed was made with.
+ */
+export const CANVAS_SCENE_ENGINES = ['cloud', 'device'] as const;
+export type CanvasSceneEngine = (typeof CANVAS_SCENE_ENGINES)[number];
+
+export const CANVAS_SCENE_ASPECTS = ['16:9', '9:16', '1:1'] as const;
+export type CanvasSceneAspect = (typeof CANVAS_SCENE_ASPECTS)[number];
+
+export const CANVAS_SCENE_SHOT_STATUSES = ['pending', 'rendering', 'done', 'failed'] as const;
+export type CanvasSceneShotStatus = (typeof CANVAS_SCENE_SHOT_STATUSES)[number];
+
+/**
+ * One shot of a planned scene, and its render state. `prompt` is the shot's
+ * FULL generation prompt — the planner's shot prompt with every present
+ * character's appearance appended — so each clip is rendered from the same
+ * character descriptions and the cast stays recognisable across shots.
+ */
+export interface CanvasSceneShot {
+  id: string;
+  /** What happens in the shot — its label on the board and on the timeline. */
+  action: string;
+  prompt: string;
+  camera: string;
+  durationSeconds: number;
+  status: CanvasSceneShotStatus;
+  /** The media job rendering it, while it renders. */
+  jobId?: string;
+  output?: CanvasVideoSource;
+  error?: string;
+}
+
 export interface CanvasSceneSpec {
   version: typeof CANVAS_SCENE_SPEC_VERSION;
+  /** Absent → `device` (see {@link CanvasSceneEngine}). */
+  engine?: CanvasSceneEngine;
+  /** Frame shape for cloud clips and the movie built from them. */
+  aspectRatio?: CanvasSceneAspect;
+  /** Opaque studio `Storyboard` (treatment, character bible, planned shots) —
+   *  carried, never introspected here, exactly like `mambaState`. */
+  storyboard?: unknown;
+  /** The storyboard's shots and their per-shot clips. */
+  shots?: CanvasSceneShot[];
   /** Corresponds to studio's `DiffusionModelId` — kept as a plain string here so this
    *  contract package does not take a dependency on the studio engine. Empty string
    *  means "not chosen yet"; the authoring panel seeds a real default. */
@@ -73,6 +120,8 @@ export interface CanvasSceneSpec {
 export function emptyCanvasSceneSpec(): CanvasSceneSpec {
   return {
     version: CANVAS_SCENE_SPEC_VERSION,
+    engine: 'cloud',
+    aspectRatio: '16:9',
     modelId: '',
     prompt: '',
     params: defaultCanvasSceneGenerationParams(),
@@ -102,6 +151,32 @@ function paramsFrom(value: unknown): CanvasSceneGenerationParams {
   };
 }
 
+function oneOf<T extends string>(values: readonly T[], value: unknown): T | undefined {
+  return typeof value === 'string' && (values as readonly string[]).includes(value) ? value as T : undefined;
+}
+
+function shotsFrom(value: unknown): CanvasSceneShot[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((entry, index): CanvasSceneShot[] => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const raw = entry as Record<string, unknown>;
+    if (typeof raw.prompt !== 'string' || !raw.prompt.trim()) return [];
+    const [output] = canvasVideoSourcesFrom(raw.output != null ? [raw.output] : []);
+    const duration = finiteOrUndefined(raw.durationSeconds);
+    return [{
+      id: typeof raw.id === 'string' && raw.id ? raw.id : `shot-${index + 1}`,
+      action: typeof raw.action === 'string' ? raw.action : '',
+      prompt: raw.prompt,
+      camera: typeof raw.camera === 'string' ? raw.camera : 'static',
+      durationSeconds: duration !== undefined ? Math.min(15, Math.max(1, duration)) : 5,
+      status: oneOf(CANVAS_SCENE_SHOT_STATUSES, raw.status) ?? (output ? 'done' : 'pending'),
+      ...(typeof raw.jobId === 'string' ? { jobId: raw.jobId } : {}),
+      ...(output ? { output } : {}),
+      ...(typeof raw.error === 'string' ? { error: raw.error } : {}),
+    }];
+  });
+}
+
 /** Reads old or AI-authored JSON defensively so an invalid patch cannot break the
  *  surface — same rule `canvasVideoTimelineFrom`/`canvasWorldSceneFrom` follow. */
 export function canvasSceneSpecFrom(value: unknown): CanvasSceneSpec {
@@ -109,12 +184,73 @@ export function canvasSceneSpecFrom(value: unknown): CanvasSceneSpec {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
   const raw = value as Record<string, unknown>;
   const [output] = canvasVideoSourcesFrom(raw.output != null ? [raw.output] : []);
+  const engine = oneOf(CANVAS_SCENE_ENGINES, raw.engine);
+  const aspectRatio = oneOf(CANVAS_SCENE_ASPECTS, raw.aspectRatio);
+  const shots = shotsFrom(raw.shots);
   return {
     version: CANVAS_SCENE_SPEC_VERSION,
+    ...(engine ? { engine } : {}),
+    ...(aspectRatio ? { aspectRatio } : {}),
+    ...(raw.storyboard !== undefined ? { storyboard: raw.storyboard } : {}),
+    ...(shots ? { shots } : {}),
     modelId: typeof raw.modelId === 'string' ? raw.modelId : fallback.modelId,
     prompt: typeof raw.prompt === 'string' ? raw.prompt : fallback.prompt,
     params: paramsFrom(raw.params),
     ...(raw.mambaState !== undefined ? { mambaState: raw.mambaState } : {}),
     ...(output ? { output } : {}),
   };
+}
+
+/** The engine a scene renders with — absent means `device` (see {@link CanvasSceneEngine}). */
+export function canvasSceneEngine(spec: Pick<CanvasSceneSpec, 'engine'>): CanvasSceneEngine {
+  return spec.engine ?? 'device';
+}
+
+/** Output frame size for an aspect ratio — the movie timeline's canvas. */
+export function canvasSceneFrameSize(aspect: CanvasSceneAspect | undefined): { width: number; height: number } {
+  if (aspect === '9:16') return { width: 1080, height: 1920 };
+  if (aspect === '1:1') return { width: 1080, height: 1080 };
+  return { width: 1920, height: 1080 };
+}
+
+/** Shots that still need a clip: never rendered, or failed. */
+export function canvasSceneShotsToRender(spec: Pick<CanvasSceneSpec, 'shots'>): CanvasSceneShot[] {
+  return (spec.shots ?? []).filter((shot) => !shot.output && shot.status !== 'rendering');
+}
+
+/**
+ * The MOVIE a scene makes: every rendered shot, in storyboard order, laid end to
+ * end on a `video` timeline's visual track and labelled with what happens in it.
+ * The result is an ordinary editable timeline: music, voiceover, captions and
+ * trims are added in the video editor like on any other. A scene with no shots
+ * but one generated clip becomes a one-clip movie. Null when nothing is rendered.
+ */
+export function canvasSceneMovie(spec: CanvasSceneSpec): { timeline: CanvasVideoTimeline; sources: CanvasVideoSource[] } | null {
+  const rendered = (spec.shots ?? []).filter((shot): shot is CanvasSceneShot & { output: CanvasVideoSource } => Boolean(shot.output));
+  const clips = rendered.length > 0
+    ? rendered.map((shot) => ({ source: shot.output, label: shot.action || shot.id }))
+    : spec.output ? [{ source: spec.output, label: spec.prompt.slice(0, 60) }] : [];
+  if (clips.length === 0) return null;
+  const { width, height } = canvasSceneFrameSize(spec.aspectRatio);
+  let cursor = 0;
+  const timeline: CanvasVideoTimeline = {
+    ...emptyCanvasVideoTimeline(),
+    width,
+    height,
+    clips: clips.map(({ source, label }, index) => {
+      const startSeconds = cursor;
+      cursor += source.durationSeconds;
+      return {
+        id: `scene-clip-${index + 1}`,
+        sourceId: source.id,
+        track: 'visual' as const,
+        startSeconds,
+        durationSeconds: source.durationSeconds,
+        trimStartSeconds: 0,
+        volume: 1,
+        label,
+      };
+    }),
+  };
+  return { timeline, sources: clips.map(({ source }) => source) };
 }

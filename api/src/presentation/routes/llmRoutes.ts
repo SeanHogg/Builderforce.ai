@@ -65,11 +65,12 @@ import {
   NO_IMAGE_VENDOR_MESSAGE,
   FREE_IMAGE_MODEL_POOL,
   PAID_IMAGE_MODEL_POOL,
-  IMAGE_TOKEN_COST,
-  IMAGE_PRODUCT_NAMES,
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
 import { persistGeneratedImages } from '../../application/llm/persistGeneratedImages';
+import { IMAGE_PRODUCT_NAMES, IMAGE_TOKEN_COST } from '../../application/llm/mediaProducts';
+import { enforceMediaCreditCap, freePlanUpgradeHint, type MediaCreditPolicy } from './mediaCreditGate';
+import { toTenantPlan } from '../../application/tenant/featureEntitlements';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
 import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
@@ -177,6 +178,7 @@ import { guestRoomTurn } from '../../application/guest/guestRoomClient';
 import { restrictGuestTools } from '../../application/guest/guestCanvasTools';
 import {
   utcDayStart,
+  secondsUntilNextUtcMidnight,
   secondsUntilNextUtcMonth,
   sumTenantTextTokens,
   estimateTokensFromChars,
@@ -191,18 +193,6 @@ import { upgradeRequiredBody } from '../../domain/tenant/paymentRequired';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Seconds remaining until the next UTC midnight — when the daily token
- * counter resets. Surfaced on cap-exhausted 429s as both a `Retry-After`
- * header and a `retryAfter` field so consumers can sleep precisely
- * instead of polling.
- */
-function secondsUntilNextUtcMidnight(): number {
-  const now = Date.now();
-  const next = new Date();
-  next.setUTCHours(24, 0, 0, 0); // midnight tomorrow UTC
-  return Math.max(1, Math.ceil((next.getTime() - now) / 1000));
-}
 
 /**
  * Bulk-insert failover events into `llm_failover_log`, fire-and-forget.
@@ -371,13 +361,6 @@ export type TenantAccess = TenantPlanSnapshot & {
    *  `clk_*`/`bfa_*` agent-host path. */
   isSuperadmin: boolean;
 };
-
-/** Map the string effectivePlan to TenantPlan enum for plan limits lookup. */
-function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
-  if (ep === 'pro') return TenantPlan.PRO;
-  if (ep === 'teams') return TenantPlan.TEAMS;
-  return TenantPlan.FREE;
-}
 
 // The psychometric-persona entitlement check moved to the shared feature gate
 // (`presentation/middleware/featureGate.ts` → `tenantHasFeature(..., 'psychometricPersona')`)
@@ -610,51 +593,18 @@ function premiumCapExceededBody(cap: number) {
 }
 
 /**
- * Image-generation daily credit gate (migration 0131). Returns a blocking JSON
- * Response when the tenant has spent its full image-credit budget for the UTC
- * day, else null. Credits = returned images; counted from today's image-product
- * usage rows (`total_tokens / IMAGE_TOKEN_COST`). Independent of the chat token
- * cap — heavy image use no longer starves the text budget, and vice-versa.
- * Best-effort: a query error fails OPEN (availability over a perfectly precise
- * cap), matching `isPaidOverflowExhausted`.
+ * Image-generation daily credit gate (migration 0131): 1 credit = 1 returned
+ * image, counted from today's image-product usage rows. Independent of the chat
+ * token cap. The query and the 429 live in the shared media gate, which video
+ * generation uses too.
  */
-async function enforceImageCreditCap(
-  c: Context<HonoEnv>,
-  access: TenantAccess,
-): Promise<Response | null> {
-  if (access.isSuperadmin) return null;
-  const limit = resolveImageCreditsDailyLimit(access.imageCreditsDailyLimit, toTenantPlan(access.effectivePlan));
-  if (limit < 0) return null; // unlimited
-  try {
-    const db = buildTransactionalDatabase(c.env);
-    const [row] = await db
-      .select({ tokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)` })
-      .from(llmUsageLog)
-      .where(and(
-        eq(llmUsageLog.tenantId, access.tenantId),
-        inArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES]),
-        gte(llmUsageLog.createdAt, utcDayStart()),
-      ));
-    const usedCredits = Math.floor(Number(row?.tokens ?? 0) / IMAGE_TOKEN_COST);
-    if (usedCredits >= limit) {
-      const upgradeHint = access.effectivePlan === 'free'
-        ? ' Upgrade to Pro at builderforce.ai/pricing for a higher image budget.'
-        : '';
-      return c.json({
-        error: `Daily image generation limit reached (${limit} image${limit === 1 ? '' : 's'} / day).${upgradeHint}`,
-        code: 'image_credit_limit_exceeded',
-        plan: access.effectivePlan,
-        dailyLimit: limit,
-        usedToday: usedCredits,
-        terminal: true,
-        retryAfter: secondsUntilNextUtcMidnight(),
-      }, 429, { 'Retry-After': String(secondsUntilNextUtcMidnight()) });
-    }
-    return null;
-  } catch {
-    return null; // fail open
-  }
-}
+const IMAGE_CREDIT_POLICY: MediaCreditPolicy = {
+  products: IMAGE_PRODUCT_NAMES,
+  unitTokens: IMAGE_TOKEN_COST,
+  code: 'image_credit_limit_exceeded',
+  dailyLimit: (access) => resolveImageCreditsDailyLimit(access.imageCreditsDailyLimit, toTenantPlan(access.effectivePlan)),
+  message: (limit, access) => `Daily image generation limit reached (${limit} image${limit === 1 ? '' : 's'} / day).${freePlanUpgradeHint(access, 'image')}`,
+};
 
 /**
  * DB loader for an agentHost (`bfa_*` / legacy `clk_*`) key → its cached auth
@@ -3343,7 +3293,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Independent image-credit budget (migration 0131) — gate BEFORE dispatch so
     // an over-budget tenant doesn't incur a vendor call. Separate from the chat
     // token cap.
-    const imageCapBlocked = await enforceImageCreditCap(c, access);
+    const imageCapBlocked = await enforceMediaCreditCap(c, access, IMAGE_CREDIT_POLICY);
     if (imageCapBlocked) return imageCapBlocked;
 
     // Capture SDK transport metadata for usage logging — stripped before vendor dispatch
@@ -3373,7 +3323,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Image accounting: still charge a flat per-image token estimate onto the
     // usage row (retained for cost rollups), but image generation is now gated by
-    // its OWN daily credit budget (enforceImageCreditCap above), NOT the chat
+    // its OWN daily credit budget (the media credit gate above), NOT the chat
     // token cap — the two budgets are independent (migration 0131). IMAGE_TOKEN_COST
     // is shared with the credit-count query so charge and count agree.
     const imagesReturned = Math.max(result.body.data.length, 0);

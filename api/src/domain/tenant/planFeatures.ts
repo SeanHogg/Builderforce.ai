@@ -44,6 +44,7 @@ export const PLAN_FEATURE_LABEL: Record<PlanFeature, string> = {
   livePreview: 'live preview on a real device',
   containerRuntime: 'cloud agents with a real shell and a repo clone',
   removeBranding: 'removing the Builderforce badge from your published sites',
+  serverVideoRender: 'rendering movies on the server',
 };
 
 /**

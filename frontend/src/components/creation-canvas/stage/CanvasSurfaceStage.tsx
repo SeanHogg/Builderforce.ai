@@ -19,6 +19,7 @@ import type { useCanvasResumeShares } from '../hooks/useCanvasResumeShares';
 import type { CanvasSessionAppActions } from '../hooks/useCanvasSessionApp';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import type { BrainConversationProps } from './useBrainConversation';
+import type { SceneMovieDraft } from '@/hooks/useCloudScene';
 
 export interface CanvasSurfaceStageProps {
   surface: CanvasSurfaceId;
@@ -73,6 +74,9 @@ export function CanvasSurfaceStage({
               data={surfaceNode.data}
               onExit={exitSurface}
               {...editSurfaceNode}
+              // The scene's movie lands on the board as an ordinary `video` object —
+              // the real timeline editor, where music and narration are added.
+              {...(editable ? { onCreateMovie: (draft: SceneMovieDraft) => { appendAtCenter('video', { title: draft.title, status: 'Draft', videoTimeline: draft.videoTimeline, videoSources: draft.videoSources }); } } : {})}
             /> : null,
             // The zero-object case of this canvas: the same transcript, the same
             // composer, no board. Objects Brain creates during the conversation land on

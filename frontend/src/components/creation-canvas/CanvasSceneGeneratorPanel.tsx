@@ -4,164 +4,102 @@
  * (WebGPU has no server-side render), which already declares the boundary.
  */
 import { useTranslations } from 'next-intl';
-import { canvasSceneSpecFrom, type CanvasSceneSpec } from '@builderforce/creation-canvas-contract';
-import { ModelPicker, ProgressFeedback, VideoPreview } from '@seanhogg/builderforce-studio-embedded';
+import { canvasSceneEngine, canvasSceneSpecFrom, type CanvasSceneEngine, type CanvasSceneSpec } from '@builderforce/creation-canvas-contract';
 import '@seanhogg/builderforce-studio-embedded/styles.css';
-import type { DiffusionModelId } from '@seanhogg/builderforce-studio';
-import { useSceneGeneration } from '@/hooks/useSceneGeneration';
+import { getStoredTenantToken } from '@/lib/auth';
+import type { SceneMovieDraft } from '@/hooks/useCloudScene';
+import { useLatestRef } from './hooks/useLatestRef';
 import styles from './CreationCanvas.module.css';
+import sceneStyles from './scene/Scene.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
+import { SceneCloudBody } from './scene/SceneCloudBody';
+import { SceneDeviceBody } from './scene/SceneDeviceBody';
 import type { CreationNodeData } from './types';
 
 /**
  * CanvasSceneGeneratorPanel — the `scene3d` surface: a `scene` object at full size.
  *
- * A prompt, a model, and a Generate action that calls the studio engine directly.
- * Object-scoped, entered from the scene's own card. (The id used to double as the
- * rail's "3D space", forking on whether a `scene` was bound; the board's depth
- * projection lives in the room now, so there is no fork left.) See
- * `creationObjectSurfaces.ts` for why `scene` maps here rather than to `timeline`
- * (the unrelated, untouched multi-track editor for imported/screen/camera clips).
- *
- * Composed from `studio-embedded`'s own sub-components rather than the all-in-one
- * `<StudioPanel>` — this canvas's persistence (a JSON patch through `onEdit`), its own
- * theme tokens, and its own object-scoped chrome (`CanvasObjectSurface`) all differ
- * from what `<StudioPanel>` assumes about its host, so composing the parts is what lets
- * this panel be a first-class, theme-aware canvas surface instead of a re-skinned copy
- * of the retired video-modality panel.
- *
- * All orchestration (engine lifecycle, generate/cancel, persisting the finished clip)
- * lives in `useSceneGeneration` — this file is presentation and layout only, which is
- * what keeps it well under the file's own size budget.
+ * Two engines behind one switch (see `CanvasSceneEngine`):
+ *   - CLOUD  (`scene/SceneCloudBody`)  — hosted video models: a clip, or a planned
+ *            storyboard of shots, then a movie on a `video` timeline
+ *   - DEVICE (`scene/SceneDeviceBody`) — the studio engine in this browser
+ * This file only chooses between them and owns the one write path: every scene
+ * patch merges onto the LATEST spec (a synchronously-updated ref), because the
+ * cloud engine commits several patches in one tick as shots finish, and merging
+ * each onto the spec of the last render would let them overwrite one another.
  */
 
 export interface CanvasSceneGeneratorPanelProps {
   /** The bound `scene` object's own node id — `CanvasObjectData` carries no id of its
-   *  own (it lives on the graph node), so the host passes it explicitly, the same way
-   *  `CanvasFacilitateSurface` takes `objectId`. */
+   *  own (it lives on the graph node), so the host passes it explicitly. */
   objectId: string;
   data: CreationNodeData;
   onExit: () => void;
-  /** Absent on a board the viewer cannot drive; the panel renders read-only (no
-   *  prompt/model controls, no Generate) — same convention `CanvasWorldView`/
-   *  `CanvasTimelineSurface` use for their own `onEdit`. */
+  /** Absent on a board the viewer cannot drive; the panel renders read-only. */
   onEdit?: (patch: Partial<CreationNodeData>) => void;
+  /** Adds the scene's movie to the board as a `video` object. */
+  onCreateMovie?: (draft: SceneMovieDraft) => void;
 }
 
-export function CanvasSceneGeneratorPanel({ objectId, data, onExit, onEdit }: CanvasSceneGeneratorPanelProps) {
-  const t = useTranslations('creationCanvas.scene');
-  const tCommon = useTranslations('common');
-  const spec = canvasSceneSpecFrom(data.scene);
-  const onChange = onEdit
-    ? (patch: Partial<CanvasSceneSpec>) => onEdit({ scene: { ...spec, ...patch } })
-    : undefined;
-  const generation = useSceneGeneration(objectId, spec, onChange);
-  const editable = Boolean(onEdit);
+/** The canvas's theme tokens mapped onto the borrowed studio-embedded components'
+ *  `--bfs-*` properties, so they follow the canvas's light or dark palette. */
+const STUDIO_THEME_BRIDGE = {
+  ['--bfs-bg' as string]: 'var(--canvas-panel)',
+  ['--bfs-bg-deep' as string]: 'var(--canvas-board-background)',
+  ['--bfs-fg' as string]: 'var(--canvas-ink)',
+  ['--bfs-fg-muted' as string]: 'var(--canvas-muted)',
+  ['--bfs-accent' as string]: 'var(--canvas-brain-accent)',
+  ['--bfs-accent-2' as string]: 'var(--canvas-brain-accent)',
+  ['--bfs-border' as string]: 'var(--canvas-line)',
+  ['--bfs-danger' as string]: 'var(--error-text)',
+};
 
-  const actions = editable ? (
-    generation.isGenerating ? (
-      <button type="button" className={styles.objectSurfaceAction} onClick={generation.cancel}>
-        {tCommon('cancel')}
-      </button>
-    ) : (
-      <button
-        type="button"
-        className={styles.objectSurfaceAction}
-        onClick={() => void generation.generate()}
-        disabled={!generation.canGenerate}
-      >
-        {t('generate')}
-      </button>
-    )
+export function CanvasSceneGeneratorPanel({ objectId, data, onExit, onEdit, onCreateMovie }: CanvasSceneGeneratorPanelProps) {
+  const t = useTranslations('creationCanvas.scene');
+  const spec = canvasSceneSpecFrom(data.scene);
+  const latest = useLatestRef<CanvasSceneSpec>(spec);
+  const onChange = onEdit
+    ? (patch: Partial<CanvasSceneSpec>) => {
+      const next = { ...latest.current, ...patch };
+      latest.current = next;
+      onEdit({ scene: next });
+    }
+    : undefined;
+  const engine = canvasSceneEngine(spec);
+  // Cloud video runs on the server against the workspace's budget, so it needs an
+  // account; a guest board renders on the device.
+  const cloudAvailable = Boolean(getStoredTenantToken());
+
+  const engineSwitch = onChange ? (
+    <div className={sceneStyles.engineSwitch} role="group" aria-label={t('engineLabel')}>
+      {(['cloud', 'device'] as const satisfies readonly CanvasSceneEngine[]).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={engine === option}
+          disabled={option === 'cloud' && !cloudAvailable}
+          title={option === 'cloud' && !cloudAvailable ? t('cloudNeedsAccount') : t(option === 'cloud' ? 'engineCloudHint' : 'engineDeviceHint')}
+          onClick={() => onChange({ engine: option })}
+        >
+          {t(option === 'cloud' ? 'engineCloud' : 'engineDevice')}
+        </button>
+      ))}
+    </div>
   ) : null;
 
   return (
-    <CanvasObjectSurface surface="scene3d" data={data} onExit={onExit} actions={actions}>
-      {/* The bridge between this surface's own theme tokens and the borrowed
-          `studio-embedded` components (`ModelPicker`/`VideoPreview`/`ProgressFeedback`),
-          whose stylesheet reads its own `--bfs-*` custom properties rather than this
-          canvas's `--canvas-*` palette — see "canvas owns its palette". Defined directly
-          here (not via `.bfs-root`, which this panel never applies — its own padding/
-          min-height/background chrome is built for a full-screen host, not one surface
-          body among several) so every borrowed component underneath, in both columns,
-          resolves the canvas's current light or dark theme instead of the `styles.css`
-          package's own hardcoded dark fallbacks. */}
-      <div
-        className={styles.sceneGeneratorStage}
-        style={{
-          ['--bfs-bg' as string]: 'var(--canvas-panel)',
-          ['--bfs-bg-deep' as string]: 'var(--canvas-board-background)',
-          ['--bfs-fg' as string]: 'var(--canvas-ink)',
-          ['--bfs-fg-muted' as string]: 'var(--canvas-muted)',
-          ['--bfs-accent' as string]: 'var(--canvas-brain-accent)',
-          ['--bfs-accent-2' as string]: 'var(--canvas-brain-accent)',
-          ['--bfs-border' as string]: 'var(--canvas-line)',
-          ['--bfs-danger' as string]: 'var(--error-text)',
-        }}
-      >
-        <section className={styles.sceneGeneratorControls}>
-          <label className={styles.sceneGeneratorField}>
-            <span>{t('promptLabel')}</span>
-            <textarea
-              className={styles.sceneGeneratorPrompt}
-              rows={4}
-              placeholder={t('promptPlaceholder')}
-              value={generation.prompt}
-              onChange={(event) => generation.setPrompt(event.target.value)}
-              disabled={!editable || generation.isGenerating}
-            />
-          </label>
-
-          {/* `ModelPicker` reads `DiffusionModelId` and reports one back — the spec's
-              own `modelId` stays a plain string (see `scene.ts`'s header for why), so
-              the boundary narrows in both directions right here. */}
-          <ModelPicker
-            // Falls back to the lightest always-available model for a defensively-parsed
-            // legacy/malformed `scene` whose stored `modelId` came back empty — the
-            // freshly-created shape already seeds a real one (see the registry entry).
-            value={(generation.modelId || 'lcm-tiny-sd') as DiffusionModelId}
-            onChange={(next) => generation.setModelId(next)}
-            disabled={!editable || generation.isGenerating}
+    <CanvasObjectSurface surface="scene3d" data={data} onExit={onExit} actions={engineSwitch}>
+      <div className={styles.sceneGeneratorStage} style={STUDIO_THEME_BRIDGE}>
+        {engine === 'cloud' && cloudAvailable ? (
+          <SceneCloudBody
+            title={data.title}
+            spec={spec}
+            {...(onChange ? { onChange } : {})}
+            {...(onCreateMovie ? { onCreateMovie } : {})}
           />
-
-          <div className={styles.sceneGeneratorRow}>
-            <label className={styles.sceneGeneratorField}>
-              <span>{t('framesLabel')}</span>
-              <input
-                type="number"
-                className={styles.sceneGeneratorNumber}
-                min={1}
-                max={120}
-                value={generation.frames}
-                onChange={(event) => generation.setFrames(Math.max(1, Math.min(120, Number(event.target.value) || 1)))}
-                disabled={!editable || generation.isGenerating}
-              />
-            </label>
-            <label className={styles.sceneGeneratorField}>
-              <span>{t('fpsLabel')}</span>
-              <input
-                type="number"
-                className={styles.sceneGeneratorNumber}
-                min={1}
-                max={60}
-                value={generation.fps}
-                onChange={(event) => generation.setFps(Math.max(1, Math.min(60, Number(event.target.value) || 1)))}
-                disabled={!editable || generation.isGenerating}
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className={styles.sceneGeneratorPreview}>
-          <VideoPreview
-            frames={generation.previewFrames}
-            videoUrl={generation.videoUrl}
-            width={512}
-            height={512}
-            loading={generation.isGenerating ? { label: generation.progressLabel || t('initializing'), framesDone: generation.previewFrames.length, framesTotal: generation.frames } : null}
-          />
-          <ProgressFeedback progressLabel={generation.progressLabel} error={generation.error} />
-        </section>
+        ) : (
+          <SceneDeviceBody objectId={objectId} spec={spec} {...(onChange ? { onChange } : {})} />
+        )}
       </div>
     </CanvasObjectSurface>
   );
