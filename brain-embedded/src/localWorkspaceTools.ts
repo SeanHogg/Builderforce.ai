@@ -88,17 +88,54 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Local workspace tools whose success means the agent CHANGED code on disk — the
- * surface-specific signal that a ticket must exist. Only the VS Code (IDE) surface
- * exposes these; the web Brain has no file tools, so a web run never trips the
- * ticket backstop. `run_command` is intentionally excluded: it usually runs tests /
+ * Workspace tools whose success means the agent CHANGED code — the surface-specific
+ * signal that a ticket must exist. Two surfaces have them: the VS Code (IDE) surface's
+ * files on disk, and the Studio's project workspace (`canvas_*_build_file`, the build
+ * vocabulary in `frontend/src/lib/canvasBuildTools.ts`). A chat with neither never trips
+ * the ticket backstop. `run_command` is intentionally excluded: it usually runs tests /
  * build / lint, not a durable code change, so treating it as one would mint
  * spurious tickets.
+ *
+ * The Studio writers were missing until chat #129 measured the cost: the Studio changed
+ * a site twice, nothing counted it as a code change, so no ticket was opened for it, the
+ * change was never verified, and the two tickets the model filed by hand sat at
+ * `in_review` (75%) with nothing in the loop that would ever move them.
  */
 export const CODE_CHANGE_TOOLS: ReadonlySet<string> = new Set([
   'write_file',
   'edit_file',
   'delete_file',
+  'canvas_write_build_file',
+  'canvas_edit_build_file',
+  'canvas_restore_build_file',
+]);
+
+/**
+ * The tool that reviews a change in the RUNNING preview (`canvas_inspect_preview`,
+ * declared as `CANVAS_INSPECT_PREVIEW_TOOL` in `@builderforce/creation-canvas-contract`;
+ * a frontend test pins the two spellings together). Only the Studio advertises it, so
+ * its presence is how the run loop knows it is in the Studio — see `previewReview.ts`.
+ */
+export const PREVIEW_REVIEW_TOOL = 'canvas_inspect_preview';
+
+/**
+ * The Studio's workspace vocabulary: what that surface IS, pinned for the reason
+ * {@link LOCAL_WORKSPACE_TOOLS} is. Measured (chat #129): with these left to relevance,
+ * the agent spent calls on `builtin_tools_find` to rediscover `canvas_search_build_files`
+ * and `builtin_tools_describe` to learn `canvas_read_build_file`'s arguments. Pinned only
+ * where the review tool is advertised (see {@link studioToolsIn}), so the creation canvas,
+ * which shares the `canvas_*` build tools, keeps its own relevance-driven selection.
+ */
+export const STUDIO_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
+  'canvas_list_build_files',
+  'canvas_read_build_file',
+  'canvas_search_build_files',
+  'canvas_write_build_file',
+  'canvas_edit_build_file',
+  'canvas_read_build_diagnostics',
+  'canvas_list_build_file_history',
+  'canvas_restore_build_file',
+  PREVIEW_REVIEW_TOOL,
 ]);
 
 /**
@@ -214,6 +251,19 @@ export function canShipHere(toolNames: readonly string[]): boolean {
  */
 export function localToolsIn(toolNames: readonly string[]): string[] {
   return toolNames.filter(isLocalWorkspaceTool);
+}
+
+/**
+ * Whether THIS run can review its own change in a live preview — the host advertised
+ * {@link PREVIEW_REVIEW_TOOL}. The Studio does; the VS Code host and the web Brain do not.
+ */
+export function canReviewInPreview(toolNames: readonly string[]): boolean {
+  return toolNames.includes(PREVIEW_REVIEW_TOOL);
+}
+
+/** The Studio workspace tools this run has — always advertised, and only in the Studio. */
+export function studioToolsIn(toolNames: readonly string[]): string[] {
+  return canReviewInPreview(toolNames) ? toolNames.filter((name) => STUDIO_WORKSPACE_TOOLS.has(name)) : [];
 }
 
 /** The project memory tools this run actually has, out of a catalog — always advertised. */

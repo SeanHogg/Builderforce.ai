@@ -63,6 +63,7 @@ __export(src_exports, {
   ON_DEVICE_ANSWER_THRESHOLD: () => ON_DEVICE_ANSWER_THRESHOLD,
   PERSONA_MODALITY_IDS: () => PERSONA_MODALITY_IDS,
   PMO_FOCUS_PARAM: () => PMO_FOCUS_PARAM,
+  PREVIEW_REVIEW_TOOL: () => PREVIEW_REVIEW_TOOL,
   PROJECT_EVERMIND_MODEL_PREFIX: () => PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   PromptInput: () => PromptInput,
@@ -76,6 +77,7 @@ __export(src_exports, {
   STOPPED_TURN_META_KEY: () => STOPPED_TURN_META_KEY,
   STOPPED_TURN_STEP: () => STOPPED_TURN_STEP,
   STREAM_IDLE_MS: () => STREAM_IDLE_MS,
+  STUDIO_WORKSPACE_TOOLS: () => STUDIO_WORKSPACE_TOOLS,
   StreamIdleError: () => StreamIdleError,
   StreamInterruptedError: () => StreamInterruptedError,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
@@ -119,6 +121,7 @@ __export(src_exports, {
   byoUnresolvedSummary: () => byoUnresolvedSummary,
   byoVendorLabel: () => byoVendorLabel,
   canChangeCodeHere: () => canChangeCodeHere,
+  canReviewInPreview: () => canReviewInPreview,
   canShipHere: () => canShipHere,
   catalogToolNamesMentionedIn: () => catalogToolNamesMentionedIn,
   chatActivityText: () => chatActivityText,
@@ -143,6 +146,7 @@ __export(src_exports, {
   createBrainRestPersistence: () => createBrainRestPersistence,
   createComposingActivity: () => createComposingActivity,
   createPayloadBudget: () => createPayloadBudget,
+  declinesReview: () => declinesReview,
   declinesShipping: () => declinesShipping,
   deriveChatTitle: () => deriveChatTitle,
   describeLiveStep: () => describeLiveStep,
@@ -212,6 +216,7 @@ __export(src_exports, {
   isUserConfiguredModelRef: () => isUserConfiguredModelRef,
   lastConsolidationIndex: () => lastConsolidationIndex,
   lastServedModel: () => lastServedModel,
+  leftChangeUnreviewed: () => leftChangeUnreviewed,
   leftChangeUnshipped: () => leftChangeUnshipped,
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
   linkedTicketsToComplete: () => linkedTicketsToComplete,
@@ -256,6 +261,7 @@ __export(src_exports, {
   poolAgentsFrom: () => poolAgentsFrom,
   premiumCostLabel: () => premiumCostLabel,
   prepareImageDataUrl: () => prepareImageDataUrl,
+  previewReviewDirective: () => previewReviewDirective,
   productForPlan: () => productForPlan,
   productModelName: () => productModelName,
   progressDuration: () => progressDuration,
@@ -296,10 +302,12 @@ __export(src_exports, {
   stoppedTurnMetadata: () => stoppedTurnMetadata,
   streamChatCompletion: () => streamChatCompletion,
   stripAskUser: () => stripAskUser,
+  studioToolsIn: () => studioToolsIn,
   subscribeRun: () => subscribeRun,
   subscribeRunStore: () => subscribeRunStore,
   subscribeToChatMessages: () => subscribeToChatMessages,
   takePendingPrompt: () => takePendingPrompt,
+  ticketsReviewedInPreview: () => ticketsReviewedInPreview,
   toolActivity: () => toolActivity,
   toolCallArgBytes: () => toolCallArgBytes,
   toolExposureInTrace: () => toolExposureInTrace,
@@ -310,6 +318,7 @@ __export(src_exports, {
   trimToolResult: () => trimToolResult,
   turnInterruption: () => turnInterruption,
   turnOptimizationDirective: () => turnOptimizationDirective,
+  unreviewedChangeNudge: () => unreviewedChangeNudge,
   unshippedChangeNudge: () => unshippedChangeNudge,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
@@ -3696,6 +3705,11 @@ var SHIPPABLE_TASK_STATUSES = /* @__PURE__ */ new Set(["in_review"]);
 function linkedTicketsToComplete(listResult) {
   return selectLinkedTasks(listResult, SHIPPABLE_TASK_STATUSES);
 }
+var REVIEWED_TASK_STATUSES = /* @__PURE__ */ new Set(["in_progress", "in_review"]);
+function linkedTicketsReviewedComplete(listResult, reviewedTaskIds) {
+  const reviewed = new Set(reviewedTaskIds.map(String));
+  return selectLinkedTasks(listResult, REVIEWED_TASK_STATUSES).filter((ticket) => reviewed.has(ticket.ref));
+}
 function codeChangeFile(args) {
   if (args && typeof args === "object" && "path" in args) {
     const p = args.path;
@@ -4762,7 +4776,22 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
   "write_file",
   "edit_file",
-  "delete_file"
+  "delete_file",
+  "canvas_write_build_file",
+  "canvas_edit_build_file",
+  "canvas_restore_build_file"
+]);
+var PREVIEW_REVIEW_TOOL = "canvas_inspect_preview";
+var STUDIO_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
+  "canvas_list_build_files",
+  "canvas_read_build_file",
+  "canvas_search_build_files",
+  "canvas_write_build_file",
+  "canvas_edit_build_file",
+  "canvas_read_build_diagnostics",
+  "canvas_list_build_file_history",
+  "canvas_restore_build_file",
+  PREVIEW_REVIEW_TOOL
 ]);
 var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set([
   "run_command",
@@ -4808,6 +4837,12 @@ function canShipHere(toolNames) {
 }
 function localToolsIn(toolNames) {
   return toolNames.filter(isLocalWorkspaceTool);
+}
+function canReviewInPreview(toolNames) {
+  return toolNames.includes(PREVIEW_REVIEW_TOOL);
+}
+function studioToolsIn(toolNames) {
+  return canReviewInPreview(toolNames) ? toolNames.filter((name) => STUDIO_WORKSPACE_TOOLS.has(name)) : [];
 }
 function memoryToolsIn(toolNames) {
   return toolNames.filter(isProjectMemoryTool);
@@ -6251,7 +6286,7 @@ function byteLen(v) {
 }
 function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}) {
   const llm = events.filter((e) => e.category === "llm");
-  const toolEvents = events.filter((e) => e.category === "tool");
+  const toolEvents2 = events.filter((e) => e.category === "tool");
   const errors = events.filter((e) => e.isError || e.category === "error");
   const loopExhausted = events.some((e) => e.label === "agent.loop" && e.isError);
   let promptTokenPeak = 0;
@@ -6285,7 +6320,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   let pagedReadWindows = 0;
   let largestLossyResultBytes = 0;
   let largestToolResult = null;
-  for (const ev of toolEvents) {
+  for (const ev of toolEvents2) {
     const bytes = typeof ev.resultBytes === "number" ? ev.resultBytes : byteLen(ev.result);
     toolResultBytes += bytes;
     const paged = ev.label === READ_FILE_TOOL;
@@ -6305,7 +6340,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const modelTurns = modelTurnLog(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
-  const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
+  const recoveredToolEvents = toolEvents2.filter((e) => e.recovered).length;
   const recoveredTurns = llm.filter((e) => e.recovered).length;
   const turnCoveragePartial = recoveredToolEvents > 0 && recoveredTurns === 0;
   const contextPressure = promptTokenPeak >= CONTEXT_PROMPT_PEAK || truncatedToolResults > 0 || downgradeEvents > 0 || largestLossyResultBytes >= LARGE_LOSSY_RESULT_BYTES;
@@ -6313,7 +6348,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const contextSignal = contextPressure && contextConsequence;
   const contextPressureOnly = contextPressure && !contextConsequence;
   const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < CONTEXT_PROMPT_PEAK) && truncatedToolResults === 0;
-  const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
+  const didWork = toolEvents2.length > 0 || completionTokenTotal > 0 || llm.length > 0;
   const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
   const stallRecoveries = stallRecoveriesInTrace(events);
   const modelFailovers = modelFailoversInTrace(events);
@@ -6322,7 +6357,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const streamRetries = streamRetriesInTrace(events);
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
-  const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
+  const noToolsAdvertised = exposure.min === 0 && toolEvents2.length === 0;
   const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
   const progress = computeRunProgress(events, messages);
   const noProgress = progress.spinning || progress.noEffect && !ctx.running;
@@ -6333,7 +6368,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : unresolvedAppFailures > 0 ? "app-errors-unresolved" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
-    toolCalls: toolEvents.length,
+    toolCalls: toolEvents2.length,
     errors: errors.length,
     errorSteps,
     loopExhausted,
@@ -7166,6 +7201,74 @@ function unshippedChangeNudge() {
   return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
+// src/previewReview.ts
+var REVIEW_RECORD_TOOL = "builtin_reviews_record";
+function previewReviewDirective(chatId) {
+  return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
+1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
+2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 builtin_chats_list_tickets with chatId=${chatId} lists it; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
+3. CLOSE \u2014 a ticket linked to this chat that has a "complete" review recorded after a passing inspection moves to done (100%) automatically when your turn ends. If the ticket you reviewed is not linked yet, link it with builtin_chats_link_ticket (chatId=${chatId}) first. Report each ticket's verdict with the key measurements.
+Never say a change works or a ticket is done without a passing \`canvas_inspect_preview\` AFTER your last edit. If the preview cannot be inspected (it is not running, or the probe times out), say so plainly and leave the ticket in review \u2014 do not record a "complete" review you could not verify.`;
+}
+function toolEvents(events) {
+  return events.filter((event) => event.category === "tool");
+}
+function lastChangeIndex(events) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (isCodeChangeTool(event.label) && !event.isError && !isFailedToolResult(event.result)) return index;
+  }
+  return -1;
+}
+function isPassingInspection(event) {
+  if (event.label !== PREVIEW_REVIEW_TOOL || event.isError || isFailedToolResult(event.result)) return false;
+  const result = event.result;
+  return result?.passed === true;
+}
+function completeReviewTaskId(event) {
+  if (event.label !== REVIEW_RECORD_TOOL || event.isError || isFailedToolResult(event.result)) return null;
+  const args = event.args ?? {};
+  const recorded = event.result?.verdict ?? args.verdict;
+  if (recorded !== "complete") return null;
+  const taskId = Number(args.taskId);
+  return Number.isInteger(taskId) && taskId > 0 ? taskId : null;
+}
+function ticketsReviewedInPreview(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  if (lastChange < 0) return [];
+  let inspected = false;
+  const reviewed = /* @__PURE__ */ new Set();
+  for (const event of tools.slice(lastChange + 1)) {
+    if (isPassingInspection(event)) inspected = true;
+    else if (inspected) {
+      const taskId = completeReviewTaskId(event);
+      if (taskId != null) reviewed.add(taskId);
+    }
+  }
+  return [...reviewed];
+}
+function inspectedAfterLastChange(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  return tools.slice(lastChange + 1).some((event) => event.label === PREVIEW_REVIEW_TOOL);
+}
+function recordedReviewAfterLastChange(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  return tools.slice(lastChange + 1).some((event) => event.label === REVIEW_RECORD_TOOL && !event.isError);
+}
+var DECLINES_REVIEW = /\b(?:don'?t|do not|never|without)\s+(?:review|verify|inspect|test|close|closing|mark)\w*|\b(?:leave|keep)\s+(?:it|them|the\s+tickets?)\s+(?:open|in\s+review)\b/i;
+function declinesReview(text) {
+  return DECLINES_REVIEW.test(text ?? "");
+}
+function leftChangeUnreviewed(input) {
+  return input.codeChanged && canReviewInPreview(input.toolNames) && !declinesReview(input.requestText) && !(inspectedAfterLastChange(input.events) && recordedReviewAfterLastChange(input.events));
+}
+function unreviewedChangeNudge() {
+  return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
 // src/composingActivity.ts
 function utf8ByteLength(text) {
   if (!text) return 0;
@@ -7768,7 +7871,18 @@ async function startRun(chatId, req) {
     }
     const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
     if (shipped && req.projectId != null && req.runTool) {
-      await completeShippedTickets(chatId, c, req).catch(() => {
+      await completeLinkedTickets(chatId, c, req, linkedTicketsToComplete, "shipped-to-base-branch").catch(() => {
+      });
+    }
+    const reviewedInPreview = !aborted && c.codeChanged ? ticketsReviewedInPreview(runTrace(c)) : [];
+    if (reviewedInPreview.length && req.projectId != null && req.runTool) {
+      await completeLinkedTickets(
+        chatId,
+        c,
+        req,
+        (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
+        "reviewed-in-preview"
+      ).catch(() => {
       });
     }
     const outcome = req.reportOutcome && codeRunOutcome({
@@ -7856,7 +7970,7 @@ async function advanceLinkedTickets(chatId, c, req) {
     });
   }
 }
-async function completeShippedTickets(chatId, c, req) {
+async function completeLinkedTickets(chatId, c, req, select, reason) {
   if (!req.runTool) return;
   let listed;
   try {
@@ -7864,7 +7978,7 @@ async function completeShippedTickets(chatId, c, req) {
   } catch {
     return;
   }
-  for (const t of linkedTicketsToComplete(listed)) {
+  for (const t of select(listed)) {
     const id = Number(t.ref);
     if (!Number.isInteger(id)) continue;
     const toolStart = nowMs2();
@@ -7881,7 +7995,7 @@ async function completeShippedTickets(chatId, c, req) {
       durationMs: nowMs2() - toolStart,
       // The REASON rides on the step: a ticket that closed itself must say what
       // closed it, or the board's history reads as an unexplained status change.
-      args: { id, status: "done", auto: true, reason: "shipped-to-base-branch" },
+      args: { id, status: "done", auto: true, reason },
       result: out ?? null,
       isError: isFailedToolResult(out)
     });
@@ -8019,6 +8133,9 @@ ${turnOptimizationDirective()}`;
   if (canShip) systemPrompt = `${systemPrompt}
 
 ${selfReviewShipDirective(chatId)}`;
+  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
+
+${previewReviewDirective(chatId)}`;
   if (c.priorResearch) systemPrompt = `${systemPrompt}
 
 ${c.priorResearch}`;
@@ -8056,6 +8173,7 @@ ${continuationDirective()}`;
   let announcementRecoveries = 0;
   let phase = c.codeChanged ? "code" : "plan";
   let shipRecoveryUsed = false;
+  let reviewRecoveryUsed = false;
   const priorReply = previousReplyText(convo);
   let restateRecoveryUsed = false;
   let activeModel = model;
@@ -8065,6 +8183,9 @@ ${continuationDirective()}`;
   const alwaysAdvertised = [
     ...toolNamesMentionedIn(systemPrompt),
     ...localToolsIn(catalogToolNames),
+    // The Studio's workspace vocabulary, including the preview review its contract
+    // requires — empty everywhere but the Studio (see `studioToolsIn`).
+    ...studioToolsIn(catalogToolNames),
     // The project-memory pair (recall before re-reading; remember what was learned) is
     // the cheapest tool in the catalog and the first one relevance would drop.
     ...memoryToolsIn(catalogToolNames),
@@ -8365,6 +8486,25 @@ ${revisit}` : covered.note;
           label: "loop.recover_unshipped_change",
           args: { step: iter, files: c.touchedFiles.slice(0, 20) },
           result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)."
+        });
+        c.streamingText = "";
+        emit(c);
+        return { action: "continue" };
+      }
+      if (runTool && !reviewRecoveryUsed && leftChangeUnreviewed({
+        codeChanged: c.codeChanged,
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c)
+      })) {
+        reviewRecoveryUsed = true;
+        await requeueWithNudge(unreviewedChangeNudge());
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "message",
+          label: "loop.recover_unreviewed_change",
+          args: { step: iter, files: c.touchedFiles.slice(0, 20) },
+          result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)."
         });
         c.streamingText = "";
         emit(c);
@@ -10526,6 +10666,7 @@ function PromptInput({
   ON_DEVICE_ANSWER_THRESHOLD,
   PERSONA_MODALITY_IDS,
   PMO_FOCUS_PARAM,
+  PREVIEW_REVIEW_TOOL,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
   PromptInput,
@@ -10539,6 +10680,7 @@ function PromptInput({
   STOPPED_TURN_META_KEY,
   STOPPED_TURN_STEP,
   STREAM_IDLE_MS,
+  STUDIO_WORKSPACE_TOOLS,
   StreamIdleError,
   StreamInterruptedError,
   TICKET_RECORDING_TOOLS,
@@ -10582,6 +10724,7 @@ function PromptInput({
   byoUnresolvedSummary,
   byoVendorLabel,
   canChangeCodeHere,
+  canReviewInPreview,
   canShipHere,
   catalogToolNamesMentionedIn,
   chatActivityText,
@@ -10606,6 +10749,7 @@ function PromptInput({
   createBrainRestPersistence,
   createComposingActivity,
   createPayloadBudget,
+  declinesReview,
   declinesShipping,
   deriveChatTitle,
   describeLiveStep,
@@ -10675,6 +10819,7 @@ function PromptInput({
   isUserConfiguredModelRef,
   lastConsolidationIndex,
   lastServedModel,
+  leftChangeUnreviewed,
   leftChangeUnshipped,
   linkedTicketsToAdvance,
   linkedTicketsToComplete,
@@ -10719,6 +10864,7 @@ function PromptInput({
   poolAgentsFrom,
   premiumCostLabel,
   prepareImageDataUrl,
+  previewReviewDirective,
   productForPlan,
   productModelName,
   progressDuration,
@@ -10759,10 +10905,12 @@ function PromptInput({
   stoppedTurnMetadata,
   streamChatCompletion,
   stripAskUser,
+  studioToolsIn,
   subscribeRun,
   subscribeRunStore,
   subscribeToChatMessages,
   takePendingPrompt,
+  ticketsReviewedInPreview,
   toolActivity,
   toolCallArgBytes,
   toolExposureInTrace,
@@ -10773,6 +10921,7 @@ function PromptInput({
   trimToolResult,
   turnInterruption,
   turnOptimizationDirective,
+  unreviewedChangeNudge,
   unshippedChangeNudge,
   useBrainActions,
   useBrainChats,

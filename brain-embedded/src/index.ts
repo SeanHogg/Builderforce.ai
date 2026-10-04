@@ -343,6 +343,10 @@ export {
   canChangeCodeHere,
   canShipHere,
   localToolsIn,
+  PREVIEW_REVIEW_TOOL,
+  STUDIO_WORKSPACE_TOOLS,
+  canReviewInPreview,
+  studioToolsIn,
 } from './localWorkspaceTools';
 
 // SELF-REVIEW SHIP — in a local editor session the agent is its own change's reviewer:
@@ -355,6 +359,17 @@ export {
   declinesShipping,
 } from './selfReviewShip';
 export type { UnshippedChangeInput } from './selfReviewShip';
+
+// PREVIEW REVIEW — the Studio's twin: the agent verifies its change in the live preview,
+// records a review quoting the measurements, and the reviewed tickets close.
+export {
+  previewReviewDirective,
+  leftChangeUnreviewed,
+  unreviewedChangeNudge,
+  ticketsReviewedInPreview,
+  declinesReview,
+} from './previewReview';
+export type { UnreviewedChangeInput } from './previewReview';
 
 // Chat MODE — conversation (`chat`) vs execution (`work`). The single source for what
 // a mode MEANS to the model, shared by the web Brain, the VS Code webview and the

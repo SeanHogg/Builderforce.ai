@@ -1,3 +1,24 @@
+## ✅ RESOLVED 2026-10-04 — Studio's AI reviews its own change in the live preview and closes the ticket (frontend 2026.10.15 · brain-embedded 2026.10.4)
+
+In chat #129 ("Build a marketing website for he-man") the Studio fixed a pill that stretched to the card's full height and rebuilt the mobile layout. It filed both tickets, and both stayed at `in_review` (75%). It had no way to check either fix: `canvas_read_build_diagnostics` reported "no errors", and a layout bug isn't an error. It tried to dispatch the invited QA agent (402, execution switched off). No agent can reach a preview that runs in someone's browser, so nothing could ever move those tickets.
+
+- **The agent can now inspect the preview.** New `frontend/src/lib/previewProbe/`.
+  - A probe script is injected into the MOUNTED `index.html` only, never the files on disk or a published build.
+  - `runPreviewProbe` loads the running preview in a hidden off-screen frame at each width, so the user's frame is never touched.
+  - The tool `canvas_inspect_preview` measures what is on screen at mobile 390 / tablet 834 / desktop 1280, or at exact widths. It reports page width against viewport, elements past the edge that nothing clips, broken images, runtime errors, small tap targets and missing alt text. For each named selector it gives the rect, key computed styles and `occludedBy`.
+  - `assessProbe` is the ONE pass/fail verdict. Content cut off by `overflow-x: hidden` fails, because cutting it off doesn't fix it. A fixed drawer parked off-screen is only a warning.
+- **The Studio reviews its own change.** New `brain-embedded/src/previewReview.ts` is the Studio twin of `selfReviewShip.ts`.
+  - The directive is VERIFY (diagnostics, then inspect at the widths the request is about), RECORD (`builtin_reviews_record` quoting the measurements), CLOSE.
+  - It says that even in a staffed chat the review of a change this session made is the session's own.
+  - A loop gate (`loop.recover_unreviewed_change`, one re-prompt) catches a turn that changed the app and ended without both an inspection and a review.
+- **Closing the ticket.** `completeShippedTickets` became `completeLinkedTickets(select, reason)`.
+  - It closes `ticketsReviewedInPreview`: a "complete" review recorded after a passing inspection that came after the run's LAST change.
+  - Only tickets linked to the chat and still `in_progress`/`in_review` are closed (`linkedTicketsReviewedComplete`), and only the ones that were reviewed. The step carries `reason: 'reviewed-in-preview'`.
+- **Studio edits count as code changes.** `canvas_write/edit/restore_build_file` joined `CODE_CHANGE_TOOLS`. A Studio edit now opens its ticket on the first edit, advances linked tickets, routes to the coder model, and counts as a real write in the triage honesty check.
+- **Studio tools are always offered.** `STUDIO_WORKSPACE_TOOLS` / `studioToolsIn` keep the build vocabulary and the inspect tool offered every turn, and only where the inspect tool is advertised, so the creation canvas keeps its relevance-based selection. Chat #129 spent calls on `builtin_tools_find` / `builtin_tools_describe` rediscovering these tools.
+- **DRY.** The head-injection arithmetic that `withPreviewErrorReporter` and `withVisualEditor` each carried is now one `lib/previewInjection.ts#injectIntoHead`. The tool name is spelled once as `CANVAS_INSPECT_PREVIEW_TOOL` (contract, guest-safe). A test pins it to brain-embedded's `PREVIEW_REVIEW_TOOL`. `check-canvas-tool-contract.mjs` now scans the new module.
+- Tests: `previewReview.test.ts`, `localWorkspaceTools.test.ts`, `previewProbe/{probeScript,probeReport,inspectPreviewAction}.test.ts`.
+
 ## ✅ RESOLVED 2026-10-04 — A project started in Studio can now go to the canvas, not only canvas-born apps (api 2026.10.9 · frontend 2026.10.14)
 
 Studio's "Open on canvas" rendered only when the project had a build record (`ide_projects` row). A Studio-born project (`useStartStudioProject`, `origin: 'studio'`) has none, so the link was hidden and `/create/build/<id>` fell through to the build list.

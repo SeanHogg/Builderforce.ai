@@ -9,9 +9,13 @@ import {
   localToolsIn,
   memoryToolsIn,
   isProjectMemoryTool,
+  canReviewInPreview,
+  studioToolsIn,
   CODE_CHANGE_TOOLS,
   LOCAL_WORKSPACE_TOOLS,
   PROJECT_MEMORY_TOOLS,
+  STUDIO_WORKSPACE_TOOLS,
+  PREVIEW_REVIEW_TOOL,
 } from './localWorkspaceTools';
 
 describe('the project memory toolset', () => {
@@ -38,10 +42,25 @@ describe('the local workspace toolset', () => {
     expect(isCodeChangeTool('search_code')).toBe(false);
   });
 
-  it('keeps the writers a strict subset of the local toolset', () => {
-    // Two sets, one meaning. A writer that is not a local tool would be pinned by
-    // neither the selector nor the backstop, which is the drift this pins shut.
-    for (const name of CODE_CHANGE_TOOLS) expect(isLocalWorkspaceTool(name)).toBe(true);
+  it('keeps every writer inside the toolset its surface pins', () => {
+    // A writer that is in no pinned set would be dropped by the selector while the
+    // backstop still counts it — the drift this pins shut. The IDE's writers are local
+    // tools; the Studio's are its workspace vocabulary.
+    for (const name of CODE_CHANGE_TOOLS) {
+      expect(isLocalWorkspaceTool(name) || STUDIO_WORKSPACE_TOOLS.has(name)).toBe(true);
+    }
+  });
+
+  /**
+   * Chat #129: the Studio changed a site twice and nothing counted it as a code change,
+   * so no ticket was opened for it and nothing ever reviewed it.
+   */
+  it('counts the Studio workspace writers as code changes, and its reads as not', () => {
+    expect(isCodeChangeTool('canvas_write_build_file')).toBe(true);
+    expect(isCodeChangeTool('canvas_edit_build_file')).toBe(true);
+    expect(isCodeChangeTool('canvas_restore_build_file')).toBe(true);
+    expect(isCodeChangeTool('canvas_read_build_file')).toBe(false);
+    expect(isCodeChangeTool(PREVIEW_REVIEW_TOOL)).toBe(false);
   });
 
   /**
@@ -108,5 +127,28 @@ describe('isRepoPublishTool', () => {
     for (const t of ['git_status', 'git_diff', 'git_history', 'read_file', 'search_code']) {
       expect(isRepoPublishTool(t), t).toBe(false);
     }
+  });
+});
+
+describe('the Studio workspace toolset', () => {
+  const STUDIO = ['builtin_tasks_create', 'canvas_read_build_file', 'canvas_edit_build_file', PREVIEW_REVIEW_TOOL, 'canvas_add_object'];
+
+  it('knows the Studio by its preview review tool', () => {
+    expect(canReviewInPreview(STUDIO)).toBe(true);
+    expect(canReviewInPreview(['read_file', 'edit_file', 'git_commit', 'git_push'])).toBe(false);
+    expect(canReviewInPreview(['builtin_tasks_create'])).toBe(false);
+  });
+
+  it('pins the build vocabulary in the Studio and nothing outside it', () => {
+    expect(studioToolsIn(STUDIO)).toEqual(['canvas_read_build_file', 'canvas_edit_build_file', PREVIEW_REVIEW_TOOL]);
+  });
+
+  /**
+   * The creation canvas shares the `canvas_*` build tools but has no preview review
+   * here, so its selection stays relevance-driven — eight pinned slots on every canvas
+   * turn would crowd out the tools the board actually needs.
+   */
+  it('pins nothing where the review tool is absent, even with build tools advertised', () => {
+    expect(studioToolsIn(['canvas_read_build_file', 'canvas_edit_build_file', 'canvas_add_object'])).toEqual([]);
   });
 });

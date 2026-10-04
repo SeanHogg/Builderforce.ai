@@ -63,6 +63,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     store,
     projectName: project.name,
     modality,
+    previewUrl: ws.runner.previewUrl,
     targets: { activeFile: editor.activeFile, applyCodeToActiveFile: editor.applyCodeToActiveFile, createProjectFile: editor.createProjectFile, setVoiceText: voice.setText },
     review: reviews,
     media: ws.media.port,

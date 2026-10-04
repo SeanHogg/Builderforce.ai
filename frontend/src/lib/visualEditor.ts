@@ -35,6 +35,8 @@
  * this is how a file gets silently rewritten by a regex.
  */
 
+import { injectIntoHead } from '@/lib/previewInjection';
+
 /** postMessage type carrying a selection out of the preview. Namespaced. */
 export const VISUAL_SELECT_MESSAGE = 'builderforce:visual-select';
 
@@ -165,14 +167,7 @@ export const VISUAL_EDITOR_OVERLAY = `<script>
  * preview error reporter: mounted copy only, never the file on disk.
  */
 export function withVisualEditor(files: Record<string, string>): Record<string, string> {
-  const html = files['index.html'];
-  if (typeof html !== 'string' || !html.includes('<head')) return files;
-  const headEnd = html.indexOf('>', html.indexOf('<head'));
-  if (headEnd === -1) return files;
-  return {
-    ...files,
-    'index.html': `${html.slice(0, headEnd + 1)}\n${VISUAL_EDITOR_OVERLAY}${html.slice(headEnd + 1)}`,
-  };
+  return injectIntoHead(files, VISUAL_EDITOR_OVERLAY);
 }
 
 /**

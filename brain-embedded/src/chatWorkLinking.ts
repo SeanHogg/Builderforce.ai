@@ -224,6 +224,25 @@ export function linkedTicketsToComplete(listResult: unknown): LinkedTicketToAdva
   return selectLinkedTasks(listResult, SHIPPABLE_TASK_STATUSES);
 }
 
+/**
+ * Statuses a REVIEWED ticket may close from. Wider than {@link SHIPPABLE_TASK_STATUSES}
+ * on purpose: that set refuses `in_progress` because a push is ambiguous about WHICH
+ * ticket it finished, while a preview review names its ticket — the agent recorded a
+ * "complete" verdict against that exact id after a passing inspection.
+ */
+const REVIEWED_TASK_STATUSES: ReadonlySet<string> = new Set(['in_progress', 'in_review']);
+
+/**
+ * From a `builtin_chats_list_tickets` result, the linked task-tier tickets this run
+ * reviewed complete in the Studio preview (`previewReview.ticketsReviewedInPreview`)
+ * that are still open. Only tickets linked to THIS chat: a review recorded against some
+ * other ticket id is the model's claim, not this conversation's work.
+ */
+export function linkedTicketsReviewedComplete(listResult: unknown, reviewedTaskIds: readonly number[]): LinkedTicketToAdvance[] {
+  const reviewed = new Set(reviewedTaskIds.map(String));
+  return selectLinkedTasks(listResult, REVIEWED_TASK_STATUSES).filter((ticket) => reviewed.has(ticket.ref));
+}
+
 /** The workspace-relative path a code-change tool touched (for delta provenance),
  *  or null when the args carry no usable `path`. */
 export function codeChangeFile(args: unknown): string | null {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { coerceFileContent } from '@builderforce/ide-file-contract';
 import { canvasBuildActions } from '@/lib/canvasBuildTools';
+import { inspectPreviewAction } from '@/lib/previewProbe/inspectPreviewAction';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
@@ -30,13 +31,16 @@ export interface WorkspaceBrainTargets {
  * Register the workspace's capabilities as Brain tools: the canvas BUILD
  * vocabulary bound to this project (list / read / search / surgical edit — the
  * same implementation the board uses, minus `canvas_create_build`: an open
- * workspace has nothing to create), plus file creation, whole-file apply, AI
+ * workspace has nothing to create), the live-preview review probe that lets the agent
+ * verify its own change, plus file creation, whole-file apply, AI
  * image and video generation for the app's pictures and clips, the voice studio's lines, and the
  * PRD / task generators behind a review.
  */
-export function useWorkspaceBrainActions({ store, projectName, modality, targets, review, media }: {
+export function useWorkspaceBrainActions({ store, projectName, modality, previewUrl, targets, review, media }: {
   /** The open workspace's files — what the build tools read and write. */
   store: WorkspaceFileStore;
+  /** The running preview, while there is one — what `canvas_inspect_preview` measures. */
+  previewUrl: string | undefined;
   projectName: string;
   modality: ProjectModality;
   targets: WorkspaceBrainTargets;
@@ -49,10 +53,10 @@ export function useWorkspaceBrainActions({ store, projectName, modality, targets
 }): void {
   // Specs and tasks belong to a durable project; a browser-held workspace has none.
   const projectId = typeof store.id === 'number' ? store.id : null;
-  const liveRef = useRef({ targets, modality, projectId, review });
+  const liveRef = useRef({ targets, modality, projectId, review, previewUrl });
   // Synced after commit, never during render; a tool runs long after either.
   useEffect(() => {
-    liveRef.current = { targets, modality, projectId, review };
+    liveRef.current = { targets, modality, projectId, review, previewUrl };
   });
 
   const buildToolActions = useMemo<BrainAction[]>(() => canvasBuildActions({
@@ -63,6 +67,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, targets
 
   const actions = useMemo<BrainAction[]>(() => [
     ...buildToolActions,
+    inspectPreviewAction({ previewUrl: () => liveRef.current.previewUrl }),
     generateImageAssetAction(media),
     generateVideoAssetAction(media),
     {

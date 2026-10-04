@@ -207,6 +207,9 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   'canvas_write_build_file',
   'canvas_edit_build_file',
   'canvas_read_build_diagnostics',
+  // Measures the RUNNING preview in a hidden frame of the visitor's own browser
+  // (`lib/previewProbe`). Reads nothing but the app the visitor is already looking at.
+  'canvas_inspect_preview',
 ] as const;
 
 /**
@@ -761,6 +764,17 @@ export const CANVAS_REALIZE_ACCOUNT_GATE = `canvas_realize needs a free Builderf
  * another, and the claim is unreadable without the thing being replaced.
  */
 export const CANVAS_SCREENSHOT_TOOL = 'canvas_capture_screenshot';
+
+/**
+ * The ONE tool that measures the app a workspace is RUNNING — its own preview, at real
+ * device widths — so a layout or visual change can be verified rather than assumed.
+ *
+ * The twin of {@link CANVAS_SCREENSHOT_TOOL} for the other side of the publish line: that
+ * one photographs a page already live on the web; this one reviews the change before it
+ * is. The run loop's Studio review contract reads its `passed` verdict, so the name is
+ * spelled once.
+ */
+export const CANVAS_INSPECT_PREVIEW_TOOL = 'canvas_inspect_preview';
 
 /**
  * Returned to the MODEL when it is about to tell a user the product cannot see, browse,

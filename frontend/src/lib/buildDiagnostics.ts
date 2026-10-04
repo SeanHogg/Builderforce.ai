@@ -36,6 +36,7 @@
 
 import { isWorkspaceId, type WorkspaceId } from '@/lib/workspace/workspaceId';
 import { subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
+import { injectIntoHead } from '@/lib/previewInjection';
 
 /** Where a failure came from. The two have genuinely different fixes. */
 export type BuildFailureSource = 'build' | 'runtime';
@@ -241,14 +242,7 @@ export const PREVIEW_ERROR_REPORTER = `<script>
  * one worth catching, and a reporter added at the end of `<body>` would miss it.
  */
 export function withPreviewErrorReporter(files: Record<string, string>): Record<string, string> {
-  const html = files['index.html'];
-  if (typeof html !== 'string' || !html.includes('<head')) return files;
-  const headEnd = html.indexOf('>', html.indexOf('<head'));
-  if (headEnd === -1) return files;
-  return {
-    ...files,
-    'index.html': `${html.slice(0, headEnd + 1)}\n${PREVIEW_ERROR_REPORTER}${html.slice(headEnd + 1)}`,
-  };
+  return injectIntoHead(files, PREVIEW_ERROR_REPORTER);
 }
 
 /** Parse a `message` event from the preview frame, or null when it is not ours. */

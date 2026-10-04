@@ -47,8 +47,8 @@ import { STOPPED_TURN_STEP, stoppedTurnMetadata } from './stoppedTurn';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
-import { isTicketRecordingTool, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
-import { isCodeChangeTool, canChangeCodeHere, canShipHere, localToolsIn, memoryToolsIn } from './localWorkspaceTools';
+import { isTicketRecordingTool, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete, isReadOnlyPlatformTool, type LinkedTicketToAdvance } from './chatWorkLinking';
+import { isCodeChangeTool, canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from './localWorkspaceTools';
 import { codeChangesOf, isDelegationTool } from './codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from './placeholderGuard';
 import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory, PlaceholderLedger } from './completionGuard';
@@ -57,6 +57,7 @@ import { hasCallMarkup } from './xmlToolCalls';
 import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcomeReport';
 import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
+import { previewReviewDirective, leftChangeUnreviewed, unreviewedChangeNudge, ticketsReviewedInPreview } from './previewReview';
 import { toolActivity, visitTarget, type BrainRunActivity } from './runActivity';
 import { createComposingActivity, toolCallArgBytes } from './composingActivity';
 import { ReadCoverage, isUnscopedMutation, revisitAdvisory, withAdvisory } from './readCoverage';
@@ -1226,7 +1227,18 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     // Evaluated once: it gates ticket completion AND is the reported outcome's `merged`.
     const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
     if (shipped && req.projectId != null && req.runTool) {
-      await completeShippedTickets(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
+      await completeLinkedTickets(chatId, c, req, linkedTicketsToComplete, 'shipped-to-base-branch').catch(() => { /* never fail the run on the backstop */ });
+    }
+    // The Studio's equivalent of a verified push: a "complete" review recorded after a
+    // passing preview inspection of THIS run's last change. Closes exactly the tickets
+    // that were reviewed — the review names its ticket, so nothing else is swept along.
+    const reviewedInPreview = !aborted && c.codeChanged ? ticketsReviewedInPreview(runTrace(c)) : [];
+    if (reviewedInPreview.length && req.projectId != null && req.runTool) {
+      await completeLinkedTickets(
+        chatId, c, req,
+        (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
+        'reviewed-in-preview',
+      ).catch(() => { /* never fail the run on the backstop */ });
     }
     // Teach learned routing how this run's CODER did. Not awaited — a report must
     // never hold the run open or fail it.
@@ -1366,12 +1378,21 @@ async function advanceLinkedTickets(chatId: number, c: RunCell, req: BrainRunReq
  * webhook, which cannot fire for a change pushed straight to the base branch with no
  * pull request, so those tickets sat at 50% on the board permanently.
  *
- * When THIS run pushed to a base branch and verified it landed
- * ({@link shippedToBaseBranch}), the run holds first-hand evidence the work shipped,
- * and is the only thing that ever will. Best-effort and fail-closed: an ambiguous
- * trace leaves the ticket exactly where it was.
+ * Two kinds of first-hand evidence close it, and the run is the only thing that will
+ * ever hold either: THIS run pushed to a base branch and verified it landed
+ * ({@link shippedToBaseBranch}), or — in the Studio, where there is no push — THIS run
+ * recorded a "complete" review after a passing preview inspection of its last change
+ * (`previewReview.ticketsReviewedInPreview`). `select` says which linked tickets the
+ * evidence covers; `reason` rides on the step so the board's history says what closed
+ * it. Best-effort and fail-closed: an ambiguous trace leaves the ticket where it was.
  */
-async function completeShippedTickets(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
+async function completeLinkedTickets(
+  chatId: number,
+  c: RunCell,
+  req: BrainRunRequest,
+  select: (listed: unknown) => LinkedTicketToAdvance[],
+  reason: 'shipped-to-base-branch' | 'reviewed-in-preview',
+): Promise<void> {
   if (!req.runTool) return;
   let listed: unknown;
   try {
@@ -1379,7 +1400,7 @@ async function completeShippedTickets(chatId: number, c: RunCell, req: BrainRunR
   } catch {
     return; // can't read the links — nothing to complete
   }
-  for (const t of linkedTicketsToComplete(listed)) {
+  for (const t of select(listed)) {
     const id = Number(t.ref);
     if (!Number.isInteger(id)) continue;
     const toolStart = nowMs();
@@ -1396,7 +1417,7 @@ async function completeShippedTickets(chatId: number, c: RunCell, req: BrainRunR
       durationMs: nowMs() - toolStart,
       // The REASON rides on the step: a ticket that closed itself must say what
       // closed it, or the board's history reads as an unexplained status change.
-      args: { id, status: 'done', auto: true, reason: 'shipped-to-base-branch' },
+      args: { id, status: 'done', auto: true, reason },
       result: out ?? null,
       isError: isFailedToolResult(out),
     });
@@ -1656,6 +1677,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // Rides both modes: it only binds a turn that changes code.
   const canShip = canShipHere(catalogToolNames);
   if (canShip) systemPrompt = `${systemPrompt}\n\n${selfReviewShipDirective(chatId)}`;
+  // The Studio's twin: its change lives in a preview no one else can reach, so the
+  // session reviews it there and the reviewed tickets close (see `previewReview.ts`).
+  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}\n\n${previewReviewDirective(chatId)}`;
   // The tool work of this chat's earlier turns, which a transcript seeded from history
   // does not carry — so "continue" builds on what was read instead of reading it again.
   if (c.priorResearch) systemPrompt = `${systemPrompt}\n\n${c.priorResearch}`;
@@ -1745,6 +1769,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // One, not a budget: the second time the model stops short it has read the contract
   // twice, and its answer — including "I cannot ship this because…" — is the answer.
   let shipRecoveryUsed = false;
+  let reviewRecoveryUsed = false;
   // One re-prompt per run for a final reply that repeats the previous turn's answer
   // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
   const priorReply = previousReplyText(convo);
@@ -1777,6 +1802,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   const alwaysAdvertised = [
     ...toolNamesMentionedIn(systemPrompt),
     ...localToolsIn(catalogToolNames),
+    // The Studio's workspace vocabulary, including the preview review its contract
+    // requires — empty everywhere but the Studio (see `studioToolsIn`).
+    ...studioToolsIn(catalogToolNames),
     // The project-memory pair (recall before re-reading; remember what was learned) is
     // the cheapest tool in the catalog and the first one relevance would drop.
     ...memoryToolsIn(catalogToolNames),
@@ -2224,6 +2252,31 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           label: 'loop.recover_unshipped_change',
           args: { step: iter, files: c.touchedFiles.slice(0, 20) },
           result: 'Run changed code and ended without committing or pushing it — re-prompted to verify, self-review and ship (this local session is the change\'s only reviewer).',
+        });
+        c.streamingText = '';
+        emit(c);
+        return { action: 'continue' };
+      }
+
+      // The Studio's twin of the gate above: the turn CHANGED the app and is ending without
+      // having inspected the preview and recorded a review. Nobody else can see that
+      // preview, so accepted as-is the change's ticket parks in `in_review` forever. Sent
+      // back once; quiet when the user said not to review, and once a review (complete or
+      // gaps) follows an inspection — a failed check or a gap is a result to report.
+      if (runTool && !reviewRecoveryUsed && leftChangeUnreviewed({
+        codeChanged: c.codeChanged,
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c),
+      })) {
+        reviewRecoveryUsed = true;
+        await requeueWithNudge(unreviewedChangeNudge());
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'loop.recover_unreviewed_change',
+          args: { step: iter, files: c.touchedFiles.slice(0, 20) },
+          result: 'Run changed the app and ended without inspecting the preview and recording a review — re-prompted to verify and review (this Studio session is the change\'s only reviewer).',
         });
         c.streamingText = '';
         emit(c);

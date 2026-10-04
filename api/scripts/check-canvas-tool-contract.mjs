@@ -95,6 +95,9 @@ const CANVAS_FILES = [
   // The prompt library's read-and-version loop. Listed the same day it was written, for
   // the same reason as the two families above.
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasPromptLibraryTools.ts'),
+  // The Studio's live-preview review probe (`canvas_inspect_preview`). Listed the same
+  // day it was written, for the reason the note above `canvasLegalRecordTools.ts` gives.
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'previewProbe', 'inspectPreviewAction.ts'),
 ];
 const CONTRACT_FILE = path.resolve(repoRoot, 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 

@@ -13,6 +13,7 @@ import { buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/s
 import { runProjectChecks, type CheckResult } from '@/lib/browserRuntime/projectChecks';
 import { clearBuildFailures, markBuildSourceChanged, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
 import { withVisualEditor } from '@/lib/visualEditor';
+import { withPreviewProbe } from '@/lib/previewProbe/probeScript';
 import type { FileEntry } from '@/lib/types';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import type { ProjectModality } from '@/lib/modality';
@@ -213,11 +214,12 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
       log.ok('filesReady');
       log.blank();
 
-      // Both overlays go into the MOUNTED copy only — never the files on disk and
+      // The overlays go into the MOUNTED copy only — never the files on disk and
       // never the publish path — so a runtime error inside the preview reaches the
-      // agent, and any element in it can be pointed at, while the user's source and
-      // their published build stay exactly what they wrote.
-      const overlaid = withVisualEditor(withPreviewErrorReporter(mountContents));
+      // agent, any element in it can be pointed at, and the agent can measure it to
+      // review its own change, while the user's source and their published build stay
+      // exactly what they wrote.
+      const overlaid = withPreviewProbe(withVisualEditor(withPreviewErrorReporter(mountContents)));
 
       // Instant preview first: served from memory, no install and no dev server.
       // Projects it cannot serve (a Node server) run their own `npm run dev` below.
