@@ -1,5 +1,19 @@
 [
   {
+    "slug": "make-video-scenes-and-movies-on-the-canvas",
+    "title": "Describe a story, get a movie — video on the canvas",
+    "date": "2026-10-04",
+    "description": "The canvas now turns a sentence into a real video clip, and a story into a planned, rendered and edited short movie. Studio can put generated clips straight into the apps it builds.",
+    "tags": [
+      "creation-canvas",
+      "video",
+      "ai-video",
+      "studio",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "studio-makes-the-images-your-app-needs",
     "title": "Studio makes the images your app needs",
     "date": "2026-10-04",

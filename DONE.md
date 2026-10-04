@@ -1,3 +1,35 @@
+## ✅ RESOLVED 2026-10-04 — Video: clips, planned scenes and movies on the canvas and in Studio (api 2026.10.6 · frontend 2026.10.6)
+
+Request: "Because we generate images, we now need to generate video and scenes and movies." Operator decisions: cheap models first, quality models on Pro; assembly in the browser, plus an offline server render on paid plans; surfaces are canvas scene and video objects, Studio agent tools and canvas Brain tools.
+
+- **Vendors.** `application/llm/mediaVendorRegistry.ts` is ONE interleaved, vendor-prefixed pool, used by both images and video. `imageVendors/registry.ts` was rebuilt on it, which fixes the prefixed-tier bug. `videoVendors/` holds two vendors:
+  - Pollinations: `wan-2.2-fast` (free), `seedance-1-pro-fast` and `veo-3.1-fast` (paid).
+  - Google AI: `veo-3.1-fast-generate-preview` (paid).
+  - `videoModelChainForPlan` returns the free chain or the paid chain.
+- **Jobs.** A clip takes from 30 s to minutes, so `/llm/v1/videos/{generations,renders}` returns 202 with a job id, and `GET /jobs/:id` reports status.
+  - `MediaJobDO` advances `advanceMediaJob` on its own alarm, with a 20-minute deadline. It stores the result in tenant R2 and logs usage per second.
+  - Another tenant's job reads as 404.
+- **Credits.** The credit gate is shared by image and video (`presentation/routes/mediaCreditGate.ts`, `application/llm/mediaCredits.ts`). Video is billed in seconds against `videoSecondsDailyLimit`: free 15, pro 120, teams 600. The gate reserves the longest clip any model in the chain could bill.
+- **Server render.** `serverVideoRender` is a new plan feature: free false, Pro and Teams true. It gates `POST /renders` with a 402 through `featureGateBody`.
+  - `MediaRenderContainerDO` is an ffmpeg container (`api/media-render/`). It takes a request built by `buildMovieRenderRequest`, which only accepts tenant-owned asset keys and SSRF-checked URLs.
+  - In the canvas, `ServerMovieRenderButton` sits next to the browser export and renders null without the feature. `useServerMovieRender` keeps the job id on the `video` object (`serverRenderJobId`), so the render outlives the tab and the next visit lands the MP4.
+- **Canvas scene.**
+  - The `CanvasSceneSpec` contract gained `engine` (cloud/device), `aspectRatio`, `storyboard`, `shots` and `canvasSceneMovie`.
+  - The scene panel is split into `scene/SceneCloudBody`, `SceneDeviceBody` and `SceneShotList`, with orchestration in `hooks/useCloudScene`.
+  - Shots are planned by the studio planner (`lib/sceneStoryboard`) and rendered three at a time (`lib/sceneRendering`), resuming in-flight jobs. "Make movie" lands a `video` object on the timeline editor.
+- **Brain and Studio.**
+  - `canvas_add_video` and `canvas_create_scene` (`actions/video.ts`) are guest-gated (`canvasVideoTools.ts`), and the PICTURES block of the canvas prompt names them.
+  - The Studio agent has `generate_video_asset`.
+  - `check-canvas-tool-contract.mjs` now resolves tool-name constants from every contract module, not only `canvasTools.ts`.
+- **i18n.** `creationCanvas.scene.*`, `videoEditor.*` (server render), `gateVideo*` and `video.*` are in all five catalogs.
+- **Shipped with:** release note migration `1195` and the blog post `make-video-scenes-and-movies-on-the-canvas`.
+- **Verified (targeted):**
+  - api type-check plus all 37 `npm run check` guards.
+  - api vitest: 13 files, 225 tests.
+  - Contract `scene.test.ts`.
+  - Frontend typecheck plus `check:i18n-keys`.
+  - Frontend vitest: 8 files, 38 tests, including the new `videoGenerationApi`, `sceneStoryboard`, `sceneRendering`, `useServerMovieRender`, `actions/video` and `generateVideoAssetAction` tests.
+
 ## ✅ RESOLVED 2026-10-04 — The Creation Canvas god files are split, and the Brain's 68 canvas tools are no longer rebuilt on every edit
 
 Gap Register entry "Codebase review 2026-09-05 — `CreationCanvas.tsx` is 13,857 lines and its size ratchet cannot see it grow".
