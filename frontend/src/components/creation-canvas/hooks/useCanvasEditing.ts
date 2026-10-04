@@ -191,7 +191,7 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
     const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
     const shouldLock = nodes.some((node) => ids.has(node.id) && canvasPlacementUnlocked(node));
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, ...canvasPlacementFlags(shouldLock), data: { ...node.data, placementLocked: shouldLock } } : node));
-    setNotice(shouldLock ? 'Object placement locked' : t('noticePlacementUnlocked'));
+    setNotice(t(shouldLock ? 'noticePlacementLocked' : 'noticePlacementUnlocked'));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
   const toggleHidden = useCallback(() => {
@@ -199,7 +199,7 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
     const shouldHide = nodes.some((node) => ids.has(node.id) && node.data.placementHidden !== true);
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, hidden: shouldHide, data: { ...node.data, placementHidden: shouldHide } } : node));
     if (shouldHide) { setSelectedId(null); setSelectedIds([]); }
-    setNotice(shouldHide ? 'Objects hidden from the canvas' : t('noticeObjectsShown'));
+    setNotice(t(shouldHide ? 'noticeObjectsHidden' : 'noticeObjectsShown'));
   }, [canEdit, nodes, selectionIds, setNodes]);
   return { selectionIds, redo, undo, deleteObjects, duplicateSelection, copySelection, pasteSelection, openFrame, deleteNodeFromCard, alignSelection, frameSelection, togglePlacementLock, toggleHidden, deleteSelection, exitFrame };
 }

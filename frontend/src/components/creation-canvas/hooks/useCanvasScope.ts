@@ -64,10 +64,10 @@ export function useCanvasScope({ edges, journal, nodes, scopeMode, selectedId, s
     return selected;
   }, [edges, effectiveSelectedIds, nodes, resolvedScopeMode, selectedNode]);
   const scopeLabel = resolvedScopeMode === 'canvas' ? t('entireCanvas')
-    : resolvedScopeMode === 'connected' ? `Connected objects (${scopedNodeIds.size})`
-      : resolvedScopeMode === 'frame' ? `Current frame: ${selectedNode?.data.title || 'Frame'}`
-        : effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects`
-          : selectedNode ? `Selected: ${selectedNode.data.title}` : t('entireCanvas');
+    : resolvedScopeMode === 'connected' ? t('scopeLabelConnected', { count: scopedNodeIds.size })
+      : resolvedScopeMode === 'frame' ? t('scopeLabelFrame', { title: selectedNode?.data.title || t('frame') })
+        : effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length })
+          : selectedNode ? t('scopeLabelSelected', { title: selectedNode.data.title }) : t('entireCanvas');
   const scopedNodes = useMemo(() => nodes.filter((node) => scopedNodeIds.has(node.id)), [nodes, scopedNodeIds]);
 
   /**

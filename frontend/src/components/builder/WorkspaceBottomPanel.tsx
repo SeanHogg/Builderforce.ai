@@ -6,6 +6,7 @@ import { Terminal } from '@/components/Terminal';
 import { useWorkspaceCommands, type BottomPanelTab } from '@/lib/workspace/workspaceCommands';
 import { ProblemsPanel } from './ProblemsPanel';
 import { useBuildFailures } from './useBuildFailures';
+import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 
 const EXPANDED_HEIGHT = 240;
 const COLLAPSED_HEIGHT = 36;
@@ -22,7 +23,7 @@ const COLLAPSED_HEIGHT = 36;
  * controls (the checks) on the right of that bar.
  */
 export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInput, onOutputReady, status }: {
-  projectId: number;
+  projectId: WorkspaceId;
   onTerminalReady: (write: (data: string) => void) => void;
   onTerminalInput: (data: string) => void;
   onOutputReady: (write: (data: string) => void) => void;

@@ -34,6 +34,8 @@
  * does not.
  */
 
+import { isWorkspaceId, type WorkspaceId } from '@/lib/workspace/workspaceId';
+
 /** Where a failure came from. The two have genuinely different fixes. */
 export type BuildFailureSource = 'build' | 'runtime';
 
@@ -66,12 +68,12 @@ export const MAX_DETAIL_CHARS = 4_000;
 /** What a caller reports. The store owns the timestamps and the collapsing. */
 export type BuildFailureInput = Omit<BuildFailure, 'firstSeen' | 'lastSeen' | 'count'>;
 
-type Listener = (storageProjectId: number) => void;
+type Listener = (workspaceId: WorkspaceId) => void;
 
-const failures = new Map<number, BuildFailure[]>();
+const failures = new Map<WorkspaceId, BuildFailure[]>();
 const listeners = new Set<Listener>();
 
-function notify(storageProjectId: number): void {
+function notify(storageProjectId: WorkspaceId): void {
   for (const listener of listeners) {
     try {
       listener(storageProjectId);
@@ -102,8 +104,8 @@ function sameFailure(a: BuildFailure, b: BuildFailureInput): boolean {
  * newest entry's count rather than appending, so a render loop cannot flood the
  * buffer out of usefulness.
  */
-export function recordBuildFailure(storageProjectId: number, input: BuildFailureInput): void {
-  if (!Number.isInteger(storageProjectId) || storageProjectId <= 0) return;
+export function recordBuildFailure(storageProjectId: WorkspaceId, input: BuildFailureInput): void {
+  if (!isWorkspaceId(storageProjectId)) return;
   const message = input.message?.trim();
   if (!message) return;
 
@@ -131,7 +133,7 @@ export function recordBuildFailure(storageProjectId: number, input: BuildFailure
 }
 
 /** Every failure recorded against a build, oldest first. */
-export function readBuildFailures(storageProjectId: number): BuildFailure[] {
+export function readBuildFailures(storageProjectId: WorkspaceId): BuildFailure[] {
   return (failures.get(storageProjectId) ?? []).map((failure) => ({ ...failure }));
 }
 
@@ -142,7 +144,7 @@ export function readBuildFailures(storageProjectId: number): BuildFailure[] {
  * the last one should not be judged against the previous attempt's errors, and a
  * run that fails the same way immediately re-records.
  */
-export function clearBuildFailures(storageProjectId: number): void {
+export function clearBuildFailures(storageProjectId: WorkspaceId): void {
   if (!failures.has(storageProjectId)) return;
   failures.delete(storageProjectId);
   notify(storageProjectId);
@@ -275,7 +277,7 @@ export function teeOutput(onData: (data: string) => void): { write: (data: strin
  * Returns null when there is nothing wrong — callers use that to decide whether
  * there is anything to repair at all.
  */
-export function formatBuildFailures(storageProjectId: number): string | null {
+export function formatBuildFailures(storageProjectId: WorkspaceId): string | null {
   const list = readBuildFailures(storageProjectId);
   if (!list.length) return null;
   return list

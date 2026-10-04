@@ -42,14 +42,14 @@
  */
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
-import { fetchFiles, fetchFileContent, fetchFileHistory, restoreFileVersion, saveFile } from '@/lib/api';
 import { coerceFileContent, validateFileContentForPath } from '@builderforce/ide-file-contract';
 // The ONE symbol extractor (shared with the editor's and on-prem's definition index);
 // imported by subpath so the canvas bundle carries the extractor, not the tool catalog.
 import { exportedSymbols } from '@builderforce/agent-tools/symbols';
 import { formatBuildFailures } from '@/lib/buildDiagnostics';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
-import type { CanvasBuildBinding } from '@/lib/canvasBuild';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
+import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
 /** A Builder object on the board that has a workspace behind it. */
@@ -57,7 +57,13 @@ export interface BoundCanvasBuild {
   /** Canvas object id. */
   objectId: string;
   title: string;
-  binding: CanvasBuildBinding;
+  modality: ProjectModality;
+  /**
+   * Where its files live: the durable storage project, or — for a board with no account
+   * yet — this browser. Every tool reads and writes through it, so the same vocabulary
+   * builds a guest's app and a tenant's.
+   */
+  store: WorkspaceFileStore;
 }
 
 export interface CanvasBuildToolsContext {
@@ -81,7 +87,7 @@ export interface CanvasBuildToolsContext {
    * Tell the host a file changed underneath it, so an open workspace panel
    * re-reads it instead of showing a stale editor buffer over new content.
    */
-  onFilesChanged?: (storageProjectId: number, paths: string[]) => void;
+  onFilesChanged?: (workspaceId: WorkspaceId, paths: string[]) => void;
 }
 
 /** Modalities that have a code workspace. The generative studios do not. */
@@ -89,6 +95,9 @@ const BUILDABLE_MODALITIES: ProjectModality[] = ['designer', 'mobile', 'webmobil
 
 /** Files whose content is never useful to a model and costly to page through. */
 const SKIP_DIRECTORIES = ['node_modules/', 'dist/', '.git/'];
+
+/** What the history tools answer for a workspace held in this browser, which keeps none. */
+const NO_HISTORY = 'This workspace is held in this browser and keeps no file history yet. Saving the board to an account turns on history and restore.';
 
 /** Read cap for one `canvas_read_build_file` call. */
 export const MAX_READ_CHARS = 100_000;
@@ -237,8 +246,8 @@ export function summarizeWorkspace(files: { path: string; content: string }[]): 
  */
 export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] {
   /** Files worth showing a model: the workspace minus build output and deps. */
-  const workspaceFiles = async (storageProjectId: number) => {
-    const entries = await fetchFiles(storageProjectId);
+  const workspaceFiles = async (store: WorkspaceFileStore) => {
+    const entries = await store.list();
     return entries.filter((entry) => entry.type !== 'directory' && !isSkipped(entry.path));
   };
 
@@ -267,7 +276,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
           : 'designer';
         try {
           const build = await ctx.createBuild({ title, modality });
-          const files = await workspaceFiles(build.binding.storageProjectId).catch(() => []);
+          const files = await workspaceFiles(build.store).catch(() => []);
           return {
             ok: true,
             applied: true,
@@ -293,11 +302,11 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
         try {
-          const files = await workspaceFiles(resolved.build.binding.storageProjectId);
+          const files = await workspaceFiles(resolved.build.store);
           return {
             ok: true,
             objectId: resolved.build.objectId,
-            modality: resolved.build.binding.modality,
+            modality: resolved.build.modality,
             fileCount: files.length,
             map: summarizeWorkspace(files),
           };
@@ -323,7 +332,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
         try {
-          const content = await fetchFileContent(resolved.build.binding.storageProjectId, path);
+          const content = await resolved.build.store.read(path);
           return {
             ok: true,
             path,
@@ -353,7 +362,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
         try {
-          const files = await workspaceFiles(resolved.build.binding.storageProjectId);
+          const files = await workspaceFiles(resolved.build.store);
           const matches: { path: string; line: number; text: string }[] = [];
           for (const file of files) {
             matches.push(...searchFileLines(file.path, file.content, query, args.caseSensitive === true));
@@ -394,8 +403,8 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const valid = validateFileContentForPath(path, content);
         if (!valid.ok) return { error: valid.reason };
         try {
-          await saveFile(resolved.build.binding.storageProjectId, path, content);
-          ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
+          await resolved.build.store.write(path, content);
+          ctx.onFilesChanged?.(resolved.build.store.id, [path]);
           return { ok: true, applied: true, path, bytes: content.length };
         } catch (error) {
           return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
@@ -425,7 +434,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
 
         let source: string;
         try {
-          source = await fetchFileContent(resolved.build.binding.storageProjectId, path);
+          source = await resolved.build.store.read(path);
         } catch {
           return { error: `No file "${path}" in this workspace. Use canvas_write_build_file to create it.` };
         }
@@ -439,8 +448,8 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const valid = validateFileContentForPath(path, edit.next);
         if (!valid.ok) return { error: valid.reason };
         try {
-          await saveFile(resolved.build.binding.storageProjectId, path, edit.next);
-          ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
+          await resolved.build.store.write(path, edit.next);
+          ctx.onFilesChanged?.(resolved.build.store.id, [path]);
           return { ok: true, applied: true, path, replacements: edit.replacements };
         } catch (error) {
           return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
@@ -458,7 +467,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const args = raw as { objectId?: unknown };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
-        const report = formatBuildFailures(resolved.build.binding.storageProjectId);
+        const report = formatBuildFailures(resolved.build.store.id);
         if (!report) {
           return {
             ok: true,
@@ -483,11 +492,10 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const args = raw as { path?: unknown; objectId?: unknown };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
+        const { history } = resolved.build.store;
+        if (!history) return { error: NO_HISTORY };
         try {
-          const versions = await fetchFileHistory(
-            resolved.build.binding.storageProjectId,
-            workspacePathArg(args.path) || undefined,
-          );
+          const versions = await history(workspacePathArg(args.path) || undefined);
           return {
             ok: true,
             versions: versions.map((version) => ({
@@ -521,9 +529,11 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         if (!path || !Number.isFinite(at)) return { error: 'path and at are both required. Call canvas_list_build_file_history first.' };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
+        const { restore } = resolved.build.store;
+        if (!restore) return { error: NO_HISTORY };
         try {
-          await restoreFileVersion(resolved.build.binding.storageProjectId, path, at);
-          ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
+          await restore(path, at);
+          ctx.onFilesChanged?.(resolved.build.store.id, [path]);
           return { ok: true, applied: true, path, restoredFrom: new Date(at).toISOString() };
         } catch (error) {
           return { error: toolErrorMessage(error, `"${path}" could not be restored.`) };

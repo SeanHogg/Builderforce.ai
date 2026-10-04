@@ -10,6 +10,7 @@ import { PointAndEditPanel } from './PointAndEditPanel';
 import type { PointAndEdit } from './usePointAndEdit';
 import type { RunPhase, RunStep } from './useWorkspaceRun';
 import styles from './workspaceChrome.module.css';
+import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 
 /**
  * How a project type frames its preview:
@@ -33,7 +34,7 @@ const SIZES: ReadonlyArray<{ id: PreviewSize; icon: IconName; width: string }> =
  * what is happening. The app gets every pixel the toolbar does not use.
  */
 export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, edit, framing, onOpenDevicePanel }: {
-  projectId: number;
+  projectId: WorkspaceId;
   url: string | undefined;
   phase: RunPhase;
   step: RunStep | null;

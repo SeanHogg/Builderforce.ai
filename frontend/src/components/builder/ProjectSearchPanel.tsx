@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { searchProjectFiles, type ProjectSearchMatch } from '@/lib/api';
+import type { ProjectSearchMatch } from '@/lib/api';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import { faultMessage } from '@/lib/apiClient';
 import { requestEditorReveal } from '@/lib/workspace/editorReveal';
 
@@ -13,7 +14,7 @@ const DEBOUNCE_MS = 300;
  * Search every file in the project and jump to a hit. Results are grouped by
  * file; choosing one opens the file at that line.
  */
-export function ProjectSearchPanel({ projectId, onOpenFile }: { projectId: number; onOpenFile: (path: string) => void }) {
+export function ProjectSearchPanel({ store, onOpenFile }: { store: WorkspaceFileStore; onOpenFile: (path: string) => void }) {
   const t = useTranslations('builderSearch');
   const inputId = useId();
   const [query, setQuery] = useState('');
@@ -33,7 +34,7 @@ export function ProjectSearchPanel({ projectId, onOpenFile }: { projectId: numbe
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setBusy(true);
-      searchProjectFiles(projectId, trimmed)
+      store.search(trimmed)
         .then((result) => {
           if (cancelled) return;
           setMatches(result.matches);
@@ -44,7 +45,7 @@ export function ProjectSearchPanel({ projectId, onOpenFile }: { projectId: numbe
         .finally(() => { if (!cancelled) setBusy(false); });
     }, DEBOUNCE_MS);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [query, projectId, t]);
+  }, [query, store, t]);
 
   const byFile = useMemo(() => {
     const groups = new Map<string, ProjectSearchMatch[]>();

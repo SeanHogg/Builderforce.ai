@@ -1,40 +1,28 @@
 /**
- * The APP a canvas session is — the projection behind the `app` surface.
+ * The board's code, read as files — what the App surface brings into the session's app.
  *
  * ── THE GAP THIS CLOSES ──────────────────────────────────────────────────────────
- * Every other runtime surface is `scope: 'object'`: a résumé is a page, a build is a
- * running frame, an edit is a set of tracks, and each of them is ONE card opened at full
- * size. An application is not shaped like that. Ask Brain for an SMS sender and what
- * lands is `backend/server.js`, `frontend/index.html` and a rendered page — three cards
- * that are one artifact, matching no surface at all, with nothing on the canvas able to
- * run them.
+ * Ask Brain for an SMS sender on the board and what lands is `backend/server.js`,
+ * `frontend/index.html` and a rendered page — three cards that are one artifact. The App
+ * surface runs the session's real project (`canvasSessionApp.ts`), and these cards become
+ * its files: silently, on open, every time a card is new or has changed since it was last
+ * brought in. So a card Brain writes on the board and a file Brain writes into the
+ * workspace end up running in the same app.
  *
- * So this is the first canvas derivation that reads MANY objects as one thing. It is a
- * pure function of the nodes for the same reason `canvasFiles` is: the surface, a test
- * and (later) a build export all have to agree about what the app IS, and three readers
+ * It is a pure function of the nodes for the same reason `canvasFiles` is: the surface,
+ * the importer and a test have to agree about which cards ARE files, and three readers
  * re-deriving that from `data.kind` checks is three places for it to drift.
  *
- * ── WHY A DOCUMENT AND NOT A DEV SERVER ──────────────────────────────────────────
- * `BuilderWorkspace` already has a real WebContainer dev server, and a Builder object
- * bound to a storage project already opens it (`CanvasBuildPanel`). Loose code cards have
- * no project to bind, so the honest thing a browser can run for them is the FRONT END:
- * the entry page with its own stylesheets and scripts inlined, in an opaque-origin frame.
- *
- * That is a real preview, not a mock — and the half it cannot run is not hidden. Server
- * files are separated out by `role`, `CANVAS_PREVIEW_REPORTER` reports every call the
- * page makes to a host that is not there, and the surface says so in words. A preview
- * that silently swallowed those calls would be worse than no preview: the user would
- * conclude their Twilio credentials were wrong.
- *
- * That reporter is NOT declared here any more. It is the same wire a live `browser` card
- * needs, so it lives in `canvasPreviewReport.ts` with the message contract both readers
- * decode — see that module for why one framed page's console must not reach another's.
+ * ── WHY ROLES SURVIVE ────────────────────────────────────────────────────────────
+ * The surface used to run these cards as one inlined document in an opaque frame, where
+ * a server file could only be named, never run. The project runtime CAN run a Node
+ * server, so nothing is filtered out by role any more; the role still decides which page
+ * is the entry the preview opens.
  */
 
 import { robloxScriptsFrom, slugify } from '@builderforce/creation-canvas-contract';
 import { gameDocumentFromUrl, robloxPlaceFromUrl } from './gameTargets';
 import { canvasWebsiteDocument } from './canvasWebsite';
-import { CANVAS_PREVIEW_REPORTER } from './canvasPreviewReport';
 
 export type CanvasAppFileRole = 'page' | 'style' | 'script' | 'server' | 'config' | 'other';
 
@@ -46,33 +34,6 @@ export interface CanvasAppFile {
   source: string;
   role: CanvasAppFileRole;
 }
-
-export interface CanvasApp {
-  files: readonly CanvasAppFile[];
-  /** The page the preview runs. Null when the session holds no renderable entry. */
-  entry: CanvasAppFile | null;
-  /** The single document the frame runs, with siblings inlined. Null without an entry. */
-  document: string | null;
-  /** The files that need a host. A frame cannot run these, and pretending otherwise
-   *  is how a working preview convinces somebody their API keys are broken. */
-  server: readonly CanvasAppFile[];
-}
-
-/**
- * The sandbox the preview frame runs under.
- *
- * `allow-scripts` WITHOUT `allow-same-origin`, which is the same load-bearing rule the
- * game frame follows (`GAME_FRAME_SANDBOX`): granting both lets a frame reach this page's
- * cookies, storage, session token and DOM, and lets it drop its own sandbox — together
- * they are equivalent to no sandbox at all. The capability sets differ because the
- * runtimes differ (a game wants pointer lock; an app wants its form to submit), so this
- * is a second CONTRACT rather than a second copy — and the invariant they share is
- * asserted by a test on each of them rather than by a comment on one.
- *
- * The document goes in through `srcDoc`, never a blob URL: a blob inherits this page's
- * origin and would quietly undo the isolation.
- */
-export const CANVAS_APP_FRAME_SANDBOX = 'allow-scripts allow-forms allow-modals';
 
 const PAGE_EXT = /\.html?$/i;
 const STYLE_EXT = /\.(css|scss|sass|less)$/i;
@@ -95,45 +56,6 @@ function roleFor(path: string, source: string): CanvasAppFileRole {
   if (SCRIPT_EXT.test(path)) return SERVER_MARKERS.test(source) ? 'server' : 'script';
   if (CONFIG_EXT.test(path)) return 'config';
   return 'other';
-}
-
-/** The directory part of a path, `''` at the root. */
-function dirOf(path: string): string {
-  const cut = path.lastIndexOf('/');
-  return cut < 0 ? '' : path.slice(0, cut + 1);
-}
-
-/** Resolve `./x`, `../x` and `/x` against a directory, without a URL base. */
-function resolvePath(from: string, href: string): string {
-  const raw = href.trim().replace(/^\.\//, '');
-  if (!raw) return '';
-  const base = raw.startsWith('/') ? '' : from;
-  const parts: string[] = [];
-  for (const segment of `${base}${raw.replace(/^\//, '')}`.split('/')) {
-    if (!segment || segment === '.') continue;
-    if (segment === '..') { parts.pop(); continue; }
-    parts.push(segment);
-  }
-  return parts.join('/');
-}
-
-/**
- * The file a page's `href`/`src` means.
- *
- * Resolved properly first, then by basename. The fallback is not sloppiness: cards carry
- * whatever path Brain wrote on them, and `frontend/index.html` asking for `styles.css`
- * when the card is `frontend/css/styles.css` is a mismatch between two model-authored
- * strings, not a decision the author made. Falling back to the basename renders the page
- * the author meant; failing to would show them an unstyled document and no reason why.
- */
-function fileFor(files: readonly CanvasAppFile[], fromDir: string, href: string): CanvasAppFile | null {
-  if (/^(https?:)?\/\/|^data:/i.test(href.trim())) return null;
-  const resolved = resolvePath(fromDir, href);
-  const exact = files.find((file) => file.path === resolved);
-  if (exact) return exact;
-  const base = resolved.slice(resolved.lastIndexOf('/') + 1).toLowerCase();
-  if (!base) return null;
-  return files.find((file) => file.path.slice(file.path.lastIndexOf('/') + 1).toLowerCase() === base) ?? null;
 }
 
 /** A filename from a title with nothing a path segment cannot hold. */
@@ -232,75 +154,4 @@ export function canvasAppEntry(files: readonly CanvasAppFile[]): CanvasAppFile |
   const pages = files.filter((file) => file.role === 'page');
   const index = pages.find((file) => /(^|\/)index\.html?$/i.test(file.path));
   return index ?? pages[0] ?? null;
-}
-
-/** Escape a source so it cannot terminate the `<script>` element it is inlined into. */
-function safeScript(source: string): string {
-  return source.replace(/<\/(script)/gi, '<\\/$1');
-}
-
-/**
- * The one document the frame runs.
- *
- * Siblings are INLINED rather than left as relative references because the frame has no
- * origin to resolve them against — a `<link href="styles.css">` inside a `srcDoc` resolves
- * against this app's own URL and 404s, which is how a preview shows a correct page with
- * none of its styling and no explanation.
- */
-export function canvasAppDocument(files: readonly CanvasAppFile[], entry: CanvasAppFile | null): string | null {
-  if (!entry) return null;
-  const dir = dirOf(entry.path);
-  let html = entry.source;
-
-  html = html.replace(
-    /<link\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi,
-    (tag, href: string) => {
-      if (!/rel\s*=\s*["']?stylesheet/i.test(tag)) return tag;
-      const file = fileFor(files, dir, href);
-      return file ? `<style>\n${file.source}\n</style>` : tag;
-    },
-  );
-
-  html = html.replace(
-    /<script\b([^>]*)\bsrc\s*=\s*["']([^"']+)["']([^>]*)>\s*<\/script>/gi,
-    (tag, before: string, src: string, after: string) => {
-      const file = fileFor(files, dir, src);
-      if (!file) return tag;
-      const attrs = `${before} ${after}`.replace(/\s+/g, ' ').trim();
-      const type = /\btype\s*=\s*["']module["']/i.test(attrs) ? ' type="module"' : '';
-      return `<script${type}>\n${safeScript(file.source)}\n</script>`;
-    },
-  );
-
-  // A fragment is still a page a person wants to look at. Wrapping it is what lets a
-  // card holding only a `<form>` render at all instead of inheriting the frame's defaults.
-  if (!/<html[\s>]/i.test(html) && !/<!doctype/i.test(html)) {
-    html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>\n${html}\n</body></html>`;
-  }
-
-  // First thing in the document, whatever the page's own shape is.
-  const head = html.match(/<head[^>]*>/i);
-  return head
-    ? html.replace(head[0], `${head[0]}${CANVAS_PREVIEW_REPORTER}`)
-    : `${CANVAS_PREVIEW_REPORTER}${html}`;
-}
-
-/**
- * The session read as one application.
- *
- * Returns an app with an empty file list rather than null when there is nothing to run:
- * the surface has something true to say in that case ("no code on this board yet"), and
- * a null would push that decision back onto every caller.
- */
-export function canvasApp(
-  nodes: ReadonlyArray<{ id: string; data: { [key: string]: unknown; kind: string } }>,
-): CanvasApp {
-  const files = canvasAppFiles(nodes);
-  const entry = canvasAppEntry(files);
-  return {
-    files,
-    entry,
-    document: canvasAppDocument(files, entry),
-    server: files.filter((file) => file.role === 'server'),
-  };
 }

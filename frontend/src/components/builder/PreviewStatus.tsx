@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 import type { RunStep } from './useWorkspaceRun';
 import styles from './workspaceChrome.module.css';
+import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 
 export type PreviewStatusState = 'starting' | 'failed' | 'blocked' | 'empty';
 
@@ -21,7 +22,7 @@ const STEPS: readonly RunStep[] = ['preparing', 'installing', 'starting'];
 export function PreviewStatus({ state, step, projectId, onRetry }: {
   state: PreviewStatusState;
   step: RunStep | null;
-  projectId: number;
+  projectId: WorkspaceId;
   onRetry: () => void;
 }) {
   const t = useTranslations('ide.workspace');

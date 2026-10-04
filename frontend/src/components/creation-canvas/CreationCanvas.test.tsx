@@ -17,12 +17,19 @@ import type { CreationFlowNode } from './CreationNode';
 import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
+import { AUTHORED_EVALUATION, answerCanvasTurns, canvasTurnRunner, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
 
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
   (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
 ));
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
+
+// The model call is the ONE thing replaced in a Brain turn here — see `canvasTurnRunnerMock`.
+// Every turn stays in flight unless a test answers it, so nothing leaves jsdom.
+vi.mock('@/lib/creationCanvasAi', async (importOriginal) => (await import('@/test/canvasTurnRunnerMock')).canvasTurnRunnerModule(
+  await importOriginal<typeof import('@/lib/creationCanvasAi')>(),
+));
 
 /**
  * This whole file is written against an ANONYMOUS canvas — every account-gate
@@ -447,14 +454,17 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     writeSectionTourHistory(CREATION_CANVAS_TOUR.sectionId, 'guest', { ...CREATION_CANVAS_TOUR, visits: 1, outcome: 'dismissed' });
     capture.failWith = null;
     for (const spy of Object.values(toasts)) spy.mockClear();
+    holdCanvasTurns();
   });
 
   it('automatically executes the prompt carried from the homepage', async () => {
+    answerCanvasTurns('Here is the launch roadmap outline.');
     const sessionId = createLocalCreationSession('Create a roadmap for the launch');
 
     render(<CreationCanvas sessionId={sessionId} persistence="local" />);
 
-    await waitFor(() => expect(screen.getAllByText('Sales presentation roadmap').length).toBeGreaterThan(0));
+    await waitFor(() => expect(canvasTurnRunner).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Create a roadmap for the launch' })));
+    await waitFor(() => expect(screen.getAllByText('Here is the launch roadmap outline.').length).toBeGreaterThan(0));
   });
 
   it('files undo and redo under Make, with the composer that leads it', () => {
@@ -1409,13 +1419,20 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.queryByTestId('canvas-picker-workflow')).not.toBeInTheDocument();
   });
 
+  // The turn's model call is mocked; everything after it is real. The evaluation goes
+  // through the board's own `canvas_add_object` tool, the proposal stage and auto-apply,
+  // and the notice asserted is the one a user actually sees when that lands.
   it('turns an AI request into a connected evaluation object', async () => {
+    answerCanvasTurns('I evaluated the board and added the evaluation.', { object: AUTHORED_EVALUATION });
     render(<CreationCanvas sessionId="evaluation-test" persistence="local" />);
 
     fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Evaluate the selected canvas objects' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
-    await waitFor(() => expect(screen.getByDisplayValue('Canvas evaluation')).toBeInTheDocument());
-    expect(screen.getByText('Evaluation added to canvas')).toBeInTheDocument();
+    const evaluation = await screen.findByTestId('canvas-node-evaluation');
+    await waitFor(() => expect(screen.getByText('1 reviewed Brain changes applied')).toBeInTheDocument());
+    // Connected: applying a Brain change associates the Brain with what it made.
+    const evaluationId = evaluation.getAttribute('data-node-id')!;
+    expect(screen.getByTestId('flow').getAttribute('data-edge-pairs')!.split(',').some((pair) => pair.split(':').includes(evaluationId))).toBe(true);
   });
 
   it('expands optional project context into related live objects', () => {
@@ -1429,11 +1446,13 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.getByDisplayValue('BuilderForce launch')).toBeInTheDocument();
   });
 
-  it('creates feature mockups and dispatches their delivery from the session', async () => {
+  // About DELIVERY: the mockup set is placed straight on the board, not conjured from a
+  // prompt — how it got there is not what this asserts.
+  it('dispatches a mockup set’s delivery from the session', async () => {
     render(<CreationCanvas sessionId="feature-test" persistence="local" />);
-    fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Create a visual summary of the top 10 requested features and mockups' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
-    await waitFor(() => expect(screen.getByDisplayValue('Top 10 feature mockups')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-mockupSet'));
+    await waitFor(() => expect(screen.getByDisplayValue('Feature mockup set')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Add to project and assign' }));
     expect(screen.getByRole('dialog', { name: 'Create an account to deliver this mockup' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Create a free account' })).toBeInTheDocument();

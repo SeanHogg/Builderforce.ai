@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { RightTab } from '@/lib/modality';
+import type { WorkspaceId } from './workspaceId';
 
 /**
  * Things a surface AROUND the Builder workspace may ask it to do: the Studio
@@ -23,16 +24,16 @@ const EVENT = 'bf:workspace-command';
 const bus = typeof EventTarget === 'undefined' ? null : new EventTarget();
 
 interface Envelope {
-  projectId: number;
+  projectId: WorkspaceId;
   command: WorkspaceCommand;
 }
 
-export function sendWorkspaceCommand(projectId: number, command: WorkspaceCommand): void {
+export function sendWorkspaceCommand(projectId: WorkspaceId, command: WorkspaceCommand): void {
   bus?.dispatchEvent(new CustomEvent<Envelope>(EVENT, { detail: { projectId, command } }));
 }
 
 /** Handle commands addressed to the workspace of `projectId`. */
-export function useWorkspaceCommands(projectId: number, handle: (command: WorkspaceCommand) => void): void {
+export function useWorkspaceCommands(projectId: WorkspaceId, handle: (command: WorkspaceCommand) => void): void {
   const handleRef = useRef(handle);
   useEffect(() => {
     handleRef.current = handle;

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslations } from 'next-intl';
-import { saveFile, fetchFileContent } from '@/lib/api';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { previewErrorFrom, recordBuildFailure } from '@/lib/buildDiagnostics';
 import {
@@ -13,6 +12,7 @@ import {
   type VisualSelection,
 } from '@/lib/visualEditor';
 import { faultMessage } from '@/lib/apiClient';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 
 export interface PointAndEditDraft {
   text: string;
@@ -34,8 +34,8 @@ export interface PointAndEditDraft {
  * Both are namespaced, and the payload is only ever read as strings, so a
  * hostile sender's best case is a spurious diagnostic line.
  */
-export function usePointAndEdit({ projectId, previewUrl, writePreviewFile, setFileContents }: {
-  projectId: number;
+export function usePointAndEdit({ store, previewUrl, writePreviewFile, setFileContents }: {
+  store: WorkspaceFileStore;
   previewUrl: string | undefined;
   writePreviewFile: (path: string, contents: string) => Promise<void>;
   setFileContents: Dispatch<SetStateAction<Record<string, string>>>;
@@ -52,13 +52,13 @@ export function usePointAndEdit({ projectId, previewUrl, writePreviewFile, setFi
     if (!previewUrl) return undefined;
     const onMessage = (event: MessageEvent) => {
       const failure = previewErrorFrom(event.data);
-      if (failure) { recordBuildFailure(projectId, failure); return; }
+      if (failure) { recordBuildFailure(store.id, failure); return; }
       const selected = visualSelectionFrom(event.data);
       if (selected) { setSelection(selected); setDraft({ text: selected.text ?? '', className: selected.className }); }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [previewUrl, projectId]);
+  }, [previewUrl, store.id]);
 
   const arm = useCallback((next: boolean) => {
     setArmed(next);
@@ -81,7 +81,7 @@ export function usePointAndEdit({ projectId, previewUrl, writePreviewFile, setFi
     if (!selection) return;
     setError(null);
     try {
-      let content = await fetchFileContent(projectId, selection.file);
+      let content = await store.read(selection.file);
       if (selection.text !== null && draft.text !== selection.text) {
         const edited = replaceTextAtLine(content, selection.line, selection.text, draft.text);
         if (!edited.ok) { setError(edited.reason); return; }
@@ -94,14 +94,14 @@ export function usePointAndEdit({ projectId, previewUrl, writePreviewFile, setFi
       }
       const valid = validateFileContentForPath(selection.file, content);
       if (!valid.ok) { setError(valid.reason); return; }
-      await saveFile(projectId, selection.file, content);
+      await store.write(selection.file, content);
       setFileContents((prev) => ({ ...prev, [selection.file]: content }));
       if (previewUrl) await writePreviewFile(selection.file, content).catch(() => { /* best-effort */ });
       setSelection(null);
     } catch (e) {
       setError(faultMessage(e, t('visualNoPreview')));
     }
-  }, [projectId, previewUrl, t, draft, selection, writePreviewFile, setFileContents]);
+  }, [store, previewUrl, t, draft, selection, writePreviewFile, setFileContents]);
 
   const cancel = useCallback(() => {
     setSelection(null);

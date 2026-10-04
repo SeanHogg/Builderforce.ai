@@ -12,17 +12,18 @@
  * R2 and is fetched, so the only thing worth sharing is the fact that it moved.
  * The panel re-reads; nothing here caches what it read.
  */
+import { isWorkspaceId, type WorkspaceId } from '@/lib/workspace/workspaceId';
 
-type Listener = (storageProjectId: number, paths: string[]) => void;
+type Listener = (workspaceId: WorkspaceId, paths: string[]) => void;
 
 const listeners = new Set<Listener>();
 
 /** Announce that `paths` changed in this build's workspace. */
-export function notifyWorkspaceFilesChanged(storageProjectId: number, paths: string[]): void {
-  if (!Number.isInteger(storageProjectId) || storageProjectId <= 0 || !paths.length) return;
+export function notifyWorkspaceFilesChanged(workspaceId: WorkspaceId, paths: string[]): void {
+  if (!isWorkspaceId(workspaceId) || !paths.length) return;
   for (const listener of listeners) {
     try {
-      listener(storageProjectId, paths);
+      listener(workspaceId, paths);
     } catch {
       /* a bad subscriber must never break the write that triggered it */
     }

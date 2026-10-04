@@ -4,13 +4,14 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { clearBuildFailures, type BuildFailure } from '@/lib/buildDiagnostics';
 import { useFormat } from '@/i18n/useFormat';
+import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 
 /**
  * What went wrong on the last run: build failures (a command and its output) and
  * runtime errors raised inside the preview. The same record the agent repairs
  * from, so what the person reads here is what the agent is told.
  */
-export function ProblemsPanel({ projectId, failures }: { projectId: number; failures: BuildFailure[] }) {
+export function ProblemsPanel({ projectId, failures }: { projectId: WorkspaceId; failures: BuildFailure[] }) {
   const t = useTranslations('builderPanels');
   const fmt = useFormat();
 

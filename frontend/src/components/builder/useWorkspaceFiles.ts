@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } 
 import { scaffoldForModality, isScaffoldPath } from '@builderforce/ide-templates';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { datasetNameForPath, looksLikeDatasetPath, parseJsonlDataset } from '@/lib/datasetFromFile';
-import { saveFile, fetchFileContent, deleteFile, fetchFiles, importCanvasDataset } from '@/lib/api';
+import { importCanvasDataset } from '@/lib/api';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import { subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
 import type { RunLog } from '@/lib/runLog';
 import type { FileEntry } from '@/lib/types';
@@ -21,8 +22,9 @@ type WriteResult = { ok: true } | { ok: false; reason: string };
  * The file list and contents are the HOST's state (the run pipeline reads them
  * too); this hook owns the editor's view of them and the writes.
  */
-export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents, setFileContents, previewUrl, writePreviewFile, refLog, onOpenInEditor }: {
-  projectId: number;
+export function useWorkspaceFiles({ store, modality, setFiles, fileContents, setFileContents, previewUrl, writePreviewFile, refLog, onOpenInEditor }: {
+  /** Where the files live — a durable project, or this browser. */
+  store: WorkspaceFileStore;
   modality: ProjectModality;
   setFiles: Dispatch<SetStateAction<FileEntry[]>>;
   fileContents: Record<string, string>;
@@ -46,9 +48,9 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
 
   const refreshFiles = useCallback(async () => {
     try {
-      setFiles(await fetchFiles(projectId));
+      setFiles(await store.list());
     } catch { /* silent */ }
-  }, [projectId, setFiles]);
+  }, [store, setFiles]);
 
   const openFile = useCallback(async (path: string) => {
     onOpenInEditor();
@@ -58,7 +60,7 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
       return;
     }
     try {
-      const content = await fetchFileContent(projectId, path);
+      const content = await store.read(path);
       setFileContents(prev => ({ ...prev, [path]: content }));
       setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
       setActiveFile(path);
@@ -72,7 +74,7 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
       setOpenFiles(prev => (prev.includes(path) ? prev : [...prev, path]));
       setActiveFile(path);
     }
-  }, [fileContents, projectId, refLog, onOpenInEditor, setFileContents]);
+  }, [fileContents, store, refLog, onOpenInEditor, setFileContents]);
 
   const closeTab = useCallback((path: string) => {
     setOpenFiles(prev => {
@@ -93,11 +95,11 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
     if (!validateFileContentForPath(activeFile, value).ok) return;
     pushToPreview(activeFile, value);
     try {
-      await saveFile(projectId, activeFile, value);
+      await store.write(activeFile, value);
     } catch (e) {
       console.error('Failed to save:', e);
     }
-  }, [activeFile, projectId, pushToPreview, setFileContents]);
+  }, [activeFile, store, pushToPreview, setFileContents]);
 
   const createFile = useCallback(async (path: string) => {
     // Creating a file posts an EMPTY body by construction — which is exactly the
@@ -105,7 +107,7 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
     // means "restore the starter file", so seed the template content instead.
     const seed = isScaffoldPath(path) ? (scaffoldForModality(modality)?.[path] ?? '') : '';
     try {
-      await saveFile(projectId, path, seed);
+      await store.write(path, seed);
       setFiles(prev => [...prev, { path, content: seed, type: 'file' }]);
       setFileContents(prev => ({ ...prev, [path]: seed }));
       void openFile(path);
@@ -113,18 +115,18 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
       console.error('Failed to create file:', e);
     }
     await refreshFiles();
-  }, [projectId, openFile, modality, refreshFiles, setFiles, setFileContents]);
+  }, [store, openFile, modality, refreshFiles, setFiles, setFileContents]);
 
   const removeFile = useCallback(async (path: string) => {
     try {
-      await deleteFile(projectId, path);
+      await store.remove(path);
       setFiles(prev => prev.filter(f => f.path !== path));
       closeTab(path);
     } catch (e) {
       console.error('Failed to delete file:', e);
     }
     await refreshFiles();
-  }, [projectId, closeTab, refreshFiles, setFiles]);
+  }, [store, closeTab, refreshFiles, setFiles]);
 
   /**
    * A file was written from the BOARD (the canvas build tools write over the API
@@ -133,18 +135,18 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
    * text back over the agent's work. Re-reads the changed files, refreshes the
    * tree, and pushes them into the running preview.
    */
-  useEffect(() => subscribeWorkspaceFiles((storageProjectId, paths) => {
-    if (storageProjectId !== projectId) return;
+  useEffect(() => subscribeWorkspaceFiles((workspaceId, paths) => {
+    if (workspaceId !== store.id) return;
     void refreshFiles();
     for (const path of paths) {
-      void fetchFileContent(projectId, path)
+      void store.read(path)
         .then((content) => {
           setFileContents((prev) => (prev[path] === content ? prev : { ...prev, [path]: content }));
           pushToPreview(path, content);
         })
         .catch(() => { /* the file may have been deleted between write and read */ });
     }
-  }), [projectId, refreshFiles, pushToPreview, setFileContents]);
+  }), [store, refreshFiles, pushToPreview, setFileContents]);
 
   /** The Brain's whole-file write into the open file. */
   const applyCodeToActiveFile = useCallback((code: string): WriteResult => {
@@ -153,9 +155,9 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
     if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [activeFile]: code }));
     pushToPreview(activeFile, code);
-    saveFile(projectId, activeFile, code).catch(console.error);
+    store.write(activeFile, code).catch(console.error);
     return { ok: true };
-  }, [activeFile, projectId, pushToPreview, setFileContents]);
+  }, [activeFile, store, pushToPreview, setFileContents]);
 
   /** The Brain's new-file write; opens the file once it is saved. */
   const createProjectFile = useCallback((path: string, content: string): WriteResult => {
@@ -163,17 +165,19 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
     if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [path]: content }));
     pushToPreview(path, content);
-    saveFile(projectId, path, content)
+    store.write(path, content)
       .then(() => {
         // A corpus written as a FILE must also become a registered dataset, or a
         // `data/train.jsonl` the Brain produced is invisible to the fine-tune
         // picker. Strictly detected, and best-effort: a registration failure must
-        // never lose the file the user just got.
-        if (looksLikeDatasetPath(path)) {
+        // never lose the file the user just got. Datasets are a durable project's,
+        // so a workspace held in this browser keeps the file and registers nothing.
+        const storageProjectId = store.id;
+        if (typeof storageProjectId === 'number' && looksLikeDatasetPath(path)) {
           const examples = parseJsonlDataset(content);
           if (examples && examples.length > 0) {
             importCanvasDataset({
-              projectId,
+              projectId: storageProjectId,
               name: datasetNameForPath(path),
               examples,
               capabilityPrompt: `Written into the workspace as ${path}`,
@@ -190,7 +194,7 @@ export function useWorkspaceFiles({ projectId, modality, setFiles, fileContents,
       })
       .catch(console.error);
     return { ok: true };
-  }, [projectId, refreshFiles, openFiles, pushToPreview, setFileContents]);
+  }, [store, refreshFiles, openFiles, pushToPreview, setFileContents]);
 
   return {
     openFiles,

@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslations } from 'next-intl';
 import { repairScaffold } from '@/lib/scaffoldRepair';
+import { hashString } from '@/lib/hashString';
 import { RUN_LOG_RULE, type RunLog } from '@/lib/runLog';
 import { useProjectRuntime } from '@/hooks/useProjectRuntime';
 import { useInstantPreview } from '@/hooks/useInstantPreview';
@@ -12,8 +13,8 @@ import { buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/s
 import { runProjectChecks, type CheckResult } from '@/lib/browserRuntime/projectChecks';
 import { clearBuildFailures, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
 import { withVisualEditor } from '@/lib/visualEditor';
-import { saveFile, fetchFileContent } from '@/lib/api';
 import type { FileEntry } from '@/lib/types';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import type { ProjectModality } from '@/lib/modality';
 
 /**
@@ -30,7 +31,8 @@ export type RunPhase = 'idle' | 'starting' | 'live' | 'failed' | 'blocked';
 export type RunStep = 'preparing' | 'installing' | 'starting';
 
 export interface WorkspaceRunArgs {
-  projectId: number;
+  /** Where the project's files live — a durable project, or this browser. */
+  store: WorkspaceFileStore;
   modality: ProjectModality;
   files: FileEntry[];
   setFiles: Dispatch<SetStateAction<FileEntry[]>>;
@@ -38,14 +40,6 @@ export interface WorkspaceRunArgs {
   setFileContents: Dispatch<SetStateAction<Record<string, string>>>;
   log: RunLog;
   publishLog: RunLog;
-}
-
-/** Cheap, stable string hash (djb2) — used to skip npm install when package.json
- *  is unchanged since the last install in this runtime session. */
-function hashString(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return String(h >>> 0);
 }
 
 /**
@@ -56,7 +50,7 @@ function hashString(s: string): string {
  * say what is happening instead of asking the person to press a button — the
  * run itself is started by `useAutoRun`, not by a Run control.
  */
-export function useWorkspaceRun({ projectId, modality, files, setFiles, fileContents, setFileContents, log, publishLog }: WorkspaceRunArgs) {
+export function useWorkspaceRun({ store, modality, files, setFiles, fileContents, setFileContents, log, publishLog }: WorkspaceRunArgs) {
   const t = useTranslations('ide');
   const tc = useTranslations('common');
   const toast = useToast();
@@ -104,7 +98,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
       const fetched: Record<string, string> = {};
       await Promise.all(unfetched.map(async (f) => {
         try {
-          const content = await fetchFileContent(projectId, f.path);
+          const content = await store.read(f.path);
           allContents[f.path] = content;
           fetched[f.path] = content;
         } catch (error) {
@@ -146,7 +140,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
       // the mount already has the content either way.
       await Promise.all(
         Object.entries(restoredMap).map(([path, content]) =>
-          saveFile(projectId, path, content).catch((e) => console.error(`Failed to restore ${path}:`, e)),
+          store.write(path, content).catch((e) => console.error(`Failed to restore ${path}:`, e)),
         ),
       );
     }
@@ -159,7 +153,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
       }
     }
     return mount;
-  }, [fileContents, files, projectId, modality, setFiles, setFileContents]);
+  }, [fileContents, files, store, modality, setFiles, setFileContents]);
 
   /**
    * Run `npm install` only when package.json changed since the last install in
@@ -203,7 +197,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
     setStep('preparing');
     // A new run is judged on its own output: clear the previous attempt's failures
     // so a repair turn is never handed an error the user has already fixed.
-    clearBuildFailures(projectId);
+    clearBuildFailures(store.id);
     let live = false;
     try {
       log.banner('runStarted');
@@ -248,7 +242,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
       const installCode = await ensureInstalled(mountContents, installLog.write, log);
       if (installCode !== 0) {
         log.error('installFailed', { code: installCode });
-        recordBuildFailure(projectId, {
+        recordBuildFailure(store.id, {
           source: 'build',
           command: 'npm install',
           exitCode: installCode,
@@ -274,7 +268,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
       console.error('Run failed:', e);
       // Recorded BEFORE the terminal formatting below, so the agent's copy is the
       // raw message rather than whichever branch happened to render it.
-      recordBuildFailure(projectId, {
+      recordBuildFailure(store.id, {
         source: 'build',
         command: 'npm run dev',
         message: errorMsg.split('\n')[0] || 'The dev server failed to start.',
@@ -307,7 +301,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
       setStep(null);
       setPhase(live ? 'live' : 'failed');
     }
-  }, [startDevServer, startInstantPreview, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, toast, t, tc, projectId]);
+  }, [startDevServer, startInstantPreview, mountFiles, assembleMountContents, ensureInstalled, log, checkResults, gateRunOnChecks, toast, t, tc, store.id]);
 
   /**
    * Build the project for publishing, in the browser: its files in, a static
@@ -316,7 +310,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
    * works at `<sub>.builderforce.ai/` and under the `/api/sites/<sub>/` path.
    */
   const publishBuild = useCallback(async (): Promise<Array<{ path: string; data: Uint8Array }>> => {
-    sendWorkspaceCommand(projectId, { type: 'showPanel', panel: 'output' });
+    sendWorkspaceCommand(store.id, { type: 'showPanel', panel: 'output' });
     publishLog.bannerInline('buildingForPublish');
 
     const mount = await assembleMountContents(publishLog);
@@ -331,7 +325,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
     publishLog.blank();
     publishLog.ok('capturedFiles', { count: assets.length });
     return assets;
-  }, [assembleMountContents, publishLog, t, projectId]);
+  }, [assembleMountContents, publishLog, t, store.id]);
 
   /**
    * Check the project the way its own toolchain would: type-check and build
@@ -372,7 +366,7 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
         onStep: (label) => log.section('checkStep', { label }),
         onOutput: (text) => log.raw(text),
       });
-      for (const failure of failures) recordBuildFailure(projectId, failure);
+      for (const failure of failures) recordBuildFailure(store.id, failure);
       setCheckResults(results);
       const failed = results.filter(r => r.status === 'fail').length;
       if (failed === 0) {
@@ -385,11 +379,11 @@ export function useWorkspaceRun({ projectId, modality, files, setFiles, fileCont
       const msg = e instanceof Error ? e.message : String(e);
       log.error('checkError', { message: msg });
       setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
-      recordBuildFailure(projectId, { source: 'build', message: msg.split('\n')[0] || 'Checks failed.', detail: msg });
+      recordBuildFailure(store.id, { source: 'build', message: msg.split('\n')[0] || 'Checks failed.', detail: msg });
     } finally {
       setIsChecking(false);
     }
-  }, [isChecking, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, log, projectId]);
+  }, [isChecking, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, log, store.id]);
 
   return {
     phase,

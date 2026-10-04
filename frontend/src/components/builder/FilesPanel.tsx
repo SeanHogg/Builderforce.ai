@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import { ProjectSearchPanel } from './ProjectSearchPanel';
 
 type View = 'files' | 'search';
@@ -10,7 +11,7 @@ type View = 'files' | 'search';
  * The workspace's file side: the explorer (passed in, so its file operations stay
  * the workspace's) and project-wide search, behind a Files | Search switch.
  */
-export function FilesPanel({ projectId, onOpenFile, explorer }: { projectId: number; onOpenFile: (path: string) => void; explorer: ReactNode }) {
+export function FilesPanel({ store, onOpenFile, explorer }: { store: WorkspaceFileStore; onOpenFile: (path: string) => void; explorer: ReactNode }) {
   const t = useTranslations('builderSearch');
   const [view, setView] = useState<View>('files');
   const tabs: Array<{ id: View; label: string }> = [
@@ -42,7 +43,7 @@ export function FilesPanel({ projectId, onOpenFile, explorer }: { projectId: num
       <div role="tabpanel" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {/* The explorer stays mounted so its expanded folders survive a trip to Search. */}
         <div style={{ position: 'absolute', inset: 0, display: view === 'files' ? 'block' : 'none' }}>{explorer}</div>
-        {view === 'search' && <ProjectSearchPanel projectId={projectId} onOpenFile={onOpenFile} />}
+        {view === 'search' && <ProjectSearchPanel store={store} onOpenFile={onOpenFile} />}
       </div>
     </div>
   );

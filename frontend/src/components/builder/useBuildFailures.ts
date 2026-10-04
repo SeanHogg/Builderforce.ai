@@ -1,10 +1,11 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 import { useEffect, useState } from 'react';
+import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 import { readBuildFailures, subscribeBuildFailures, type BuildFailure } from '@/lib/buildDiagnostics';
 
 /** The build and runtime failures recorded for a project, kept current. */
-export function useBuildFailures(projectId: number): BuildFailure[] {
+export function useBuildFailures(projectId: WorkspaceId): BuildFailure[] {
   const [failures, setFailures] = useState<BuildFailure[]>(() => readBuildFailures(projectId));
 
   useEffect(() => {
