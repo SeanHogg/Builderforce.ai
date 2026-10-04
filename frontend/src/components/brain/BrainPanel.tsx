@@ -80,7 +80,6 @@ import {
   chatRosterFromParticipants,
   useQueuedTurns,
   NEW_CHAT_MODE,
-  useRegisterInlineBrain,
   type ChatMode,
   type WorkOptionId,
   type BrainCapabilityId,
@@ -89,6 +88,9 @@ import {
   type BrainModality,
   type BrainEffort,
 } from '@/lib/brain';
+// By path, not via the `@/lib/brain` barrel: the barrel is in the root layout's static
+// closure and this module's only consumers load dynamically (check:root-closure).
+import { useRegisterInlineBrain } from '@/lib/brain/inlineBrainHost';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, tasksApi, type AgentAssignment, type ProjectRepository, type TicketKind } from '@/lib/builderforceApi';
 import { captureDiagnosticsBlock } from './captureDiagnostics';

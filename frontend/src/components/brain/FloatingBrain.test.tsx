@@ -21,8 +21,8 @@ vi.mock('@/lib/brain', () => ({
     initialChatId: null,
   }),
   takePendingPrompt,
-  useInlineBrainMounted: () => state.inlineBrain,
 }));
+vi.mock('@/lib/brain/inlineBrainHost', () => ({ useInlineBrainMounted: () => state.inlineBrain }));
 // BrainPanel (authed) and GuestBrainPanel (logged-out) both pull in the whole
 // brain runtime; stub both — we only assert WHICH branch FloatingBrain renders,
 // not the panel internals.

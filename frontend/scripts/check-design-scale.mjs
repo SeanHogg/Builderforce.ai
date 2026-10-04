@@ -278,7 +278,7 @@ const BASELINE = {
    * work. Net −29 below the drifted tally, −25 below the old floor, and the floor
    * follows it down.
    */
-  offScaleFontSizes: 3423,
+  offScaleFontSizes: 3419,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.
