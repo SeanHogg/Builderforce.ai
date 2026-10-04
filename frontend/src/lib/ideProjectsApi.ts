@@ -24,6 +24,13 @@ export async function fetchIdeProjectByStorage(storageProjectId: number): Promis
   }
 }
 
+/** The build record for an existing project, bound in place when it has none, so
+ *  a project started in Studio can be placed on the canvas like any other build.
+ *  Idempotent: calling it for a project that already has one returns that record. */
+export async function ensureIdeProjectForStorage(storageProjectId: number): Promise<IdeProject> {
+  return apiRequest<IdeProject>(`/api/ide-projects/by-storage/${storageProjectId}`, { method: 'PUT' });
+}
+
 export async function listIdeContainers(): Promise<IdeContainerOption[]> {
   return apiRequest<IdeContainerOption[]>('/api/ide-projects/containers');
 }

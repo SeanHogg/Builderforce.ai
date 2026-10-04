@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { fetchProject } from '@/lib/api';
-import { fetchIdeProjectByStorage } from '@/lib/ideProjectsApi';
+import { ensureIdeProjectForStorage } from '@/lib/ideProjectsApi';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
 import { namesProjectChat, studioChatHref, studioChatLinkFrom } from '@/lib/studio/studioDeepLink';
@@ -28,9 +28,9 @@ export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
         if (!cancelled) router.replace(studioChatHref(project.id, chatLink));
         return;
       }
-      // No build record (a project started in Studio) is an answer, not an error.
-      const build = await fetchIdeProjectByStorage(project.id);
-      if (!build) return toBuildList();
+      // A project started in Studio has no build record yet; this binds one in
+      // place, so it lands on a board the same way a canvas-born app does.
+      const build = await ensureIdeProjectForStorage(project.id);
       const opened = await creationSessionsApi.openIdeProject(build.id);
       if (cancelled) return;
       router.replace(openedBoardHref(opened, {

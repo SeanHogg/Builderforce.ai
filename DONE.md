@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-10-04 — A project started in Studio can now go to the canvas, not only canvas-born apps (api 2026.10.9 · frontend 2026.10.14)
+
+Studio's "Open on canvas" rendered only when the project had a build record (`ide_projects` row). A Studio-born project (`useStartStudioProject`, `origin: 'studio'`) has none, so the link was hidden and `/create/build/<id>` fell through to the build list.
+
+- **Bind in place.** New `application/project/ideProjectBinding.ts` (`ensureIdeProjectForStorage`) gives an existing project a build record without minting a second storage project. It is exposed as `PUT /api/ide-projects/by-storage/:storageProjectId`: 200 with the existing record, 201 when bound now, 404 outside the tenant. A race is safe because `storage_project_id` is unique (insert `onConflictDoNothing`, then re-read). `is_ide_storage` stays false, so the project keeps its listing, and deleting the build later only unlinks it, which the delete route already did for backfilled rows.
+- **Board choice (the logged operator decision).** Settled by the existing primitive, not a new rule. `creationSessionsApi.openIdeProject` reopens the board that already holds the build. Otherwise it creates a new board named after the project, exactly as for a canvas-born app.
+- **Frontend.** `BuildCanvasRedirect` calls `ensureIdeProjectForStorage` instead of giving up. `OpenOnCanvasLink` drops its probe and always renders.
+- **DRY.** The modality allow-list moved from the route into the binding module (`IDE_MODALITIES`, `toIdeModality`), shared by create and bind.
+
 ## ✅ RESOLVED 2026-10-04 — Chat #129 tool-call review: stale build diagnostics, identical re-writes, and a "healthy" triage over a broken app
 
 In chat #129 ("Build a marketing website for he-man") a MiniMax-M1 run kept failing on `Cannot read properties of null (reading 'useState')`. It re-read files, rewrote `src/App.jsx` twice with the identical 8.6 KB body, and triage still called the run healthy.

@@ -26,16 +26,10 @@ import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/e
 import { invalidateEvermindGrouping } from '../../application/llm/projectEvermind';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { ensureIdeProjectForStorage, toIdeModality } from '../../application/project/ideProjectBinding';
 import { parseBody, z } from './requestBody';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** The IDE modalities an IDE project can be — must stay in step with the frontend's
- *  `lib/modality.ts` registry, since an id missing here is silently downgraded to
- *  `designer` (which is how `webmobile` projects lost their Mobile identity).
- *  `llm` is the retired combined modality, accepted for backward compatibility
- *  (the frontend aliases it to `evermind`). */
-const MODALITIES = new Set(['designer', 'mobile', 'webmobile', 'video', 'evermind', 'finetune', 'voice', 'llm']);
 
 const listCacheKey = (tenantId: number) => `ide-projects:list:${tenantId}`;
 
@@ -164,6 +158,23 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     return c.json(row);
   });
 
+  // PUT /api/ide-projects/by-storage/:storageProjectId — the build record for an
+  // EXISTING project, bound in place when it has none (a project started in
+  // Studio). Idempotent: 200 with the existing record, 201 when it was bound now.
+  router.put('/by-storage/:storageProjectId', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const sid = Number(c.req.param('storageProjectId'));
+    if (!Number.isInteger(sid)) return c.json({ error: 'Invalid storage project id' }, 400);
+    const binding = await ensureIdeProjectForStorage(db, tenantId, sid);
+    if (!binding) return c.json({ error: 'Project not found' }, 404);
+    if (binding.created) {
+      await invalidateCached(c.env as Env, listCacheKey(tenantId));
+      await invalidateEvermindGrouping(c.env as Env, tenantId, [sid]);
+    }
+    const view = await fetchOne(tenantId, String(binding.id));
+    return c.json(view, binding.created ? 201 : 200);
+  });
+
   // GET /api/ide-projects/:id — single IDE project (int id or public UUID).
   router.get('/:id', async (c) => {
     const view = await fetchOne(c.get('tenantId') as number, c.req.param('id'));
@@ -179,7 +190,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     const body = await parseBody(c, CreateIdeProjectBody);
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
-    const modality = body.modality && MODALITIES.has(body.modality) ? body.modality : 'designer';
+    const modality = toIdeModality(body.modality);
 
     let containerProjectId: number | null = null;
     if (body.containerProjectId != null) {
