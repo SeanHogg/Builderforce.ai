@@ -121,6 +121,22 @@ export function getStoredTenant(): Tenant | null {
   }
 }
 
+/**
+ * The default workspace this browser held before the default moved onto the
+ * account (2026.10.7), handed over ONCE: read and removed, so the account
+ * copy is the only one from then on.
+ */
+export function takeLegacyDefaultTenantId(): string | null {
+  if (!isBrowser()) return null;
+  try {
+    const id = localStorage.getItem('bf_default_tenant_id');
+    if (id !== null) localStorage.removeItem('bf_default_tenant_id');
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 export function persistLastProjectId(projectId: string): void {
   if (!isBrowser()) return;
   localStorage.setItem(LAST_PROJECT_KEY, projectId);

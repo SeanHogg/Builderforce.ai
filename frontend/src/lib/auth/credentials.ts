@@ -11,6 +11,7 @@
  *   POST /api/auth/magic-link
  *   GET  /api/auth/my-tenants           (with the token just issued)
  *   POST /api/auth/tenant-token         (the web → tenant token exchange)
+ *   PUT  /api/auth/default-tenant       (adopting a legacy default with that same token)
  *
  * Routing them through `apiRequest` would run its 401 handling on a failed
  * sign-in and bounce the person off the login page they are standing on, and
@@ -27,6 +28,7 @@ import {
   AUTH_API_URL,
   checkUnauthorizedAndRedirect,
   persistTenantSession,
+  takeLegacyDefaultTenantId,
 } from '../auth';
 
 export interface AuthSession {
@@ -153,7 +155,13 @@ export async function getMyTenants(webToken: string): Promise<Tenant[]> {
   };
   const arr = Array.isArray(data) ? data : data?.tenants;
   if (!Array.isArray(arr)) return [];
-  const defaultId = Array.isArray(data) || data.defaultTenantId == null ? null : String(data.defaultTenantId);
+  let defaultId = Array.isArray(data) || data.defaultTenantId == null ? null : String(data.defaultTenantId);
+  // A default this browser set before it lived on the account: adopt it once.
+  const legacyDefault = takeLegacyDefaultTenantId();
+  if (defaultId === null && legacyDefault !== null && arr.some((t) => String(t.id ?? '') === legacyDefault)) {
+    defaultId = legacyDefault;
+    void saveDefaultTenant(webToken, legacyDefault).catch(() => undefined);
+  }
   return arr.map((t) => ({
     id: String(t.id ?? ''),
     name: t.name ?? '',
@@ -170,6 +178,34 @@ export async function getMyTenants(webToken: string): Promise<Tenant[]> {
 export function autoSelectTenant(tenants: Tenant[]): Tenant | null {
   if (tenants.length === 1) return tenants[0];
   return tenants.find((t) => t.isDefault) ?? null;
+}
+
+/**
+ * Set (or clear, with null) the account's default workspace. Here rather than on
+ * the session transport because `getMyTenants` adopts a legacy default with the
+ * token it was handed, before that token is stored.
+ */
+export async function saveDefaultTenant(webToken: string, tenantId: string | null): Promise<void> {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/default-tenant`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ tenantId: tenantId === null ? null : Number(tenantId) }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string; message?: string };
+    throw new Error(body.error ?? body.message ?? 'Failed to save the default workspace');
+  }
+}
+
+/**
+ * Someone with several workspaces and no default just picked one by hand, which
+ * says which workspace they use. Remember it so they are not asked again;
+ * "Set as default" on /tenants still changes it.
+ */
+export async function rememberWorkspaceChoice(webToken: string, chosen: Tenant, workspaces: Tenant[]): Promise<void> {
+  if (workspaces.length < 2 || workspaces.some((t) => t.isDefault)) return;
+  await saveDefaultTenant(webToken, chosen.id).catch(() => undefined);
 }
 
 export async function getTenantToken(

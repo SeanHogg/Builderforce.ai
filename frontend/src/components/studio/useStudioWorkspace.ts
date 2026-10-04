@@ -1,8 +1,8 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { autoSelectTenant } from '@/lib/auth/credentials';
+import { autoSelectTenant, rememberWorkspaceChoice } from '@/lib/auth/credentials';
 import type { Tenant } from '@/lib/types';
 
 export type StudioWorkspaceState =
@@ -17,10 +17,11 @@ export type StudioWorkspaceState =
 /**
  * Studio projects live in a workspace, so a session is not enough on its own: a
  * visitor who signed in with a password (no workspace chosen yet) is put in their
- * only workspace automatically, and asked only when they have several.
+ * only workspace (or their default) automatically, and asked only when they have
+ * several and no default. That first pick becomes the default, so it is asked once.
  */
 export function useStudioWorkspace(): StudioWorkspaceState & { choose: (tenant: Tenant) => Promise<void> } {
-  const { authReady, isAuthenticated, hasTenant, fetchTenants, selectTenant } = useAuth();
+  const { authReady, isAuthenticated, hasTenant, webToken, fetchTenants, selectTenant } = useAuth();
   const [state, setState] = useState<StudioWorkspaceState>({ status: 'loading' });
 
   useEffect(() => {
@@ -41,5 +42,11 @@ export function useStudioWorkspace(): StudioWorkspaceState & { choose: (tenant: 
     return () => { cancelled = true; };
   }, [authReady, isAuthenticated, hasTenant, fetchTenants, selectTenant]);
 
-  return { ...state, choose: selectTenant };
+  const workspaces = state.status === 'choose' ? state.workspaces : undefined;
+  const choose = useCallback(async (tenant: Tenant) => {
+    await selectTenant(tenant);
+    if (webToken && workspaces) await rememberWorkspaceChoice(webToken, tenant, workspaces);
+  }, [selectTenant, webToken, workspaces]);
+
+  return { ...state, choose };
 }

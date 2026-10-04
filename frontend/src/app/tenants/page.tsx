@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { hasSession, useRequireSession } from '@/lib/useRequireSession';
-import { autoSelectTenant } from '@/lib/auth/credentials';
+import { autoSelectTenant, rememberWorkspaceChoice, saveDefaultTenant } from '@/lib/auth/credentials';
 import { workspacesApi } from '@/lib/auth/session';
 import type { Tenant } from '@/lib/types';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -39,7 +39,7 @@ export default function TenantsPage() {
   const tc = useTranslations('common');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { hasTenant, fetchTenants, selectTenant } = useAuth();
+  const { hasTenant, webToken, fetchTenants, selectTenant } = useAuth();
   const errorMessage = useErrorMessage();
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -96,6 +96,7 @@ export default function TenantsPage() {
     setError(null);
     try {
       await selectTenant(tenant);
+      if (webToken) await rememberWorkspaceChoice(webToken, tenant, tenants);
       const next = searchParams.get('next') || '/dashboard';
       router.push(next);
     } catch (err) {
@@ -109,12 +110,13 @@ export default function TenantsPage() {
   // rolled back if the save fails.
   const defaultTenantId = tenants.find((x) => x.isDefault)?.id ?? null;
   const saveDefault = async (id: string | null) => {
+    if (!webToken) return;
     const previous = defaultTenantId;
     const mark = (target: string | null) => setTenants((prev) => prev.map((x) => ({ ...x, isDefault: x.id === target })));
     setError(null);
     mark(id);
     try {
-      await workspacesApi.setDefault(id);
+      await saveDefaultTenant(webToken, id);
     } catch (err) {
       mark(previous);
       setError(errorMessage(err));

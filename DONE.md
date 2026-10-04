@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-10-04 — Studio previews crashed on the first hook; Studio still asked for a workspace (frontend 2026.10.8 · webcontainers 2026.10.4)
+
+Report: "This was deployed but it's not working on the studio — this shouldn't be shown." Studio showed "Choose a workspace", and the generated He-Man app's preview failed with `Cannot read properties of null (reading 'useState')`. The Brain could not fix that error, because it was not in the app's code.
+
+- **Two Reacts in every preview.** The cause was in `builderforce-webcontainers` `packages/core/src/packageCdn.ts`.
+  - Every declared package's esm.sh URL carried `deps=` for every OTHER declared package. So the app imported `react?deps=react-dom,vite,…`, which is a distinct esm.sh build.
+  - Meanwhile react-dom's own `import 'react'` links to the plain build, carrying only the pins react itself uses (none). This was verified against esm.sh.
+  - Result: two React instances, and the app's first `useState` read a null dispatcher. It hit every React app with a hook.
+- **Fix (2026.10.4).**
+  - `esmShCdnFactory` is now async. It loads each declared package's `package.json` from the CDN (`loadPackageManifests`, cached per session), and a package's URL pins only the declared packages it depends on or peers on. That is exactly the module esm.sh links to.
+  - Undeclared packages, and any whose manifest fails to load, still carry every pin.
+  - The dev server caches the CDN as a promise, and `buildProject` awaits it.
+  - Tests answer manifest requests offline (`tests/offlineManifests.ts`). The build test that asserted the broken `jsx-runtime?deps=` shape was corrected.
+- **Workspace picker in Studio.** No account had a default yet, because the defaults people set before 2026.10.7 lived only in browser storage.
+  - `getMyTenants` now adopts that legacy key once (`takeLegacyDefaultTenantId`, then `saveDefaultTenant`).
+  - A first hand-made pick, made with several workspaces and no default, becomes the default (`rememberWorkspaceChoice`) in both `/tenants` and Studio (`useStudioWorkspace`). The picker is asked once.
+  - `saveDefaultTenant` in `auth/credentials` is now the ONE client for `PUT /api/auth/default-tenant`, and `workspacesApi.setDefault` was removed.
+
 ## ✅ RESOLVED 2026-10-04 — Default workspace forgotten on every sign-in; `/tenants` crash (api 2026.10.7 · frontend 2026.10.7)
 
 Report: "Setting a default tenant is not being saved — users consistently have to select their tenant even though a default has been set." A second ticket the same day: `/tenants` crashed with `TypeError: useEffectEvent is not a function`.

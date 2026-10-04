@@ -242,6 +242,19 @@ describe('the account default workspace', () => {
     expect(result.map((t) => t.isDefault)).toEqual([false, true]);
   });
 
+  it('adopts a default this browser set before it lived on the account, once', async () => {
+    localStorage.setItem('bf_default_tenant_id', '9');
+    fetchSpy.mockResolvedValueOnce(mockOk({ tenants: [{ id: 3, name: 'Hogg' }, { id: 9, name: 'Enterprise' }], defaultTenantId: null }));
+    fetchSpy.mockResolvedValueOnce(mockOk({ defaultTenantId: 9 }));
+    const result = await getMyTenants('web-token-123');
+    expect(result.find((t) => t.isDefault)?.id).toBe('9');
+    const [url, init] = fetchSpy.mock.calls[1] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/auth\/default-tenant$/);
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(String(init.body))).toEqual({ tenantId: 9 });
+    expect(localStorage.getItem('bf_default_tenant_id')).toBeNull();
+  });
+
   it('auto-selects the only workspace, else the default, else nothing', () => {
     const a: Tenant = { id: '3', name: 'Hogg' };
     const b: Tenant = { id: '9', name: 'Enterprise' };
