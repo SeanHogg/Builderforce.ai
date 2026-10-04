@@ -43,6 +43,7 @@ import { useBrainChatRowActions } from './useBrainChatRowActions';
 import { useBrainNewProject } from './useBrainNewProject';
 import { useBrainCaptureExecution } from './useBrainCaptureExecution';
 import { useBrainPanelBanners } from './useBrainPanelBanners';
+import { useDockedComposerSeed } from '@/lib/brain/dockedBrain';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -147,6 +148,11 @@ export function useBrainPanelController({
     pickWorkOption,
     onboard,
   } = useBrainChatStart({ chats, isPage, setDockedTab });
+
+  // The panel that IS the page's chat (docked, no close) takes text a neighbouring
+  // surface hands it — Studio's Media panel "use in app" — to finish and send.
+  const seedComposer = useCallback((text: string) => { setInput(text); showChatTab(); }, [setInput, showChatTab]);
+  useDockedComposerSeed(!isPage && !onClose, seedComposer);
 
   // Tell the model which project is in context, so "create a task" / "list
   // specs" without a named project default to it. Chat-FIRST: a chat that belongs

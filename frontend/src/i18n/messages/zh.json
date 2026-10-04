@@ -1309,7 +1309,8 @@
       "agent": "智能体",
       "train": "训练",
       "publish": "发布",
-      "state": "状态"
+      "state": "状态",
+      "media": "媒体"
     },
     "modalityProject": "{label} 项目",
     "modality": {
@@ -1566,6 +1567,49 @@
       "collabConnected": "协作者已连接",
       "voiceNeedsClone": "请先创建或选择一个声音",
       "generating": "正在生成…"
+    },
+    "media": {
+      "rendering": "正在渲染…",
+      "failed": "生成失败",
+      "reviewTitle": "Brain 生成了这个——要用吗？",
+      "reviewLeadImage": "代理正在等待。在应用中使用这张图片、换个提示词重试，或丢弃它。",
+      "reviewLeadVideo": "代理正在等待。在应用中使用这个片段、换个提示词重试，或丢弃它。",
+      "promptLabel": "提示词",
+      "useIt": "使用",
+      "tryAgain": "重试",
+      "discard": "丢弃",
+      "generateTitle": "生成",
+      "kindLabel": "要生成什么",
+      "kindImage": "图片",
+      "kindVideo": "视频",
+      "promptPlaceholderImage": "阳光洒落的面包店柜台主图，暖色调，浅景深",
+      "promptPlaceholderVideo": "冷却架上新鲜面包冒着热气，缓慢推近，清晨光线",
+      "shapeLabel": "画幅",
+      "shape": {
+        "landscape": "横向",
+        "square": "方形",
+        "portrait": "纵向"
+      },
+      "lengthLabel": "时长",
+      "seconds": "{seconds} 秒",
+      "generate": "生成",
+      "generatingImage": "正在生成图片…",
+      "generatingVideo": "正在渲染片段…",
+      "videoHint": "一个片段需要半分钟到几分钟。即使关闭面板，它也会继续渲染。",
+      "generateFailed": "生成失败，请重试。",
+      "libraryTitle": "此项目的媒体",
+      "loading": "正在加载媒体…",
+      "openPreview": "预览：{prompt}",
+      "inApp": "已用于应用",
+      "useInApp": "用于应用",
+      "copyLink": "复制链接",
+      "copied": "已复制",
+      "delete": "删除",
+      "useInAppImagePrompt": "在应用中使用这张图片：{url}\n放在",
+      "useInAppVideoPrompt": "在应用中使用这个视频片段：{url}\n放在",
+      "deleteConfirm": "要从项目媒体中移除它吗？已经使用它的页面仍可正常工作。",
+      "emptyTitle": "还没有媒体",
+      "emptyBody": "在这里生成图片或片段，或让 Brain 生成——为此项目制作的每张图片和每段视频都会汇集在这里，供你先行预览。"
     }
   },
   "references": {

@@ -1309,7 +1309,8 @@
       "agent": "Agent",
       "train": "Train",
       "publish": "Publish",
-      "state": "State"
+      "state": "State",
+      "media": "Media"
     },
     "modalityProject": "{label} project",
     "modality": {
@@ -1566,6 +1567,49 @@
       "collabConnected": "Collaborators connected",
       "voiceNeedsClone": "Create or select a voice first",
       "generating": "Generating…"
+    },
+    "media": {
+      "rendering": "Rendering…",
+      "failed": "Generation failed",
+      "reviewTitle": "Brain made this — use it?",
+      "reviewLeadImage": "The agent is waiting. Use this image in the app, try again with a different prompt, or discard it.",
+      "reviewLeadVideo": "The agent is waiting. Use this clip in the app, try again with a different prompt, or discard it.",
+      "promptLabel": "Prompt",
+      "useIt": "Use it",
+      "tryAgain": "Try again",
+      "discard": "Discard",
+      "generateTitle": "Generate",
+      "kindLabel": "What to make",
+      "kindImage": "Image",
+      "kindVideo": "Video",
+      "promptPlaceholderImage": "A hero image of a sunlit bakery counter, warm tones, shallow depth of field",
+      "promptPlaceholderVideo": "Steam rising off fresh bread on a cooling rack, slow push-in, morning light",
+      "shapeLabel": "Shape",
+      "shape": {
+        "landscape": "Landscape",
+        "square": "Square",
+        "portrait": "Portrait"
+      },
+      "lengthLabel": "Length",
+      "seconds": "{seconds}s",
+      "generate": "Generate",
+      "generatingImage": "Generating image…",
+      "generatingVideo": "Rendering clip…",
+      "videoHint": "A clip takes from half a minute to a few minutes. It keeps rendering if you close the panel.",
+      "generateFailed": "Generation failed. Try again.",
+      "libraryTitle": "This project’s media",
+      "loading": "Loading media…",
+      "openPreview": "Preview: {prompt}",
+      "inApp": "In the app",
+      "useInApp": "Use in app",
+      "copyLink": "Copy link",
+      "copied": "Copied",
+      "delete": "Delete",
+      "useInAppImagePrompt": "Use this image in the app: {url}\nPut it ",
+      "useInAppVideoPrompt": "Use this video clip in the app: {url}\nPut it ",
+      "deleteConfirm": "Remove this from the project’s media? Pages that already use it keep working.",
+      "emptyTitle": "No media yet",
+      "emptyBody": "Generate an image or a clip here, or ask Brain for one — every picture and video made for this project collects here for you to preview first."
     }
   },
   "references": {

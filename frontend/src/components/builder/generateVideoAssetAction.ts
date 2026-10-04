@@ -1,7 +1,8 @@
 import type { BrainAction } from '@/lib/brain';
-import { generateVideoClip, isVideoAspectRatio } from '@/lib/videoGenerationApi';
 import { CLOUD_SHOT_SECONDS, snapShotSeconds } from '@/lib/sceneStoryboard';
-import { toolErrorMessage } from '@/lib/toolErrorMessage';
+import { generateReviewedMedia } from './media/reviewedMediaGeneration';
+import { shapeFromAspect } from './media/mediaRequest';
+import type { MediaStudioPort } from './media/useMediaStudio';
 
 /**
  * `generate_video_asset` — the Studio builder's way to put a REAL video in the
@@ -9,17 +10,15 @@ import { toolErrorMessage } from '@/lib/toolErrorMessage';
  *
  * Twin of `generate_image_asset` and for the same reason: without it a "landing
  * page with a video hero" got a `<video>` pointing at a sample-video URL that
- * 404s. The gateway renders the clip, stores it in the tenant asset store and the
- * action hands back a durable public URL for `<video src>` — one that works in the
- * live preview and after the app is deployed.
+ * 404s. The gateway renders the clip and stores it; the person previews it in the
+ * Media panel and decides before the model ever sees the URL.
  */
-/** `generate` is injectable so the action is testable without module mocks;
- *  every real caller uses the default gateway client. */
-export function generateVideoAssetAction(generate: typeof generateVideoClip = generateVideoClip): BrainAction {
+export function generateVideoAssetAction(media: MediaStudioPort): BrainAction {
   return {
     name: 'generate_video_asset',
     description:
       'Generate an original short video clip with AI (hero loops, product shots, ambient backgrounds) and get back a public MP4 URL to use in the project — as a <video src> (add autoplay muted loop playsinline for a background). ' +
+      'The user previews it in the Media panel first and decides to use it, try again or discard it; only write the URL into the code when this tool returns one. ' +
       'Describe the subject, motion, setting, light and camera move in the prompt. Takes from half a minute to a few minutes. Use this instead of sample-video URLs.',
     parameters: {
       type: 'object',
@@ -33,23 +32,21 @@ export function generateVideoAssetAction(generate: typeof generateVideoClip = ge
     run: async ({ prompt, durationSeconds, aspectRatio }: { prompt?: unknown; durationSeconds?: unknown; aspectRatio?: unknown }) => {
       const text = typeof prompt === 'string' ? prompt.trim() : '';
       if (!text) return { error: 'A prompt describing the clip is required.' };
-      try {
-        const { job, source } = await generate({
-          prompt: text,
-          durationSeconds: snapShotSeconds(typeof durationSeconds === 'number' ? durationSeconds : 5),
-          ...(isVideoAspectRatio(aspectRatio) ? { aspectRatio } : {}),
-          useCase: 'studio_video_asset',
-        });
-        return {
-          url: source.url,
-          mimeType: source.mimeType,
-          durationSeconds: source.durationSeconds,
-          model: job.result?.model,
-          note: 'Reference this URL directly in the project code, e.g. <video src="…" autoplay muted loop playsinline>.',
-        };
-      } catch (e) {
-        return { error: toolErrorMessage(e, 'Video generation failed') };
-      }
+      const result = await generateReviewedMedia(media, {
+        kind: 'video',
+        prompt: text,
+        shape: shapeFromAspect(aspectRatio),
+        durationSeconds: snapShotSeconds(typeof durationSeconds === 'number' ? durationSeconds : 5),
+      });
+      if (!result.ok) return 'error' in result ? { error: result.error } : { declined: true, note: result.note };
+      const { item } = result;
+      return {
+        url: item.url,
+        mimeType: item.mimeType,
+        durationSeconds: item.durationSeconds,
+        model: item.model,
+        note: 'The user chose this clip. Reference this URL directly in the project code, e.g. <video src="…" autoplay muted loop playsinline>.',
+      };
     },
   };
 }

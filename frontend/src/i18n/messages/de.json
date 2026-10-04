@@ -1309,7 +1309,8 @@
       "agent": "Agent",
       "train": "Trainieren",
       "publish": "Veröffentlichen",
-      "state": "Status"
+      "state": "Status",
+      "media": "Medien"
     },
     "modalityProject": "{label}-Projekt",
     "modality": {
@@ -1566,6 +1567,49 @@
       "collabConnected": "Mitwirkende verbunden",
       "voiceNeedsClone": "Erstelle oder wähle zuerst eine Stimme",
       "generating": "Wird generiert…"
+    },
+    "media": {
+      "rendering": "Wird gerendert…",
+      "failed": "Erzeugung fehlgeschlagen",
+      "reviewTitle": "Brain hat das erstellt – verwenden?",
+      "reviewLeadImage": "Der Agent wartet. Verwende dieses Bild in der App, versuche es mit einem anderen Prompt erneut oder verwirf es.",
+      "reviewLeadVideo": "Der Agent wartet. Verwende diesen Clip in der App, versuche es mit einem anderen Prompt erneut oder verwirf ihn.",
+      "promptLabel": "Prompt",
+      "useIt": "Verwenden",
+      "tryAgain": "Erneut versuchen",
+      "discard": "Verwerfen",
+      "generateTitle": "Erzeugen",
+      "kindLabel": "Was erstellen",
+      "kindImage": "Bild",
+      "kindVideo": "Video",
+      "promptPlaceholderImage": "Titelbild einer sonnigen Bäckereitheke, warme Töne, geringe Schärfentiefe",
+      "promptPlaceholderVideo": "Dampf steigt von frischem Brot auf einem Abkühlgitter, langsamer Push-in, Morgenlicht",
+      "shapeLabel": "Format",
+      "shape": {
+        "landscape": "Querformat",
+        "square": "Quadratisch",
+        "portrait": "Hochformat"
+      },
+      "lengthLabel": "Länge",
+      "seconds": "{seconds} s",
+      "generate": "Erzeugen",
+      "generatingImage": "Bild wird erzeugt…",
+      "generatingVideo": "Clip wird gerendert…",
+      "videoHint": "Ein Clip dauert eine halbe Minute bis einige Minuten. Er wird weiter gerendert, auch wenn du das Panel schließt.",
+      "generateFailed": "Erzeugung fehlgeschlagen. Bitte erneut versuchen.",
+      "libraryTitle": "Medien dieses Projekts",
+      "loading": "Medien werden geladen…",
+      "openPreview": "Vorschau: {prompt}",
+      "inApp": "In der App",
+      "useInApp": "In der App verwenden",
+      "copyLink": "Link kopieren",
+      "copied": "Kopiert",
+      "delete": "Löschen",
+      "useInAppImagePrompt": "Verwende dieses Bild in der App: {url}\nPlatziere es ",
+      "useInAppVideoPrompt": "Verwende diesen Videoclip in der App: {url}\nPlatziere ihn ",
+      "deleteConfirm": "Aus den Medien des Projekts entfernen? Seiten, die es bereits verwenden, funktionieren weiter.",
+      "emptyTitle": "Noch keine Medien",
+      "emptyBody": "Erzeuge hier ein Bild oder einen Clip oder bitte Brain darum – jedes Bild und Video für dieses Projekt landet hier, damit du es zuerst ansehen kannst."
     }
   },
   "references": {

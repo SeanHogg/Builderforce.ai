@@ -11,6 +11,7 @@ import { generateImageAssetAction } from './generateImageAssetAction';
 import { generateVideoAssetAction } from './generateVideoAssetAction';
 import type { ProjectModality } from '@/lib/modality';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
+import type { MediaStudioPort } from './media/useMediaStudio';
 
 type WriteResult = { ok: true } | { ok: false; reason: string };
 
@@ -33,12 +34,14 @@ export interface WorkspaceBrainTargets {
  * image and video generation for the app's pictures and clips, the voice studio's lines, and the
  * PRD / task generators behind a review.
  */
-export function useWorkspaceBrainActions({ store, projectName, modality, targets, review }: {
+export function useWorkspaceBrainActions({ store, projectName, modality, targets, review, media }: {
   /** The open workspace's files — what the build tools read and write. */
   store: WorkspaceFileStore;
   projectName: string;
   modality: ProjectModality;
   targets: WorkspaceBrainTargets;
+  /** The Media panel: where generated images and clips are previewed before the app uses them. */
+  media: MediaStudioPort;
   review: {
     requestPrd: (prd: string) => Promise<boolean>;
     requestTasks: (draft: { titles: string[]; descriptions: string[] }) => Promise<boolean>;
@@ -60,8 +63,8 @@ export function useWorkspaceBrainActions({ store, projectName, modality, targets
 
   const actions = useMemo<BrainAction[]>(() => [
     ...buildToolActions,
-    generateImageAssetAction(),
-    generateVideoAssetAction(),
+    generateImageAssetAction(media),
+    generateVideoAssetAction(media),
     {
       name: 'create_file',
       // Steered at the surgical editor deliberately: this action also backs the
@@ -176,7 +179,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, targets
     },
     // Closures read only the live ref + module imports. `buildToolActions` is the
     // one real dependency: the tools must follow the workspace they edit.
-  ], [buildToolActions]);
+  ], [buildToolActions, media]);
 
   useRegisterBrainActions(actions);
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { PlanBadge } from '@/components/PlanBadge';
@@ -18,6 +18,7 @@ import { useBuilderWorkspace } from '@/components/builder/useBuilderWorkspace';
 import { useArtifactReviews } from '@/components/builder/useArtifactReviews';
 import { useWorkspaceBrainActions } from '@/components/builder/useWorkspaceBrainActions';
 import { useWorkspaceBrainContext } from '@/components/builder/useWorkspaceBrainContext';
+import { useMediaStudio } from '@/components/builder/media/useMediaStudio';
 import styles from '@/components/builder/workspaceChrome.module.css';
 import { serverFileStore } from '@/lib/workspace/workspaceFileStore';
 import type { Project, FileEntry } from '@/lib/types';
@@ -58,12 +59,17 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
 
   const reviews = useArtifactReviews(project.id);
+  // Generated images and clips: the rail's Media tab, and where the agent's wait for a decision.
+  const { openRail, setNarrowPane } = ws;
+  const media = useMediaStudio(ws.storageProjectId, useCallback(() => openRail('media'), [openRail]));
+  const revealDockedChat = useCallback(() => setNarrowPane('chat'), [setNarrowPane]);
   useWorkspaceBrainActions({
     store,
     projectName: project.name,
     modality,
     targets: { activeFile: editor.activeFile, applyCodeToActiveFile: editor.applyCodeToActiveFile, createProjectFile: editor.createProjectFile, setVoiceText: voice.setText },
     review: reviews,
+    media: media.port,
   });
   const brain = useWorkspaceBrainContext({
     projectId: project.id,
@@ -173,7 +179,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           ) : undefined}
         />
 
-        <WorkspaceSidePanels ws={ws} visible={showWork} />
+        <WorkspaceSidePanels ws={ws} visible={showWork} media={media} />
       </div>
     </div>
   );
@@ -181,6 +187,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   // With the Brain docked on the left, every "open a chat" entry point (the team-chat
   // button) selects it THERE rather than opening the floating drawer as a second panel.
   return hasDockedBrain
-    ? <DockedBrainProvider reveal={() => ws.setNarrowPane('chat')}>{workspace}</DockedBrainProvider>
+    ? <DockedBrainProvider reveal={revealDockedChat}>{workspace}</DockedBrainProvider>
     : workspace;
 }

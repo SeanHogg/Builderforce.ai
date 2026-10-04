@@ -25,7 +25,8 @@ export const NARROW_LAYOUT_PX = 760;
  * publishing and state are capabilities of a durable project; offering them to a board
  * with no account would be a door that opens onto an error.
  */
-const LOCAL_RIGHT_TABS: readonly RightTab[] = ['files'];
+// Media works in a browser-held workspace too: generated items are kept for the session.
+const LOCAL_RIGHT_TABS: readonly RightTab[] = ['files', 'media'];
 
 export interface BuilderWorkspaceSubject {
   /** Where the files live — a durable project, or this browser. */

@@ -264,6 +264,7 @@ import { createStudioRoutes }          from './presentation/routes/studioWeightR
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes, createProjectEvermindAgentRoutes }  from './presentation/routes/projectEvermindRoutes';
 import { createProjectFactsRoutes, createProjectFactsAgentRoutes }  from './presentation/routes/projectFactsRoutes';
+import { createProjectMediaRoutes } from './presentation/routes/projectMediaRoutes';
 import { createRunContextRoutes }    from './presentation/routes/runContextRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
@@ -1171,6 +1172,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/projects',  createProjectEvermindRoutes(db));
   app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
   app.route('/api/projects',  createProjectFactsRoutes(db));
+  // The images and clips generated for a project — Studio's Media panel.
+  app.route('/api/projects',  createProjectMediaRoutes(db));
   app.route('/api/agent/projects', createProjectFactsAgentRoutes(db));
   // The ONE run-context source every prompt-assembly surface consumes (the cloud engine
   // in-process; VS Code and the on-prem runner over HTTP). ONE router on both paths —

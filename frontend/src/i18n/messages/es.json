@@ -1309,7 +1309,8 @@
       "agent": "Agente",
       "train": "Entrenar",
       "publish": "Publicar",
-      "state": "Estado"
+      "state": "Estado",
+      "media": "Multimedia"
     },
     "modalityProject": "Proyecto {label}",
     "modality": {
@@ -1566,6 +1567,49 @@
       "collabConnected": "Colaboradores conectados",
       "voiceNeedsClone": "Primero crea o selecciona una voz",
       "generating": "Generando…"
+    },
+    "media": {
+      "rendering": "Renderizando…",
+      "failed": "Error al generar",
+      "reviewTitle": "Brain ha creado esto: ¿lo usas?",
+      "reviewLeadImage": "El agente está esperando. Usa esta imagen en la app, inténtalo de nuevo con otra indicación o descártala.",
+      "reviewLeadVideo": "El agente está esperando. Usa este clip en la app, inténtalo de nuevo con otra indicación o descártalo.",
+      "promptLabel": "Indicación",
+      "useIt": "Usarlo",
+      "tryAgain": "Intentar de nuevo",
+      "discard": "Descartar",
+      "generateTitle": "Generar",
+      "kindLabel": "Qué crear",
+      "kindImage": "Imagen",
+      "kindVideo": "Vídeo",
+      "promptPlaceholderImage": "Imagen principal del mostrador soleado de una panadería, tonos cálidos, poca profundidad de campo",
+      "promptPlaceholderVideo": "Vapor saliendo del pan recién hecho en una rejilla, acercamiento lento, luz de mañana",
+      "shapeLabel": "Formato",
+      "shape": {
+        "landscape": "Horizontal",
+        "square": "Cuadrado",
+        "portrait": "Vertical"
+      },
+      "lengthLabel": "Duración",
+      "seconds": "{seconds} s",
+      "generate": "Generar",
+      "generatingImage": "Generando imagen…",
+      "generatingVideo": "Renderizando clip…",
+      "videoHint": "Un clip tarda entre medio minuto y unos minutos. Sigue renderizándose aunque cierres el panel.",
+      "generateFailed": "Error al generar. Inténtalo de nuevo.",
+      "libraryTitle": "Multimedia de este proyecto",
+      "loading": "Cargando multimedia…",
+      "openPreview": "Vista previa: {prompt}",
+      "inApp": "En la app",
+      "useInApp": "Usar en la app",
+      "copyLink": "Copiar enlace",
+      "copied": "Copiado",
+      "delete": "Eliminar",
+      "useInAppImagePrompt": "Usa esta imagen en la app: {url}\nPonla ",
+      "useInAppVideoPrompt": "Usa este clip de vídeo en la app: {url}\nPonlo ",
+      "deleteConfirm": "¿Quitar esto de la multimedia del proyecto? Las páginas que ya lo usan siguen funcionando.",
+      "emptyTitle": "Aún no hay multimedia",
+      "emptyBody": "Genera aquí una imagen o un clip, o pídeselo a Brain: cada imagen y vídeo creados para este proyecto se reúnen aquí para que los veas antes."
     }
   },
   "references": {
