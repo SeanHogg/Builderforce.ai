@@ -5163,6 +5163,9 @@ function isReadOnlyShellCall(tool, args) {
   const command = typeof record.command === "string" ? record.command : typeof record.cmd === "string" ? record.cmd : "";
   return isReadOnlyShellCommand(command);
 }
+function isUnscopedMutation(tool, args) {
+  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
+}
 function resultObject2(result) {
   if (result && typeof result === "object" && !Array.isArray(result)) return result;
   if (typeof result === "string") {
@@ -5306,7 +5309,7 @@ var ReadCoverage = class _ReadCoverage {
    *   are forgotten; file reads are not, because a ticket write does not edit source.
    */
   invalidate(tool, args) {
-    if (isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args)) {
+    if (isUnscopedMutation(tool, args)) {
       this.exact.clear();
       for (const visit of this.visits.values()) visit.mayHaveChanged = true;
       return;
@@ -5831,6 +5834,19 @@ function formatBrainProvenance(events, opts = {}) {
   }
   return lines;
 }
+function unresolvedAppFailuresInTrace(events) {
+  let last = 0;
+  for (const ev of events) {
+    if (ev.category !== "tool" || ev.isError) continue;
+    const r = ev.result;
+    if (!r || typeof r !== "object" || Array.isArray(r)) continue;
+    const o = r;
+    if (typeof o.failures !== "number") continue;
+    if (o.failures > 0 && typeof o.report !== "string") continue;
+    last = o.failures;
+  }
+  return last;
+}
 var MAX_REPORTED_ERRORS = 5;
 var MAX_ERROR_CHARS = 240;
 function errorMessageOf(e) {
@@ -5927,8 +5943,9 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const noProgress = progress.spinning || progress.noEffect && !ctx.running;
   const staffing = staffingSummaryInTrace(events);
   const workFiledNotStaffed = staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused";
-  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !noProgress && didWork;
-  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
+  const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
+  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !noProgress && unresolvedAppFailures === 0 && didWork;
+  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : unresolvedAppFailures > 0 ? "app-errors-unresolved" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -5964,6 +5981,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     progress,
     contextPressureOnly,
     staffing,
+    unresolvedAppFailures,
     likelyCause
   };
 }
@@ -5989,7 +6007,7 @@ function contextPressureLine(d) {
 }
 function formatBrainDiagnostics(d) {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
-  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "work-filed-not-staffed" ? workFiledNotStaffedVerdict(d.staffing) : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? `Likely CONTEXT EXHAUSTION (case A) \u2014 ${contextEvidence(d)}.` : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "app-errors-unresolved" ? `APP STILL BROKEN \u2014 every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error \u2014 if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.` : d.likelyCause === "work-filed-not-staffed" ? workFiledNotStaffedVerdict(d.staffing) : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -6858,6 +6876,49 @@ function repeatedFailureAdvisory(tool, attempts, reason) {
   return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
 }
 
+// src/repeatedWrite.ts
+function contentWriteOf(tool, args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const { path, content } = args;
+  if (typeof path !== "string" || !path.trim() || typeof content !== "string") return null;
+  return { path: path.trim(), fingerprint: `${tool}:${stableStringify(args)}` };
+}
+function pathOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const path = args.path;
+  return typeof path === "string" && path.trim() ? path.trim() : null;
+}
+var WriteLedger = class {
+  written = /* @__PURE__ */ new Map();
+  /** Is this call a full-content write identical to the last one that landed on its
+   *  path, with nothing touching that path since? */
+  isRepeat(tool, args) {
+    const write = contentWriteOf(tool, args);
+    return !!write && this.written.get(write.path) === write.fingerprint;
+  }
+  /**
+   * A non-read call ran. A successful full-content write is remembered; anything else
+   * that names a path forgets that path; `unscoped` (a shell command, a checkout)
+   * forgets everything. A FAILED write forgets its path — the file's state is unknown.
+   */
+  record(tool, args, options) {
+    if (options.unscoped) {
+      this.written.clear();
+      return;
+    }
+    const write = options.ok ? contentWriteOf(tool, args) : null;
+    if (write) {
+      this.written.set(write.path, write.fingerprint);
+      return;
+    }
+    const path = pathOf(args);
+    if (path) this.written.delete(path);
+  }
+};
+function repeatedWriteNote(tool, path) {
+  return `Not re-run: this exact \`${tool}\` of "${path}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
+}
+
 // src/turnOptimization.ts
 var MAX_ROUTING_QUERY_CHARS = 4e3;
 var ROUTING_USER_TURNS = 4;
@@ -7590,6 +7651,7 @@ ${continuationDirective()}`;
   }
   const readCoverage = new ReadCoverage();
   const failures = new FailureTally();
+  const writeLedger = new WriteLedger();
   const placeholderLedger = new PlaceholderLedger();
   const failureAdvisoryFor = (name, args, out, step) => {
     const attempts = failures.record(name, args);
@@ -7827,6 +7889,12 @@ ${revisit}` : covered.note;
           return { result: { data: served.content } };
         }
       } else {
+        if (writeLedger.isRepeat(call.name, args)) {
+          const note = repeatedWriteNote(call.name, String(args.path ?? "").trim());
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call.name }, result: note });
+          pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: { skipped: true, note } });
+          return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
+        }
         readCoverage.invalidate(call.name, args);
       }
       return call === rawCall ? void 0 : { rewrite: call };
@@ -8251,6 +8319,7 @@ ${revisit}` : covered.note;
         const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
         out = { ok: false, error: message };
         const repeat = failureAdvisoryFor(call.name, args, out, iter);
+        if (!isReadTool) writeLedger.record(call.name, args, { ok: false, unscoped: isUnscopedMutation(call.name, args) });
         pendingRun = { out, toolStart, isReadTool, threw: true };
         return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
       }
@@ -8267,6 +8336,7 @@ ${revisit}` : covered.note;
       if (isTicketRecordingTool(call.name)) c.ticketRecorded = true;
       await autoLinkCreatedItem(chatId, c, persistence, runTool, call.name, out);
       let advisory = null;
+      if (!isReadTool) writeLedger.record(call.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call.name, args) });
       if (isFailedToolResult(out)) {
         advisory = failureAdvisoryFor(call.name, args, out, iter);
       } else {

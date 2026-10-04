@@ -554,3 +554,32 @@ describe('work filed but not staffed', () => {
     expect(d.likelyCause).toBe('healthy');
   });
 });
+
+/**
+ * Chat #129: "No failure signal … Nothing here needs triaging" over a run whose
+ * diagnostics tool had just reported `failures: 6` — every tool call succeeded, the
+ * app was still throwing on render.
+ */
+describe('app-errors-unresolved', () => {
+  const llm: BrainTraceEvent = { ts: '', category: 'llm', label: 'llm.complete', usage: { prompt: 20000, completion: 300 } };
+  const diag = (result: unknown): BrainTraceEvent => ({ ts: '', category: 'tool', label: 'canvas_read_build_diagnostics', result });
+  const write: BrainTraceEvent = { ts: '', category: 'tool', label: 'canvas_write_build_file', result: { ok: true, applied: true } };
+
+  it('is the verdict when the last diagnostics read still reported failures', () => {
+    const d = computeBrainDiagnostics([llm, diag({ ok: true, failures: 2, report: 'x' }), write, llm, diag({ ok: true, failures: 6, report: 'x' })]);
+    expect(d.unresolvedAppFailures).toBe(6);
+    expect(d.likelyCause).toBe('app-errors-unresolved');
+    expect(formatBrainDiagnostics(d)[1]).toContain('APP STILL BROKEN');
+  });
+
+  it('clears once a later read comes back clean — stale failures do not count', () => {
+    const d = computeBrainDiagnostics([llm, diag({ ok: true, failures: 2, report: 'x' }), write, llm, diag({ ok: true, failures: 0, staleFailures: 2, staleReport: 'x' })]);
+    expect(d.unresolvedAppFailures).toBe(0);
+    expect(d.likelyCause).toBe('healthy');
+  });
+
+  it('ignores results that merely carry a failures count without a report', () => {
+    const d = computeBrainDiagnostics([llm, { ts: '', category: 'tool', label: 'builtin_ci_summary', result: { ok: true, failures: 3 } }]);
+    expect(d.unresolvedAppFailures).toBe(0);
+  });
+});

@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { notifyWorkspaceFilesChanged } from './workspaceFileEvents';
 import {
   MAX_DETAIL_CHARS,
   MAX_FAILURES_PER_BUILD,
   PREVIEW_ERROR_MESSAGE,
   clearBuildFailures,
   formatBuildFailures,
+  markBuildSourceChanged,
   previewErrorFrom,
   readBuildFailures,
   recordBuildFailure,
@@ -77,19 +79,52 @@ describe('recordBuildFailure', () => {
 });
 
 describe('formatBuildFailures', () => {
-  it('returns null when there is nothing to repair', () => {
-    expect(formatBuildFailures(PROJECT)).toBeNull();
+  afterEach(() => vi.useRealTimers());
+
+  it('returns null reports when there is nothing to repair', () => {
+    expect(formatBuildFailures(PROJECT)).toEqual({ current: { count: 0, report: null }, stale: { count: 0, report: null } });
   });
 
   it('labels the source and carries command, exit code, repeats and location', () => {
     recordBuildFailure(PROJECT, { source: 'build', command: 'npm run build', exitCode: 2, message: 'build failed', detail: 'TS2304' });
     recordBuildFailure(PROJECT, { source: 'runtime', message: 'x is not a function', at: 'src/App.jsx:12:3' });
     recordBuildFailure(PROJECT, { source: 'runtime', message: 'x is not a function', at: 'src/App.jsx:12:3' });
-    const report = formatBuildFailures(PROJECT)!;
-    expect(report).toContain('[BUILD · `npm run build` · exit 2] build failed');
-    expect(report).toContain('TS2304');
-    expect(report).toContain('[RUNTIME · ×2] x is not a function');
-    expect(report).toContain('at src/App.jsx:12:3');
+    const { current } = formatBuildFailures(PROJECT);
+    expect(current.count).toBe(2);
+    expect(current.report).toContain('[BUILD · `npm run build` · exit 2] build failed');
+    expect(current.report).toContain('TS2304');
+    expect(current.report).toContain('[RUNTIME · ×2] x is not a function');
+    expect(current.report).toContain('at src/App.jsx:12:3');
+  });
+
+  // An agent that rewrote App.jsx and re-read diagnostics was handed the error it
+  // had just fixed, as if the fix had failed — and rewrote the file again.
+  it('reports failures last seen before a source change as stale, not current', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    recordBuildFailure(PROJECT, { source: 'runtime', message: 'old error' });
+    vi.setSystemTime(2_000);
+    notifyWorkspaceFilesChanged(PROJECT, ['src/App.jsx']);
+    let report = formatBuildFailures(PROJECT);
+    expect(report.current).toEqual({ count: 0, report: null });
+    expect(report.stale.count).toBe(1);
+    expect(report.stale.report).toContain('old error');
+
+    // The reloaded preview throws it again: it is current once more.
+    vi.setSystemTime(3_000);
+    recordBuildFailure(PROJECT, { source: 'runtime', message: 'old error' });
+    report = formatBuildFailures(PROJECT);
+    expect(report.current.count).toBe(1);
+    expect(report.stale.count).toBe(0);
+  });
+
+  it('treats an editor write into the preview as a source change too', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(5_000);
+    recordBuildFailure(PROJECT, { source: 'build', message: 'broken' });
+    vi.setSystemTime(6_000);
+    markBuildSourceChanged(PROJECT);
+    expect(formatBuildFailures(PROJECT).stale.count).toBe(1);
   });
 });
 

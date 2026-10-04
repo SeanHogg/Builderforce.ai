@@ -59,8 +59,9 @@ import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
 import { toolActivity, visitTarget, type BrainRunActivity } from './runActivity';
 import { createComposingActivity, toolCallArgBytes } from './composingActivity';
-import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
+import { ReadCoverage, isUnscopedMutation, revisitAdvisory, withAdvisory } from './readCoverage';
 import { FailureTally, failureReason, repeatedFailureAdvisory } from './repeatedFailure';
+import { WriteLedger, repeatedWriteNote } from './repeatedWrite';
 import { trimToolResult } from './toolResultBudget';
 import { chatModeDirective, normalizeChatMode, type ChatMode, type ChatRosterAgent } from './chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
@@ -1698,6 +1699,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // gone. The first retry stays free; from the second the model reads the count and the
   // error it already has, and the moves that remain.
   const failures = new FailureTally();
+  // What this run has already WRITTEN (see `repeatedWrite.ts`): the third loop shape —
+  // a successful full-content write sent again byte for byte, because an error from
+  // before it was still on screen. Replaying it cannot change the file, so it is answered
+  // without running.
+  const writeLedger = new WriteLedger();
   // Placeholders this run wrote and has not removed — read when a ticket is marked done
   // (see `completionGuard.ts`).
   const placeholderLedger = new PlaceholderLedger();
@@ -2082,6 +2088,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           return { result: { data: served.content } };
         }
       } else {
+        if (writeLedger.isRepeat(call.name, args)) {
+          const note = repeatedWriteNote(call.name, String((args as { path?: unknown }).path ?? '').trim());
+          pushTrace(c, { ts: nowIso(), category: 'message', label: 'tools.repeat_write_guard', args: { step: iter, tool: call.name }, result: note });
+          pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: { skipped: true, note } });
+          return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
+        }
         readCoverage.invalidate(call.name, args);
       }
       return call === rawCall ? undefined : { rewrite: call };
@@ -2670,6 +2682,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // loop, not persistence, and the model needs to be told so on the result it
         // reads. The DURABLE step keeps the untouched error.
         const repeat = failureAdvisoryFor(call.name, args, out, iter);
+        if (!isReadTool) writeLedger.record(call.name, args, { ok: false, unscoped: isUnscopedMutation(call.name, args) });
         pendingRun = { out, toolStart, isReadTool, threw: true };
         // Errors are small; push as-is (trimming a short error would only add noise).
         return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
@@ -2712,6 +2725,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // is recorded as its own step so triage can see the loop was fought rather
       // than inferring it from the repetition alone.
       let advisory: string | null = null;
+      if (!isReadTool) writeLedger.record(call.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call.name, args) });
       if (isFailedToolResult(out)) {
         // The OTHER loop the guards missed. `readCoverage` records successes only, by
         // design — a failed read has no result above to reuse, so a retry must not be

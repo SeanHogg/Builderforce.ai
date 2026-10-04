@@ -645,6 +645,12 @@ export interface BrainDiagnostics {
    */
   staffing: StaffingSummary;
   /**
+   * Build/runtime failures the run's LAST diagnostics read still reported — the app the
+   * run was working on was broken when it stopped looking. 0 when no read reported any,
+   * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
+   */
+  unresolvedAppFailures: number;
+  /**
    * Best-effort verdict — the header a triager reads first. `healthy` is distinct
    * from `inconclusive`: the former means there is no failure to explain, the
    * latter that there IS one but the signals don't separate A from B. Collapsing
@@ -675,9 +681,37 @@ export interface BrainDiagnostics {
     | 'no-progress'
     | 'context-exhaustion'
     | 'model-degradation'
+    | 'app-errors-unresolved'
     | 'work-filed-not-staffed'
     | 'inconclusive'
     | 'healthy';
+}
+
+/**
+ * How many build/runtime failures the run's LAST diagnostics read reported.
+ *
+ * Chat #129 triaged "No failure signal … Nothing here needs triaging" over a run whose
+ * `canvas_read_build_diagnostics` had just answered `failures: 6` — the user's app was
+ * throwing on render, the model had rewritten the same file twice to fix it, and the
+ * report called it healthy because every TOOL CALL had succeeded. A diagnostics read
+ * that succeeds in reporting a broken app is not a tool error, so `errors` never saw it.
+ *
+ * Read by the result's SHAPE (`{ failures: number }` alongside a `report` or a clean
+ * zero), not a tool name, so any host's diagnostics tool counts. Only the last read
+ * matters: a later clean one means the run fixed what the earlier one found.
+ */
+export function unresolvedAppFailuresInTrace(events: BrainTraceEvent[]): number {
+  let last = 0;
+  for (const ev of events) {
+    if (ev.category !== 'tool' || ev.isError) continue;
+    const r = ev.result;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+    const o = r as { failures?: unknown; report?: unknown };
+    if (typeof o.failures !== 'number') continue;
+    if (o.failures > 0 && typeof o.report !== 'string') continue;
+    last = o.failures;
+  }
+  return last;
 }
 
 /** How many failing steps the report names before it stops listing them. */
@@ -895,9 +929,10 @@ export function computeBrainDiagnostics(
   // Filed versus staffed — the outcome question no other signal here asks.
   const staffing = staffingSummaryInTrace(events);
   const workFiledNotStaffed = staffing.verdict === 'filed-not-staffed' || staffing.verdict === 'staffing-refused';
+  const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const healthy =
     errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
-    && !announcedUnmadeToolCall && !noProgress && didWork;
+    && !announcedUnmadeToolCall && !noProgress && unresolvedAppFailures === 0 && didWork;
   const likelyCause: BrainDiagnostics['likelyCause'] =
     memoryOnlyRun ? 'memory-answered'
       : noToolsAdvertised ? 'no-tools-advertised'
@@ -906,6 +941,7 @@ export function computeBrainDiagnostics(
             : noProgress ? 'no-progress'
             : contextSignal && !degradationSignal ? 'context-exhaustion'
               : degradationSignal && !contextSignal ? 'model-degradation'
+                : unresolvedAppFailures > 0 ? 'app-errors-unresolved'
                 : workFiledNotStaffed ? 'work-filed-not-staffed'
                   : healthy ? 'healthy'
                     : 'inconclusive';
@@ -945,6 +981,7 @@ export function computeBrainDiagnostics(
     progress,
     contextPressureOnly,
     staffing,
+    unresolvedAppFailures,
     likelyCause,
   };
 }
@@ -1011,6 +1048,8 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
             ? `Likely CONTEXT EXHAUSTION (case A) — ${contextEvidence(d)}.`
             : d.likelyCause === 'model-degradation'
               ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
+              : d.likelyCause === 'app-errors-unresolved'
+                ? `APP STILL BROKEN — every tool call succeeded, but the run's last diagnostics read still reported ${d.unresolvedAppFailures} build/runtime failure(s) in the app it was working on. The tools are fine; the app is not. Read that diagnostics result in the trace below for the error — if it points into a package CDN or the preview runtime rather than the project's own files, the fault is the platform's, and rewriting project files will not fix it.`
               : d.likelyCause === 'work-filed-not-staffed'
                 ? workFiledNotStaffedVerdict(d.staffing)
               : d.likelyCause === 'healthy'

@@ -1,3 +1,19 @@
+## ✅ RESOLVED 2026-10-04 — Chat #129 tool-call review: stale build diagnostics, identical re-writes, and a "healthy" triage over a broken app
+
+In chat #129 ("Build a marketing website for he-man") a MiniMax-M1 run kept failing on `Cannot read properties of null (reading 'useState')`. It re-read files, rewrote `src/App.jsx` twice with the identical 8.6 KB body, and triage still called the run healthy.
+
+- **Root cause of the app error (already fixed).** The app had two copies of React loaded from esm.sh. The `react@18.3.1` URL carried the pins `@vitejs/plugin-react,react-dom,vite`, which is the "manifest didn't load, pin everything" fallback, and `react-dom` linked a different copy. Fixed in builderforce-webcontainers 2026.10.4 (`b91e070`, pins only the packages each package imports). The frontend shipped it at 20:02Z in `f915abbe8`. The failing turns ran at 19:36Z, before that deploy. The project's own files were never the problem.
+- **Stale diagnostics.** `canvas_read_build_diagnostics` cleared failures only when a run started. An edit pushed into a live preview isn't a run, so after its rewrite the model was handed the old errors (`failures: 2 → 6`) as if its fix had failed.
+  - `buildDiagnostics.ts` now tracks `markBuildSourceChanged`. It is fed by `workspaceFileEvents` (agent writes, restores) and by `writePreviewFile` (editor saves).
+  - `formatBuildFailures` returns `{ current, stale }`. The tool reports stale failures separately, with a note not to rewrite over them.
+- **Identical re-writes.** New `brain-embedded/src/repeatedWrite.ts` (`WriteLedger`): a full-content write (`path` + `content`) identical to the last one that landed on that path, with nothing touching the path since, is answered `unchanged` without running.
+  - Matched on the call's shape, so it covers `write_file` and `canvas_write_build_file` alike.
+  - find/replace edits are excluded, because repeating one isn't a no-op.
+  - The "could this change any file" check is now one exported `isUnscopedMutation` in `readCoverage.ts`.
+- **Triage blind to a broken app.** New verdict `app-errors-unresolved` (`unresolvedAppFailuresInTrace`): when the run's last diagnostics read still reported failures, the report says APP STILL BROKEN instead of "No failure signal".
+- **Not a bug: the `<think>` text in the trace.** The trace logs "I've</think> generated…" raw. `stitchSplitSentence` already rejoins it for display.
+- Tests: `repeatedWrite.test.ts`, `buildDiagnostics.test.ts` (stale/current split), `brainTriage.test.ts` (new verdict).
+
 ## ✅ RESOLVED 2026-10-04 — Studio now follows its layout mockup: one header, a framed preview, a status bar, and the project's own chat (frontend 2026.10.11)
 
 The operator compared the shipped Studio with the design canvas (claude.ai artifact "Studio Layout Redesign") and asked why they differed. The pass that shipped it had been built from the old screenshots' complaints, reusing the existing host components, and was never compared with the mockup. This pass works from the mockup.

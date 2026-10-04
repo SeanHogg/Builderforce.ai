@@ -102,6 +102,15 @@ function isReadOnlyShellCall(tool: string, args: unknown): boolean {
   return isReadOnlyShellCommand(command);
 }
 
+/**
+ * Could this call have changed ANY file, unnamed? A shell command or a tree-rewriting
+ * git tool — minus a shell command that provably only reads. The ONE reading of that
+ * question, shared by every per-target ledger (this one and `repeatedWrite.ts`).
+ */
+export function isUnscopedMutation(tool: string, args: unknown): boolean {
+  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
+}
+
 /** A tool result as an object — the host may hand it back already parsed or as JSON text. */
 function resultObject(result: unknown): Record<string, unknown> | null {
   if (result && typeof result === 'object' && !Array.isArray(result)) return result as Record<string, unknown>;
@@ -363,7 +372,7 @@ export class ReadCoverage {
     // A shell command that provably only READS (`git log`, `ls`, a loop of `git rev-list`)
     // changed nothing, so it forgets nothing — see `readOnlyShell.ts`. Every other shell
     // command keeps the unknown-blast-radius treatment below.
-    if (isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args)) {
+    if (isUnscopedMutation(tool, args)) {
       this.exact.clear();
       for (const visit of this.visits.values()) visit.mayHaveChanged = true;
       return;

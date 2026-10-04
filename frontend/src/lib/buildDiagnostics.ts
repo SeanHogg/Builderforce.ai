@@ -35,6 +35,7 @@
  */
 
 import { isWorkspaceId, type WorkspaceId } from '@/lib/workspace/workspaceId';
+import { subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
 
 /** Where a failure came from. The two have genuinely different fixes. */
 export type BuildFailureSource = 'build' | 'runtime';
@@ -149,6 +150,30 @@ export function clearBuildFailures(storageProjectId: WorkspaceId): void {
   failures.delete(storageProjectId);
   notify(storageProjectId);
 }
+
+/**
+ * When each build's source last changed, by epoch ms.
+ *
+ * ── WHY ─────────────────────────────────────────────────────────────────────
+ * Failures are only cleared when a RUN starts, but an edit into a live preview
+ * (an agent's `canvas_write_build_file`, a save in the editor) is not a run. So
+ * a repair turn that rewrote `src/App.jsx` and re-read diagnostics was handed
+ * the SAME errors it had just fixed, with no way to tell "still broken" from
+ * "not re-run yet" — and rewrote the file again, identically. Marking the
+ * moment the source moved lets the report separate failures seen SINCE the
+ * edit (still happening) from ones last seen BEFORE it (unconfirmed).
+ */
+const sourceChangedAt = new Map<WorkspaceId, number>();
+
+/** Record that a build's source just changed. */
+export function markBuildSourceChanged(storageProjectId: WorkspaceId): void {
+  if (!isWorkspaceId(storageProjectId)) return;
+  sourceChangedAt.set(storageProjectId, Date.now());
+}
+
+// Every write that is not the editor's own (canvas build tools, version restores)
+// announces itself here — the one place it needs hearing.
+subscribeWorkspaceFiles((workspaceId) => markBuildSourceChanged(workspaceId));
 
 /** Subscribe to changes. Returns the unsubscribe. */
 export function subscribeBuildFailures(listener: Listener): () => void {
@@ -274,23 +299,38 @@ export function teeOutput(onData: (data: string) => void): { write: (data: strin
  * same text to the same model, and two formatters would eventually disagree
  * about what a failure looks like.
  *
- * Returns null when there is nothing wrong — callers use that to decide whether
- * there is anything to repair at all.
+ * Failures are split by {@link markBuildSourceChanged}: `current` were seen at or
+ * after the latest source change (still happening), `stale` were last seen
+ * before it (the edit may have fixed them; the preview has not re-confirmed).
+ * Each report is null when its half is empty — callers use `current` to decide
+ * whether there is anything to repair at all.
  */
-export function formatBuildFailures(storageProjectId: WorkspaceId): string | null {
+export interface BuildFailureReport {
+  current: { count: number; report: string | null };
+  stale: { count: number; report: string | null };
+}
+
+function formatFailure(failure: BuildFailure): string {
+  const head = [
+    failure.source === 'build' ? 'BUILD' : 'RUNTIME',
+    failure.command ? `\`${failure.command}\`` : null,
+    failure.exitCode != null ? `exit ${failure.exitCode}` : null,
+    failure.count > 1 ? `×${failure.count}` : null,
+  ].filter(Boolean).join(' · ');
+  const location = failure.at ? `\n  at ${failure.at}` : '';
+  const detail = failure.detail ? `\n\n${failure.detail}` : '';
+  return `[${head}] ${failure.message}${location}${detail}`;
+}
+
+function formatList(list: BuildFailure[]): { count: number; report: string | null } {
+  return { count: list.length, report: list.length ? list.map(formatFailure).join('\n\n---\n\n') : null };
+}
+
+export function formatBuildFailures(storageProjectId: WorkspaceId): BuildFailureReport {
+  const changedAt = sourceChangedAt.get(storageProjectId) ?? 0;
   const list = readBuildFailures(storageProjectId);
-  if (!list.length) return null;
-  return list
-    .map((failure) => {
-      const head = [
-        failure.source === 'build' ? 'BUILD' : 'RUNTIME',
-        failure.command ? `\`${failure.command}\`` : null,
-        failure.exitCode != null ? `exit ${failure.exitCode}` : null,
-        failure.count > 1 ? `×${failure.count}` : null,
-      ].filter(Boolean).join(' · ');
-      const location = failure.at ? `\n  at ${failure.at}` : '';
-      const detail = failure.detail ? `\n\n${failure.detail}` : '';
-      return `[${head}] ${failure.message}${location}${detail}`;
-    })
-    .join('\n\n---\n\n');
+  return {
+    current: formatList(list.filter((failure) => failure.lastSeen >= changedAt)),
+    stale: formatList(list.filter((failure) => failure.lastSeen < changedAt)),
+  };
 }

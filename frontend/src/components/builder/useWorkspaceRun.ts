@@ -11,7 +11,7 @@ import { useToast } from '@/components/ToastProvider';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 import { buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/siteTools';
 import { runProjectChecks, type CheckResult } from '@/lib/browserRuntime/projectChecks';
-import { clearBuildFailures, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
+import { clearBuildFailures, markBuildSourceChanged, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
 import { withVisualEditor } from '@/lib/visualEditor';
 import type { FileEntry } from '@/lib/types';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
@@ -74,9 +74,12 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
 
   /** An edit reaches whichever runtime is showing the preview. */
   const writePreviewFile = useCallback(
-    (path: string, contents: string): Promise<void> =>
-      writeInstantPreview(path, contents) ? Promise.resolve() : writeRuntimeFile(path, contents),
-    [writeInstantPreview, writeRuntimeFile],
+    (path: string, contents: string): Promise<void> => {
+      // Failures from before this edit are no longer proof the source is broken.
+      markBuildSourceChanged(store.id);
+      return writeInstantPreview(path, contents) ? Promise.resolve() : writeRuntimeFile(path, contents);
+    },
+    [writeInstantPreview, writeRuntimeFile, store.id],
   );
 
   /**

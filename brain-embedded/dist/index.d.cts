@@ -2556,6 +2556,12 @@ interface BrainDiagnostics {
      */
     staffing: StaffingSummary;
     /**
+     * Build/runtime failures the run's LAST diagnostics read still reported — the app the
+     * run was working on was broken when it stopped looking. 0 when no read reported any,
+     * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
+     */
+    unresolvedAppFailures: number;
+    /**
      * Best-effort verdict — the header a triager reads first. `healthy` is distinct
      * from `inconclusive`: the former means there is no failure to explain, the
      * latter that there IS one but the signals don't separate A from B. Collapsing
@@ -2578,7 +2584,7 @@ interface BrainDiagnostics {
      * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
      * model fault or narrated-call failure explains the missing dispatch better and outranks it.
      */
-    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
+    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O

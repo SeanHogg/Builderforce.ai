@@ -485,15 +485,26 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const args = raw as { objectId?: unknown };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
-        const report = formatBuildFailures(resolved.build.store.id);
-        if (!report) {
+        const { current, stale } = formatBuildFailures(resolved.build.store.id);
+        if (!current.report && !stale.report) {
           return {
             ok: true,
             failures: 0,
             note: 'No build or runtime errors have been recorded for this workspace in this session. If the user reports a problem, it has not run yet — open the Builder object and press Run — or the problem is behavioural rather than an error.',
           };
         }
-        return { ok: true, failures: report.split('\n\n---\n\n').length, report };
+        // Errors last seen BEFORE the latest edit are not evidence the edit failed:
+        // the preview has not reported them again. Re-writing the same file over
+        // them is the loop this split exists to stop.
+        const staleNote = stale.report
+          ? `${stale.count} error(s) were last seen BEFORE the latest file change and have not recurred since. Do not rewrite a file to fix them again — if the preview has reloaded and they are absent, the edit worked; otherwise ask the user to reload the preview and re-read.`
+          : undefined;
+        return {
+          ok: true,
+          failures: current.count,
+          ...(current.report ? { report: current.report } : {}),
+          ...(stale.report ? { staleFailures: stale.count, staleReport: stale.report, note: staleNote } : {}),
+        };
       },
     },
     {
