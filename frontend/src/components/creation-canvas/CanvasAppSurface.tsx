@@ -3,194 +3,85 @@
  * already declares the boundary, so a directive would mark a second entry point that does
  * not exist — and `check-frontend-architecture` counts directives, not components.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { CodeReadingIcon, ConsoleReadingIcon, PreviewReadingIcon } from '@/components/canvas/CanvasCommands';
-import { CANVAS_APP_FRAME_SANDBOX, canvasApp, type CanvasAppFile } from '@/lib/canvasApp';
-import type { CanvasViewport } from '@builderforce/creation-canvas-contract';
-import { CanvasBarGroup } from './CanvasBarGroup';
-import { CanvasDeviceFrame } from './CanvasDeviceFrame';
-import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
-import { useCanvasSurfaceActions } from './canvasSurfaceActions';
-import { useCanvasPreviewLog } from './useCanvasPreviewLog';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
+import { useStoreFiles } from '@/components/builder/useStoreFiles';
+import { canvasAppFiles } from '@/lib/canvasApp';
+import { appCardSignature, type SessionApp } from '@/lib/canvasSessionApp';
+import type { ProjectModality } from '@/lib/modality';
+import { CanvasAppStart } from './CanvasAppStart';
+import type { CanvasSessionAppActions } from './hooks/useCanvasSessionApp';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 
+// The editor, the runtime client and the panels are the heaviest code on the canvas, and
+// most boards never open App — so they load when it opens, not with the board.
+const CanvasAppWorkspace = dynamic(() => import('./CanvasAppWorkspace').then((module) => module.CanvasAppWorkspace), { ssr: false });
+
 /**
- * The session as one running application — the app runtime.
+ * The session's app — the App surface.
  *
- * ── WHY THIS IS A BOARD SURFACE ──────────────────────────────────────────────────
- * `page`, `play`, `site` and `timeline` each open ONE card at full size. An application
- * is not one card: ask Brain for an SMS sender and you get `backend/server.js`,
- * `frontend/index.html` and the page they render — three objects that are one artifact.
- * There is no card to enter it from, so the surface is about the session, and it sits in
- * the rail beside Chat and Board where pressing it with nothing selected has an answer.
+ * ── WHAT IT RUNS ─────────────────────────────────────────────────────────────────
+ * The real Builder workspace (files, the in-browser runtime, terminal, database,
+ * publishing), embedded in the canvas's own chrome — see `CanvasAppWorkspace`. It used to
+ * run the board's code cards as one inlined document in an opaque frame, which could show
+ * a front end and could only NAME a server. That runner is gone; the cards are now brought
+ * into the app's files instead (below), where the runtime can run all of them.
  *
- * ── THREE READINGS, ONE ARTIFACT ─────────────────────────────────────────────────
- * Preview, Code and Console are the same app read three ways, which is the shape every
- * comparable builder converged on. The Console is not decoration: this frame runs with an
- * opaque origin, so without the instrumentation `canvasApp` injects, a page that throws
- * inside it fails invisibly and the user concludes their credentials are wrong.
+ * ── WHICH APP ────────────────────────────────────────────────────────────────────
+ * The session's primary Builder object (`lib/canvasSessionApp.ts`). A board with none is
+ * offered a choice of what to make — unless it already holds code cards, in which case an
+ * app is created for them without asking, because those cards ARE the app the person
+ * opened this surface to run.
  *
- * ── WHAT IT DOES NOT PRETEND ─────────────────────────────────────────────────────
- * A browser frame cannot run a Node server. `canvasApp` separates those files out by
- * ROLE, this surface names them, and every call the front end makes to a host that is not
- * attached is reported in the console with that reason. A preview that swallowed them
- * would be worse than none.
+ * ── THE BOARD'S CODE CARDS ───────────────────────────────────────────────────────
+ * Brought in silently while the surface is open: on arrival, and again whenever a card is
+ * added or edited, so a card Brain writes on the board shows up in the running app.
  *
- * ── WHY ITS CONTROLS ARE NOT DRAWN HERE ──────────────────────────────────────────
- * Run/Stop, the three readings and the preview width used to be a toolbar of this
- * surface's own, drawn directly under the session bar — two rows of controls that looked
- * alike, sat 40px apart, and disagreed about which one you press to do something. A third
- * surface with a runtime would have made three. They are now PUBLISHED into the one
- * session bar through `useCanvasSurfaceActions`, so the canvas has a single bar whose
- * contents follow the surface. The host never learns what an app surface is; this surface
- * never learns where the bar is.
- *
- * ── WHY THE SHIP CONTROL IS A BUTTON AND NOT A RAIL ──────────────────────────────
- * Build → Stage → Live already exists, complete, in `CanvasReleasesPanel`: it snapshots,
- * runs the harness, refuses to publish while anything blocks, shows the buyer's own view
- * of the product and can revert. Redrawing any of that here would be a second copy of a
- * gate the server owns — the exact failure that panel's own header warns about. So this
- * surface adds a DOOR to it, scoped to the whole board, and owns none of the lifecycle.
+ * ── NO ACCOUNT ───────────────────────────────────────────────────────────────────
+ * The same workspace, over files held in this browser. "Keep your work" makes the board
+ * durable, and the session's app follows it into a real project.
  */
-
-const READINGS = ['preview', 'code', 'console'] as const;
-type AppReading = (typeof READINGS)[number];
-
-/** One glyph per reading. Icons rather than words for the reason the width switcher gives:
- *  this group renders INSIDE the one command bar, where everything else is a 15px mark, and
- *  six worded buttons in that row wrapped the bar onto a second line that then covered the
- *  prompt floating above it. The word is still the button's accessible name. */
-const READING_ICON: Record<AppReading, () => React.ReactElement> = {
-  preview: PreviewReadingIcon,
-  code: CodeReadingIcon,
-  console: ConsoleReadingIcon,
-};
-
 export interface CanvasAppSurfaceProps {
   nodes: ReadonlyArray<{ id: string; data: CreationNodeData }>;
-  /** Escape hands the board back. There is no exit BUTTON here, unlike the object
-   *  surfaces: this one is in the rail, so pressing "App" again is the way out — and a
-   *  second control for a decision the switcher already owns is the thing the surface
-   *  registry exists to prevent. */
+  session: CanvasSessionAppActions;
+  persistence: 'local' | 'server';
+  /** What the board is called — the name an app created from here starts with. */
+  sessionTitle: string;
+  /** Escape hands the board back. Pressing "App" again in the switcher is the other way out. */
   onExit: () => void;
-  /** Send the reader to the card a file came from. */
-  onOpenObject?: (nodeId: string) => void;
-  /**
-   * The object the reader just opened elsewhere — set when they pressed "Open the site"
-   * on a website card, because that site and this app are the same thing read two ways.
-   * The surface opens THAT object's file rather than the entry it would otherwise guess,
-   * so arriving here does not silently change which thing is in hand. Unset when the
-   * reader came from the rail, where there is no such object and the entry is right.
-   */
-  focusNodeId?: string | null;
 }
 
-export function CanvasAppSurface({ nodes, onExit, onOpenObject, focusNodeId }: CanvasAppSurfaceProps) {
+export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, onExit }: CanvasAppSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.app');
-  const app = useMemo(() => canvasApp(nodes), [nodes]);
-  const [reading, setReading] = useState<AppReading>('preview');
-  const [viewport, setViewport] = useState<CanvasViewport>('desktop');
-  const [running, setRunning] = useState(false);
-  const [openFile, setOpenFile] = useState<string | null>(null);
+  const { app, apps, createApp, importCards, selectApp } = session;
+  // Recomputed only when a card's content changes, never on a drag (see `appCardSignature`).
+  const cards = appCardSignature(nodes);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `cards` is the dependency: it changes exactly when these cards do.
+  const hasCodeCards = useMemo(() => canvasAppFiles(nodes).length > 0, [cards]);
+  const title = sessionTitle.trim() || t('defaultAppTitle');
 
-  // Arriving from a site: show that object's file. Keyed on the id rather than done once
-  // on mount, because the surface stays mounted while the reader opens a second site —
-  // and it must follow them rather than keep showing the first one's page.
+  // A board of code cards and no app: make the app those cards are, once.
+  const autoCreated = useRef(false);
   useEffect(() => {
-    if (!focusNodeId) return;
-    const owned = app.files.find((file) => file.nodeId === focusNodeId);
-    if (owned) setOpenFile(owned.path);
-  }, [focusNodeId, app.files]);
-  // Bumping this remounts the frame, which is what "restart" means for a document that
-  // has no server to reload from.
-  const [runNonce, setRunNonce] = useState(0);
-  const frameRef = useRef<HTMLIFrameElement>(null);
+    if (app || !hasCodeCards || autoCreated.current) return;
+    autoCreated.current = true;
+    void createApp({ title, modality: 'designer' }).catch(() => { autoCreated.current = false; });
+  }, [app, hasCodeCards, createApp, title]);
 
-  // What the running document says about itself, over the ONE preview wire — scoped to
-  // this surface's own frame, which a listener of its own could not do.
-  const { log, summary, reset } = useCanvasPreviewLog(frameRef, running);
+  // New or edited code cards follow the app while it is open.
+  // Read through a ref: `app` is a fresh object on every board change, and keying the
+  // import on it would run a pass on every drag. Its id and the cards are what matter.
+  const appRef = useRef(app);
+  useEffect(() => { appRef.current = app; });
+  const appId = app?.nodeId ?? null;
+  useEffect(() => {
+    if (appRef.current) void importCards(appRef.current);
+  }, [appId, cards, importCards]);
 
-  // A rewritten card is a different app. Tearing the frame down rather than leaving it
-  // is what stops the surface showing the previous build under the new file list.
-  useEffect(() => { setRunning(false); reset(); }, [app.document, reset]);
-
-  const run = useCallback(() => {
-    reset();
-    setRunNonce((value) => value + 1);
-    setRunning(true);
-  }, [reset]);
-
-  const errors = summary.errors;
-  const entryPath = app.entry?.path ?? '';
-  const selected = app.files.find((file) => file.path === openFile) ?? app.files[0] ?? null;
-
-  // Into the ONE session bar, for as long as this surface is mounted. See the header:
-  // these used to be a second toolbar of this surface's own.
-  //
-  // Split into what you PRESS and what the runtime REPORTS, because the bar folds away
-  // the first and keeps the second — an app that is running has to keep saying so even
-  // when its Run button is hidden.
-  useCanvasSurfaceActions(() => ({
-    status: (
-      <span
-        className={styles.appAddress}
-        data-running={running}
-        role="status"
-        aria-live="polite"
-      >
-        {running && entryPath ? entryPath : t('stopped')}
-      </span>
-    ),
-    controls: (
-    // Captioned like every other group on the bar. The name comes from the SURFACE, not
-    // from the host's group registry — an app runtime owns its own vocabulary, and a host
-    // table naming these controls would be the host learning what an app is.
-    <CanvasBarGroup caption={t('label')} label={t('regionLabel')}>
-    <div className={styles.appBarControls}>
-      <button
-        type="button"
-        className={styles.appRunButton}
-        data-running={running}
-        disabled={!app.document}
-        onClick={() => (running ? setRunning(false) : run())}
-      >
-        <span className={styles.appRunDot} aria-hidden />
-        {running ? t('stop') : t('run')}
-      </button>
-
-      <div className={styles.segmentedGroup} role="group" aria-label={t('readings')}>
-        {READINGS.map((option) => {
-          const Glyph = READING_ICON[option];
-          const name = t(`reading.${option}` as 'reading.preview');
-          return (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setReading(option)}
-              aria-pressed={reading === option}
-              aria-label={name}
-              title={name}
-            >
-              <Glyph />
-              {option === 'console' && errors > 0 && (
-                <span className={styles.appErrorCount} aria-label={t('errorCount', { count: errors })}>{errors}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* The width the READER is checking — the ONE switcher, shared with the site
-          surface. Local and unpersisted: looking at a desktop app on a phone frame for a
-          moment must not quietly re-author what the app is designed for. */}
-      <CanvasViewportSwitcher value={viewport} onChange={setViewport} />
-
-    </div>
-    </CanvasBarGroup>
-    ),
-  }), [running, reading, viewport, errors, entryPath, app.document, t]);
+  const create = async (modality: ProjectModality) => { await createApp({ title, modality }); };
 
   return (
     <section
@@ -200,103 +91,27 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject, focusNodeId }: C
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onExit(); } }}
     >
       <div className={styles.appSurfaceBody}>
-        {app.files.length === 0 ? (
-          <div className={styles.appEmpty} role="status">
-            <strong>{t('emptyTitle')}</strong>
-            <p>{t('emptyBody')}</p>
-          </div>
+        {app ? (
+          <SessionAppWorkspace app={app} apps={apps} onSelectApp={selectApp} />
+        ) : hasCodeCards ? (
+          <div className={styles.appEmpty} role="status"><strong>{t('preparing')}</strong></div>
         ) : (
-          <>
-            {reading === 'preview' && (
-              <div className={styles.appStage} data-viewport={viewport}>
-                {app.document && running ? (
-                  /* Laid out at the width the reader picked and scaled into the stage —
-                     never capped to the stage, which would hand the app's own media
-                     queries the stage's width and make all three readings identical.
-                     See `CanvasDeviceFrame`; that was this surface's defect. */
-                  <CanvasDeviceFrame
-                    frameRef={frameRef}
-                    reloadKey={runNonce}
-                    className={styles.appFrame}
-                    viewport={viewport}
-                    title={t('frameTitle', { path: entryPath })}
-                    srcDoc={app.document}
-                    // No `allow-same-origin`. See `CANVAS_APP_FRAME_SANDBOX` — with
-                    // `allow-scripts` it would let the frame escape the sandbox entirely.
-                    sandbox={CANVAS_APP_FRAME_SANDBOX}
-                  />
-                ) : (
-                  <div className={styles.appIdle} role="status">
-                    <strong>{app.document ? t('idleTitle') : t('noEntryTitle')}</strong>
-                    <p>{app.document ? t('idleBody') : t('noEntryBody')}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {reading === 'code' && (
-              <div className={styles.appCode}>
-                <nav className={styles.appTree} aria-label={t('files')}>
-                  {app.files.map((file) => (
-                    <button
-                      key={file.path}
-                      type="button"
-                      onClick={() => setOpenFile(file.path)}
-                      aria-current={selected?.path === file.path}
-                      data-role={file.role}
-                    >
-                      <span>{file.path}</span>
-                      {file.role === 'server' && <em>{t('role.server')}</em>}
-                    </button>
-                  ))}
-                </nav>
-                <div className={styles.appSource}>
-                  {selected && (
-                    <>
-                      <div className={styles.appSourceBar}>
-                        <b>{selected.path}</b>
-                        {onOpenObject && (
-                          <button type="button" onClick={() => onOpenObject(selected.nodeId)}>
-                            {t('openCard')}
-                          </button>
-                        )}
-                      </div>
-                      <pre>{selected.source}</pre>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {reading === 'console' && (
-              <div className={styles.appConsole}>
-                {app.server.length > 0 && (
-                  <p className={styles.appServerNote} role="note">
-                    {t('serverNote', { files: app.server.map((file) => file.path).join(', ') })}
-                  </p>
-                )}
-                {log.length === 0 ? (
-                  <p className={styles.appConsoleEmpty}>{running ? t('consoleQuiet') : t('consoleStopped')}</p>
-                ) : (
-                  <ol className={styles.appConsoleLines}>
-                    {log.map((entry, index) => (
-                      <li key={`${entry.at}-${index}`} data-level={entry.level}>
-                        <span className={styles.appConsoleTime}>{(entry.at / 1000).toFixed(1)}s</span>
-                        <span className={styles.appConsoleLevel}>{t(`level.${entry.level}` as 'level.log')}</span>
-                        <span className={styles.appConsoleText}>{entry.text}</span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </div>
-            )}
-          </>
+          <CanvasAppStart durable={persistence === 'server'} onCreate={create} />
         )}
       </div>
     </section>
   );
 }
 
-/** Exported for the test that reads the file list back — the surface renders it, and a
- *  projection nobody can name is a projection nobody can assert on. */
-export type { CanvasAppFile };
+/** One app's workspace, once its files are read. Keyed by store, so switching apps remounts. */
+function SessionAppWorkspace({ app, apps, onSelectApp }: { app: SessionApp; apps: readonly SessionApp[]; onSelectApp: (nodeId: string) => void }) {
+  const t = useTranslations('creationCanvas.surface.app');
+  const { files, error } = useStoreFiles(app.store, t('loadFailed'));
+  if (error) return <div className={styles.appEmpty} role="alert"><strong>{error}</strong></div>;
+  if (!files) return <div className={styles.appEmpty} role="status"><strong>{t('loading')}</strong></div>;
+  return (
+    <ChunkErrorBoundary>
+      <CanvasAppWorkspace key={String(app.store.id)} app={app} initialFiles={files} apps={apps} onSelectApp={onSelectApp} />
+    </ChunkErrorBoundary>
+  );
+}

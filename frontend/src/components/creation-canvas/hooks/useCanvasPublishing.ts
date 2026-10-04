@@ -9,7 +9,9 @@ import { createProject, deleteIdeProject, publishSite } from '@/lib/api';
 import { embeddedAppsApi } from '@/lib/embeddedApps';
 import { newNode } from '../canvasNodeHelpers';
 import { addEdge, type Edge } from '@xyflow/react';
-import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
+import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch } from '@/lib/canvasBuild';
+import { sessionApps } from '@/lib/canvasSessionApp';
+import type { CanvasSessionAppActions } from './useCanvasSessionApp';
 import { faultText } from '@/lib/apiClient';
 import type { IdeProject } from '@/lib/types';
 import { nextCanvasObjectPosition } from '../creationCanvasLayout';
@@ -32,7 +34,9 @@ export interface UseCanvasPublishingDeps {
   requireAccount: (action: string, title: string, description: string) => void;
   selectedNode: CanvasObject | null;
   sessionId: string;
-  setBuildFocus: Dispatch<SetStateAction<{ nodeId: string; storageProjectId: number; } | null>>;
+  /** Show a Builder object's workspace — the App surface, on that object. */
+  openApp: (nodeId: string) => void;
+  provisionApp: CanvasSessionAppActions['provisionApp'];
   setCreatingBuild: Dispatch<SetStateAction<boolean>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   setGameShipFocus: Dispatch<SetStateAction<string | null>>;
@@ -45,7 +49,7 @@ export interface UseCanvasPublishingDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, setBuildFocus, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t }: UseCanvasPublishingDeps) {
+export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, openApp, provisionApp, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t }: UseCanvasPublishingDeps) {
   /**
    * Open the ship-to-device panel for a game object.
    *
@@ -190,45 +194,41 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
   }, [ensureCanvasProject, nodes, persistence, publishWebsiteTo, requireAccount, selectedNode, setNodes, t]);
 
   /**
-   * Open a Builder object's workspace on the board, creating its backing legacy
-   * build record first when the object is not bound yet. Creation goes through
-   * the existing `/api/ide-projects` compatibility route, so the workspace is
-   * seeded with its modality's starter template and opens runnable — the
-   * in-browser website/app builder, on the canvas.
+   * Open a Builder object's workspace — the App surface, on that object — giving it a
+   * workspace first when it has none. A signed-in board gets a durable project through
+   * the `/api/ide-projects` compatibility route, seeded with its modality's starter
+   * template; a board with no account gets the same starter held in this browser, which
+   * "Keep your work" later makes durable. Either way it opens runnable.
    */
   const openBuild = useCallback((buildId?: string) => {
     const target = nodes.find((node) => node.id === buildId && node.data.kind === 'build')
       ?? (selectedNode?.data.kind === 'build' ? selectedNode : nodes.find((node) => node.data.kind === 'build'));
     if (!target) { setNotice(t('build.selectFirst')); return; }
-    const bound = canvasBuildBinding(target.data);
-    if (bound) { setBuildFocus({ nodeId: target.id, storageProjectId: bound.storageProjectId }); return; }
-    if (persistence !== 'server') { requireAccount('open', t('build.gateTitle'), t('build.gateDescription')); return; }
+    if (sessionApps([target]).length) { openApp(target.id); return; }
     if (creatingBuild) return;
     setCreatingBuild(true);
     setNotice(t('build.creating'));
-    const container = connectedCanvasProjectNode(nodes, edges, target.id);
-    void createCanvasBuild({
+    const container = persistence === 'server' ? connectedCanvasProjectNode(nodes, edges, target.id) : null;
+    void provisionApp(target.id, {
       title: target.data.title,
       modality: canvasBuildModality(target.data),
       containerProjectId: container ? canvasProjectId(container.data) : null,
     })
-      .then((ide) => {
-        const patch = canvasBuildPatch(ide);
-        setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, ...patch } } : node));
-        setBuildFocus({ nodeId: target.id, storageProjectId: ide.storageProjectId });
+      .then(() => {
+        openApp(target.id);
         setNotice(t('build.created'));
       })
       .catch((error) => setNotice(faultText(error, t('build.createFailed'))))
       .finally(() => setCreatingBuild(false));
-  }, [creatingBuild, edges, nodes, persistence, requireAccount, selectedNode, setNodes, t]);
+  }, [creatingBuild, edges, nodes, openApp, persistence, provisionApp, selectedNode, t]);
 
   /** Bind a Builder object to a legacy build record that already exists, instead of
    *  provisioning a second workspace for work that is already under way. */
   const attachBuild = useCallback((nodeId: string, ide: IdeProject) => {
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...canvasBuildPatch(ide) } } : node));
-    setBuildFocus({ nodeId, storageProjectId: ide.storageProjectId });
+    openApp(nodeId);
     setNotice(t('build.attached'));
-  }, [setNodes, t]);
+  }, [openApp, setNodes, t]);
 
   /**
    * Delete the build record a Builder object provisioned, and return the object to
@@ -243,7 +243,6 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
     if (!(await confirm({ message: t('build.deleteConfirm', { title: target.data.title }), destructive: true }))) return;
     try {
       await deleteIdeProject(binding.ideProjectId);
-      setBuildFocus((current) => current?.nodeId === nodeId ? null : current);
       setNodes((current) => current.map((node) => node.id === nodeId
         ? { ...node, data: { ...node.data, resourceId: undefined, ideProjectId: undefined, storageProjectId: undefined, storageProjectPublicId: undefined, siteUrl: undefined, url: undefined, pathUrl: undefined, status: 'Not created' } }
         : node));

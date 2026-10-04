@@ -8,6 +8,8 @@ author: Sean Hogg
 
 # Run the app your board just built — without leaving the board
 
+> **Update, 4 October 2026:** the App surface now runs the full Studio workspace in place, with real files, a runtime that can run your server, a terminal and a database. Your code cards become the project's files. Read [The App on your canvas is now a real project](/blog/your-canvas-app-is-a-real-project).
+
 Ask for an SMS sender and four cards land on the board: `backend/server.js`, `frontend/index.html`, a rendered page, a setup note. All connected, all correct, all sitting there.
 
 Then what?

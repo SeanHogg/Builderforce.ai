@@ -2,6 +2,7 @@ import { memo, useCallback, type Dispatch, type RefObject, type SetStateAction }
 import { Background, BackgroundVariant, MarkerType, ReactFlow, type DefaultEdgeOptions, type Edge, type FitViewOptions, type Node, type NodeTypes, type OnEdgesChange, type ReactFlowInstance } from '@xyflow/react';
 import { CANVAS_FIT_MIN_ZOOM, CanvasCommands } from '@/components/canvas/CanvasCommands';
 import type { CreationFlowNode } from '../CreationNode';
+import type { CreationObjectKind } from '../types';
 import { RemoteCursors } from '../RemoteCursors';
 import { BrainSurfaceProvider } from '../brainSurfaceContext';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
@@ -18,6 +19,17 @@ const FIT_VIEW_OPTIONS: FitViewOptions<CreationFlowNode> = { padding: 0.12, minZ
 const DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = { type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, style: { stroke: 'var(--canvas-edge)', strokeWidth: 1.5 } };
 const PRO_OPTIONS = { hideAttribution: true };
 const DELETE_KEYS = ['Backspace', 'Delete'];
+
+// The board's own identity hues, declared beside the rest of its palette in
+// CreationCanvas.module.css — see PRD 21 §2.6 rule 9. Four pitch kinds share
+// one hue because they are four faces of one object.
+const MINIMAP_COLORS: Partial<Record<CreationObjectKind, string>> = { workflow: 'var(--canvas-obj-workflow)', website: 'var(--canvas-obj-website)', dashboard: 'var(--canvas-obj-dashboard)', agent: 'var(--canvas-obj-agent)', staff: 'var(--canvas-obj-staff)', evaluation: 'var(--canvas-obj-evaluation)', evermind: 'var(--canvas-obj-evermind)', projectComparison: 'var(--canvas-obj-comparison)', pitch: 'var(--canvas-obj-pitch)', pitchScorecard: 'var(--canvas-obj-pitch)', pitchQa: 'var(--canvas-obj-pitch)', pitchApplication: 'var(--canvas-obj-pitch)' };
+
+/** A card's colour on the mini map. Pure, so it is a module function rather than a
+ *  callback the host has to keep stable. */
+export function canvasMinimapColor(node: CreationFlowNode): string {
+  return MINIMAP_COLORS[node.data.kind] ?? 'var(--canvas-obj-unknown)';
+}
 
 export interface CanvasBoardFlowProps {
   brainSurface: ReturnType<typeof useCanvasBrainSurface>['brainSurface'];
@@ -42,7 +54,6 @@ export interface CanvasBoardFlowProps {
   minimapOpen: boolean;
   setMinimapOpen: Dispatch<SetStateAction<boolean>>;
   onCleanLayout: () => void;
-  minimapColor: (node: CreationFlowNode) => string;
   /** The flat board is not what is being drawn, so its mini map stands down. */
   threeDActive: boolean;
 }
@@ -71,7 +82,7 @@ function sameFlowProps(previous: CanvasBoardFlowProps, next: CanvasBoardFlowProp
 export const CanvasBoardFlow = memo(function CanvasBoardFlow({
   brainSurface, nodes, edges, nodeTypes, onNodesChange, onEdgesChange, onConnect, connectionProps, onNodeClick, onSelectionChange,
   onPaneClick, onMoveEnd, interactionProps, flowRef, pendingViewport, drawingMode, liveMembers, presenceSelfId, minimapOpen,
-  setMinimapOpen, onCleanLayout, minimapColor, threeDActive,
+  setMinimapOpen, onCleanLayout, threeDActive,
 }: CanvasBoardFlowProps) {
   const { canEdit } = useCanvasSessionFacts();
   const onInit = useCallback((instance: ReactFlowInstance<CreationFlowNode, Edge>) => {
@@ -117,7 +128,7 @@ export const CanvasBoardFlow = memo(function CanvasBoardFlow({
             minimapOpen={minimapOpen}
             setMinimapOpen={setMinimapOpen}
             onCleanLayout={onCleanLayout}
-            minimapNodeColor={minimapColor as (node: Node) => string}
+            minimapNodeColor={canvasMinimapColor as (node: Node) => string}
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
             // All this gates now is the mini map, which is a map OF the flat board: it
             // stands down wherever that board is not what is being drawn, because the 3D

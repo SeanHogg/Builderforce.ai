@@ -2590,12 +2590,6 @@
 .segmentedGroup button > svg { display:block; width:15px; height:15px; }
 .segmentedGroup button:hover,.segmentedGroup button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
 .segmentedGroup button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
-/* The error count rides the console glyph rather than sitting beside it: a badge in the
-   flow would make one button in a segmented group wider than its neighbours the moment an
-   app throws, which reads as the group shifting rather than as a count. */
-.segmentedGroup button > .appErrorCount { position:absolute; top:-3px; right:-3px; }
-.appErrorCount { min-width:15px; padding:0 4px; border-radius:var(--radius-full); background:var(--tone-danger-bg); color:var(--tone-danger-ink); font-size:9px; font-weight:700; text-align:center; }
-
 /* Where it is running — STATUS, so it survives a collapsed bar. Capped rather than
    flexed: in the session bar an unbounded address would push Share and Publish off the
    end on a laptop. A running app gets the live tint, because when the bar is folded this
@@ -2603,68 +2597,58 @@
 .appAddress { min-width:0; max-width:220px; overflow:hidden; color:var(--canvas-muted); font-family:var(--font-mono,ui-monospace,monospace); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
 .appAddress[data-running='true'] { color:var(--tone-success-ink); font-weight:650; }
 
-/* Preview. Same three measures the site surface uses, same reasoning. */
-/* No `--app-width` here any more, and no cap on the frame. The stage is only the room;
-   `CanvasDeviceFrame` lays the document out at the chosen device width and scales it in.
-   The bug that lived here: `.appFrame` carried `width:min(100%,var(--app-width))` AND
-   `flex:1` inside a row — `flex-basis:0%` beat the width outright, so the frame filled
-   the stage at every setting and the three viewport buttons changed nothing visible. */
-.appStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px; background:var(--canvas-board-background); overflow:hidden; }
-.appFrame { max-width:100%; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); }
-/* A phone-width document scaled 1:1 must not stretch across a 1400px stage: the wrapper
-   IS the device, so it takes the device's width and the stage centres it. `--device-width`
-   is written onto the wrapper by `CanvasDeviceFrame` from `CANVAS_VIEWPORT_WIDTHS` — the
-   numbers are never restated here, because a stylesheet's copy of them is precisely what
-   let the CSS widths and the frame widths disagree in the first place. */
-.appStage .appFrame,.siteStage .siteFrame { flex:0 1 auto; width:var(--device-width,100%); }
-.appIdle,.appEmpty,.insightsEmpty { display:grid; place-content:center; justify-items:center; gap:6px; flex:1; padding:32px 24px; text-align:center; }
-.appIdle strong,.appEmpty strong,.insightsEmpty strong { color:var(--canvas-ink); font-size:13px; }
-.appIdle p,.appEmpty p,.insightsEmpty p { max-width:44ch; margin:0; color:var(--canvas-muted); font-size:11.5px; line-height:1.6; }
+/* The bar's link out (Open in Studio) wears the segmented group's button shape, so the
+   group reads as one row of glyphs whatever each one does. */
+.segmentedGroup .appBarLink { display:inline-flex; align-items:center; justify-content:center; min-width:28px; min-height:24px; padding:0 6px; border-radius:calc(var(--radius-md) - 2px); color:var(--canvas-muted); }
+.segmentedGroup .appBarLink:hover,.segmentedGroup .appBarLink:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+/* Only drawn with a second app on the board. A native select keeps it keyboard- and
+   screen-reader-complete; the option colours follow the canvas palette in both themes. */
+.appSwitcher select { max-width:160px; min-height:28px; padding:2px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.appSwitcher select option { background:var(--canvas-panel); color:var(--canvas-ink); }
+.appLocalBadge { flex:none; padding:2px 8px; border-radius:var(--radius-full); background:var(--tone-warning-bg); color:var(--tone-warning-ink); font-size:10px; font-weight:650; white-space:nowrap; }
+
+/* The embedded workspace. Its regions are drawn in the app shell's tokens (they are also
+   Studio's); here those tokens are re-pointed at the canvas palette, so the workspace is
+   part of the canvas in light AND dark — the canvas owns its palette, the shell does not. */
+.appWorkspace {
+  --bg-deep:var(--canvas-board-background); --bg-base:var(--canvas-panel); --bg-surface:var(--canvas-panel);
+  --bg-elevated:var(--canvas-panel-muted); --text-primary:var(--canvas-ink); --text-secondary:var(--canvas-muted);
+  --text-muted:var(--canvas-muted); --border-subtle:var(--canvas-line); --accent:var(--canvas-accent);
+  min-height:0; flex:1; display:flex; min-width:0; overflow:hidden;
+  margin:0 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg);
+  background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 10px 34px var(--canvas-shadow);
+}
+@media (max-width:720px) { .appWorkspace { margin:0; border-radius:0; border-inline:0; } }
+
+/* Before the session has an app: what to make. A grid that wraps to one column on a
+   phone; every kind is a full tap target. */
+.appStart { display:grid; align-content:center; justify-items:center; gap:12px; flex:1; padding:32px 16px; text-align:center; overflow:auto; }
+.appStart > strong { color:var(--canvas-ink); font-size:15px; }
+.appStart > p { max-width:52ch; margin:0; color:var(--canvas-muted); font-size:12px; line-height:1.6; }
+.appStartKinds { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; width:min(760px,100%); }
+.appStartKinds button { display:grid; grid-template-columns:auto 1fr; align-items:center; column-gap:8px; row-gap:4px; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); color:var(--canvas-ink); text-align:left; cursor:pointer; }
+.appStartKinds button b { font-size:13px; }
+.appStartKinds button small { grid-column:1/-1; color:var(--canvas-muted); font-size:11px; line-height:1.45; }
+.appStartKinds button:hover:not(:disabled),.appStartKinds button:focus-visible { border-color:var(--canvas-accent); background:var(--canvas-hover); outline:none; }
+.appStartKinds button:disabled { opacity:.6; cursor:progress; }
+.appStart > .appStartError { color:var(--tone-danger-ink); }
+.appStart > .appStartHint { font-size:11px; }
+
+/* A site frame takes its device's width and the stage centres it. `--device-width` is
+   written onto the wrapper by `CanvasDeviceFrame` from `CANVAS_VIEWPORT_WIDTHS` — the
+   numbers are never restated here. */
+.siteStage .siteFrame { flex:0 1 auto; width:var(--device-width,100%); }
+.appEmpty,.insightsEmpty { display:grid; place-content:center; justify-items:center; gap:6px; flex:1; padding:32px 24px; text-align:center; }
+.appEmpty strong,.insightsEmpty strong { color:var(--canvas-ink); font-size:13px; }
+.appEmpty p,.insightsEmpty p { max-width:44ch; margin:0; color:var(--canvas-muted); font-size:11.5px; line-height:1.6; }
 .insightsEmpty a { color:var(--canvas-accent); font-size:12px; font-weight:650; text-decoration:none; }
 .insightsEmpty a:hover { text-decoration:underline; }
-
-/* Code. The tree collapses above the source on a phone rather than fighting it for width. */
-.appCode { min-height:0; flex:1; display:grid; grid-template-columns:minmax(150px,220px) minmax(0,1fr); }
-.appTree { display:flex; flex-direction:column; padding:8px 0; border-right:1px solid var(--canvas-line); background:var(--canvas-panel-muted); overflow:auto; }
-.appTree button {
-  display:flex; align-items:baseline; justify-content:space-between; gap:8px; padding:5px 12px;
-  border:0; background:transparent; color:var(--canvas-muted); font-family:var(--font-mono,ui-monospace,monospace); font-size:11px; text-align:left; cursor:pointer;
-}
-.appTree button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.appTree button em { flex:none; color:var(--tone-warning-ink); font-size:9px; font-style:normal; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
-.appTree button:hover,.appTree button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
-.appTree button[aria-current='true'] { background:var(--canvas-panel); color:var(--canvas-ink); }
-.appSource { min-width:0; display:flex; flex-direction:column; overflow:hidden; }
-.appSourceBar { display:flex; flex:none; align-items:center; justify-content:space-between; gap:10px; padding:7px 12px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
-.appSourceBar b { min-width:0; overflow:hidden; color:var(--canvas-ink); font-family:var(--font-mono,ui-monospace,monospace); font-size:11px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
-.appSourceBar button { flex:none; min-height:24px; padding:3px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink); font:650 10px var(--font-sans); cursor:pointer; }
-.appSourceBar button:hover,.appSourceBar button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
-.appSource pre { min-height:0; flex:1; margin:0; padding:12px 14px; color:var(--canvas-ink); font-family:var(--font-mono,ui-monospace,monospace); font-size:11px; line-height:1.7; overflow:auto; }
-
-/* Console. Levels are marked by WORD as well as colour, so the verdict survives a
-   monochrome display and a colour-blind reader. */
-.appConsole { min-height:0; flex:1; display:flex; flex-direction:column; gap:0; overflow:auto; }
-.appServerNote { flex:none; margin:0; padding:10px 14px; border-bottom:1px solid var(--canvas-line); background:var(--tone-warning-bg); color:var(--tone-warning-ink); font-size:11px; line-height:1.55; }
-.appConsoleEmpty { display:grid; place-content:center; flex:1; margin:0; padding:24px; color:var(--canvas-muted); font-size:11.5px; text-align:center; }
-.appConsoleLines { margin:0; padding:0; list-style:none; }
-.appConsoleLines li { display:grid; grid-template-columns:44px 62px minmax(0,1fr); gap:10px; padding:5px 14px; border-bottom:1px solid var(--canvas-line); align-items:baseline; font-family:var(--font-mono,ui-monospace,monospace); font-size:10.5px; }
-.appConsoleTime { color:var(--canvas-muted); font-variant-numeric:tabular-nums; }
-.appConsoleLevel { font-size:9px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-.appConsoleLines li[data-level='log'] .appConsoleLevel,
-.appConsoleLines li[data-level='request'] .appConsoleLevel { color:var(--canvas-muted); }
-.appConsoleLines li[data-level='warn'] .appConsoleLevel { color:var(--tone-warning-ink); }
-.appConsoleLines li[data-level='error'] .appConsoleLevel { color:var(--tone-danger-ink); }
-.appConsoleText { color:var(--canvas-ink); overflow-wrap:anywhere; }
 
 @media (max-width:720px) {
   /* The address is the first thing to go on a phone: the bar's budget is two controls
      beside the title, and "which file is running" is answerable from the Code reading. */
   .appAddress { display:none; }
-  .appCode { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
-  .appTree { max-height:130px; border-right:0; border-bottom:1px solid var(--canvas-line); }
-  .appConsoleLines li { grid-template-columns:40px minmax(0,1fr); }
-  .appConsoleLines li .appConsoleLevel { grid-column:2; }
-  .appConsoleLines li .appConsoleText { grid-column:1/-1; }
+  .appLocalBadge { display:none; }
 }
 
 /* A page keeps a MEASURE. Stretching prose to a 2560px monitor makes the surface bigger
@@ -2706,7 +2690,7 @@
 .playPlayers button { min-height:28px; padding:4px 12px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-brain-accent); font:650 10px var(--font-sans); cursor:pointer; }
 .playPlayers button:hover,.playPlayers button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
 
-/* Same story as `.appStage`: the widths are the frame's, in real device pixels, and this
+/* The widths are the frame's, in real device pixels, and this
    is only the room they are centred in. The `edit` reading has no frame — it is markup in
    this document — so it keeps a scrolling stage and a width cap of its own, below. */
 .siteStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px 16px 24px; background:var(--canvas-board-background); overflow:hidden; }

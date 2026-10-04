@@ -55,8 +55,20 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
  * enforces is about the advertised VOCABULARY, not about where it is typed. A
  * new family adds one line here.
  */
+/** The canvas's own tool families, one module each, since the CreationCanvas split
+ *  moved its action `useMemo` into `creation-canvas/actions/`. Read as a directory so
+ *  a new family module is covered without another line here. */
+const CANVAS_ACTIONS_DIR = path.resolve(repoRoot, 'frontend', 'src', 'components', 'creation-canvas', 'actions');
+const CANVAS_ACTION_FILES = fs.existsSync(CANVAS_ACTIONS_DIR)
+  ? fs.readdirSync(CANVAS_ACTIONS_DIR)
+    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+    .sort()
+    .map((f) => path.join(CANVAS_ACTIONS_DIR, f))
+  : [];
+
 const CANVAS_FILES = [
   path.resolve(repoRoot, 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
+  ...CANVAS_ACTION_FILES,
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasFounderOpsTools.ts'),
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasEquityTools.ts'),

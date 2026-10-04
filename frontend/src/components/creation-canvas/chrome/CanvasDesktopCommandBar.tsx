@@ -17,6 +17,17 @@ import { useCanvasSessionFacts } from './canvasSessionContext';
 
 type NodePanels = ReturnType<typeof useCanvasNodePanels>;
 
+/** Some step on the board sends through Twilio, so the vendor setup prompt belongs on the bar. */
+export function boardUsesTwilio(nodes: readonly CreationFlowNode[]): boolean {
+  return nodes.some((node) => (
+    Array.isArray(node.data.steps) && node.data.steps.some((step) => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return false;
+      const connector = (step as Record<string, unknown>).connector;
+      return typeof connector === 'string' && (connector === 'twilio' || connector.startsWith('twilio-'));
+    })
+  ));
+}
+
 export interface CanvasDesktopCommandBarProps extends Omit<CanvasRosterProps, 'members'> {
   /** A phone draws no command bar at all — see below. */
   phoneViewport: boolean;

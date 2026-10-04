@@ -1,6 +1,5 @@
 /** Keeping the session in sync — saving, realtime, polled members and invitations. */
 import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'react';
-import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { boardSignature, persistBoard, saveAttemptKey } from '@/domains/canvas/application/PersistCanvas';
 import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
 import { rejectedObjectKinds } from '../canvasBoardLoad';
@@ -54,7 +53,7 @@ export interface UseCanvasSessionSyncDeps {
   selectedIds: string[];
   sendPresence: (state: CanvasPresenceState) => void;
   sessionId: string;
-  setBuildFocus: Dispatch<SetStateAction<{ nodeId: string; storageProjectId: number; } | null>>;
+  openApp: (nodeId: string) => void;
   setCurrentUserId: Dispatch<SetStateAction<string | null>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   setJoinedCollaborator: Dispatch<SetStateAction<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; } | null>>;
@@ -73,7 +72,7 @@ export interface UseCanvasSessionSyncDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialized, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraph, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydrated, initialBuildOpen, initialBuildOpened, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraph, liveSocketRef, loadingSession, localBoardState, mobileViewportFitted, nodes, noteSaveState, pendingSave, persistSnapshot, persistence, presenceLive, presenceRef, receivePresence, revision, saveInFlight, selectedIds, sendPresence, sessionId, setBuildFocus, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
+export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialized, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraph, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydrated, initialBuildOpen, initialBuildOpened, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraph, liveSocketRef, loadingSession, localBoardState, mobileViewportFitted, nodes, noteSaveState, pendingSave, persistSnapshot, persistence, presenceLive, presenceRef, receivePresence, revision, saveInFlight, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
   useEffect(() => { currentGraph.current = JSON.stringify({ nodes, edges }); }, [edges, nodes]);
 
   // A persisted viewport is expressed in screen pixels, so restoring a camera
@@ -101,11 +100,10 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
   useEffect(() => {
     if (!initialBuildOpen || initialBuildOpened.current || !initialFocusId) return;
     const target = nodes.find((node) => node.id === initialFocusId && node.data.kind === 'build');
-    const binding = target ? canvasBuildBinding(target.data) : null;
-    if (!target || !binding) return;
+    if (!target) return;
     initialBuildOpened.current = true;
-    setBuildFocus({ nodeId: target.id, storageProjectId: binding.storageProjectId });
-  }, [initialBuildOpen, initialFocusId, nodes]);
+    openApp(target.id);
+  }, [initialBuildOpen, initialFocusId, nodes, openApp]);
 
   /**
    * AUTOSAVE. Debounced 300ms behind the edit that triggered it.

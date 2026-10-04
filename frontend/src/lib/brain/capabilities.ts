@@ -18,7 +18,7 @@
  *
  * `'build'` was called `'ide'` until the standalone IDE destination was folded
  * into the canvas: there is no IDE route or IDE surface any more, only a Builder
- * object on a board that opens `<CanvasBuildPanel>`. The value is renamed rather
+ * object on a board that opens on the canvas's App surface. The value is renamed rather
  * than kept as an alias because a surface name is read by people deciding where
  * a capability belongs, and a name for a destination that no longer exists sends
  * them looking for it.

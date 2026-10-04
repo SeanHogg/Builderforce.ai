@@ -194,6 +194,19 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   'canvas_record_defect',
   'canvas_audit_page',
   'canvas_generate_test_data',
+  // ── The build vocabulary (`lib/canvasBuildTools.ts`) ─────────────────────────
+  // Creating, listing, reading, searching and editing the CODE behind a Builder
+  // object. Guest-safe because a board with no account runs its app over files held
+  // in the BROWSER (`lib/workspace/localFileStore.ts`) and the tools run there too:
+  // nothing reaches a tenant. "Keep your work" uploads those files into a real
+  // project. Only the history pair below stays account-required.
+  'canvas_create_build',
+  'canvas_list_build_files',
+  'canvas_read_build_file',
+  'canvas_search_build_files',
+  'canvas_write_build_file',
+  'canvas_edit_build_file',
+  'canvas_read_build_diagnostics',
 ] as const;
 
 /**
@@ -494,29 +507,11 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // board: the card carries `postingId`, and every application read joins on it instead
   // of on a title two requisitions can share.
   'canvas_sync_job_posting',
-  // ── The build vocabulary (`lib/canvasBuildTools.ts`) ─────────────────────────
-  // Creating, listing, reading, searching and editing the CODE behind a Builder
-  // object. Account-required for the plainest possible reason: a workspace is
-  // tenant storage (`ide/projects/<id>/` in R2, behind a tenant JWT), and a guest
-  // has no workspace to write into.
-  //
-  // These are deliberately NOT guest-gated. The gated set exists for a capability
-  // whose absence would make the model invent a limitation — a picture, a test
-  // run — where "that needs a free account" is a true one-sentence answer. Here
-  // the guest path is not a refusal but a different and complete answer: an
-  // anonymous board can already author a `website` object, a `prototype` and a
-  // full spec with the tools it has. Advertising seven build tools that every
-  // guest call would refuse would spend the model's attention on the one route it
-  // cannot take, on the surface where first impressions are formed.
-  'canvas_create_build',
-  'canvas_list_build_files',
-  'canvas_read_build_file',
-  'canvas_search_build_files',
-  'canvas_write_build_file',
-  'canvas_edit_build_file',
-  'canvas_read_build_diagnostics',
-  // The undo. Same classification for the same reason: a workspace's history is
-  // tenant storage, and a guest has no workspace to roll back.
+  // ── The build vocabulary's undo (`lib/canvasBuildTools.ts`) ──────────────────
+  // File history is kept by a durable project's storage (`ide/projects/<id>/` in R2,
+  // behind a tenant JWT). A guest's app is held in the browser and keeps none, so
+  // these two stay account-required while the rest of the build vocabulary is
+  // guest-safe (see GUEST_SAFE_CANVAS_TOOLS).
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
 ] as const;

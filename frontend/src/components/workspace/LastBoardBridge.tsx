@@ -109,8 +109,6 @@ function boardOnStage(sessionId: string, persistence: 'local' | 'server'): Activ
     focusId: null,
     shareOpen: false,
     buildOpen: false,
-    buildChatId: null,
-    buildTicket: null,
     prompt: null,
     present: false,
     modelComparisonIds: [],

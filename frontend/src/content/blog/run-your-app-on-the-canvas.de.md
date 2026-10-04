@@ -1,3 +1,5 @@
+> **Update, 4. Oktober 2026:** Die App-Ansicht führt jetzt den kompletten Studio-Arbeitsbereich direkt auf der Leinwand aus – mit echten Dateien, einer Laufzeitumgebung, die auch Ihren Server betreibt, einem Terminal und einer Datenbank. Ihre Code-Karten werden zu den Dateien des Projekts. Mehr dazu: [Die App auf Ihrer Leinwand ist jetzt ein echtes Projekt](/blog/your-canvas-app-is-a-real-project).
+
 Bitten Sie um einen SMS-Versender, und vier Karten landen auf dem Board: `backend/server.js`, `frontend/index.html`, eine gerenderte Seite, eine Setup-Notiz. Alle verbunden, alle korrekt, alle einfach da.
 
 Und dann?

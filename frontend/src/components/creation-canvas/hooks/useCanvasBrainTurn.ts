@@ -25,7 +25,6 @@ import { canvasTurnSnapshot } from '../brainTurn/turnSnapshot';
 import { turnAgentNodes } from '../brainTurn/turnParticipants';
 import { runCanvasGroupTurn } from '../brainTurn/runCanvasGroupTurn';
 import { type CanvasTurnSettleContext, settleCanvasTurnFailure, settleCanvasTurnSuccess } from '../brainTurn/settleCanvasTurn';
-import { scheduleOfflineTurnFixture } from '../brainTurn/offlineTurnFixture';
 
 export interface UseCanvasBrainTurnDeps {
   appendTimeline: (role: 'user' | 'assistant' | 'system', body: string, metadata?: CreationTimelineMessage['metadata'], clientMessageId?: string) => string;
@@ -34,6 +33,7 @@ export interface UseCanvasBrainTurnDeps {
   canvasActions: BrainAction<unknown, unknown>[];
   canvasNotices: CanvasNotices;
   canvasRunRef: RefObject<{ abort: AbortController; requestMessageId: string; startedAt: number; } | null>;
+  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
   canvasText: CanvasTextTranslator;
   confirm: ConfirmFn;
   currentUserId: string | null;
@@ -46,13 +46,16 @@ export interface UseCanvasBrainTurnDeps {
   initialPromptSubmitted: RefObject<boolean>;
   journal: RefObject<CanvasJournal>;
   lastTurnProvenance: () => { model?: string; tools?: string[]; };
+  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
   locale: string;
   members: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[];
   memoryEnabled: boolean;
   modelSelection: ChatModelSelection;
   nodes: CanvasObject[];
+  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
   openNodeInspector: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null, rect?: DOMRect) => void;
   persistence: 'local' | 'server';
+  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
   placeAppendedRef: RefObject<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>;
   prompt: string;
   recordBrainCompletion: (completion: CanvasAiCompletion) => void;
@@ -86,7 +89,7 @@ export interface UseCanvasBrainTurnDeps {
   turnUnanswered: RefObject<{ reason: string; detail?: string; } | null>;
 }
 
-export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime, canvasActions, canvasNotices, canvasRunRef, canvasText, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseId, initialPromptSubmitted, journal, lastTurnProvenance, locale, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, placeAppendedRef, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCalls, turnUnanswered }: UseCanvasBrainTurnDeps) {
+export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseId, initialPromptSubmitted, journal, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCalls, turnUnanswered }: UseCanvasBrainTurnDeps) {
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     if (!requestText || thinking) return;
@@ -143,12 +146,6 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime,
     }
     setSelectedId(brainId);
     setSelectedIds([brainId]);
-    // Test-only stand-in for the model turn — see `offlineTurnFixture` for why it is
-    // still here.
-    if (process.env.NODE_ENV === 'test') {
-      scheduleOfflineTurnFixture({ canvasText, clearComposer, locale, nodes, openNodeInspector, placeAppendedRef, requestText, setEdges, setNodes, setNotice, setSelectedId, setThinking, t });
-      return;
-    }
     stage.reset();
     turnUnanswered.current = null;
     turnToolCalls.current = new Set();
@@ -180,6 +177,6 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime,
     void runCanvasGroupTurn({ appendTimeline, autoApplyRef, brainId, brainRuntime, canvasActions, canvasNotices, confirm, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journal, memoryEnabled, modelSelection, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal: runAbort.signal, stage, t, timeline, title, turnSnapshot, turnToolCalls, turnUnanswered })
       .then((answer) => settleCanvasTurnSuccess(settle, answer))
       .catch((error) => settleCanvasTurnFailure(settle, error));
-  }, [appendTimeline, canvasActions, canvasNotices, canvasText, confirm, currentUserId, locale, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
   return { evaluateCanvas };
 }

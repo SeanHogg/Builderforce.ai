@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
-import { canvasApp } from '@/lib/canvasApp';
+import { canvasAppEntry, canvasAppFiles } from '@/lib/canvasApp';
 import { CreationCanvas } from './CreationCanvas';
 
 /**
@@ -49,10 +49,10 @@ describe('the floating command bar', () => {
     const page = { id: 'n3', data: { kind: 'code', path: 'index.html', code: '<h1>Live</h1>' } };
 
     // Objects, and even source, are not an app: a lone module has no page to open.
-    expect(canvasApp([note]).entry).toBeNull();
-    expect(canvasApp([note, draft]).entry).toBeNull();
+    expect(canvasAppEntry(canvasAppFiles([note]))).toBeNull();
+    expect(canvasAppEntry(canvasAppFiles([note, draft]))).toBeNull();
     // A page is.
-    expect(canvasApp([note, draft, page]).entry?.path).toBe('index.html');
+    expect(canvasAppEntry(canvasAppFiles([note, draft, page]))?.path).toBe('index.html');
   });
 
   it('offers no Run over a board that builds nothing yet', () => {

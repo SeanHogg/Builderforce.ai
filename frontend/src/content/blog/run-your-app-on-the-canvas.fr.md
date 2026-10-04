@@ -1,3 +1,5 @@
+> **Mise à jour du 4 octobre 2026 :** la vue App exécute désormais l’espace de travail Studio complet directement sur le canevas, avec de vrais fichiers, un environnement capable de faire tourner votre serveur, un terminal et une base de données. Vos cartes de code deviennent les fichiers du projet. En savoir plus : [L’App de votre canevas est désormais un vrai projet](/blog/your-canvas-app-is-a-real-project).
+
 Demandez un envoi de SMS et quatre cartes arrivent sur le tableau : `backend/server.js`, `frontend/index.html`, une page rendue, une note de configuration. Toutes reliées, toutes correctes, toutes posées là.
 
 Et ensuite ?

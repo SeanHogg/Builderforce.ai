@@ -21751,7 +21751,9 @@
       "deleteWorkspaceHint": "Removing this object from the canvas keeps its workspace; deleting the workspace removes its files everywhere.",
       "deleteConfirm": "Delete the workspace behind “{title}”? Its files are removed everywhere, not just from this canvas.",
       "workspaceDeleted": "Workspace deleted — this Builder has no files again.",
-      "deleteWorkspaceFailed": "Could not delete the workspace"
+      "deleteWorkspaceFailed": "Could not delete the workspace",
+      "tileLocal": "In this browser",
+      "tileLocalHint": "Runs here in your browser. Keep your work to save it to an account."
     },
     "resumeShareSaveFirst": "Save this Canvas before sharing a résumé.",
     "resumeLinkCopied": "Public résumé link copied",
@@ -21807,6 +21809,8 @@
     "noticeFeatureSummaryAdded": "Feature summary and mockups added",
     "noticeEvaluationAdded": "Evaluation added to canvas",
     "noticeSavingPrd": "Saving reviewed PRD to its project…",
+    "noticeReviewedChangesApplied": "{count, plural, one {# reviewed Brain change applied} other {# reviewed Brain changes applied}}",
+    "noticePrdsSavedChangesApplied": "{prds, plural, one {# project PRD saved} other {# project PRDs saved}} and {count, plural, one {# reviewed Brain change applied} other {# reviewed Brain changes applied}}",
     "noticeChangesRejected": "Brain changes rejected; canvas unchanged",
     "noticeNeedRunnerAccess": "Runner or owner access is required",
     "noticeNeedWorkflow": "Add a workflow to run it",
@@ -24265,37 +24269,41 @@
         "enter": "Run what this canvas builds",
         "active": "You are in the app",
         "regionLabel": "This canvas, running as one app",
-        "run": "Run",
-        "stop": "Stop",
-        "stopped": "Not running",
         "readings": "How to read the app",
+        "run": "Run",
+        "publish": "Publish",
+        "restart": "Restart",
+        "starting": "Starting…",
+        "phase": {
+          "idle": "Not running",
+          "starting": "Starting…",
+          "live": "Running",
+          "failed": "Stopped with an error",
+          "blocked": "Blocked by failed checks"
+        },
+        "panels": "App panels",
+        "files": "Files",
+        "terminal": "Terminal",
+        "openInStudio": "Open in Studio",
+        "switchApp": "Switch app",
+        "localBadge": "In this browser",
+        "localHint": "This app runs in your browser. Keep your work to save it to an account and turn on publishing, history and a database.",
+        "defaultAppTitle": "My app",
+        "preparing": "Bringing your code into the app…",
+        "loading": "Opening the app…",
+        "loadFailed": "The app’s files could not be opened.",
+        "start": {
+          "title": "Start this session’s app",
+          "body": "Pick what you’re making. You get a real project with files, a runtime and a database, and it stays attached to this canvas.",
+          "bodyLocal": "Pick what you’re making. It runs right here in your browser. Keep your work to save it to an account.",
+          "creating": "Setting it up…",
+          "failed": "The app could not be created. Try again.",
+          "askBrain": "Or just ask Brain, for example “Build a marketing website for my bakery”."
+        },
         "reading": {
           "preview": "Preview",
           "code": "Code",
-          "console": "Console"
-        },
-        "errorCount": "{count, plural, one {# error} other {# errors}}",
-        "publish": "Publish",
-        "frameTitle": "{path}, running",
-        "idleTitle": "Ready to run",
-        "idleBody": "Press Run to start the app in a sandbox only you can reach.",
-        "noEntryTitle": "No page to open",
-        "noEntryBody": "This canvas has code but no HTML page to start from. Ask Brain for one, or open a file below.",
-        "emptyTitle": "Nothing to run yet",
-        "emptyBody": "Ask Brain to build something and the files it writes will run here.",
-        "files": "Files in this app",
-        "role": {
-          "server": "Server"
-        },
-        "openCard": "Open the card",
-        "serverNote": "{files} needs a host to run. The preview runs the front end only, so calls to your backend will fail here — publish to give it a server.",
-        "consoleQuiet": "Running. Nothing logged yet.",
-        "consoleStopped": "Run the app to see what it logs.",
-        "level": {
-          "log": "log",
-          "warn": "warn",
-          "error": "error",
-          "request": "call"
+          "database": "Database"
         }
       },
       "insights": {

@@ -89,7 +89,7 @@ function StatusCard({ icon, title, hint, live, children }: {
       >
         {icon}
         <div style={{ display: 'grid', gap: 4 }}>
-          <strong style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>{title}</strong>
+          <strong style={{ fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</strong>
           <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{hint}</span>
         </div>
         {children}

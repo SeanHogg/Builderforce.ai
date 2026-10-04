@@ -21751,7 +21751,9 @@
       "deleteWorkspaceHint": "Dieses Objekt vom Canvas zu entfernen behält seinen Arbeitsbereich; den Arbeitsbereich zu löschen entfernt seine Dateien überall.",
       "deleteConfirm": "Den Arbeitsbereich hinter „{title}“ löschen? Seine Dateien werden überall entfernt, nicht nur von diesem Canvas.",
       "workspaceDeleted": "Arbeitsbereich gelöscht – dieser Builder hat wieder keine Dateien.",
-      "deleteWorkspaceFailed": "Arbeitsbereich konnte nicht gelöscht werden"
+      "deleteWorkspaceFailed": "Arbeitsbereich konnte nicht gelöscht werden",
+      "tileLocal": "In diesem Browser",
+      "tileLocalHint": "Läuft hier in Ihrem Browser. Sichern Sie Ihre Arbeit, um sie in einem Konto zu speichern."
     },
     "resumeShareSaveFirst": "Speichere diesen Canvas, bevor du einen Lebenslauf teilst.",
     "resumeLinkCopied": "Öffentlicher Lebenslauf-Link kopiert",
@@ -21807,6 +21809,8 @@
     "noticeFeatureSummaryAdded": "Funktionsübersicht und Mockups hinzugefügt",
     "noticeEvaluationAdded": "Bewertung zum Canvas hinzugefügt",
     "noticeSavingPrd": "Geprüftes PRD wird im Projekt gespeichert…",
+    "noticeReviewedChangesApplied": "{count, plural, one {# geprüfte Brain-Änderung angewendet} other {# geprüfte Brain-Änderungen angewendet}}",
+    "noticePrdsSavedChangesApplied": "{prds, plural, one {# Projekt-PRD gespeichert} other {# Projekt-PRDs gespeichert}} und {count, plural, one {# geprüfte Brain-Änderung angewendet} other {# geprüfte Brain-Änderungen angewendet}}",
     "noticeChangesRejected": "Brain-Änderungen abgelehnt; Canvas unverändert",
     "noticeNeedRunnerAccess": "Runner- oder Eigentümerzugriff erforderlich",
     "noticeNeedWorkflow": "Füge einen Workflow hinzu, um ihn auszuführen",
@@ -24265,37 +24269,41 @@
         "enter": "Ausführen, was diese Leinwand baut",
         "active": "Du bist in der App",
         "regionLabel": "Diese Leinwand, als eine App ausgeführt",
-        "run": "Starten",
-        "stop": "Stoppen",
-        "stopped": "Läuft nicht",
         "readings": "Wie die App gelesen wird",
+        "run": "Starten",
+        "publish": "Veröffentlichen",
+        "restart": "Neu starten",
+        "starting": "Startet…",
+        "phase": {
+          "idle": "Läuft nicht",
+          "starting": "Startet…",
+          "live": "Läuft",
+          "failed": "Mit einem Fehler beendet",
+          "blocked": "Durch fehlgeschlagene Prüfungen blockiert"
+        },
+        "panels": "App-Bereiche",
+        "files": "Dateien",
+        "terminal": "Terminal",
+        "openInStudio": "In Studio öffnen",
+        "switchApp": "App wechseln",
+        "localBadge": "In diesem Browser",
+        "localHint": "Diese App läuft in Ihrem Browser. Sichern Sie Ihre Arbeit in einem Konto, um Veröffentlichung, Verlauf und eine Datenbank freizuschalten.",
+        "defaultAppTitle": "Meine App",
+        "preparing": "Ihr Code wird in die App übernommen…",
+        "loading": "App wird geöffnet…",
+        "loadFailed": "Die Dateien der App konnten nicht geöffnet werden.",
+        "start": {
+          "title": "Die App dieser Sitzung starten",
+          "body": "Wählen Sie, was Sie bauen. Sie erhalten ein echtes Projekt mit Dateien, Laufzeitumgebung und Datenbank, das mit dieser Leinwand verbunden bleibt.",
+          "bodyLocal": "Wählen Sie, was Sie bauen. Es läuft direkt hier in Ihrem Browser. Sichern Sie Ihre Arbeit, um sie in einem Konto zu speichern.",
+          "creating": "Wird eingerichtet…",
+          "failed": "Die App konnte nicht erstellt werden. Versuchen Sie es erneut.",
+          "askBrain": "Oder fragen Sie einfach Brain, zum Beispiel „Baue eine Marketing-Website für meine Bäckerei“."
+        },
         "reading": {
           "preview": "Vorschau",
           "code": "Code",
-          "console": "Konsole"
-        },
-        "errorCount": "{count, plural, one {# Fehler} other {# Fehler}}",
-        "publish": "Veröffentlichen",
-        "frameTitle": "{path}, läuft",
-        "idleTitle": "Bereit zum Start",
-        "idleBody": "Drücke Starten, um die App in einer Sandbox zu starten, die nur du erreichst.",
-        "noEntryTitle": "Keine Seite zum Öffnen",
-        "noEntryBody": "Diese Leinwand hat Code, aber keine HTML-Seite als Einstieg. Bitte Brain um eine oder öffne unten eine Datei.",
-        "emptyTitle": "Noch nichts zum Ausführen",
-        "emptyBody": "Bitte Brain, etwas zu bauen — die geschriebenen Dateien laufen dann hier.",
-        "files": "Dateien dieser App",
-        "role": {
-          "server": "Server"
-        },
-        "openCard": "Karte öffnen",
-        "serverNote": "{files} braucht einen Host. Die Vorschau führt nur das Frontend aus, Aufrufe an dein Backend schlagen hier also fehl — veröffentliche, um ihm einen Server zu geben.",
-        "consoleQuiet": "Läuft. Noch nichts protokolliert.",
-        "consoleStopped": "Starte die App, um zu sehen, was sie protokolliert.",
-        "level": {
-          "log": "Log",
-          "warn": "Warnung",
-          "error": "Fehler",
-          "request": "Aufruf"
+          "database": "Datenbank"
         }
       },
       "insights": {

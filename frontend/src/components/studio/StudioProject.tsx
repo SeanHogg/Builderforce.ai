@@ -16,9 +16,13 @@ import { useStudioWorkspace } from './useStudioWorkspace';
  * A Studio project: the full Builder workspace under Studio's bar. Signed out, it
  * asks for a sign-in in place (the pop-up), and opens the project the moment the
  * session and workspace are there. A prompt sent from the Studio home starts the
- * agent on first open.
+ * agent on first open. A link naming a project chat (`?chat=`, `?ticket=`) opens that chat.
  */
-export function StudioProject({ projectId }: { projectId: number }) {
+export function StudioProject({ projectId, initialChatId = null, initialTicket = null }: {
+  projectId: number;
+  initialChatId?: number | null;
+  initialTicket?: { kind: string; ref: string } | null;
+}) {
   const t = useTranslations('studio.project');
   const { requestSignIn } = useSignInDialog();
   const workspace = useStudioWorkspace();
@@ -57,6 +61,8 @@ export function StudioProject({ projectId }: { projectId: number }) {
               project={project}
               initialFiles={files}
               initialPrompt={initialPrompt}
+              initialChatId={initialChatId}
+              initialTicket={initialTicket ?? undefined}
               onProjectUpdate={setProject}
               headerLeading={<StudioBrand compact />}
               headerTrailing={(

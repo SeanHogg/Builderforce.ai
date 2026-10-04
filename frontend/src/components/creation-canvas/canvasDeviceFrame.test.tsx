@@ -8,9 +8,7 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 
 import { CANVAS_VIEWPORT_WIDTHS } from '@builderforce/creation-canvas-contract';
 import { canvasWebsiteDocument, CANVAS_WEBSITE_FRAME_SANDBOX } from '@/lib/canvasWebsite';
-import { CanvasAppSurface } from './CanvasAppSurface';
 import { CanvasSiteSurface } from './CanvasSiteSurface';
-import { CanvasSurfaceActionsProvider, useContributedSurfaceActions } from './canvasSurfaceActions';
 import { WebsiteFrame } from './WebsiteCanvas';
 import type { CreationNodeData } from './types';
 
@@ -141,34 +139,6 @@ describe('the width a preview is checked at', () => {
 
     rerender(<WebsiteFrame data={SITE} viewport="mobile" colorScheme="light" />);
     expect(framed(container).style.width).toBe(`${CANVAS_VIEWPORT_WIDTHS.mobile}px`);
-  });
-
-  /** The app runtime publishes its width switcher into the session bar, so the test needs
-   *  the bar — see `canvasAppSurface.test.tsx`, which stands one up the same way. */
-  function AppHost({ nodes }: { nodes: ReadonlyArray<{ id: string; data: CreationNodeData }> }) {
-    return <CanvasSurfaceActionsProvider><AppBar /><CanvasAppSurface nodes={nodes} onExit={() => undefined} /></CanvasSurfaceActionsProvider>;
-  }
-  function AppBar() {
-    const { controls } = useContributedSurfaceActions();
-    return <div data-testid="session-bar">{controls}</div>;
-  }
-
-  it('moves the app runtime between the same three widths', () => {
-    const page = { id: 'n1', data: {
-      kind: 'code', title: 'index.html', path: 'index.html',
-      content: '<!doctype html><html><body><h1>Hi</h1></body></html>',
-    } as unknown as CreationNodeData };
-    const { container } = render(<AppHost nodes={[page]} />);
-    const bar = screen.getByTestId('session-bar');
-
-    fireEvent.click(within(bar).getByRole('button', { name: 'Run' }));
-    expect(framed(container).style.width).toBe(`${CANVAS_VIEWPORT_WIDTHS.desktop}px`);
-
-    fireEvent.click(within(bar).getByRole('button', { name: 'Phone' }));
-    expect(framed(container).style.width).toBe(`${CANVAS_VIEWPORT_WIDTHS.mobile}px`);
-
-    fireEvent.click(within(bar).getByRole('button', { name: 'Tablet' }));
-    expect(framed(container).style.width).toBe(`${CANVAS_VIEWPORT_WIDTHS.tablet}px`);
   });
 });
 

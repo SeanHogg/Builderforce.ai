@@ -53,6 +53,33 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
 }
 
 /**
+ * WHERE THE ONE COMPOSER GOES, after the host and the surface have had their say.
+ *
+ * When Brain IS the surface (chat) there is no dock to join and no board to hand the
+ * space back to, so it stays floating and open whatever the stored preference says.
+ * `docked` renders it INSIDE the Brain panel's column, so it only holds while that panel
+ * is on screen — otherwise the preference is untouched and the prompt floats until the
+ * panel comes back.
+ *
+ * A surface the EMBEDDING HOST supplies owns its whole centre, input included: its
+ * runtime is somewhere this component cannot reach (in VS Code, the extension host),
+ * so a composer wired to the in-page `evaluateCanvas` would be a second, quieter way
+ * to start a turn that behaves differently from the one the reader can see.
+ */
+export function effectiveCanvasPromptPlacement({ hostOwnsSurface, brainIsSurface, preference, brainDockDrawn }: {
+  hostOwnsSurface: boolean;
+  brainIsSurface: boolean;
+  preference: CanvasPromptPlacement;
+  brainDockDrawn: boolean;
+}): CanvasPromptPlacement {
+  return hostOwnsSurface
+    ? 'closed'
+    : brainIsSurface
+      ? 'float'
+      : preference === 'docked' && !brainDockDrawn ? 'float' : preference;
+}
+
+/**
  * THE ONE COMPOSER. Its markup, its height, its resize grip and its drag offset are
  * `CanvasComposer`'s. What stays here is what only the host knows: where the box is
  * PLACED, what its verbs DO, and the `ChatInput` wiring.

@@ -21751,7 +21751,9 @@
       "deleteWorkspaceHint": "Retirer cet objet du canevas conserve son espace de travail ; supprimer l'espace de travail efface ses fichiers partout.",
       "deleteConfirm": "Supprimer l'espace de travail de « {title} » ? Ses fichiers seront effacés partout, pas seulement sur ce canevas.",
       "workspaceDeleted": "Espace de travail supprimé — ce Constructeur n'a de nouveau aucun fichier.",
-      "deleteWorkspaceFailed": "Impossible de supprimer l'espace de travail"
+      "deleteWorkspaceFailed": "Impossible de supprimer l'espace de travail",
+      "tileLocal": "Dans ce navigateur",
+      "tileLocalHint": "Tourne ici, dans votre navigateur. Conservez votre travail pour l’enregistrer dans un compte."
     },
     "resumeShareSaveFirst": "Enregistrez ce Canvas avant de partager un CV.",
     "resumeLinkCopied": "Lien public du CV copié",
@@ -21807,6 +21809,8 @@
     "noticeFeatureSummaryAdded": "Résumé des fonctionnalités et maquettes ajoutés",
     "noticeEvaluationAdded": "Évaluation ajoutée au canevas",
     "noticeSavingPrd": "Enregistrement du PRD révisé dans son projet…",
+    "noticeReviewedChangesApplied": "{count, plural, one {# modification Brain vérifiée appliquée} other {# modifications Brain vérifiées appliquées}}",
+    "noticePrdsSavedChangesApplied": "{prds, plural, one {# PRD de projet enregistré} other {# PRD de projet enregistrés}} et {count, plural, one {# modification Brain vérifiée appliquée} other {# modifications Brain vérifiées appliquées}}",
     "noticeChangesRejected": "Modifications de Brain rejetées ; canevas inchangé",
     "noticeNeedRunnerAccess": "Un accès exécuteur ou propriétaire est requis",
     "noticeNeedWorkflow": "Ajoutez un workflow pour l’exécuter",
@@ -24265,37 +24269,41 @@
         "enter": "Exécuter ce que ce canevas construit",
         "active": "Vous êtes dans l'app",
         "regionLabel": "Ce canevas, exécuté comme une seule app",
-        "run": "Exécuter",
-        "stop": "Arrêter",
-        "stopped": "À l'arrêt",
         "readings": "Comment lire l'app",
+        "run": "Exécuter",
+        "publish": "Publier",
+        "restart": "Redémarrer",
+        "starting": "Démarrage…",
+        "phase": {
+          "idle": "Arrêtée",
+          "starting": "Démarrage…",
+          "live": "En cours",
+          "failed": "Arrêtée sur une erreur",
+          "blocked": "Bloquée par des vérifications en échec"
+        },
+        "panels": "Panneaux de l’app",
+        "files": "Fichiers",
+        "terminal": "Terminal",
+        "openInStudio": "Ouvrir dans Studio",
+        "switchApp": "Changer d’app",
+        "localBadge": "Dans ce navigateur",
+        "localHint": "Cette app tourne dans votre navigateur. Conservez votre travail dans un compte pour activer la publication, l’historique et une base de données.",
+        "defaultAppTitle": "Mon app",
+        "preparing": "Import de votre code dans l’app…",
+        "loading": "Ouverture de l’app…",
+        "loadFailed": "Les fichiers de l’app n’ont pas pu être ouverts.",
+        "start": {
+          "title": "Lancer l’app de cette session",
+          "body": "Choisissez ce que vous créez. Vous obtenez un vrai projet avec des fichiers, un environnement d’exécution et une base de données, rattaché à ce canevas.",
+          "bodyLocal": "Choisissez ce que vous créez. Tout tourne ici, dans votre navigateur. Conservez votre travail pour l’enregistrer dans un compte.",
+          "creating": "Préparation…",
+          "failed": "L’app n’a pas pu être créée. Réessayez.",
+          "askBrain": "Ou demandez simplement à Brain, par exemple « Crée un site marketing pour ma boulangerie »."
+        },
         "reading": {
           "preview": "Aperçu",
           "code": "Code",
-          "console": "Console"
-        },
-        "errorCount": "{count, plural, one {# erreur} other {# erreurs}}",
-        "publish": "Publier",
-        "frameTitle": "{path}, en cours d'exécution",
-        "idleTitle": "Prêt à s'exécuter",
-        "idleBody": "Appuyez sur Exécuter pour lancer l'app dans un bac à sable auquel vous seul avez accès.",
-        "noEntryTitle": "Aucune page à ouvrir",
-        "noEntryBody": "Ce canevas contient du code mais aucune page HTML de départ. Demandez-en une à Brain ou ouvrez un fichier ci-dessous.",
-        "emptyTitle": "Rien à exécuter pour l'instant",
-        "emptyBody": "Demandez à Brain de construire quelque chose et les fichiers qu'il écrira s'exécuteront ici.",
-        "files": "Fichiers de cette app",
-        "role": {
-          "server": "Serveur"
-        },
-        "openCard": "Ouvrir la carte",
-        "serverNote": "{files} a besoin d'un hôte pour s'exécuter. L'aperçu n'exécute que le front-end : les appels vers votre backend échoueront ici — publiez pour lui donner un serveur.",
-        "consoleQuiet": "En cours d'exécution. Rien de consigné pour l'instant.",
-        "consoleStopped": "Exécutez l'app pour voir ce qu'elle consigne.",
-        "level": {
-          "log": "journal",
-          "warn": "alerte",
-          "error": "erreur",
-          "request": "appel"
+          "database": "Base de données"
         }
       },
       "insights": {

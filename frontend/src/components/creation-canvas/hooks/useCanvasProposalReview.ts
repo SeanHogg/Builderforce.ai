@@ -232,7 +232,7 @@ export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending,
     if (actions.length) setPendingBrainActions((current) => [...current, ...actions.filter((change) => !deletedObjectIds.has(change.objectId)).map(({ objectId, action }) => ({ objectId, action }))]);
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
-    setNotice(canonicalPrds.length ? `${canonicalPrds.length} project PRD${canonicalPrds.length === 1 ? '' : 's'} saved and ${selected.length} reviewed Brain changes applied` : `${selected.length} reviewed Brain changes applied`);
+    setNotice(canonicalPrds.length ? t('noticePrdsSavedChangesApplied', { prds: canonicalPrds.length, count: selected.length }) : t('noticeReviewedChangesApplied', { count: selected.length }));
     trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: canvasSurface(), commandCount: selected.length } });
   }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes, setSurface]);
 

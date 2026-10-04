@@ -1,64 +1,25 @@
-import { useState, useCallback, useEffect, type ReactNode } from 'react';
-import dynamic from 'next/dynamic';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { CodePane } from './CodePane';
-import { FileExplorer } from './FileExplorer';
-// WebGPU LoRA training — onnxruntime-web, the tokenizer and the whole training
-// loop, behind ONE tab of this workspace. Statically imported it shipped to
-// every builder who only ever edits files; `CreationCanvas` already defers the
-// same panel. `ssr: false`: there is no server-side WebGPU.
-const AITrainingPanel = dynamic(
-  () => import('./AITrainingPanel').then((module) => module.AITrainingPanel),
-  { ssr: false },
-);
-import { AgentPublishPanel } from './AgentPublishPanel';
-import { SitePublishPanel } from './SitePublishPanel';
-import { AgentStateViewer } from './AgentStateViewer';
 import { Icon } from '@/components/ui/Icon';
 import { PlanBadge } from '@/components/PlanBadge';
-import { EvermindStudioPanel } from './EvermindStudioPanel';
-import { FinetuneStudioPanel } from './FinetuneStudioPanel';
 import { BuilderProjectsSlideOutPanel } from './builder/BuilderProjectsSlideOutPanel';
 import { WorkspaceBrainColumn } from './builder/WorkspaceBrainColumn';
 import { TeamChatButton } from './brain/TeamChatButton';
-import { BuilderSettingsPanel } from './BuilderSettingsPanel';
-import { BuilderAgentPanel } from './builder/BuilderAgentPanel';
-import { MobileDevicePanel } from './builder/MobileDevicePanel';
-import { useLazyShell } from '@/hooks/useLazyShell';
-import { useWorkspaceCommands } from '@/lib/workspace/workspaceCommands';
-import { FilesPanel } from '@/components/builder/FilesPanel';
-import { WorkspaceBottomPanel } from '@/components/builder/WorkspaceBottomPanel';
-import { VersionsPanel } from '@/components/builder/VersionsPanel';
-import { PaneLayer } from '@/components/builder/PaneLayer';
-import { DatabasePanel } from '@/components/builder/database/DatabasePanel';
 import { WorkspaceHeader } from '@/components/builder/WorkspaceHeader';
 import { ProjectTitleField } from '@/components/builder/ProjectTitleField';
 import { WorkspaceMoreMenu } from '@/components/builder/WorkspaceMoreMenu';
-import { CenterViewSwitch, centerViewsFor, type CenterView } from '@/components/builder/CenterViewSwitch';
-import { PreviewPane, type PreviewFraming } from '@/components/builder/PreviewPane';
-import { ChecksControl } from '@/components/builder/ChecksControl';
-import { WorkspaceRail } from '@/components/builder/WorkspaceRail';
+import { CenterViewSwitch } from '@/components/builder/CenterViewSwitch';
 import { VoiceGenerateButton } from '@/components/builder/VoiceGenerateButton';
-import { useWorkspaceLogs } from '@/components/builder/useWorkspaceLogs';
-import { useWorkspaceRun } from '@/components/builder/useWorkspaceRun';
-import { useWorkspaceFiles } from '@/components/builder/useWorkspaceFiles';
-import { useAutoRun, hasRunnableEntry } from '@/components/builder/useAutoRun';
-import { usePointAndEdit } from '@/components/builder/usePointAndEdit';
+import { WorkspaceCenter } from '@/components/builder/WorkspaceCenter';
+import { WorkspaceSidePanels } from '@/components/builder/WorkspaceSidePanels';
+import { WorkspaceOverlays } from '@/components/builder/WorkspaceOverlays';
+import { useBuilderWorkspace } from '@/components/builder/useBuilderWorkspace';
 import { useArtifactReviews } from '@/components/builder/useArtifactReviews';
 import { useWorkspaceBrainActions } from '@/components/builder/useWorkspaceBrainActions';
 import { useWorkspaceBrainContext } from '@/components/builder/useWorkspaceBrainContext';
 import styles from '@/components/builder/workspaceChrome.module.css';
-import { useCollaboration } from '@/hooks/useCollaboration';
-import type { Project, FileEntry, TrainingJob } from '@/lib/types';
-import { getModality, hasLivePreview, type RightTab } from '@/lib/modality';
-import { useModalityCopy } from '@/lib/useModalityCopy';
-import { useIsMobile } from '@/lib/useIsMobile';
-import { useVoiceStudio } from '@/lib/voiceStudio';
-import { VoiceOutput } from './builder/VoiceOutput';
-import { VoiceConfigPanel } from './builder/VoiceConfigPanel';
-
-/** Below this width the chat and the workspace take turns instead of sitting side by side. */
-const NARROW_LAYOUT_PX = 760;
+import { serverFileStore } from '@/lib/workspace/workspaceFileStore';
+import type { Project, FileEntry } from '@/lib/types';
 
 interface IDEProps {
   project: Project;
@@ -79,123 +40,41 @@ interface IDEProps {
 }
 
 /**
- * The Builder workspace: one header row, the docked Brain, the centre (a live
- * preview that starts by itself, code, data — or a studio panel for the types
- * that are not apps), and a side panel opened on demand.
+ * The Builder workspace as Studio lays it out: one header row, the docked Brain, the
+ * centre (a live preview that starts by itself, code, data — or a studio panel for the
+ * types that are not apps), and a side panel opened on demand.
  *
- * It composes; the work lives in hooks beside it — the run pipeline
- * (`useWorkspaceRun` + `useAutoRun`), the editor's files (`useWorkspaceFiles`),
- * point & edit, the Brain's tools and context, and the review dialogs.
+ * What the workspace IS lives in `useBuilderWorkspace`, and its regions are shared with
+ * the canvas App surface (`CanvasAppWorkspace`). This file owns only Studio's chrome: the
+ * header, the docked Brain and the Brain's workspace tools.
  */
 export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket, headerLeading, headerTrailing }: IDEProps) {
   const t = useTranslations('ide');
-  // Builder is scoped to its project's type: modality is fixed at creation, not
-  // switchable in-session, so it's derived (and clamped) rather than state.
-  const modalityDef = getModality(project.modality);
-  const modality = modalityDef.id;
-  const modalityCopy = useModalityCopy()(modality);
-  // Layout comes from the modality registry, not from `modality === '…'` checks.
+  const store = useMemo(() => serverFileStore(project.id), [project.id]);
+  const ws = useBuilderWorkspace({ store, name: project.name, modality: project.modality, initialFiles });
+  const { modalityDef, modality, modalityCopy, livePreview, narrow, narrowPane, editor, voice } = ws;
   const hasDockedBrain = modalityDef.dockBrain;
-  const livePreview = hasLivePreview(modalityDef);
-  const allowedRightTabs = modalityDef.rightTabs;
-  const narrow = useIsMobile(NARROW_LAYOUT_PX);
-  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
-
-  const [files, setFiles] = useState<FileEntry[]>(initialFiles);
-  const [fileContents, setFileContents] = useState<Record<string, string>>({});
-  const [centerView, setCenterView] = useState<CenterView>('preview');
-  // Narrow screens show one pane at a time: the chat, or the workspace.
-  const [narrowPane, setNarrowPane] = useState<'chat' | 'work'>('work');
-  const [rightTab, setRightTab] = useState<RightTab>(() => getModality(project.modality).rightTabs[0]);
-  // A live preview gets the whole width by default; the panel opens on demand
-  // (and by itself for Code, which needs the file tree). Types whose centre IS a
-  // panel's subject (Evermind, Fine-tune, Voice) keep it open.
-  const [railOpen, setRailOpen] = useState(() => !hasLivePreview(getModality(project.modality)));
-  const [completedJobs, setCompletedJobs] = useState<TrainingJob[]>([]);
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  // Mobile: the "preview on your phone" slide-out (QR of the published build).
-  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
 
-  const openRail = useCallback((tab: RightTab) => {
-    if (!allowedRightTabs.includes(tab)) return;
-    setRightTab(tab);
-    setRailOpen(true);
-    setNarrowPane('work');
-  }, [allowedRightTabs]);
-
-  const selectView = useCallback((view: CenterView) => {
-    setCenterView(view);
-    setNarrowPane('work');
-    // Code without a file tree is a dead end, so it brings the tree with it.
-    if (view === 'code' && !railOpen) openRail('files');
-  }, [railOpen, openRail]);
-  const showEditor = useCallback(() => selectView('code'), [selectView]);
-
-  // When modality changes, clamp the active right-panel tab to the allowed set.
-  useEffect(() => {
-    if (!allowedRightTabs.includes(rightTab)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRightTab(allowedRightTabs[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modality]);
-
-  // A surface around the workspace (the Studio header) opening one of its panels.
-  useWorkspaceCommands(project.id, (command) => {
-    if (command.type === 'openSettings') setSettingsOpen(true);
-    else if (command.type === 'openTab') openRail(command.tab);
-  });
-
-  const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
-  // Voice studio state. Always called for hook stability; only works for Voice.
-  const voice = useVoiceStudio({ enabled: modality === 'voice', storageProjectId: projectIdNum });
-
-  const logs = useWorkspaceLogs();
-  const runner = useWorkspaceRun({
-    projectId: projectIdNum, modality, files, setFiles, fileContents, setFileContents,
-    log: logs.log, publishLog: logs.publishLog,
-  });
-  useAutoRun({ enabled: livePreview, files, phase: runner.phase, run: runner.run });
-  const edit = usePointAndEdit({ projectId: projectIdNum, previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, setFileContents });
-  const editor = useWorkspaceFiles({
-    projectId: projectIdNum, modality, setFiles, fileContents, setFileContents,
-    previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, refLog: logs.log, onOpenInEditor: showEditor,
-  });
-  const handleTerminalInput = useLazyShell(runner.startShell, logs.writeTerminal);
-
-  const reviews = useArtifactReviews(projectIdNum);
+  const reviews = useArtifactReviews(project.id);
   useWorkspaceBrainActions({
-    projectId: projectIdNum,
+    store,
     projectName: project.name,
     modality,
     targets: { activeFile: editor.activeFile, applyCodeToActiveFile: editor.applyCodeToActiveFile, createProjectFile: editor.createProjectFile, setVoiceText: voice.setText },
     review: reviews,
   });
   const brain = useWorkspaceBrainContext({
-    projectId: projectIdNum,
+    projectId: project.id,
     modality,
     activeFile: editor.activeFile,
-    activeFileContent: editor.activeFile ? (fileContents[editor.activeFile] ?? '') : undefined,
+    activeFileContent: editor.activeFile ? (ws.fileContents[editor.activeFile] ?? '') : undefined,
     docked: hasDockedBrain,
     initialChatId,
     initialPrompt,
     initialTicket,
   });
 
-  const codePane = (
-    <CodePane
-      openFiles={editor.openFiles}
-      activeFile={editor.activeFile}
-      fileContents={fileContents}
-      onTabSelect={editor.setActiveFile}
-      onTabClose={editor.closeTab}
-      onChange={editor.editActiveFile}
-      ydoc={ydoc}
-      projectId={project.id}
-    />
-  );
-  const framing: PreviewFraming = modalityDef.center === 'device' ? 'bezel' : modalityDef.enableMobilePreview ? 'both' : 'frame';
   const showChat = hasDockedBrain && (!narrow || narrowPane === 'chat');
   const showWork = !narrow || !hasDockedBrain || narrowPane === 'work';
 
@@ -209,16 +88,16 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         onOpenProjects={() => setProjectsPanelOpen(true)}
         center={livePreview || (narrow && hasDockedBrain) ? (
           <CenterViewSwitch
-            views={livePreview ? centerViewsFor(modalityDef.publishPanel) : []}
-            value={centerView}
-            onChange={selectView}
-            chat={narrow && hasDockedBrain ? { active: narrowPane === 'chat', onSelect: () => setNarrowPane('chat') } : undefined}
+            views={ws.centerViews}
+            value={ws.centerView}
+            onChange={ws.selectView}
+            chat={narrow && hasDockedBrain ? { active: narrowPane === 'chat', onSelect: () => ws.setNarrowPane('chat') } : undefined}
             workLabel={modalityCopy.label}
           />
         ) : undefined}
         actions={(
           <>
-            {collabConnected && (
+            {ws.collabConnected && (
               <span role="status" aria-label={t('workspace.collabConnected')} title={t('workspace.collabConnected')} style={{ display: 'inline-flex', padding: '0 4px' }}>
                 <span className={styles.dot} />
               </span>
@@ -226,13 +105,13 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             {/* The plan funding this workspace's chat. It used to sit in the composer's
                 last row, where "FREE · UPGRADE" read as part of the message being typed. */}
             <PlanBadge />
-            {Number.isFinite(projectIdNum) && <TeamChatButton projectId={projectIdNum} />}
+            <TeamChatButton projectId={project.id} />
             {/* A type with no live preview (Voice) keeps an explicit button for its one action. */}
             {modalityDef.showRunButton && !livePreview && <VoiceGenerateButton voice={voice} label={modalityCopy.runLabel} />}
             <WorkspaceMoreMenu
-              tabs={allowedRightTabs}
-              onOpenTab={openRail}
-              onOpenSettings={() => setSettingsOpen(true)}
+              tabs={ws.rightTabs}
+              onOpenTab={ws.openRail}
+              onOpenSettings={() => ws.setSettingsOpen(true)}
               onOpenDetails={onOpenProjectDetails}
             />
           </>
@@ -240,19 +119,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         trailing={headerTrailing}
       />
 
-      <BuilderProjectsSlideOutPanel open={projectsPanelOpen} onClose={() => setProjectsPanelOpen(false)} currentStorageProjectId={projectIdNum} />
-      <BuilderSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} projectId={projectIdNum} onImported={editor.refreshFiles} />
-
-      {/* Mobile: scan-to-open-on-a-real-phone. Mounted only where the device
-          simulator is, since it hands off that modality's published build. */}
-      {(modalityDef.center === 'device' || modalityDef.enableMobilePreview) && Number.isFinite(projectIdNum) && (
-        <MobileDevicePanel
-          open={devicePanelOpen}
-          onClose={() => setDevicePanelOpen(false)}
-          projectId={projectIdNum}
-          onGoToPublish={() => openRail('publish')}
-        />
-      )}
+      <BuilderProjectsSlideOutPanel open={projectsPanelOpen} onClose={() => setProjectsPanelOpen(false)} currentStorageProjectId={project.id} />
+      <WorkspaceOverlays ws={ws} />
 
       {/* Brain-tool artifact reviews (generate_prd / generate_tasks). */}
       {reviews.modals}
@@ -264,7 +132,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         {hasDockedBrain && (
           <div style={{ display: showChat ? 'contents' : 'none' }}>
             <WorkspaceBrainColumn
-              projectId={projectIdNum}
+              projectId={project.id}
               modality={modality}
               extraSystem={brain.extraSystem}
               activeFile={editor.activeFile}
@@ -277,11 +145,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           </div>
         )}
 
-        {/* Centre — content depends on the project type, chrome stays consistent. */}
-        <div style={{ display: showWork && !(narrow && railOpen) ? 'flex' : 'none', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative' }}>
-          {/* Types that DON'T dock the agent (Evermind / Fine-tune) get a prominent
-              button that opens the AI chat scoped to this project. */}
-          {!hasDockedBrain && (
+        <WorkspaceCenter
+          ws={ws}
+          hidden={!showWork || (narrow && ws.railOpen)}
+          // Types that DON'T dock the agent (Evermind / Fine-tune) get a prominent
+          // button that opens the AI chat scoped to this project.
+          overlay={!hasDockedBrain ? (
             <button
               type="button"
               onClick={brain.openDrawer}
@@ -300,123 +169,10 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               <Icon name="brain" size={18} />
               {t('askAi')}
             </button>
-          )}
-          {modalityDef.center === 'voice' ? (
-            <VoiceOutput result={voice.result} audioUrl={voice.audioUrl} busy={voice.busy} unavailable={voice.unavailable} />
-          ) : modalityDef.center === 'evermind' || modalityDef.center === 'finetune' ? (
-            editor.activeFile ? codePane : (
-              <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                {modalityDef.center === 'evermind' ? (
-                  <EvermindStudioPanel projectId={project.id} />
-                ) : (
-                  <FinetuneStudioPanel projectId={project.id} files={files} onGoToTab={openRail} onOpenFile={editor.openFile} />
-                )}
-              </div>
-            )
-          ) : (
-            <>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-                <PaneLayer active={centerView === 'preview'} style={{ display: 'flex', flexDirection: 'column' }}>
-                  <PreviewPane
-                    projectId={projectIdNum}
-                    url={runner.previewUrl}
-                    phase={runner.phase}
-                    step={runner.step}
-                    runnable={hasRunnableEntry(files)}
-                    onRestart={() => { void runner.run(); }}
-                    edit={edit}
-                    framing={framing}
-                    onOpenDevicePanel={() => setDevicePanelOpen(true)}
-                  />
-                </PaneLayer>
-                <PaneLayer active={centerView === 'code'} style={{ display: 'flex', flexDirection: 'column' }}>
-                  {codePane}
-                </PaneLayer>
-                {/* Database — mounted only while open, so it re-reads each time it is shown */}
-                {centerView === 'database' && (
-                  <PaneLayer active>
-                    <DatabasePanel projectId={project.id} />
-                  </PaneLayer>
-                )}
-              </div>
+          ) : undefined}
+        />
 
-              <WorkspaceBottomPanel
-                projectId={project.id}
-                onTerminalReady={logs.onTerminalReady}
-                onTerminalInput={handleTerminalInput}
-                onOutputReady={logs.onOutputReady}
-                status={modalityDef.showChecks ? (
-                  <ChecksControl
-                    results={runner.checkResults}
-                    checking={runner.isChecking}
-                    disabled={runner.phase === 'starting'}
-                    onCheck={() => { void runner.check(); }}
-                    gate={runner.gateRunOnChecks}
-                    onGateChange={runner.setGateRunOnChecks}
-                  />
-                ) : undefined}
-              />
-            </>
-          )}
-        </div>
-
-        {/* Side panel: Files / Versions / Agent / Train / Publish / State */}
-        <WorkspaceRail
-          tabs={allowedRightTabs}
-          active={rightTab}
-          open={railOpen && showWork}
-          fill={narrow}
-          onSelect={setRightTab}
-          onClose={() => setRailOpen(false)}
-        >
-          <PaneLayer active={rightTab === 'voice'}>
-            {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
-          </PaneLayer>
-          <PaneLayer active={rightTab === 'files'}>
-            <FilesPanel
-              projectId={project.id}
-              onOpenFile={editor.openFile}
-              explorer={(
-                <FileExplorer
-                  files={files}
-                  activeFile={editor.activeFile}
-                  onFileSelect={editor.openFile}
-                  onFileCreate={editor.createFile}
-                  onFileDelete={editor.removeFile}
-                  showHeader={false}
-                />
-              )}
-            />
-          </PaneLayer>
-          {/* Always mounted where the modality has versions: the panel is also what records one per agent turn. */}
-          {allowedRightTabs.includes('versions') && (
-            <PaneLayer active={rightTab === 'versions'}>
-              <VersionsPanel projectId={project.id} />
-            </PaneLayer>
-          )}
-          <PaneLayer active={rightTab === 'agent'}>
-            {rightTab === 'agent' && <BuilderAgentPanel projectId={project.id} />}
-          </PaneLayer>
-          <PaneLayer active={rightTab === 'train'}>
-            <AITrainingPanel
-              projectId={project.id}
-              datasetsVersion={editor.datasetsRegistered}
-              onLog={(msg) => logs.log.raw(`\r\n\x1b[35m[${t('runLog.trainTag')}]\x1b[0m ${msg}`)}
-              onJobCompleted={(job) => setCompletedJobs(prev => {
-                const exists = prev.some(j => j.id === job.id);
-                return exists ? prev.map(j => j.id === job.id ? job : j) : [job, ...prev];
-              })}
-            />
-          </PaneLayer>
-          <PaneLayer active={rightTab === 'publish'} style={{ overflow: 'auto' }}>
-            {modalityDef.publishPanel === 'site'
-              ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={runner.publishBuild} />
-              : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
-          </PaneLayer>
-          <PaneLayer active={rightTab === 'state'}>
-            <AgentStateViewer projectId={project.id} />
-          </PaneLayer>
-        </WorkspaceRail>
+        <WorkspaceSidePanels ws={ws} visible={showWork} />
       </div>
     </div>
   );

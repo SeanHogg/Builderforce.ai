@@ -1,13 +1,24 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLocalCreationSession, creationStorageKey, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { CreationCanvas } from './CreationCanvas';
+import { AUTHORED_EVALUATION, answerCanvasTurns, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
+
+// Only the model call is replaced — see `canvasTurnRunnerMock`. Every turn stays in flight
+// unless a test answers it, so nothing leaves jsdom.
+vi.mock('@/lib/creationCanvasAi', async (importOriginal) => (await import('@/test/canvasTurnRunnerMock')).canvasTurnRunnerModule(
+  await importOriginal<typeof import('@/lib/creationCanvasAi')>(),
+));
 
 // No suite-level timeout override — see the note in `CreationCanvas.test.tsx`:
 // the 15s cap was a mitigation for a render loop that no longer exists, and it
 // now only cuts off heavy mounts when this file runs alongside the rest of
 // `src/components` rather than on its own.
 describe('CreationCanvas with the real XYFlow store', () => {
+  beforeEach(() => {
+    holdCanvasTurns();
+  });
+
   afterEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
@@ -16,6 +27,9 @@ describe('CreationCanvas with the real XYFlow store', () => {
   it('hydrates an anonymous local Session without an update-depth loop', async () => {
     const errors: unknown[][] = [];
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
+    // The auto-submitted turn answers shortly after hydration and lands a real object on
+    // the board through the tool path, so the store syncs again inside the window below.
+    answerCanvasTurns('Added an evaluation of the board.', { object: AUTHORED_EVALUATION, delayMs: 300 });
     const sessionId = createLocalCreationSession('Build a new website');
 
     render(<CreationCanvas sessionId={sessionId} persistence="local" />);

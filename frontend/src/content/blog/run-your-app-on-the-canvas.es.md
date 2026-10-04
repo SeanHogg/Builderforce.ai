@@ -1,3 +1,5 @@
+> **Actualización, 4 de octubre de 2026:** la vista App ahora ejecuta el espacio de trabajo completo de Studio en el propio lienzo, con archivos reales, un entorno que puede ejecutar tu servidor, una terminal y una base de datos. Tus tarjetas de código pasan a ser los archivos del proyecto. Más información: [La App de tu lienzo ahora es un proyecto real](/blog/your-canvas-app-is-a-real-project).
+
 Pide un servicio de envío de SMS y aparecen cuatro tarjetas en el tablero: `backend/server.js`, `frontend/index.html`, una página renderizada y una nota de configuración. Todas conectadas, todas correctas, todas ahí quietas.
 
 ¿Y ahora qué?

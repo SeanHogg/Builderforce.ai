@@ -90,8 +90,11 @@ export interface CanvasBuildToolsContext {
   onFilesChanged?: (workspaceId: WorkspaceId, paths: string[]) => void;
 }
 
-/** Modalities that have a code workspace. The generative studios do not. */
-const BUILDABLE_MODALITIES: ProjectModality[] = ['designer', 'mobile', 'webmobile'];
+/**
+ * Modalities that have a code workspace. The generative studios do not — and these are also
+ * the only ones a workspace held in this browser can run, since the studios need a project.
+ */
+export const BUILDABLE_MODALITIES: readonly ProjectModality[] = ['designer', 'mobile', 'webmobile'];
 
 /** Files whose content is never useful to a model and costly to page through. */
 const SKIP_DIRECTORIES = ['node_modules/', 'dist/', '.git/'];
@@ -262,7 +265,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
           title: { type: 'string', description: 'Short product name, e.g. "Recipe Box".' },
           modality: {
             type: 'string',
-            enum: BUILDABLE_MODALITIES,
+            enum: [...BUILDABLE_MODALITIES],
             description: 'designer = a website or web app; mobile = a React Native phone app; webmobile = one codebase that is both.',
           },
         },

@@ -61,12 +61,12 @@ export function canvasDataQueryActions(ctx: CanvasActionContext): BrainAction[] 
         },
         sort: { type: 'object', additionalProperties: false, properties: { column: { type: 'string' }, direction: { type: 'string', enum: ['asc', 'desc'] } } },
         limit: { type: 'number' },
-        materializeAs: { type: 'string', enum: ['none', 'table', 'chart', 'dashboard', 'kpi', 'map'], description: 'Build a canvas object populated with the real query result. Use "table" for a row-level breakdown, "chart" or "dashboard" for a grouped visualization, and "map" to plot rows geographically — "map" requires latitude and longitude columns, which geo.geocode can add to a dataset of place names.' },
+        materializeAs: { type: 'string', enum: ['none', 'table', 'chart', 'dashboard', 'kpi', 'map'], description: 'Build a canvas object populated with the real query result. Use "table" for a row-level breakdown, "chart" or "dashboard" for a grouped visualization, and "map" to plot rows geographically — "map" requires latitude and longitude columns, which builtin_geo_geocode can add to a dataset of place names.' },
         title: { type: 'string', description: 'Title for the materialized object.' },
         mapValueColumn: { type: 'string', description: 'For materializeAs "map": the numeric column that sizes each marker.' },
         mapRegionName: { type: 'string', description: 'For materializeAs "map": the enclosing region shown on the card, e.g. "Michigan".' },
-        mapRegion: { type: 'array', items: { type: 'number' }, description: 'For materializeAs "map": [south, north, west, east] to fit the viewport to, exactly as geo.geocode returns in boundingBox. Omit to fit the plotted points.' },
-        mapOutline: { description: 'For materializeAs "map": a boundary to draw behind the points — pass geo.geocode\'s outline value for the enclosing region straight through.' },
+        mapRegion: { type: 'array', items: { type: 'number' }, description: 'For materializeAs "map": [south, north, west, east] to fit the viewport to, exactly as builtin_geo_geocode returns in boundingBox. Omit to fit the plotted points.' },
+        mapOutline: { description: 'For materializeAs "map": a boundary to draw behind the points — pass builtin_geo_geocode\'s outline value for the enclosing region straight through.' },
         mapAttribution: { type: 'string', description: 'For materializeAs "map": the geocoder attribution string to print under the map.' },
         highlight: {
           type: 'array', description: 'Row colouring for a materialized table. The first matching rule wins.',
@@ -102,7 +102,7 @@ export function canvasDataQueryActions(ctx: CanvasActionContext): BrainAction[] 
         return {
           error: geoColumns?.latitude && geoColumns.longitude
             ? `No row in this result has a usable coordinate pair in ${geoColumns.latitude}/${geoColumns.longitude}.`
-            : `This result has no latitude/longitude columns, so it cannot be plotted. Available columns: ${result.columns.join(', ')}. Resolve the place names with geo.geocode, write the returned lat/lng back onto the dataset rows with canvas_update_object, then plot it.`,
+            : `This result has no latitude/longitude columns, so it cannot be plotted. Available columns: ${result.columns.join(', ')}. Resolve the place names with builtin_geo_geocode, write the returned lat/lng back onto the dataset rows with canvas_update_object, then plot it.`,
         };
       }
       const payload = {

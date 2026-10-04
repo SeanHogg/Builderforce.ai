@@ -8,9 +8,9 @@ import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import { readDrawingPreferences, type DrawingPreferences } from '../drawingPreferences';
 import { useCanvasStandupAction, type CanvasStandupActionInput } from '../useCanvasStandupAction';
 import type { useCanvasFiles } from '../hooks/useCanvasFiles';
-import { useCanvasSessionFacts } from './canvasSessionContext';
+import type { CanvasSessionFacts } from './canvasSessionContext';
 
-export interface CanvasSessionActionHandlerDeps {
+export interface CanvasSessionActionHandlerDeps extends Pick<CanvasSessionFacts, 'sessionId' | 'persistence' | 'requireAccount'> {
   /** Closes every sheet an action can be pressed from. */
   closeActionMenus: () => void;
   undo: () => void;
@@ -55,11 +55,10 @@ export function useCanvasSessionActionHandlers({
   closeActionMenus, undo, redo, openOutcomeMetrics, outcomeMetricsOpen, openDiagnostics, diagnosticsOpen,
   walkthroughRef, walkthroughStopCount, toggleFullscreen, fullscreen, liveRoom, hasAccount, standup,
   talktrackOpen, setTalktrackOpen, runWorkflow, presentMode, setPresentMode, drawingMode, setDrawing,
-  shareOpen, setShareOpen, openReleasesPanel, releaseOpen, timeline, title,
+  shareOpen, setShareOpen, openReleasesPanel, releaseOpen, timeline, title, sessionId, persistence, requireAccount,
 }: CanvasSessionActionHandlerDeps): Record<CanvasSessionActionId, CanvasSessionActionHandler> {
   const t = useTranslations('creationCanvas');
   const router = useRouter();
-  const { sessionId, persistence, requireAccount } = useCanvasSessionFacts();
   // The standup beside the call. The hook resolves the project (scope, then this
   // board's), owns the ceremony and asks the agents at the table for their updates
   // through the ordinary turn path; this file learns one handler.

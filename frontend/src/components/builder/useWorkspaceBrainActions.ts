@@ -9,8 +9,11 @@ import { useRegisterBrainActions, savePrd, saveTasks, type BrainAction } from '@
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { generateImageAssetAction } from './generateImageAssetAction';
 import type { ProjectModality } from '@/lib/modality';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 
 type WriteResult = { ok: true } | { ok: false; reason: string };
+
+const NEEDS_PROJECT = 'Specs and tasks are saved to a project, and this workspace is held in this browser. Save the board to an account first.';
 
 /** The live workspace state the tools act on. Read through a ref, so the
  *  registered action list stays stable while `run()` sees current values. */
@@ -29,8 +32,9 @@ export interface WorkspaceBrainTargets {
  * image generation for the app's pictures, the voice studio's lines, and the
  * PRD / task generators behind a review.
  */
-export function useWorkspaceBrainActions({ projectId, projectName, modality, targets, review }: {
-  projectId: number;
+export function useWorkspaceBrainActions({ store, projectName, modality, targets, review }: {
+  /** The open workspace's files — what the build tools read and write. */
+  store: WorkspaceFileStore;
   projectName: string;
   modality: ProjectModality;
   targets: WorkspaceBrainTargets;
@@ -39,6 +43,8 @@ export function useWorkspaceBrainActions({ projectId, projectName, modality, tar
     requestTasks: (draft: { titles: string[]; descriptions: string[] }) => Promise<boolean>;
   };
 }): void {
+  // Specs and tasks belong to a durable project; a browser-held workspace has none.
+  const projectId = typeof store.id === 'number' ? store.id : null;
   const liveRef = useRef({ targets, modality, projectId, review });
   // Synced after commit, never during render; a tool runs long after either.
   useEffect(() => {
@@ -46,14 +52,10 @@ export function useWorkspaceBrainActions({ projectId, projectName, modality, tar
   });
 
   const buildToolActions = useMemo<BrainAction[]>(() => canvasBuildActions({
-    builds: () => [{
-      objectId: String(projectId),
-      title: projectName,
-      binding: { ideProjectId: projectId, storageProjectId: projectId, storageProjectPublicId: String(projectId), modality },
-    }],
+    builds: () => [{ objectId: String(store.id), title: projectName, modality, store }],
     createBuild: async () => { throw new Error('This workspace is already open — edit its files instead of creating another build.'); },
     onFilesChanged: notifyWorkspaceFilesChanged,
-  }).filter((action) => action.name !== 'canvas_create_build'), [modality, projectName, projectId]);
+  }).filter((action) => action.name !== 'canvas_create_build'), [modality, projectName, store]);
 
   const actions = useMemo<BrainAction[]>(() => [
     ...buildToolActions,
@@ -118,11 +120,13 @@ export function useWorkspaceBrainActions({ projectId, projectName, modality, tar
       },
       run: async ({ prd }: { prd: string }) => {
         if (!prd?.trim()) return { error: 'PRD content is empty.' };
+        const { projectId: specsProjectId } = liveRef.current;
+        if (specsProjectId === null) return { error: NEEDS_PROJECT };
         // Auto-approve skips the review — the user already opted out of
         // per-action prompts, so save straight through.
         if (isBrainAutoApprove()) {
           try {
-            await savePrd(liveRef.current.projectId, prd.trim());
+            await savePrd(specsProjectId, prd.trim());
             return { saved: true };
           } catch (e) {
             return { error: toolErrorMessage(e, 'Failed to save PRD') };
@@ -152,11 +156,13 @@ export function useWorkspaceBrainActions({ projectId, projectName, modality, tar
       run: async ({ tasks }: { tasks: Array<{ title: string; description?: string }> }) => {
         const list = Array.isArray(tasks) ? tasks.filter(t => t?.title?.trim()) : [];
         if (list.length === 0) return { error: 'No tasks provided.' };
+        const { projectId: tasksProjectId } = liveRef.current;
+        if (tasksProjectId === null) return { error: NEEDS_PROJECT };
         const titles = list.map(t => t.title);
         const descriptions = list.map(t => t.description ?? '');
         if (isBrainAutoApprove()) {
           try {
-            await saveTasks(liveRef.current.projectId, { titles, descriptions });
+            await saveTasks(tasksProjectId, { titles, descriptions });
             return { added: list.length };
           } catch (e) {
             return { error: toolErrorMessage(e, 'Failed to add tasks') };

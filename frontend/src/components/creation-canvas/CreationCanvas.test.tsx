@@ -1429,7 +1429,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Evaluate the selected canvas objects' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
     const evaluation = await screen.findByTestId('canvas-node-evaluation');
-    await waitFor(() => expect(screen.getByText('1 reviewed Brain changes applied')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('1 reviewed Brain change applied')).toBeInTheDocument());
     // Connected: applying a Brain change associates the Brain with what it made.
     const evaluationId = evaluation.getAttribute('data-node-id')!;
     expect(screen.getByTestId('flow').getAttribute('data-edge-pairs')!.split(',').some((pair) => pair.split(':').includes(evaluationId))).toBe(true);

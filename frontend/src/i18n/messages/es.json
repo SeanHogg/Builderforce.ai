@@ -21751,7 +21751,9 @@
       "deleteWorkspaceHint": "Quitar este objeto del lienzo conserva su espacio de trabajo; eliminar el espacio de trabajo borra sus archivos en todas partes.",
       "deleteConfirm": "¿Eliminar el espacio de trabajo de «{title}»? Sus archivos se borrarán en todas partes, no solo en este lienzo.",
       "workspaceDeleted": "Espacio de trabajo eliminado: este Constructor vuelve a no tener archivos.",
-      "deleteWorkspaceFailed": "No se pudo eliminar el espacio de trabajo"
+      "deleteWorkspaceFailed": "No se pudo eliminar el espacio de trabajo",
+      "tileLocal": "En este navegador",
+      "tileLocalHint": "Se ejecuta aquí, en tu navegador. Guarda tu trabajo para conservarlo en una cuenta."
     },
     "resumeShareSaveFirst": "Guarda este Canvas antes de compartir un currículum.",
     "resumeLinkCopied": "Enlace público del currículum copiado",
@@ -21807,6 +21809,8 @@
     "noticeFeatureSummaryAdded": "Resumen de funciones y maquetas añadidos",
     "noticeEvaluationAdded": "Evaluación añadida al lienzo",
     "noticeSavingPrd": "Guardando el PRD revisado en su proyecto…",
+    "noticeReviewedChangesApplied": "{count, plural, one {# cambio revisado de Brain aplicado} other {# cambios revisados de Brain aplicados}}",
+    "noticePrdsSavedChangesApplied": "{prds, plural, one {# PRD del proyecto guardado} other {# PRD del proyecto guardados}} y {count, plural, one {# cambio revisado de Brain aplicado} other {# cambios revisados de Brain aplicados}}",
     "noticeChangesRejected": "Cambios de Brain rechazados; el lienzo no ha cambiado",
     "noticeNeedRunnerAccess": "Se requiere acceso de ejecutor o propietario",
     "noticeNeedWorkflow": "Añade un flujo de trabajo para ejecutarlo",
@@ -24265,37 +24269,41 @@
         "enter": "Ejecuta lo que construye este lienzo",
         "active": "Estás en la app",
         "regionLabel": "Este lienzo, ejecutándose como una sola app",
-        "run": "Ejecutar",
-        "stop": "Detener",
-        "stopped": "Sin ejecutar",
         "readings": "Cómo leer la app",
+        "run": "Ejecutar",
+        "publish": "Publicar",
+        "restart": "Reiniciar",
+        "starting": "Iniciando…",
+        "phase": {
+          "idle": "Detenida",
+          "starting": "Iniciando…",
+          "live": "En ejecución",
+          "failed": "Se detuvo con un error",
+          "blocked": "Bloqueada por comprobaciones fallidas"
+        },
+        "panels": "Paneles de la app",
+        "files": "Archivos",
+        "terminal": "Terminal",
+        "openInStudio": "Abrir en Studio",
+        "switchApp": "Cambiar de app",
+        "localBadge": "En este navegador",
+        "localHint": "Esta app se ejecuta en tu navegador. Guarda tu trabajo en una cuenta para activar la publicación, el historial y una base de datos.",
+        "defaultAppTitle": "Mi app",
+        "preparing": "Llevando tu código a la app…",
+        "loading": "Abriendo la app…",
+        "loadFailed": "No se pudieron abrir los archivos de la app.",
+        "start": {
+          "title": "Empieza la app de esta sesión",
+          "body": "Elige qué vas a crear. Obtienes un proyecto real con archivos, un entorno de ejecución y una base de datos, unido a este lienzo.",
+          "bodyLocal": "Elige qué vas a crear. Se ejecuta aquí mismo, en tu navegador. Guarda tu trabajo para conservarlo en una cuenta.",
+          "creating": "Preparándolo…",
+          "failed": "No se pudo crear la app. Inténtalo de nuevo.",
+          "askBrain": "O simplemente pídeselo a Brain, por ejemplo «Crea una web de marketing para mi panadería»."
+        },
         "reading": {
           "preview": "Vista previa",
           "code": "Código",
-          "console": "Consola"
-        },
-        "errorCount": "{count, plural, one {# error} other {# errores}}",
-        "publish": "Publicar",
-        "frameTitle": "{path}, en ejecución",
-        "idleTitle": "Listo para ejecutar",
-        "idleBody": "Pulsa Ejecutar para iniciar la app en un entorno aislado al que solo tú accedes.",
-        "noEntryTitle": "No hay página que abrir",
-        "noEntryBody": "Este lienzo tiene código pero ninguna página HTML por la que empezar. Pídele una a Brain o abre un archivo abajo.",
-        "emptyTitle": "Todavía no hay nada que ejecutar",
-        "emptyBody": "Pídele a Brain que construya algo y los archivos que escriba se ejecutarán aquí.",
-        "files": "Archivos de esta app",
-        "role": {
-          "server": "Servidor"
-        },
-        "openCard": "Abrir la tarjeta",
-        "serverNote": "{files} necesita un host para ejecutarse. La vista previa solo ejecuta el front-end, así que las llamadas a tu backend fallarán aquí: publica para darle un servidor.",
-        "consoleQuiet": "En ejecución. Todavía no hay registros.",
-        "consoleStopped": "Ejecuta la app para ver qué registra.",
-        "level": {
-          "log": "registro",
-          "warn": "aviso",
-          "error": "error",
-          "request": "llamada"
+          "database": "Base de datos"
         }
       },
       "insights": {

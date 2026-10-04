@@ -16,6 +16,8 @@ import { CanvasSceneGeneratorPanel, CanvasWorldView } from '../canvasLazyPanels'
 import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData, CreationObjectKind } from '../types';
 import type { useCanvasResumeShares } from '../hooks/useCanvasResumeShares';
+import type { CanvasSessionAppActions } from '../hooks/useCanvasSessionApp';
+import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import type { BrainConversationProps } from './useBrainConversation';
 
 export interface CanvasSurfaceStageProps {
@@ -26,7 +28,8 @@ export interface CanvasSurfaceStageProps {
   exitSurface: () => void;
   setSurface: (surface: CanvasSurfaceId) => void;
   /** The SITE the reader arrived by opening, so the App modality shows that object. */
-  appTarget: string | null;
+  sessionApp: CanvasSessionAppActions;
+  sessionTitle: string;
   nodes: CreationFlowNode[];
   /** Direct edits made on a surface can land — role and lock both allow it. */
   editable: boolean;
@@ -49,12 +52,13 @@ export interface CanvasSurfaceStageProps {
  * back. Adding a runtime is a key here plus an entry in `canvasSurfaces.ts`.
  */
 export function CanvasSurfaceStage({
-  surface, hostSurfaces, surfaceNode, exitSurface, setSurface, appTarget, nodes, editable, updateNodeData, appendAtCenter,
+  surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, nodes, editable, updateNodeData, appendAtCenter,
   revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen,
 }: CanvasSurfaceStageProps) {
+  const { persistence } = useCanvasSessionFacts();
   const exitToBoard = () => setSurface('graph');
   /** The object-scoped runtimes' one write, offered only where the edit can land. */
-  const editSurfaceNode = surfaceNode && editable
+  const editSurfaceNode: { onEdit?: (patch: Partial<CreationNodeData>) => void } = surfaceNode && editable
     ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) }
     : {};
   return <CanvasSurfaceRouter
@@ -83,14 +87,7 @@ export function CanvasSurfaceStage({
             // below it takes the nodes rather than a single object: `backend/server.js`,
             // `frontend/index.html` and the page they render are three cards and one
             // artifact, and there is no card to enter it from.
-            app: <CanvasAppSurface
-              nodes={nodes}
-              onExit={exitToBoard}
-              onOpenObject={revealObject}
-              // Set when the reader arrived by opening a SITE, so the App modality shows
-              // that same object rather than the entry file it would otherwise guess.
-              focusNodeId={appTarget}
-            />,
+            app: <CanvasAppSurface nodes={nodes} session={sessionApp} persistence={persistence} sessionTitle={sessionTitle} onExit={exitToBoard} />,
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
             insights: <CanvasInsightsSurface onExit={exitToBoard} />,

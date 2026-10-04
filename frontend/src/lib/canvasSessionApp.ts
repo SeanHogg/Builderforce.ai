@@ -13,7 +13,7 @@
  * A signed-in board's app is a durable storage project (`canvasBuildBinding`). A board
  * with no account yet runs the same workspace over files held in this browser, keyed by
  * `localAppKey` on the card. "Keep your work" claims the board, and the App surface then
- * provisions a real project and uploads those files ({@link localAppUpload}). Everything
+ * provisions a real project and uploads those files (`useCanvasSessionApp`). Everything
  * downstream — the workspace, the Brain's build tools — reads a {@link SessionApp} and
  * its `store`, and never asks which kind it has.
  *
@@ -135,6 +135,34 @@ export function newLocalAppKey(): string {
 export function entryRedirectPage(entryPath: string): string {
   const href = `./${entryPath.replace(/^\.?\//, '')}`;
   return `<!doctype html>\n<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=${href}"><title>App</title></head>\n<body><script>location.replace(${JSON.stringify(href)});</script></body></html>\n`;
+}
+
+/** The card kinds `canvasAppFiles` reads — the only ones whose edits can change the app. */
+const APP_CARD_KINDS: ReadonlySet<string> = new Set(['code', 'game', 'website', 'prototype']);
+
+const dataVersions = new WeakMap<object, number>();
+let nextDataVersion = 0;
+
+/**
+ * A cheap fingerprint of the board's app cards: their ids and the IDENTITY of their data.
+ *
+ * Moving a card replaces the node but keeps its data object, so dragging cards around
+ * leaves this unchanged and costs no import pass — only an actual edit (a new data
+ * object) or a card added or removed does. Hashing contents here would re-render every
+ * website card on every frame of a drag.
+ */
+export function appCardSignature(nodes: ReadonlyArray<BoardNode>): string {
+  const parts: string[] = [];
+  for (const node of nodes) {
+    if (!APP_CARD_KINDS.has(node.data.kind)) continue;
+    let version = dataVersions.get(node.data);
+    if (version === undefined) {
+      version = ++nextDataVersion;
+      dataVersions.set(node.data, version);
+    }
+    parts.push(`${node.id}:${version}`);
+  }
+  return parts.join('|');
 }
 
 export interface CardImport {

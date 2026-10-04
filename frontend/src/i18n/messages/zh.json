@@ -21751,7 +21751,9 @@
       "deleteWorkspaceHint": "从画布移除该对象会保留其工作区；删除工作区则会在所有位置移除其文件。",
       "deleteConfirm": "要删除“{title}”背后的工作区吗？其文件将在所有位置被移除，而不仅仅是从此画布。",
       "workspaceDeleted": "工作区已删除 — 该构建器再次没有任何文件。",
-      "deleteWorkspaceFailed": "无法删除工作区"
+      "deleteWorkspaceFailed": "无法删除工作区",
+      "tileLocal": "保存在此浏览器中",
+      "tileLocalHint": "在你的浏览器中运行。保存你的工作即可存入账户。"
     },
     "resumeShareSaveFirst": "分享简历前请先保存此画布。",
     "resumeLinkCopied": "已复制公开简历链接",
@@ -21807,6 +21809,8 @@
     "noticeFeatureSummaryAdded": "已添加功能摘要和原型",
     "noticeEvaluationAdded": "评估已添加到画布",
     "noticeSavingPrd": "正在将已审阅的 PRD 保存到其项目…",
+    "noticeReviewedChangesApplied": "已应用 {count} 项经审核的 Brain 更改",
+    "noticePrdsSavedChangesApplied": "已保存 {prds} 份项目 PRD，并应用 {count} 项经审核的 Brain 更改",
     "noticeChangesRejected": "已拒绝 Brain 的更改；画布未变动",
     "noticeNeedRunnerAccess": "需要运行者或所有者权限",
     "noticeNeedWorkflow": "请添加一个工作流以运行它",
@@ -24265,37 +24269,41 @@
         "enter": "运行此画布所构建的内容",
         "active": "你正在应用中",
         "regionLabel": "此画布，作为一个应用运行",
-        "run": "运行",
-        "stop": "停止",
-        "stopped": "未运行",
         "readings": "查看应用的方式",
+        "run": "运行",
+        "publish": "发布",
+        "restart": "重新启动",
+        "starting": "正在启动…",
+        "phase": {
+          "idle": "未运行",
+          "starting": "正在启动…",
+          "live": "运行中",
+          "failed": "因错误停止",
+          "blocked": "因检查未通过而被阻止"
+        },
+        "panels": "应用面板",
+        "files": "文件",
+        "terminal": "终端",
+        "openInStudio": "在 Studio 中打开",
+        "switchApp": "切换应用",
+        "localBadge": "保存在此浏览器中",
+        "localHint": "此应用在你的浏览器中运行。保存你的工作到账户，即可启用发布、历史记录和数据库。",
+        "defaultAppTitle": "我的应用",
+        "preparing": "正在把你的代码导入应用…",
+        "loading": "正在打开应用…",
+        "loadFailed": "无法打开应用的文件。",
+        "start": {
+          "title": "开始本次会话的应用",
+          "body": "选择你要做的东西。你会得到一个真实的项目，包含文件、运行环境和数据库，并与这块画布保持关联。",
+          "bodyLocal": "选择你要做的东西。它直接在你的浏览器中运行。保存你的工作即可存入账户。",
+          "creating": "正在设置…",
+          "failed": "无法创建应用，请重试。",
+          "askBrain": "也可以直接问 Brain，例如“为我的面包店做一个营销网站”。"
+        },
         "reading": {
           "preview": "预览",
           "code": "代码",
-          "console": "控制台"
-        },
-        "errorCount": "{count, plural, other {# 个错误}}",
-        "publish": "发布",
-        "frameTitle": "{path}，运行中",
-        "idleTitle": "准备就绪",
-        "idleBody": "点击“运行”，在只有你能访问的沙箱中启动应用。",
-        "noEntryTitle": "没有可打开的页面",
-        "noEntryBody": "此画布有代码，但没有作为入口的 HTML 页面。可以让 Brain 生成一个，或在下方打开某个文件。",
-        "emptyTitle": "暂时没有可运行的内容",
-        "emptyBody": "让 Brain 构建一些东西，它写出的文件就会在这里运行。",
-        "files": "此应用的文件",
-        "role": {
-          "server": "服务端"
-        },
-        "openCard": "打开卡片",
-        "serverNote": "{files} 需要一个主机才能运行。预览只运行前端，因此对后端的调用在这里会失败——发布后即可获得服务器。",
-        "consoleQuiet": "运行中。暂无日志。",
-        "consoleStopped": "运行应用即可查看它输出的日志。",
-        "level": {
-          "log": "日志",
-          "warn": "警告",
-          "error": "错误",
-          "request": "调用"
+          "database": "数据库"
         }
       },
       "insights": {

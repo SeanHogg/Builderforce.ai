@@ -5,7 +5,7 @@
  * Same port as the durable store (`workspaceFileStore.ts`), so the editor, the run pipeline
  * and the Brain's build tools are unchanged; only where a write lands differs. "Keep your
  * work" turns the board into a durable session, and the App surface then provisions a real
- * project and uploads these files into it (`promoteLocalApp` in `canvasSessionApp.ts`).
+ * project and uploads these files into it (`useCanvasSessionApp`).
  *
  * ── STORAGE ──────────────────────────────────────────────────────────────────────
  * IndexedDB, one record per workspace (`{ key, files }`): an app is tens of small text

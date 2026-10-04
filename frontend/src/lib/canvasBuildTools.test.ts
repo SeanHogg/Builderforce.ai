@@ -7,14 +7,18 @@ import {
   workspacePathArg,
   CANVAS_BUILD_TOOL_NAMES,
   CANVAS_BUILD_WORKSPACE_WRITE_TOOLS,
+  canvasBuildActions,
   type BoundCanvasBuild,
 } from './canvasBuildTools';
-import { ACCOUNT_REQUIRED_CANVAS_TOOLS } from '@builderforce/creation-canvas-contract';
+import { ACCOUNT_REQUIRED_CANVAS_TOOLS, GUEST_SAFE_CANVAS_TOOLS } from '@builderforce/creation-canvas-contract';
+import { localFileStore, seedLocalWorkspace } from './workspace/localFileStore';
+import { serverFileStore } from './workspace/workspaceFileStore';
 
 const build = (objectId: string, title: string): BoundCanvasBuild => ({
   objectId,
   title,
-  binding: { ideProjectId: 1, storageProjectId: 900, storageProjectPublicId: '900', modality: 'designer' },
+  modality: 'designer',
+  store: serverFileStore(900),
 });
 
 describe('resolveCanvasBuild', () => {
@@ -109,11 +113,49 @@ describe('summarizeWorkspace', () => {
 describe('the guest boundary', () => {
   // The contract guard checks that every DECLARED tool is classified; this checks
   // the other half — that the module's own manifest agrees with the contract, so a
-  // tool cannot be added here and quietly left out of the account-required set.
-  it('classifies every build tool as account-required', () => {
+  // tool cannot be added here and quietly left out of either set.
+  const HISTORY = ['canvas_list_build_file_history', 'canvas_restore_build_file'];
+
+  it('gives a guest every build tool except file history', () => {
     for (const name of CANVAS_BUILD_TOOL_NAMES) {
-      expect(ACCOUNT_REQUIRED_CANVAS_TOOLS).toContain(name);
+      if (HISTORY.includes(name)) expect(ACCOUNT_REQUIRED_CANVAS_TOOLS).toContain(name);
+      else expect(GUEST_SAFE_CANVAS_TOOLS).toContain(name);
     }
+  });
+});
+
+describe('a workspace held in this browser', () => {
+  const run = async (actions: ReturnType<typeof canvasBuildActions>, name: string, args: unknown) => {
+    const action = actions.find((candidate) => candidate.name === name);
+    if (!action) throw new Error(`missing ${name}`);
+    return action.run(args as never) as Promise<Record<string, unknown>>;
+  };
+
+  it('writes, reads, edits and searches through the local store', async () => {
+    await seedLocalWorkspace('tools-local', { 'index.html': '<h1>Hi</h1>' });
+    const store = localFileStore('tools-local');
+    const changed: Array<[unknown, string[]]> = [];
+    const actions = canvasBuildActions({
+      builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store }],
+      createBuild: async () => { throw new Error('unused'); },
+      onFilesChanged: (id, paths) => changed.push([id, paths]),
+    });
+
+    expect(await run(actions, 'canvas_write_build_file', { path: '/src/App.jsx', content: 'export const a = 1;' })).toMatchObject({ ok: true, path: 'src/App.jsx' });
+    expect(await run(actions, 'canvas_read_build_file', { path: 'src/App.jsx' })).toMatchObject({ content: 'export const a = 1;' });
+    expect(await run(actions, 'canvas_edit_build_file', { path: 'src/App.jsx', find: '1', replace: '2' })).toMatchObject({ ok: true });
+    expect(await store.read('src/App.jsx')).toBe('export const a = 2;');
+    expect(await run(actions, 'canvas_search_build_files', { query: 'const a' })).toMatchObject({ matchCount: 1 });
+    expect(changed).toEqual([['local:tools-local', ['src/App.jsx']], ['local:tools-local', ['src/App.jsx']]]);
+  });
+
+  it('answers the history tools with a reason instead of failing', async () => {
+    const actions = canvasBuildActions({
+      builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store: localFileStore('tools-history') }],
+      createBuild: async () => { throw new Error('unused'); },
+    });
+    expect(await run(actions, 'canvas_list_build_file_history', {})).toHaveProperty('error');
+    expect(await run(actions, 'canvas_restore_build_file', { path: 'a.js', at: 1 })).toHaveProperty('error');
   });
 });
 

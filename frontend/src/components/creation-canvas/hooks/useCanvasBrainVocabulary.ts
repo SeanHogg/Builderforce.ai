@@ -1,8 +1,6 @@
 /** The Brain's tool vocabulary for this board — the inline actions plus every tool-module family, built once per session/role/locale. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { type BoundCanvasBuild, canvasBuildActions } from '@/lib/canvasBuildTools';
-import { canvasBuildBinding, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
-import type { ProjectModality } from '@/lib/modality';
+import { type Dispatch, type RefObject, type SetStateAction, useLayoutEffect, useMemo, useRef } from 'react';
+import { canvasBuildActions } from '@/lib/canvasBuildTools';
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasFounderOpsActions, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
@@ -29,9 +27,12 @@ import type { CanvasActionKind } from '@/lib/canvasActionJournal';
 import type { useTranslations } from 'next-intl';
 import type { Formatter } from '@/i18n/format';
 import type { CanvasDockPanel } from '../CanvasBoardMenuBody';
+import type { CanvasSessionAppActions } from './useCanvasSessionApp';
 import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
 
 export interface UseCanvasBrainVocabularyDeps {
+  buildsRef: CanvasSessionAppActions['buildsRef'];
+  createApp: CanvasSessionAppActions['createApp'];
   buildSocialFeedNode: (filter: SocialFeedFilter, opts?: { title?: string; x?: number; y?: number; }) => Promise<{ ok: true; node: CreationFlowNode; read: Awaited<ReturnType<typeof socialApi.feed>>; } | { ok: false; error: string; }>;
   canEdit: boolean;
   canvasText: CanvasTextTranslator;
@@ -61,58 +62,19 @@ export interface UseCanvasBrainVocabularyDeps {
   turnToolCalls: RefObject<Set<string>>;
 }
 
-export function useCanvasBrainVocabulary({ buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseId, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, placeAppendedRef, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, setNodes, socialAccountGate, stage, t, tSocial, turnToolCalls }: UseCanvasBrainVocabularyDeps) {
+export function useCanvasBrainVocabulary({ buildsRef, createApp, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseId, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, placeAppendedRef, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, setNodes, socialAccountGate, stage, t, tSocial, turnToolCalls }: UseCanvasBrainVocabularyDeps) {
   /**
    * The BUILD vocabulary — creating and editing the code behind a Builder object.
    *
-   * Held in `lib/canvasBuildTools.ts` rather than inline below: the action array
-   * in this component is already ~3 700 lines, and these are pure functions over
-   * an injected context, so they unit-test without React or a canvas.
-   *
-   * `boundBuildsRef` exists so the tools read CURRENT board state without `nodes`
-   * being a dependency of the memo that builds them — otherwise every object added
-   * to the board would re-register all seven tools mid-turn.
+   * The apps are the session's (`useCanvasSessionApp`): `buildsRef` is read by the tools at
+   * call time, so adding an object to the board never re-registers them, and `createApp`
+   * gives a guest board a browser-held workspace instead of refusing.
    */
-  /* The board as the tool modules read it is `nodesRef`, declared beside
-   * `updateNodeData` above — ONE ref for the one reason all three callers need it,
-   * `boundBuildsRef` directly below included: reading CURRENT board state without
-   * `nodes` being a dependency, which would re-register the whole vocabulary mid-turn
-   * and remount every Object on the board. */
-  const boundBuildsRef = useRef<BoundCanvasBuild[]>([]);
-  boundBuildsRef.current = useMemo(() => {
-    return stage.nodes().flatMap((node) => {
-      if (node.data.kind !== 'build') return [];
-      const binding = canvasBuildBinding(node.data);
-      return binding ? [{ objectId: node.id, title: String(node.data.title ?? 'Build'), binding }] : [];
-    });
-  }, [nodes, stage]);
-
-  /**
-   * Provision a workspace for the model and put its Builder object on the board.
-   *
-   * Committed straight to `nodes` rather than staged as a proposal, unlike almost
-   * every other authoring tool. The reason is that the expensive half already
-   * happened: `createCanvasBuild` creates a real build record with a seeded R2
-   * workspace behind it, so a rejected proposal would leave an orphaned workspace
-   * the board no longer references. This is the same order `openBuild` uses for
-   * the click path, so both routes leave identical state.
-   */
-  const createBuildForTool = useCallback(async (input: { title: string; modality: ProjectModality }): Promise<BoundCanvasBuild> => {
-    const node = stage.createObject('build');
-    const ide = await createCanvasBuild({ title: input.title, modality: input.modality });
-    const patch = canvasBuildPatch(ide);
-    node.data = { ...node.data, ...patch, title: input.title };
-    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
-    const binding = canvasBuildBinding(node.data);
-    if (!binding) throw new Error('The workspace was created but could not be bound to the board.');
-    return { objectId: node.id, title: input.title, binding };
-  }, [setNodes, stage]);
-
   const canvasBuildActionList = useMemo<BrainAction[]>(() => canvasBuildActions({
-    builds: () => boundBuildsRef.current,
-    createBuild: createBuildForTool,
+    builds: () => buildsRef.current ?? [],
+    createBuild: createApp,
     onFilesChanged: notifyWorkspaceFilesChanged,
-  }), [createBuildForTool]);
+  }), [buildsRef, createApp]);
 
   /**
    * The context every board-mutation AI tool GROUP shares — founder-ops, legal

@@ -12,7 +12,7 @@ import { ActiveCanvasProvider, useOptionalActiveCanvas, type ActiveCanvas } from
 
 const board = (sessionId: string): ActiveCanvas => ({
   sessionId, persistence: 'server', focusId: null, shareOpen: false, buildOpen: false,
-  buildChatId: null, buildTicket: null, prompt: null, present: false, modelComparisonIds: [],
+  prompt: null, present: false, modelComparisonIds: [],
 });
 
 function Probe() {
