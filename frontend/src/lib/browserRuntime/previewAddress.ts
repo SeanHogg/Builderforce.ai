@@ -12,6 +12,8 @@
  * A URL that is not a relay preview (a container preview, a published site) is shown
  * as it is.
  */
+import { slugify } from '@builderforce/creation-canvas-contract';
+
 const RELAY_PATH = /^\/__bfwc\/[^/]+(\/.*)?$/;
 
 /** Longest slug kept, so a prompt-length project name stays an address. */
@@ -26,15 +28,7 @@ export function previewDisplayAddress(url: string, projectName: string): string 
   return `${projectSlug(projectName)}-preview.builderforce.ai${path}${parsed.search}`;
 }
 
-/** "Build a marketing website for he-man" → "build-a-marketing-website-for-he-man". */
+/** "Build a marketing website for he-man" → "build-a-marketing-website-for-he-man" (the shared slug rule). */
 export function projectSlug(name: string): string {
-  const slug = name
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, SLUG_MAX)
-    .replace(/-+$/g, '');
-  return slug || 'app';
+  return slugify(name, { maxLength: SLUG_MAX, fallback: 'app', foldDiacritics: true });
 }
