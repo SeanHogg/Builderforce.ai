@@ -8,6 +8,7 @@ import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { generateImageAssetAction } from './generateImageAssetAction';
+import { generateVideoAssetAction } from './generateVideoAssetAction';
 import type { ProjectModality } from '@/lib/modality';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 
@@ -29,7 +30,7 @@ export interface WorkspaceBrainTargets {
  * vocabulary bound to this project (list / read / search / surgical edit — the
  * same implementation the board uses, minus `canvas_create_build`: an open
  * workspace has nothing to create), plus file creation, whole-file apply, AI
- * image generation for the app's pictures, the voice studio's lines, and the
+ * image and video generation for the app's pictures and clips, the voice studio's lines, and the
  * PRD / task generators behind a review.
  */
 export function useWorkspaceBrainActions({ store, projectName, modality, targets, review }: {
@@ -60,6 +61,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, targets
   const actions = useMemo<BrainAction[]>(() => [
     ...buildToolActions,
     generateImageAssetAction(),
+    generateVideoAssetAction(),
     {
       name: 'create_file',
       // Steered at the surgical editor deliberately: this action also backs the

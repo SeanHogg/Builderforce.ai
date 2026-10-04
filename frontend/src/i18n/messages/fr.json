@@ -19858,7 +19858,12 @@
       "deleteScene": "Supprimer {title}",
       "captionsAndChapter": "Sous-titres et chapitre",
       "caption": "Sous-titre / téléprompteur",
-      "chapter": "Repère de chapitre"
+      "chapter": "Repère de chapitre",
+      "renderOnServer": "Rendre sur le serveur",
+      "serverRendering": "Rendu sur le serveur…",
+      "serverRenderHint": "Rend un MP4 sur les serveurs Builderforce. Vous pouvez fermer cet onglet : la vidéo terminée arrivera ici.",
+      "serverRenderRunning": "Rendu en cours sur le serveur. Vous pouvez fermer cet onglet.",
+      "serverRenderFailed": "Le rendu sur le serveur a échoué : {reason}"
     },
     "comparison": {
       "promptTitle": "Prompt de comparaison partagé",
@@ -24628,7 +24633,39 @@
       "framesLabel": "Images",
       "fpsLabel": "IPS",
       "generate": "Générer",
-      "initializing": "Initialisation…"
+      "initializing": "Initialisation…",
+      "engineLabel": "Moteur",
+      "engineCloud": "Vidéo dans le cloud",
+      "engineDevice": "Sur cet appareil",
+      "engineCloudHint": "De vrais clips vidéo rendus par des modèles hébergés. Utilise vos crédits vidéo quotidiens.",
+      "engineDeviceHint": "Images générées dans ce navigateur avec votre propre GPU. Gratuit, privé, fidélité moindre.",
+      "cloudNeedsAccount": "La vidéo dans le cloud nécessite un compte gratuit.",
+      "aspectLabel": "Format",
+      "aspectLandscape": "Paysage 16:9",
+      "aspectPortrait": "Vertical 9:16",
+      "aspectSquare": "Carré 1:1",
+      "clipLengthLabel": "Durée du clip",
+      "sceneLengthLabel": "Durée du film",
+      "secondsOption": "{seconds} s",
+      "generateClip": "Générer un clip",
+      "planScene": "Planifier une scène",
+      "planning": "Planification des plans…",
+      "renderShots": "{count, plural, one {Rendre # plan} other {Rendre # plans}}",
+      "rendering": "Rendu des plans — {done} sur {total} terminés",
+      "makeMovie": "Créer le film",
+      "movieHint": "Créer le film place les plans sur une timeline vidéo, où vous ajoutez musique, narration et sous-titres.",
+      "movieTitle": "{title} — film",
+      "shotsTitle": "Plans",
+      "shotStatus": {
+        "pending": "Non rendu",
+        "rendering": "Rendu en cours",
+        "done": "Rendu",
+        "failed": "Échec"
+      },
+      "shotPromptLabel": "Plan {index}",
+      "shotDuration": "Durée",
+      "removeShot": "Supprimer le plan",
+      "emptyShots": "Aucun plan pour l’instant. Générez un clip, ou planifiez une scène pour la découper en plans."
     },
     "miro": {
       "title": "Tableaux Miro",
@@ -25839,7 +25876,15 @@
     },
     "noticeGradebookExported": "Carnet de notes exporté en CSV : {count, plural, one {# apprenant} other {# apprenants}}",
     "noticeReferencesExported": "{count, plural, one {# référence exportée} other {# références exportées}} en BibTeX",
-    "noticeReferencesExportEmpty": "Aucune référence à exporter pour l'instant"
+    "noticeReferencesExportEmpty": "Aucune référence à exporter pour l'instant",
+    "gateVideoTitle": "Créez un compte pour générer de la vidéo",
+    "gateVideoBody": "La vidéo est générée sur les serveurs Builderforce, elle nécessite donc un compte. Créez-en un gratuitement et ce canevas — objets, conversation et mise en page — vous suit.",
+    "video": {
+      "movieStatus": "Brouillon de film",
+      "movieProposal": "Ajouter le film « {title} »",
+      "sceneProposal": "Ajouter la scène « {title} »",
+      "sceneStatus": "{done} plans rendus sur {total}"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

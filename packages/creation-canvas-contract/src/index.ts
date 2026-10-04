@@ -8,6 +8,7 @@ export * from './roomDesign';
 export * from './scene';
 export * from './robloxWorld';
 export * from './canvasTools';
+export * from './canvasVideoTools';
 export * from './marketplaceListings';
 export * from './dependencyGraph';
 export * from './academic';

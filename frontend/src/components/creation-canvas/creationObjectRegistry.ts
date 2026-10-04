@@ -571,6 +571,9 @@ const BASE_MUTABLE_FIELDS = {
   agent: ['content', 'model', 'personality', 'instructions', 'tools', 'autonomy', 'testPrompt', 'testExpected', 'testResponse', 'testStatus', 'testHistory'],
   voice: ['content', 'transcript', 'voiceId', 'audioUrl'],
   video: ['content', 'prompt', 'videoUrl', 'duration', 'modelSlug', 'maxFrames', 'frameCount', 'videoWidth', 'videoHeight', 'generatedFrames', 'mediaKind', 'capabilityId', 'videoTimeline', 'videoSources', 'selectedVideoClipId', 'renderedVideoUrl', 'renderedVideoStorageKey', 'renderedVideoMimeType', 'youtubeVideoId', 'youtubeUrl', 'youtubePrivacyStatus',
+    // The server render still running for this movie — kept on the object so the
+    // render outlives the tab that started it (`useServerMovieRender`).
+    'serverRenderJobId',
     // A video with no captions cannot lawfully be distributed to a class (WCAG 1.2.2),
     // and until this field existed the board had nowhere to record that they exist.
     'captionsUrl',

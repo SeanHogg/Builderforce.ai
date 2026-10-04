@@ -244,6 +244,12 @@ export const GUEST_GATED_CANVAS_TOOLS = [
   // which is the reason this set exists — without it a guest asking for a game gets
   // `canvas_add_object`, and that produces a design document nobody can play.
   'canvas_add_game',
+  // The ONLY routes to moving pictures (`canvasVideoTools.ts`). Gated rather than
+  // absent for the reason this set exists: with no video tool a model tells the user
+  // "I can't make videos", which is false here. Clips are generated on the server, so
+  // the gate is on credentials, exactly like `canvas_add_image`.
+  'canvas_add_video',
+  'canvas_create_scene',
   // Writes the board's cases into the tenant's QA library (`/api/qa/flows` +
   // `/api/qa/generate`) and reads its runs back. Gated rather than absent for the
   // reason the whole set exists: a visitor who has just watched the canvas write their

@@ -19,6 +19,7 @@ import { useCanvasMediaCapture } from '@/hooks/useCanvasMediaCapture';
 import { renderCanvasVideo } from '@/lib/canvasVideoRender';
 import { youtubeApi, type YouTubeConnection } from '@/lib/youtubeApi';
 import styles from './CanvasVideoEditor.module.css';
+import { ServerMovieRenderButton } from './ServerMovieRenderButton';
 import { VIDEO_RESUME_TEMPLATES, videoResumeTemplatePatch, type VideoResumeScene } from '@/lib/videoResumeTemplates';
 
 const TRACKS: readonly CanvasVideoTrackKind[] = ['visual', 'music', 'voiceover', 'sfx'];
@@ -199,6 +200,14 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
       {!capture.mode && <button type="button" disabled={!editable || !capture.isSupported || !!busy} onClick={() => void capture.start('camera')}>{t('recordCamera')}</button>}
       {capture.mode && <button type="button" className={styles.recording} onClick={() => void finishCapture()}>{t('stopRecording', { seconds: Math.round(capture.durationMs / 1000) })}</button>}
       <button type="button" disabled={!timeline.clips.length || !!busy} onClick={() => void exportVideo()}>{t('exportVideo')}</button>
+      {editable && <ServerMovieRenderButton
+        timeline={timeline}
+        sources={sources}
+        pendingJobId={typeof data.serverRenderJobId === 'string' ? data.serverRenderJobId : null}
+        disabled={!!busy}
+        onJobChange={(jobId) => onEdit?.({ serverRenderJobId: jobId })}
+        onRendered={(rendition) => commit(timeline, sources, { renderedVideoUrl: rendition.url, renderedVideoStorageKey: rendition.storageKey, renderedVideoMimeType: rendition.mimeType, status: t('exported') })}
+      />}
     </div>
     {capture.error && capture.error !== 'cancelled' && <p role="alert" className={styles.status}>{t(capture.error === 'unsupported' ? 'captureUnsupported' : 'captureFailed')}</p>}
     {problem && <p role="alert" className={styles.status}>{problem}</p>}

@@ -19858,7 +19858,12 @@
       "deleteScene": "Delete {title}",
       "captionsAndChapter": "Captions and chapter",
       "caption": "Caption / teleprompter",
-      "chapter": "Chapter marker"
+      "chapter": "Chapter marker",
+      "renderOnServer": "Render on server",
+      "serverRendering": "Rendering on server…",
+      "serverRenderHint": "Render an MP4 on Builderforce servers. You can close this tab — the finished video lands here.",
+      "serverRenderRunning": "Rendering on the server. You can close this tab.",
+      "serverRenderFailed": "The server render failed: {reason}"
     },
     "comparison": {
       "promptTitle": "Shared comparison prompt",
@@ -24628,7 +24633,39 @@
       "framesLabel": "Frames",
       "fpsLabel": "FPS",
       "generate": "Generate",
-      "initializing": "Initialising…"
+      "initializing": "Initialising…",
+      "engineLabel": "Engine",
+      "engineCloud": "Cloud video",
+      "engineDevice": "On this device",
+      "engineCloudHint": "Real video clips rendered by hosted models. Uses your daily video credits.",
+      "engineDeviceHint": "Frames generated in this browser on your own GPU. Free, private, lower fidelity.",
+      "cloudNeedsAccount": "Cloud video needs a free account.",
+      "aspectLabel": "Shape",
+      "aspectLandscape": "Landscape 16:9",
+      "aspectPortrait": "Vertical 9:16",
+      "aspectSquare": "Square 1:1",
+      "clipLengthLabel": "Clip length",
+      "sceneLengthLabel": "Movie length",
+      "secondsOption": "{seconds}s",
+      "generateClip": "Generate clip",
+      "planScene": "Plan a scene",
+      "planning": "Planning the shots…",
+      "renderShots": "{count, plural, one {Render # shot} other {Render # shots}}",
+      "rendering": "Rendering shots — {done} of {total} done",
+      "makeMovie": "Make movie",
+      "movieHint": "Make movie puts the shots on a video timeline, where you add music, narration and captions.",
+      "movieTitle": "{title} — movie",
+      "shotsTitle": "Shots",
+      "shotStatus": {
+        "pending": "Not rendered",
+        "rendering": "Rendering",
+        "done": "Rendered",
+        "failed": "Failed"
+      },
+      "shotPromptLabel": "Shot {index}",
+      "shotDuration": "Length",
+      "removeShot": "Remove shot",
+      "emptyShots": "No shots yet. Generate a clip, or plan a scene to storyboard it into shots."
     },
     "miro": {
       "title": "Miro boards",
@@ -25839,7 +25876,15 @@
     },
     "noticeGradebookExported": "Gradebook exported as CSV: {count, plural, one {# learner} other {# learners}}",
     "noticeReferencesExported": "{count, plural, one {# reference exported} other {# references exported}} as BibTeX",
-    "noticeReferencesExportEmpty": "There are no references to export yet"
+    "noticeReferencesExportEmpty": "There are no references to export yet",
+    "gateVideoTitle": "Create an account to generate video",
+    "gateVideoBody": "Video is generated on Builderforce servers, so it needs an account. Create a free one and this canvas — objects, conversation and layout — comes with you.",
+    "video": {
+      "movieStatus": "Movie draft",
+      "movieProposal": "Add movie “{title}”",
+      "sceneProposal": "Add scene “{title}”",
+      "sceneStatus": "{done} of {total} shots rendered"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

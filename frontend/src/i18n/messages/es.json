@@ -19858,7 +19858,12 @@
       "deleteScene": "Eliminar {title}",
       "captionsAndChapter": "Subtítulos y capítulo",
       "caption": "Subtítulo / teleprompter",
-      "chapter": "Marcador de capítulo"
+      "chapter": "Marcador de capítulo",
+      "renderOnServer": "Renderizar en el servidor",
+      "serverRendering": "Renderizando en el servidor…",
+      "serverRenderHint": "Renderiza un MP4 en los servidores de Builderforce. Puedes cerrar esta pestaña: el vídeo terminado aparecerá aquí.",
+      "serverRenderRunning": "Renderizando en el servidor. Puedes cerrar esta pestaña.",
+      "serverRenderFailed": "El renderizado en el servidor falló: {reason}"
     },
     "comparison": {
       "promptTitle": "Prompt compartido de comparación",
@@ -24628,7 +24633,39 @@
       "framesLabel": "Fotogramas",
       "fpsLabel": "FPS",
       "generate": "Generar",
-      "initializing": "Inicializando…"
+      "initializing": "Inicializando…",
+      "engineLabel": "Motor",
+      "engineCloud": "Vídeo en la nube",
+      "engineDevice": "En este dispositivo",
+      "engineCloudHint": "Clips de vídeo reales renderizados por modelos alojados. Consume tus créditos diarios de vídeo.",
+      "engineDeviceHint": "Fotogramas generados en este navegador con tu propia GPU. Gratis, privado y de menor calidad.",
+      "cloudNeedsAccount": "El vídeo en la nube necesita una cuenta gratuita.",
+      "aspectLabel": "Formato",
+      "aspectLandscape": "Horizontal 16:9",
+      "aspectPortrait": "Vertical 9:16",
+      "aspectSquare": "Cuadrado 1:1",
+      "clipLengthLabel": "Duración del clip",
+      "sceneLengthLabel": "Duración de la película",
+      "secondsOption": "{seconds} s",
+      "generateClip": "Generar clip",
+      "planScene": "Planificar una escena",
+      "planning": "Planificando las tomas…",
+      "renderShots": "{count, plural, one {Renderizar # toma} other {Renderizar # tomas}}",
+      "rendering": "Renderizando tomas: {done} de {total} listas",
+      "makeMovie": "Crear película",
+      "movieHint": "Crear película coloca las tomas en una línea de tiempo de vídeo, donde añades música, narración y subtítulos.",
+      "movieTitle": "{title} — película",
+      "shotsTitle": "Tomas",
+      "shotStatus": {
+        "pending": "Sin renderizar",
+        "rendering": "Renderizando",
+        "done": "Renderizada",
+        "failed": "Error"
+      },
+      "shotPromptLabel": "Toma {index}",
+      "shotDuration": "Duración",
+      "removeShot": "Quitar toma",
+      "emptyShots": "Aún no hay tomas. Genera un clip o planifica una escena para dividirla en tomas."
     },
     "miro": {
       "title": "Tableros de Miro",
@@ -25839,7 +25876,15 @@
     },
     "noticeGradebookExported": "Libro de calificaciones exportado como CSV: {count, plural, one {# estudiante} other {# estudiantes}}",
     "noticeReferencesExported": "{count, plural, one {# referencia exportada} other {# referencias exportadas}} como BibTeX",
-    "noticeReferencesExportEmpty": "Todavía no hay referencias que exportar"
+    "noticeReferencesExportEmpty": "Todavía no hay referencias que exportar",
+    "gateVideoTitle": "Crea una cuenta para generar vídeo",
+    "gateVideoBody": "El vídeo se genera en los servidores de Builderforce, así que necesita una cuenta. Crea una gratis y este lienzo —objetos, conversación y diseño— viene contigo.",
+    "video": {
+      "movieStatus": "Borrador de película",
+      "movieProposal": "Añadir la película «{title}»",
+      "sceneProposal": "Añadir la escena «{title}»",
+      "sceneStatus": "{done} de {total} tomas renderizadas"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

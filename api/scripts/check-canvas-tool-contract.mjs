@@ -106,17 +106,23 @@ for (const file of [...CANVAS_FILES, CONTRACT_FILE]) {
 }
 
 /**
- * `export const SOME_NAME = 'canvas_x';` in the contract file — the constant a
+ * `export const SOME_NAME = 'canvas_x';` in the contract package — the constant a
  * declaration may name INSTEAD of repeating the string literal, so a tool whose
  * name is quoted more than once (a redirect message, an account gate) has exactly
  * one place that spells it. Resolved here so `declaredCanvasTools` can treat
  * `name: CANVAS_GAME_TOOL,` as declaring `canvas_add_game`, the same as a literal.
  */
 function contractToolConstants() {
-  const text = fs.readFileSync(CONTRACT_FILE, 'utf8');
+  // Every module of the contract, not just `canvasTools.ts`: a tool family named in
+  // its own module (`canvasVideoTools.ts`) is still one place that spells each name.
+  const contractDir = path.dirname(CONTRACT_FILE);
   const constants = new Map();
-  for (const m of text.matchAll(/^export const ([A-Z][A-Z0-9_]*)\s*=\s*'(canvas_[a-z0-9_]+)';$/gm)) {
-    constants.set(m[1], m[2]);
+  for (const entry of fs.readdirSync(contractDir)) {
+    if (!entry.endsWith('.ts') || entry.endsWith('.test.ts')) continue;
+    const text = fs.readFileSync(path.join(contractDir, entry), 'utf8');
+    for (const m of text.matchAll(/^export const ([A-Z][A-Z0-9_]*)\s*=\s*'(canvas_[a-z0-9_]+)';$/gm)) {
+      constants.set(m[1], m[2]);
+    }
   }
   return constants;
 }

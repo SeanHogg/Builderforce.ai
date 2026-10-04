@@ -20,6 +20,7 @@ import { canvasInboxActions } from './inbox';
 import { canvasSocialActions } from './social';
 import { canvasRealizationActions } from './realization';
 import { canvasMediaActions } from './media';
+import { canvasVideoActions } from './video';
 import { canvasObjectActions } from './objects';
 import { canvasQaPlanningActions } from './qaPlanning';
 import { canvasQaExecutionActions } from './qaExecution';
@@ -38,6 +39,7 @@ const FACTORIES: ReadonlyArray<(ctx: CanvasActionContext) => BrainAction[]> = [
   canvasSocialActions,
   canvasRealizationActions,
   canvasMediaActions,
+  canvasVideoActions,
   canvasObjectActions,
   canvasQaPlanningActions,
   canvasQaExecutionActions,

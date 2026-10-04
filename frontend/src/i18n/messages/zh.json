@@ -19858,7 +19858,12 @@
       "deleteScene": "删除 {title}",
       "captionsAndChapter": "字幕和章节",
       "caption": "字幕 / 提词器",
-      "chapter": "章节标记"
+      "chapter": "章节标记",
+      "renderOnServer": "在服务器上渲染",
+      "serverRendering": "正在服务器上渲染…",
+      "serverRenderHint": "在 Builderforce 服务器上渲染 MP4。你可以关闭此标签页——完成的视频会出现在这里。",
+      "serverRenderRunning": "正在服务器上渲染。你可以关闭此标签页。",
+      "serverRenderFailed": "服务器渲染失败：{reason}"
     },
     "comparison": {
       "promptTitle": "共享比较提示词",
@@ -24628,7 +24633,39 @@
       "framesLabel": "帧数",
       "fpsLabel": "帧率",
       "generate": "生成",
-      "initializing": "正在初始化…"
+      "initializing": "正在初始化…",
+      "engineLabel": "引擎",
+      "engineCloud": "云端视频",
+      "engineDevice": "在此设备上",
+      "engineCloudHint": "由托管模型渲染的真实视频片段。会消耗你每天的视频额度。",
+      "engineDeviceHint": "在此浏览器中用你自己的 GPU 生成画面。免费、私密，画质较低。",
+      "cloudNeedsAccount": "云端视频需要一个免费账户。",
+      "aspectLabel": "画幅",
+      "aspectLandscape": "横屏 16:9",
+      "aspectPortrait": "竖屏 9:16",
+      "aspectSquare": "方形 1:1",
+      "clipLengthLabel": "片段时长",
+      "sceneLengthLabel": "影片时长",
+      "secondsOption": "{seconds} 秒",
+      "generateClip": "生成片段",
+      "planScene": "规划场景",
+      "planning": "正在规划镜头…",
+      "renderShots": "{count, plural, other {渲染 # 个镜头}}",
+      "rendering": "正在渲染镜头 — 已完成 {done}/{total}",
+      "makeMovie": "制作影片",
+      "movieHint": "“制作影片”会把镜头放到视频时间线上，你可以在那里添加音乐、旁白和字幕。",
+      "movieTitle": "{title} — 影片",
+      "shotsTitle": "镜头",
+      "shotStatus": {
+        "pending": "未渲染",
+        "rendering": "渲染中",
+        "done": "已渲染",
+        "failed": "失败"
+      },
+      "shotPromptLabel": "镜头 {index}",
+      "shotDuration": "时长",
+      "removeShot": "移除镜头",
+      "emptyShots": "还没有镜头。生成一个片段，或规划一个场景把它拆分成镜头。"
     },
     "miro": {
       "title": "Miro 白板",
@@ -25839,7 +25876,15 @@
     },
     "noticeGradebookExported": "成绩册已导出为 CSV：{count, plural, other {# 名学习者}}",
     "noticeReferencesExported": "已将 {count, plural, other {# 条参考文献}}导出为 BibTeX",
-    "noticeReferencesExportEmpty": "暂无可导出的参考文献"
+    "noticeReferencesExportEmpty": "暂无可导出的参考文献",
+    "gateVideoTitle": "创建账户以生成视频",
+    "gateVideoBody": "视频在 Builderforce 服务器上生成，因此需要一个账户。创建一个免费账户，这个画布——对象、对话和布局——都会随你保留。",
+    "video": {
+      "movieStatus": "影片草稿",
+      "movieProposal": "添加影片“{title}”",
+      "sceneProposal": "添加场景“{title}”",
+      "sceneStatus": "已渲染 {done}/{total} 个镜头"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

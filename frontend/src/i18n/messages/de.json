@@ -19858,7 +19858,12 @@
       "deleteScene": "{title} löschen",
       "captionsAndChapter": "Untertitel und Kapitel",
       "caption": "Untertitel / Teleprompter",
-      "chapter": "Kapitelmarke"
+      "chapter": "Kapitelmarke",
+      "renderOnServer": "Auf dem Server rendern",
+      "serverRendering": "Wird auf dem Server gerendert…",
+      "serverRenderHint": "Rendert eine MP4 auf den Builderforce-Servern. Du kannst diesen Tab schließen – das fertige Video landet hier.",
+      "serverRenderRunning": "Wird auf dem Server gerendert. Du kannst diesen Tab schließen.",
+      "serverRenderFailed": "Das Server-Rendering ist fehlgeschlagen: {reason}"
     },
     "comparison": {
       "promptTitle": "Gemeinsamer Vergleichsprompt",
@@ -24628,7 +24633,39 @@
       "framesLabel": "Frames",
       "fpsLabel": "FPS",
       "generate": "Generieren",
-      "initializing": "Wird initialisiert…"
+      "initializing": "Wird initialisiert…",
+      "engineLabel": "Engine",
+      "engineCloud": "Cloud-Video",
+      "engineDevice": "Auf diesem Gerät",
+      "engineCloudHint": "Echte Videoclips, gerendert von gehosteten Modellen. Verbraucht dein tägliches Videoguthaben.",
+      "engineDeviceHint": "Bilder werden in diesem Browser auf deiner eigenen GPU erzeugt. Kostenlos, privat, geringere Qualität.",
+      "cloudNeedsAccount": "Cloud-Video erfordert ein kostenloses Konto.",
+      "aspectLabel": "Format",
+      "aspectLandscape": "Querformat 16:9",
+      "aspectPortrait": "Hochformat 9:16",
+      "aspectSquare": "Quadratisch 1:1",
+      "clipLengthLabel": "Cliplänge",
+      "sceneLengthLabel": "Filmlänge",
+      "secondsOption": "{seconds} s",
+      "generateClip": "Clip erzeugen",
+      "planScene": "Szene planen",
+      "planning": "Einstellungen werden geplant…",
+      "renderShots": "{count, plural, one {# Einstellung rendern} other {# Einstellungen rendern}}",
+      "rendering": "Einstellungen werden gerendert – {done} von {total} fertig",
+      "makeMovie": "Film erstellen",
+      "movieHint": "Film erstellen legt die Einstellungen auf eine Video-Zeitleiste, wo du Musik, Sprecher und Untertitel hinzufügst.",
+      "movieTitle": "{title} – Film",
+      "shotsTitle": "Einstellungen",
+      "shotStatus": {
+        "pending": "Nicht gerendert",
+        "rendering": "Wird gerendert",
+        "done": "Gerendert",
+        "failed": "Fehlgeschlagen"
+      },
+      "shotPromptLabel": "Einstellung {index}",
+      "shotDuration": "Länge",
+      "removeShot": "Einstellung entfernen",
+      "emptyShots": "Noch keine Einstellungen. Erzeuge einen Clip oder plane eine Szene, um sie in Einstellungen zu gliedern."
     },
     "miro": {
       "title": "Miro-Boards",
@@ -25839,7 +25876,15 @@
     },
     "noticeGradebookExported": "Notenbuch als CSV exportiert: {count, plural, one {# lernende Person} other {# Lernende}}",
     "noticeReferencesExported": "{count, plural, one {# Quelle} other {# Quellen}} als BibTeX exportiert",
-    "noticeReferencesExportEmpty": "Es gibt noch keine Quellen zum Exportieren"
+    "noticeReferencesExportEmpty": "Es gibt noch keine Quellen zum Exportieren",
+    "gateVideoTitle": "Erstelle ein Konto, um Videos zu erzeugen",
+    "gateVideoBody": "Videos werden auf Builderforce-Servern erzeugt und brauchen deshalb ein Konto. Erstelle ein kostenloses, und diese Canvas – Objekte, Unterhaltung und Layout – kommt mit.",
+    "video": {
+      "movieStatus": "Filmentwurf",
+      "movieProposal": "Film „{title}“ hinzufügen",
+      "sceneProposal": "Szene „{title}“ hinzufügen",
+      "sceneStatus": "{done} von {total} Einstellungen gerendert"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

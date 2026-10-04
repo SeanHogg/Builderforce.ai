@@ -2,7 +2,7 @@
  * Video generation — `/llm/v1/videos/*`.
  *
  *   POST /generations   start a clip from a prompt (and optional first frame)  → 202 { id, status }
- *   POST /renders       render a canvas video timeline to MP4 on the server    → 202 { id, status }  (paid plans)
+ *   POST /renders       render a canvas video timeline to MP4 on the server    → 202 { id, status }  (`serverVideoRender`)
  *   GET  /jobs/:id      a job's status and, once finished, its stored result
  *
  * Both kinds are JOBS: a clip takes from 30 seconds to minutes, so the route
@@ -18,6 +18,7 @@ import type { HonoEnv } from '../../env';
 import { parseBody, z } from './requestBody';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './llmRoutes';
 import { enforceMediaCreditCap, freePlanUpgradeHint, type MediaCreditPolicy } from './mediaCreditGate';
+import { featureGateBody, resolveFeatureEntitlement } from '../middleware/featureGate';
 import { VIDEO_PRODUCT_NAMES, VIDEO_SECOND_TOKEN_COST, mediaProductForPlan } from '../../application/llm/mediaProducts';
 import { resolveVideoSecondsDailyLimit } from '../../domain/tenant/PlanLimits';
 import { toTenantPlan } from '../../application/tenant/featureEntitlements';
@@ -50,7 +51,7 @@ const VIDEO_CREDIT_POLICY: MediaCreditPolicy = {
   message: (limit, access) => `Daily video generation limit reached (${limit} second${limit === 1 ? '' : 's'} of video / day).${freePlanUpgradeHint(access, 'video')}`,
 };
 
-/** Paid plans (or a premium override) get the quality chain and server render. */
+/** Paid plans (or a premium override) get the quality model chain. */
 function isPaidAccess(access: TenantAccess): boolean {
   return access.premiumOverride || access.effectivePlan !== 'free';
 }
@@ -117,12 +118,9 @@ export function createVideoRoutes(): Hono<HonoEnv> {
   router.post('/renders', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    if (!isPaidAccess(access)) {
-      return c.json({
-        error: 'Rendering on the server is part of paid plans. Export in the browser instead, or upgrade at builderforce.ai/pricing.',
-        code: 'server_render_requires_paid_plan',
-      }, 403);
-    }
+    // Browser export works on every plan; rendering offline is the paid convenience.
+    const entitlement = await resolveFeatureEntitlement(c.env, access.tenantId, access.userId, 'serverVideoRender');
+    if (!entitlement.entitled) return c.json(featureGateBody(entitlement), 402);
     if (!c.env.MEDIA_RENDER_CONTAINER) return c.json({ error: 'Server rendering is not configured on this deployment' }, 503);
     const body = await parseBody(c, VideoRenderBody);
     const built = buildMovieRenderRequest({
