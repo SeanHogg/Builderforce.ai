@@ -109,6 +109,8 @@
   --radius-sm: 6px;
   --radius-xl: 16px;
   --radius-full: 9999px;
+  /* A phone's PHYSICAL corner (see DevicePreview) — an object drawn, not chrome. */
+  --radius-device-phone: 28px;
   --duration-fast: 120ms;
 
   /* Canonical design-system metrics. Public pages and authenticated product

@@ -113,7 +113,7 @@ export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, 
           <div className={styles.previewStageInner} data-size={size}>
             <div
               className={styles.previewPage}
-              style={{ width, borderRadius: size === 'phone' ? 28 : undefined }}
+              style={{ width }}
               data-desktop={desktop || undefined}
             >
               <PreviewFrame url={url} frameRef={edit.frameRef} />

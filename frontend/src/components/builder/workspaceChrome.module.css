@@ -448,6 +448,10 @@
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
 }
 
+.previewStageInner[data-size='phone'] .previewPage {
+  border-radius: var(--radius-device-phone);
+}
+
 @media (max-width: 520px) {
   .previewStageInner,
   .previewStageInner:not([data-size='desktop']) {
