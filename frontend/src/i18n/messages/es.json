@@ -1593,7 +1593,9 @@
       "changeLanded": "Vista previa actualizada · {count, plural, one {# archivo cambiado} other {# archivos cambiados}}",
       "changeUndone": "Deshecho: la versión anterior ha vuelto",
       "changeUndoFailed": "No se pudo deshacer: abre Versiones para restaurar a mano",
-      "undo": "Deshacer"
+      "undo": "Deshacer",
+      "hideChat": "Ocultar el chat",
+      "showChat": "Mostrar el chat"
     },
     "media": {
       "rendering": "Renderizando…",
@@ -11654,7 +11656,23 @@
     "newChatAria": "Nuevo chat",
     "historyShow": "Historial de chats",
     "historyHide": "Volver a la conversación",
-    "messagePlaceholderBuild": "Describe un cambio o haz una pregunta…"
+    "messagePlaceholderBuild": "Describe un cambio o haz una pregunta…",
+    "buildModes": {
+      "chat": {
+        "label": "Preguntar",
+        "hint": "Háblalo: respuestas y explicaciones. No se crean tickets."
+      },
+      "work": {
+        "label": "Construir",
+        "hint": "Haz el cambio: Brain edita el proyecto y registra el trabajo como un ticket."
+      }
+    },
+    "turnChanges": {
+      "title": "{count, plural, one {# archivo cambiado} other {# archivos cambiados}}",
+      "review": "Revisar cambios",
+      "open": "Abrir {path}",
+      "more": "+ {count} más"
+    }
   },
   "chatMessage": {
     "copy": "Copiar",

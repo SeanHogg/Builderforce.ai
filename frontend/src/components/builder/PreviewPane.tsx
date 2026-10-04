@@ -6,6 +6,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { PreviewFrame } from '@/components/PreviewFrame';
 import { useFormat } from '@/i18n/useFormat';
 import { navigatePreview } from '@/lib/visualEditor';
+import { previewDisplayAddress } from '@/lib/browserRuntime/previewAddress';
 import { DevicePreview } from './DevicePreview';
 import { PreviewStatus, type PreviewStatusState } from './PreviewStatus';
 import { PointAndEditPanel } from './PointAndEditPanel';
@@ -39,8 +40,10 @@ const SIZES: ReadonlyArray<{ id: PreviewSize; icon: IconName; width: string }> =
  * app, framed as a page on the workspace's ground — or, before there is one, a
  * status that says what is happening.
  */
-export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, onOpenVersions, versions, edit, framing, onOpenDevicePanel }: {
+export function PreviewPane({ projectId, projectName, url, phase, step, runnable, onRestart, onOpenVersions, versions, edit, framing, onOpenDevicePanel }: {
   projectId: WorkspaceId;
+  /** Names the preview's address (`<project>-preview.builderforce.ai`). */
+  projectName: string;
   url: string | undefined;
   phase: RunPhase;
   step: RunStep | null;
@@ -74,7 +77,7 @@ export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, 
           </>
         )}
         <ToolbarIcon icon="refresh" label={t('workspace.restart')} disabled={starting || !runnable} onClick={onRestart} />
-        <AddressPill projectId={projectId} url={url} phase={phase} />
+        <AddressPill projectId={projectId} projectName={projectName} url={url} phase={phase} />
         {!bezel && (
           <button
             type="button"
@@ -150,7 +153,7 @@ function previewStatusFor({ url, phase, runnable }: { url: string | undefined; p
   return runnable ? 'starting' : 'empty';
 }
 
-function AddressPill({ projectId, url, phase }: { projectId: WorkspaceId; url: string | undefined; phase: RunPhase }) {
+function AddressPill({ projectId, projectName, url, phase }: { projectId: WorkspaceId; projectName: string; url: string | undefined; phase: RunPhase }) {
   const t = useTranslations('ide.workspace');
   const fmt = useFormat();
   const { updatedAt, now } = usePreviewFreshness(projectId, url);
@@ -162,7 +165,7 @@ function AddressPill({ projectId, url, phase }: { projectId: WorkspaceId; url: s
         <span className={styles.dot} data-muted={!live || undefined} />
         {label}
       </span>
-      {url && <span title={url} className={styles.addressUrl}>{url}</span>}
+      {url && <span title={url} className={styles.addressUrl}>{previewDisplayAddress(url, projectName)}</span>}
       {live && updatedAt != null && (
         <span className={styles.addressFresh}>{t('updatedAgo', { when: fmt.relative(updatedAt, new Date(now)) })}</span>
       )}

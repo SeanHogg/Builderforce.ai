@@ -16,7 +16,9 @@ export type WorkspaceCommand =
   /** The settings slide-out: source control, GitHub, deploy. */
   | { type: 'openSettings' }
   /** Bring a bottom-panel tab forward (a publish shows its output). */
-  | { type: 'showPanel'; panel: BottomPanelTab };
+  | { type: 'showPanel'; panel: BottomPanelTab }
+  /** Open a file in the Code view (a chat's "files changed" card). */
+  | { type: 'openFile'; path: string };
 
 export type BottomPanelTab = 'terminal' | 'output' | 'problems';
 

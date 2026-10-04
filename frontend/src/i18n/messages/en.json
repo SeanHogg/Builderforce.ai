@@ -1593,7 +1593,9 @@
       "changeLanded": "Preview updated · {count, plural, one {# file} other {# files}} changed",
       "changeUndone": "Undone — the previous version is back",
       "changeUndoFailed": "Couldn't undo — open Versions to restore by hand",
-      "undo": "Undo"
+      "undo": "Undo",
+      "hideChat": "Hide the chat",
+      "showChat": "Show the chat"
     },
     "media": {
       "rendering": "Rendering…",
@@ -11654,7 +11656,23 @@
     "newChatAria": "New chat",
     "historyShow": "Chat history",
     "historyHide": "Back to the conversation",
-    "messagePlaceholderBuild": "Describe a change, or ask a question…"
+    "messagePlaceholderBuild": "Describe a change, or ask a question…",
+    "buildModes": {
+      "chat": {
+        "label": "Ask",
+        "hint": "Talk it through: answers and explanations. No tickets are created."
+      },
+      "work": {
+        "label": "Build",
+        "hint": "Make the change: Brain edits the project and tracks the work as a ticket."
+      }
+    },
+    "turnChanges": {
+      "title": "{count, plural, one {# file changed} other {# files changed}}",
+      "review": "Review changes",
+      "open": "Open {path}",
+      "more": "+ {count} more"
+    }
   },
   "chatMessage": {
     "copy": "Copy",

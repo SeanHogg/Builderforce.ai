@@ -1593,7 +1593,9 @@
       "changeLanded": "预览已更新 · 更改了 {count} 个文件",
       "changeUndone": "已撤销——已恢复到上一个版本",
       "changeUndoFailed": "无法撤销——请打开“版本”手动恢复",
-      "undo": "撤销"
+      "undo": "撤销",
+      "hideChat": "隐藏对话",
+      "showChat": "显示对话"
     },
     "media": {
       "rendering": "正在渲染…",
@@ -11654,7 +11656,23 @@
     "newChatAria": "新对话",
     "historyShow": "对话历史",
     "historyHide": "返回对话",
-    "messagePlaceholderBuild": "描述一处更改，或提出一个问题…"
+    "messagePlaceholderBuild": "描述一处更改，或提出一个问题…",
+    "buildModes": {
+      "chat": {
+        "label": "提问",
+        "hint": "讨论一下：回答与解释。不会创建工单。"
+      },
+      "work": {
+        "label": "构建",
+        "hint": "进行更改：Brain 会编辑项目，并以工单记录这项工作。"
+      }
+    },
+    "turnChanges": {
+      "title": "更改了 {count} 个文件",
+      "review": "查看更改",
+      "open": "打开 {path}",
+      "more": "另外 {count} 个"
+    }
   },
   "chatMessage": {
     "copy": "复制",

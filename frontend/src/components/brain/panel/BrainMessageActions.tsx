@@ -1,5 +1,6 @@
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
+import { TurnChangesCard } from '@/components/brain/TurnChangesCard';
 import { isStepMessage, parseSuggestedActions, type SuggestedAction, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
 import { useBrainPanel } from './BrainPanelContext';
@@ -19,6 +20,8 @@ export function BrainMessageActions({ msg, conv, projectId, capability, chatTitl
   const lastAssistantId = [...conv.messages].reverse().find((m) => m.role === 'assistant' && !isStepMessage(m))?.id;
   return (
     <>
+      {/* What this turn changed in the project beside the chat, under its last reply. */}
+      <TurnChangesCard messages={conv.messages} replyId={msg.id} projectId={projectId} />
       {suggestions && suggestions.length > 0 && onRunSuggestion && (
         <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
           {suggestions.map((s, i) => (

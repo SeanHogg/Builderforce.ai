@@ -137,6 +137,12 @@ export function useBuilderWorkspace({ store, name, modality: requestedModality, 
     previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, refLog: logs.log, onOpenInEditor: showEditor,
   });
   const handleTerminalInput = useLazyShell(runner.startShell, logs.writeTerminal);
+  // A chat's "files changed" card opening one of the files it lists.
+  useWorkspaceCommands(store.id, (command) => {
+    if (command.type !== 'openFile') return;
+    void editor.openFile(command.path);
+    selectView('code');
+  });
 
   const recordCompletedJob = useCallback((job: TrainingJob) => setCompletedJobs((prev) => {
     const exists = prev.some((j) => j.id === job.id);

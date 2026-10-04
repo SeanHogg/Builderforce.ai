@@ -1593,7 +1593,9 @@
       "changeLanded": "Vorschau aktualisiert · {count, plural, one {# Datei} other {# Dateien}} geändert",
       "changeUndone": "Rückgängig gemacht — die vorherige Version ist wieder da",
       "changeUndoFailed": "Rückgängig fehlgeschlagen — über „Versionen“ manuell wiederherstellen",
-      "undo": "Rückgängig"
+      "undo": "Rückgängig",
+      "hideChat": "Chat ausblenden",
+      "showChat": "Chat einblenden"
     },
     "media": {
       "rendering": "Wird gerendert…",
@@ -11654,7 +11656,23 @@
     "newChatAria": "Neuer Chat",
     "historyShow": "Chatverlauf",
     "historyHide": "Zurück zum Gespräch",
-    "messagePlaceholderBuild": "Beschreibe eine Änderung oder stelle eine Frage…"
+    "messagePlaceholderBuild": "Beschreibe eine Änderung oder stelle eine Frage…",
+    "buildModes": {
+      "chat": {
+        "label": "Fragen",
+        "hint": "Besprich es: Antworten und Erklärungen. Es werden keine Tickets angelegt."
+      },
+      "work": {
+        "label": "Bauen",
+        "hint": "Setze die Änderung um: Brain bearbeitet das Projekt und erfasst die Arbeit als Ticket."
+      }
+    },
+    "turnChanges": {
+      "title": "{count, plural, one {# Datei geändert} other {# Dateien geändert}}",
+      "review": "Änderungen prüfen",
+      "open": "{path} öffnen",
+      "more": "+ {count} weitere"
+    }
   },
   "chatMessage": {
     "copy": "Kopieren",

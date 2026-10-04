@@ -18,6 +18,7 @@ export function BrainDockedLayout() {
     ctxProjectId,
     onClose,
     headerContext,
+    headerActions,
     searchQuery,
     setSearchQuery,
   } = useBrainPanel();
@@ -47,7 +48,7 @@ export function BrainDockedLayout() {
         onNewChat={onNewChat}
         expandHref={expandHref}
         onClose={onClose}
-        actions={<BrainPanelCaptureButton />}
+        actions={<><BrainPanelCaptureButton />{headerActions}</>}
         context={headerContext}
       />
       {dockedTab === 'history' ? (

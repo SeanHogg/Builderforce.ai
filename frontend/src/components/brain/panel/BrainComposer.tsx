@@ -8,6 +8,7 @@ import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker'
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import AssigneeHovercard from '../../workforce/AssigneeHovercard';
 import { useBrainPanel } from './BrainPanelContext';
+import { modeVocabularyFor } from '@/lib/brain/useChatModeCopy';
 
 /** A recipient's avatar inside the shared hovercard — module scope, so its identity never changes. */
 function renderRecipientAvatar(r: DirectedRecipient, avatar: ReactNode) {
@@ -104,6 +105,7 @@ export function BrainComposer() {
       // surfaces that have this setting now render it from the same place.
       chatMode={chatMode}
       onChatModeChange={selectMode}
+      modeVocabulary={modeVocabularyFor(capabilitySurface)}
       // Memory and the consolidate/fork actions live in that same `/` menu, for the
       // same reason and on both surfaces: three pills that were inert for most of a
       // chat's life used to sit between the mode control and Send.

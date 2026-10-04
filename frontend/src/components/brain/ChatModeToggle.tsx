@@ -16,21 +16,23 @@
  * dark. Responsive: the pills wrap and keep a tap-friendly 32px height via --chat-ctl-size.
  */
 
-import { useTranslations } from 'next-intl';
 import { CHAT_MODES, CHAT_MODE_ICON, type ChatMode } from '@/lib/brain';
+import { useChatModeCopy, type ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
 
 export interface ChatModeToggleProps {
   value: ChatMode;
   onChange: (mode: ChatMode) => void;
+  /** Which words the surface uses for the modes (Ask / Build beside a project being built). */
+  vocabulary?: ChatModeVocabulary;
 }
 
-export function ChatModeToggle({ value, onChange }: ChatModeToggleProps) {
-  const t = useTranslations('brain.modes');
+export function ChatModeToggle({ value, onChange, vocabulary }: ChatModeToggleProps) {
+  const copy = useChatModeCopy(vocabulary);
 
   return (
     <div
       role="radiogroup"
-      aria-label={t('pickerAria')}
+      aria-label={copy.pickerAria}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -50,7 +52,7 @@ export function ChatModeToggle({ value, onChange }: ChatModeToggleProps) {
             type="button"
             role="radio"
             aria-checked={active}
-            title={t(`${mode}.hint`)}
+            title={copy.hint(mode)}
             onClick={() => { if (!active) onChange(mode); }}
             style={{
               display: 'inline-flex',
@@ -71,7 +73,7 @@ export function ChatModeToggle({ value, onChange }: ChatModeToggleProps) {
             }}
           >
             <span aria-hidden>{CHAT_MODE_ICON[mode]}</span>
-            <span>{t(`${mode}.label`)}</span>
+            <span>{copy.label(mode)}</span>
           </button>
         );
       })}

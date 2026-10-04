@@ -64,6 +64,7 @@ export function useBrainPanelController({
   capabilitySurface = 'brainstorm',
   onClose,
   headerContext,
+  headerActions,
   composerDensity = 'comfortable',
 }: BrainPanelProps) {
   const isPage = variant === 'page';
@@ -360,6 +361,7 @@ export function useBrainPanelController({
     viewingProjectId,
     onClose,
     headerContext,
+    headerActions,
     // Chats + conversation
     chats,
     conv,

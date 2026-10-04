@@ -66,6 +66,7 @@ export function WorkspaceCenter({ ws, hidden = false, overlay }: {
             <PaneLayer active={ws.centerView === 'preview'} style={{ display: 'flex', flexDirection: 'column' }}>
               <PreviewPane
                 projectId={store.id}
+                projectName={ws.name}
                 url={runner.previewUrl}
                 phase={runner.phase}
                 step={runner.step}

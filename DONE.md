@@ -14,7 +14,7 @@ In chat #129 ("Build a marketing website for he-man") a MiniMax-M1 run kept fail
 - **Not a bug: the `<think>` text in the trace.** The trace logs "I've</think> generated…" raw. `stitchSplitSentence` already rejoins it for display.
 - Tests: `repeatedWrite.test.ts`, `buildDiagnostics.test.ts` (stale/current split), `brainTriage.test.ts` (new verdict).
 
-## ✅ RESOLVED 2026-10-04 — Studio now follows its layout mockup: one header, a framed preview, a status bar, and the project's own chat (frontend 2026.10.11)
+## ✅ RESOLVED 2026-10-04 — Studio now follows its layout mockup: one header, a framed preview, a status bar, and the project's own chat (frontend 2026.10.11 · 2026.10.13)
 
 The operator compared the shipped Studio with the design canvas (claude.ai artifact "Studio Layout Redesign") and asked why they differed. The pass that shipped it had been built from the old screenshots' complaints, reusing the existing host components, and was never compared with the mockup. This pass works from the mockup.
 
@@ -47,7 +47,12 @@ The operator compared the shipped Studio with the design canvas (claude.ai artif
 - **One versions recorder.** `useProjectVersions` moved from `VersionsPanel` into `useBuilderWorkspace` (`ws.versions`). The panel, the header chip and the toast read one instance. A second caller would have recorded every turn twice.
 - **i18n.** New and reworded keys in all five catalogs. Removed the now-dead `brain.tabChat`, `brain.tabHistory`, `brain.sectionsAria`, `ide.brainContext.codingAgent` and `ide.brainContext.voiceDirector`.
 - **Tests.** `PreviewStatus.test.tsx`, `PreviewChangeToast.test.tsx`, `usePinnedProjectChat.test.ts`. `BuilderWorkspace.modality.test.tsx` gained breadcrumb, version-chip and status-bar cases.
-- **Still different from the mockup, with blockers:** the readable preview host, the in-chat files-changed card, Build/Ask wording and the collapse button. All four are in the Gap Register. Two deliberate omissions: the "Link ticket" chip (the chat's ticket strip already does it, and a second control would duplicate it) and "vite · :5173" in the status bar (the runtime does not report a server name or port to the UI).
+- **The four items first left over, closed the same day (operator: "Why did you not resolve these?").**
+  - **Readable preview address.** The toolbar shows `<project>-preview.builderforce.ai/<path>` (`lib/browserRuntime/previewAddress.ts`). It is a display name, by the operator's call: the in-browser preview is one relay origin whose service worker serves every project, so a real host per project would need a relay per origin. `<project>.preview.…` would also need a second-level wildcard certificate that Cloudflare's free plan does not issue. The real URL stays in the tooltip and behind Open in a new tab.
+  - **Files-changed card in the chat.** `TurnChangesCard` sits under a turn's last reply. It shows "N files changed", each path opens in the Code view (new workspace command `openFile`), and Review changes opens Versions. The files come from the turn's persisted steps, read by result shape (`{ applied: true, path }` / `{ created }`) rather than tool name (`lib/brain/turnChanges.ts`). It is web-only through the existing `renderAssistantActions` hook, so no brain-ui release was needed. It renders only beside the workspace that owns the files.
+  - **Build / Ask.** Mode names are catalog data selected by surface (`lib/brain/useChatModeCopy.ts`). The build surface reads Ask / Build (`brain.buildModes`) and everywhere else keeps Chat / Work. One hook feeds the `/` menu, its trigger and the empty-state toggle. The hints are accurate rather than the mockup's: Ask can still edit files, so it does not claim "changes nothing".
+  - **Collapse panel.** The docked Brain's header has a hide button (new `headerActions` slot). On a wide screen the workspace header then shows a Chat button to bring it back. The column stays mounted, so the conversation survives.
+- **Deliberately not built:** the "Link ticket" chip (the chat's ticket strip already does it, and a second control would duplicate it) and "vite · :5173" in the status bar (the runtime does not report a server name or port to the UI).
 
 ## ✅ RESOLVED 2026-10-04 — Studio: one chat panel, and generated media is previewed before the app uses it (api 2026.10.8 · frontend 2026.10.10)
 

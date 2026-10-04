@@ -1,5 +1,6 @@
 import { useTranslations } from 'next-intl';
 import type { ChatMode } from '@/lib/brain';
+import type { ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
 import { BrainMark } from './BrainMark';
 import { ChatModeToggle } from './ChatModeToggle';
 import { StarterGroup, StarterTile } from './StarterTiles';
@@ -13,6 +14,8 @@ export interface BrainEmptyStateProps {
    */
   layout: 'page' | 'docked';
   mode: ChatMode;
+  /** Which words the surface uses for the modes. */
+  modeVocabulary?: ChatModeVocabulary;
   onModeChange: (mode: ChatMode) => void;
   /** Host-owned controls beside the mode switch (the new-chat project picker). */
   controls?: React.ReactNode;
@@ -34,14 +37,14 @@ export interface BrainEmptyStateProps {
  * primary buttons between the greeting and the composer; onboarding is now one more
  * starting point in the list, where people look for one.
  */
-export function BrainEmptyState({ layout, mode, onModeChange, controls, composer, starters, onOnboard }: BrainEmptyStateProps) {
+export function BrainEmptyState({ layout, mode, modeVocabulary, onModeChange, controls, composer, starters, onOnboard }: BrainEmptyStateProps) {
   const t = useTranslations('brain');
   const docked = layout === 'docked';
   const hint = t(mode === 'work' ? 'emptyHintWork' : 'emptyHint');
 
   const switcher = (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: docked ? 'flex-start' : 'center' }}>
-      <ChatModeToggle value={mode} onChange={onModeChange} />
+      <ChatModeToggle value={mode} onChange={onModeChange} vocabulary={modeVocabulary} />
       {controls}
     </div>
   );

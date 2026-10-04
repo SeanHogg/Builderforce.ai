@@ -9,6 +9,7 @@ import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
 import { BrainEmptyState } from '../BrainEmptyState';
 import { BrainErrorBanner } from '../BrainErrorBanner';
 import { useBrainPanel } from './BrainPanelContext';
+import { modeVocabularyFor } from '@/lib/brain/useChatModeCopy';
 import { BrainComposer } from './BrainComposer';
 import { BrainComposerArea } from './BrainComposerArea';
 import { BrainConversationHeader } from './BrainConversationHeader';
@@ -73,6 +74,7 @@ export function BrainConversation() {
           <BrainEmptyState
             layout={isPage ? 'page' : 'docked'}
             mode={chatMode}
+            modeVocabulary={modeVocabularyFor(capabilitySurface)}
             onModeChange={selectMode}
             // File the conversation as it starts. New chats otherwise inherit the global
             // scope silently, so a user with no project in scope had no way to put THIS

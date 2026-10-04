@@ -78,7 +78,10 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     initialTicket,
   });
 
-  const showChat = hasDockedBrain && (!narrow || narrowPane === 'chat');
+  // A wide screen may hide the chat to give the preview the width; the header's Chat
+  // button brings it back. Narrow screens already take turns, so this does not apply.
+  const [chatHidden, setChatHidden] = useState(false);
+  const showChat = hasDockedBrain && (narrow ? narrowPane === 'chat' : !chatHidden);
   const showWork = !narrow || !hasDockedBrain || narrowPane === 'work';
 
   const workspace = (
@@ -104,6 +107,12 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               <span role="status" aria-label={t('workspace.collabConnected')} title={t('workspace.collabConnected')} style={{ display: 'inline-flex', padding: '0 4px' }}>
                 <span className={styles.dot} />
               </span>
+            )}
+            {hasDockedBrain && !narrow && chatHidden && (
+              <button type="button" className={styles.ghostChip} onClick={() => setChatHidden(false)} title={t('workspace.showChat')} aria-label={t('workspace.showChat')}>
+                <Icon name="message" size={15} />
+                {t('workspace.chat')}
+              </button>
             )}
             {/* The plan is the host's account control; team chat is a chip over the docked Brain. */}
             {ws.rightTabs.includes('versions') && <WorkspaceVersionChip versions={ws.versions} onOpen={() => ws.openRail('versions')} />}
@@ -142,6 +151,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               initialPrompt={initialPrompt}
               initialTicket={initialTicket}
               fill={narrow}
+              onCollapse={narrow ? undefined : () => setChatHidden(true)}
             />
           </div>
         )}

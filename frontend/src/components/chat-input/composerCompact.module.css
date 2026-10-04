@@ -1,0 +1,54 @@
+/*
+ * The compact composer (a workspace's docked Brain): the shared `/` options
+ * trigger reads as ONE chip, "⚡ Work · Builderforce Free ▾", instead of a slash,
+ * a mode pill and a monospace model name side by side. Same control and same
+ * menu as every other composer; only its face changes where space is tight.
+ */
+
+.compact :global(.bf-pmenu__trigger) {
+  height: 30px;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  max-width: 230px;
+}
+
+.compact :global(.bf-pmenu__trigger)::after {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.7;
+}
+
+.compact :global(.bf-pmenu__trigger.is-open)::after {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+
+.compact :global(.bf-pmenu__slash) {
+  display: none;
+}
+
+.compact :global(.bf-pmenu__mode) {
+  padding: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+}
+
+.compact :global(.bf-pmenu__model) {
+  font-family: inherit;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.compact :global(.bf-pmenu__mode) + :global(.bf-pmenu__model)::before {
+  content: '· ';
+}

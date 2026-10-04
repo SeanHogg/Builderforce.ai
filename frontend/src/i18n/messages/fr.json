@@ -1593,7 +1593,9 @@
       "changeLanded": "Aperçu mis à jour · {count, plural, one {# fichier modifié} other {# fichiers modifiés}}",
       "changeUndone": "Annulé — la version précédente est rétablie",
       "changeUndoFailed": "Annulation impossible — ouvrez Versions pour restaurer manuellement",
-      "undo": "Annuler"
+      "undo": "Annuler",
+      "hideChat": "Masquer la conversation",
+      "showChat": "Afficher la conversation"
     },
     "media": {
       "rendering": "Rendu en cours…",
@@ -11654,7 +11656,23 @@
     "newChatAria": "Nouvelle conversation",
     "historyShow": "Historique des conversations",
     "historyHide": "Retour à la conversation",
-    "messagePlaceholderBuild": "Décrivez une modification ou posez une question…"
+    "messagePlaceholderBuild": "Décrivez une modification ou posez une question…",
+    "buildModes": {
+      "chat": {
+        "label": "Demander",
+        "hint": "Discutez-en : réponses et explications. Aucun ticket n’est créé."
+      },
+      "work": {
+        "label": "Construire",
+        "hint": "Faites la modification : Brain modifie le projet et suit le travail comme un ticket."
+      }
+    },
+    "turnChanges": {
+      "title": "{count, plural, one {# fichier modifié} other {# fichiers modifiés}}",
+      "review": "Examiner les modifications",
+      "open": "Ouvrir {path}",
+      "more": "+ {count} de plus"
+    }
   },
   "chatMessage": {
     "copy": "Copier",

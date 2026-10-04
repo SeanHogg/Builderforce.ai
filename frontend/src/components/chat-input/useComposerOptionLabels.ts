@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import type { PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { useChatModeCopy } from '@/lib/brain/useChatModeCopy';
 
 /**
  * The `/` menu's copy. Localized here (next-intl) and handed to the SHARED
@@ -12,10 +13,10 @@ export function useComposerOptionLabels(): Partial<PromptOptionsLabels> {
   const t = useTranslations('chatInput');
   // The two mode names are the conversation's vocabulary, not the composer's — they
   // are the SAME words the Brain empty state uses, from the same catalog namespace.
-  const tModes = useTranslations('brain.modes');
+  const { pickerAria } = useChatModeCopy();
   return useMemo<Partial<PromptOptionsLabels>>(() => ({
     options: t('options'),
-    mode: tModes('pickerAria'),
+    mode: pickerAria,
     memory: t('memory'),
     autoMode: t('autoMode'),
     autoModeHint: t('autoModeHint'),
@@ -65,5 +66,5 @@ export function useComposerOptionLabels(): Partial<PromptOptionsLabels> {
     modelLocked: t('modelLocked'),
     accountSettings: t('accountSettings'),
     status: t('status'),
-  }), [t, tModes]);
+  }), [t, pickerAria]);
 }

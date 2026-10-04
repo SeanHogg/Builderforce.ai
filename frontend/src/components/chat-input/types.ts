@@ -1,3 +1,4 @@
+import type { ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
 import type { ReactNode } from 'react';
 import type { ChatModelOptions, ChatModelSelection, ModelIdentityContext } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient, TicketTag } from '@seanhogg/builderforce-brain-embedded';
@@ -78,6 +79,8 @@ export interface ChatInputProps {
    */
   chatMode?: ChatMode;
   onChatModeChange?: (mode: ChatMode) => void;
+  /** Which words this surface uses for the modes (Ask / Build beside a project being built). */
+  modeVocabulary?: ChatModeVocabulary;
   /** Persistent memory for this conversation, shown and changed in the `/` menu. */
   memoryEnabled?: boolean;
   onMemoryChange?: (on: boolean) => void;

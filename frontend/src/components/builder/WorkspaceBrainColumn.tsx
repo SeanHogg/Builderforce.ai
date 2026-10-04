@@ -19,6 +19,8 @@ export interface WorkspaceBrainColumnProps {
   initialTicket?: { kind: string; ref: string };
   /** Take the whole row (a narrow screen, where chat and workspace take turns). */
   fill?: boolean;
+  /** Hide the column to give the workspace the width; the header's Chat button brings it back. */
+  onCollapse?: () => void;
 }
 
 /**
@@ -32,8 +34,9 @@ export interface WorkspaceBrainColumnProps {
  * Width is fluid (`clamp`) rather than a fixed 340px, so a wide screen gives the
  * conversation room and a narrow one keeps the editor usable.
  */
-export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeFile, voiceName, initialChatId, initialPrompt, initialTicket, fill = false }: WorkspaceBrainColumnProps) {
+export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeFile, voiceName, initialChatId, initialPrompt, initialTicket, fill = false, onCollapse }: WorkspaceBrainColumnProps) {
   const t = useTranslations('ide.brainContext');
+  const tw = useTranslations('ide.workspace');
   const voice = modality === 'voice';
   const subject = voice ? (voiceName || t('noVoice')) : (activeFile || t('wholeProject'));
 
@@ -55,6 +58,11 @@ export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeF
         capabilitySurface="build"
         // The workspace header already names the project, its type and the plan.
         composerDensity="compact"
+        headerActions={onCollapse && (
+          <button type="button" className={styles.iconButton} onClick={onCollapse} aria-label={tw('hideChat')} title={tw('hideChat')} style={{ width: 32, height: 32 }}>
+            <Icon name="collapse-horizontal" size={16} />
+          </button>
+        )}
         headerContext={(
           <>
             {/* What the agent is working with: the open file, or the whole project

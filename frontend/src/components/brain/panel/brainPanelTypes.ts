@@ -42,6 +42,8 @@ export interface BrainPanelProps {
    * file, the voice director's clone). Rendered as the header's subtitle.
    */
   headerContext?: ReactNode;
+  /** Docked only: the host's own icon actions in the header (the workspace's "collapse panel"). */
+  headerActions?: ReactNode;
   /**
    * `compact` — a composer beside a workspace that already names the project and
    * its type, and whose header carries the plan: the context pickers ride in the

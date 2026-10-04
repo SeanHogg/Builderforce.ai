@@ -76,6 +76,7 @@ export function ChatInput({
   contextControls,
   meta,
   density = 'comfortable',
+  modeVocabulary,
   className,
   focusToken,
 }: ChatInputProps) {
@@ -223,6 +224,7 @@ export function ChatInput({
               modelIdentity={modelIdentity}
               chatMode={chatMode}
               onChatModeChange={onChatModeChange}
+              modeVocabulary={modeVocabulary}
               memoryEnabled={memoryEnabled}
               onMemoryChange={onMemoryChange}
               memoryUnavailableReason={memoryUnavailableReason}

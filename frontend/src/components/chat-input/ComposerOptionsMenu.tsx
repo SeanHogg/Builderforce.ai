@@ -5,6 +5,7 @@ import { PromptOptionsMenu } from '@seanhogg/builderforce-brain-ui';
 import { effortProfile } from '@seanhogg/builderforce-brain-embedded';
 import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
 import { useComposerOptionLabels } from './useComposerOptionLabels';
+import { useChatModeCopy } from '@/lib/brain/useChatModeCopy';
 import type { ChatInputProps } from './types';
 
 export type ComposerOptionsMenuProps = Pick<ChatInputProps,
@@ -12,7 +13,7 @@ export type ComposerOptionsMenuProps = Pick<ChatInputProps,
   | 'modelSelection' | 'modelOptions' | 'onModelSelectionChange' | 'effectiveModel' | 'modelIdentity'
   | 'chatMode' | 'onChatModeChange' | 'memoryEnabled' | 'onMemoryChange' | 'memoryUnavailableReason'
   | 'canConsolidate' | 'consolidating' | 'forking' | 'onConsolidate' | 'onFork'
-  | 'autoMode' | 'onAutoModeChange'
+  | 'autoMode' | 'onAutoModeChange' | 'modeVocabulary'
 > & { disabled: boolean };
 
 /**
@@ -47,17 +48,18 @@ export const ComposerOptionsMenu = memo(function ComposerOptionsMenu({
   onFork,
   autoMode,
   onAutoModeChange,
+  modeVocabulary,
 }: ComposerOptionsMenuProps) {
   const t = useTranslations('chatInput');
-  const tModes = useTranslations('brain.modes');
+  const modeCopy = useChatModeCopy(modeVocabulary);
   const router = useRouter();
   const optionLabels = useComposerOptionLabels();
 
   // Chat | Work, built from the SHARED mode list so a mode cannot exist in the
   // vocabulary and be missing from the control that arms it.
   const modeChoices = useMemo(
-    () => CHAT_MODES.map((mode) => ({ value: mode, label: tModes(`${mode}.label`), hint: tModes(`${mode}.hint`), icon: CHAT_MODE_ICON[mode] })),
-    [tModes],
+    () => CHAT_MODES.map((mode) => ({ value: mode, label: modeCopy.label(mode), hint: modeCopy.hint(mode), icon: CHAT_MODE_ICON[mode] })),
+    [modeCopy],
   );
   const describeMemory = useCallback((on: boolean) => t(on ? 'memoryOnHint' : 'memoryOffHint'), [t]);
 
