@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { scaffoldForModality } from '@builderforce/ide-templates';
 import { canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
-import type { BoundCanvasBuild } from '@/lib/canvasBuildTools';
+import { appModalityFor, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
 import {
   APP_PRIMARY_FIELD,
   LOCAL_APP_KEY_FIELD,
@@ -18,6 +18,7 @@ import { DEFAULT_MODALITY, type ProjectModality } from '@/lib/modality';
 import { serverFileStore } from '@/lib/workspace/workspaceFileStore';
 import { discardLocalWorkspace, readLocalWorkspace, seedLocalWorkspace } from '@/lib/workspace/localFileStore';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
+import { reportBackgroundFailure } from '@/lib/reportError';
 import type { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData } from '../types';
@@ -72,7 +73,9 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
   const apps = useMemo(() => sessionApps(nodes), [nodes]);
   const app = primarySessionApp(apps);
   const buildsRef = useRef<BoundCanvasBuild[]>([]);
-  buildsRef.current = useMemo(() => boundCanvasBuilds(apps), [apps]);
+  const builds = useMemo(() => boundCanvasBuilds(apps), [apps]);
+  // Mirrored after commit: only the Brain's tools read it, and they run in handlers.
+  useLayoutEffect(() => { buildsRef.current = builds; }, [builds]);
 
   /** The data that gives a card a workspace: a durable project, or one in this browser. */
   const workspaceFor = useCallback(async (input: { title: string; modality: ProjectModality; containerProjectId?: number | null }): Promise<Partial<CreationNodeData>> => {
@@ -81,8 +84,9 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
       return { ...canvasBuildPatch(ide), title: input.title };
     }
     const key = newLocalAppKey();
-    await seedLocalWorkspace(key, scaffoldForModality(input.modality) ?? scaffoldForModality(DEFAULT_MODALITY) ?? {});
-    return { title: input.title, modality: input.modality, [LOCAL_APP_KEY_FIELD]: key, status: 'Workspace ready' };
+    const modality = appModalityFor(input.modality, false);
+    await seedLocalWorkspace(key, scaffoldForModality(modality) ?? scaffoldForModality(DEFAULT_MODALITY) ?? {});
+    return { title: input.title, modality, [LOCAL_APP_KEY_FIELD]: key, status: 'Workspace ready' };
   }, [persistence]);
 
   const createApp = useCallback(async (input: { title: string; modality: ProjectModality }): Promise<BoundCanvasBuild> => {
@@ -106,33 +110,39 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
     setNodes((current) => withPrimaryApp(current, nodeId));
   }, [setNodes]);
 
-  const importing = useRef(false);
+  const importingRef = useRef(false);
   const importCards = useCallback(async (target: SessionApp) => {
-    if (importing.current) return;
+    if (importingRef.current) return;
     const pending = pendingCardImport(nodesRef.current ?? []);
     const paths = Object.keys(pending.files);
     if (!paths.length) return;
-    importing.current = true;
+    importingRef.current = true;
     try {
       await Promise.all(paths.map((path) => target.store.write(path, pending.files[path])));
       notifyWorkspaceFilesChanged(target.store.id, paths);
       setNodes((current) => withImportStamps(current, pending.stamps));
-    } catch {
+    } catch (error) {
       // Unstamped cards are simply brought in on the next open; nothing is lost.
+      void reportBackgroundFailure({
+        title: 'CanvasAppCardImportFailed',
+        message: error instanceof Error ? error.message : String(error),
+        level: 'warning',
+        context: { appNodeId: target.nodeId },
+      });
     } finally {
-      importing.current = false;
+      importingRef.current = false;
     }
   }, [nodesRef, setNodes]);
 
   // "Keep your work" made this board durable. An app still held in this browser now gets
   // a real project, its files go up, and the browser copy is dropped — once per app.
-  const promoting = useRef(new Set<string>());
+  const promotingRef = useRef(new Set<string>());
   useEffect(() => {
     if (persistence !== 'server') return;
     for (const candidate of apps) {
-      if (!candidate.localKey || promoting.current.has(candidate.nodeId)) continue;
+      if (!candidate.localKey || promotingRef.current.has(candidate.nodeId)) continue;
       const { nodeId, localKey, title, modality } = candidate;
-      promoting.current.add(nodeId);
+      promotingRef.current.add(nodeId);
       void (async () => {
         const files = await readLocalWorkspace(localKey);
         const ide = await createCanvasBuild({ title, modality });
@@ -144,7 +154,7 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
         await discardLocalWorkspace(localKey);
       })().catch(() => {
         // Left local; the next mount retries. The files are still in this browser.
-        promoting.current.delete(nodeId);
+        promotingRef.current.delete(nodeId);
       });
     }
   }, [apps, persistence, setNodes]);

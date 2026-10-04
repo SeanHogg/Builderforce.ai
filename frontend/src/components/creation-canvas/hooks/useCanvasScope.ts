@@ -8,7 +8,7 @@ import type { CanvasJournal } from '@/lib/canvasActionJournal';
 
 export interface UseCanvasScopeDeps {
   edges: Edge[];
-  journal: RefObject<CanvasJournal>;
+  journalRef: RefObject<CanvasJournal>;
   nodes: CanvasObject[];
   scopeMode: 'auto' | 'canvas' | 'selection' | 'connected' | 'frame';
   selectedId: string | null;
@@ -17,7 +17,7 @@ export interface UseCanvasScopeDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasScope({ edges, journal, nodes, scopeMode, selectedId, selectedIds, selectedNode, t }: UseCanvasScopeDeps) {
+export function useCanvasScope({ edges, journalRef, nodes, scopeMode, selectedId, selectedIds, selectedNode, t }: UseCanvasScopeDeps) {
   const effectiveSelectedIds = useMemo(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
   /**
    * SELECTING THE CHAT IS NOT A SCOPING INTENT.
@@ -82,15 +82,15 @@ export function useCanvasScope({ edges, journal, nodes, scopeMode, selectedId, s
    * the journal reads as a sequence of decisions rather than a render log.
    */
   const scopeSignature = `${resolvedScopeMode}:${scopedNodeIds.size}/${nodes.length}`;
-  const lastScopeSignature = useRef(scopeSignature);
+  const lastScopeSignatureRef = useRef(scopeSignature);
   useEffect(() => {
-    if (lastScopeSignature.current === scopeSignature) return;
-    lastScopeSignature.current = scopeSignature;
-    journal.current.record({
+    if (lastScopeSignatureRef.current === scopeSignature) return;
+    lastScopeSignatureRef.current = scopeSignature;
+    journalRef.current.record({
       kind: 'user',
       label: 'scope.change',
       detail: `${resolvedScopeMode} · ${scopedNodeIds.size} of ${nodes.length} object(s) visible to Brain`,
     });
-  }, [nodes.length, resolvedScopeMode, scopeSignature, scopedNodeIds.size]);
+  }, [journalRef, nodes.length, resolvedScopeMode, scopeSignature, scopedNodeIds.size]);
   return { scopedNodes, scopedNodeIds, effectiveSelectedIds, resolvedScopeMode, scopeLabel };
 }

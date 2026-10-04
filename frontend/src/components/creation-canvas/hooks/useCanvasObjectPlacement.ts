@@ -62,7 +62,7 @@ export function useCanvasObjectPlacement({ canEdit, cardsEditable, connectionKin
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
     return node;
-  }, [localizedTourDefaults, sessionId, setNodes, timeline]);
+  }, [flowRef, localizedTourDefaults, placeAppendedRef, sessionId, setNodes, timeline]);
 
   /**
    * WHAT ENTER MEANS ON THE SCRATCHPAD — the `captureIdea` composer intent, wired to the
@@ -75,7 +75,7 @@ export function useCanvasObjectPlacement({ canEdit, cardsEditable, connectionKin
     if (!data) return;
     appendAtCenter(IDEA_KIND, data as Partial<CreationNodeData>);
     setPrompt('');
-  }, [appendAtCenter, cardsEditable]);
+  }, [appendAtCenter, cardsEditable, setPrompt]);
 
   const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>, size?: { width: number; height: number }) => {
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
@@ -86,7 +86,7 @@ export function useCanvasObjectPlacement({ canEdit, cardsEditable, connectionKin
     // where a click on an existing card opens the short one.
     if (node.data.kind !== 'chat') openNodeInspector(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
-  }, [appendAtCenter, canEdit, openNodeInspector, t]);
+  }, [appendAtCenter, canEdit, openNodeInspector, setNotice, setSelectedId, setSelectedIds, t]);
 
   /**
    * What choosing an object in the picker DOES.
@@ -136,6 +136,6 @@ export function useCanvasObjectPlacement({ canEdit, cardsEditable, connectionKin
     if (node.data.kind !== 'chat') openNodeInspector(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [addAtCenter, canEdit, choiceSeed, connectionKind, nodes, openNodeInspector, sessionId, setEdges, setNodes, t]);
+  }, [addAtCenter, canEdit, choiceSeed, connectionKind, nodes, openNodeInspector, placeAppendedRef, sessionId, setEdges, setNodes, setNotice, setObjectPicker, setSelectedId, setSelectedIds, t]);
   return { addAtCenter, choiceSeed, captureIdeaFromComposer, pickObject, appendAtCenter };
 }

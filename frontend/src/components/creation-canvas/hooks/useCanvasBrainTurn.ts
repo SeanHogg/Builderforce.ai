@@ -20,7 +20,6 @@ import type { CanvasNotices } from '@/lib/canvasNotices';
 import type { ChatModelSelection } from '@/components/ChatInput';
 import type { CanvasJournal } from '@/lib/canvasActionJournal';
 import type { GuestLimitRefusal } from '@/lib/guestLimit';
-import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import { canvasTurnSnapshot } from '../brainTurn/turnSnapshot';
 import { turnAgentNodes } from '../brainTurn/turnParticipants';
 import { runCanvasGroupTurn } from '../brainTurn/runCanvasGroupTurn';
@@ -29,12 +28,10 @@ import { type CanvasTurnSettleContext, settleCanvasTurnFailure, settleCanvasTurn
 export interface UseCanvasBrainTurnDeps {
   appendTimeline: (role: 'user' | 'assistant' | 'system', body: string, metadata?: CreationTimelineMessage['metadata'], clientMessageId?: string) => string;
   autoApplyRef: RefObject<boolean>;
-  brainRuntime: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
+  brainRuntimeRef: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
   canvasActions: BrainAction<unknown, unknown>[];
   canvasNotices: CanvasNotices;
   canvasRunRef: RefObject<{ abort: AbortController; requestMessageId: string; startedAt: number; } | null>;
-  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
-  canvasText: CanvasTextTranslator;
   confirm: ConfirmFn;
   currentUserId: string | null;
   describeTurnError: (error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => string;
@@ -42,21 +39,15 @@ export interface UseCanvasBrainTurnDeps {
   edges: Edge[];
   effectiveSelectedIds: string[];
   evermindProjectId: number | null;
-  inFlightUseCaseId: RefObject<string | null>;
-  initialPromptSubmitted: RefObject<boolean>;
-  journal: RefObject<CanvasJournal>;
+  inFlightUseCaseIdRef: RefObject<string | null>;
+  initialPromptSubmittedRef: RefObject<boolean>;
+  journalRef: RefObject<CanvasJournal>;
   lastTurnProvenance: () => { model?: string; tools?: string[]; };
-  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
-  locale: string;
   members: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[];
   memoryEnabled: boolean;
   modelSelection: ChatModelSelection;
   nodes: CanvasObject[];
-  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
-  openNodeInspector: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null, rect?: DOMRect) => void;
   persistence: 'local' | 'server';
-  /** UNREAD — only the deleted test-only fixture used it; drop it here and at the call site in CreationCanvas.tsx together. */
-  placeAppendedRef: RefObject<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>;
   prompt: string;
   recordBrainCompletion: (completion: CanvasAiCompletion) => void;
   requireAccount: (action: string, title: string, description: string) => void;
@@ -85,11 +76,11 @@ export interface UseCanvasBrainTurnDeps {
   thinking: boolean;
   timeline: CanvasTimelineMessage[];
   title: string;
-  turnToolCalls: RefObject<Set<string>>;
-  turnUnanswered: RefObject<{ reason: string; detail?: string; } | null>;
+  turnToolCallsRef: RefObject<Set<string>>;
+  turnUnansweredRef: RefObject<{ reason: string; detail?: string; } | null>;
 }
 
-export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseId, initialPromptSubmitted, journal, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCalls, turnUnanswered }: UseCanvasBrainTurnDeps) {
+export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     if (!requestText || thinking) return;
@@ -118,13 +109,13 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime,
     // one fact and must not each carry their own copy of the string.
     const executiveUseCase = executiveUseCaseFromPrompt(requestText);
     // Published for the duration of the turn so the tool can fall back to it.
-    inFlightUseCaseId.current = executiveUseCase?.id ?? null;
+    inFlightUseCaseIdRef.current = executiveUseCase?.id ?? null;
     const executiveWorkflow = executiveUseCase ? cSuiteCanvasWorkflow(executiveUseCase) : null;
     trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } });
     setThinking(true);
     setBrainRunStartedAt(Date.now());
     setNotice(t('noticeBrainEvaluating'));
-    const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
+    const initialMessage = initialPromptSubmittedRef.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
     const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
     const promptStartedAt = performance.now();
@@ -147,8 +138,8 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime,
     setSelectedId(brainId);
     setSelectedIds([brainId]);
     stage.reset();
-    turnUnanswered.current = null;
-    turnToolCalls.current = new Set();
+    turnUnansweredRef.current = null;
+    turnToolCallsRef.current = new Set();
     setBrainTrace([]);
     setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
     setProposedChanges([]);
@@ -169,14 +160,14 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntime,
     // The turn, start to finish — including the SCOPE it ran against, which is
     // the fact that explained the reported "I don't see that file" answer and
     // which nothing was recording.
-    const turnDone = journal.current.begin(
+    const turnDone = journalRef.current.begin(
       'turn', 'brain.turn',
       `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
     );
-    const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, canvasRunRef, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, runAbort, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, setThinking, stage, t, turnDone, turnUnanswered };
-    void runCanvasGroupTurn({ appendTimeline, autoApplyRef, brainId, brainRuntime, canvasActions, canvasNotices, confirm, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journal, memoryEnabled, modelSelection, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal: runAbort.signal, stage, t, timeline, title, turnSnapshot, turnToolCalls, turnUnanswered })
+    const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, canvasRunRef, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, runAbort, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, setThinking, stage, t, turnDone, turnUnansweredRef };
+    void runCanvasGroupTurn({ appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, confirm, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal: runAbort.signal, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef })
       .then((answer) => settleCanvasTurnSuccess(settle, answer))
       .catch((error) => settleCanvasTurnFailure(settle, error));
-  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
+  }, [prompt, thinking, persistence, inFlightUseCaseIdRef, sessionId, resolvedScopeMode, scopedNodes, setThinking, setBrainRunStartedAt, setNotice, t, initialPromptSubmittedRef, timeline, members, appendTimeline, scopedNodeIds, currentUserId, canvasRunRef, nodes, setSelectedId, setSelectedIds, stage, turnUnansweredRef, turnToolCallsRef, setBrainTrace, setNodes, setProposedChanges, edges, effectiveSelectedIds, setActiveAgentIds, journalRef, autoApplyRef, describeTurnError, lastTurnProvenance, setAcceptedProposalIds, setAutoApplyPending, setEdges, setGuestLimit, brainRuntimeRef, canvasActions, canvasNotices, confirm, disableBrainModel, evermindProjectId, memoryEnabled, modelSelection, recordBrainCompletion, sessionMode, setModelSelection, title, requireAccount, setPrompt]);
   return { evaluateCanvas };
 }

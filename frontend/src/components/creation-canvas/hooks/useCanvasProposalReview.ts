@@ -24,12 +24,12 @@ export interface UseCanvasProposalReviewDeps {
   describeTurnError: (error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => string;
   evaluateCanvas: (promptOverride?: string) => void;
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
-  hydrated: RefObject<boolean>;
+  hydratedRef: RefObject<boolean>;
   initialFocusId: string | null | undefined;
   initialPrompt: string | null | undefined;
-  initialPromptSubmitted: RefObject<boolean>;
+  initialPromptSubmittedRef: RefObject<boolean>;
   layoutViewportRef: RefObject<() => CanvasLayoutViewport>;
-  modelComparisonStarted: RefObject<boolean>;
+  modelComparisonStartedRef: RefObject<boolean>;
   nodes: CanvasObject[];
   persistence: 'local' | 'server';
   proposedChanges: ProposedCanvasChange[];
@@ -53,19 +53,19 @@ export interface UseCanvasProposalReviewDeps {
   timeline: CanvasTimelineMessage[];
 }
 
-export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, evaluateCanvas, flowRef, hydrated, initialFocusId, initialPrompt, initialPromptSubmitted, layoutViewportRef, modelComparisonStarted, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline }: UseCanvasProposalReviewDeps) {
+export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline }: UseCanvasProposalReviewDeps) {
   useEffect(() => {
-    if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
+    if (!hydratedRef.current || modelComparisonStartedRef.current || comparisonModelIds.length < 2) return;
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
     if (!initial?.body.trim()) return;
     const completed = nodes.filter((node) => node.data.comparisonPrompt === initial.body && node.data.comparisonState === 'completed');
     if (comparisonModelIds.every((model) => completed.some((node) => node.data.comparisonModel === model))) {
-      modelComparisonStarted.current = true;
+      modelComparisonStartedRef.current = true;
       return;
     }
 
-    modelComparisonStarted.current = true;
-    initialPromptSubmitted.current = true;
+    modelComparisonStartedRef.current = true;
+    initialPromptSubmittedRef.current = true;
     const promptId = `comparison-prompt:${sessionId}`;
     const resultIds = new Map(comparisonModelIds.map((model, index) => [model, `comparison-result:${index}:${sessionId}`]));
     const promptNode: CreationFlowNode = {
@@ -133,26 +133,26 @@ export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending,
     })).then(() => {
       setNotice(t('comparison.finished'));
     });
-  }, [comparisonModelIds, describeTurnError, nodes, persistence, sessionId, setEdges, setNodes, t, timeline]);
+  }, [comparisonModelIds, describeTurnError, hydratedRef, initialPromptSubmittedRef, modelComparisonStartedRef, nodes, persistence, sessionId, setEdges, setNodes, setNotice, t, timeline]);
 
   useEffect(() => {
     if (comparisonModelIds.length >= 2) return;
-    if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
+    if (!hydratedRef.current || initialPromptSubmittedRef.current || thinking) return;
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
     if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
-    initialPromptSubmitted.current = true;
+    initialPromptSubmittedRef.current = true;
     setPrompt(initial.body);
     evaluateCanvas(initial.body);
-  }, [comparisonModelIds.length, thinking, timeline, evaluateCanvas]);
+  }, [comparisonModelIds.length, thinking, timeline, evaluateCanvas, hydratedRef, initialPromptSubmittedRef, setPrompt]);
 
   useEffect(() => {
     const request = initialPrompt?.trim();
-    if (!request || !hydrated.current || initialPromptSubmitted.current || thinking) return;
+    if (!request || !hydratedRef.current || initialPromptSubmittedRef.current || thinking) return;
     if (initialFocusId && selectedId !== initialFocusId) return;
-    initialPromptSubmitted.current = true;
+    initialPromptSubmittedRef.current = true;
     setPrompt(request);
     evaluateCanvas(request);
-  }, [evaluateCanvas, initialFocusId, initialPrompt, selectedId, thinking]);
+  }, [evaluateCanvas, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, selectedId, setPrompt, thinking]);
 
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
@@ -234,13 +234,13 @@ export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending,
     setAcceptedProposalIds(new Set());
     setNotice(canonicalPrds.length ? t('noticePrdsSavedChangesApplied', { prds: canonicalPrds.length, count: selected.length }) : t('noticeReviewedChangesApplied', { count: selected.length }));
     trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: canvasSurface(), commandCount: selected.length } });
-  }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes, setSurface]);
+  }, [acceptedProposalIds, flowRef, layoutViewportRef, nodes, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setEdges, setNodes, setNotice, setPendingBrainActions, setProposedChanges, setSelectedId, setSelectedIds, setSurface, t]);
 
   useEffect(() => {
     if (!autoApplyPending || !proposedChanges.length || acceptedProposalIds.size !== proposedChanges.length) return;
     setAutoApplyPending(false);
     void applyProposedChanges();
-  }, [acceptedProposalIds.size, applyProposedChanges, autoApplyPending, proposedChanges.length]);
+  }, [acceptedProposalIds.size, applyProposedChanges, autoApplyPending, proposedChanges.length, setAutoApplyPending]);
 
   const applyAndEnableAutoApply = useCallback(() => {
     setAutoApplyMode(true);
@@ -253,6 +253,6 @@ export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending,
     stage.reset();
     setAutoApplyPending(false);
     setNotice(t('noticeChangesRejected'));
-  }, [setNotice, stage, t]);
+  }, [setAcceptedProposalIds, setAutoApplyPending, setNotice, setProposedChanges, stage, t]);
   return { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges };
 }

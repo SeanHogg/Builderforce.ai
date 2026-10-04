@@ -22,14 +22,14 @@ export interface UseCanvasDiagnosticsDeps {
   allMembers: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[];
   autoApplyRef: RefObject<boolean>;
   brainRunStartedAt: number | null;
-  brainRuntime: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
+  brainRuntimeRef: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
   brainTrace: BrainTraceEvent[];
   canvasActions: BrainAction<unknown, unknown>[];
-  currentGraph: RefObject<string>;
+  currentGraphRef: RefObject<string>;
   edges: Edge[];
   effectiveSelectedIds: string[];
-  journal: RefObject<CanvasJournal>;
-  lastSavedGraph: RefObject<string>;
+  journalRef: RefObject<CanvasJournal>;
+  lastSavedGraphRef: RefObject<string>;
   memoryEnabled: boolean;
   modelSelection: ChatModelSelection;
   nodes: CanvasObject[];
@@ -38,8 +38,8 @@ export interface UseCanvasDiagnosticsDeps {
   proposedChanges: ProposedCanvasChange[];
   realtimeState: 'local' | 'connecting' | 'online' | 'reconnecting' | 'offline';
   resolvedScopeMode: 'frame' | 'selection' | 'canvas' | 'connected';
-  revision: RefObject<number>;
-  saveInFlight: RefObject<boolean>;
+  revisionRef: RefObject<number>;
+  saveInFlightRef: RefObject<boolean>;
   scopedNodeIds: Set<string>;
   scopedNodes: CanvasObject[];
   sessionId: string;
@@ -56,12 +56,12 @@ export interface UseCanvasDiagnosticsDeps {
   timeline: CanvasTimelineMessage[];
   title: string;
   toast: ToastApi;
-  undoStack: RefObject<string[]>;
+  undoStackRef: RefObject<string[]>;
 }
 
-export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStartedAt, brainRuntime, brainTrace, canvasActions, currentGraph, edges, effectiveSelectedIds, journal, lastSavedGraph, memoryEnabled, modelSelection, nodes, pendingInvitations, persistence, proposedChanges, realtimeState, resolvedScopeMode, revision, saveInFlight, scopedNodeIds, scopedNodes, sessionId, sessionMode, sessionRole, setDiagnosticsOpen, setHistoryOpen, setOutcomeMetrics, setOutcomeMetricsError, setOutcomeMetricsLoading, setOutcomeMetricsOpen, t, thinking, timeline, title, toast, undoStack }: UseCanvasDiagnosticsDeps) {
+export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStartedAt, brainRuntimeRef, brainTrace, canvasActions, currentGraphRef, edges, effectiveSelectedIds, journalRef, lastSavedGraphRef, memoryEnabled, modelSelection, nodes, pendingInvitations, persistence, proposedChanges, realtimeState, resolvedScopeMode, revisionRef, saveInFlightRef, scopedNodeIds, scopedNodes, sessionId, sessionMode, sessionRole, setDiagnosticsOpen, setHistoryOpen, setOutcomeMetrics, setOutcomeMetricsError, setOutcomeMetricsLoading, setOutcomeMetricsOpen, t, thinking, timeline, title, toast, undoStackRef }: UseCanvasDiagnosticsDeps) {
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
-    sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
+    sessionId, title, persistence, role: sessionRole, revision: revisionRef.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
     // an object can act, so every caller reports the same evidence rather than
     // each one choosing a different subset (which is how the field that mattered
@@ -75,9 +75,9 @@ export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStarted
     canonicalResourceCount: nodes.filter((node) => !!node.data.resourceId).length,
     memberCount: persistence === 'local' ? 1 : allMembers.length,
     pendingInvitationCount: pendingInvitations.length,
-    unsavedChanges: currentGraph.current !== lastSavedGraph.current,
-    saveInFlight: saveInFlight.current,
-    undoDepth: undoStack.current.length,
+    unsavedChanges: currentGraphRef.current !== lastSavedGraphRef.current,
+    saveInFlight: saveInFlightRef.current,
+    undoDepth: undoStackRef.current.length,
     timeline: timeline.map((message) => ({ role: message.messageRole === 'assistant' ? 'Brain' : message.messageRole, body: message.body, createdAt: message.createdAt })),
     brain: { scope: resolvedScopeMode, thinking, proposedChangeCount: proposedChanges.length, actionCount: canvasActions.length },
     brainRuntime: {
@@ -89,8 +89,8 @@ export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStarted
       scope: resolvedScopeMode,
       scopedObjectIds: [...scopedNodeIds],
       availableTools: canvasActions.map((action) => action.name),
-      disabledModels: [...brainRuntime.current.disabledModels],
-      completions: [...brainRuntime.current.completions],
+      disabledModels: [...brainRuntimeRef.current.disabledModels],
+      completions: [...brainRuntimeRef.current.completions],
     },
     trace: brainTrace.map((event) => ({
       ts: event.ts, category: event.category, label: event.label,
@@ -100,12 +100,12 @@ export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStarted
     // What the person and the agent DID, with durations — the evidence that lets
     // the report explain how the board got into the state it is in, rather than
     // only restating that state back to whoever is already looking at it.
-    actions: journal.current.entries(),
+    actions: journalRef.current.entries(),
     // How much of the board the last turn could actually see. A turn scoped to a
     // selection is why "I don't see that file anywhere on the canvas" could be
     // said about a file that was on the canvas.
     scopedObjectCount: scopedNodes.length,
-  }, await captureDiagnosticsContext()), [allMembers.length, brainRunStartedAt, brainTrace, canvasActions, edges.length, effectiveSelectedIds, memoryEnabled, modelSelection, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, scopedNodeIds, scopedNodes.length, sessionId, sessionMode, sessionRole, thinking, timeline, title]);
+  }, await captureDiagnosticsContext()), [allMembers.length, autoApplyRef, brainRunStartedAt, brainRuntimeRef, brainTrace, canvasActions, currentGraphRef, edges.length, effectiveSelectedIds, journalRef, lastSavedGraphRef, memoryEnabled, modelSelection, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, revisionRef, saveInFlightRef, scopedNodeIds, scopedNodes.length, sessionId, sessionMode, sessionRole, thinking, timeline, title, undoStackRef]);
 
   /**
    * Unlike `buildDiagnostics` above (all in-memory canvas state), this reads
@@ -146,7 +146,7 @@ export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStarted
     }
     if (await copyTextToClipboard(report)) toast.success(t('diagnosticsCopied'));
     else toast.error(t('diagnosticsCopyFailed'));
-  }, [buildDiagnostics, t, toast]);
+  }, [buildDiagnostics, setDiagnosticsOpen, setHistoryOpen, setOutcomeMetricsOpen, t, toast]);
 
   const openOutcomeMetrics = useCallback(() => {
     setOutcomeMetricsOpen(true);
@@ -157,6 +157,6 @@ export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStarted
       .then(setOutcomeMetrics)
       .catch((error) => setOutcomeMetricsError(faultMessage(error, t('noticeOutcomeMetricsFailed'))))
       .finally(() => setOutcomeMetricsLoading(false));
-  }, [persistence, sessionId]);
+  }, [persistence, sessionId, setOutcomeMetrics, setOutcomeMetricsError, setOutcomeMetricsLoading, setOutcomeMetricsOpen, t]);
   return { openOutcomeMetrics, openDiagnostics, buildDiagnostics, buildProofJourneyDiagnostics };
 }

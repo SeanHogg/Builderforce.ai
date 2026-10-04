@@ -133,7 +133,7 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
       target.data.title || t('flowStep.untitledFlow'),
       '',
     );
-  }, [connectionKind, resolveWorkflowNode, setEdges, setNodes, setNotice, t, errorText]);
+  }, [resolveWorkflowNode, t, setNotice, setNodes, setEdges, setSelectedId, setSelectedIds, connectionKind, errorText]);
 
   /**
    * BUILD WHAT IS DRAWN — and there is exactly one thing that compiles a canvas.
@@ -227,7 +227,7 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
         setNotice(message);
       });
     })();
-  }, [canRun, compileWorkflow, errorText, persistence, resolveWorkflowNode, setNodes, t]);
+  }, [canRun, compileWorkflow, errorText, persistence, resolveWorkflowNode, setNodes, setNotice, t]);
 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
@@ -245,6 +245,6 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
         setNotice(ref ? t('agentSettingsSaved') : t('agentCreatedReady'));
       })
       .catch((error) => setNotice(faultText(error, t('agentSettingsSaveFailed'))));
-  }, [persistence, requireAccount, selectedNode, setNodes, t]);
+  }, [persistence, requireAccount, selectedNode, setNodes, setNotice, t]);
   return { compileWorkflow, runWorkflow, unpackWorkflow, saveAgent };
 }

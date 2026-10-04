@@ -35,11 +35,11 @@ export interface UseCanvasBoardDropDeps {
 export function useCanvasBoardDrop({ canEdit, flowRef, placeAppendedRef, addFilesToCanvas, seatTeammate, choiceSeed, localizedTourDefaults, openNodeInspector, setNodes, setSelectedId, setSelectedIds, setNotice, t }: UseCanvasBoardDropDeps) {
   /** A file is being dragged over the board from outside the browser. */
   const [fileDragging, setFileDragging] = useState(false);
-  const fileDragDepth = useRef(0);
+  const fileDragDepthRef = useRef(0);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    fileDragDepth.current = 0;
+    fileDragDepthRef.current = 0;
     setFileDragging(false);
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const point = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -83,13 +83,13 @@ export function useCanvasBoardDrop({ canEdit, flowRef, placeAppendedRef, addFile
    * overlay is held by a depth count rather than by the last event seen. */
   const onCanvasDragEnter = useCallback((event: React.DragEvent) => {
     if (!dragCarriesFiles(event)) return;
-    fileDragDepth.current += 1;
+    fileDragDepthRef.current += 1;
     setFileDragging(true);
   }, []);
   const onCanvasDragLeave = useCallback((event: React.DragEvent) => {
     if (!dragCarriesFiles(event)) return;
-    fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
-    if (!fileDragDepth.current) setFileDragging(false);
+    fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+    if (!fileDragDepthRef.current) setFileDragging(false);
   }, []);
 
   return { fileDragging, onDrop, onCanvasDragEnter, onCanvasDragLeave };

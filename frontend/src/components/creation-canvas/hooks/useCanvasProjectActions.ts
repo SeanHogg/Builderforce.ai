@@ -115,7 +115,7 @@ export function useCanvasProjectActions({ errorText, nodes, openNodeInspector, p
     ]);
     setNotice(t('noticeRelationshipsAdded'));
     trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId: Number.isInteger(projectId) ? projectId : undefined } });
-  }, [nodes, persistence, selectedNode, sessionId, setEdges, setNodes]);
+  }, [nodes, persistence, placeAppendedRef, selectedNode, sessionId, setEdges, setNodes, setNotice, t]);
 
   const compareProjects = useCallback(() => {
     if (persistence !== 'server') { requireAccount('compare', 'Create an account to compare projects', 'Project comparisons use live tenant projects, delivery metrics, feature evidence, and saved source references.'); return; }
@@ -172,7 +172,7 @@ export function useCanvasProjectActions({ errorText, nodes, openNodeInspector, p
       setNotice(t('noticeComparisonAdded'));
       trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: canvasSurface(), projectCount: projectNodes.length } });
     }).catch((error) => setNotice(faultText(error, t('noticeCompareProjectsFailed'))));
-  }, [nodes, openNodeInspector, persistence, requireAccount, setEdges, setNodes]);
+  }, [nodes, openNodeInspector, persistence, requireAccount, sessionId, setEdges, setNodes, setNotice, setSelectedId, t]);
 
   const loadProjectQuality = useCallback(() => {
     const project = selectedNode?.data.kind === 'project' ? selectedNode : null;
@@ -215,7 +215,7 @@ export function useCanvasProjectActions({ errorText, nodes, openNodeInspector, p
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'failed', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt }).catch(() => undefined);
       setNotice(faultText(error, t('noticeLoadQualityFailed')));
     });
-  }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
+  }, [nodes, openNodeInspector, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, t]);
 
   const deliverMockup = useCallback(() => {
     if (!selectedNode || (selectedNode.data.kind !== 'mockup' && selectedNode.data.kind !== 'mockupSet')) return;
@@ -301,7 +301,7 @@ export function useCanvasProjectActions({ errorText, nodes, openNodeInspector, p
     }
     addTaskNode(`draft-task:${crypto.randomUUID()}`, 'Draft');
     setNotice(t('noticeNeedProjectForDelivery'));
-  }, [errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes]);
+  }, [errorText, nodes, openNodeInspector, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, t]);
 
   const expandMockupSet = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'mockupSet') return;
@@ -312,6 +312,6 @@ export function useCanvasProjectActions({ errorText, nodes, openNodeInspector, p
     setNodes((current) => [...current, ...placeAppendedRef.current(current, additions)]);
     setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: selectedNode.id, target: node.id, type: 'smoothstep', label: 'contains', animated: true }))]);
     setNotice(t('noticeMockupsExpanded', { count: additions.length }));
-  }, [selectedNode, setEdges, setNodes]);
+  }, [placeAppendedRef, selectedNode, setEdges, setNodes, setNotice, t]);
   return { expandProject, compareProjects, expandMockupSet, deliverMockup, loadProjectQuality };
 }

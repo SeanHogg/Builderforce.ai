@@ -31,7 +31,7 @@ export function useCanvasBranching({ branchParentId, edges, mergeReview, nodes, 
     void creationSessionsApi.branch(sessionId, `${title} — branch`).then(async ({ session }) => {
       canvasNavigate(`/create/${session.id}`);
     }).catch((error) => setNotice(faultText(error, t('noticeCreateBranchFailed'))));
-  }, [persistence, requireAccount, sessionId, title]);
+  }, [persistence, requireAccount, sessionId, setNotice, t, title]);
 
   const prepareMerge = useCallback(() => {
     if (!branchParentId || persistence !== 'server') return;
@@ -47,7 +47,7 @@ export function useCanvasBranching({ branchParentId, edges, mergeReview, nodes, 
       setMergeReview({ parentId: branchParentId, parentRevision: detail.session.canvasRevision, parentNodes: parent.nodes, parentEdges: parent.edges, items });
       setNotice(t('noticeDecisionsReady', { count: items.length }));
     }).catch((error) => setNotice(faultText(error, t('noticeCompareBranchFailed'))));
-  }, [branchParentId, nodes, persistence]);
+  }, [branchParentId, nodes, persistence, setMergeReview, setNotice, t]);
 
   const applyMerge = useCallback(() => {
     if (!mergeReview) return;
@@ -64,6 +64,6 @@ export function useCanvasBranching({ branchParentId, edges, mergeReview, nodes, 
     const graph = persistedGraphFromBoard({ nodes: merged, edges: [...retainedEdges, ...branchEdges] });
     setNotice(t('noticeApplyingMerge'));
     void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { canvasNavigate(`/create/${mergeReview.parentId}`); }).catch((error) => setNotice(faultText(error, t('noticeMergeFailed'))));
-  }, [edges, mergeReview]);
+  }, [edges, mergeReview, setNotice, t]);
   return { createBranch, prepareMerge, applyMerge };
 }

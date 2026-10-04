@@ -1,5 +1,5 @@
 /** The board model — live refs, the proposal stage, and the primitive writes every surface goes through. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useRef } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useRef, useState } from 'react';
 import type { CreationFlowNode } from '../CreationNode';
 import type { Edge } from '@xyflow/react';
 import { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
@@ -17,6 +17,7 @@ import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
 import type { useTranslations } from 'next-intl';
+import { useLatestRef } from './useLatestRef';
 
 export interface UseCanvasBoardModelDeps {
   canEdit: boolean;
@@ -34,6 +35,34 @@ export interface UseCanvasBoardModelDeps {
   setTimeline: Dispatch<SetStateAction<CanvasTimelineMessage[]>>;
   syncSocialCampaign: (campaignId: number, nodeId: string, patch: Partial<CreationNodeData>) => Promise<void>;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
+}
+
+/**
+ * The proposal stage over the live board. Module-level so the board is read through the
+ * refs when a tool RUNS — the stage is built once, during the first render, and never
+ * reads them then.
+ */
+function createBoardStage(
+  nodesRef: RefObject<CreationFlowNode[]>,
+  edgesRef: RefObject<Edge[]>,
+  canvasTextRef: RefObject<CanvasTextTranslator>,
+  layoutViewportRef: RefObject<() => CanvasLayoutViewport>,
+): CanvasProposalStage {
+  return new CanvasProposalStage(
+    { nodes: () => nodesRef.current, edges: () => edgesRef.current },
+    { defaults: (kind) => createDefaultCreationData(kind, canvasTextRef.current), position: nextCanvasObjectPosition, viewport: () => layoutViewportRef.current() },
+  );
+}
+
+/** Built once and never replaced, so the tools registered against it keep one identity. */
+function useBoardStage(
+  nodesRef: RefObject<CreationFlowNode[]>,
+  edgesRef: RefObject<Edge[]>,
+  canvasTextRef: RefObject<CanvasTextTranslator>,
+  layoutViewportRef: RefObject<() => CanvasLayoutViewport>,
+): CanvasProposalStage {
+  const [stage] = useState(() => createBoardStage(nodesRef, edgesRef, canvasTextRef, layoutViewportRef));
+  return stage;
 }
 
 export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edges, layoutViewportRef, lockBlocked, nodes, noteSaveState, persistence, sessionId, setNodes, setNotice, setTimeline, syncSocialCampaign, t }: UseCanvasBoardModelDeps) {
@@ -57,8 +86,7 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
    * `runWorkflowFromNode` below: stable identity, newest closure. `nodesRef` is the ONE
    * such ref — the build tools and the object vocabulary read the board through it too.
    */
-  const nodesRef = useRef<CreationFlowNode[]>([]);
-  nodesRef.current = nodes;
+  const nodesRef = useLatestRef<CreationFlowNode[]>(nodes);
   /**
    * The framed reading of the board — who is inside which frame — as a ref.
    *
@@ -70,8 +98,7 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
    */
   const framedBoardRef = useRef<{ memberIdsOf: (frameId: string) => string[] }>({ memberIdsOf: () => [] });
   /** The connections, on the same terms as `nodesRef` — what a compile reads. */
-  const edgesRef = useRef<Edge[]>([]);
-  edgesRef.current = edges;
+  const edgesRef = useLatestRef<Edge[]>(edges);
 
   /**
    * What THIS Brain turn intends the board to become, before a human has agreed
@@ -88,12 +115,7 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
    * keep one identity across renders; it reads `nodesRef`/`edgesRef` so it always
    * sees the CURRENT board rather than whichever one the memo captured.
    */
-  const stageRef = useRef<CanvasProposalStage | null>(null);
-  stageRef.current ??= new CanvasProposalStage(
-    { nodes: () => nodesRef.current, edges: () => edgesRef.current },
-    { defaults: (kind) => createDefaultCreationData(kind, canvasTextRef.current), position: nextCanvasObjectPosition, viewport: () => layoutViewportRef.current() },
-  );
-  const stage = stageRef.current;
+  const stage = useBoardStage(nodesRef, edgesRef, canvasTextRef, layoutViewportRef);
 
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
     if (!cardsEditable) return;
@@ -122,7 +144,7 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
       && SERVER_OWNED_CAMPAIGN_FIELDS.some((field) => field in patch)) {
       void syncSocialCampaign(campaignId, nodeId, patch);
     }
-  }, [cardsEditable, setNodes, syncSocialCampaign]);
+  }, [cardsEditable, nodesRef, noteSaveState, setNodes, syncSocialCampaign]);
 
   /**
    * A deal dragged into another stage, on the card.
@@ -153,7 +175,7 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
       .catch((error: unknown) => {
         setNotice(faultText(error, t('noticeDealNotMoved')));
       });
-  }, [cardsEditable, setNodes, t]);
+  }, [cardsEditable, noteSaveState, setNodes, setNotice, t]);
 
   /* Takes the node it resizes rather than reading the selection: the panel that offers
      this is anchored to ONE card, and "whichever card is selected" is exactly the
@@ -163,7 +185,7 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
     const preset = viewport === 'mobile' ? { width: 340, height: 620 } : viewport === 'tablet' ? { width: 520, height: 560 } : { width: 720, height: 460 };
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, style: { ...node.style, ...preset }, data: { ...node.data, viewport } } : node));
     setNotice(t('noticeViewportChanged', { viewport }));
-  }, [canEdit, lockBlocked, setNodes]);
+  }, [canEdit, lockBlocked, setNodes, setNotice, t]);
 
   // `clientMessageId` is annotated rather than inferred from the default:
   // `crypto.randomUUID()` is typed as the template literal `${string}-${string}…`
@@ -176,6 +198,6 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
       setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
     }).catch((error) => setNotice(error instanceof Error ? t('noticeConversationSaveFailedReason', { reason: error.message }) : t('noticeConversationSaveFailed')));
     return clientMessageId;
-  }, [persistence, sessionId]);
+  }, [persistence, sessionId, setNotice, setTimeline, t]);
   return { nodesRef, framedBoardRef, stage, appendTimeline, edgesRef, updateNodeData, moveDealFromNode, updateWebsiteViewport };
 }

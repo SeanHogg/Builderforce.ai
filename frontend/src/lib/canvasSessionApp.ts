@@ -66,7 +66,8 @@ function storeFor(binding: CanvasBuildBinding | null, localKey: string | null): 
   return created;
 }
 
-function localKeyOf(data: BoardNode['data']): string | null {
+/** The key of the workspace this card holds in the browser, while it has no project. */
+export function canvasAppLocalKey(data: { [key: string]: unknown }): string | null {
   const value = data[LOCAL_APP_KEY_FIELD];
   return typeof value === 'string' && value ? value : null;
 }
@@ -77,7 +78,7 @@ export function sessionApps(nodes: ReadonlyArray<BoardNode>): SessionApp[] {
   for (const node of nodes) {
     if (node.data.kind !== 'build') continue;
     const binding = canvasBuildBinding(node.data as Parameters<typeof canvasBuildBinding>[0]);
-    const localKey = binding ? null : localKeyOf(node.data);
+    const localKey = binding ? null : canvasAppLocalKey(node.data);
     const store = storeFor(binding, localKey);
     if (!store) continue;
     apps.push({

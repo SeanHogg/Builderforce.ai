@@ -14,17 +14,17 @@ import type { CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
 
 export interface UseCanvasEditingDeps {
   canEdit: boolean;
-  canvasClipboard: RefObject<{ nodes: CreationFlowNode[]; edges: Edge[]; } | null>;
+  canvasClipboardRef: RefObject<{ nodes: CreationFlowNode[]; edges: Edge[]; } | null>;
   cardsEditable: boolean;
   edges: Edge[];
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
-  historyApplying: RefObject<boolean>;
-  historyBaseline: RefObject<string | null>;
-  journal: RefObject<CanvasJournal>;
+  historyApplyingRef: RefObject<boolean>;
+  historyBaselineRef: RefObject<string | null>;
+  journalRef: RefObject<CanvasJournal>;
   nodes: CanvasObject[];
   nodesRef: RefObject<CanvasObject[]>;
   placeAppendedRef: RefObject<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>;
-  redoStack: RefObject<string[]>;
+  redoStackRef: RefObject<string[]>;
   selectedId: string | null;
   selectedIds: string[];
   setEdges: Dispatch<SetStateAction<Edge[]>>;
@@ -36,33 +36,33 @@ export interface UseCanvasEditingDeps {
   setSelectedId: Dispatch<SetStateAction<string | null>>;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
-  undoStack: RefObject<string[]>;
+  undoStackRef: RefObject<string[]>;
 }
 
-export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edges, flowRef, historyApplying, historyBaseline, journal, nodes, nodesRef, placeAppendedRef, redoStack, selectedId, selectedIds, setEdges, setFrameFocus, setNodePanel, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, t, undoStack }: UseCanvasEditingDeps) {
+export function useCanvasEditing({ canEdit, canvasClipboardRef, cardsEditable, edges, flowRef, historyApplyingRef, historyBaselineRef, journalRef, nodes, nodesRef, placeAppendedRef, redoStackRef, selectedId, selectedIds, setEdges, setFrameFocus, setNodePanel, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, t, undoStackRef }: UseCanvasEditingDeps) {
   const restoreGraphState = useCallback((serialized: string) => {
     const graph = JSON.parse(serialized) as { nodes: CreationFlowNode[]; edges: Edge[] };
-    historyApplying.current = true;
-    historyBaseline.current = serialized;
+    historyApplyingRef.current = true;
+    historyBaselineRef.current = serialized;
     setNodes(graph.nodes); setEdges(graph.edges);
-    window.setTimeout(() => { historyApplying.current = false; }, 0);
-  }, [setEdges, setNodes]);
+    window.setTimeout(() => { historyApplyingRef.current = false; }, 0);
+  }, [historyApplyingRef, historyBaselineRef, setEdges, setNodes]);
 
   const undo = useCallback(() => {
-    const prior = undoStack.current.pop(); if (!prior) { journal.current.record({ kind: 'user', label: 'undo', ok: false, detail: 'nothing to undo' }); setNotice(t('noticeNothingToUndo')); return; }
-    journal.current.record({ kind: 'user', label: 'undo' });
-    redoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice(t('noticeChangeUndone'));
-  }, [edges, nodes, restoreGraphState]);
+    const prior = undoStackRef.current.pop(); if (!prior) { journalRef.current.record({ kind: 'user', label: 'undo', ok: false, detail: 'nothing to undo' }); setNotice(t('noticeNothingToUndo')); return; }
+    journalRef.current.record({ kind: 'user', label: 'undo' });
+    redoStackRef.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice(t('noticeChangeUndone'));
+  }, [edges, journalRef, nodes, redoStackRef, restoreGraphState, setNotice, t, undoStackRef]);
   const redo = useCallback(() => {
-    const next = redoStack.current.pop(); if (!next) { journal.current.record({ kind: 'user', label: 'redo', ok: false, detail: 'nothing to redo' }); setNotice(t('noticeNothingToRedo')); return; }
-    journal.current.record({ kind: 'user', label: 'redo' });
-    undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice(t('noticeChangeRedone'));
-  }, [edges, nodes, restoreGraphState]);
+    const next = redoStackRef.current.pop(); if (!next) { journalRef.current.record({ kind: 'user', label: 'redo', ok: false, detail: 'nothing to redo' }); setNotice(t('noticeNothingToRedo')); return; }
+    journalRef.current.record({ kind: 'user', label: 'redo' });
+    undoStackRef.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice(t('noticeChangeRedone'));
+  }, [edges, journalRef, nodes, redoStackRef, restoreGraphState, setNotice, t, undoStackRef]);
 
   // Operator decision 2026-09-12: anything placed into a COLLAPSED frame — dropped,
   // dragged, pasted, imported, applied from Brain, adopted from a collaborator — opens
   // it. Diffed off the board state because that is the one path every placement shares.
-  useExpandFramesOnPlacement(nodes, setNodes, { toBox: toFrameBox, enabled: cardsEditable, suspended: historyApplying });
+  useExpandFramesOnPlacement(nodes, setNodes, { toBox: toFrameBox, enabled: cardsEditable, suspended: historyApplyingRef });
 
   const selectionIds = useCallback(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
 
@@ -98,7 +98,7 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
     setSelectedIds((current) => current.filter((id) => !removable.has(id)));
     setSelectedId((current) => (current && removable.has(current) ? null : current));
     setNotice(t('noticeObjectsDeleted', { count: removable.size }));
-  }, [canEdit, setEdges, setNodes, setNotice, t]);
+  }, [canEdit, nodesRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
   /** Stable across renders so `canvasNodeTypes` keeps its identity — see above. */
   const deleteNodeFromCard = useCallback((nodeId: string) => deleteObjects([nodeId]), [deleteObjects]);
   const deleteSelection = useCallback(() => deleteObjects(selectionIds()), [deleteObjects, selectionIds]);
@@ -117,29 +117,29 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
     setEdges((current) => [...current, ...copiedEdges]);
     const nextIds = copies.map((node) => node.id); setSelectedIds(nextIds); setSelectedId(nextIds.length === 1 ? nextIds[0] : null);
     setNotice(t('noticeObjectsDuplicated', { count: copies.length }));
-  }, [canEdit, edges, nodes, selectionIds, setEdges, setNodes]);
+  }, [canEdit, edges, nodes, placeAppendedRef, selectionIds, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
 
   const copySelection = useCallback(() => {
     const ids = new Set(selectionIds());
     if (!ids.size) { setNotice(t('noticeSelectToCopy')); return; }
-    canvasClipboard.current = {
+    canvasClipboardRef.current = {
       nodes: nodes.filter((node) => ids.has(node.id)).map((node) => ({ ...node, data: { ...node.data } })),
       edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge })),
     };
     setNotice(t('noticeObjectsCopied', { count: ids.size }));
-  }, [edges, nodes, selectionIds]);
+  }, [canvasClipboardRef, edges, nodes, selectionIds, setNotice, t]);
 
   const pasteSelection = useCallback(() => {
-    if (!canEdit || !canvasClipboard.current) return;
+    if (!canEdit || !canvasClipboardRef.current) return;
     const idMap = new Map<string, string>();
-    const pasted = canvasClipboard.current.nodes.map((node) => {
+    const pasted = canvasClipboardRef.current.nodes.map((node) => {
       const id = crypto.randomUUID(); idMap.set(node.id, id);
       return { ...node, id, position: { x: node.position.x + 48, y: node.position.y + 48 }, selected: true, data: { ...node.data, resourceId: undefined } };
     });
-    const pastedEdges = canvasClipboard.current.edges.map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
+    const pastedEdges = canvasClipboardRef.current.edges.map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
     setNodes((current) => { const base = current.map((node) => ({ ...node, selected: false })); return [...base, ...placeAppendedRef.current(base, pasted)]; }); setEdges((current) => [...current, ...pastedEdges]);
     const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(t('noticeObjectsPasted', { count: ids.length }));
-  }, [canEdit, setEdges, setNodes]);
+  }, [canEdit, canvasClipboardRef, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
 
   const alignSelection = useCallback(() => {
     const ids = new Set(selectionIds());
@@ -153,7 +153,7 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
       return placement ? { ...node, position: placement } : node;
     }));
     setNotice(t('objectsAligned', { count: placements.size }));
-  }, [canEdit, nodes, selectionIds, setNodes, t]);
+  }, [canEdit, nodes, selectionIds, setNodes, setNotice, t]);
 
   /**
    * Work on one section alone — a canvas within a canvas.
@@ -168,11 +168,11 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
     setNodePanel(null);
     // After the hidden flags land, or the fit measures the whole board.
     window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.14, minZoom: CANVAS_FIT_MIN_ZOOM }); }, 0);
-  }, []);
+  }, [flowRef, setFrameFocus, setNodePanel]);
   const exitFrame = useCallback(() => {
     setFrameFocus(null);
     window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.12, minZoom: CANVAS_FIT_MIN_ZOOM }); }, 0);
-  }, []);
+  }, [flowRef, setFrameFocus]);
 
   const frameSelection = useCallback(() => {
     const ids = new Set(selectionIds());
@@ -185,14 +185,14 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
     const frame = newNode('frame', { x: left, y: top }); frame.style = { width: right - left, height: bottom - top }; frame.zIndex = -1;
     frame.data = { ...frame.data, title: 'Grouped objects', framePurpose: 'Organize this related work' };
     setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(t('noticeObjectsFramed', { count: chosen.length }));
-  }, [canEdit, nodes, selectionIds, setNodes]);
+  }, [canEdit, nodes, selectionIds, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, t]);
 
   const togglePlacementLock = useCallback(() => {
     const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
     const shouldLock = nodes.some((node) => ids.has(node.id) && canvasPlacementUnlocked(node));
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, ...canvasPlacementFlags(shouldLock), data: { ...node.data, placementLocked: shouldLock } } : node));
     setNotice(t(shouldLock ? 'noticePlacementLocked' : 'noticePlacementUnlocked'));
-  }, [canEdit, nodes, selectionIds, setNodes]);
+  }, [canEdit, nodes, selectionIds, setNodes, setNotice, t]);
 
   const toggleHidden = useCallback(() => {
     const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
@@ -200,6 +200,6 @@ export function useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edge
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, hidden: shouldHide, data: { ...node.data, placementHidden: shouldHide } } : node));
     if (shouldHide) { setSelectedId(null); setSelectedIds([]); }
     setNotice(t(shouldHide ? 'noticeObjectsHidden' : 'noticeObjectsShown'));
-  }, [canEdit, nodes, selectionIds, setNodes]);
+  }, [canEdit, nodes, selectionIds, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
   return { selectionIds, redo, undo, deleteObjects, duplicateSelection, copySelection, pasteSelection, openFrame, deleteNodeFromCard, alignSelection, frameSelection, togglePlacementLock, toggleHidden, deleteSelection, exitFrame };
 }

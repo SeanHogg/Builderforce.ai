@@ -72,7 +72,7 @@ export function useCanvasCreativeGeneration({ errorText, nodes, persistence, req
       setNotice(message);
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'failed', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt }).catch(() => undefined);
     });
-  }, [errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
+  }, [errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes, setNotice, t]);
 
   const runCreativeAction = useCallback((objectId?: string, action = 'generate') => {
     const target = nodes.find((node) => node.id === objectId && CREATIVE_GENERATOR_KINDS.has(node.data.kind))
@@ -182,6 +182,6 @@ export function useCanvasCreativeGeneration({ errorText, nodes, persistence, req
           void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: `creative.${action}`, phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { provider: artifact.provider, outputFormat: artifact.outputFormat } }).catch(() => undefined);
         }
       });
-  }, [nodes, persistence, selectedNode, sessionId, setNodes, t]);
+  }, [nodes, persistence, selectedNode, sessionId, setNodes, setNotice, t]);
   return { generateVideo, runCreativeAction };
 }

@@ -110,6 +110,6 @@ export function useCanvasDiagramConversion({ canEdit, nodes, setEdges, setNodes,
       ? t('diagramCreatedPartial', { name: diagram.data.title, dropped: conversion.droppedConnections })
       : t('diagramCreated', { name: diagram.data.title, notation: notation.name }));
     return { ok: true, diagramId: diagram.id };
-  }, [canEdit, nodes, setEdges, setNodes, t]);
+  }, [canEdit, nodes, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
   return { convertObjectToDiagram };
 }

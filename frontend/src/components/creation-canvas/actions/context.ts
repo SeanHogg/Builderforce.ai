@@ -75,9 +75,9 @@ export interface CanvasActionStable {
   promptRef: RefObject<string>;
   layoutViewportRef: RefObject<ReturnType<typeof useCanvasLayoutViewport>>;
   /** The executive use case this turn is running, if any — see `measurementGate`. */
-  inFlightUseCaseId: RefObject<string | null>;
+  inFlightUseCaseIdRef: RefObject<string | null>;
   /** Tools called so far this turn. */
-  turnToolCalls: RefObject<Set<string>>;
+  turnToolCallsRef: RefObject<Set<string>>;
 }
 
 export interface CanvasActionContext extends CanvasActionStable, Omit<CanvasActionLive, 'nodes' | 'scopedNodeIds' | 'resolvedScopeMode' | 'effectiveSelectedIds'> {
@@ -93,22 +93,22 @@ export interface CanvasActionContext extends CanvasActionStable, Omit<CanvasActi
 
 /**
  * Build the context once per stable input set. Every live member forwards through
- * `live`, so a tool always reads the board as it is when the tool RUNS.
+ * `liveRef`, so a tool always reads the board as it is when the tool RUNS.
  */
-export function createCanvasActionContext(stable: CanvasActionStable, live: RefObject<CanvasActionLive>): CanvasActionContext {
+export function createCanvasActionContext(stable: CanvasActionStable, liveRef: RefObject<CanvasActionLive>): CanvasActionContext {
   return {
     ...stable,
-    nodes: () => live.current.nodes,
-    scopedNodeIds: () => live.current.scopedNodeIds,
-    resolvedScopeMode: () => live.current.resolvedScopeMode,
-    effectiveSelectedIds: () => live.current.effectiveSelectedIds,
-    requireAccount: (...args) => live.current.requireAccount(...args),
-    openAccountGate: (...args) => live.current.openAccountGate(...args),
-    socialAccountGate: (...args) => live.current.socialAccountGate(...args),
-    buildSocialFeedNode: (...args) => live.current.buildSocialFeedNode(...args),
-    convertObjectToDiagram: (...args) => live.current.convertObjectToDiagram(...args),
-    localizedTourDefaults: () => live.current.localizedTourDefaults(),
-    recentJournalEvidence: (...args) => live.current.recentJournalEvidence(...args),
+    nodes: () => liveRef.current.nodes,
+    scopedNodeIds: () => liveRef.current.scopedNodeIds,
+    resolvedScopeMode: () => liveRef.current.resolvedScopeMode,
+    effectiveSelectedIds: () => liveRef.current.effectiveSelectedIds,
+    requireAccount: (...args) => liveRef.current.requireAccount(...args),
+    openAccountGate: (...args) => liveRef.current.openAccountGate(...args),
+    socialAccountGate: (...args) => liveRef.current.socialAccountGate(...args),
+    buildSocialFeedNode: (...args) => liveRef.current.buildSocialFeedNode(...args),
+    convertObjectToDiagram: (...args) => liveRef.current.convertObjectToDiagram(...args),
+    localizedTourDefaults: () => liveRef.current.localizedTourDefaults(),
+    recentJournalEvidence: (...args) => liveRef.current.recentJournalEvidence(...args),
     stageImageAsset: (asset, options) => stageImageAsset(stable, asset, options),
     resolveTabularTarget: (objectId) => resolveTabularTarget(stable.stage, objectId),
     measurementGate: (kind) => measurementGate(stable, kind),
@@ -236,16 +236,16 @@ function resolveTabularTarget(stage: CanvasProposalStage, objectId?: string) {
  * measurement is pending.
  */
 function measurementGate(
-  { inFlightUseCaseId, turnToolCalls }: Pick<CanvasActionStable, 'inFlightUseCaseId' | 'turnToolCalls'>,
+  { inFlightUseCaseIdRef, turnToolCallsRef }: Pick<CanvasActionStable, 'inFlightUseCaseId' | 'turnToolCalls'>,
   kind: CreationObjectKind,
 ): { error: string } | null {
-  const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === inFlightUseCaseId.current);
+  const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === inFlightUseCaseIdRef.current);
   if (!useCase) return null;
   const required = executiveRequiredTools(useCase);
   if (!required.length) return null;
   const workflow = cSuiteCanvasWorkflow(useCase);
   if (!workflow?.outputs.includes(kind)) return null;
-  const missing = missingRequiredTools(required, turnToolCalls.current);
+  const missing = missingRequiredTools(required, turnToolCallsRef.current);
   if (!missing.length) return null;
   return {
     error: `\`${kind}\` is the answer to ${useCase.id}, and that answer must be MEASURED. Call ${missing.join(' and ')} first, then author this object from what it returns. Do not infer the numbers from the documents already in context — a score produced that way changes every time it is asked for, which is the reason this tool exists.`,

@@ -80,7 +80,9 @@ export function useCanvasSessionActionHandlers({
       // the same reasoning the call uses once its dock has taken over. The
       // threshold is the walkthrough's own: an empty `walkthroughStops` IS the
       // answer, so it is not restated here as a second number to keep in step.
-      walkthrough: { ...act(() => walkthroughRef.current?.open()), available: walkthroughStopCount > 0 },
+      // Spelled out rather than through `act`: the walkthrough is reached through its ref,
+      // which is read when the action is PRESSED, never while this record is built.
+      walkthrough: { run: () => { closeActionMenus(); walkthroughRef.current?.open(); }, available: walkthroughStopCount > 0 },
       fullscreen: act(toggleFullscreen, fullscreen),
       // The call is a session action like any other, so it is in the bar on every
       // surface instead of in a band of chrome of its own. Two session facts decide how

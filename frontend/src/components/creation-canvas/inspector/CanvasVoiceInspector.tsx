@@ -13,25 +13,26 @@ export function CanvasVoiceInspector({ node, persistence, onChange }: { node: Cr
   const t = useTranslations('creationCanvas');
   const storageProjectId = useMemo(() => canvasProjectId(node.data), [node.data]);
   const voice = useVoiceStudio({ enabled: persistence === 'server', storageProjectId });
-  const loadedNode = useRef<string | null>(null);
-  const savedResult = useRef<unknown>(null);
+  const loadedNodeRef = useRef<string | null>(null);
+  const savedResultRef = useRef<unknown>(null);
+  const { setText, clones, selectedCloneId, setSelectedCloneId } = voice;
 
   useEffect(() => {
-    if (loadedNode.current === node.id) return;
-    loadedNode.current = node.id;
-    voice.setText(typeof node.data.voiceScript === 'string' && node.data.voiceScript.trim() ? node.data.voiceScript : '');
-  }, [node.data.voiceScript, node.id, voice.setText]);
+    if (loadedNodeRef.current === node.id) return;
+    loadedNodeRef.current = node.id;
+    setText(typeof node.data.voiceScript === 'string' && node.data.voiceScript.trim() ? node.data.voiceScript : '');
+  }, [node.data.voiceScript, node.id, setText]);
 
   useEffect(() => {
     const savedCloneId = Number(node.data.voiceCloneId);
-    if (Number.isInteger(savedCloneId) && savedCloneId > 0 && voice.clones.some((clone) => clone.id === savedCloneId) && voice.selectedCloneId !== savedCloneId) {
-      voice.setSelectedCloneId(savedCloneId);
+    if (Number.isInteger(savedCloneId) && savedCloneId > 0 && clones.some((clone) => clone.id === savedCloneId) && selectedCloneId !== savedCloneId) {
+      setSelectedCloneId(savedCloneId);
     }
-  }, [node.data.voiceCloneId, voice.clones, voice.selectedCloneId, voice.setSelectedCloneId]);
+  }, [node.data.voiceCloneId, clones, selectedCloneId, setSelectedCloneId]);
 
   useEffect(() => {
-    if (!voice.result || savedResult.current === voice.result) return;
-    savedResult.current = voice.result;
+    if (!voice.result || savedResultRef.current === voice.result) return;
+    savedResultRef.current = voice.result;
     onChange({
       voiceScript: voice.text,
       voiceTranscript: voice.text,

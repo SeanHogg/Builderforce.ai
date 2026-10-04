@@ -25,7 +25,7 @@ export function useCanvasResumeShares({ persistence, sessionId, setNodes, setNot
     // Selection/scope are React state. Start the turn after that state commits so
     // the Recruiter receives the intended résumé, not the previous canvas scope.
     window.setTimeout(() => startCanvasTurnRef.current(`Target Canvas resume object ID: ${nodeId}\n\n${request}`), 0);
-  }, []);
+  }, [setScopeMode, setSelectedId, setSelectedIds, startCanvasTurnRef]);
   const detachResumeFromNode = useCallback((nodeId: string, detachedData: Partial<CreationNodeData>) => {
     const detachedId = crypto.randomUUID();
     setNodes((current) => {
@@ -35,20 +35,20 @@ export function useCanvasResumeShares({ persistence, sessionId, setNodes, setNot
     });
     setSelectedId(detachedId);
     setSelectedIds([detachedId]);
-  }, [setNodes]);
+  }, [setNodes, setSelectedId, setSelectedIds]);
   const createResumeShare = useCallback(async (nodeId: string, kind: 'view' | 'embed') => {
     if (persistence !== 'server') throw new Error(t('resumeShareSaveFirst'));
     const share = await creationSessionsApi.resumeShares.create(sessionId, nodeId);
     const path = kind === 'embed' ? share.embedPath : share.viewPath;
     await navigator.clipboard.writeText(`${window.location.origin}${path}`);
     setNotice(t(kind === 'embed' ? 'resumeEmbedCopied' : 'resumeLinkCopied'));
-  }, [persistence, sessionId, t]);
+  }, [persistence, sessionId, setNotice, t]);
   const listResumeShares = useCallback((nodeId: string) => persistence === 'server'
     ? creationSessionsApi.resumeShares.list(sessionId, nodeId).then((result) => result.shares)
     : Promise.resolve([]), [persistence, sessionId]);
   const revokeResumeShare = useCallback(async (nodeId: string, shareId: string) => {
     await creationSessionsApi.resumeShares.revoke(sessionId, nodeId, shareId);
     setNotice(t('resumeShareRevoked'));
-  }, [sessionId, t]);
+  }, [sessionId, setNotice, t]);
   return { tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare };
 }

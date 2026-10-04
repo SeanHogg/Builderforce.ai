@@ -25,7 +25,7 @@ export interface UseCanvasTemplatesDeps {
   locale: string;
   persistence: 'local' | 'server';
   placeAppendedRef: RefObject<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>;
-  revision: RefObject<number>;
+  revisionRef: RefObject<number>;
   selectedNode: CanvasObject | null;
   sessionId: string;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
@@ -40,7 +40,7 @@ export interface UseCanvasTemplatesDeps {
   templateText: (template: CreationTemplate, field: 'name' | 'description') => string;
 }
 
-export function useCanvasTemplates({ canEdit, canvasText, flowRef, locale, persistence, placeAppendedRef, revision, selectedNode, sessionId, setEdges, setFramePresets, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setServerTemplates, setTemplateOpen, t, templateText }: UseCanvasTemplatesDeps) {
+export function useCanvasTemplates({ canEdit, canvasText, flowRef, locale, persistence, placeAppendedRef, revisionRef, selectedNode, sessionId, setEdges, setFramePresets, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setServerTemplates, setTemplateOpen, t, templateText }: UseCanvasTemplatesDeps) {
   const applyTemplate = useCallback((pack: CreationTemplate) => {
     if (!canEdit) return;
     // A pack that still authors a legacy `workflow` card is lowered to a frame of
@@ -80,14 +80,14 @@ export function useCanvasTemplates({ canEdit, canvasText, flowRef, locale, persi
     setNodes((current) => [...current, ...placeAppendedRef.current(current, created)]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(t('noticeTemplateAddedMarketplace', { name: templateText(template, 'name') }));
     trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: canvasSurface(), templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: created.map(({ id }) => ({ id })), padding: .2, duration: 400 }), 0);
-  }, [canEdit, canvasText, locale, sessionId, setEdges, setNodes, t, templateText]);
+  }, [canEdit, canvasText, flowRef, locale, placeAppendedRef, sessionId, setEdges, setNodes, setNotice, setTemplateOpen, t, templateText]);
 
   const addFramePreset = useCallback((preset: FramePreset) => {
     if (!canEdit) return;
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
     const node = newNode('frame', position); node.data = { ...preset.data, title: preset.name };
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]); setSelectedId(node.id); setTemplateOpen(false); setNotice(t('noticeFramePresetAdded', { name: preset.name }));
-  }, [canEdit, setNodes]);
+  }, [canEdit, flowRef, placeAppendedRef, setNodes, setNotice, setSelectedId, setTemplateOpen, t]);
 
   const saveFramePreset = useCallback(() => {
     if (selectedNode?.data.kind !== 'frame') return;
@@ -102,18 +102,18 @@ export function useCanvasTemplates({ canEdit, canvasText, flowRef, locale, persi
     }
     setFramePresets((current) => { const next = [...current.filter((item) => item.name !== preset.name), preset].slice(-20); localStorage.setItem('builderforce:create-frame-presets', JSON.stringify(next)); return next; });
     setNotice(t('noticeFrameSavedLibrary'));
-  }, [persistence, selectedNode]);
+  }, [persistence, selectedNode, setFramePresets, setNotice, setServerTemplates, t]);
 
   const applyServerTemplate = useCallback((template: ServerCreationTemplate) => {
     if (persistence !== 'server' || !canEdit) return;
     setNotice(t('noticeAddingTemplate', { name: template.name }));
-    void creationSessionsApi.templates.apply(sessionId, template.id, revision.current).then(async (result) => {
-      revision.current = result.revision;
+    void creationSessionsApi.templates.apply(sessionId, template.id, revisionRef.current).then(async (result) => {
+      revisionRef.current = result.revision;
       const detail = await creationSessionsApi.get(sessionId);
       const flow = flowFromSession(detail);
       setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(t('noticeTemplateAdded', { name: template.name }));
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: result.objectIds.map((id) => ({ id })), padding: .2, duration: 400 }), 0);
     }).catch((error) => setNotice(faultText(error, t('noticeTemplateFailed'))));
-  }, [canEdit, persistence, sessionId, setEdges, setNodes]);
+  }, [canEdit, flowRef, persistence, revisionRef, sessionId, setEdges, setNodes, setNotice, setPersistedObjectIds, setTemplateOpen, t]);
   return { applyTemplate, applyServerTemplate, addFramePreset, saveFramePreset };
 }

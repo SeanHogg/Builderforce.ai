@@ -47,7 +47,7 @@ export interface CanvasBoardFlowProps {
   interactionProps: Interaction['interactionProps'];
   flowRef: RefObject<ReactFlowInstance<CreationFlowNode, Edge> | null>;
   /** A viewport restored before React Flow was ready, applied the moment it is. */
-  pendingViewport: RefObject<{ x: number; y: number; zoom: number } | null>;
+  pendingViewportRef: RefObject<{ x: number; y: number; zoom: number } | null>;
   drawingMode: boolean;
   liveMembers: Presence['liveMembers'];
   presenceSelfId: Presence['presenceSelfId'];
@@ -81,14 +81,14 @@ function sameFlowProps(previous: CanvasBoardFlowProps, next: CanvasBoardFlowProp
  */
 export const CanvasBoardFlow = memo(function CanvasBoardFlow({
   brainSurface, nodes, edges, nodeTypes, onNodesChange, onEdgesChange, onConnect, connectionProps, onNodeClick, onSelectionChange,
-  onPaneClick, onMoveEnd, interactionProps, flowRef, pendingViewport, drawingMode, liveMembers, presenceSelfId, minimapOpen,
+  onPaneClick, onMoveEnd, interactionProps, flowRef, pendingViewportRef, drawingMode, liveMembers, presenceSelfId, minimapOpen,
   setMinimapOpen, onCleanLayout, threeDActive,
 }: CanvasBoardFlowProps) {
   const { canEdit } = useCanvasSessionFacts();
   const onInit = useCallback((instance: ReactFlowInstance<CreationFlowNode, Edge>) => {
     flowRef.current = instance;
-    if (pendingViewport.current) void instance.setViewport(pendingViewport.current);
-  }, [flowRef, pendingViewport]);
+    if (pendingViewportRef.current) void instance.setViewport(pendingViewportRef.current);
+  }, [flowRef, pendingViewportRef]);
   return <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={nodes}

@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import { BUILDABLE_MODALITIES } from '@/lib/canvasBuildTools';
+import { hasCodeWorkspace } from '@/lib/canvasBuildTools';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import type { ProjectModality } from '@/lib/modality';
 import styles from './CreationCanvas.module.css';
@@ -25,7 +25,7 @@ export function CanvasAppStart({ durable, onCreate }: {
   onCreate: (modality: ProjectModality) => Promise<void>;
 }) {
   const t = useTranslations('creationCanvas.surface.app.start');
-  const modalities = useLocalizedModalities().filter((modality) => !modality.comingSoon && (durable || BUILDABLE_MODALITIES.includes(modality.id)));
+  const modalities = useLocalizedModalities().filter((modality) => !modality.comingSoon && (durable || hasCodeWorkspace(modality.id)));
   const [creating, setCreating] = useState<ProjectModality | null>(null);
   const [failed, setFailed] = useState(false);
 

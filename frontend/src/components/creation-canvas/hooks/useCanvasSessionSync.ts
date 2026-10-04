@@ -1,5 +1,5 @@
 /** Keeping the session in sync — saving, realtime, polled members and invitations. */
-import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useEffect, useEffectEvent } from 'react';
 import { boardSignature, persistBoard, saveAttemptKey } from '@/domains/canvas/application/PersistCanvas';
 import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
 import { rejectedObjectKinds } from '../canvasBoardLoad';
@@ -16,40 +16,40 @@ import type { PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 
 export interface UseCanvasSessionSyncDeps {
-  activeMemberIds: RefObject<Set<string>>;
-  activePresenceInitialized: RefObject<boolean>;
+  activeMemberIdsRef: RefObject<Set<string>>;
+  activePresenceInitializedRef: RefObject<boolean>;
   applyRemoteBoard: (decision: AdoptRemoteBoardDecision, notice: string) => void;
   brainRunStartedAt: number | null;
   canEdit: boolean;
   clearPresence: () => void;
-  currentGraph: RefObject<string>;
+  currentGraphRef: RefObject<string>;
   currentSnapshot: (viewport?: { x: number; y: number; zoom: number; }) => LocalCreationSnapshot;
   currentUserId: string | null;
   cursorRef: RefObject<{ x: number; y: number; } | null>;
   edges: Edge[];
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
   followingUserId: string | null;
-  hydrated: RefObject<boolean>;
+  hydratedRef: RefObject<boolean>;
   initialBuildOpen: boolean;
-  initialBuildOpened: RefObject<boolean>;
+  initialBuildOpenedRef: RefObject<boolean>;
   initialFocusId: string | null | undefined;
   isComposingPrompt: boolean;
   joinedCollaborator: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; } | null;
-  lastSavedGraph: RefObject<string>;
+  lastSavedGraphRef: RefObject<string>;
   liveSocketRef: RefObject<WebSocket | null>;
   loadingSession: boolean;
   localBoardState: () => LocalBoardState;
-  mobileViewportFitted: RefObject<boolean>;
+  mobileViewportFittedRef: RefObject<boolean>;
   nodes: CanvasObject[];
   noteSaveState: () => void;
-  pendingSave: RefObject<{ signature: string; key: string; } | null>;
+  pendingSaveRef: RefObject<{ signature: string; key: string; } | null>;
   persistSnapshot: (snapshot: LocalCreationSnapshot) => void;
   persistence: 'local' | 'server';
   presenceLive: boolean;
   presenceRef: RefObject<PresenceRelay | null>;
   receivePresence: (frame: unknown) => void;
-  revision: RefObject<number>;
-  saveInFlight: RefObject<boolean>;
+  revisionRef: RefObject<number>;
+  saveInFlightRef: RefObject<boolean>;
   selectedIds: string[];
   sendPresence: (state: CanvasPresenceState) => void;
   sessionId: string;
@@ -72,38 +72,38 @@ export interface UseCanvasSessionSyncDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialized, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraph, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydrated, initialBuildOpen, initialBuildOpened, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraph, liveSocketRef, loadingSession, localBoardState, mobileViewportFitted, nodes, noteSaveState, pendingSave, persistSnapshot, persistence, presenceLive, presenceRef, receivePresence, revision, saveInFlight, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
-  useEffect(() => { currentGraph.current = JSON.stringify({ nodes, edges }); }, [edges, nodes]);
+export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialBuildOpen, initialBuildOpenedRef, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRef, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
+  useEffect(() => { currentGraphRef.current = JSON.stringify({ nodes, edges }); }, [currentGraphRef, edges, nodes]);
 
   // A persisted viewport is expressed in screen pixels, so restoring a camera
   // saved on desktop can put the useful part of the graph beyond a phone's
   // narrow viewport. Reframe once after hydration; subsequent pans and zooms
   // remain entirely under the user's control.
   useEffect(() => {
-    if (loadingSession || mobileViewportFitted.current || !nodes.length || typeof window === 'undefined' || window.innerWidth > 760) return;
+    if (loadingSession || mobileViewportFittedRef.current || !nodes.length || typeof window === 'undefined' || window.innerWidth > 760) return;
     const handle = window.setTimeout(() => {
       if (!flowRef.current) return;
-      mobileViewportFitted.current = true;
+      mobileViewportFittedRef.current = true;
       // A full desktop graph can otherwise shrink to an illegible thumbnail on
       // a phone. Keep objects readable and let the user pan to off-screen work.
       void flowRef.current.fitView({ padding: 0.18, minZoom: 0.62, maxZoom: 0.82, duration: 280 });
     }, 80);
     return () => window.clearTimeout(handle);
-  }, [loadingSession, nodes]);
+  }, [flowRef, loadingSession, mobileViewportFittedRef, nodes]);
 
   useEffect(() => {
     if (!initialFocusId || !nodes.some((node) => node.id === initialFocusId)) return;
     setSelectedId(initialFocusId);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [{ id: initialFocusId }], padding: 0.45, duration: 350 }), 0);
-  }, [initialFocusId, nodes]);
+  }, [flowRef, initialFocusId, nodes, setSelectedId]);
 
   useEffect(() => {
-    if (!initialBuildOpen || initialBuildOpened.current || !initialFocusId) return;
+    if (!initialBuildOpen || initialBuildOpenedRef.current || !initialFocusId) return;
     const target = nodes.find((node) => node.id === initialFocusId && node.data.kind === 'build');
     if (!target) return;
-    initialBuildOpened.current = true;
+    initialBuildOpenedRef.current = true;
     openApp(target.id);
-  }, [initialBuildOpen, initialFocusId, nodes, openApp]);
+  }, [initialBuildOpen, initialBuildOpenedRef, initialFocusId, nodes, openApp]);
 
   /**
    * AUTOSAVE. Debounced 300ms behind the edit that triggered it.
@@ -115,34 +115,34 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
    * conflict merge finally has a test that does not mount a canvas.
    */
   useEffect(() => {
-    if (!hydrated.current || !canEdit) return;
+    if (!hydratedRef.current || !canEdit) return;
     const handle = window.setTimeout(() => {
       const board = { nodes, edges };
       const signature = boardSignature(board);
-      if (signature === lastSavedGraph.current) return;
+      if (signature === lastSavedGraphRef.current) return;
       if (persistence === 'local') {
         const snapshot = currentSnapshot();
         persistSnapshot(snapshot);
-        lastSavedGraph.current = signature;
+        lastSavedGraphRef.current = signature;
         noteSaveState();
         return;
       }
       noteSaveState();
-      saveInFlight.current = true;
+      saveInFlightRef.current = true;
       // STABLE across retries of the same board, NEW for a different one — so a
       // retry after a timeout is the same write and an edit made during it is not.
-      pendingSave.current = saveAttemptKey(pendingSave.current, signature);
-      const attempt = pendingSave.current;
+      pendingSaveRef.current = saveAttemptKey(pendingSaveRef.current, signature);
+      const attempt = pendingSaveRef.current;
       void persistBoard(
-        { sessionId, board, viewport: viewportRef.current, expectedRevision: revision.current, idempotencyKey: attempt.key, signature },
+        { sessionId, board, viewport: viewportRef.current, expectedRevision: revisionRef.current, idempotencyKey: attempt.key, signature },
         canvasSessionGateway,
         t,
       ).then((result) => {
         if (result.outcome === 'failed') { setNotice(result.notice); return; }
-        revision.current = result.revision;
-        lastSavedGraph.current = result.signature;
+        revisionRef.current = result.revision;
+        lastSavedGraphRef.current = result.signature;
         setPersistedObjectIds(new Set(result.objectIds));
-        if (pendingSave.current?.key === attempt.key) pendingSave.current = null;
+        if (pendingSaveRef.current?.key === attempt.key) pendingSaveRef.current = null;
         if (result.outcome === 'saved') { noteSaveState(); return; }
         setNodes(result.board.nodes);
         setEdges(result.board.edges);
@@ -151,23 +151,28 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
         // the initial load makes rather than a second, quieter rule for the same event.
         if (result.rejected.length) setNotice(t('objectsRejected', { count: result.rejected.length, kinds: rejectedObjectKinds(result.rejected) }));
         else setNotice(result.notice);
-      }).finally(() => { saveInFlight.current = false; });
+      }).finally(() => { saveInFlightRef.current = false; });
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [canEdit, edges, nodes, noteSaveState, persistSnapshot, persistence, sessionId, setEdges, setNodes, setNotice, storageKey, t, timeline, title, viewportRef]);
+  // `currentSnapshot` changes exactly when edges/nodes/sessionId/timeline/title do, so listing it
+  // does not change when the debounce restarts.
+  }, [canEdit, currentSnapshot, edges, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, revisionRef, saveInFlightRef, sessionId, setEdges, setNodes, setNotice, setPersistedObjectIds, storageKey, t, timeline, title, viewportRef]);
 
+  // The write reads the room's CURRENT `persistSnapshot` when the debounce fires; the room
+  // changing is not itself a reason to write the board again.
+  const writeLocalSnapshot = useEffectEvent((snapshot: LocalCreationSnapshot) => persistSnapshot(snapshot));
   useEffect(() => {
-    if (persistence !== 'local' || !hydrated.current) return;
+    if (persistence !== 'local' || !hydratedRef.current) return;
     const handle = window.setTimeout(() => {
       const prior = readLocalCreationSession(sessionId); if (!prior) return;
       // `...prior` carries prior.title forward untouched — a rename now happens in
       // the session rail, not here, so this write must not overwrite it with the
       // stale copy this component hydrated `title` from.
       const snapshot: LocalCreationSnapshot = { ...prior, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
-      persistSnapshot(snapshot);
+      writeLocalSnapshot(snapshot);
     }, 150);
     return () => window.clearTimeout(handle);
-  }, [edges, nodes, persistence, sessionId, storageKey, timeline]);
+  }, [edges, hydratedRef, nodes, persistence, sessionId, storageKey, timeline, viewportRef]);
 
   // The board-reconcile poll. Its load reads the CURRENT selection, composer state
   // and follow target at call time (the hook holds the latest closure), so a click
@@ -183,14 +188,14 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
         // count as active, so dropping one column out of a write that happens anyway
         // would have bought staleness rather than saved a write.
         const relayed = liveSocketRef.current?.readyState === WebSocket.OPEN;
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
+        const presence = await creationSessionsApi.presence(sessionId, { revision: revisionRef.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
         if (signal.aborted) return;
         const nextActiveIds = new Set(presence.members.map((member) => member.userId));
-        if (activePresenceInitialized.current) {
-          const joined = presence.members.find((member) => member.userId !== (presence.currentUserId || currentUserId) && !activeMemberIds.current.has(member.userId));
+        if (activePresenceInitializedRef.current) {
+          const joined = presence.members.find((member) => member.userId !== (presence.currentUserId || currentUserId) && !activeMemberIdsRef.current.has(member.userId));
           if (joined) setJoinedCollaborator(joined);
-        } else activePresenceInitialized.current = true;
-        activeMemberIds.current = nextActiveIds;
+        } else activePresenceInitializedRef.current = true;
+        activeMemberIdsRef.current = nextActiveIds;
         setMembers(presence.members);
         // Following is driven by the relay when it is up (see the follow effect);
         // this is the same move at poll speed for a client with no socket.
@@ -200,7 +205,7 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
         // The poll's own revision is the cheap probe; whether the board may
         // actually be replaced — and what happens to the objects this build
         // cannot render — belongs to `AdoptRemoteBoard`.
-        if (presence.revision <= revision.current) return;
+        if (presence.revision <= revisionRef.current) return;
         const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
         if (signal.aborted) return;
         applyRemoteBoard(decision, t('noticeUpdatedByCollaborator'));
@@ -211,7 +216,7 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
     if (!joinedCollaborator) return;
     const timer = window.setTimeout(() => setJoinedCollaborator(null), 4_500);
     return () => window.clearTimeout(timer);
-  }, [joinedCollaborator]);
+  }, [joinedCollaborator, setJoinedCollaborator]);
 
   useEffect(() => {
     if (persistence !== 'server') return;
@@ -221,14 +226,17 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
     let socket: WebSocket | null = null;
     let retryTimer: number | null = null;
     let retryMs = 1_000;
+    // Created once with the canvas and never replaced, so reading it here is the same relay
+    // the cleanup used to read.
+    const presence = presenceRef.current;
     const syncRevision = async (hint?: number) => {
       if (stopped) return;
       try {
         // `events` is this channel's cheap probe, exactly as the poll's payload is
         // the other channel's. Everything after it is the same act, and lives in
         // one place so the two doors cannot answer differently.
-        const caughtUp = await creationSessionsApi.events(sessionId, revision.current);
-        if (Math.max(Number(hint || 0), Number(caughtUp.revision || 0)) <= revision.current) return;
+        const caughtUp = await creationSessionsApi.events(sessionId, revisionRef.current);
+        if (Math.max(Number(hint || 0), Number(caughtUp.revision || 0)) <= revisionRef.current) return;
         const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
         if (stopped) return;
         applyRemoteBoard(decision, t('noticeUpdatedLive'));
@@ -281,10 +289,10 @@ export function useCanvasSessionSync({ activeMemberIds, activePresenceInitialize
       if (retryTimer != null) window.clearTimeout(retryTimer);
       liveSocketRef.current = null;
       // Drop the pending flush with the socket it was going to be written to.
-      presenceRef.current?.dispose();
+      presence?.dispose();
       socket?.close();
     };
-  }, [clearPresence, persistence, receivePresence, sessionId, setEdges, setNodes]);
+  }, [applyRemoteBoard, clearPresence, liveSocketRef, localBoardState, persistence, presenceRef, receivePresence, revisionRef, sessionId, setEdges, setNodes, setRealtimeState, setTimeline, t]);
 
   /**
    * Composing a prompt is presence too — the cursor label says so. It changes at

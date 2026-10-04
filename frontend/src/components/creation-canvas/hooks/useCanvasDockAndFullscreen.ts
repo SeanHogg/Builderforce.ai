@@ -26,9 +26,9 @@ export function useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, f
     const enabled = isBrainAutoApprove();
     autoApplyRef.current = enabled;
     setAutoApply(enabled);
-  }, []);
+  }, [autoApplyRef, setAutoApply]);
 
-  useEffect(() => { setBrainDock(readBrainDockPreferences()); }, []);
+  useEffect(() => { setBrainDock(readBrainDockPreferences()); }, [setBrainDock]);
   // BRAIN NEVER AUTO-COVERS A PHONE. The stored (and default) preference is a docked
   // rail standing open, which is the desktop. At phone width that same preference is a
   // sheet over the board, so the first paint that learns it is a phone closes it without
@@ -37,7 +37,7 @@ export function useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, f
   useEffect(() => {
     if (!phoneViewport) return;
     setBrainDock((current) => (current.open ? { ...current, open: false } : current));
-  }, [phoneViewport]);
+  }, [phoneViewport, setBrainDock]);
   /**
    * The surface the visitor last chose to work on, restored after hydration rather than
    * in the initial state — `localStorage` does not exist on the server, and a first
@@ -72,7 +72,7 @@ export function useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, f
       }
       return next;
     });
-  }, [sessionId]);
+  }, [sessionId, setBrainDock]);
 
   /**
    * Fill the screen with the board, natively where the browser offers it and by
@@ -92,7 +92,7 @@ export function useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, f
     const request = document.fullscreenEnabled ? shell.requestFullscreen?.() : undefined;
     if (request) void request.catch(() => setFullscreen(true));
     else setFullscreen(true);
-  }, [fullscreen]);
+  }, [fullscreen, setFullscreen, shellRef]);
 
   useEffect(() => {
     // Only the native path owns the flag while IT is what is on screen. Without
@@ -106,7 +106,7 @@ export function useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, f
     };
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
-  }, []);
+  }, [nativeFullscreenRef, setFullscreen, shellRef]);
 
   // Escape leaves the CSS fallback, the way it leaves native full screen — the
   // browser handles that key itself only when the browser put us there.
@@ -115,6 +115,6 @@ export function useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, f
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setFullscreen(false); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [fullscreen]);
+  }, [fullscreen, nativeFullscreenRef, setFullscreen]);
   return { updateBrainDock, toggleFullscreen };
 }

@@ -1072,9 +1072,6 @@
    The builder is a genuinely wide surface (file tree + editor + preview + right
    rail). Below its working width it SCROLLS inside this box rather than crushing
    its panes — the page itself never scrolls sideways. */
-.buildFocusBody { display:flex; flex:1; min-height:0; min-width:0; flex-direction:column; overflow-x:auto; overflow-y:hidden; }
-.buildFocusBody > * { min-width:900px; }
-@media (min-width:960px) { .buildFocusBody > * { min-width:0; } }
 
 .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }.kpis div { display:grid; gap:3px; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }.kpis small { color:var(--canvas-muted); }.kpis strong { font-size:17px; }.kpis em { color:var(--canvas-trend-up); font-size:8px; font-style:normal; }
 /* An UNSET donut is an empty ring, not a decorative four-slice gradient: the old

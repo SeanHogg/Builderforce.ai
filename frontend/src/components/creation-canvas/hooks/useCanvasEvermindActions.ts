@@ -44,7 +44,7 @@ export function useCanvasEvermindActions({ flowRef, nodes, openNodeInspector, pe
       setEvermindLiveByNodeId((current) => ({ ...current, [evermindNodeId]: projectEvermindNodePatch(head, activity) }));
       setNotice(t('noticeEvermindAttached'));
     }).catch((error) => setNotice(faultText(error, t('noticeLoadEvermindFailed'))));
-  }, [nodes, selectedNode, setEdges, setNodes]);
+  }, [nodes, selectedNode, setEdges, setEvermindLiveByNodeId, setNodes, setNotice, t]);
 
   const expandEvermindPipeline = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
@@ -94,7 +94,7 @@ export function useCanvasEvermindActions({ flowRef, nodes, openNodeInspector, pe
     setSelectedId(dataset!.id); setSelectedIds([dataset!.id]); openNodeInspector(dataset!.id);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created, ...stageSteps].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
     setNotice(t('noticeDatasetStepOne'));
-  }, [nodes, openNodeInspector, selectedNode, setEdges, setNodes]);
+  }, [flowRef, nodes, openNodeInspector, placeAppendedRef, selectedNode, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
 
   const openEvermindTraining = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
@@ -108,7 +108,7 @@ export function useCanvasEvermindActions({ flowRef, nodes, openNodeInspector, pe
     }
     setTrainingFocus({ nodeId: selectedNode.id, projectId: projectId ?? `local-${sessionId}`, localOnly: persistence === 'local' });
     setNotice(persistence === 'local' ? 'Local-only adapter studio opened' : t('noticeAdapterStudioOpened'));
-  }, [expandEvermindPipeline, nodes, persistence, selectedNode, sessionId]);
+  }, [expandEvermindPipeline, nodes, persistence, selectedNode, sessionId, setNotice, setTrainingFocus, t]);
 
   const evaluateEvermind = useCallback((nodeId?: string) => {
     const target = nodes.find((node) => node.id === nodeId && node.data.kind === 'evermind')
@@ -139,6 +139,6 @@ export function useCanvasEvermindActions({ flowRef, nodes, openNodeInspector, pe
       setEdges((current) => current.some((edge) => edge.source === target.id && edge.target === evaluation.id) ? current : [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluated by', animated: true }]);
       setNotice(t('noticeEvermindEvalComplete', { score: (result.score * 100).toFixed(0) }));
     }).catch((error) => setNotice(faultText(error, t('noticeEvermindEvalFailed'))));
-  }, [nodes, selectedNode, setEdges, setNodes]);
+  }, [nodes, selectedNode, setEdges, setNodes, setNotice, t]);
   return { openEvermindTraining, evaluateEvermind, attachEvermindProject, expandEvermindPipeline };
 }

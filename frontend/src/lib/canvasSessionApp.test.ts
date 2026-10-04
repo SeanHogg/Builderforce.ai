@@ -3,6 +3,7 @@ import {
   APP_IMPORT_HASH_FIELD,
   appCardSignature,
   boundCanvasBuilds,
+  canvasAppLocalKey,
   entryRedirectPage,
   pendingCardImport,
   primarySessionApp,
@@ -120,5 +121,13 @@ describe('appCardSignature', () => {
 
   it('only fingerprints cards that can change the app', () => {
     expect(appCardSignature([{ id: 'n', data: { kind: 'note', title: 'x' } }])).toBe('');
+  });
+});
+
+describe('canvasAppLocalKey', () => {
+  it('reads the browser workspace key a card holds, and nothing else', () => {
+    expect(canvasAppLocalKey({ kind: 'build', localAppKey: 'k1' })).toBe('k1');
+    expect(canvasAppLocalKey({ kind: 'build', localAppKey: '' })).toBeNull();
+    expect(canvasAppLocalKey({ kind: 'build' })).toBeNull();
   });
 });

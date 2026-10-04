@@ -35,7 +35,7 @@ export interface CanvasTurnSettleContext extends Pick<UseCanvasBrainTurnDeps,
 
 /** The turn answered: write the answer, stage what it proposed, report the outcome. */
 export function settleCanvasTurnSuccess(ctx: CanvasTurnSettleContext, answer: string): void {
-  const { appendTimeline, autoApplyRef, brainId, canvasRunRef, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, runAbort, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, setThinking, stage, t, turnDone, turnUnanswered } = ctx;
+  const { appendTimeline, autoApplyRef, brainId, canvasRunRef, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, runAbort, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, setThinking, stage, t, turnDone, turnUnansweredRef } = ctx;
   // A run the user stopped has no result to record. `stopCanvasRun` already
   // unwound the UI and wrote the "you stopped this" line; a late answer from a
   // request that was already in flight must not overwrite it.
@@ -46,8 +46,8 @@ export function settleCanvasTurnSuccess(ctx: CanvasTurnSettleContext, answer: st
   // let one failed turn become the template for the next: the following request
   // carried it as an example answer and a free model reproduced it verbatim.
   // Recorded as a failed turn instead — visible to the user, invisible to the model.
-  const unanswered = turnUnanswered.current;
-  turnUnanswered.current = null;
+  const unanswered = turnUnansweredRef.current;
+  turnUnansweredRef.current = null;
   // A turn that ran at all means the allowance is no longer spent (a new day,
   // or they took the account) — retire the conversion CTA the refusal armed.
   setGuestLimit(null);

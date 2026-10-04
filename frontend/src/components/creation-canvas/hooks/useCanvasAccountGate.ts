@@ -39,7 +39,7 @@ export function useCanvasAccountGate({ sessionId, setAccountGate, t }: UseCanvas
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
     trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
-  }, [sessionId]);
+  }, [sessionId, setAccountGate]);
   /**
    * ONE door in front of everything that reads a CONNECTED ACCOUNT.
    *

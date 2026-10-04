@@ -152,7 +152,7 @@ export function useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framed
       setNotice(message);
       return null;
     }
-  }, [persistence, requireAccount, resolveSubflow, sessionId, setNodes, setNotice, t, updateNodeData]);
+  }, [edgesRef, framedBoardRef, nodesRef, persistence, requireAccount, resolveSubflow, sessionId, setNodes, setNotice, t, updateNodeData]);
 
   /**
    * Build the flow the person is looking at, drawing the section first if there is none.
@@ -180,7 +180,7 @@ export function useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framed
     // The frame has to exist on the board before its membership can be read — the
     // containment is geometric, and geometry is what the next render establishes.
     return new Promise((resolve) => { window.setTimeout(() => { void buildFlowFromFrame(frame.id).then(resolve); }, 0); });
-  }, [buildFlowFromFrame, setNodes, setNotice, t]);
+  }, [buildFlowFromFrame, nodesRef, setNodes, setNotice, t]);
 
   /**
    * The section whose steps are being run IN THE BROWSER, and the graph they compile to.
@@ -209,7 +209,7 @@ export function useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framed
     if (issues.length > 0) { setNotice(t(`flowIssue.${issues[0]!.messageKey}` as 'flowIssue.noSteps', issues[0]!.values ?? {})); return; }
     const projectId = canvasProjectNodes(board).map((node) => canvasProjectId(node.data))[0] ?? null;
     setEvermindBuild({ name: frame.data.title || t('flowStep.untitledFlow'), projectId, graph: definition });
-  }, [resolveSubflow, sessionId, setNotice, t]);
+  }, [edgesRef, framedBoardRef, nodesRef, resolveSubflow, sessionId, setNotice, t]);
 
   /**
    * Lay a starting Evermind pipeline out inside a frame.
@@ -246,6 +246,6 @@ export function useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framed
       ]);
       setNotice(t('flowStep.opened', { count: stepNodes.length }));
     }).catch((error: Error) => setNotice(errorText(error)));
-  }, [connectionKind, setEdges, setNodes, setNotice, t, errorText]);
+  }, [nodesRef, setNotice, t, setNodes, setEdges, connectionKind, errorText]);
   return { resolveWorkflowNode, buildFlowFromFrame, buildFlow, openEvermindBuild, loadEvermindTemplate, evermindBuild, setEvermindBuild };
 }

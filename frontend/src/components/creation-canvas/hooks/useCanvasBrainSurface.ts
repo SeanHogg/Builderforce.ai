@@ -174,7 +174,7 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
    */
   const replayBrainMessage = useCallback((message: BrainMessage) => {
     startCanvasTurnRef.current(message.content);
-  }, []);
+  }, [startCanvasTurnRef]);
   /**
    * Rate a Brain reply on this board.
    *
@@ -250,10 +250,6 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
-  }), [
-    brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt,
-    brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes,
-    openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, updateBrainDock,
-  ]);
+  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, setSelectedId, setSelectedIds, updateBrainDock]);
   return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies };
 }

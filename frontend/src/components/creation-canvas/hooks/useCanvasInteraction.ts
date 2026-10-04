@@ -31,12 +31,12 @@ export interface UseCanvasInteractionDeps {
   currentSnapshot: (viewport?: { x: number; y: number; zoom: number; }) => LocalCreationSnapshot;
   cursorRef: RefObject<{ x: number; y: number; } | null>;
   drawing: DrawingPreferences | null;
-  drawingPoints: RefObject<{ x: number; y: number; }[]>;
+  drawingPointsRef: RefObject<{ x: number; y: number; }[]>;
   edges: Edge[];
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
   framedBoardRef: RefObject<{ memberIdsOf: (frameId: string) => string[]; }>;
   guestLimit: GuestLimitRefusal | null;
-  hydrated: RefObject<boolean>;
+  hydratedRef: RefObject<boolean>;
   nodes: CanvasObject[];
   onNodesChange: OnNodesChange<CanvasObject>;
   openNodeInspector: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null, rect?: DOMRect) => void;
@@ -65,7 +65,7 @@ export interface UseCanvasInteractionDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, connectionStyle, currentSnapshot, cursorRef, drawing, drawingPoints, edges, flowRef, framedBoardRef, guestLimit, hydrated, nodes, onNodesChange, openNodeInspector, openNodePanel, persistSnapshot, persistence, placeAppendedRef, presenceLive, sendPresence, sessionId, setBrainDock, setConnectionStyleState, setDiagnosticsOpen, setEdges, setHistoryOpen, setInspectorFocus, setNodes, setNotice, setOutcomeMetricsOpen, setSelectedId, setSelectedIds, storageKey, t, timeline, title, viewportRef }: UseCanvasInteractionDeps) {
+export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, connectionStyle, currentSnapshot, cursorRef, drawing, drawingPointsRef, edges, flowRef, framedBoardRef, guestLimit, hydratedRef, nodes, onNodesChange, openNodeInspector, openNodePanel, persistSnapshot, persistence, placeAppendedRef, presenceLive, sendPresence, sessionId, setBrainDock, setConnectionStyleState, setDiagnosticsOpen, setEdges, setHistoryOpen, setInspectorFocus, setNodes, setNotice, setOutcomeMetricsOpen, setSelectedId, setSelectedIds, storageKey, t, timeline, title, viewportRef }: UseCanvasInteractionDeps) {
   // Derived here rather than passed in, so `drawingMode` narrows `drawing` the way it did in the component.
   const drawingMode = drawing !== null;
   // What a primary drag on empty board does, and how forgiving the board is about a
@@ -123,7 +123,7 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
       });
       return next;
     });
-  }, [setEdges]);
+  }, [setConnectionStyleState, setEdges]);
 
   /** Selecting the Brain Object reveals the dock instead of a second transcript. */
   const openBrainDock = useCallback(() => setBrainDock((current) => {
@@ -131,7 +131,7 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
     const next = { ...current, open: true };
     writeBrainDockPreferences(next);
     return next;
-  }), []);
+  }), [setBrainDock]);
 
   /**
    * A guest wall is the answer to something they just asked, and the answer — the
@@ -156,7 +156,7 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
     if (node.data.kind !== 'chat' && event.currentTarget instanceof Element) {
       openNodePanel(node.id, 'config', event.currentTarget.getBoundingClientRect());
     }
-  }, [openBrainDock, openNodeInspector, openNodePanel]);
+  }, [openBrainDock, openNodeInspector, openNodePanel, setDiagnosticsOpen, setHistoryOpen, setInspectorFocus, setOutcomeMetricsOpen, setSelectedId, setSelectedIds]);
   // XYFlow subscribes to this callback through its Zustand store. An inline
   // callback is a new subscription every render; immediately writing a fresh
   // `[]` back to React from that subscription can create an update-depth loop
@@ -197,32 +197,32 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
         .map((node) => ({ id: node.id, type: 'position' as const, position: { x: node.position.x + dx, y: node.position.y + dy } }));
     });
     onNodesChange(followers.length ? [...changes, ...followers] : changes);
-  }, [nodes, onNodesChange]);
+  }, [framedBoardRef, nodes, onNodesChange]);
   const onSelectionChange = useCallback(({ nodes: chosen }: { nodes: CreationFlowNode[] }) => {
     const ids = chosen.map((node) => node.id);
     setSelectedIds((current) => current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids);
     const nextId = ids.length === 1 ? ids[0]! : null;
     setSelectedId((current) => current === nextId ? current : nextId);
-  }, []);
+  }, [setSelectedId, setSelectedIds]);
   const clearSelection = useCallback(() => {
     setSelectedId((current) => current == null ? current : null);
     setSelectedIds((current) => current.length ? [] : current);
-  }, []);
+  }, [setSelectedId, setSelectedIds]);
   const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!flowRef.current) return;
     const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
     if (presenceLive) { cursorRef.current = point; sendPresence({ cursor: point }); }
-    if (drawingMode && drawingPoints.current.length) drawingPoints.current.push(point);
-  }, [drawingMode, presenceLive, sendPresence]);
+    if (drawingMode && drawingPointsRef.current.length) drawingPointsRef.current.push(point);
+  }, [cursorRef, drawingMode, drawingPointsRef, flowRef, presenceLive, sendPresence]);
   const onCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     // A stroke may START ANYWHERE, including on top of a card — that is what
     // makes annotation possible. While a tool is held the canvas is a drawing
     // surface, and the cards under it are things to mark up rather than things
     // to drag. (Dragging and connecting are disabled for the same reason.)
     if (!drawingMode || !canEdit || !flowRef.current) return;
-    drawingPoints.current = [flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY })];
+    drawingPointsRef.current = [flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY })];
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [canEdit, drawingMode]);
+  }, [canEdit, drawingMode, drawingPointsRef, flowRef]);
   /**
    * Commit the stroke.
    *
@@ -234,7 +234,7 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
    */
   const onCanvasPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!drawingMode) return;
-    const path = drawingPoints.current.splice(0);
+    const path = drawingPointsRef.current.splice(0);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const start = path[0];
     if (!start) return;
@@ -298,14 +298,14 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setSelectedId(node.id);
     setNotice(target ? t('noticeAnnotationAdded', { title: target.data.title }) : t('noticeSketchAdded'));
-  }, [drawing, drawingMode, nodes, setNodes, t]);
+  }, [drawing.color, drawing.tool, drawing.width, drawingMode, drawingPointsRef, nodes, placeAppendedRef, setNodes, setNotice, setSelectedId, t]);
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
     // A follower is watching this pan happen, not reading about it eight seconds later.
     if (presenceLive) sendPresence({ viewport });
-    if (persistence !== 'local' || !hydrated.current) return;
+    if (persistence !== 'local' || !hydratedRef.current) return;
     const snapshot = currentSnapshot(viewport);
     persistSnapshot(snapshot);
-  }, [edges, nodes, persistence, presenceLive, sendPresence, sessionId, storageKey, timeline, title]);
+  }, [currentSnapshot, hydratedRef, persistSnapshot, persistence, presenceLive, sendPresence, viewportRef]);
   return { openBrainDock, setConnectionStyle, onCanvasPointerDown, onCanvasPointerMove, onCanvasPointerUp, onCanvasNodesChange, onConnect, connectionProps, onNodeClick, onSelectionChange, clearSelection, onViewportChange, interactionProps };
 }

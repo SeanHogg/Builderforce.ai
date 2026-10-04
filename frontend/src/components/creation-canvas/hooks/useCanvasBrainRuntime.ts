@@ -24,7 +24,7 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
    * than state: recording an action must never re-render the canvas, or the act
    * of observing the board would change what is being observed.
    */
-  const journal = useRef(createCanvasJournal());
+  const journalRef = useRef(createCanvasJournal());
   /**
    * The tail of the journal, in the shape a defect carries it.
    *
@@ -50,8 +50,8 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
    */
   useEffect(() => {
     const stored = readStoredJournal(sessionId);
-    if (stored.length) journal.current.restore(stored);
-    const flush = () => writeStoredJournal(sessionId, journal.current.entries());
+    if (stored.length) journalRef.current.restore(stored);
+    const flush = () => writeStoredJournal(sessionId, journalRef.current.entries());
     const timer = window.setInterval(flush, 15_000);
     window.addEventListener('pagehide', flush);
     return () => {
@@ -62,7 +62,7 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
   }, [sessionId]);
 
   const recentJournalEvidence = useCallback((limit = 12) => {
-    const entries = journal.current.entries();
+    const entries = journalRef.current.entries();
     const notable = entries.filter((entry) => entry.ok === false || entry.durationMs == null);
     const recent = entries.slice(-limit);
     return [...notable, ...recent.filter((entry) => !notable.includes(entry))]
@@ -76,11 +76,11 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
   }, []);
   /** Effective inference facts accumulated by this mounted Creation Session.
    * Kept out of render state: observing completions must not remount the board. */
-  const brainRuntime = useRef<{ completions: CanvasAiCompletion[]; disabledModels: string[] }>({
+  const brainRuntimeRef = useRef<{ completions: CanvasAiCompletion[]; disabledModels: string[] }>({
     completions: [], disabledModels: [],
   });
   const recordBrainCompletion = useCallback((completion: CanvasAiCompletion) => {
-    brainRuntime.current.completions = [...brainRuntime.current.completions, completion].slice(-50);
+    brainRuntimeRef.current.completions = [...brainRuntimeRef.current.completions, completion].slice(-50);
   }, []);
   /**
    * What the LAST completion of the turn just finished actually ran on — the resolved
@@ -90,13 +90,13 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
    * share of all model calls — could rate nothing.
    */
   const lastTurnProvenance = useCallback((): { model?: string; tools?: string[] } => {
-    const last = brainRuntime.current.completions[brainRuntime.current.completions.length - 1];
+    const last = brainRuntimeRef.current.completions[brainRuntimeRef.current.completions.length - 1];
     if (!last?.resolvedModel) return {};
     return { model: last.resolvedModel, ...(last.toolCalls.length ? { tools: last.toolCalls } : {}) };
   }, []);
   const disableBrainModel = useCallback((model: string) => {
-    if (!model || brainRuntime.current.disabledModels.includes(model)) return;
-    brainRuntime.current.disabledModels = [...brainRuntime.current.disabledModels, model];
+    if (!model || brainRuntimeRef.current.disabledModels.includes(model)) return;
+    brainRuntimeRef.current.disabledModels = [...brainRuntimeRef.current.disabledModels, model];
   }, []);
-  return { journal, recentJournalEvidence, brainRuntime, disableBrainModel, recordBrainCompletion, lastTurnProvenance };
+  return { journalRef, recentJournalEvidence, brainRuntimeRef, disableBrainModel, recordBrainCompletion, lastTurnProvenance };
 }

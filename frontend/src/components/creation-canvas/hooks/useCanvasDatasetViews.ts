@@ -38,7 +38,7 @@ export function useCanvasDatasetViews({ canvasText, fmt, nodes, openNodeInspecto
     setSelectedId(result.object.id);
     openNodeInspector(result.object.id);
     setNotice(result.notice);
-  }, [openNodeInspector, setEdges, setNodes, setNotice]);
+  }, [openNodeInspector, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId]);
 
   /** The dependencies every materialisation takes: how to speak to the person, and
    *  how to build an object of a kind (the factory reads the object registry, which

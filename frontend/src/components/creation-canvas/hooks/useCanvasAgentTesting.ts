@@ -12,7 +12,7 @@ import type { CanvasNotices } from '@/lib/canvasNotices';
 import type { ChatModelSelection } from '@/components/ChatInput';
 
 export interface UseCanvasAgentTestingDeps {
-  brainRuntime: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
+  brainRuntimeRef: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
   canEdit: boolean;
   canvasNotices: CanvasNotices;
   describeTurnError: (error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => string;
@@ -29,7 +29,7 @@ export interface UseCanvasAgentTestingDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasAgentTesting({ brainRuntime, canEdit, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, placeAppendedRef, recordBrainCompletion, setEdges, setNodes, setNotice, t }: UseCanvasAgentTestingDeps) {
+export function useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, placeAppendedRef, recordBrainCompletion, setEdges, setNodes, setNotice, t }: UseCanvasAgentTestingDeps) {
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
     const authored = content.trim();
@@ -39,7 +39,7 @@ export function useCanvasAgentTesting({ brainRuntime, canEdit, canvasNotices, de
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [knowledge])]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: knowledge.id, target: agent.id, type: 'smoothstep', label: 'grounds', animated: true, data: { connectionKind: 'reference' } }]);
     setNotice(t('noticeKnowledgeConnected'));
-  }, [canEdit, nodes, persistence, setEdges, setNodes]);
+  }, [canEdit, nodes, placeAppendedRef, setEdges, setNodes, setNotice, t]);
 
   const runAgentTest = useCallback(async (agentId: string, testPrompt: string, expected: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -62,7 +62,7 @@ export function useCanvasAgentTesting({ brainRuntime, canEdit, canvasNotices, de
     try {
       const response = await runCreationCanvasAi({
         prompt: testPrompt.trim(), canvasSnapshot: snapshot, persistence, canvasActions: [], notices: canvasNotices,
-        disabledModels: brainRuntime.current.disabledModels,
+        disabledModels: brainRuntimeRef.current.disabledModels,
         onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
         ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
         routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
@@ -89,6 +89,6 @@ export function useCanvasAgentTesting({ brainRuntime, canEdit, canvasNotices, de
       setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: t('noticeAgentTestStatusError', { reason: message }) } } : node));
       setNotice(message);
     }
-  }, [describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, recordBrainCompletion, setEdges, setNodes, t]);
+  }, [brainRuntimeRef, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection.mode, modelSelection.model, nodes, persistence, recordBrainCompletion, setEdges, setNodes, setNotice, t]);
   return { addAgentKnowledge, runAgentTest };
 }

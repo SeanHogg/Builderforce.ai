@@ -26,7 +26,7 @@ export function useCanvasPresence({ currentUserId, flowRef, followingUserId, inR
   useEffect(() => {
     if (!followedViewport) return;
     void flowRef.current?.setViewport(followedViewport, { duration: 120 });
-  }, [followedViewport]);
+  }, [flowRef, followedViewport]);
 
   /**
    * Who "you" are in the live roster. A saved board keys the viewer by account; an

@@ -21,7 +21,7 @@ export interface UseCanvasFileIntakeDeps {
   canEdit: boolean;
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
   importLabel: CanvasTextTranslator;
-  journal: RefObject<CanvasJournal>;
+  journalRef: RefObject<CanvasJournal>;
   openBrainDock: () => void;
   placeAppendedRef: RefObject<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>;
   seatTeammate: (teammate: TeammatePayload, point?: { x: number; y: number; }) => void;
@@ -35,7 +35,7 @@ export interface UseCanvasFileIntakeDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canEdit, flowRef, importLabel, journal, openBrainDock, placeAppendedRef, seatTeammate, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, stageActive, t }: UseCanvasFileIntakeDeps) {
+export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, seatTeammate, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, stageActive, t }: UseCanvasFileIntakeDeps) {
   // The keyboard half of §3.3. Only the board actually on the stage answers —
   // hidden cached boards hear the same event and must not quietly seat someone
   // on a canvas nobody is looking at.
@@ -105,7 +105,7 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
       // being able to explain what happened — so the journal records each one,
       // with the kind it BECAME. "guide.htm → attachment" is the single line that
       // explains why the agent could not read it.
-      const importDone = journal.current.begin('user', 'file.import', `${file.name} · ${Math.max(1, Math.round(file.size / 1024))}KB`);
+      const importDone = journalRef.current.begin('user', 'file.import', `${file.name} · ${Math.max(1, Math.round(file.size / 1024))}KB`);
       try {
         const imported = await importCanvasFile(file, importLabel, attachmentBytesStrategy);
         const [first, ...rest] = imported.objects;
@@ -146,7 +146,7 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
     // Never overwrite something the person is part-way through typing.
     if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds, source } });
-  }, [attachmentBytesStrategy, canEdit, importLabel, openBrainDock, sessionId, setNodes, t]);
+  }, [attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t]);
 
   const attachCanvasArtifact = useCallback(
     (file: File) => addFilesToCanvas([file], undefined, 'composer_attachment'),

@@ -93,6 +93,6 @@ export function useCanvasTeammates({ addAtCenter, canEdit, nodesRef, placeAppend
     // Addressable immediately: the composer is seeded with the mention rather
     // than leaving the person to retype a name they just dragged in.
     setPrompt((current) => (current.includes(`@${teammate.name}`) ? current : `${current ? `${current.trimEnd()} ` : ''}@${teammate.name} `));
-  }, [addAtCenter, canEdit, setNodes, t]);
+  }, [addAtCenter, canEdit, nodesRef, placeAppendedRef, revealObjectRef, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t]);
   return { seatTeammate };
 }

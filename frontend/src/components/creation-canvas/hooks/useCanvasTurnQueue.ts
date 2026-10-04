@@ -40,7 +40,7 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
   exportRef.current = exportArtifact;
   const exportFromNode = useCallback((nodeId: string, action: CanvasExportAction) => {
     void exportRef.current(nodeId, action).then(setNotice);
-  }, []);
+  }, [setNotice]);
   const evaluateCanvasRef = useRef(evaluateCanvas);
   evaluateCanvasRef.current = evaluateCanvas;
   /**
@@ -89,7 +89,7 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
       correlationId: run.requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
       durationMs: performance.now() - run.startedAt, metadata: { stopped: true },
     }).catch(() => undefined);
-  }, [appendTimeline, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, t, thinking]);
+  }, [appendTimeline, canvasRunRef, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setThinking, t, thinking]);
   /**
    * THE ONE DOOR every user-initiated turn goes through — the composer, "Send
    * again" on a transcript message, an object handing Brain a request.
@@ -107,7 +107,7 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
       return;
     }
     evaluateCanvasRef.current(text);
-  }, [assistantGate.assistantAllowed, prompt, queuedTurns]);
+  }, [assistantGate.assistantAllowed, prompt, queuedTurns, setPrompt]);
   // eslint-disable-next-line react-hooks/refs
   startCanvasTurnRef.current = startCanvasTurn;
   return { startCanvasTurnRef, exportFromNode, startCanvasTurn, stopCanvasRun, queuedTurns };

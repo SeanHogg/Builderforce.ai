@@ -33,7 +33,7 @@ export function ActivityInspector({ sessionId, objectId, data, persistence, role
     } catch (error) {
       setStatus(faultText(error, t('noticeLoadActivityFailed')));
     }
-  }, [objectId, persistence, sessionId]);
+  }, [objectId, persistence, sessionId, t]);
 
   useEffect(() => { void reload(); }, [reload]);
 

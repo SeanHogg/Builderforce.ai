@@ -40,7 +40,7 @@ export function useCanvasHistory({ canEdit, checkpointName, edges, flowRef, node
     if (persistence !== 'server') { setLocalCheckpoints(localCheckpointSummaries(sessionId)); return; }
     void creationSessionsApi.history.list(sessionId).then((result) => setHistory(result.snapshots))
       .catch((error) => setNotice(faultText(error, t('noticeLoadHistoryFailed'))));
-  }, [persistence, sessionId]);
+  }, [persistence, sessionId, setHistory, setHistoryOpen, setLocalCheckpoints, setNotice, t]);
 
   const restoreLocalCheckpoint = useCallback((checkpointId: string) => {
     if (!canEdit) return;
@@ -52,7 +52,7 @@ export function useCanvasHistory({ canEdit, checkpointName, edges, flowRef, node
     setEdges(checkpoint.edges);
     setHistoryOpen(false);
     setNotice(t('noticeCheckpointRestored', { label: checkpoint.label }));
-  }, [canEdit, sessionId, setEdges, setNodes, t]);
+  }, [canEdit, sessionId, setEdges, setHistoryOpen, setLocalCheckpoints, setNodes, setNotice, t]);
 
   const restoreRevision = useCallback((targetRevision: number) => {
     if (!canEdit || persistence !== 'server') return;
@@ -64,7 +64,7 @@ export function useCanvasHistory({ canEdit, checkpointName, edges, flowRef, node
       setHistoryOpen(false);
       setNotice(t('noticeRevisionRestored', { revision: targetRevision }));
     }).catch((error) => setNotice(faultText(error, t('noticeRestoreRevisionFailed'))));
-  }, [canEdit, persistence, sessionId, setEdges, setNodes]);
+  }, [canEdit, persistence, sessionId, setEdges, setHistoryOpen, setNodes, setNotice, t]);
 
   /**
    * Name a checkpoint.
@@ -96,7 +96,7 @@ export function useCanvasHistory({ canEdit, checkpointName, edges, flowRef, node
       setNotice(t('noticeCheckpointSaved', { label }));
       return creationSessionsApi.history.list(sessionId);
     }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(faultText(error, t('noticeSaveCheckpointFailed'))));
-  }, [canEdit, checkpointName, edges, nodes, persistence, sessionId, t]);
+  }, [canEdit, checkpointName, edges, nodes, persistence, sessionId, setCheckpointName, setHistory, setLocalCheckpoints, setNotice, t]);
 
   const exportSession = useCallback(() => {
     const filename = `${safeDownloadName(title)}.builderforce-canvas.json`;
@@ -114,6 +114,6 @@ export function useCanvasHistory({ canEdit, checkpointName, edges, flowRef, node
       downloadJson(payload, filename);
       setNotice(t('noticeExportDownloaded'));
     }).catch((error) => setNotice(faultText(error, t('noticeExportFailed'))));
-  }, [edges, nodes, persistence, sessionId, timeline, title]);
+  }, [edges, flowRef, nodes, persistence, sessionId, setNotice, t, timeline, title, viewportRef]);
   return { exportSession, openHistory, createCheckpoint, restoreRevision, restoreLocalCheckpoint };
 }

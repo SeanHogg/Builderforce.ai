@@ -10,7 +10,7 @@ import { mapObjectFields } from '@/lib/canvasGeo';
 import type { CanvasActionContext } from './context';
 
 export function canvasExecutiveActions(ctx: CanvasActionContext): BrainAction[] {
-  const { canEdit, fmt, inFlightUseCaseId, persistence, stage, t } = ctx;
+  const { canEdit, fmt, inFlightUseCaseIdRef, persistence, stage, t } = ctx;
   return [{
     name: 'canvas_prepare_executive_use_case',
     description: 'Prepare one of the 48 migrated executive use cases for execution on this Canvas. Call this first when the prompt contains a legacy dotted use-case id. It returns the exact operation, completion condition, permitted existing Canvas outputs, and live evidence from the already-owning Builderforce domains. It never creates schema or mutates canonical domain data.',
@@ -28,7 +28,7 @@ export function canvasExecutiveActions(ctx: CanvasActionContext): BrainAction[] 
       // the args carry nothing usable — see `resolveExecutiveUseCaseId` for why
       // that is safe for this tool and not in general. A run died here on a
       // model typing `useCas1eId`, with the right value under the wrong key.
-      const resolvedId = resolveExecutiveUseCaseId(raw, inFlightUseCaseId.current);
+      const resolvedId = resolveExecutiveUseCaseId(raw, inFlightUseCaseIdRef.current);
       const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === resolvedId);
       const workflow = useCase ? cSuiteCanvasWorkflow(useCase) : null;
       const owner = useCase ? cSuiteCanvasOwner(useCase) : null;

@@ -44,7 +44,7 @@ function canvasActionConfirmer({ confirm, t }: Pick<CanvasGroupTurnContext, 'con
 
 /** Run the turn's model loops and resolve with the Brain's answer. */
 export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<string> {
-  const { appendTimeline, autoApplyRef, brainId, brainRuntime, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journal, memoryEnabled, modelSelection, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal, stage, t, timeline, title, turnSnapshot, turnToolCalls, turnUnanswered } = ctx;
+  const { appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef } = ctx;
   const confirmCanvasAction = canvasActionConfirmer(ctx);
   // Stop is honoured between every phase of the turn, not only inside the model
   // stream: a run interrupted while the invited agents are replying must not go
@@ -112,7 +112,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           guestTurnInput: request,
           persistence, canvasActions: persistence === 'server' ? [] : canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
-          disabledModels: brainRuntime.current.disabledModels,
+          disabledModels: brainRuntimeRef.current.disabledModels,
           onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
           onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
           participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
@@ -158,10 +158,10 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
     ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
     routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
     autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
-    disabledModels: brainRuntime.current.disabledModels,
+    disabledModels: brainRuntimeRef.current.disabledModels,
     onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
     onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
-    onUnanswered: (outcome) => { turnUnanswered.current = outcome; },
+    onUnanswered: (outcome) => { turnUnansweredRef.current = outcome; },
     // The canvas runner takes recall + learn only, and deliberately NOT the
     // memory-first answer tier the conversational Brain uses: a canvas turn is a
     // COMMAND ("add a node", "lay these out"), and replaying a stored answer for
@@ -184,7 +184,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
       // A real diagnostics report came in reading `canvas_read_snapshot
       // FAILED — error` twice with no way to find out why. The word
       // "error" is the one thing the reader already knows from `ok:false`.
-      journal.current.record({
+      journalRef.current.record({
         kind: 'tool', label: event.label, at: event.ts,
         durationMs: event.durationMs ?? 0,
         ...(event.isError === true ? { ok: false } : {}),
@@ -192,7 +192,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           ? safeTraceJson(event.result) || event.category
           : event.category,
       });
-      if (event.category === 'tool' && event.label) turnToolCalls.current.add(event.label);
+      if (event.category === 'tool' && event.label) turnToolCallsRef.current.add(event.label);
       setBrainTrace((current) => [...current, event]);
     },
     conversation: contributions > 0 ? groupConversation : historicalConversation,

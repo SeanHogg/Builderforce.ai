@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appModalityFor,
   applySearchReplace,
+  hasCodeWorkspace,
   resolveCanvasBuild,
   searchFileLines,
   summarizeWorkspace,
@@ -198,5 +200,21 @@ describe('the workspace write set', () => {
     expect([...CANVAS_BUILD_WORKSPACE_WRITE_TOOLS].sort()).toEqual([
       'canvas_create_build', 'canvas_edit_build_file', 'canvas_restore_build_file', 'canvas_write_build_file',
     ]);
+  });
+});
+
+describe('which app types a board can hold', () => {
+  it('knows the types that have a code workspace', () => {
+    expect(hasCodeWorkspace('designer')).toBe(true);
+    expect(hasCodeWorkspace('webmobile')).toBe(true);
+    expect(hasCodeWorkspace('evermind')).toBe(false);
+    expect(hasCodeWorkspace(undefined)).toBe(false);
+  });
+
+  it('gives a browser-held app a website when its type cannot run there, and a project any known type', () => {
+    expect(appModalityFor('mobile', false)).toBe('mobile');
+    expect(appModalityFor('evermind', false)).toBe('designer');
+    expect(appModalityFor('evermind', true)).toBe('evermind');
+    expect(appModalityFor('nonsense', true)).toBe('designer');
   });
 });

@@ -62,6 +62,10 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
   const runLabel = RUN_LABEL[runner.phase];
   const filesOpen = ws.railOpen && ws.rightTab === 'files';
   // The switcher's content, as a value: `apps` is a fresh array on every board change.
+  // The voice studio returns a fresh object every render; publishing on its identity would
+  // re-render the bar, and with it this workspace, forever. Only what Generate reads matters,
+  // and only for a type that has no live preview.
+  const voiceState = livePreview ? '' : JSON.stringify([ws.voice.busy, ws.voice.selectedCloneId, ws.voice.text]);
   const appChoices = JSON.stringify(apps.map((candidate) => [candidate.nodeId, candidate.title]));
 
   useCanvasSurfaceActions(() => ({
@@ -135,7 +139,7 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
         </div>
       </CanvasBarGroup>
     ),
-  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, ws.railOpen, ws.rightTab, ws.rightTabs, appChoices, app.nodeId, storageProjectId, store.id, ws.durable, livePreview, modalityDef.showRunButton, ws.voice, t]);
+  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, ws.railOpen, ws.rightTab, ws.rightTabs, appChoices, app.nodeId, storageProjectId, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
 
   return (
     <div className={styles.appWorkspace} data-testid="canvas-app-workspace">

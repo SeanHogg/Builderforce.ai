@@ -19,22 +19,22 @@ export interface UseCanvasDatasetImportDeps {
   datasetRowLimit: number;
   edges: Edge[];
   fmt: Formatter;
-  historyApplying: RefObject<boolean>;
-  historyBaseline: RefObject<string | null>;
-  hydrated: RefObject<boolean>;
+  historyApplyingRef: RefObject<boolean>;
+  historyBaselineRef: RefObject<string | null>;
+  hydratedRef: RefObject<boolean>;
   importLabel: CanvasTextTranslator;
-  journal: RefObject<CanvasJournal>;
+  journalRef: RefObject<CanvasJournal>;
   nodes: CanvasObject[];
   persistence: 'local' | 'server';
-  redoStack: RefObject<string[]>;
+  redoStackRef: RefObject<string[]>;
   selectedId: string | null;
   setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
-  undoStack: RefObject<string[]>;
+  undoStackRef: RefObject<string[]>;
 }
 
-export function useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt, historyApplying, historyBaseline, hydrated, importLabel, journal, nodes, persistence, redoStack, selectedId, setNodes, setNotice, t, undoStack }: UseCanvasDatasetImportDeps) {
+export function useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt, historyApplyingRef, historyBaselineRef, hydratedRef, importLabel, journalRef, nodes, persistence, redoStackRef, selectedId, setNodes, setNotice, t, undoStackRef }: UseCanvasDatasetImportDeps) {
   /**
    * How a dropped file's bytes survive past the import that could not read
    * them, so a later tool can still escalate it (OCR on a scan, a multimodal
@@ -100,31 +100,31 @@ export function useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt
     } catch (error) {
       setNotice(faultText(error, t('datasetImportFailed')));
     }
-  }, [canvasText, datasetRowLimit, importLabel, selectedId, setNodes, t]);
+  }, [canvasText, datasetRowLimit, fmt, importLabel, selectedId, setNodes, setNotice, t]);
 
   useEffect(() => {
-    if (!hydrated.current || historyApplying.current) return;
+    if (!hydratedRef.current || historyApplyingRef.current) return;
     const next = JSON.stringify({ nodes, edges });
     const handle = window.setTimeout(() => {
-      if (historyBaseline.current == null) historyBaseline.current = next;
-      else if (historyBaseline.current !== next) {
+      if (historyBaselineRef.current == null) historyBaselineRef.current = next;
+      else if (historyBaselineRef.current !== next) {
         // Every board mutation — palette, drag, delete, inspector edit, an AI
         // proposal being applied, an undo — settles HERE, so this is the one
         // place that can record what the person did without a dozen handlers
         // each remembering to. See `describeGraphChange`.
         try {
           const change = describeGraphChange(
-            JSON.parse(historyBaseline.current) as { nodes: CreationFlowNode[]; edges: Edge[] },
+            JSON.parse(historyBaselineRef.current) as { nodes: CreationFlowNode[]; edges: Edge[] },
             { nodes, edges },
           );
-          if (change) journal.current.record({ kind: 'user', label: change.label, detail: change.detail });
+          if (change) journalRef.current.record({ kind: 'user', label: change.label, detail: change.detail });
         } catch { /* the journal must never be able to break the history stack */ }
-        undoStack.current = [...undoStack.current.slice(-49), historyBaseline.current];
-        historyBaseline.current = next;
-        redoStack.current = [];
+        undoStackRef.current = [...undoStackRef.current.slice(-49), historyBaselineRef.current];
+        historyBaselineRef.current = next;
+        redoStackRef.current = [];
       }
     }, 500);
     return () => window.clearTimeout(handle);
-  }, [edges, nodes]);
+  }, [edges, historyApplyingRef, historyBaselineRef, hydratedRef, journalRef, nodes, redoStackRef, undoStackRef]);
   return { attachmentBytesStrategy, importDataset };
 }

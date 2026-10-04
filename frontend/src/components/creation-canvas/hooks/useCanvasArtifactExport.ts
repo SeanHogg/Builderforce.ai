@@ -194,6 +194,6 @@ export function useCanvasArtifactExport({ edges, nodes, setNodes, setNotice, t }
     } catch (error) {
       return error instanceof Error ? error.message : t('exportFailed');
     }
-  }, [nodes, setNodes, t]);
+  }, [edges, nodes, setNodes, setNotice, t]);
   return { exportArtifact };
 }

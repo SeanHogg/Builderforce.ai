@@ -10,7 +10,8 @@ import { embeddedAppsApi } from '@/lib/embeddedApps';
 import { newNode } from '../canvasNodeHelpers';
 import { addEdge, type Edge } from '@xyflow/react';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch } from '@/lib/canvasBuild';
-import { sessionApps } from '@/lib/canvasSessionApp';
+import { canvasAppLocalKey, LOCAL_APP_KEY_FIELD, sessionApps } from '@/lib/canvasSessionApp';
+import { discardLocalWorkspace } from '@/lib/workspace/localFileStore';
 import type { CanvasSessionAppActions } from './useCanvasSessionApp';
 import { faultText } from '@/lib/apiClient';
 import type { IdeProject } from '@/lib/types';
@@ -66,7 +67,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
       return;
     }
     setGameShipFocus(gameId);
-  }, [nodes, persistence, requireAccount, t]);
+  }, [nodes, persistence, requireAccount, setGameShipFocus, setNotice, t]);
 
   /**
    * Open the sell-it panel for one object, or for the whole board.
@@ -82,7 +83,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
       return;
     }
     setPublishFocus(nodeId ?? '');
-  }, [persistence, requireAccount, sessionId, t]);
+  }, [persistence, requireAccount, sessionId, setPublishFocus, t]);
 
   /**
    * Build → Stage → Live for one card.
@@ -97,7 +98,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
       return;
     }
     setReleaseFocus(nodeId ?? '');
-  }, [persistence, requireAccount, sessionId, t]);
+  }, [persistence, requireAccount, sessionId, setReleaseFocus, t]);
 
   /** The project a game ships into, and the game as it stands right now. */
   const gamePanelTarget = useMemo(() => {
@@ -133,7 +134,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
       setNotice(message);
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'failed', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt }).catch(() => undefined);
     });
-  }, [errorText, sessionId, setNodes, t]);
+  }, [errorText, sessionId, setNodes, setNotice, t]);
 
   /**
    * The canonical project an object acts against, PROVISIONING one when the board
@@ -176,7 +177,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setEdges((current) => addEdge({ id: crypto.randomUUID(), source: node.id, target: sourceId, type: connectionKind }, current));
     return project.id;
-  }, [connectionKind, edges, nodes, sessionId, setEdges, setNodes]);
+  }, [connectionKind, edges, nodes, placeAppendedRef, sessionId, setEdges, setNodes]);
 
   const publishWebsite = useCallback((websiteId?: string) => {
     const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
@@ -191,7 +192,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
         setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publish failed' } } : node));
         setNotice(message);
       });
-  }, [ensureCanvasProject, nodes, persistence, publishWebsiteTo, requireAccount, selectedNode, setNodes, t]);
+  }, [ensureCanvasProject, nodes, persistence, publishWebsiteTo, requireAccount, selectedNode, setNodes, setNotice, t]);
 
   /**
    * Open a Builder object's workspace — the App surface, on that object — giving it a
@@ -220,7 +221,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
       })
       .catch((error) => setNotice(faultText(error, t('build.createFailed'))))
       .finally(() => setCreatingBuild(false));
-  }, [creatingBuild, edges, nodes, openApp, persistence, provisionApp, selectedNode, t]);
+  }, [creatingBuild, edges, nodes, openApp, persistence, provisionApp, selectedNode, setCreatingBuild, setNotice, t]);
 
   /** Bind a Builder object to a legacy build record that already exists, instead of
    *  provisioning a second workspace for work that is already under way. */
@@ -228,29 +229,32 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...canvasBuildPatch(ide) } } : node));
     openApp(nodeId);
     setNotice(t('build.attached'));
-  }, [openApp, setNodes, t]);
+  }, [openApp, setNodes, setNotice, t]);
 
   /**
    * Delete the build record a Builder object provisioned, and return the object to
    * its unbound state. Removing the OBJECT deliberately leaves the workspace alone
    * — a build record is a first-class child of a Project and outlives the session
-   * that spawned it — so this is the explicit way to discard the files too.
+   * that spawned it — so this is the explicit way to discard the files too. A workspace
+   * held in this browser is discarded the same way, from the browser.
    */
   const deleteBuildWorkspace = useCallback(async (nodeId: string) => {
     const target = nodes.find((node) => node.id === nodeId);
     const binding = target ? canvasBuildBinding(target.data) : null;
-    if (!target || !binding) return;
+    const localKey = target && !binding ? canvasAppLocalKey(target.data) : null;
+    if (!target || (!binding && !localKey)) return;
     if (!(await confirm({ message: t('build.deleteConfirm', { title: target.data.title }), destructive: true }))) return;
     try {
-      await deleteIdeProject(binding.ideProjectId);
+      if (binding) await deleteIdeProject(binding.ideProjectId);
+      else if (localKey) await discardLocalWorkspace(localKey);
       setNodes((current) => current.map((node) => node.id === nodeId
-        ? { ...node, data: { ...node.data, resourceId: undefined, ideProjectId: undefined, storageProjectId: undefined, storageProjectPublicId: undefined, siteUrl: undefined, url: undefined, pathUrl: undefined, status: 'Not created' } }
+        ? { ...node, data: { ...node.data, resourceId: undefined, ideProjectId: undefined, storageProjectId: undefined, storageProjectPublicId: undefined, siteUrl: undefined, url: undefined, pathUrl: undefined, [LOCAL_APP_KEY_FIELD]: undefined, status: 'Not created' } }
         : node));
       setNotice(t('build.workspaceDeleted'));
     } catch (error) {
       setNotice(faultText(error, t('build.deleteWorkspaceFailed')));
     }
-  }, [confirm, nodes, setNodes, t]);
+  }, [confirm, nodes, setNodes, setNotice, t]);
 
   /**
    * Grow an authored Website object into a real codebase: add a Builder object
@@ -270,6 +274,6 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
     setSelectedId(build.id);
     setSelectedIds([build.id]);
     setNotice(t('build.addedFromWebsite'));
-  }, [edges, nodes, openBuild, setEdges, setNodes, t]);
+  }, [edges, layoutViewportRef, nodes, openBuild, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
   return { publishWebsite, openBuild, openReleasesPanel, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode, openGamePanel, openPublishPanel, gamePanelTarget };
 }

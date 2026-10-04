@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-10-04 — The canvas App surface IS the Studio workspace (frontend 2026.10.5)
+
+Pressing **App** on a canvas now opens the full Studio workspace in place. It replaces the old single-document preview frame. Operator decisions (2026-10-04): a guest runs a browser-held workspace that "Keep your work" promotes; existing code cards are converted silently; one primary app per session, with a switcher only when there is a second.
+
+- **One workspace, two layouts.** The hook `useBuilderWorkspace` holds the workspace's state. Three shared regions render it: `WorkspaceCenter`, `WorkspaceSidePanels` and `WorkspaceOverlays`. `BuilderWorkspace` is now the Studio layout. `CanvasAppWorkspace` is the canvas layout, and it puts its controls into the session bar through ONE `CanvasBarGroup`: Run, view tabs, Files/Terminal/Publish/Open in Studio, the app switcher and a local badge. `.appWorkspace` maps the shell tokens to the canvas palette, so it works in light and dark.
+- **A file-store port.** `WorkspaceFileStore` (`lib/workspace/`) has two adapters: `serverFileStore` and `localFileStore` (IndexedDB, single-flight load, in-memory fallback). `WorkspaceId = number | local:<key>` replaces the storage-project id in diagnostics, the command bus, file events, run, files, point-and-edit, search and the Brain's build tools. A local workspace offers Preview and Code, plus Files, and leaves out the panes that need a project.
+- **Session app.** `lib/canvasSessionApp.ts`:
+  - `sessionApps`, `primarySessionApp`, and ONE writer of the `appPrimary` flag (`withPrimaryApp`).
+  - Code cards are imported silently, hashed per card. The root `index.html` redirect is added only when the entry card itself is imported.
+  - `canvasAppLocalKey`.
+  - `useCanvasSessionApp` creates and provisions apps, imports cards, and promotes a local app to a durable project once the board is claimed.
+- **Guests build.** The contract moves the build tools (create, list, read, search, write, edit, diagnostics) to `GUEST_SAFE_CANVAS_TOOLS`. History and restore still need an account. `hasCodeWorkspace` and `appModalityFor` (`lib/canvasBuildTools.ts`) are the ONE rule for which types a browser-held app can be: the start picker, the inspector, the create tool and provisioning all use them.
+- **The build card.** The card and its inspector recognise a browser-held app ("In this browser"). The inspector opens it, and its delete control discards it. The inspector's list of existing projects is now derived during render instead of set inside an effect.
+- **Deep links.** `?chat` and `?ticket` links to a build go to Studio (`lib/studio/studioDeepLink.ts`). Plain build links open the canvas App surface. `buildChatId` and `buildTicket` are gone from `ActiveCanvasContext` and the session client.
+- **Retired.** The canvas build dialog (`CanvasBuildPanel`), `canvasApp`/`canvasAppDocument`/the frame sandbox, the runner CSS and the `.buildFocusBody` CSS, plus ten orphaned `creationCanvas.build.*` keys in all five catalogs.
+- **Shipped with:** release note migration `1194` (2026.10.5) and the blog post `your-canvas-app-is-a-real-project`, with update banners on `run-your-app-on-the-canvas` in all five locales.
+- **Still open (ROADMAP):** the App surface shows two Publish doors (the app's site publish and the board's release). This is blocked on an operator decision.
+
 ## ✅ RESOLVED 2026-10-04 — Image generation: four more free vendors, durable links, Studio's agent can make pictures, and a split + hardened diffusion engine
 
 - **More image vendors in the gateway cascade** (`api/src/application/llm/imageVendors/`). New modules: `cloudflare.ts` (Workers AI: Flux Schnell, SDXL Lightning, DreamShaper 8 LCM FREE; Leonardo Lucid Origin / Phoenix STANDARD), `huggingface.ts` (Inference Providers: Flux Schnell, SDXL; FREE), `pollinations.ts` (gen.pollinations.ai with an `sk_` secret key: Flux Schnell, Z-Image Turbo, DreamShaper LCM; FREE) and `googleai.ts` (Gemini 2.5 Flash Image STANDARD, Gemini 3 Pro Image PREMIUM, on the existing `GOOGLE_API_KEY`). Together and FluxAPI are kept. NVIDIA was left out at the operator's request.

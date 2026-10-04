@@ -63,7 +63,7 @@ export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persiste
       }
       : node));
     setNotice(t('noticeGateEvaluated', { score: verdict.score }));
-  }, [edges, nodes, setNodes, t]);
+  }, [edges, nodes, setNodes, setNotice, t]);
 
   /**
    * A CARD ACT — `invoice.issue`, `offer.hire`, `submission.mark`, and seven more.
@@ -91,7 +91,7 @@ export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persiste
     setNotice,
     persistence,
     t: canvasText,
-  }), [persistence, setEdges, setNodes, setNotice, canvasText]);
+  }), [setNodes, setEdges, setNotice, persistence, canvasText, nodesRef]);
   const runCardActOnObject = useCardActRunnerFor(cardActBoard);
 
   /**
@@ -142,6 +142,6 @@ export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persiste
     } catch (error) {
       setNotice(faultText(error, tPoll('publishFailed')));
     }
-  }, [persistence, requireAccount, setSurface, tPoll, updateNodeData]);
+  }, [nodesRef, persistence, requireAccount, setNotice, setSurface, tPoll, updateNodeData]);
   return { runPollAction, evaluateReleaseGate, runCardActOnObject, cardActBoard };
 }

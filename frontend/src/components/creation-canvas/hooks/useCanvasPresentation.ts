@@ -69,7 +69,7 @@ export function useCanvasPresentation({ canEdit, copySelection, deleteObjects, d
       ? { width: wrapper.clientWidth, height: wrapper.clientHeight }
       : { width: typeof window === 'undefined' ? 1_280 : window.innerWidth, height: typeof window === 'undefined' ? 720 : window.innerHeight };
     void flowRef.current?.setViewport(presentationViewport(step.bounds, screen), { duration: 420 });
-  }, [presentationSteps]);
+  }, [flowRef, flowWrapRef, presentationSteps, setPresentStep]);
 
   /**
    * Step relative, clamped. Wrapping past the last frame in front of a room reads as a
@@ -101,7 +101,7 @@ export function useCanvasPresentation({ canEdit, copySelection, deleteObjects, d
     const ids = selectionIds(); if (!ids.length) return;
     if (threeDControls) { threeDControls.focusObjects(ids); return; }
     void flowRef.current?.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.28, duration: 350 });
-  }, [selectionIds, threeDControls]);
+  }, [flowRef, selectionIds, threeDControls]);
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
@@ -133,6 +133,6 @@ export function useCanvasPresentation({ canEdit, copySelection, deleteObjects, d
       }
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
-  }, [canEdit, copySelection, deleteObjects, duplicateSelection, goToPresentationStep, movePresentation, pasteSelection, presentationSteps.length, redo, selectionIds, setNodes, setPresentMode, undo]);
+  }, [canEdit, copySelection, deleteObjects, duplicateSelection, goToPresentationStep, movePresentation, pasteSelection, presentModeRef, presentationSteps.length, redo, selectionIds, setNodes, setPresentMode, setSelectedId, setSelectedIds, undo]);
   return { presentationSteps, movePresentation, focusSelection };
 }

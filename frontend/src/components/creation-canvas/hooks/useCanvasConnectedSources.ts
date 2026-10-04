@@ -95,7 +95,7 @@ export function useCanvasConnectedSources({ canEdit, connectedAccountGate, layou
     };
     node.style = { width: 460, height: 560 };
     return { ok: true, node, read };
-  }, [nodes, stage, tSocial]);
+  }, [stage, tSocial]);
 
   /** The panel's "put it on the board" — a committed add, not a proposal. */
   const addSocialFeedToBoard = useCallback(async (filter: SocialFeedFilter) => {
@@ -105,7 +105,7 @@ export function useCanvasConnectedSources({ canEdit, connectedAccountGate, layou
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [built.node])]);
     setSelectedId(built.node.id); setSelectedIds([built.node.id]);
     setNotice(t('objectAdded', { title: built.node.data.title }));
-  }, [buildSocialFeedNode, canEdit, setNodes, t]);
+  }, [buildSocialFeedNode, canEdit, placeAppendedRef, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
 
   /**
    * A Miro board, landed on this canvas.
@@ -133,7 +133,7 @@ export function useCanvasConnectedSources({ canEdit, connectedAccountGate, layou
     setNotice(result.skipped.length
       ? tMiro('importedWithSkips', { name: board.name || board.id, count: placed.length, types: result.skipped.join(', ') })
       : tMiro('imported', { name: board.name || board.id, count: placed.length }));
-  }, [canEdit, nodes, setEdges, setNodes, t, tMiro]);
+  }, [canEdit, nodes, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t, tMiro]);
 
   /**
    * The pictures on this board, for the composer's attachment picker.
@@ -173,6 +173,6 @@ export function useCanvasConnectedSources({ canEdit, connectedAccountGate, layou
       node.style = { width: 440, height: 460 };
       return [...current, node];
     });
-  }, [canEdit, setNodes, t]);
+  }, [canEdit, layoutViewportRef, setNodes, setNotice, t]);
   return { socialAccountGate, buildSocialFeedNode, importMiroBoard, addSocialFeedToBoard, addSocialCampaignToBoard, boardMedia };
 }

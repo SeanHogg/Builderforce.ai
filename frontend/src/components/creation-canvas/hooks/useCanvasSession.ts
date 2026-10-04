@@ -19,19 +19,19 @@ import type { useTranslations } from 'next-intl';
 import type { CreationNodeData } from '../types';
 
 export interface UseCanvasSessionDeps {
-  currentGraph: RefObject<string>;
+  currentGraphRef: RefObject<string>;
   edges: Edge[];
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
-  hydrated: RefObject<boolean>;
-  lastSavedGraph: RefObject<string>;
+  hydratedRef: RefObject<boolean>;
+  lastSavedGraphRef: RefObject<string>;
   nodes: CanvasObject[];
   noteSaveState: () => void;
-  pendingViewport: RefObject<{ x: number; y: number; zoom: number; } | null>;
+  pendingViewportRef: RefObject<{ x: number; y: number; zoom: number; } | null>;
   persistence: 'local' | 'server';
-  revision: RefObject<number>;
-  saveInFlight: RefObject<boolean>;
+  revisionRef: RefObject<number>;
+  saveInFlightRef: RefObject<boolean>;
   sessionId: string;
-  sessionOpenCorrelation: RefObject<string>;
+  sessionOpenCorrelationRef: RefObject<string>;
   setAllMembers: Dispatch<SetStateAction<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[]>>;
   setBranchParentId: Dispatch<SetStateAction<string | null>>;
   setCurrentUserId: Dispatch<SetStateAction<string | null>>;
@@ -54,7 +54,7 @@ export interface UseCanvasSessionDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastSavedGraph, nodes, noteSaveState, pendingViewport, persistence, revision, saveInFlight, sessionId, sessionOpenCorrelation, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef }: UseCanvasSessionDeps) {
+export function useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef }: UseCanvasSessionDeps) {
   useEffect(() => {
     try {
       if (persistence === 'local') {
@@ -67,14 +67,14 @@ export function useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastS
           // The mode a guest armed in the homepage composer, carried across the
           // hand-off — a local canvas has no server row, so the snapshot IS the store.
           setSessionMode_(normalizeChatMode(saved.mode));
-          if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
+          if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewportRef.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
-        hydrated.current = true;
+        hydratedRef.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), persistence: 'local' } });
         return;
       }
       const openedAt = performance.now();
-      void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'started' }).catch(() => undefined);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelationRef.current, action: 'session.open', phase: 'started' }).catch(() => undefined);
       void Promise.all([creationSessionsApi.get(sessionId), creationSessionsApi.timeline.list(sessionId)]).then(([detail, transcript]) => {
         const { nodes: loadedNodes, edges: loadedEdges, rejected } = flowFromSession(detail);
         // The `declaredKind` invariant, said out loud. An object this build cannot
@@ -103,22 +103,22 @@ export function useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastS
           : null;
         if (restoredViewport) {
           viewportRef.current = restoredViewport;
-          pendingViewport.current = restoredViewport;
+          pendingViewportRef.current = restoredViewport;
           void flowRef.current?.setViewport(restoredViewport);
         }
-        revision.current = detail.session.canvasRevision ?? detail.session.revision ?? 1;
-        lastSavedGraph.current = JSON.stringify({ nodes: loadedNodes, edges: loadedEdges });
-        currentGraph.current = lastSavedGraph.current;
-        hydrated.current = true;
+        revisionRef.current = detail.session.canvasRevision ?? detail.session.revision ?? 1;
+        lastSavedGraphRef.current = JSON.stringify({ nodes: loadedNodes, edges: loadedEdges });
+        currentGraphRef.current = lastSavedGraphRef.current;
+        hydratedRef.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
-        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelationRef.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
         noteSaveState();
       }).catch((error) => {
-        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelationRef.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
         setNotice(faultText(error, t('noticeLoadSessionFailed')));
       }).finally(() => setLoadingSession(false));
-    } catch { hydrated.current = true; }
-  }, [persistence, sessionId, setEdges, setNodes]);
+    } catch { hydratedRef.current = true; }
+  }, [currentGraphRef, flowRef, hydratedRef, lastSavedGraphRef, noteSaveState, pendingViewportRef, persistence, revisionRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, viewportRef]);
 
   /**
    * Adopt the room's board. Used for the first load in a shared session and for
@@ -139,11 +139,11 @@ export function useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastS
    * its effect closed over them still sees the board as it is now.
    */
   const localBoardState = useCallback((): LocalBoardState => ({
-    saving: saveInFlight.current,
-    signature: currentGraph.current,
-    savedSignature: lastSavedGraph.current,
-    revision: revision.current,
-  }), []);
+    saving: saveInFlightRef.current,
+    signature: currentGraphRef.current,
+    savedSignature: lastSavedGraphRef.current,
+    revision: revisionRef.current,
+  }), [currentGraphRef, lastSavedGraphRef, revisionRef, saveInFlightRef]);
 
   /**
    * Put an adopted board on screen. The ONE place a collaborator's board lands,
@@ -160,22 +160,22 @@ export function useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastS
     setPersistedObjectIds(new Set(decision.board.nodes.map((node) => node.id)));
     setTitle(decision.title);
     setAllMembers(decision.members as CreationSessionDetail['members']);
-    revision.current = decision.revision;
-    lastSavedGraph.current = decision.signature;
-    currentGraph.current = decision.signature;
+    revisionRef.current = decision.revision;
+    lastSavedGraphRef.current = decision.signature;
+    currentGraphRef.current = decision.signature;
     // A collaborator on a newer deployment can save a kind this build does not
     // declare. Both of these doors used to drop those objects in silence while
     // the initial load, three hundred lines away, said so.
     if (decision.rejected.length) setNotice(t('objectsRejected', { count: decision.rejected.length, kinds: rejectedObjectKinds(decision.rejected) }));
     else setNotice(notice);
-  }, [setEdges, setNodes, setNotice, t]);
+  }, [currentGraphRef, lastSavedGraphRef, revisionRef, setAllMembers, setEdges, setNodes, setNotice, setPersistedObjectIds, setTitle, t]);
 
   const applyRoomSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
     // `noteExchanged` is NOT called here any more: the shared session moved into
     // `useSharedCanvasRoom`, and its `pull` records the exchange before it calls the
     // adopt callback — which is this function, and its only caller. Calling it here
     // would be the same fact written twice, and the binding no longer exists.
-    lastSavedGraph.current = boardSignature(snapshot);
+    lastSavedGraphRef.current = boardSignature(snapshot);
     setTitle(snapshot.title);
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
@@ -191,8 +191,8 @@ export function useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastS
     writeLocalCreationSession(sessionId, snapshot);
     // A joiner mounts on the starter board and this is the first real one it has
     // seen; the load gate opens here so the save debounce may start writing.
-    hydrated.current = true;
-  }, [sessionId, setEdges, setNodes]);
+    hydratedRef.current = true;
+  }, [hydratedRef, lastSavedGraphRef, sessionId, setEdges, setNodes, setTimeline, setTitle]);
 
   /**
    * The board as it stands, in the shape localStorage keeps it.
@@ -234,7 +234,7 @@ export function useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastS
   const evermindLiveEnabled = persistence === 'server' && evermindBindingKey !== '[]';
   useEffect(() => {
     if (!evermindLiveEnabled) setEvermindLiveByNodeId({});
-  }, [evermindLiveEnabled]);
+  }, [evermindLiveEnabled, setEvermindLiveByNodeId]);
   usePolledResource(async (signal) => {
       const bindings = JSON.parse(evermindBindingKey) as Array<{ nodeId: string; projectId: number }>;
       const byProject = new Map<number, Promise<[ProjectEvermindHead, ProjectEvermindContributions]>>();

@@ -45,7 +45,7 @@ export function useCanvasFiles({ edges, exportArtifact, flowRef, nodes, revealOb
     setSelectedId(nodeId);
     setSelectedIds([nodeId]);
     void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 });
-  }, [setSurface]);
+  }, [flowRef, setInspectorFocus, setSelectedId, setSelectedIds, setSurface]);
   revealObjectRef.current = revealObject;
 
   /**
@@ -80,6 +80,6 @@ export function useCanvasFiles({ edges, exportArtifact, flowRef, nodes, revealOb
     }
     const target = nodes.find((node) => node.id === file.nodeId);
     if (target) void exportArtifact(file.nodeId, defaultExportAction(target.data.kind)).then(setNotice);
-  }, [exportArtifact, nodes, t]);
+  }, [exportArtifact, nodes, setNotice, t]);
   return { revealObject, walkthroughRef, walkthroughStops, sessionFiles, downloadCanvasFile };
 }

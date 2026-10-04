@@ -154,7 +154,7 @@ export function useCanvasRenderedBoard({ activeAgentIds, canEdit, comparisonMode
     setInspectorFocus(null);
     setSelectedId(id);
     setSelectedIds([id]);
-  }, []);
+  }, [setInspectorFocus, setSelectedId, setSelectedIds]);
   /**
    * WHAT THE ROOM'S SESSION IS MADE FROM.
    *
@@ -191,12 +191,12 @@ export function useCanvasRenderedBoard({ activeAgentIds, canEdit, comparisonMode
    */
   const zoomInAction = useCallback(() => {
     if (threeDControls) threeDControls.zoomIn(); else void flowRef.current?.zoomIn({ duration: 180 });
-  }, [threeDControls]);
+  }, [flowRef, threeDControls]);
   const zoomOutAction = useCallback(() => {
     if (threeDControls) threeDControls.zoomOut(); else void flowRef.current?.zoomOut({ duration: 180 });
-  }, [threeDControls]);
+  }, [flowRef, threeDControls]);
   const fitViewAction = useCallback(() => {
     if (threeDControls) threeDControls.resetView(); else void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 });
-  }, [threeDControls]);
+  }, [flowRef, threeDControls]);
   return { zoomInAction, zoomOutAction, fitViewAction, framedBoard, roomSceneInput, threeDNodes, describeThreeD, selectThreeDObject, moveThreeDObjects, roomCreations, openRoomCreation };
 }

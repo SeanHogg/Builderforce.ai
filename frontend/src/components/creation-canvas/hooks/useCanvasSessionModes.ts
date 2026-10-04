@@ -33,7 +33,7 @@ export function useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessio
     autoApplyRef.current = enabled;
     setAutoApply(enabled);
     setBrainAutoApprove(enabled);
-  }, []);
+  }, [autoApplyRef, setAutoApply]);
 
   /**
    * Session MODE (migration 0409) — `chat` (author on the board and answer) or `work`
@@ -53,7 +53,7 @@ export function useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessio
     }
     void creationSessionsApi.update(sessionId, { mode: next })
       .catch(() => setNotice(t('modeSaveFailed')));
-  }, [persistence, sessionId, t]);
+  }, [persistence, sessionId, setNotice, setSessionMode_, t]);
 
   const memoryStorageKey = useMemo(() => {
     const chat = nodes.find((node) => node.data.kind === 'chat');
@@ -63,16 +63,16 @@ export function useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessio
 
   useEffect(() => {
     try { setMemoryEnabled(localStorage.getItem(memoryStorageKey) !== '0'); } catch { setMemoryEnabled(true); }
-  }, [memoryStorageKey]);
+  }, [memoryStorageKey, setMemoryEnabled]);
 
   const setMemoryMode = useCallback((enabled: boolean) => {
     setMemoryEnabled(enabled);
     try { localStorage.setItem(memoryStorageKey, enabled ? '1' : '0'); } catch { /* storage may be unavailable */ }
-  }, [memoryStorageKey]);
+  }, [memoryStorageKey, setMemoryEnabled]);
 
   useEffect(() => {
     try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
-  }, []);
+  }, [setFramePresets]);
 
   useEffect(() => {
     if (persistence !== 'server') return;
@@ -80,18 +80,18 @@ export function useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessio
       if (quota.limits.datasetRows === -1) setDatasetRowLimit(1_000_000);
       else setDatasetRowLimit(Math.max(1, quota.limits.datasetRows));
     }).catch(() => undefined);
-  }, [persistence]);
+  }, [persistence, setDatasetRowLimit]);
 
   useEffect(() => {
     if (!templateOpen || persistence !== 'server') return;
     void creationSessionsApi.templates.list().then((result) => setServerTemplates(result.templates)).catch(() => setServerTemplates([]));
-  }, [persistence, templateOpen]);
+  }, [persistence, setServerTemplates, templateOpen]);
 
   useEffect(() => {
     if (!shareOpen || persistence !== 'server' || sessionRole !== 'owner') return;
     void creationSessionsApi.invitations.list(sessionId)
       .then((result) => setPendingInvitations(result.invitations.filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)))
       .catch((error) => setNotice(faultText(error, t('noticeInvitationsFailed'))));
-  }, [persistence, sessionId, sessionRole, shareOpen]);
+  }, [persistence, sessionId, sessionRole, setNotice, setPendingInvitations, shareOpen, t]);
   return { setAutoApplyMode, setSessionMode, setMemoryMode };
 }

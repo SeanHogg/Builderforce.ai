@@ -96,6 +96,23 @@ export interface CanvasBuildToolsContext {
  */
 export const BUILDABLE_MODALITIES: readonly ProjectModality[] = ['designer', 'mobile', 'webmobile'];
 
+/** True for a modality with a code workspace, so one that can also run held in this browser. */
+export function hasCodeWorkspace(modality: unknown): modality is ProjectModality {
+  return BUILDABLE_MODALITIES.includes(modality as ProjectModality);
+}
+
+/**
+ * The modality an app is actually created with. A durable project can be any type; a
+ * workspace held in this browser (and the Brain's create tool) only one with code, and
+ * falls back to a website rather than refusing.
+ */
+export function appModalityFor(modality: unknown, durable: boolean): ProjectModality {
+  if (hasCodeWorkspace(modality)) return modality;
+  return durable && typeof modality === 'string' && MODALITIES.some((entry) => entry.id === modality)
+    ? modality as ProjectModality
+    : 'designer';
+}
+
 /** Files whose content is never useful to a model and costly to page through. */
 const SKIP_DIRECTORIES = ['node_modules/', 'dist/', '.git/'];
 
@@ -274,9 +291,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const args = raw as { title?: unknown; modality?: unknown };
         const title = typeof args.title === 'string' ? args.title.trim() : '';
         if (!title) return { error: 'A title is required.' };
-        const modality = BUILDABLE_MODALITIES.includes(args.modality as ProjectModality)
-          ? args.modality as ProjectModality
-          : 'designer';
+        const modality = appModalityFor(args.modality, false);
         try {
           const build = await ctx.createBuild({ title, modality });
           const files = await workspaceFiles(build.store).catch(() => []);

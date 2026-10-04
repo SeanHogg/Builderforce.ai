@@ -111,7 +111,7 @@ export function useCanvasNodePanels({ selectedId, setInspectorFocus }: UseCanvas
     setObjectPicker(null);
     setInspectorFocus(focus);
     setNodePanel({ nodeId, panel: null, box: rect ? boxOf(rect) : null, expanded: true });
-  }, []);
+  }, [setInspectorFocus]);
 
   /**
    * While the WIDE panel is open, it FOLLOWS selection rather than being left behind.
