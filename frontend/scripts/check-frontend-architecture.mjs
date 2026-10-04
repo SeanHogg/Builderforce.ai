@@ -13,6 +13,13 @@
  * a client-rooted page is a real first-paint cost — as does `check-root-closure`.
  * The changelog below is kept as history.
  *
+ * `oversizedProductionFiles` → `oversizedProductionFileLines` (2026-10-04). The set
+ * ratchet counted MEMBERSHIP, so a grandfathered file could grow without limit —
+ * `CreationCanvas.tsx` gained ~800 lines inside an unchanged set. Each grandfathered
+ * file now has a line CEILING: it fails on growth, and a shrink is printed as slack
+ * to lower. The same pass split `CreationCanvas.tsx`, `CreationNode.tsx` (out of the
+ * set), `BrainPanel.tsx` (out), `ChatInput.tsx` and `canvas/CanvasCommands.tsx`.
+ *
  * `oversizedProductionFiles` +1 (2026-08-20) — `lib/structured-data.ts` (995),
  * crossing 800 when the per-entity SEO pass added detail schemas for personas,
  * prompts and published agents beside the marketplace-skill one that was already
@@ -1060,9 +1067,18 @@ const directEngineConstruction = production
   .filter((file) => /^(?:app|components)\//.test(rel(file)))
   .filter((file) => /new\s+(?:WebGPUTrainer|MambaEngine|MambaModelProvider)\s*\(/.test(source.get(file)))
   .map(rel);
-const oversizedProductionFiles = production
-  .filter((file) => source.get(file).split(/\r?\n/).length > 800)
-  .map(rel);
+/**
+ * Files over 800 lines, WITH their size. Membership alone was the old ratchet, and it
+ * could not see a grandfathered file grow: `CreationCanvas.tsx` went from 13,857 to
+ * 14,642 lines while the set it sat in stayed exactly the same. So every grandfathered
+ * file now carries a CEILING (`oversizedProductionFileLines`): it may shrink — and the
+ * shrink is reported as slack to bank — but it may not grow.
+ */
+const lineCount = (file) => source.get(file).split(/\r?\n/).length;
+const oversizedProductionFileLines = Object.fromEntries(production
+  .filter((file) => lineCount(file) > 800)
+  .map((file) => [rel(file), lineCount(file)]));
+const oversizedProductionFiles = Object.keys(oversizedProductionFileLines);
 
 /**
  * CIRCULAR STATIC IMPORTS — the one ratchet here that guards a crash rather than
@@ -1216,11 +1232,28 @@ function ratchetSet(label, actual, allowed) {
 ratchetCount("client-rooted pages", 'useClientPages', clientPages.length, baseline.useClientPages);
 ratchetSet('presentation -> infrastructure', presentationInfrastructureImports, baseline.presentationInfrastructureImports);
 ratchetSet('presentation engine construction', directEngineConstruction, baseline.directEngineConstruction);
-ratchetSet('production files over 800 lines', oversizedProductionFiles, baseline.oversizedProductionFiles);
+ratchetSet('production files over 800 lines', oversizedProductionFiles, Object.keys(baseline.oversizedProductionFileLines));
+/** Ceilings this tree has come in under — reported like `slack`, never failed. */
+const lineSlack = [];
+for (const [file, lines] of Object.entries(oversizedProductionFileLines)) {
+  const ceiling = baseline.oversizedProductionFileLines[file];
+  if (ceiling == null) continue; // a NEW oversized file — the set ratchet above already failed it
+  if (lines > ceiling) violations.push(`production file grew: ${file} is ${lines} lines, ceiling ${ceiling} — split it, do not raise the ceiling`);
+  else if (lines < ceiling) lineSlack.push(`    "${file}": ${lines}`);
+}
+for (const file of Object.keys(baseline.oversizedProductionFileLines)) {
+  if (!(file in oversizedProductionFileLines)) lineSlack.push(`    "${file}": now under 800 lines — delete the entry`);
+}
 ratchetSet('circular static imports', importCycles, baseline.importCycles);
 
 /** Names the baselines this tree has outgrown downward, and the edit that closes them. */
 function reportSlack() {
+  if (lineSlack.length) {
+    console.error(
+      `\n   Grandfathered files that SHRANK — lower their ceilings in\n` +
+      `   scripts/.frontend-architecture-baseline.json → oversizedProductionFileLines:\n\n${lineSlack.join('\n')}\n`,
+    );
+  }
   if (slack.size === 0) return;
   const lines = [...slack].map(([key, actual]) => `    "${key}": ${actual}`).join('\n');
   console.error(

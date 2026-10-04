@@ -91,21 +91,31 @@ function DiagramCanvas({ graph, title }: { graph: DiagramGraph; title: string })
  *
  * No editor embed and no network in either path.
  */
+type ParsedDiagram = { graph: DiagramGraph | null; unreadable: boolean };
+const NOT_PARSED: ParsedDiagram = { graph: null, unreadable: false };
+
 export function DiagramBody({ data }: CreationBodyProps) {
   const t = useTranslations('creationCanvas.node');
   const diagram = canvasDiagram(data);
   const source = diagram?.source ?? '';
   const format = diagram?.format;
   const notation = diagramNotation(format);
-  const [graph, setGraph] = useState<DiagramGraph | null>(null);
-  const [unreadable, setUnreadable] = useState(false);
+  const parsesGraph = !!format && notation?.renderer === 'graph';
+  const [{ graph, unreadable }, setParsed] = useState<ParsedDiagram>(NOT_PARSED);
+  // Leaving the graph renderer (a mermaid source, or no diagram at all) clears the last
+  // parse during render rather than in the effect: the effect only ever sets state from
+  // the parse's own callback.
+  const [parsedAsGraph, setParsedAsGraph] = useState(parsesGraph);
+  if (parsedAsGraph !== parsesGraph) {
+    setParsedAsGraph(parsesGraph);
+    if (!parsesGraph) setParsed(NOT_PARSED);
+  }
   useEffect(() => {
-    if (!format || notation?.renderer !== 'graph') { setGraph(null); setUnreadable(false); return; }
+    if (!format || notation?.renderer !== 'graph') return;
     let cancelled = false;
     void readDiagramSource(format, source).then((parsed) => {
       if (cancelled) return;
-      setGraph(parsed);
-      setUnreadable(!parsed);
+      setParsed({ graph: parsed, unreadable: !parsed });
     });
     return () => { cancelled = true; };
   }, [format, notation?.renderer, source]);

@@ -28,6 +28,7 @@ import type { BrainPanelProps } from '../panel/brainPanelTypes';
 import { useBrainProjectFilter } from './useBrainProjectFilter';
 import { useBrainProjects } from './useBrainProjects';
 import { useBrainChatStart } from './useBrainChatStart';
+import { useBrainChatHistory } from './useBrainChatHistory';
 import { useBrainAccountPreferences } from './useBrainAccountPreferences';
 import { useBrainPersona } from './useBrainPersona';
 import { useBrainTicketables } from './useBrainTicketables';
@@ -41,6 +42,7 @@ import { useBrainTimelineBindings } from './useBrainTimelineBindings';
 import { useBrainChatRowActions } from './useBrainChatRowActions';
 import { useBrainNewProject } from './useBrainNewProject';
 import { useBrainCaptureExecution } from './useBrainCaptureExecution';
+import { useBrainPanelBanners } from './useBrainPanelBanners';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -70,7 +72,6 @@ export function useBrainPanelController({
 
   const { filterProjectId, setFilterProjectId } = useBrainProjectFilter();
   const { projects, setProjects, projectName } = useBrainProjects();
-  const [searchQuery, setSearchQuery] = useState('');
   /**
    * Docked drawer sections. Chat history used to be a collapsible strip stacked
    * ABOVE the conversation, which squeezed the thread in a ~440px drawer and hid
@@ -171,7 +172,6 @@ export function useBrainPanelController({
     projects,
     autoApprove,
     effort: prefs.effort,
-    thinking: prefs.thinking,
     webBrowsing: prefs.webBrowsing,
   });
 
@@ -269,17 +269,10 @@ export function useBrainPanelController({
     chats, conv, isPage, initialChatId, initialPrompt, initialTicket, pinnedProjectId, viewingProjectId, showChatTab,
   });
 
-  const filteredChats = useMemo(
-    () => (searchQuery.trim()
-      ? chats.chats.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
-      : chats.chats),
-    [chats.chats, searchQuery],
-  );
-
   const rows = useBrainChatRowActions({ chats, isPage, showChatTab });
   const newProject = useBrainNewProject({ chats, setProjects });
   const timeline = useBrainTimelineBindings({
-    conv, chats, recipient, pinnedProjectId, toolSpecs, runTool, bumpParticipants,
+    conv, chats, recipient, toolSpecs, runTool, bumpParticipants,
   });
 
   // Messages the user typed while a run was still streaming. Held by the shared
@@ -309,7 +302,7 @@ export function useBrainPanelController({
     // the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
     const ok = await conv.send(text, { addressedTo: recipient });
     if (!ok) setInput((cur) => cur || text);
-  }, [assistantGate.assistantAllowed, input, conv, queuedTurns, recipient]);
+  }, [assistantGate.assistantAllowed, input, setInput, conv, queuedTurns, recipient]);
 
   const { captureExecution, captureState } = useBrainCaptureExecution({
     chats,
@@ -326,23 +319,13 @@ export function useBrainPanelController({
     ticketAdapter,
   });
 
-  const error = chats.error || conv.error;
-  // The banner surfaces either source; dismissing must clear whichever is set.
-  const dismissError = useCallback(() => { chats.setError(''); conv.clearError(); }, [chats, conv]);
+  const { error, dismissError, showProviderCapBanner, dismissProviderCap } = useBrainPanelBanners({ chats, conv });
 
-  // Provider usage-cap banner — shown when a BYO provider's key hit its billing
-  // limit this run. Keyed on the provider set so a new provider re-shows it.
-  const [dismissedProviderCap, setDismissedProviderCap] = useState('');
-  const providerCapKey = conv.providerCap.join(',');
-  const showProviderCapBanner = conv.providerCap.length > 0 && dismissedProviderCap !== providerCapKey;
-  const dismissProviderCap = useCallback(() => setDismissedProviderCap(providerCapKey), [providerCapKey]);
-
-  // Unread messages sitting in chats OTHER than the open one — the reason to go
-  // look at history at all, surfaced on the tab so it isn't a blind switch.
-  const historyUnread = useMemo(
-    () => chats.chats.reduce((n, c) => n + (c.id === chats.activeChatId ? 0 : (attn.chatUnread[c.id] ?? 0)), 0),
-    [chats.chats, chats.activeChatId, attn.chatUnread],
-  );
+  const { searchQuery, setSearchQuery, filteredChats, historyUnread } = useBrainChatHistory({
+    chatList: chats.chats,
+    activeChatId: chats.activeChatId,
+    chatUnread: attn.chatUnread,
+  });
 
   return {
     // Surface props

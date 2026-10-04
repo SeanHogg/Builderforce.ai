@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { selectPendingAskUser, askUserAnchorId, type useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { parseSuggestedActions, type useBrainActions, type useBrainChats, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
-import { BrainMessageActions } from '../panel/BrainMessageActions';
 
 /**
  * Everything the shared <BrainTimeline> and the pending-question banner are
@@ -16,11 +15,10 @@ import { BrainMessageActions } from '../panel/BrainMessageActions';
  * otherwise the memo never skips and the transcript re-parses markdown on
  * every keystroke/streaming token (mirrors the VS Code webview App.tsx).
  */
-export function useBrainTimelineBindings({ conv, chats, recipient, pinnedProjectId, toolSpecs, runTool, bumpParticipants }: {
+export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, runTool, bumpParticipants }: {
   conv: ReturnType<typeof useBrainConversation>;
   chats: ReturnType<typeof useBrainChats>;
   recipient: ReturnType<typeof useRecipientChoice>['recipient'];
-  pinnedProjectId: number | null;
   toolSpecs: ReturnType<typeof useBrainActions>['toolSpecs'];
   runTool: ReturnType<typeof useBrainActions>['runTool'];
   /** Re-reads the chat's participant roster (after an invite/remove). */
@@ -54,8 +52,12 @@ export function useBrainTimelineBindings({ conv, chats, recipient, pinnedProject
   // recomputes as the user types, so a callback that depends on them would change
   // identity every keystroke and defeat <BrainTimeline>'s memo. Read the latest
   // values from a ref instead, keeping the callbacks below referentially stable.
-  const timelineCtxRef = useRef({ conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined, capability: chats.activeChat?.capability ?? null, chatTitle: chats.activeChat?.title });
-  timelineCtxRef.current = { conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined, capability: chats.activeChat?.capability ?? null, chatTitle: chats.activeChat?.title };
+  // The ref is only READ by event handlers, so it is refreshed after commit (a layout
+  // effect, ahead of any user event) rather than written during render.
+  const timelineCtxRef = useRef({ conv, chats, recipient });
+  useLayoutEffect(() => {
+    timelineCtxRef.current = { conv, chats, recipient };
+  });
   const onAnswerTimelineQuestion = useCallback((answer: string) => {
     const { conv: c, recipient: r } = timelineCtxRef.current;
     void c.send(answer, { addressedTo: r });
@@ -102,20 +104,6 @@ export function useBrainTimelineBindings({ conv, chats, recipient, pinnedProject
     (text: string) => <ChatMessageContent content={parseSuggestedActions(text).content} />,
     [],
   );
-  const renderTimelineAssistantActions = useCallback((msg: BrainMessage) => {
-    const { conv: c, projectId, capability, chatTitle } = timelineCtxRef.current;
-    return (
-      <BrainMessageActions
-        msg={msg}
-        conv={c}
-        projectId={projectId}
-        capability={capability}
-        chatTitle={chatTitle}
-        suggestions={parseSuggestedActions(msg.content).actions}
-        onRunSuggestion={(prompt) => { void c.send(prompt); }}
-      />
-    );
-  }, []);
   const onTicketsChanged = useCallback(() => {
     const { conv: c, chats: ch } = timelineCtxRef.current;
     void ch.reload();
@@ -134,7 +122,6 @@ export function useBrainTimelineBindings({ conv, chats, recipient, pinnedProject
     revealPendingQuestion,
     renderTimelineMessage,
     renderTimelineStreaming,
-    renderTimelineAssistantActions,
     onTicketsChanged,
   };
 }

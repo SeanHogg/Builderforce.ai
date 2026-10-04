@@ -1,8 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { useBrainChats } from '@/lib/brain';
 import { brain } from '@/lib/builderforceApi';
 import { projectBrainMemoryHooks } from '@/lib/brainMemoryHooks';
 import { MEMORY_KEY } from '../panel/brainPanelUtils';
+
+/** The per-chat switch is only ever written by this panel — nothing to subscribe to. */
+function subscribeNever() {
+  return () => {};
+}
+
+/** Default ON; a stored '0' is the only OFF. Unreadable storage ⇒ ON. */
+function readStoredMemoryEnabled(chatId: number | null): boolean {
+  if (chatId == null) return true;
+  try {
+    const v = window.localStorage.getItem(MEMORY_KEY(chatId));
+    return v == null ? true : v !== '0';
+  } catch { return true; }
+}
+
+const memoryEnabledServerSnapshot = () => true;
 
 /**
  * Project-Evermind memory for the active chat: the recall/learn hooks, the
@@ -13,15 +29,16 @@ export function useBrainChatMemory({ chats, pinnedProjectId, viewingProjectId }:
   pinnedProjectId: number | null;
   viewingProjectId: number | null;
 }) {
+  const { activeChatId, activeChat, reload } = chats;
   // Project-Evermind memory hooks: recall the active chat's project learnings
   // before answering (grounding the reply + surfacing recall/learn/reconcile
   // steps). Bound to the chat's project (falling back to the pinned/viewing one a
   // new chat will be created under, so learning + recall stay on the same model).
-  const evermindProjectId = chats.activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null;
+  const evermindProjectId = activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null;
   // Chat-tiered recall: this conversation's own memories first, the project's after.
   const evermind = useMemo(
-    () => projectBrainMemoryHooks(evermindProjectId, chats.activeChatId),
-    [evermindProjectId, chats.activeChatId],
+    () => projectBrainMemoryHooks(evermindProjectId, activeChatId),
+    [evermindProjectId, activeChatId],
   );
 
   // Self-heal Evermind learning scope (web parity with the VS Code webview). The server's
@@ -34,35 +51,46 @@ export function useBrainChatMemory({ chats, pinnedProjectId, viewingProjectId }:
   const adoptedProjectRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const pid = pinnedProjectId ?? viewingProjectId ?? null;
-    const chatId = chats.activeChatId;
-    const active = chats.activeChat;
+    const chatId = activeChatId;
+    const active = activeChat;
     if (chatId == null || pid == null || active == null || active.projectId != null) return;
     if (adoptedProjectRef.current.has(chatId)) return;
     adoptedProjectRef.current.add(chatId);
     brain.updateChat(chatId, { projectId: pid })
-      .then(() => chats.reload())
+      .then(() => reload())
       .catch(() => { adoptedProjectRef.current.delete(chatId); });
-  }, [chats.activeChatId, chats.activeChat, chats.reload, pinnedProjectId, viewingProjectId]);
+  }, [activeChatId, activeChat, reload, pinnedProjectId, viewingProjectId]);
 
   // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks
   // (recall + learn). Default ON; persisted per-chat in localStorage so it sticks
   // across reloads. Turning it off makes the chat a scratch space that neither
   // recalls nor writes back to the project's learned memory.
-  const [memoryEnabled, setMemoryEnabled] = useState(true);
-  useEffect(() => {
-    const cid = chats.activeChatId;
-    if (cid == null) { setMemoryEnabled(true); return; }
-    try {
-      const v = window.localStorage.getItem(MEMORY_KEY(cid));
-      setMemoryEnabled(v == null ? true : v !== '0');
-    } catch { setMemoryEnabled(true); }
-  }, [chats.activeChatId]);
+  //
+  // The stored value is READ, not mirrored into state by an effect: an external-store
+  // read whose server snapshot is the default (ON), so SSR and hydration render ON and
+  // the client then shows the stored choice — the same two frames the old effect gave.
+  const storedMemoryEnabled = useSyncExternalStore(
+    subscribeNever,
+    () => readStoredMemoryEnabled(activeChatId),
+    memoryEnabledServerSnapshot,
+  );
+  // A toggle this session wins over the stored value — it must hold even when storage
+  // is blocked and the write below fails. Dropped while rendering whenever the chat
+  // changes (React's "adjust state when a prop changes"), so every chat re-reads its
+  // own stored choice exactly as before.
+  const [memoryOverride, setMemoryOverride] = useState<boolean | null>(null);
+  const [overrideChatId, setOverrideChatId] = useState(activeChatId);
+  if (overrideChatId !== activeChatId) {
+    setOverrideChatId(activeChatId);
+    setMemoryOverride(null);
+  }
+  const memoryEnabled = memoryOverride ?? storedMemoryEnabled;
   const toggleMemory = useCallback((on: boolean) => {
-    setMemoryEnabled(on);
-    const cid = chats.activeChatId;
+    setMemoryOverride(on);
+    const cid = activeChatId;
     if (cid == null) return;
     try { window.localStorage.setItem(MEMORY_KEY(cid), on ? '1' : '0'); } catch { /* storage blocked */ }
-  }, [chats.activeChatId]);
+  }, [activeChatId]);
   // Gate the Evermind hooks on the per-chat switch — off ⇒ no recall/learn this chat.
   const gatedEvermind = memoryEnabled ? evermind : undefined;
 

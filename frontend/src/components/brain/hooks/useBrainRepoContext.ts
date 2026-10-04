@@ -24,11 +24,24 @@ export function useBrainRepoContext({ repoProjectId, activeChatId, attach }: {
   const [projectRepos, setProjectRepos] = useState<ProjectRepository[]>([]);
   const [linkedTaskId, setLinkedTaskId] = useState<number | null>(null);
   const [repoPickerOpen, setRepoPickerOpen] = useState(false);
+  // Nothing in scope ⇒ nothing to list. Cleared while rendering, the moment the
+  // project / chat goes away (React's "adjust state when a prop changes"), so the
+  // effects below only ever set state from their fetches.
+  const [prevRepoProjectId, setPrevRepoProjectId] = useState(repoProjectId);
+  if (prevRepoProjectId !== repoProjectId) {
+    setPrevRepoProjectId(repoProjectId);
+    if (repoProjectId == null) setProjectRepos([]);
+  }
+  const [prevChatId, setPrevChatId] = useState(activeChatId);
+  if (prevChatId !== activeChatId) {
+    setPrevChatId(activeChatId);
+    if (activeChatId == null) setLinkedTaskId(null);
+  }
 
   // Repos are fetched from the cached list endpoint; the picker only appears when
   // at least one repo is connected.
   useEffect(() => {
-    if (repoProjectId == null) { setProjectRepos([]); return; }
+    if (repoProjectId == null) return;
     let live = true;
     reposApi.list(repoProjectId)
       .then((r) => { if (live) setProjectRepos(r); })
@@ -42,7 +55,7 @@ export function useBrainRepoContext({ repoProjectId, activeChatId, attach }: {
   // linked to at most one task in practice; take the first live task link.
   useEffect(() => {
     const cid = activeChatId;
-    if (cid == null) { setLinkedTaskId(null); return; }
+    if (cid == null) return;
     let live = true;
     brain.listChatTickets(cid)
       .then((links) => {

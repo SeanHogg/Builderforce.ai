@@ -1,7 +1,8 @@
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
-import { isStepMessage, type SuggestedAction, type useBrainConversation } from '@/lib/brain';
+import { isStepMessage, parseSuggestedActions, type SuggestedAction, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
+import { useBrainPanel } from './BrainPanelContext';
 
 export function BrainMessageActions({ msg, conv, projectId, capability, chatTitle, suggestions, onRunSuggestion }: {
   msg: BrainMessage;
@@ -67,4 +68,29 @@ export function BrainMessageActions({ msg, conv, projectId, capability, chatTitl
       />
     </>
   );
+}
+
+/**
+ * A reply's action row wired to the panel: reads the live conversation and the chat's
+ * project / capability / title from the panel controller, so the timeline's render
+ * prop can stay one stable module-level function (see `renderBrainAssistantActions`).
+ */
+function BrainPanelMessageActions({ msg }: { msg: BrainMessage }) {
+  const { conv, chats, pinnedProjectId } = useBrainPanel();
+  return (
+    <BrainMessageActions
+      msg={msg}
+      conv={conv}
+      projectId={chats.activeChat?.projectId ?? pinnedProjectId ?? undefined}
+      capability={chats.activeChat?.capability ?? null}
+      chatTitle={chats.activeChat?.title}
+      suggestions={parseSuggestedActions(msg.content).actions}
+      onRunSuggestion={(prompt) => { void conv.send(prompt); }}
+    />
+  );
+}
+
+/** <BrainTimeline>'s `renderAssistantActions` — module scope, so its identity never changes. */
+export function renderBrainAssistantActions(msg: BrainMessage) {
+  return <BrainPanelMessageActions msg={msg} />;
 }

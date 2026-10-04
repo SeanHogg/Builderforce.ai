@@ -19,9 +19,16 @@ export function useBrainRunTrace(activeChatId: number | null, liveTrace: BrainTr
   // survive a reload. Shown when there's no live trace this session (a live run
   // repopulates conv.trace, which then wins).
   const [persistedTrace, setPersistedTrace] = useState<BrainTraceEvent[]>([]);
+  // No chat ⇒ no history. Cleared while rendering, the moment the chat goes away
+  // (React's "adjust state when a prop changes"), not by an effect.
+  const [prevChatId, setPrevChatId] = useState(activeChatId);
+  if (prevChatId !== activeChatId) {
+    setPrevChatId(activeChatId);
+    if (activeChatId == null) setPersistedTrace([]);
+  }
   useEffect(() => {
     const cid = activeChatId;
-    if (cid == null) { setPersistedTrace([]); return; }
+    if (cid == null) return;
     let live = true;
     brain.getChatTrace(cid)
       .then((rows) => { if (live) setPersistedTrace(rows.map(traceRowToEvent)); })

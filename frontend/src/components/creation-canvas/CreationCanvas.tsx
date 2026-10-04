@@ -1,48 +1,22 @@
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { usePolledResource } from '@/hooks/usePolledResource';
-import {
-  addEdge,
-  Background,
-  BackgroundVariant,
-  MarkerType,
-  ReactFlow,
-  ReactFlowProvider,
-  useEdgesState,
-  useNodesState,
-  type Connection,
-  type Edge,
-  type Node,
-  type NodeMouseHandler,
-  type NodeTypes,
-  type ReactFlowInstance,
-} from '@xyflow/react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Background, BackgroundVariant, MarkerType, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Edge, type Node, type NodeTypes, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, DisclosureIcon, MoreActionsIcon, ProveIdeaIcon, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { CanvasNodeFace } from '@/components/canvas/CanvasNodeFace';
 import { useCanvasStandupAction } from './useCanvasStandupAction';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
-import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
-import { DEFAULT_CANVAS_PHASE, readCanvasPhase, surfacesForPhase, writeCanvasPhase, type CanvasPhase } from '@/lib/canvasPhases';
-import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
+import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { canvasChromeShows } from '@/lib/canvasChrome';
 import { canvasApp } from '@/lib/canvasApp';
-import { isTypingTarget } from '@/lib/keyboardTarget';
-import { canvasNodeMessages, type CanvasNodePanelId, canvasNodeSettingsPanel } from '@/lib/canvasNodeAffordances';
+import { canvasNodeMessages, canvasNodeSettingsPanel } from '@/lib/canvasNodeAffordances';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
-import {
-  DEFAULT_CANVAS_PROMPT_PLACEMENT,
-  readCanvasPromptPlacement,
-  toggledCanvasPromptPlacement,
-  writeCanvasPromptPlacement,
-  type CanvasPromptPlacement,
-} from '@/lib/canvasPromptPlacement';
+import { toggledCanvasPromptPlacement, type CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import { CanvasNodePanel } from './CanvasNodePanel';
 import { CanvasObjectPicker } from './CanvasObjectPicker';
-import { type ConnectionStyle, DEFAULT_CONNECTION_STYLE, edgeVisuals } from '@/lib/canvasConnectionStyle';
+import { type ConnectionStyle, DEFAULT_CONNECTION_STYLE } from '@/lib/canvasConnectionStyle';
 import { CanvasSurfaceRouter, type CanvasSurfaceNodes } from './CanvasSurfaceRouter';
 import { CanvasFacilitateSurface } from './CanvasFacilitateSurface';
 import { CanvasFormSurface } from './CanvasFormSurface';
-import { publishPoll, setPollState } from '@/lib/pollApi';
-import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import { CanvasCalendarSurface } from './CanvasCalendarSurface';
 import { PhaseModalitySelector } from './PhaseModalitySelector';
 import { CanvasSurfaceStrip } from './CanvasSurfaceStrip';
@@ -58,7 +32,7 @@ import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasS
 import { CanvasMenuSheet } from './CanvasMenuSheet';
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
-import { mergeLivePresence, BRAIN_RUN_HEARTBEAT_MS, PRESENCE_SEND_INTERVAL_MS } from '@/lib/canvas/livePresence';
+import { PRESENCE_SEND_INTERVAL_MS } from '@/lib/canvas/livePresence';
 import { useLivePresence } from '@/lib/canvas/useLivePresence';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -87,7 +61,7 @@ import { canvasNavigate, canvasSurface, canvasWebOrigin } from '@/lib/canvasHost
 import { BrainDock } from './BrainDock';
 import { BrainActivityIndicator } from './BrainActivityView';
 import { BrainMark } from '@/components/brain/BrainMark';
-import { brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockPreferences } from './brainDockPreferences';
+import { brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES } from './brainDockPreferences';
 import { BrainSurfaceProvider } from './brainSurfaceContext';
 import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
@@ -95,37 +69,18 @@ import type { CreationNodeData, CreationObjectKind } from './types';
 import { shouldAcquireCanvasObjectLock } from '@/domains/canvas/domain/selection';
 import { type ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
-// The canvas APPLICATION layer. PRD 22 §3.4 used the three dataset materialisations
-// as its worked example of a presentation callback running a whole domain query and
-// mutating the graph in the same function; they are now use cases that return a
-// DESCRIPTION of the change, and this file is what applies it.
-import {
-  plotDataset as plotDatasetUseCase,
-  profileDataset as profileDatasetUseCase,
-  visualizeDataset as visualizeDatasetUseCase,
-  type MaterializeResult,
-} from '@/domains/canvas/application/MaterializeDataset';
-import { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
 import { parseResourceRef } from '@builderforce/creation-canvas-contract';
-import { canvasPlacementFlags } from '@/domains/canvas/domain/canvasObject';
-import { CardActProvider, useCardActRunnerFor, type CardActBoardBinding } from './cardActRunner';
+import { CardActProvider } from './cardActRunner';
 import { CanvasBoardBridgeProvider } from './canvasBoardBridge';
 import { CanvasSpacePresenceProvider } from './canvasSpacePresence';
 import { syncSocialCampaign as syncCampaignUseCase } from '@/domains/marketing/application/SyncSocialCampaign';
 import { socialCampaignGateway } from '@/domains/marketing/infrastructure/socialCampaignGateway';
 import { cardActFor } from '@/domains/canvas/application/CardAct';
-import {
-  boardSignature,
-  createCanvasNotices,
-  persistBoard,
-  saveAttemptKey,
-  type CanvasNotices,
-} from '@/domains/canvas/application/PersistCanvas';
-import { adoptRemoteBoard, type AdoptRemoteBoardDecision, type LocalBoardState } from '@/domains/canvas/application/AdoptRemoteBoard';
+import { createCanvasNotices, type CanvasNotices } from '@/domains/canvas/application/PersistCanvas';
 import { createPresenceRelay, type PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import styles from './CreationCanvas.module.css';
-import { ceremonySessionsApi, type CreationOutcomeMetric, type CreationOutcomeMetrics, type CreationSessionDetail, type CreationSessionInvitation, creationSessionsApi, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTimelineMessage, type CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
+import { ceremonySessionsApi, type CreationOutcomeMetric, type CreationOutcomeMetrics, type CreationSessionDetail, type CreationSessionInvitation, creationSessionsApi, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
 import {
   compareOutcomeMetric,
   formatOutcomeMetric,
@@ -136,9 +91,8 @@ import {
   outcomeMetricLabel,
   type OutcomeTranslator,
 } from '@/lib/outcomeMetrics';
-import { creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { creationStorageKey } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { useSharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanvasRoom';
-import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
 
 /**
  * Which guided tour this board offers, and at which revision.
@@ -152,63 +106,42 @@ import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSess
  */
 export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;
 import { teammateFromDrag } from '@/lib/team/teammate';
-import { getGuestDisplayName, guestMediaTransport } from '@/lib/guestRoomApi';
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
 import { GuestCollaboratorNotice } from '@/components/guest/GuestCollaboratorNotice';
 import { CanvasInviteLinkPanel } from './CanvasInviteLinkPanel';
-import { type CanvasAiCompletion } from '@/lib/creationCanvasAi';
 import { GuestAiUnavailableError } from '@/lib/canvasAiErrors';
 import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import { getProjectEvermindContributions, getProjectEvermindHead, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
 import { GuestSignupCta } from '@/components/GuestSignupCta';
-import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
+import { presentationStepAt } from '@/lib/canvasPresentation';
 import { type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
-import { createDefaultCreationData, creationObjectDefinition, emptyShellProblem, type CreationObjectGroup } from './creationObjectRegistry';
+import { creationObjectDefinition, emptyShellProblem } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from '@/lib/templates/creationTemplates';
 import { socialCampaignNodeData } from '@/lib/canvasSocial';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
-import { getStoredTenantToken } from '@/lib/auth';
-import { useViewerSession } from '@/lib/viewerSession';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
-import { profileTabular, type TabularSource } from '@/lib/canvasTabularData';
-import { classificationSummary, classifyTabular } from '@/lib/canvasDataGovernance';
-import { useCoarsePointer } from '@/lib/useCoarsePointer';
-import { flowConnectionProps } from '@/lib/flowConnection';
-import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
-import { type CanvasStroke, canvasStrokes, DRAWING_TOOLS, drawingPatch, eraseStrokes } from '@/lib/canvasDrawing';
+import { type CanvasGesture } from './canvasPointerMode';
+import { DRAWING_TOOLS } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
 import { useChromeSpace } from './useChromeSpace';
-import {
-  fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
-} from '@/domains/canvas/application/ImportCanvasFile';
-import { uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
+import { type ImportTranslator } from '@/domains/canvas/application/ImportCanvasFile';
 import { CanvasAppPanel } from '@/components/apps/CanvasAppPanel';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
-import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
-import { readStoredJournal, writeStoredJournal } from '@/lib/canvasJournalStore';
 import { usePublishBoardToShell } from '@/lib/canvas/usePublishBoardToShell';
 import { Icon } from '@/components/ui/Icon';
-import { stepConfigOf, stepKindOf } from '@/domains/workflow/domain/flowStepObject';
-import { outletForHandle } from '@/domains/workflow/domain/stepOutlets';
-import { withFrameCollapsed } from '@/domains/canvas/application/ExpandFramesOnPlacement';
-import { useExpandFramesOnPlacement } from '@/domains/canvas/presentation/useExpandFramesOnPlacement';
-import { toFrameBox } from './useFramedBoard';
 import { EvermindBuildPanel } from '@/domains/workflow/presentation/EvermindBuildPanel';
 import { CopyButton } from '@/components/CopyButton';
 import { clearActiveCanvasSync, setActiveCanvasSync } from '@/lib/activeCanvasSyncStatus';
-import { alignCanvasNodesLeft, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, placeAppendedCanvasNodes } from './creationCanvasLayout';
+import { canvasNodeDimensions, placeAppendedCanvasNodes } from './creationCanvasLayout';
 import { useCanvasLayoutViewport } from '@/components/canvas/useCanvasLayoutViewport';
-import { CanvasWalkthrough, type CanvasWalkthroughHandle } from './CanvasWalkthrough';
-import { canvasWalkthroughStops } from '@/lib/canvasWalkthrough';
-import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
+import { CanvasWalkthrough } from './CanvasWalkthrough';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SectionTour, type SectionTourStep } from '@/components/onboarding/SectionTour';
 import { useSectionTour } from '@/components/onboarding/useSectionTour';
@@ -220,15 +153,9 @@ import { applyTemplateEntry } from '@/lib/templates/apply';
 import { useTemplateCatalog } from '@/lib/templates/useTemplateCatalog';
 import { matchesTemplateQuery } from '@/lib/templates/contract';
 import { TwilioCanvasSetup } from './TwilioCanvasSetup';
-import { NEW_CHAT_MODE, normalizeChatMode, useQueuedTurns, type ChatMode } from '@/lib/brain';
-import { navigableArtifactUrl } from '@/lib/creationDeliverables';
-import { canvasFiles, type CanvasFile } from '@/lib/canvasDocuments';
-import { defaultExportAction, type CanvasExportAction } from '@/lib/canvasExports';
+import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
+import { defaultExportAction } from '@/lib/canvasExports';
 import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';
-import { normalizeExitCriteria, planGateVerdict } from '@/lib/canvasQa';
-import { canvasBuildBinding } from '@/lib/canvasBuild';
-import { pipelineFieldsFrom } from '@/lib/canvasFounderOpsTools';
-import { moveDeal as moveDealOnBoard } from '@/lib/founderOpsApi';
 import { normalizeWebPageUrl, webPageHost } from '@/lib/canvasWebPage';
 import { CREATIVE_GENERATOR_KINDS } from '@/lib/creationObjectGroups';
 import '@/lib/canvasKindSettings.people';
@@ -242,7 +169,6 @@ import '@/lib/canvasKindSettings.dataArchitecture';
 import '@/lib/canvasKindSettings.qa';
 import '@/lib/canvasKindSettings.delivery';
 import { CanvasBuildPanel } from './CanvasBuildPanel';
-import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
@@ -250,13 +176,10 @@ import { useErrorText } from '@/i18n/useErrorMessage';
 import type { AccountGate, CanvasTimelineMessage, FramePreset, MergeReview } from './canvasBoardTypes';
 import { AITrainingPanel, Canvas3DView, CanvasGamePanel, CanvasPublishPanel, CanvasReleasesPanel, CanvasRoomSurface, CanvasSceneGeneratorPanel, CanvasWorldView } from './canvasLazyPanels';
 import { initialEdges, initialNodes } from './canvasSeed';
-import { flowFromSession, rejectedObjectKinds } from './canvasBoardLoad';
-import { DRAWING_FALLBACK_HEX, DRAWING_TOOL_GLYPH, newNode, topmostNodeAt } from './canvasNodeHelpers';
+import { DRAWING_FALLBACK_HEX, DRAWING_TOOL_GLYPH, newNode } from './canvasNodeHelpers';
 import { dragCarriesFiles } from './canvasFileDrop';
 import { Inspector } from './inspector/CanvasInspector';
-import { accountGateResult } from './actions/accountGate';
-import { releaseGateEvidence } from './canvasReleaseEvidence';
-import { projectEvermindNodePatch } from './canvasProjectSync';
+import { CanvasInspectorProvider, type CanvasInspectorValue } from './inspector/inspectorContext';
 import { useCanvasObjectPlacement } from './hooks/useCanvasObjectPlacement';
 import { useCanvasConnectedSources } from './hooks/useCanvasConnectedSources';
 import { useCanvasTeammates } from './hooks/useCanvasTeammates';
@@ -279,7 +202,27 @@ import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useCanvasRenderedBoard } from './hooks/useCanvasRenderedBoard';
 import { useCanvasDiagnostics } from './hooks/useCanvasDiagnostics';
 import { useCanvasBrainSurface } from './hooks/useCanvasBrainSurface';
-import { SERVER_OWNED_CAMPAIGN_FIELDS } from './canvasSocialCampaignFields';
+import { useCanvasSurfaceState } from './hooks/useCanvasSurfaceState';
+import { useCanvasNodePanels } from './hooks/useCanvasNodePanels';
+import { useCanvasBrainRuntime } from './hooks/useCanvasBrainRuntime';
+import { useCanvasAccountGate } from './hooks/useCanvasAccountGate';
+import { useCanvasDockAndFullscreen } from './hooks/useCanvasDockAndFullscreen';
+import { useCanvasSessionModes } from './hooks/useCanvasSessionModes';
+import { useCanvasSession } from './hooks/useCanvasSession';
+import { useCanvasSessionSync } from './hooks/useCanvasSessionSync';
+import { useCanvasPresence } from './hooks/useCanvasPresence';
+import { useCanvasScope } from './hooks/useCanvasScope';
+import { useCanvasLivePublish } from './hooks/useCanvasLivePublish';
+import { useCanvasBoardModel } from './hooks/useCanvasBoardModel';
+import { useCanvasDatasetImport } from './hooks/useCanvasDatasetImport';
+import { useCanvasEditing } from './hooks/useCanvasEditing';
+import { useCanvasPresentation } from './hooks/useCanvasPresentation';
+import { useCanvasDatasetViews } from './hooks/useCanvasDatasetViews';
+import { useCanvasInteraction } from './hooks/useCanvasInteraction';
+import { useCanvasFiles } from './hooks/useCanvasFiles';
+import { useCanvasCardActs } from './hooks/useCanvasCardActs';
+import { useCanvasTurnQueue } from './hooks/useCanvasTurnQueue';
+import { useCanvasResumeShares } from './hooks/useCanvasResumeShares';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 /**
@@ -438,119 +381,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [connectionStyle, setConnectionStyleState] = useState<ConnectionStyle>(DEFAULT_CONNECTION_STYLE);
   const [title, setTitle] = useState('Untitled session');
   const [minimapOpen, setMinimapOpen] = useState(true);
-  /**
-   * WHICH SURFACE this canvas is being read through — the board, the 3D space, or the
-   * conversation. Every surface but the board replaces the flat view rather than
-   * floating over it: two live views of the same objects would compete for the same
-   * pointer, and the point of a surface is to read the work one way without distraction.
-   *
-   * ONE state, because it is one question. 3D used to keep its own boolean beside this
-   * (`useCanvasThreeD`, which the three other spatial canvases still use), and a second
-   * answer to "what am I looking at?" is a second control that can disagree with the
-   * first. The rail and the phone stack both drive THIS, and `data-view` publishes it to
-   * the stylesheet — see `lib/canvasSurfaces.ts`.
-   *
-   * A model comparison opens straight into the space: the whole point of running two
-   * models side by side is to read the results in depth.
-   */
-  const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
-  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'room' : initialSurface ?? 'graph');
-  /**
-   * The object an object-scoped surface is about. Null for every board surface, and
-   * the reason a surface can be `page` at all: a page is a page OF something.
-   */
-  const [surfaceTarget, setSurfaceTarget] = useState<string | null>(null);
-  /**
-   * The object the App surface should mount, when the reader got there by opening a
-   * SITE rather than by pressing App in the rail.
-   *
-   * It is deliberately not `surfaceTarget`. That one is cleared the moment a board
-   * surface opens, because a board surface is about the whole session — and the App
-   * surface IS board-scoped, so it would lose this the instant it was needed. This
-   * remembers which object the reader last chose so the App modality opens the same
-   * thing the site modality is showing, and it is cleared when they pick an object
-   * that has no code on this board (below), so it can never point at a stale card.
-   */
-  const [appTarget, setAppTarget] = useState<string | null>(null);
-  const surfaceDef = canvasSurfaceDefinition(surface);
-  /**
-   * Whether the session bar is folded to what the canvas IS DOING.
-   *
-   * Read from storage in an effect rather than as the initial state, the way the surface
-   * preference is: reading `localStorage` during render is a hydration mismatch, and the
-   * bar arriving expanded for one frame is the safe direction to be wrong in.
-   */
-  const [barCollapsed, setBarCollapsedState] = useState(false);
-  useEffect(() => { setBarCollapsedState(readCanvasBarCollapsed()); }, []);
-  /**
-   * Where the prompt lives — floating, docked into Brain, or closed. Read in an effect
-   * for the same reason the folded bar is: reading storage during render is a hydration
-   * mismatch, and a prompt that arrives floating for one frame is the safe direction.
-   */
-  const [promptPlacement, setPromptPlacementState] = useState<CanvasPromptPlacement>(DEFAULT_CANVAS_PROMPT_PLACEMENT);
-  useEffect(() => { setPromptPlacementState(readCanvasPromptPlacement()); }, []);
-  const setPromptPlacement = useCallback((next: CanvasPromptPlacement) => {
-    setPromptPlacementState(next);
-    writeCanvasPromptPlacement(next);
-  }, []);
-  const setBarCollapsed = useCallback((next: boolean) => {
-    setBarCollapsedState(next);
-    writeCanvasBarCollapsed(next);
-  }, []);
-  /**
-   * Where an object surface's way back goes. Null — the board — for every entry except
-   * one made FROM a surface that asked to be returned to: a creation opened from the
-   * room goes back into the room rather than dropping the reader on the board.
-   */
-  const [surfaceOrigin, setSurfaceOrigin] = useState<CanvasSurfaceId | null>(null);
-  const setSurface = useCallback((next: CanvasSurfaceId, targetId: string | null = null, origin: CanvasSurfaceId | null = null) => {
-    setSurfaceState(next);
-    // Only an object-scoped surface keeps a target (and an origin); the rail's switcher
-    // never passes either.
-    const objectScoped = canvasSurfaceDefinition(next).scope === 'object';
-    setSurfaceTarget(objectScoped ? targetId : null);
-    setSurfaceOrigin(objectScoped ? origin : null);
-    // The registry decides what is worth remembering — a PLACE the user chose, never a
-    // projection of the board they were already on, and never a surface that cannot be
-    // restored without the object it was about.
-    writeCanvasSurface(next);
-    /**
-     * OPENING A SITE ALSO ARMS THE APP.
-     *
-     * A website on this board is not only a set of pages: when the session carries the
-     * code that serves it, the SAME thing is also a running application. Pressing "Open
-     * the site" used to land on `site` alone, and the App modality stayed on whatever it
-     * last showed — so the reader had to find the rail and press App to see the very
-     * build they had just opened, and the two surfaces disagreed about which object was
-     * in hand.
-     *
-     * So the site's target is carried over to the App surface here, at the ONE place
-     * every door into a surface passes through (the card header, the anchored panel and
-     * the room all call this). The App surface stays a board-scoped reading — it is
-     * still "the session as one application" — this only tells it which object the
-     * reader just chose, so it mounts that one rather than its own last guess.
-     */
-    if (next === 'site' && targetId) setAppTarget(targetId);
-  }, []);
-  /** Leave an object surface: back to wherever it was opened from, else the board. */
-  const exitSurface = useCallback(() => setSurface(surfaceOrigin ?? 'graph'), [setSurface, surfaceOrigin]);
-  /**
-   * Which stage of ITS OWN methodology this session is in — see `lib/canvasPhases.ts`
-   * for why this is not `useFounderJourney()`. Same SSR-safe pattern as `surface`:
-   * a safe default in the initial state, the real preference restored in a mount-only
-   * effect below, because reading `localStorage` during render is a hydration mismatch.
-   */
-  const [phase, setPhaseState] = useState<CanvasPhase>(DEFAULT_CANVAS_PHASE);
-  useEffect(() => { setPhaseState(readCanvasPhase()); }, []);
-  const setPhase = useCallback((next: CanvasPhase) => {
-    setPhaseState(next);
-    writeCanvasPhase(next);
-    // Additive narrowing (see `surfacesForPhase`), so this only ever RESETS the surface
-    // when the one already open falls outside the new phase's offer — pressing Idea
-    // while reading the app it built must not silently pull the reader back to the
-    // board over a surface the new phase would still have shown them.
-    if (!surfacesForPhase(next).includes(surface)) setSurface('graph');
-  }, [surface, setSurface]);
+  const { comparisonModelIds, setSurfaceState, surfaceTarget, surface, exitSurface, surfaceDef, setSurface, promptPlacement, setPromptPlacement, barCollapsed, phase, setPhase, setBarCollapsed, appTarget } = useCanvasSurfaceState({ initialModelComparisonIds, initialSurface });
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -593,223 +424,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * plenty of objects and nothing to run.
    */
   const runnableApp = useMemo(() => canvasApp(nodes).entry !== null, [nodes]);
-
-  /**
-   * THE ANCHORED PANEL AND THE PICKER — two overlays, one rule.
-   *
-   * Both are positioned from a SCREEN rect handed up by whichever control opened them,
-   * never from a board coordinate. The alternative is projecting a node's flow position
-   * through the viewport transform on every pan and zoom, which is a second copy of React
-   * Flow's own maths and drifts the moment either changes. A fixed overlay anchored to
-   * where the button actually is cannot drift, and both close on click-away anyway.
-   */
-  /**
-   * THE ONE PANEL, and how it is placed.
-   *
-   * `box` is the card's own screen rectangle, not a resolved anchor: the panel has two
-   * widths and the clamp that keeps it on screen depends on which one is showing, so the
-   * position is derived at render from the box rather than frozen when it opened.
-   * A `null` box means "read it off the card's element" — the board actions that open an
-   * object's inspector have a node id and no event to take a rectangle from.
-   *
-   * `panel` may be null for the same reason: an action that opens an object's whole
-   * inspector has no opinion about which SHORT panel it narrows back to, so the kind's
-   * own settings panel is chosen at render.
-   */
-  const [nodePanel, setNodePanel] = useState<{ nodeId: string; panel: CanvasNodePanelId | null; box: { top: number; right: number } | null; expanded: boolean } | null>(null);
-  const [objectPicker, setObjectPicker] = useState<{ anchor: { x: number; y: number }; group?: CreationObjectGroup; fromNodeId?: string } | null>(null);
-  /**
-   * "The add-to-canvas picker is up, opened from a DOOR rather than a node's own
-   * `+`" — the one condition every entry point that offers a pressed/open state
-   * (the command bar's circles, the board's own toggle) reads, so the two can never
-   * disagree about whether the picker is "the add flow" being open.
-   */
-  const objectPickerOpen = objectPicker !== null && !objectPicker.fromNodeId;
-
-  /** Beside the badge, clamped so a card at the right edge does not open a panel off it. */
-  const anchorFrom = (rect: { top: number; right: number }, width: number) => ({
-    x: Math.min(Math.max(12, rect.right + 12), Math.max(12, window.innerWidth - width - 12)),
-    y: Math.min(Math.max(12, rect.top - 8), Math.max(12, window.innerHeight - 220)),
-  });
-
-  const boxOf = (rect: DOMRect) => ({ top: rect.top, right: rect.right });
-
-  /**
-   * Opens the object picker with no group filter — the command bar's own "add to
-   * canvas" button reaches it directly by anchoring on its own rect; this is for the
-   * doors that have no card or circle of their own to anchor beside (the composer's
-   * "add context" row, the large-canvas notice's "Frame" button, the guided tour), so
-   * they open at a fixed, sensible corner instead.
-   */
-  const openObjectPicker = useCallback(() => {
-    setNodePanel(null);
-    setObjectPicker({ anchor: { x: 54, y: 54 } });
-  }, []);
-
-  /**
-   * The card's box on screen, found through the card itself.
-   *
-   * The board actions that open an object's inspector — visualize a dataset, compare
-   * projects, expand a pipeline — have a node id and no event. A node's FLOW position
-   * would have to be projected through the viewport transform to become a screen box,
-   * which is a second copy of React Flow's own maths; its rendered element already is one.
-   * Null when the card has not painted yet (an object created in the same tick), and the
-   * render falls back to a sensible on-screen position until it has.
-   */
-  const nodeBoxOnScreen = useCallback((nodeId: string) => {
-    if (typeof document === 'undefined') return null;
-    const element = document.querySelector(`[data-node-id="${nodeId}"]`);
-    return element instanceof Element ? boxOf(element.getBoundingClientRect()) : null;
-  }, []);
-
-  /**
-   * Fills in the box for a panel that was opened without one.
-   *
-   * A LAYOUT effect and not a read during render: the card is often created in the same
-   * tick as the panel that describes it, so the element does not exist yet when the panel
-   * first renders. Measuring after paint is the only point at which the answer exists, and
-   * doing it here — rather than calling `getBoundingClientRect` from the render body —
-   * keeps the render a pure function of state. Until it resolves, the panel draws at the
-   * fallback position below, which is one frame.
-   */
-  useLayoutEffect(() => {
-    if (!nodePanel || nodePanel.box) return;
-    const box = nodeBoxOnScreen(nodePanel.nodeId);
-    if (!box) return;
-    setNodePanel((current) => (current && current.nodeId === nodePanel.nodeId && !current.box ? { ...current, box } : current));
-  }, [nodeBoxOnScreen, nodePanel]);
-
-  const openNodePanel = useCallback((nodeId: string, panel: CanvasNodePanelId, rect: DOMRect) => {
-    setObjectPicker(null);
-    setNodePanel({ nodeId, panel, box: boxOf(rect), expanded: false });
-  }, []);
-
-  /**
-   * "Show me everything about this object" — the same anchored panel, opened WIDE.
-   *
-   * This replaced `setInspectorNodeId`, which opened a separate full-height rail on the
-   * far side of the board. Every one of the eighteen board actions that used to reach for
-   * that rail lands here instead, so an object's values, its settings and its activity are
-   * always read beside the card they belong to.
-   */
-  const openNodeInspector = useCallback((nodeId: string, focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null = null, rect?: DOMRect) => {
-    setObjectPicker(null);
-    setInspectorFocus(focus);
-    setNodePanel({ nodeId, panel: null, box: rect ? boxOf(rect) : null, expanded: true });
-  }, []);
-
-  /**
-   * While the WIDE panel is open, it FOLLOWS selection rather than being left behind.
-   *
-   * Dozens of the inspector's own actions — deliver a mockup, visualize a dataset,
-   * compare projects, build a website with code, expand an Evermind pipeline — create
-   * a NEW object and select it, exactly the "just made something, look at it" moment
-   * the wide reading exists for. Requiring every one of those call sites to remember to
-   * retarget the panel is the kind of thing one of them eventually forgets; this is the
-   * single place that keeps the rule instead. It does nothing while the panel is COMPACT:
-   * a plain click on a different card opens that card's own short panel, which
-   * `onNodeClick` has already done by the time this runs.
-   */
-  useEffect(() => {
-    if (!selectedId) return;
-    setNodePanel((current) => (current && current.expanded && current.nodeId !== selectedId
-      ? { ...current, nodeId: selectedId, panel: null, box: null }
-      : current));
-  }, [selectedId]);
-
-  const openInsertPicker = useCallback((nodeId: string, rect: DOMRect) => {
-    setNodePanel(null);
-    setObjectPicker({ anchor: anchorFrom(boxOf(rect), 400), fromNodeId: nodeId });
-  }, []);
-  /**
-   * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
-   *
-   * Both used to be `useState` here, which meant leaving the board ended the
-   * presentation and dropped whoever you were following — so "let me show you
-   * the delivery numbers" was a way to END the thing you were doing. They live on
-   * the live session, which outlives every navigation; the local fallbacks below
-   * keep the board working on surfaces with no session provider (the embed tree,
-   * and the tests, which mount the canvas bare).
-   */
-  /**
-   * The action journal for THIS board — see `canvasActionJournal`. A ref rather
-   * than state: recording an action must never re-render the canvas, or the act
-   * of observing the board would change what is being observed.
-   */
-  const journal = useRef(createCanvasJournal());
-  /**
-   * The tail of the journal, in the shape a defect carries it.
-   *
-   * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
-   * The journal already recorded exactly what a bug report needs — ordered actions
-   * with durations, failures, and the ones that started and never finished — and it
-   * lived only in this ref, capped at 240 entries and gone on reload. So by the time
-   * anyone filed the report, the three steps that explain it no longer existed
-   * anywhere. Attaching it to the defect is what makes "it did this a moment ago" a
-   * reproducible claim rather than a memory.
-   *
-   * The FAILURES and the stalls are hoisted to the front: a twenty-row list where the
-   * one red row is in the middle gets skimmed past, and that row is the report.
-   */
-  /**
-   * Keep the journal across a reload, and flush it before the tab goes away.
-   *
-   * Hydrate once per session id; flush on a slow interval and on `pagehide` (which
-   * fires for a reload, a navigation and a bfcache eviction, where `unload` does
-   * not). Writing on every recorded action would put a storage write in the path of
-   * every tool call, and the whole point of the journal is that observing the board
-   * does not change it.
-   */
-  useEffect(() => {
-    const stored = readStoredJournal(sessionId);
-    if (stored.length) journal.current.restore(stored);
-    const flush = () => writeStoredJournal(sessionId, journal.current.entries());
-    const timer = window.setInterval(flush, 15_000);
-    window.addEventListener('pagehide', flush);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('pagehide', flush);
-      flush();
-    };
-  }, [sessionId]);
-
-  const recentJournalEvidence = useCallback((limit = 12) => {
-    const entries = journal.current.entries();
-    const notable = entries.filter((entry) => entry.ok === false || entry.durationMs == null);
-    const recent = entries.slice(-limit);
-    return [...notable, ...recent.filter((entry) => !notable.includes(entry))]
-      .slice(0, limit)
-      .map((entry) => ({
-        at: entry.at, kind: entry.kind, label: entry.label,
-        ...(entry.detail ? { detail: entry.detail.slice(0, 300) } : {}),
-        ...(entry.ok != null ? { ok: entry.ok } : {}),
-        ...(entry.durationMs != null ? { durationMs: entry.durationMs } : {}),
-      }));
-  }, []);
-  /** Effective inference facts accumulated by this mounted Creation Session.
-   * Kept out of render state: observing completions must not remount the board. */
-  const brainRuntime = useRef<{ completions: CanvasAiCompletion[]; disabledModels: string[] }>({
-    completions: [], disabledModels: [],
-  });
-  const recordBrainCompletion = useCallback((completion: CanvasAiCompletion) => {
-    brainRuntime.current.completions = [...brainRuntime.current.completions, completion].slice(-50);
-  }, []);
-  /**
-   * What the LAST completion of the turn just finished actually ran on — the resolved
-   * model and the tools it called. Stamped onto the assistant message so a thumb
-   * pressed on it (now or after a reload) can be filed against the model that earned
-   * it, exactly as the Brain chat files provenance. Without this the Canvas — a large
-   * share of all model calls — could rate nothing.
-   */
-  const lastTurnProvenance = useCallback((): { model?: string; tools?: string[] } => {
-    const last = brainRuntime.current.completions[brainRuntime.current.completions.length - 1];
-    if (!last?.resolvedModel) return {};
-    return { model: last.resolvedModel, ...(last.toolCalls.length ? { tools: last.toolCalls } : {}) };
-  }, []);
-  const disableBrainModel = useCallback((model: string) => {
-    if (!model || brainRuntime.current.disabledModels.includes(model)) return;
-    brainRuntime.current.disabledModels = [...brainRuntime.current.disabledModels, model];
-  }, []);
+  const { openObjectPicker, setNodePanel, openNodeInspector, openNodePanel, setObjectPicker, openInsertPicker, nodePanel, anchorFrom, objectPicker, objectPickerOpen } = useCanvasNodePanels({ selectedId, setInspectorFocus });
+  const { journal, recentJournalEvidence, brainRuntime, disableBrainModel, recordBrainCompletion, lastTurnProvenance } = useCanvasBrainRuntime({ sessionId });
 
   const liveSession = useOptionalLiveSession();
   // "Is there a room here, may I open it, and is one already running" — one decision,
@@ -1106,83 +722,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
   const isComposingPrompt = prompt.trim().length > 0;
-  // "IS THIS BOARD SAVED?" AND "DOES THIS PERSON HAVE AN ACCOUNT?" ARE DIFFERENT
-  // QUESTIONS, AND `persistence` ONLY ANSWERS THE FIRST.
-  //
-  // It is derived from the session id alone (`isLocalCreationSession` — a `local-…`
-  // prefix), so a SIGNED-IN user working on an unsaved board reads as anonymous. Used
-  // as a stand-in for "no account" it told a paying user to create an account before
-  // they could generate an image, when their own credentials would have authorized the
-  // call: image generation posts to `/llm/v1/images/generations` with the tenant token
-  // and never touches the session row.
-  //
-  // Keep the two separate at the source. `persistence` still gates anything that needs
-  // a SAVED SESSION to point at (durable object actions, branches, comparisons); this
-  // answers only "will a tenant request from this browser authenticate?".
-  //
-  // Answered by `useViewerSession`, which falls back to the token store rather than
-  // requiring `useAuth`, for two reasons: it is the exact value `apiRequest`
-  // authorizes with (so it cannot disagree with the call it is predicting), and the
-  // canvas mounts in surfaces that have no AuthProvider above them — the VS Code
-  // webview, the embed, and the component tests, where `useAuth()` throws.
-  const hasAccount = useViewerSession().hasTenant;
-  const [claimingDraft, setClaimingDraft] = useState(false);
-  const requireAccount = useCallback((action: string, title: string, description: string) => {
-    setAccountGate({ action, title, description });
-    trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
-  }, [sessionId]);
-  /**
-   * ONE door in front of everything that reads a CONNECTED ACCOUNT.
-   *
-   * Cloud storage, Miro, social and paid media all call the API with the tenant
-   * token. A signed-out visitor has none, so opening any of them used to fire a
-   * request that came back 401 "Missing or malformed Authorization header" — and
-   * because the canvas reports API failures as support tickets, a guest tapping
-   * along the rail filed five of them in ninety seconds. The condition is the
-   * same for every one of these surfaces, so the check, the copy and the
-   * sign-up prompt are one function rather than a rule each panel remembers.
-   *
-   * ── THE IMPERATIVE SIBLING OF `<SessionGate action="connectIntegration">` ────
-   * Same question, same answer, two shapes — and the shapes are genuinely
-   * different rather than a duplicate: `SessionGate` WRAPS a control, which is
-   * what a button in a list needs, while this is called from inside an
-   * `onClick` and from the model's own tool handlers, where there is no element
-   * to wrap. What must never differ is the CONDITION, so both read "is there a
-   * readable workspace behind this screen": the component through
-   * `useSampleWorkspace`, which is reactive because it renders, and this
-   * through the stored tenant token, which is what an event handler can see.
-   *
-   * Returns true when the caller may proceed.
-   */
-  const connectedAccountGate = useCallback((source: string) => {
-    if (getStoredTenantToken()) return true;
-    requireAccount('connected_account', t('connectedGateTitle', { source }), t('connectedGateBody', { source }));
-    return false;
-  }, [requireAccount, t]);
-  /**
-   * ONE door for a guest-GATED canvas TOOL — the model half of `connectedAccountGate`.
-   *
-   * `accountGateResult` builds the shape the model reads, and every gate string in the
-   * contract ends with "The account prompt is now open" — but the builder is a plain
-   * function and CANNOT open anything. `canvas_read_attachment` returned it directly, so
-   * that sentence was false there: the model told the user a prompt was waiting and no
-   * prompt had been raised. The two halves are one call here precisely so the claim and
-   * the prompt cannot drift apart again.
-   *
-   * The CONDITION stays with the caller because it genuinely differs: a corpus needs
-   * CREDENTIALS (a signed-in user promotes from an unsaved board), while reading a scan
-   * needs a SAVED canvas for the bytes to have been stored at all. Folding both into one
-   * predicate would gate each tool on something it does not actually need. What must
-   * never differ is this: the prompt opens whenever the gate shape is returned.
-   *
-   * Returns the gate result to hand straight back to the model.
-   */
-  const openAccountGate = useCallback((
-    tool: string, action: string, title: string, description: string, reason: string,
-  ): { requiresAccount: true; tool: string; error: string } => {
-    requireAccount(action, title, description);
-    return accountGateResult(tool, reason);
-  }, [requireAccount]);
+  const { connectedAccountGate, requireAccount, openAccountGate, hasAccount, claimingDraft, setClaimingDraft } = useCanvasAccountGate({ sessionId, setAccountGate, t });
   const shellRef = useRef<HTMLDivElement | null>(null);
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
   const hydrated = useRef(false);
@@ -1329,636 +869,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const modelComparisonStarted = useRef(false);
   const autoApplyRef = useRef(true);
   const mobileViewportFitted = useRef(false);
-
-  useEffect(() => {
-    const enabled = isBrainAutoApprove();
-    autoApplyRef.current = enabled;
-    setAutoApply(enabled);
-  }, []);
-
-  useEffect(() => { setBrainDock(readBrainDockPreferences()); }, []);
-  // BRAIN NEVER AUTO-COVERS A PHONE. The stored (and default) preference is a docked
-  // rail standing open, which is the desktop. At phone width that same preference is a
-  // sheet over the board, so the first paint that learns it is a phone closes it without
-  // writing — a reload must not cover the surface, and a desktop that last left Brain
-  // open must not find it shut when they come back. The launcher is how it opens.
-  useEffect(() => {
-    if (!phoneViewport) return;
-    setBrainDock((current) => (current.open ? { ...current, open: false } : current));
-  }, [phoneViewport]);
-  /**
-   * The surface the visitor last chose to work on, restored after hydration rather than
-   * in the initial state — `localStorage` does not exist on the server, and a first
-   * render that disagreed with the markup would flash the wrong surface. A canvas opened
-   * FOR a model comparison keeps the space it was opened into; the stored preference is
-   * about where someone works, not about what a link asked for.
-   */
-  useEffect(() => {
-    if (comparisonModelIds.length >= 2) return;
-    // An ENTRY that named a surface outranks the stored preference: "open my chat" has
-    // to open the chat even for someone whose last visit left them on the board. The
-    // preference is where you were, not what you just asked for — the same precedence
-    // the comparison case above already asserts.
-    setSurfaceState(initialSurface ?? readCanvasSurface());
-    // Mount only: this restores a preference, and re-running it would drag the visitor
-    // back out of whatever surface they have since switched to.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /**
-   * Persist AND report the layout the user chose. The signal is what lets the
-   * shipped default become the layout people actually prefer instead of a guess.
-   * A resize drag passes persist=false so the board reflows live without writing
-   * storage — and firing a preference signal — on every pointer move.
-   */
-  const updateBrainDock = useCallback((patch: Partial<BrainDockPreferences>, persist = true) => {
-    setBrainDock((current) => {
-      const next = { ...current, ...patch };
-      if (persist) {
-        writeBrainDockPreferences(next);
-        trackActivity('creation_brain_dock_preference', { sessionId, metadata: { clientSurface: canvasSurface(), ...next } });
-      }
-      return next;
-    });
-  }, [sessionId]);
-
-  /**
-   * Fill the screen with the board, natively where the browser offers it and by
-   * taking over the viewport where it does not.
-   *
-   * iOS Safari exposes no element Fullscreen API at all, so the button used to
-   * report "full screen unavailable" on the one class of device where handing the
-   * whole screen to the canvas is worth the most. The CSS fallback (see
-   * `[data-fullscreen]` in the stylesheet) pins the shell over the app chrome and
-   * the mobile bottom bar, which is the same result the native call would give.
-   */
-  const toggleFullscreen = useCallback(() => {
-    const shell = shellRef.current;
-    if (typeof document === 'undefined' || !shell) return;
-    if (document.fullscreenElement) { void document.exitFullscreen?.().catch(() => undefined); return; }
-    if (fullscreen) { setFullscreen(false); return; }
-    const request = document.fullscreenEnabled ? shell.requestFullscreen?.() : undefined;
-    if (request) void request.catch(() => setFullscreen(true));
-    else setFullscreen(true);
-  }, [fullscreen]);
-
-  useEffect(() => {
-    // Only the native path owns the flag while IT is what is on screen. Without
-    // this guard a `fullscreenchange` fired by anything else on the page (a video,
-    // say) would silently drop the canvas out of the CSS fallback.
-    const sync = () => {
-      const native = !!document.fullscreenElement && document.fullscreenElement === shellRef.current;
-      if (!native && !nativeFullscreenRef.current) return;
-      nativeFullscreenRef.current = native;
-      setFullscreen(native);
-    };
-    document.addEventListener('fullscreenchange', sync);
-    return () => document.removeEventListener('fullscreenchange', sync);
-  }, []);
-
-  // Escape leaves the CSS fallback, the way it leaves native full screen — the
-  // browser handles that key itself only when the browser put us there.
-  useEffect(() => {
-    if (!fullscreen || nativeFullscreenRef.current) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setFullscreen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [fullscreen]);
-
-  const setAutoApplyMode = useCallback((enabled: boolean) => {
-    autoApplyRef.current = enabled;
-    setAutoApply(enabled);
-    setBrainAutoApprove(enabled);
-  }, []);
-
-  /**
-   * Session MODE (migration 0409) — `chat` (author on the board and answer) or `work`
-   * (leave a tracked, dispatched ticket behind). Persisted on the SESSION rather than
-   * in this browser, so a mode a collaborator armed is the mode everyone's next turn
-   * runs in. A local (unsaved) canvas has nowhere to persist it, so it keeps the value
-   * in state only — the same degradation the rest of the local canvas accepts.
-   */
-  const setSessionMode = useCallback((next: ChatMode) => {
-    setSessionMode_(next);
-    if (persistence !== 'server') {
-      // No server row to hold it, so the local snapshot does — otherwise the mode
-      // reset on every reload of a guest canvas.
-      const prior = readLocalCreationSession(sessionId);
-      if (prior) writeLocalCreationSession(sessionId, { ...prior, mode: next, updatedAt: new Date().toISOString() });
-      return;
-    }
-    void creationSessionsApi.update(sessionId, { mode: next })
-      .catch(() => setNotice(t('modeSaveFailed')));
-  }, [persistence, sessionId, t]);
-
-  const memoryStorageKey = useMemo(() => {
-    const chat = nodes.find((node) => node.data.kind === 'chat');
-    const canonicalId = chat?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
-    return `brain.memoryEnabled:${canonicalId || `canvas:${sessionId}`}`;
-  }, [nodes, sessionId]);
-
-  useEffect(() => {
-    try { setMemoryEnabled(localStorage.getItem(memoryStorageKey) !== '0'); } catch { setMemoryEnabled(true); }
-  }, [memoryStorageKey]);
-
-  const setMemoryMode = useCallback((enabled: boolean) => {
-    setMemoryEnabled(enabled);
-    try { localStorage.setItem(memoryStorageKey, enabled ? '1' : '0'); } catch { /* storage may be unavailable */ }
-  }, [memoryStorageKey]);
-
-  useEffect(() => {
-    try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
-  }, []);
-
-  useEffect(() => {
-    if (persistence !== 'server') return;
-    void creationSessionsApi.quotas().then((quota) => {
-      if (quota.limits.datasetRows === -1) setDatasetRowLimit(1_000_000);
-      else setDatasetRowLimit(Math.max(1, quota.limits.datasetRows));
-    }).catch(() => undefined);
-  }, [persistence]);
-
-  useEffect(() => {
-    if (!templateOpen || persistence !== 'server') return;
-    void creationSessionsApi.templates.list().then((result) => setServerTemplates(result.templates)).catch(() => setServerTemplates([]));
-  }, [persistence, templateOpen]);
-
-  useEffect(() => {
-    if (!shareOpen || persistence !== 'server' || sessionRole !== 'owner') return;
-    void creationSessionsApi.invitations.list(sessionId)
-      .then((result) => setPendingInvitations(result.invitations.filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)))
-      .catch((error) => setNotice(faultText(error, t('noticeInvitationsFailed'))));
-  }, [persistence, sessionId, sessionRole, shareOpen]);
-
-  useEffect(() => {
-    try {
-      if (persistence === 'local') {
-        const saved = readLocalCreationSession(sessionId);
-        if (saved) {
-          setTitle(saved.title);
-          setNodes(saved.nodes);
-          setEdges(saved.edges);
-          setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, metadata: message.metadata ?? {}, createdAt: message.createdAt })));
-          // The mode a guest armed in the homepage composer, carried across the
-          // hand-off — a local canvas has no server row, so the snapshot IS the store.
-          setSessionMode_(normalizeChatMode(saved.mode));
-          if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
-        }
-        hydrated.current = true;
-        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), persistence: 'local' } });
-        return;
-      }
-      const openedAt = performance.now();
-      void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'started' }).catch(() => undefined);
-      void Promise.all([creationSessionsApi.get(sessionId), creationSessionsApi.timeline.list(sessionId)]).then(([detail, transcript]) => {
-        const { nodes: loadedNodes, edges: loadedEdges, rejected } = flowFromSession(detail);
-        // The `declaredKind` invariant, said out loud. An object this build cannot
-        // name is dropped rather than drawn as a blank card, and the user is told
-        // which kinds — without that sentence the board silently has fewer objects
-        // than the person who saved it put on it, which is the worse failure.
-        if (rejected.length) setNotice(t('objectsRejected', { count: rejected.length, kinds: rejectedObjectKinds(rejected) }));
-        setTitle(detail.session.title);
-        // Mode is a property of the SESSION (0409), so a collaborator opening this
-        // board inherits the mode it is actually running in rather than the default.
-        setSessionMode_(normalizeChatMode(detail.session.mode));
-        setBranchParentId(detail.session.branchParentSessionId ?? null);
-        setNodes(loadedNodes);
-        setEdges(loadedEdges);
-        setPersistedObjectIds(new Set(loadedNodes.map((node) => node.id)));
-        setMembers(detail.members);
-        setAllMembers(detail.members);
-        setCurrentUserId(detail.currentUserId || null);
-        const personalSelection = detail.members.find((member) => member.userId === detail.currentUserId)?.selection?.filter((id) => loadedNodes.some((node) => node.id === id)) ?? [];
-        setSelectedIds(personalSelection);
-        setSelectedId(personalSelection.length === 1 ? personalSelection[0] : null);
-        setSessionRole(detail.role);
-        setTimeline(transcript.messages);
-        const restoredViewport = detail.personalViewport && typeof detail.personalViewport.x === 'number' && typeof detail.personalViewport.y === 'number' && typeof detail.personalViewport.zoom === 'number'
-          ? { x: detail.personalViewport.x, y: detail.personalViewport.y, zoom: detail.personalViewport.zoom }
-          : null;
-        if (restoredViewport) {
-          viewportRef.current = restoredViewport;
-          pendingViewport.current = restoredViewport;
-          void flowRef.current?.setViewport(restoredViewport);
-        }
-        revision.current = detail.session.canvasRevision ?? detail.session.revision ?? 1;
-        lastSavedGraph.current = JSON.stringify({ nodes: loadedNodes, edges: loadedEdges });
-        currentGraph.current = lastSavedGraph.current;
-        hydrated.current = true;
-        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
-        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
-        noteSaveState();
-      }).catch((error) => {
-        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
-        setNotice(faultText(error, t('noticeLoadSessionFailed')));
-      }).finally(() => setLoadingSession(false));
-    } catch { hydrated.current = true; }
-  }, [persistence, sessionId, setEdges, setNodes]);
-
-  /**
-   * Adopt the room's board. Used for the first load in a shared session and for
-   * every peer edit after it.
-   *
-   * Recording the board as EXCHANGED and as SAVED before the state lands is the
-   * whole trick: both save debounces compare against those and bail, so applying a
-   * peer's board cannot be mistaken for a local edit and pushed straight back —
-   * which is how a two-person session turns into an infinite sync loop. The echo
-   * half of that now belongs to `ShareCanvasSession`, which is where it is tested.
-   */
-  /**
-   * What this browser is holding, for the use case that decides whether a
-   * collaborator's board may replace it.
-   *
-   * A function rather than a value because the answer must be read at the MOMENT
-   * of the decision: these are refs precisely so a poll firing eight seconds after
-   * its effect closed over them still sees the board as it is now.
-   */
-  const localBoardState = useCallback((): LocalBoardState => ({
-    saving: saveInFlight.current,
-    signature: currentGraph.current,
-    savedSignature: lastSavedGraph.current,
-    revision: revision.current,
-  }), []);
-
-  /**
-   * Put an adopted board on screen. The ONE place a collaborator's board lands,
-   * for both channels that can carry one.
-   *
-   * A refusal is silent on purpose: "your unsaved edits kept a newer board out"
-   * is not something to interrupt someone with, and the next poll or frame will
-   * carry it again once the save lands.
-   */
-  const applyRemoteBoard = useCallback((decision: AdoptRemoteBoardDecision, notice: string) => {
-    if (!decision.adopt) return;
-    setNodes(decision.board.nodes);
-    setEdges(decision.board.edges);
-    setPersistedObjectIds(new Set(decision.board.nodes.map((node) => node.id)));
-    setTitle(decision.title);
-    setAllMembers(decision.members as CreationSessionDetail['members']);
-    revision.current = decision.revision;
-    lastSavedGraph.current = decision.signature;
-    currentGraph.current = decision.signature;
-    // A collaborator on a newer deployment can save a kind this build does not
-    // declare. Both of these doors used to drop those objects in silence while
-    // the initial load, three hundred lines away, said so.
-    if (decision.rejected.length) setNotice(t('objectsRejected', { count: decision.rejected.length, kinds: rejectedObjectKinds(decision.rejected) }));
-    else setNotice(notice);
-  }, [setEdges, setNodes, setNotice, t]);
-
-  const applyRoomSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
-    // `noteExchanged` is NOT called here any more: the shared session moved into
-    // `useSharedCanvasRoom`, and its `pull` records the exchange before it calls the
-    // adopt callback — which is this function, and its only caller. Calling it here
-    // would be the same fact written twice, and the binding no longer exists.
-    lastSavedGraph.current = boardSignature(snapshot);
-    setTitle(snapshot.title);
-    setNodes(snapshot.nodes);
-    setEdges(snapshot.edges);
-    setTimeline((snapshot.timeline ?? []).map((message) => ({
-      clientMessageId: message.clientMessageId,
-      messageRole: message.role,
-      body: message.body,
-      metadata: message.metadata ?? {},
-      createdAt: message.createdAt,
-    })));
-    // The viewport is personal — following someone else's pan mid-edit is
-    // disorienting, and each participant keeps their own place on the board.
-    writeLocalCreationSession(sessionId, snapshot);
-    // A joiner mounts on the starter board and this is the first real one it has
-    // seen; the load gate opens here so the save debounce may start writing.
-    hydrated.current = true;
-  }, [sessionId, setEdges, setNodes]);
-
-  /**
-   * The board as it stands, in the shape localStorage keeps it.
-   *
-   * ONE builder. It was written out three times — the autosave debounce, the
-   * viewport write and the moment sharing starts — and a fourth caller copying
-   * whichever one it happened to sit next to is how a field starts being carried
-   * by two of the three.
-   *
-   * The title comes off the STORED snapshot, not this component's own `title`
-   * state: renaming now happens in the session rail, not on the canvas, so this
-   * board is no longer the one place a local session's name changes. Reading it
-   * fresh off storage rather than baking in the closure's copy is what stops a
-   * card move made after a rail rename from writing the OLD name back over it.
-   */
-  const currentSnapshot = useCallback((viewport = viewportRef.current) => localCreationSnapshot(sessionId, {
-    title: readLocalCreationSession(sessionId)?.title ?? title,
-    timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })),
-    nodes,
-    edges,
-    viewport,
-  }), [edges, nodes, sessionId, timeline, title, viewportRef]);
-  const currentSnapshotRef = useRef(currentSnapshot);
-  currentSnapshotRef.current = currentSnapshot;
-
-  // Both are read by the hook through a ref, so its pull effect is driven by the
-  // ROOM changing rather than by this component re-rendering — which would
-  // re-pull the shared board on every keystroke.
-  const applyRoomSnapshotRef = useRef(applyRoomSnapshot);
-  applyRoomSnapshotRef.current = applyRoomSnapshot;
-
-  const evermindBindingKey = useMemo(() => JSON.stringify(nodes.flatMap((node) => {
-    const match = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string'
-      ? /^evermind:(\d+)$/.exec(node.data.resourceId)
-      : null;
-    return match ? [{ nodeId: node.id, projectId: Number(match[1]) }] : [];
-  }).sort((a, b) => a.nodeId.localeCompare(b.nodeId))), [nodes]);
-
-  const evermindLiveEnabled = persistence === 'server' && evermindBindingKey !== '[]';
-  useEffect(() => {
-    if (!evermindLiveEnabled) setEvermindLiveByNodeId({});
-  }, [evermindLiveEnabled]);
-  usePolledResource(async (signal) => {
-      const bindings = JSON.parse(evermindBindingKey) as Array<{ nodeId: string; projectId: number }>;
-      const byProject = new Map<number, Promise<[ProjectEvermindHead, ProjectEvermindContributions]>>();
-      for (const binding of bindings) {
-        if (!byProject.has(binding.projectId)) byProject.set(binding.projectId, Promise.all([getProjectEvermindHead(binding.projectId), getProjectEvermindContributions(binding.projectId)]));
-      }
-      const settled = await Promise.all(bindings.map(async (binding) => {
-        try {
-          const [head, activity] = await byProject.get(binding.projectId)!;
-          return [binding.nodeId, projectEvermindNodePatch(head, activity)] as const;
-        } catch { return null; }
-      }));
-      if (signal.aborted) return;
-      const activeNodeIds = new Set(bindings.map((binding) => binding.nodeId));
-      setEvermindLiveByNodeId((current) => {
-        const next = Object.fromEntries(Object.entries(current).filter(([nodeId]) => activeNodeIds.has(nodeId)));
-        for (const entry of settled) {
-          if (entry) next[entry[0]] = entry[1];
-        }
-        return JSON.stringify(current) === JSON.stringify(next) ? current : next;
-      });
-  }, { intervalMs: 20_000, enabled: evermindLiveEnabled, restartKey: evermindBindingKey });
-
-  useEffect(() => { currentGraph.current = JSON.stringify({ nodes, edges }); }, [edges, nodes]);
-
-  // A persisted viewport is expressed in screen pixels, so restoring a camera
-  // saved on desktop can put the useful part of the graph beyond a phone's
-  // narrow viewport. Reframe once after hydration; subsequent pans and zooms
-  // remain entirely under the user's control.
-  useEffect(() => {
-    if (loadingSession || mobileViewportFitted.current || !nodes.length || typeof window === 'undefined' || window.innerWidth > 760) return;
-    const handle = window.setTimeout(() => {
-      if (!flowRef.current) return;
-      mobileViewportFitted.current = true;
-      // A full desktop graph can otherwise shrink to an illegible thumbnail on
-      // a phone. Keep objects readable and let the user pan to off-screen work.
-      void flowRef.current.fitView({ padding: 0.18, minZoom: 0.62, maxZoom: 0.82, duration: 280 });
-    }, 80);
-    return () => window.clearTimeout(handle);
-  }, [loadingSession, nodes]);
-
-  useEffect(() => {
-    if (!initialFocusId || !nodes.some((node) => node.id === initialFocusId)) return;
-    setSelectedId(initialFocusId);
-    window.setTimeout(() => void flowRef.current?.fitView({ nodes: [{ id: initialFocusId }], padding: 0.45, duration: 350 }), 0);
-  }, [initialFocusId, nodes]);
-
-  useEffect(() => {
-    if (!initialBuildOpen || initialBuildOpened.current || !initialFocusId) return;
-    const target = nodes.find((node) => node.id === initialFocusId && node.data.kind === 'build');
-    const binding = target ? canvasBuildBinding(target.data) : null;
-    if (!target || !binding) return;
-    initialBuildOpened.current = true;
-    setBuildFocus({ nodeId: target.id, storageProjectId: binding.storageProjectId });
-  }, [initialBuildOpen, initialFocusId, nodes]);
-
-  /**
-   * AUTOSAVE. Debounced 300ms behind the edit that triggered it.
-   *
-   * What is left here is the SCHEDULING and the React state the result lands in.
-   * Everything that decides anything — has the board changed, is this retry the
-   * same write, is `Session changed` a failure or a collaborator having saved
-   * first — is `persistBoard` in `application/PersistCanvas.ts`, which is why the
-   * conflict merge finally has a test that does not mount a canvas.
-   */
-  useEffect(() => {
-    if (!hydrated.current || !canEdit) return;
-    const handle = window.setTimeout(() => {
-      const board = { nodes, edges };
-      const signature = boardSignature(board);
-      if (signature === lastSavedGraph.current) return;
-      if (persistence === 'local') {
-        const snapshot = currentSnapshot();
-        persistSnapshot(snapshot);
-        lastSavedGraph.current = signature;
-        noteSaveState();
-        return;
-      }
-      noteSaveState();
-      saveInFlight.current = true;
-      // STABLE across retries of the same board, NEW for a different one — so a
-      // retry after a timeout is the same write and an edit made during it is not.
-      pendingSave.current = saveAttemptKey(pendingSave.current, signature);
-      const attempt = pendingSave.current;
-      void persistBoard(
-        { sessionId, board, viewport: viewportRef.current, expectedRevision: revision.current, idempotencyKey: attempt.key, signature },
-        canvasSessionGateway,
-        t,
-      ).then((result) => {
-        if (result.outcome === 'failed') { setNotice(result.notice); return; }
-        revision.current = result.revision;
-        lastSavedGraph.current = result.signature;
-        setPersistedObjectIds(new Set(result.objectIds));
-        if (pendingSave.current?.key === attempt.key) pendingSave.current = null;
-        if (result.outcome === 'saved') { noteSaveState(); return; }
-        setNodes(result.board.nodes);
-        setEdges(result.board.edges);
-        // A collaborator's board can carry a kind this build does not declare, and
-        // the merge is the moment it arrives. Saying so here is the same promise
-        // the initial load makes rather than a second, quieter rule for the same event.
-        if (result.rejected.length) setNotice(t('objectsRejected', { count: result.rejected.length, kinds: rejectedObjectKinds(result.rejected) }));
-        else setNotice(result.notice);
-      }).finally(() => { saveInFlight.current = false; });
-    }, 300);
-    return () => window.clearTimeout(handle);
-  }, [canEdit, edges, nodes, noteSaveState, persistSnapshot, persistence, sessionId, setEdges, setNodes, setNotice, storageKey, t, timeline, title, viewportRef]);
-
-  useEffect(() => {
-    if (persistence !== 'local' || !hydrated.current) return;
-    const handle = window.setTimeout(() => {
-      const prior = readLocalCreationSession(sessionId); if (!prior) return;
-      // `...prior` carries prior.title forward untouched — a rename now happens in
-      // the session rail, not here, so this write must not overwrite it with the
-      // stale copy this component hydrated `title` from.
-      const snapshot: LocalCreationSnapshot = { ...prior, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
-      persistSnapshot(snapshot);
-    }, 150);
-    return () => window.clearTimeout(handle);
-  }, [edges, nodes, persistence, sessionId, storageKey, timeline]);
-
-  // The board-reconcile poll. Its load reads the CURRENT selection, composer state
-  // and follow target at call time (the hook holds the latest closure), so a click
-  // or a keystroke no longer tears the timer down and fires a round-trip.
-  usePolledResource(async (signal) => {
-      try {
-        // The cursor is STILL written here, on purpose. The relay is what makes a
-        // pointer live; this row is what makes it survive a client with no socket at
-        // all (a blocked WebSocket behind a corporate proxy) — such a client is both
-        // seen by everyone and able to see everyone, exactly as before, because the
-        // merge simply has no live entry to prefer. And it costs nothing: this tick
-        // already UPDATEs the row for `lastSeenAt`, which is what makes a member
-        // count as active, so dropping one column out of a write that happens anyway
-        // would have bought staleness rather than saved a write.
-        const relayed = liveSocketRef.current?.readyState === WebSocket.OPEN;
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
-        if (signal.aborted) return;
-        const nextActiveIds = new Set(presence.members.map((member) => member.userId));
-        if (activePresenceInitialized.current) {
-          const joined = presence.members.find((member) => member.userId !== (presence.currentUserId || currentUserId) && !activeMemberIds.current.has(member.userId));
-          if (joined) setJoinedCollaborator(joined);
-        } else activePresenceInitialized.current = true;
-        activeMemberIds.current = nextActiveIds;
-        setMembers(presence.members);
-        // Following is driven by the relay when it is up (see the follow effect);
-        // this is the same move at poll speed for a client with no socket.
-        const followed = relayed ? undefined : presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
-        if (followed?.viewport) void flowRef.current?.setViewport({ x: Number(followed.viewport.x), y: Number(followed.viewport.y), zoom: Number(followed.viewport.zoom) }, { duration: 350 });
-        if (presence.currentUserId) setCurrentUserId(presence.currentUserId);
-        // The poll's own revision is the cheap probe; whether the board may
-        // actually be replaced — and what happens to the objects this build
-        // cannot render — belongs to `AdoptRemoteBoard`.
-        if (presence.revision <= revision.current) return;
-        const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
-        if (signal.aborted) return;
-        applyRemoteBoard(decision, t('noticeUpdatedByCollaborator'));
-      } catch { /* Presence and polling are best-effort; local edits continue. */ }
-  }, { intervalMs: 8_000, enabled: persistence === 'server', restartKey: sessionId });
-
-  useEffect(() => {
-    if (!joinedCollaborator) return;
-    const timer = window.setTimeout(() => setJoinedCollaborator(null), 4_500);
-    return () => window.clearTimeout(timer);
-  }, [joinedCollaborator]);
-
-  useEffect(() => {
-    if (persistence !== 'server') return;
-    const liveUrl = creationSessionsApi.liveUrl(sessionId);
-    if (!liveUrl) { setRealtimeState('offline'); return; }
-    let stopped = false;
-    let socket: WebSocket | null = null;
-    let retryTimer: number | null = null;
-    let retryMs = 1_000;
-    const syncRevision = async (hint?: number) => {
-      if (stopped) return;
-      try {
-        // `events` is this channel's cheap probe, exactly as the poll's payload is
-        // the other channel's. Everything after it is the same act, and lives in
-        // one place so the two doors cannot answer differently.
-        const caughtUp = await creationSessionsApi.events(sessionId, revision.current);
-        if (Math.max(Number(hint || 0), Number(caughtUp.revision || 0)) <= revision.current) return;
-        const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
-        if (stopped) return;
-        applyRemoteBoard(decision, t('noticeUpdatedLive'));
-      } catch { /* The presence reconciliation remains a durable fallback. */ }
-    };
-    const connect = () => {
-      if (stopped) return;
-      setRealtimeState(retryMs > 1_000 ? 'reconnecting' : 'connecting');
-      try { socket = new WebSocket(liveUrl); } catch { socket = null; }
-      if (!socket) {
-        setRealtimeState('reconnecting');
-        retryTimer = window.setTimeout(connect, retryMs);
-        retryMs = Math.min(15_000, retryMs * 2);
-        return;
-      }
-      socket.onopen = () => {
-        setRealtimeState('online');
-        retryMs = 1_000;
-        // Publishing the socket is what arms `sendPresence`; until this runs, the
-        // pointer keeps riding the presence poll.
-        liveSocketRef.current = socket;
-        void syncRevision();
-      };
-      socket.onmessage = (event) => {
-        try {
-          const frame = JSON.parse(String(event.data)) as { type?: string; revision?: number; lastId?: number; action?: string; peer?: { id?: string } };
-          if (frame.type === 'canvas.changed') void syncRevision(frame.revision);
-          if (frame.type === 'timeline.changed') void creationSessionsApi.timeline.list(sessionId).then((result) => setTimeline(result.messages)).catch(() => undefined);
-          // A peer's pointer at pointer speed, and the `leave` that retires it. Relayed
-          // frames are attributed by the SERVER (`userId`), never by the sender — see
-          // `SessionRoomDO`; the folding is `useLivePresence`'s, shared with the guest room.
-          receivePresence(frame);
-        } catch { /* Ignore malformed relay frames. */ }
-      };
-      socket.onclose = () => {
-        if (liveSocketRef.current === socket) liveSocketRef.current = null;
-        socket = null;
-        // Nobody's pointer is live while this client is deaf; the poll takes over.
-        clearPresence();
-        if (!stopped) {
-          setRealtimeState(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'reconnecting');
-          retryTimer = window.setTimeout(connect, retryMs);
-          retryMs = Math.min(15_000, retryMs * 2);
-        }
-      };
-    };
-    connect();
-    return () => {
-      stopped = true;
-      if (retryTimer != null) window.clearTimeout(retryTimer);
-      liveSocketRef.current = null;
-      // Drop the pending flush with the socket it was going to be written to.
-      presenceRef.current?.dispose();
-      socket?.close();
-    };
-  }, [clearPresence, persistence, receivePresence, sessionId, setEdges, setNodes]);
-
-  /**
-   * Composing a prompt is presence too — the cursor label says so. It changes at
-   * human speed, so it is sent on the state change rather than throttled per frame.
-   */
-  useEffect(() => {
-    if (!presenceLive) return;
-    sendPresence({ typing: isComposingPrompt });
-  }, [isComposingPrompt, presenceLive, sendPresence]);
-
-  /**
-   * A Brain turn in flight is presence too. The run executes in THIS browser, so
-   * without announcing it everyone else on the board saw an idle Brain for the
-   * minutes a long turn takes. Re-sent on a heartbeat because a still requester
-   * sends nothing else and would otherwise expire off their screens mid-run — the
-   * same beat also reaches a collaborator who joins after the turn began.
-   */
-  useEffect(() => {
-    if (!presenceLive) return;
-    const brainRun = thinking && brainRunStartedAt != null ? { startedAt: brainRunStartedAt } : null;
-    sendPresence({ brainRun });
-    if (!brainRun) return;
-    const timer = window.setInterval(() => sendPresence({ brainRun }), BRAIN_RUN_HEARTBEAT_MS);
-    return () => window.clearInterval(timer);
-  }, [brainRunStartedAt, presenceLive, sendPresence, thinking]);
-
-  /**
-   * Follow, driven live. The poll's copy of this only runs when the relay is down,
-   * so a follower moves WITH the person they are following rather than catching up
-   * to where they were.
-   */
-  const followedViewport = followingUserId ? livePresence[followingUserId]?.viewport : undefined;
-  useEffect(() => {
-    if (!followedViewport) return;
-    void flowRef.current?.setViewport(followedViewport, { duration: 120 });
-  }, [followedViewport]);
-
-  /**
-   * Who "you" are in the live roster. A saved board keys the viewer by account; an
-   * account-less guest room keys every person by `guestRoomOccupantId`, so the viewer
-   * is the room's own answer (`sharedRoom.selfId`).
-   */
-  const presenceSelfId = inRoom ? sharedRoom.selfId : currentUserId;
-  /**
-   * One roster to draw. Identity (name, role) comes from the poll — or, in a guest
-   * room, from the room's roster; position comes from the relay. Merging rather than
-   * keeping two lists is why a name and a pointer can never disagree — see
-   * `lib/canvas/livePresence`. (Unretracted pointers are retired by `useLivePresence`.)
-   */
-  const liveMembers = useMemo(
-    () => mergeLivePresence<CreationSessionDetail['members'][number]>(inRoom ? sharedRoom.roster : members, livePresence, presenceSelfId),
-    [inRoom, livePresence, members, presenceSelfId, sharedRoom.roster],
-  );
+  const { updateBrainDock, toggleFullscreen } = useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, fullscreen, initialSurface, nativeFullscreenRef, phoneViewport, sessionId, setAutoApply, setBrainDock, setFullscreen, setSurfaceState, shellRef });
+  const { setAutoApplyMode, setSessionMode, setMemoryMode } = useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setMemoryEnabled, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
+  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard } = useCanvasSession({ currentGraph, edges, flowRef, hydrated, lastSavedGraph, nodes, noteSaveState, pendingViewport, persistence, revision, saveInFlight, sessionId, sessionOpenCorrelation, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
+  useCanvasSessionSync({ activeMemberIds, activePresenceInitialized, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraph, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydrated, initialBuildOpen, initialBuildOpened, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraph, liveSocketRef, loadingSession, localBoardState, mobileViewportFitted, nodes, noteSaveState, pendingSave, persistSnapshot, persistence, presenceLive, presenceRef, receivePresence, revision, saveInFlight, selectedIds, sendPresence, sessionId, setBuildFocus, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
+  const { liveMembers, presenceSelfId } = useCanvasPresence({ currentUserId, flowRef, followingUserId, inRoom, livePresence, members, sharedRoom });
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
   /**
@@ -1973,117 +888,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   useEffect(() => {
     if (canvasSurfaceDefinition(surface).scope === 'object' && !surfaceNode) exitSurface();
   }, [surface, surfaceNode, exitSurface]);
-  const effectiveSelectedIds = useMemo(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
-  /**
-   * SELECTING THE CHAT IS NOT A SCOPING INTENT.
-   *
-   * The Brain chat is an object on the board, so typing into it selects it — and AUTO
-   * scope read any selection as "ask about this", which narrowed every turn after the
-   * first to the chat itself. Measured 2026-08-15 (ui 2026.8.17): turn one ran against
-   * 2 of 2 objects, the composer selected the chat 116ms later, and turns two and three
-   * ran against 1 of 2 — the board's only real object invisible to Brain for the rest
-   * of the session, with the diagnostics reporting "an answer about what is on the
-   * canvas from this scope is answering about a subset".
-   *
-   * A selection that is ENTIRELY chat objects is where the person is typing, not what
-   * they are pointing at. Selecting the chat AND something else is still a real
-   * selection, and an explicitly chosen scope is always honoured — this only decides
-   * what `auto` infers.
-   */
-  const selectionIsOnlyChat = effectiveSelectedIds.length > 0
-    && effectiveSelectedIds.every((id) => nodes.find((node) => node.id === id)?.data.kind === 'chat');
-  const resolvedScopeMode = scopeMode === 'auto'
-    ? selectedNode?.data.kind === 'frame' ? 'frame'
-      : effectiveSelectedIds.length && !selectionIsOnlyChat ? 'selection' : 'canvas'
-    : scopeMode;
-  const scopedNodeIds = useMemo(() => {
-    if (resolvedScopeMode === 'canvas') return new Set(nodes.map((node) => node.id));
-    const selected = new Set(effectiveSelectedIds);
-    if (resolvedScopeMode === 'connected') {
-      edges.forEach((edge) => {
-        if (selected.has(edge.source)) selected.add(edge.target);
-        if (selected.has(edge.target)) selected.add(edge.source);
-      });
-    }
-    if (resolvedScopeMode === 'frame' && selectedNode?.data.kind === 'frame') {
-      const { width, height } = canvasNodeDimensions(selectedNode);
-      nodes.forEach((node) => {
-        if (node.id === selectedNode.id) return;
-        const withinX = node.position.x >= selectedNode.position.x
-          && node.position.x <= selectedNode.position.x + width;
-        const withinY = node.position.y >= selectedNode.position.y
-          && node.position.y <= selectedNode.position.y + height;
-        if (withinX && withinY) selected.add(node.id);
-      });
-    }
-    return selected;
-  }, [edges, effectiveSelectedIds, nodes, resolvedScopeMode, selectedNode]);
-  const scopeLabel = resolvedScopeMode === 'canvas' ? t('entireCanvas')
-    : resolvedScopeMode === 'connected' ? `Connected objects (${scopedNodeIds.size})`
-      : resolvedScopeMode === 'frame' ? `Current frame: ${selectedNode?.data.title || 'Frame'}`
-        : effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects`
-          : selectedNode ? `Selected: ${selectedNode.data.title}` : t('entireCanvas');
-  const scopedNodes = useMemo(() => nodes.filter((node) => scopedNodeIds.has(node.id)), [nodes, scopedNodeIds]);
-
-  /**
-   * WHAT THE PERSON WAS LOOKING AT WHEN THEY ASKED.
-   *
-   * Scope and selection decide how much of the board a Brain turn can see, and
-   * the reported failure — "I don't see that file anywhere on the canvas", said
-   * about a file that was on the canvas — happened because the turn ran against
-   * ONE selected object. Neither the scope nor the selection that produced an
-   * answer was recorded anywhere, so the report could not show the reader the
-   * one fact that explained it. Recorded on CHANGE rather than per render, so
-   * the journal reads as a sequence of decisions rather than a render log.
-   */
-  const scopeSignature = `${resolvedScopeMode}:${scopedNodeIds.size}/${nodes.length}`;
-  const lastScopeSignature = useRef(scopeSignature);
-  useEffect(() => {
-    if (lastScopeSignature.current === scopeSignature) return;
-    lastScopeSignature.current = scopeSignature;
-    journal.current.record({
-      kind: 'user',
-      label: 'scope.change',
-      detail: `${resolvedScopeMode} · ${scopedNodeIds.size} of ${nodes.length} object(s) visible to Brain`,
-    });
-  }, [nodes.length, resolvedScopeMode, scopeSignature, scopedNodeIds.size]);
-
-  /**
-   * The board is the source of truth for WHO IS ON IT; the shell is the source of
-   * truth for who is on the CALL. Publishing the roster upward is what lets the
-   * live bar show one set of people instead of the board and the room each
-   * keeping their own — and it is why a teammate who navigates away from the
-   * board does not vanish from the call.
-   */
-  /**
-   * A logged-out board that has started a shared free session IS a room — it has a
-   * guest room code and the guest media transport that `GuestRoomMeeting` has used
-   * since guest rooms shipped. Nothing on the canvas could reach it, so the free
-   * board was the one surface where people could work on the same thing and had no
-   * way to talk about it. Declaring the anchor is all it takes: `useCanvasLiveRoom`
-   * owns the decision and the bar's own `call` action is the control — the same one
-   * every signed-in canvas uses, so the free board gains a call rather than a second
-   * way of starting one.
-   */
-  const publishAnchor = liveSession?.publishAnchor;
-  useEffect(() => {
-    if (!publishAnchor) return undefined;
-    if (persistence !== 'local' || !sharedRoom.code) { publishAnchor(null); return undefined; }
-    publishAnchor({
-      roomKey: sharedRoom.code,
-      label: t('sharedCallLabel'),
-      tenantId: null,
-      participant: { name: getGuestDisplayName(), ref: 'self' },
-      transport: guestMediaTransport,
-    });
-    return () => publishAnchor(null);
-  }, [persistence, publishAnchor, sharedRoom.code, sharedRoom.displayName, t]);
-
-  const publishPresence = liveSession?.publishPresence;
-  useEffect(() => {
-    if (!publishPresence) return;
-    publishPresence(members.map((member) => ({ userId: member.userId, displayName: member.displayName })), currentUserId);
-  }, [currentUserId, members, publishPresence]);
+  const { scopedNodes, scopedNodeIds, effectiveSelectedIds, resolvedScopeMode, scopeLabel } = useCanvasScope({ edges, journal, nodes, scopeMode, selectedId, selectedIds, selectedNode, t });
+  useCanvasLivePublish({ currentUserId, liveSession, members, persistence, sharedRoom, t });
 
   /**
    * What this board tells the shell — the projects it references and the strictest
@@ -2134,147 +940,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ? { ...node, data: { ...node.data, ...socialCampaignNodeData(result.campaign) } as CreationNodeData }
       : node));
   }, [setNodes, setNotice, tSocial]);
-
-  /**
-   * The board, read WITHOUT depending on it.
-   *
-   * `updateNodeData` is handed to every card through the `nodeTypes` memo, and `nodes`
-   * changes identity on every board event — a selection, a drag, a re-measure, each
-   * streamed Brain token writing the transcript back onto the chat Object. Listing it
-   * as a dependency therefore gave React Flow a new `nodeTypes` object continuously and
-   * REMOUNTED every Object on the board, destroying the local state a card holds: the
-   * dashboard's open editor, a document's caret, a data grid's edited cell.
-   *
-   * Reported as "Edit dashboard does nothing", and that is precisely what it did: the
-   * remount lands between the mousedown that SELECTS a card and the click on a control
-   * inside it, so the first press hit an element that no longer existed and never
-   * reached a handler. Locked by `CreationCanvas.realFlow.test.tsx`, which needs the
-   * real store — a mocked XYFlow cannot see a remount.
-   *
-   * Same ref treatment, for the same reason, as `exportFromNode` and
-   * `runWorkflowFromNode` below: stable identity, newest closure. `nodesRef` is the ONE
-   * such ref — the build tools and the object vocabulary read the board through it too.
-   */
-  const nodesRef = useRef<CreationFlowNode[]>([]);
-  nodesRef.current = nodes;
-  /**
-   * The framed reading of the board — who is inside which frame — as a ref.
-   *
-   * Same treatment, for the same reason, as `nodesRef` above: the drag handler needs
-   * the newest containment and must keep a stable identity, and the containment is
-   * derived far below it (`useFramedBoard`, which reads the fully decorated nodes). A
-   * dependency instead of a ref would either reorder the whole component or hand React
-   * Flow a new handler on every board edit.
-   */
-  const framedBoardRef = useRef<{ memberIdsOf: (frameId: string) => string[] }>({ memberIdsOf: () => [] });
-  /** The connections, on the same terms as `nodesRef` — what a compile reads. */
-  const edgesRef = useRef<Edge[]>([]);
-  edgesRef.current = edges;
-
-  /**
-   * What THIS Brain turn intends the board to become, before a human has agreed
-   * to any of it.
-   *
-   * Reading it through {@link CanvasProposalStage} rather than a raw array is the
-   * reason a tool can no longer forget that its view of the board must include
-   * what the tools before it staged: `stage.nodes()` is the union and there is no
-   * accessor that is not. That question used to be re-answered by hand at 58 call
-   * sites — three of which spelled the local differently and one of which left the
-   * staged EDGES out — and getting it wrong placed objects on top of each other.
-   *
-   * Constructed once and never replaced, so the tools registered in `canvasActions`
-   * keep one identity across renders; it reads `nodesRef`/`edgesRef` so it always
-   * sees the CURRENT board rather than whichever one the memo captured.
-   */
-  const stageRef = useRef<CanvasProposalStage | null>(null);
-  stageRef.current ??= new CanvasProposalStage(
-    { nodes: () => nodesRef.current, edges: () => edgesRef.current },
-    { defaults: (kind) => createDefaultCreationData(kind, canvasTextRef.current), position: nextCanvasObjectPosition, viewport: () => layoutViewportRef.current() },
-  );
-  const stage = stageRef.current;
-
-  const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
-    if (!cardsEditable) return;
-    setNodes((current) => current.map((node) => {
-      if (node.id !== nodeId) return node;
-      const data = { ...node.data, ...patch };
-      // A frame putting itself away is not only a fact ABOUT the frame — it is a
-      // different-sized object on the board, and size lives on the node, not in its
-      // data. Handled here rather than through a second callback so that every route
-      // that collapses a frame (the card, Brain, a keyboard shortcut) resizes it, and
-      // so `frameExpandedWidth/Height` is written by exactly one piece of code.
-      if (node.data.kind === 'frame' && 'frameCollapsed' in patch) {
-        return withFrameCollapsed(
-          { ...node, data },
-          patch.frameCollapsed === true,
-          { id: node.id, kind: 'frame', position: node.position, size: canvasNodeDimensions(node), data: node.data as unknown as Record<string, unknown> },
-        );
-      }
-      return { ...node, data };
-    }));
-    noteSaveState();
-    const target = nodesRef.current.find((node) => node.id === nodeId);
-    const campaignId = Number(target?.data.campaignId);
-    if (target?.data.kind === 'socialCampaign'
-      && Number.isInteger(campaignId)
-      && SERVER_OWNED_CAMPAIGN_FIELDS.some((field) => field in patch)) {
-      void syncSocialCampaign(campaignId, nodeId, patch);
-    }
-  }, [cardsEditable, setNodes, syncSocialCampaign]);
-
-  /**
-   * A deal dragged into another stage, on the card.
-   *
-   * The gesture FO-F1 named itself after and could not perform: every piece was in
-   * place — each projected card carries its `dealId`, and ONE call both moves the
-   * deal and returns the redrawn board — and the renderer had no drag handler, so
-   * the move was reachable through the MODEL and not through a pointer.
-   *
-   * Deliberately NOT `updateNodeData`: this is not a patch to the card, it is a
-   * write to the DEAL followed by a redraw from that same response. Which is also
-   * why there is no optimistic reorder — the board that comes back is the board,
-   * and painting a guess first would reintroduce, for a few hundred milliseconds,
-   * exactly the "the card says one thing and the CRM says another" the projection
-   * exists to remove. A refusal (a stage the tenant retired, a deal somebody else
-   * closed) leaves the card where it was and says why.
-   */
-  const moveDealFromNode = useCallback((nodeId: string, dealId: number, stage: string) => {
-    if (!cardsEditable) return;
-    noteSaveState();
-    void moveDealOnBoard(dealId, stage)
-      .then((pipeline) => {
-        setNodes((current) => current.map((node) => node.id === nodeId
-          ? { ...node, data: { ...node.data, ...pipelineFieldsFrom(pipeline) } }
-          : node));
-        setNotice(t('noticeDealMoved', { stage }));
-      })
-      .catch((error: unknown) => {
-        setNotice(faultText(error, t('noticeDealNotMoved')));
-      });
-  }, [cardsEditable, setNodes, t]);
-
-  /* Takes the node it resizes rather than reading the selection: the panel that offers
-     this is anchored to ONE card, and "whichever card is selected" is exactly the
-     ambiguity anchoring the panel removed. */
-  const updateWebsiteViewport = useCallback((nodeId: string, viewport: 'desktop' | 'tablet' | 'mobile') => {
-    if (!canEdit || lockBlocked) return;
-    const preset = viewport === 'mobile' ? { width: 340, height: 620 } : viewport === 'tablet' ? { width: 520, height: 560 } : { width: 720, height: 460 };
-    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, style: { ...node.style, ...preset }, data: { ...node.data, viewport } } : node));
-    setNotice(t('noticeViewportChanged', { viewport }));
-  }, [canEdit, lockBlocked, setNodes]);
-
-  // `clientMessageId` is annotated rather than inferred from the default:
-  // `crypto.randomUUID()` is typed as the template literal `${string}-${string}…`
-  // in the DOM lib, which would narrow the PARAMETER to that shape and reject
-  // the ids callers legitimately pass through (a resumed message's own id).
-  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata: CreationTimelineMessage['metadata'] = {}, clientMessageId: string = crypto.randomUUID()) => {
-    const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, metadata, createdAt: new Date().toISOString() };
-    setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
-    if (persistence === 'server') void creationSessionsApi.timeline.append(sessionId, { clientMessageId, role, body, metadata }).then((saved) => {
-      setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
-    }).catch((error) => setNotice(error instanceof Error ? t('noticeConversationSaveFailedReason', { reason: error.message }) : t('noticeConversationSaveFailed')));
-    return clientMessageId;
-  }, [persistence, sessionId]);
+  const { nodesRef, framedBoardRef, stage, appendTimeline, edgesRef, updateNodeData, moveDealFromNode, updateWebsiteViewport } = useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edges, layoutViewportRef, lockBlocked, nodes, noteSaveState, persistence, sessionId, setNodes, setNotice, setTimeline, syncSocialCampaign, t });
 
   // The Brain Object mirrors the live turn — messages, trace, and the run state that
   // drives its activity bar — so a working Brain reads as working on the board too,
@@ -2304,260 +970,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void creationSessionsApi.lock(sessionId, lockedObjectId, 'release').catch(() => undefined);
     };
   }, [canEdit, persistedObjectIds, persistence, selectedId, sessionId]);
-
-  /**
-   * How a dropped file's bytes survive past the import that could not read
-   * them, so a later tool can still escalate it (OCR on a scan, a multimodal
-   * read on a corrupted document). A signed-in, server-persisted session has a
-   * tenant to scope an R2 upload to and later bill that read to, so its bytes
-   * go there and only a key stays on the canvas object. A local/guest canvas
-   * has neither, so the alternative is to keep the bytes inline as base64 —
-   * unrealized cost if the draft is only ever a scratch board, but not lost if
-   * the person later signs in and the draft is claimed, at which point the
-   * same object can still be escalated.
-   */
-  const attachmentBytesStrategy: AttachmentBytesStrategy = useCallback(async (file: File) => {
-    if (persistence === 'server') {
-      try {
-        return { sourceFileKey: await uploadAttachmentSource(file) };
-      } catch {
-        return null;
-      }
-    }
-    const url = await fileToDataUrl(file);
-    return url ? { sourceDataUrl: url } : null;
-  }, [persistence]);
-
-  /** Filling an existing Dataset object from a file reads it through the same
-   * engine as a drop, so a workbook picked here loads exactly as one dropped on
-   * the board rather than failing on a format only this path never learned. */
-  const importDataset = useCallback(async (file: File) => {
-    if (!selectedId) return;
-    try {
-      const [imported] = (await importCanvasFile(file, importLabel)).objects;
-      const columns = Array.isArray(imported?.data.columns) ? imported.data.columns as string[] : [];
-      const rows = Array.isArray(imported?.data.rows) ? imported.data.rows as TabularSource['rows'] : [];
-      if (!columns.length) throw new Error(t('datasetNoColumns'));
-      if (rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: fmt.number(datasetRowLimit) }));
-      const { title: _title, ...fields } = imported!.data;
-      // Adopt the imported file's name, but only over the palette's placeholder.
-      // A card the user has already named is theirs and survives the import;
-      // one that still says "Imported dataset.csv" after importing revenue.csv is
-      // simply wrong, and every artifact derived from it — "… visualization",
-      // the map, the chart — inherits that wrong name.
-      // Both spellings: a card minted before default titles followed the board's
-      // language still carries the English one.
-      const placeholders = new Set([createDefaultCreationData('dataset').title, createDefaultCreationData('dataset', canvasText).title]);
-      // Two facts are stamped at import because neither can be recovered later.
-      // `fetchedAt` is what makes staleness computable at all — a dataset with no
-      // timestamp is a snapshot of unknown age, and every chart built on it
-      // inherits that silence. The PII scan runs here rather than on demand
-      // because a restricted column must be masked from the FIRST render, not
-      // from whenever someone remembers to ask.
-      const source: TabularSource = { columns, rows };
-      const classifications = classifyTabular(source, profileTabular(source));
-      const governance = classificationSummary(classifications);
-      setNodes((current) => current.map((node) => (node.id === selectedId
-        ? { ...node, data: {
-          ...node.data, ...fields,
-          classifications, fetchedAt: new Date().toISOString(), sourceUri: file.name,
-          ...(placeholders.has(node.data.title) ? { title: file.name } : {}),
-        } }
-        : node)));
-      setNotice(governance.piiColumns
-        ? t('datasetImportedWithPii', { name: file.name, rows: fmt.number(rows.length), columns: columns.length, pii: governance.piiColumns })
-        : t('datasetImported', { name: file.name, rows: fmt.number(rows.length), columns: columns.length }));
-    } catch (error) {
-      setNotice(faultText(error, t('datasetImportFailed')));
-    }
-  }, [canvasText, datasetRowLimit, importLabel, selectedId, setNodes, t]);
-
-  useEffect(() => {
-    if (!hydrated.current || historyApplying.current) return;
-    const next = JSON.stringify({ nodes, edges });
-    const handle = window.setTimeout(() => {
-      if (historyBaseline.current == null) historyBaseline.current = next;
-      else if (historyBaseline.current !== next) {
-        // Every board mutation — palette, drag, delete, inspector edit, an AI
-        // proposal being applied, an undo — settles HERE, so this is the one
-        // place that can record what the person did without a dozen handlers
-        // each remembering to. See `describeGraphChange`.
-        try {
-          const change = describeGraphChange(
-            JSON.parse(historyBaseline.current) as { nodes: CreationFlowNode[]; edges: Edge[] },
-            { nodes, edges },
-          );
-          if (change) journal.current.record({ kind: 'user', label: change.label, detail: change.detail });
-        } catch { /* the journal must never be able to break the history stack */ }
-        undoStack.current = [...undoStack.current.slice(-49), historyBaseline.current];
-        historyBaseline.current = next;
-        redoStack.current = [];
-      }
-    }, 500);
-    return () => window.clearTimeout(handle);
-  }, [edges, nodes]);
-
-  const restoreGraphState = useCallback((serialized: string) => {
-    const graph = JSON.parse(serialized) as { nodes: CreationFlowNode[]; edges: Edge[] };
-    historyApplying.current = true;
-    historyBaseline.current = serialized;
-    setNodes(graph.nodes); setEdges(graph.edges);
-    window.setTimeout(() => { historyApplying.current = false; }, 0);
-  }, [setEdges, setNodes]);
-
-  const undo = useCallback(() => {
-    const prior = undoStack.current.pop(); if (!prior) { journal.current.record({ kind: 'user', label: 'undo', ok: false, detail: 'nothing to undo' }); setNotice(t('noticeNothingToUndo')); return; }
-    journal.current.record({ kind: 'user', label: 'undo' });
-    redoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice(t('noticeChangeUndone'));
-  }, [edges, nodes, restoreGraphState]);
-  const redo = useCallback(() => {
-    const next = redoStack.current.pop(); if (!next) { journal.current.record({ kind: 'user', label: 'redo', ok: false, detail: 'nothing to redo' }); setNotice(t('noticeNothingToRedo')); return; }
-    journal.current.record({ kind: 'user', label: 'redo' });
-    undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice(t('noticeChangeRedone'));
-  }, [edges, nodes, restoreGraphState]);
-
-  // Operator decision 2026-09-12: anything placed into a COLLAPSED frame — dropped,
-  // dragged, pasted, imported, applied from Brain, adopted from a collaborator — opens
-  // it. Diffed off the board state because that is the one path every placement shares.
-  useExpandFramesOnPlacement(nodes, setNodes, { toBox: toFrameBox, enabled: cardsEditable, suspended: historyApplying });
-
-  const selectionIds = useCallback(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
-
-  /**
-   * REMOVE OBJECTS — and every connection into or out of them.
-   *
-   * ONE path for all three ways of asking: the Delete key, the trash on a card's own
-   * header (`CanvasNodeDeleteButton`), and Delete in the selection toolbar. Written
-   * three times it would have been three answers to "what happens to the edges", "does
-   * a locked object go too" and "what is the selection afterwards" — and the keyboard
-   * path already answered the second one differently from `arrange`, `align` and the
-   * nudge keys, all of which skip a locked object.
-   *
-   * It reads `nodesRef` rather than `nodes` deliberately: this callback is handed to
-   * every card through `canvasNodeTypes`, and a dependency on the board itself would
-   * give React Flow a new `nodeTypes` object on every edit and remount the whole board.
-   */
-  const deleteObjects = useCallback((ids: readonly string[]) => {
-    if (!canEdit) return;
-    const requested = new Set(ids);
-    // A locked object is locked against being moved, resized AND removed — the lock is
-    // the one thing standing between a finished board and an accidental drag, and a
-    // delete that ignored it would make that promise worth nothing.
-    const removable = new Set(nodesRef.current.filter((node) => requested.has(node.id) && canvasPlacementUnlocked(node)).map((node) => node.id));
-    if (!removable.size) {
-      setNotice(requested.size ? t('noticeDeleteLocked') : t('noticeSelectToDelete'));
-      return;
-    }
-    setNodes((current) => current.filter((node) => !removable.has(node.id)));
-    setEdges((current) => current.filter((edge) => !removable.has(edge.source) && !removable.has(edge.target)));
-    // Only what actually went. Clearing the whole selection would drop the other cards a
-    // person had gathered, which is a second, unasked-for edit.
-    setSelectedIds((current) => current.filter((id) => !removable.has(id)));
-    setSelectedId((current) => (current && removable.has(current) ? null : current));
-    setNotice(t('noticeObjectsDeleted', { count: removable.size }));
-  }, [canEdit, setEdges, setNodes, setNotice, t]);
-  /** Stable across renders so `canvasNodeTypes` keeps its identity — see above. */
-  const deleteNodeFromCard = useCallback((nodeId: string) => deleteObjects([nodeId]), [deleteObjects]);
-  const deleteSelection = useCallback(() => deleteObjects(selectionIds()), [deleteObjects, selectionIds]);
-
-  const duplicateSelection = useCallback(() => {
-    if (!canEdit) return;
-    const ids = new Set(selectionIds());
-    if (!ids.size) { setNotice(t('noticeSelectToDuplicate')); return; }
-    const idMap = new Map<string, string>();
-    const copies = nodes.filter((node) => ids.has(node.id)).map((node) => {
-      const id = crypto.randomUUID(); idMap.set(node.id, id);
-      return { ...node, id, position: { x: node.position.x + 36, y: node.position.y + 36 }, selected: true, data: { ...node.data, title: `${node.data.title} copy`, resourceId: undefined } };
-    });
-    const copiedEdges = edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
-    setNodes((current) => { const base = current.map((node) => ({ ...node, selected: false })); return [...base, ...placeAppendedRef.current(base, copies)]; });
-    setEdges((current) => [...current, ...copiedEdges]);
-    const nextIds = copies.map((node) => node.id); setSelectedIds(nextIds); setSelectedId(nextIds.length === 1 ? nextIds[0] : null);
-    setNotice(t('noticeObjectsDuplicated', { count: copies.length }));
-  }, [canEdit, edges, nodes, selectionIds, setEdges, setNodes]);
-
-  const copySelection = useCallback(() => {
-    const ids = new Set(selectionIds());
-    if (!ids.size) { setNotice(t('noticeSelectToCopy')); return; }
-    canvasClipboard.current = {
-      nodes: nodes.filter((node) => ids.has(node.id)).map((node) => ({ ...node, data: { ...node.data } })),
-      edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge })),
-    };
-    setNotice(t('noticeObjectsCopied', { count: ids.size }));
-  }, [edges, nodes, selectionIds]);
-
-  const pasteSelection = useCallback(() => {
-    if (!canEdit || !canvasClipboard.current) return;
-    const idMap = new Map<string, string>();
-    const pasted = canvasClipboard.current.nodes.map((node) => {
-      const id = crypto.randomUUID(); idMap.set(node.id, id);
-      return { ...node, id, position: { x: node.position.x + 48, y: node.position.y + 48 }, selected: true, data: { ...node.data, resourceId: undefined } };
-    });
-    const pastedEdges = canvasClipboard.current.edges.map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
-    setNodes((current) => { const base = current.map((node) => ({ ...node, selected: false })); return [...base, ...placeAppendedRef.current(base, pasted)]; }); setEdges((current) => [...current, ...pastedEdges]);
-    const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(t('noticeObjectsPasted', { count: ids.length }));
-  }, [canEdit, setEdges, setNodes]);
-
-  const alignSelection = useCallback(() => {
-    const ids = new Set(selectionIds());
-    if (!canEdit || ids.size < 2) { setNotice(t('alignNeedsTwo')); return; }
-    // Left-aligning ALONE piles a selected row of objects onto one another, which
-    // is what "align" used to do here; the shared primitive spaces the column too.
-    const placements = alignCanvasNodesLeft(nodes, ids);
-    if (!placements.size) { setNotice(t('alignNeedsTwo')); return; }
-    setNodes((current) => current.map((node) => {
-      const placement = placements.get(node.id);
-      return placement ? { ...node, position: placement } : node;
-    }));
-    setNotice(t('objectsAligned', { count: placements.size }));
-  }, [canEdit, nodes, selectionIds, setNodes, t]);
-
-  /**
-   * Work on one section alone — a canvas within a canvas.
-   *
-   * Everything outside the frame is hidden (not removed — see `useFramedBoard`), the
-   * viewport fits what is left, and the board is otherwise exactly the board: same
-   * palette, same Brain, same undo, same presence. That is the whole difference from
-   * the modal editor this replaced, which had its own of each.
-   */
-  const openFrame = useCallback((frameId: string) => {
-    setFrameFocus(frameId);
-    setNodePanel(null);
-    // After the hidden flags land, or the fit measures the whole board.
-    window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.14, minZoom: CANVAS_FIT_MIN_ZOOM }); }, 0);
-  }, []);
-  const exitFrame = useCallback(() => {
-    setFrameFocus(null);
-    window.setTimeout(() => { void flowRef.current?.fitView({ padding: 0.12, minZoom: CANVAS_FIT_MIN_ZOOM }); }, 0);
-  }, []);
-
-  const frameSelection = useCallback(() => {
-    const ids = new Set(selectionIds());
-    const chosen = nodes.filter((node) => ids.has(node.id));
-    if (!canEdit || chosen.length < 2) { setNotice(t('noticeSelectTwoForFrame')); return; }
-    const left = Math.min(...chosen.map((node) => node.position.x)) - 40;
-    const top = Math.min(...chosen.map((node) => node.position.y)) - 70;
-    const right = Math.max(...chosen.map((node) => node.position.x + canvasNodeDimensions(node).width)) + 40;
-    const bottom = Math.max(...chosen.map((node) => node.position.y + canvasNodeDimensions(node).height)) + 40;
-    const frame = newNode('frame', { x: left, y: top }); frame.style = { width: right - left, height: bottom - top }; frame.zIndex = -1;
-    frame.data = { ...frame.data, title: 'Grouped objects', framePurpose: 'Organize this related work' };
-    setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(t('noticeObjectsFramed', { count: chosen.length }));
-  }, [canEdit, nodes, selectionIds, setNodes]);
-
-  const togglePlacementLock = useCallback(() => {
-    const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
-    const shouldLock = nodes.some((node) => ids.has(node.id) && canvasPlacementUnlocked(node));
-    setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, ...canvasPlacementFlags(shouldLock), data: { ...node.data, placementLocked: shouldLock } } : node));
-    setNotice(shouldLock ? 'Object placement locked' : t('noticePlacementUnlocked'));
-  }, [canEdit, nodes, selectionIds, setNodes]);
-
-  const toggleHidden = useCallback(() => {
-    const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
-    const shouldHide = nodes.some((node) => ids.has(node.id) && node.data.placementHidden !== true);
-    setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, hidden: shouldHide, data: { ...node.data, placementHidden: shouldHide } } : node));
-    if (shouldHide) { setSelectedId(null); setSelectedIds([]); }
-    setNotice(shouldHide ? 'Objects hidden from the canvas' : t('noticeObjectsShown'));
-  }, [canEdit, nodes, selectionIds, setNodes]);
+  const { attachmentBytesStrategy, importDataset } = useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt, historyApplying, historyBaseline, hydrated, importLabel, journal, nodes, persistence, redoStack, selectedId, setNodes, setNotice, t, undoStack });
+  const { selectionIds, redo, undo, deleteObjects, duplicateSelection, copySelection, pasteSelection, openFrame, deleteNodeFromCard, alignSelection, frameSelection, togglePlacementLock, toggleHidden, deleteSelection, exitFrame } = useCanvasEditing({ canEdit, canvasClipboard, cardsEditable, edges, flowRef, historyApplying, historyBaseline, journal, nodes, nodesRef, placeAppendedRef, redoStack, selectedId, selectedIds, setEdges, setFrameFocus, setNodePanel, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, t, undoStack });
 
   /**
    * The commands the 3D scene publishes while it is on screen, and `null` in the
@@ -2575,402 +989,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * cannot disagree about it.
    */
   const objectsOnScreen = surfaceDef.showsObjects || threeDControls !== null;
-  /**
-   * The ordered walk through this board's frames.
-   *
-   * Derived from the nodes rather than stored — see `canvasPresentation.ts` for why a
-   * stored list is the wrong shape for a board several people are editing. Memoised on
-   * the nodes, so adding a frame mid-presentation extends the sequence with no
-   * bookkeeping anywhere.
-   */
-  const presentationSteps = useMemo(() => presentationSequence(nodes.map((node) => {
-    const dimensions = canvasNodeDimensions(node);
-    return {
-      id: node.id,
-      position: node.position,
-      width: dimensions.width,
-      height: dimensions.height,
-      data: { kind: node.data.kind, title: node.data.title, presentationOrder: node.data.presentationOrder, hidden: node.data.placementHidden },
-      hidden: node.hidden === true,
-    };
-  })), [nodes]);
-
-  /**
-   * Move the presentation, and everyone following, to one step.
-   *
-   * The follower half is FREE and is the reason this writes a viewport rather than
-   * calling `fitView`: the presence channel already carries `viewport` on every pan and
-   * zoom, and `followedViewport` already applies it. So moving the presenter's camera
-   * moves every follower's, and the sequence needed no new transport at all — which is
-   * exactly why these three were the Miro items worth chasing.
-   */
-  const goToPresentationStep = useCallback((index: number) => {
-    const step = presentationStepAt(presentationSteps, index);
-    if (!step) return;
-    setPresentStep(step.index - 1);
-    const wrapper = flowWrapRef.current;
-    const screen = wrapper
-      ? { width: wrapper.clientWidth, height: wrapper.clientHeight }
-      : { width: typeof window === 'undefined' ? 1_280 : window.innerWidth, height: typeof window === 'undefined' ? 720 : window.innerHeight };
-    void flowRef.current?.setViewport(presentationViewport(step.bounds, screen), { duration: 420 });
-  }, [presentationSteps]);
-
-  /**
-   * Step relative, clamped. Wrapping past the last frame in front of a room reads as a
-   * crash, which is the whole argument in `stepPresentation`.
-   */
-  const movePresentation = useCallback((delta: number) => {
-    const next = stepPresentation(presentStep, delta, presentationSteps.length);
-    if (next === null) return;
-    goToPresentationStep(next);
-  }, [goToPresentationStep, presentStep, presentationSteps.length]);
-
-  /**
-   * Opening present mode opens ON the sequence.
-   *
-   * Without this, entering present mode leaves the camera wherever the presenter
-   * happened to be — which is the behaviour that made the mode feel unfinished: the
-   * chrome vanishes and nothing else happens.
-   */
-  useEffect(() => {
-    if (!presentMode || !presentationSteps.length) return;
-    goToPresentationStep(presentStep);
-    // Deliberately NOT depending on `presentStep`: this fires on ENTERING the mode, and
-    // re-running it on every step would fight the step handler that just moved the
-    // camera.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presentMode, presentationSteps.length]);
-
-  const focusSelection = useCallback(() => {
-    const ids = selectionIds(); if (!ids.length) return;
-    if (threeDControls) { threeDControls.focusObjects(ids); return; }
-    void flowRef.current?.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.28, duration: 350 });
-  }, [selectionIds, threeDControls]);
-
-  useEffect(() => {
-    const keyboard = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); return; }
-      const ids = new Set(selectionIds());
-      if ((event.key === 'Delete' || event.key === 'Backspace') && ids.size && canEdit) {
-        event.preventDefault(); deleteObjects([...ids]);
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateSelection(); return; }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelection(); return; }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteSelection(); return; }
-      // PRESENTING TAKES THE ARROW KEYS. Nudging a selected object one pixel is the
-      // right binding on a board being edited and the wrong one in front of a room,
-      // where → means "next". Escape leaves the mode rather than clearing a selection,
-      // for the same reason: it is what every presentation tool does.
-      if (presentModeRef.current && presentationSteps.length > 0) {
-        if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); movePresentation(1); return; }
-        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp' || event.key === 'PageUp') { event.preventDefault(); movePresentation(-1); return; }
-        if (event.key === 'Home') { event.preventDefault(); goToPresentationStep(0); return; }
-        if (event.key === 'End') { event.preventDefault(); goToPresentationStep(presentationSteps.length - 1); return; }
-        if (event.key === 'Escape') { event.preventDefault(); setPresentMode(false); return; }
-      }
-      if (event.key === 'Escape') { setSelectedId(null); setSelectedIds([]); setNodes((current) => current.map((node) => ({ ...node, selected: false }))); return; }
-      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && ids.size && canEdit) {
-        event.preventDefault(); const step = event.shiftKey ? 10 : 1; const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0; const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
-        setNodes((current) => current.map((node) => ids.has(node.id) && canvasPlacementUnlocked(node) ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } } : node));
-      }
-    };
-    window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
-  }, [canEdit, copySelection, deleteObjects, duplicateSelection, goToPresentationStep, movePresentation, pasteSelection, presentationSteps.length, redo, selectionIds, setNodes, setPresentMode, undo]);
-
-  /**
-   * Apply what a materialisation use case decided.
-   *
-   * ONE place that turns a `MaterializeResult` into board state, because "add the
-   * object, connect it to its source, select it, open its inspector, say so" is
-   * the same five steps for a chart and for a map — and they were written twice,
-   * so the map already differed from the chart in ways nobody had chosen.
-   */
-  const applyMaterialization = useCallback((result: MaterializeResult) => {
-    if (!result.ok) { setNotice(result.notice); return; }
-    setNodes((current) => [...current, ...placeAppendedRef.current(current, [result.object])]);
-    setEdges((current) => [...current, result.edge]);
-    setSelectedId(result.object.id);
-    openNodeInspector(result.object.id);
-    setNotice(result.notice);
-  }, [openNodeInspector, setEdges, setNodes, setNotice]);
-
-  /** The dependencies every materialisation takes: how to speak to the person, and
-   *  how to build an object of a kind (the factory reads the object registry, which
-   *  the application layer must not import). */
-  const materializeDeps = useMemo(
-    () => ({ t: canvasText, createObject: (kind: CreationObjectKind, position: { x: number; y: number }) => newNode(kind, position, canvasText) }),
-    [canvasText],
-  );
-
-  const visualizeDataset = useCallback(() => {
-    if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
-    applyMaterialization(visualizeDatasetUseCase(selectedNode, materializeDeps, fmt.number));
-  }, [applyMaterialization, fmt, materializeDeps, selectedNode]);
-
-  /**
-   * "Plot on a map" — the direct counterpart to {@link visualizeDataset}.
-   *
-   * A dataset whose rows ALREADY carry coordinates (an uploaded geocoded CSV, or one the
-   * Brain has written lat/lng back onto) needed a Brain turn to become a map, because the
-   * only path to `materializeAs: 'map'` was `canvas_query_dataset`. The detection was
-   * already here — `detectGeoColumns` runs over the imported rows — so the UI was
-   * withholding something it could see. This spends no tokens and makes no network call.
-   */
-  const plotDataset = useCallback(() => {
-    if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
-    applyMaterialization(plotDatasetUseCase(selectedNode, materializeDeps));
-  }, [applyMaterialization, materializeDeps, selectedNode]);
-
-  const profileDataset = useCallback((nodeId: string) => {
-    const target = nodes.find((node) => node.id === nodeId);
-    if (!target) return;
-    const result = profileDatasetUseCase(target, materializeDeps.t, fmt.number);
-    if (!result.ok) { setNotice(result.notice); return; }
-    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...result.patch } } : node));
-    setNotice(result.notice);
-  }, [fmt, materializeDeps, nodes, setNodes, setNotice]);
-
-  // What a primary drag on empty board does, and how forgiving the board is about a
-  // pointer that wanders. `panAndSelectConflict` is the invariant `canvasInteractionProps`
-  // guarantees, not a React Flow prop, so it is dropped before the rest is spread.
-  const coarsePointer = useCoarsePointer();
-  const { panAndSelectConflict: _panAndSelectConflict, ...interactionProps } = useMemo(
-    () => canvasInteractionProps({ gesture: canvasGesture, pointer: coarsePointer ? 'coarse' : 'fine', drawing: drawingMode }),
-    [canvasGesture, coarsePointer, drawingMode],
-  );
-
-  // How a drawn connection is accepted. Shared with the workflow builder, because
-  // "released on the wrong side of the card and nothing happened" is one bug, not two.
-  const connectionProps = useMemo(() => flowConnectionProps(coarsePointer ? 'coarse' : 'fine'), [coarsePointer]);
-
-  const onConnect = useCallback((connection: Connection) => {
-    // An arm drawn out of a step that DECIDES is labeled with the outlet it left, not
-    // with the board's connection kind: that label is what the executor prunes on
-    // (`WorkflowDefEdge.label`), and it is what the arrow has to READ as, because
-    // "reference" on the arm out of a switch case tells nobody which case it is.
-    const from = nodes.find((node) => node.id === connection.source);
-    const outlet = from?.data.kind === 'flowStep'
-      ? outletForHandle(stepKindOf(from.data), stepConfigOf(from.data), connection.sourceHandle)
-      : null;
-    setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), ...edgeVisuals(connectionStyle), data: { connectionKind, connectionStyle }, label: outlet?.name || connectionKind }, current));
-    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: canvasSurface(), connectionKind } });
-    const source = nodes.find((node) => node.id === connection.source);
-    const target = nodes.find((node) => node.id === connection.target);
-    if (persistence === 'server' && source && target && source.data.kind !== 'chat' && target.data.kind !== 'chat') {
-      const correlationId = crypto.randomUUID();
-      const metadata = { sourceKind: source.data.kind, targetKind: target.data.kind, connectionKind };
-      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'started', artifactId: source.id, metadata }).catch(() => undefined);
-      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'reused', artifactId: source.id, metricKey: 'outputs_reused', metricValue: 1, unit: 'count', metadata }).catch(() => undefined);
-    }
-  }, [connectionKind, connectionStyle, nodes, persistence, sessionId, setEdges]);
-
-  /**
-   * Choose the connector style — and RESTYLE what is selected.
-   *
-   * A style control that only armed the next draw would be unusable on a diagram that
-   * already exists: the way a person restyles an arrow is to select it and pick, which
-   * is what every drawing tool has taught them. So one press does both, and the same
-   * `edgeVisuals` translation runs for the new edge and the existing ones — three call
-   * sites computing that themselves would be three edges that look different while
-   * claiming one style.
-   */
-  const setConnectionStyle = useCallback((patch: Partial<ConnectionStyle>) => {
-    setConnectionStyleState((current) => {
-      const next = { ...current, ...patch };
-      setEdges((edges) => {
-        if (!edges.some((edge) => edge.selected)) return edges;
-        return edges.map((edge) => (edge.selected
-          ? { ...edge, ...edgeVisuals(next), data: { ...(edge.data ?? {}), connectionStyle: next } }
-          : edge));
-      });
-      return next;
-    });
-  }, [setEdges]);
-
-  /** Selecting the Brain Object reveals the dock instead of a second transcript. */
-  const openBrainDock = useCallback(() => setBrainDock((current) => {
-    if (current.open) return current;
-    const next = { ...current, open: true };
-    writeBrainDockPreferences(next);
-    return next;
-  }), []);
-
-  /**
-   * A guest wall is the answer to something they just asked, and the answer — the
-   * refusal and the account that clears it — lives on the Brain surface. Reveal it,
-   * or a visitor with Brain closed gets a one-line notice and no way forward.
-   */
-  useEffect(() => { if (guestLimit) openBrainDock(); }, [guestLimit, openBrainDock]);
-
-  const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((event, node) => {
-    setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
-    setInspectorFocus(null); setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]);
-    if (node.data.kind === 'chat') openBrainDock();
-    // Selecting a card opens the panel ANCHORED to it, SHORT. Everything else about the
-    // object is one press away in the same panel, which is the whole reason the short
-    // reading can afford to be short.
-    //
-    // `resume` opens it WIDE instead. The card now shows only the rendered document (no
-    // fields left to put in a compact panel at all — see `ResumeInspectorSection`), so
-    // the short reading would open on every click with nothing in it but the control
-    // that widens it.
-    if (node.data.kind === 'resume') { openNodeInspector(node.id, null, event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : undefined); return; }
-    if (node.data.kind !== 'chat' && event.currentTarget instanceof Element) {
-      openNodePanel(node.id, 'config', event.currentTarget.getBoundingClientRect());
-    }
-  }, [openBrainDock, openNodeInspector, openNodePanel]);
-  // XYFlow subscribes to this callback through its Zustand store. An inline
-  // callback is a new subscription every render; immediately writing a fresh
-  // `[]` back to React from that subscription can create an update-depth loop
-  // on a newly hydrated local Session. Keep the subscriber stable and preserve
-  // state identity when the semantic selection did not change.
-  /**
-   * Node changes, plus the annotations that have to come along.
-   *
-   * A mark drawn ON a card is a separate node (only `data` survives the graph
-   * round trip, so React Flow's own parenting cannot be used — see the note
-   * where `annotatesId` is written). Without this, dragging a document left its
-   * highlighting behind on the board, which is worse than not being able to
-   * highlight it at all. The delta is taken from the position change itself, so
-   * one drag moves the pair by exactly the same amount.
-   */
-  const onCanvasNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
-    const moves = changes.flatMap((change) => change.type === 'position' && change.position ? [{ id: change.id, position: change.position }] : []);
-    if (!moves.length) { onNodesChange(changes); return; }
-    // Anything React Flow is ALREADY moving. A selected card inside a frame that is
-    // being dragged gets its own position change from the library, and adding a
-    // follower for it would apply the delta twice — the card would drift out of the
-    // section at double speed, which is worse than not carrying it at all.
-    const alreadyMoving = new Set(moves.map((move) => move.id));
-    const followers = moves.flatMap((move) => {
-      const source = nodes.find((node) => node.id === move.id);
-      if (!source) return [];
-      const dx = move.position.x - source.position.x;
-      const dy = move.position.y - source.position.y;
-      if (!dx && !dy) return [];
-      // An annotation follows the object it marks up; a FRAME carries everything
-      // inside it. Both are "this moved, so did that", which is why they are resolved
-      // in one pass — a frame full of annotated cards must not move its members and
-      // leave their marks behind.
-      const carried = source.data.kind === 'frame' ? new Set(framedBoardRef.current.memberIdsOf(move.id)) : null;
-      return nodes
-        .filter((node) => !alreadyMoving.has(node.id)
-          && ((node.data.kind === 'drawing' && node.data.annotatesId === move.id) || carried?.has(node.id)))
-        .map((node) => ({ id: node.id, type: 'position' as const, position: { x: node.position.x + dx, y: node.position.y + dy } }));
-    });
-    onNodesChange(followers.length ? [...changes, ...followers] : changes);
-  }, [nodes, onNodesChange]);
-  const onSelectionChange = useCallback(({ nodes: chosen }: { nodes: CreationFlowNode[] }) => {
-    const ids = chosen.map((node) => node.id);
-    setSelectedIds((current) => current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids);
-    const nextId = ids.length === 1 ? ids[0]! : null;
-    setSelectedId((current) => current === nextId ? current : nextId);
-  }, []);
-  const clearSelection = useCallback(() => {
-    setSelectedId((current) => current == null ? current : null);
-    setSelectedIds((current) => current.length ? [] : current);
-  }, []);
-  const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!flowRef.current) return;
-    const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    if (presenceLive) { cursorRef.current = point; sendPresence({ cursor: point }); }
-    if (drawingMode && drawingPoints.current.length) drawingPoints.current.push(point);
-  }, [drawingMode, presenceLive, sendPresence]);
-  const onCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    // A stroke may START ANYWHERE, including on top of a card — that is what
-    // makes annotation possible. While a tool is held the canvas is a drawing
-    // surface, and the cards under it are things to mark up rather than things
-    // to drag. (Dragging and connecting are disabled for the same reason.)
-    if (!drawingMode || !canEdit || !flowRef.current) return;
-    drawingPoints.current = [flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY })];
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, [canEdit, drawingMode]);
-  /**
-   * Commit the stroke.
-   *
-   * Where it LANDS is the whole difference between a drawing tool and a sketch
-   * pad: a stroke over an existing drawing joins that drawing, a stroke over any
-   * other object becomes an annotation that rides on it, and a stroke over empty
-   * board starts a new sketch. All three go through `drawingPatch`, so the marks,
-   * the card's size and its position stay in step however the drawing grew.
-   */
-  const onCanvasPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!drawingMode) return;
-    const path = drawingPoints.current.splice(0);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    const start = path[0];
-    if (!start) return;
-    const tool = drawing.tool;
-    // Freehand and shapes need a drag; text and the eraser act on a tap.
-    if (tool !== 'text' && tool !== 'eraser' && path.length < 2) return;
-
-    if (tool === 'eraser') {
-      const radius = Math.max(8, drawing.width * 3);
-      let erased = 0;
-      setNodes((current) => current.flatMap((node) => {
-        if (node.data.kind !== 'drawing') return [node];
-        const absolute = canvasStrokes(node.data).map((stroke) => ({ ...stroke, points: stroke.points.map((item) => ({ x: item.x + node.position.x, y: item.y + node.position.y })) }));
-        const kept = eraseStrokes(absolute, path, radius);
-        if (kept.length === absolute.length) return [node];
-        erased += absolute.length - kept.length;
-        // A drawing with nothing left on it is not an empty card, it is gone.
-        if (!kept.length) return [];
-        const patch = drawingPatch(kept);
-        return [{ ...node, position: { x: Number(patch.drawingOriginX ?? node.position.x), y: Number(patch.drawingOriginY ?? node.position.y) }, style: { width: Number(patch.drawingWidth), height: Number(patch.drawingHeight) + 44 }, data: { ...node.data, ...patch } }];
-      }));
-      if (erased) setNotice(t('noticeStrokesErased', { count: erased }));
-      return;
-    }
-
-    const stroke: CanvasStroke = {
-      tool,
-      points: tool === 'text' ? [start] : tool === 'pen' || tool === 'highlighter' ? path : [start, path[path.length - 1]!],
-      stroke: drawing.color,
-      strokeWidth: drawing.width,
-      ...(tool === 'text' ? { text: '' } : {}),
-    };
-
-    // The object under the first point decides where the stroke goes.
-    const target = topmostNodeAt(nodes, start);
-    if (target?.data.kind === 'drawing') {
-      setNodes((current) => current.map((node) => {
-        if (node.id !== target.id) return node;
-        const absolute = canvasStrokes(node.data).map((item) => ({ ...item, points: item.points.map((position) => ({ x: position.x + node.position.x, y: position.y + node.position.y })) }));
-        const patch = drawingPatch([...absolute, stroke]);
-        return { ...node, position: { x: Number(patch.drawingOriginX), y: Number(patch.drawingOriginY) }, style: { width: Number(patch.drawingWidth), height: Number(patch.drawingHeight) + 44 }, data: { ...node.data, ...patch } };
-      }));
-      setSelectedId(target.id);
-      return;
-    }
-
-    const patch = drawingPatch([stroke]);
-    const node = newNode('drawing', { x: Number(patch.drawingOriginX), y: Number(patch.drawingOriginY) });
-    node.style = { width: Number(patch.drawingWidth), height: Number(patch.drawingHeight) + (target ? 8 : 44) };
-    node.data = {
-      ...node.data,
-      title: target ? t('annotationTitle', { title: target.data.title }) : t('sketchTitle'),
-      ...patch,
-      // An annotation names what it is ON. `annotatesId` is node DATA rather
-      // than React Flow's `parentId` because only `data` survives the graph
-      // round trip (see `persistedGraphFromBoard`) — a parent id would be
-      // silently dropped on save and the mark would come back detached.
-      ...(target ? { annotatesId: target.id, status: '' } : {}),
-    };
-    if (target) node.zIndex = 6;
-    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
-    setSelectedId(node.id);
-    setNotice(target ? t('noticeAnnotationAdded', { title: target.data.title }) : t('noticeSketchAdded'));
-  }, [drawing, drawingMode, nodes, setNodes, t]);
-  const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
-    viewportRef.current = viewport;
-    // A follower is watching this pan happen, not reading about it eight seconds later.
-    if (presenceLive) sendPresence({ viewport });
-    if (persistence !== 'local' || !hydrated.current) return;
-    const snapshot = currentSnapshot(viewport);
-    persistSnapshot(snapshot);
-  }, [edges, nodes, persistence, presenceLive, sendPresence, sessionId, storageKey, timeline, title]);
+  const { presentationSteps, movePresentation, focusSelection } = useCanvasPresentation({ canEdit, copySelection, deleteObjects, duplicateSelection, flowRef, flowWrapRef, nodes, pasteSelection, presentMode, presentModeRef, presentStep, redo, selectionIds, setNodes, setPresentMode, setPresentStep, setSelectedId, setSelectedIds, threeDControls, undo });
+  const { visualizeDataset, plotDataset, profileDataset } = useCanvasDatasetViews({ canvasText, fmt, nodes, openNodeInspector, placeAppendedRef, selectedNode, setEdges, setNodes, setNotice, setSelectedId });
+  const { openBrainDock, setConnectionStyle, onCanvasPointerDown, onCanvasPointerMove, onCanvasPointerUp, onCanvasNodesChange, onConnect, connectionProps, onNodeClick, onSelectionChange, clearSelection, onViewportChange, interactionProps } = useCanvasInteraction({ canEdit, canvasGesture, connectionKind, connectionStyle, currentSnapshot, cursorRef, drawing, drawingPoints, edges, flowRef, framedBoardRef, guestLimit, hydrated, nodes, onNodesChange, openNodeInspector, openNodePanel, persistSnapshot, persistence, placeAppendedRef, presenceLive, sendPresence, sessionId, setBrainDock, setConnectionStyleState, setDiagnosticsOpen, setEdges, setHistoryOpen, setInspectorFocus, setNodes, setNotice, setOutcomeMetricsOpen, setSelectedId, setSelectedIds, storageKey, t, timeline, title, viewportRef });
   const { addAtCenter, choiceSeed, captureIdeaFromComposer, pickObject, appendAtCenter } = useCanvasObjectPlacement({ canEdit, cardsEditable, connectionKind, flowRef, localizedTourDefaults, nodes, openNodeInspector, placeAppendedRef, sessionId, setEdges, setNodes, setNotice, setObjectPicker, setPrompt, setSelectedId, setSelectedIds, t, tStep, timeline });
   const { socialAccountGate, buildSocialFeedNode, importMiroBoard, addSocialFeedToBoard, addSocialCampaignToBoard, boardMedia } = useCanvasConnectedSources({ canEdit, connectedAccountGate, layoutViewportRef, nodes, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, stage, t, tMiro, tSocial });
   const { seatTeammate } = useCanvasTeammates({ addAtCenter, canEdit, nodesRef, placeAppendedRef, revealObjectRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t });
@@ -3093,176 +1114,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const { publishWebsite, openBuild, openReleasesPanel, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode, openGamePanel, openPublishPanel, gamePanelTarget } = useCanvasPublishing({ confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, setBuildFocus, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t });
   const { generateVideo, runCreativeAction } = useCanvasCreativeGeneration({ errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes, setNotice, t });
   const { exportArtifact } = useCanvasArtifactExport({ edges, nodes, setNodes, setNotice, t });
-
-  /** Every file this session holds, derived from the objects themselves so a new
-   * document, deck, diagram, or sheet appears in the library the moment Brain
-   * authors it — no separate registration step to forget. */
-  const sessionFiles = useMemo(() => canvasFiles(nodes), [nodes]);
-
-  /**
-   * Put the reader in front of one object, from wherever they are.
-   *
-   * Selecting a node, clearing the inspector and flying the viewport to it were three
-   * calls spelled out inline by the Files library; the app surface's "open the card"
-   * needs the identical four, plus the one the library did not need — HANDING THE BOARD
-   * BACK. A surface that has taken the centre is the one place where selecting a node
-   * changes nothing you can see, so "reveal" has to include leaving.
-   */
-  const revealObject = useCallback((nodeId: string) => {
-    setSurface('graph');
-    setInspectorFocus(null);
-    setSelectedId(nodeId);
-    setSelectedIds([nodeId]);
-    void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 });
-  }, [setSurface]);
-  revealObjectRef.current = revealObject;
-
-  /**
-   * WHAT THIS BOARD IS, as a walk. Derived from the board's own objects and
-   * connections by `canvasWalkthroughStops` — one stop per kind, in dependency
-   * order — so the running order is never a hand-maintained list that a new
-   * object kind quietly falls out of.
-   *
-   * Memoised on the board: it is otherwise recomputed on every object edit, and
-   * the grouping walks the graph. An empty result means there is nothing worth
-   * walking, and that one fact answers BOTH whether the offer appears and whether
-   * the command bar draws the button — see the `walkthrough` handler.
-   */
-  const walkthroughStops = useMemo(
-    () => canvasWalkthroughStops(nodes, edges.map((edge) => ({ source: edge.source, target: edge.target }))),
-    [edges, nodes],
-  );
-  const walkthroughRef = useRef<CanvasWalkthroughHandle>(null);
-
-  /** A file the library offers: a delivered artifact opens, an authored object
-   * exports through the path above. */
-  const downloadCanvasFile = useCallback((file: CanvasFile) => {
-    if (file.url) {
-      const navigable = navigableArtifactUrl(file.url);
-      const anchor = document.createElement('a');
-      anchor.href = navigable;
-      anchor.download = file.name;
-      anchor.click();
-      if (navigable !== file.url) window.setTimeout(() => URL.revokeObjectURL(navigable), 60_000);
-      setNotice(t('downloadReady'));
-      return;
-    }
-    const target = nodes.find((node) => node.id === file.nodeId);
-    if (target) void exportArtifact(file.nodeId, defaultExportAction(target.data.kind)).then(setNotice);
-  }, [exportArtifact, nodes, t]);
-
-  /**
-   * Evaluate a test plan's exit criteria against the evidence ON THE BOARD.
-   *
-   * ── WHY THIS IS DERIVED AND NEVER AUTHORED ───────────────────────────────────
-   * The Creation Canvas release gate was a hand-edited `canvas-release-evidence.json`
-   * whose only real validation was that the `REPLACE_` placeholder had been deleted —
-   * so it certified whatever someone typed. The same criteria are worth gating on;
-   * what was wrong was where the numbers came from.
-   *
-   * So `gateVerdict` is absent from `MUTABLE_FIELDS.testPlan` (a model that could
-   * write its own verdict could report a release green that nothing ran), and this is
-   * its only writer. The evidence itself comes from `releaseGateEvidence`, which the
-   * JSON export also reads — one definition of "an open defect", two consumers.
-   */
-  const evaluateReleaseGate = useCallback((planId: string) => {
-    const plan = nodes.find((node) => node.id === planId && node.data.kind === 'testPlan');
-    if (!plan) return;
-    const evidence = releaseGateEvidence(plan, nodes, edges);
-    const connected = new Set(edges.filter((edge) => edge.source === plan.id).map((edge) => edge.target));
-    const verdict = planGateVerdict(normalizeExitCriteria(plan.data.exitCriteria), evidence);
-    setNodes((current) => current.map((node) => node.id === plan.id
-      ? {
-        ...node,
-        data: {
-          ...node.data,
-          gateVerdict: verdict,
-          passRate: evidence.runs[0]?.passRate ?? null,
-          caseCount: nodes.filter((candidate) => candidate.data.kind === 'testCase' && connected.has(candidate.id)).length,
-        },
-      }
-      : node));
-    setNotice(t('noticeGateEvaluated', { score: verdict.score }));
-  }, [edges, nodes, setNodes, t]);
-
-  /**
-   * A CARD ACT — `invoice.issue`, `offer.hire`, `submission.mark`, and seven more.
-   *
-   * Ten `useCallback`s used to live here, one per act, each repeating the same six
-   * steps: find the card by id and kind, refuse without an account, validate its
-   * fields, do the work, stamp the result back, say what happened. They are now
-   * registry entries owned by the contexts they belong to — finance, hiring,
-   * teaching — and this is the ONE place the board is mutated on their behalf.
-   *
-   * The dispatch below asks `cardActFor` FIRST rather than calling this and
-   * checking, because the chain it sits in is synchronous and "did an act answer"
-   * has to be known before the next `else if` is considered.
-   */
-  // The runner itself now lives in `cardActRunner.tsx` and is PUBLISHED to the board
-  // rather than held in this closure, so a surface that wants a button for an act reads
-  // it from context instead of being handed a callback threaded through the inspector's
-  // prop list. This binding is the only thing that stays here: applying an outcome is
-  // still the one place the board is mutated on an act's behalf.
-  const cardActBoard = useMemo<CardActBoardBinding>(() => ({
-    objects: () => nodesRef.current,
-    create: newNode,
-    setNodes,
-    setEdges,
-    setNotice,
-    persistence,
-    t: canvasText,
-  }), [persistence, setEdges, setNodes, setNotice, canvasText]);
-  const runCardActOnObject = useCardActRunnerFor(cardActBoard);
-
-  /**
-   * The poll's four acts, run from the BOARD rather than from the room.
-   *
-   * The facilitation surface has the same four buttons, and both call the same two
-   * endpoints through the same card reading (`pollPublishBody`) — a second reading of
-   * what `options` means would be a second poll out of one card, and the one that drifts
-   * is the one reached through a model rather than through a person.
-   *
-   * `publish` ends by OPENING the surface: the next thing that happens after a poll is
-   * published is a room being asked to answer it, and leaving the facilitator on the
-   * board with an address they cannot read out is the wrong place to stop.
-   */
-  const runPollAction = useCallback(async (nodeId: string, action: string) => {
-    const target = nodesRef.current.find((node) => node.id === nodeId);
-    if (!target) return;
-    // A poll reaches real people at a public address, which is a tenant resource. A
-    // local board has no tenant, so this is the account gate rather than a failure.
-    if (persistence !== 'server') { requireAccount('publish', tPoll('accountTitle'), tPoll('accountBody')); return; }
-    try {
-      if (action === 'publish') {
-        const result = await publishPoll(pollPublishBody(target.data, nodeId));
-        updateNodeData(nodeId, {
-          questionSetId: result.questionSetId,
-          joinUrl: pollJoinUrl(result.slug),
-          status: tPoll('statusOpen'),
-        } as Partial<CreationNodeData>);
-        setSurface('facilitate', nodeId);
-        setNotice(tPoll('noticePublished'));
-        return;
-      }
-      const questionSetId = typeof target.data.questionSetId === 'string' ? target.data.questionSetId : '';
-      if (!questionSetId) { setNotice(tPoll('noticePublishFirst')); return; }
-      const next = await setPollState(questionSetId, action === 'open'
-        ? { status: 'open' }
-        : action === 'close'
-          ? { status: 'closed' }
-          // `reveal` shows the room the count. Deliberately one-way here: hiding it again
-          // is a facilitation move made in front of the room, on the surface, not
-          // something a model should be able to do to a screen people are reading.
-          : { showResultsLive: true });
-      updateNodeData(nodeId, {
-        showResultsLive: next.showResultsLive,
-        status: next.status === 'open' ? tPoll('statusOpen') : tPoll('statusClosed'),
-      } as Partial<CreationNodeData>);
-      setNotice(next.status === 'open' ? tPoll('noticeVotingOpen') : tPoll('noticeVotingClosed'));
-    } catch (error) {
-      setNotice(faultText(error, tPoll('publishFailed')));
-    }
-  }, [persistence, requireAccount, setSurface, tPoll, updateNodeData]);
+  const { revealObject, walkthroughRef, walkthroughStops, sessionFiles, downloadCanvasFile } = useCanvasFiles({ edges, exportArtifact, flowRef, nodes, revealObjectRef, setInspectorFocus, setNotice, setSelectedId, setSelectedIds, setSurface, t });
+  const { runPollAction, evaluateReleaseGate, runCardActOnObject, cardActBoard } = useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persistence, requireAccount, setEdges, setNodes, setNotice, setSurface, t, tPoll, updateNodeData });
 
   useEffect(() => {
     const pending = pendingBrainActions[0];
@@ -3327,121 +1180,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
   const cleanLayout = useCanvasCleanLayout({ boardRef: flowWrapRef, instanceRef: flowRef, setNodes, edges, padding: .16, maxZoom: .9 });
   const { zoomInAction, zoomOutAction, fitViewAction, framedBoard, roomSceneInput, threeDNodes, describeThreeD, selectThreeDObject, moveThreeDObjects, roomCreations, openRoomCreation } = useCanvasRenderedBoard({ activeAgentIds, canEdit, comparisonModelIds, dockPanel, edges, evermindLiveByNodeId, flowRef, frameFocus, framedBoardRef, minimapColor, nodes, outlineHighlightIds, setInspectorFocus, setNodes, setSelectedId, setSelectedIds, setSurface, showHidden, t, threeDControls, timeline });
-  /**
-   * Export from a card, at the identity React Flow needs.
-   *
-   * `exportArtifact` closes over `nodes`, so a card holding it directly would
-   * either export a stale document or force `nodeTypes` to change on every board
-   * edit — remounting every Object. The ref keeps the callback stable while
-   * always running the newest closure, so a paragraph typed a moment ago is in
-   * the file.
-   */
-  const exportRef = useRef(exportArtifact);
-  exportRef.current = exportArtifact;
-  const exportFromNode = useCallback((nodeId: string, action: CanvasExportAction) => {
-    void exportRef.current(nodeId, action).then(setNotice);
-  }, []);
-  const evaluateCanvasRef = useRef(evaluateCanvas);
-  evaluateCanvasRef.current = evaluateCanvas;
-  /**
-   * Turns typed while Brain is working.
-   *
-   * The composer stays live for the whole run (see the `ChatInput` below): a turn
-   * typed mid-run is HELD and sent the moment the current one finishes, so a long
-   * research turn never means a dead input box. Shared with the Brain panel — one
-   * queueing rule for every composer in the product.
-   */
-  /** Assigned below, once `startCanvasTurn` exists — the queue and the board
-   *  callbacks both need the newest closure without re-registering. */
-  const startCanvasTurnRef = useRef<(text?: string) => void>(() => {});
-  const queuedTurns = useQueuedTurns({
-    running: thinking,
-    // Flushed turns take the same door every other turn takes — see
-    // `startCanvasTurn`. Re-queueing is impossible here: the queue only flushes
-    // once the run it was held behind has finished.
-    send: (text) => startCanvasTurnRef.current(text),
-    resetKey: sessionId,
-  });
-  /**
-   * STOP. Interrupts the in-flight turn: the model stream is aborted, the loop
-   * refuses to start another round-trip or tool, and anything the user had queued
-   * behind it is dropped — they stopped the conversation, not just this sentence.
-   *
-   * The UI unwinds HERE rather than in the run's rejection handler, because a tool
-   * already in flight can take seconds to settle and a Stop that leaves the board
-   * saying "Executing…" is not a stop.
-   */
-  const stopCanvasRun = useCallback(() => {
-    const run = canvasRunRef.current;
-    // `thinking` is the authority on whether there is anything to stop: a settled
-    // run can leave its handle behind, and a Stop that narrates an interruption
-    // nobody was waiting on is worse than an inert button.
-    if (!run || !thinking) return;
-    canvasRunRef.current = null;
-    run.abort.abort();
-    queuedTurns.clear();
-    setThinking(false);
-    setActiveAgentIds(new Set());
-    setBrainRunStartedAt(null);
-    setNotice(t('noticeBrainStopped'));
-    appendTimeline('system', t('noticeBrainStopped'), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${run.requestMessageId}:stopped`);
-    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, {
-      correlationId: run.requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
-      durationMs: performance.now() - run.startedAt, metadata: { stopped: true },
-    }).catch(() => undefined);
-  }, [appendTimeline, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, t, thinking]);
-  /**
-   * THE ONE DOOR every user-initiated turn goes through — the composer, "Send
-   * again" on a transcript message, an object handing Brain a request.
-   *
-   * A turn offered while Brain is still working joins the queue instead of being
-   * refused, which is what lets the composer stay enabled. `evaluateCanvas` drops
-   * a turn on the floor while `thinking` (it is single-flight), so anything that
-   * bypasses this door is silently ignored mid-run.
-   */
-  const startCanvasTurn = useCallback((text?: string) => {
-    const value = (text ?? prompt).trim();
-    if (!value || !assistantGate.assistantAllowed) return; // a closed-book assessment refuses every turn, composer or not
-    if (queuedTurns.submit(value)) {
-      if (text === undefined) setPrompt('');
-      return;
-    }
-    evaluateCanvasRef.current(text);
-  }, [assistantGate.assistantAllowed, prompt, queuedTurns]);
-  // eslint-disable-next-line react-hooks/refs
-  startCanvasTurnRef.current = startCanvasTurn;
-  const tailorResumeFromNode = useCallback((nodeId: string, request: string) => {
-    setSelectedId(nodeId);
-    setSelectedIds([nodeId]);
-    setScopeMode('selection');
-    // Selection/scope are React state. Start the turn after that state commits so
-    // the Recruiter receives the intended résumé, not the previous canvas scope.
-    window.setTimeout(() => startCanvasTurnRef.current(`Target Canvas resume object ID: ${nodeId}\n\n${request}`), 0);
-  }, []);
-  const detachResumeFromNode = useCallback((nodeId: string, detachedData: Partial<CreationNodeData>) => {
-    const detachedId = crypto.randomUUID();
-    setNodes((current) => {
-      const source = current.find((node) => node.id === nodeId);
-      if (!source) return current;
-      return [...current, { ...source, id: detachedId, selected: true, position: { x: source.position.x + 64, y: source.position.y + 64 }, data: { ...source.data, ...detachedData } }];
-    });
-    setSelectedId(detachedId);
-    setSelectedIds([detachedId]);
-  }, [setNodes]);
-  const createResumeShare = useCallback(async (nodeId: string, kind: 'view' | 'embed') => {
-    if (persistence !== 'server') throw new Error(t('resumeShareSaveFirst'));
-    const share = await creationSessionsApi.resumeShares.create(sessionId, nodeId);
-    const path = kind === 'embed' ? share.embedPath : share.viewPath;
-    await navigator.clipboard.writeText(`${window.location.origin}${path}`);
-    setNotice(t(kind === 'embed' ? 'resumeEmbedCopied' : 'resumeLinkCopied'));
-  }, [persistence, sessionId, t]);
-  const listResumeShares = useCallback((nodeId: string) => persistence === 'server'
-    ? creationSessionsApi.resumeShares.list(sessionId, nodeId).then((result) => result.shares)
-    : Promise.resolve([]), [persistence, sessionId]);
-  const revokeResumeShare = useCallback(async (nodeId: string, shareId: string) => {
-    await creationSessionsApi.resumeShares.revoke(sessionId, nodeId, shareId);
-    setNotice(t('resumeShareRevoked'));
-  }, [sessionId, t]);
+  const { startCanvasTurnRef, exportFromNode, startCanvasTurn, stopCanvasRun, queuedTurns } = useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setPrompt, setThinking, t, thinking });
+  const { tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare } = useCanvasResumeShares({ persistence, sessionId, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, startCanvasTurnRef, t });
   /**
    * The same treatment for `runWorkflow`, which needed it just as badly and was
    * missed.
@@ -3476,6 +1216,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // Brain reaches its Object through BrainSurfaceProvider, not through this memo:
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
+  /** The inspector's board — see `inspector/inspectorContext.tsx`. */
+  const removeConnection = useCallback((edgeId: string) => setEdges((current) => current.filter((edge) => edge.id !== edgeId)), [setEdges]);
+  const convertDiagramFromInspector = useCallback(async (nodeId: string, format: string, diagramId?: string) => {
+    const result = await convertObjectToDiagram(nodeId, format, diagramId);
+    return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed');
+  }, [convertObjectToDiagram, t]);
+  const askBrainFromInspector = useCallback((request: string) => { openBrainDock(); evaluateCanvas(request); }, [evaluateCanvas, openBrainDock]);
+  const inspectorValue = useMemo<CanvasInspectorValue>(() => ({
+    nodes, edges, focus: inspectorFocus, timeline, brainTrace, sessionId, persistence, role: sessionRole, editable: canEdit && !lockBlocked, members, creatingBuild,
+    updateNodeData, updateWebsiteViewport, runWorkflow, publishWebsite, openBuild, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode,
+    generateVideo, runCreativeAction, openGamePanel, openPublishPanel, openReleasesPanel, unpackWorkflow, compileWorkflow, buildFlow,
+    openEvermindBuild, loadEvermindTemplate, openBuiltinAgent: openBuiltinAgentSurfaceFromNode, addAgentKnowledge, runAgentTest,
+    convertDiagram: convertDiagramFromInspector, exportArtifact,
+    removeConnection, saveAgent, saveFramePreset, expandProject, loadProjectQuality, compareProjects, deliverMockup, expandMockupSet,
+    importDataset, visualizeDataset, plotDataset, profileDataset, attachEvermindProject, expandEvermindPipeline, trainEvermind: openEvermindTraining,
+    startStandup, askBrain: askBrainFromInspector,
+    resumeTailor: tailorResumeFromNode, resumeDetach: detachResumeFromNode, resumeShare: createResumeShare, resumeSharesList: listResumeShares, resumeShareRevoke: revokeResumeShare,
+  }), [addAgentKnowledge, askBrainFromInspector, attachBuild, attachEvermindProject, brainTrace, buildFlow, buildWebsiteWithCode, canEdit, compareProjects, compileWorkflow, convertDiagramFromInspector, createResumeShare, creatingBuild, deleteBuildWorkspace, deliverMockup, detachResumeFromNode, edges, expandEvermindPipeline, expandMockupSet, expandProject, exportArtifact, generateVideo, importDataset, inspectorFocus, listResumeShares, loadEvermindTemplate, loadProjectQuality, lockBlocked, members, nodes, openBuild, openBuiltinAgentSurfaceFromNode, openEvermindBuild, openEvermindTraining, openGamePanel, openPublishPanel, openReleasesPanel, persistence, plotDataset, profileDataset, publishWebsite, removeConnection, revokeResumeShare, runAgentTest, runCreativeAction, runWorkflow, saveAgent, saveFramePreset, sessionId, sessionRole, startStandup, tailorResumeFromNode, timeline, unpackWorkflow, updateNodeData, updateWebsiteViewport, visualizeDataset]);
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
     creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onOpenFrame={openFrame} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData, onMoveDeal: moveDealFromNode, onDeleteNode: deleteNodeFromCard } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
@@ -4048,7 +1806,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           expanded={expanded}
           onToggleExpanded={() => setNodePanel((current) => (current ? { ...current, expanded: !current.expanded } : current))}
           onOpenSurface={(surface) => setSurface(surface, nodePanel.nodeId)}
-        >{expanded ? <Inspector node={target} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={(patch) => updateNodeData(target.id, patch)} onWebsiteViewportChange={(viewport) => updateWebsiteViewport(target.id, viewport)} onRun={() => runWorkflow(target.id)} onPublishWebsite={() => publishWebsite(target.id)} onOpenBuild={() => openBuild(target.id)} onAttachBuild={(ide) => attachBuild(target.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(target.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(target.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(target.id)} onRunCreativeAction={(action) => runCreativeAction(target.id, action)} onShipGame={() => openGamePanel(target.id)} onPublishListing={() => openPublishPanel(target.id)} onOpenReleases={() => openReleasesPanel(target.id)} onUnpackWorkflow={() => unpackWorkflow(target.id)} onBuildWorkflow={() => { void compileWorkflow(target.id); }} onBuildFlow={() => { void buildFlow(target.id); }} onOpenEvermindBuild={() => openEvermindBuild(target.id)} onLoadEvermindTemplate={(templateId) => loadEvermindTemplate(target.id, templateId)} onRemoveConnection={(edgeId) => setEdges((current) => current.filter((edge) => edge.id !== edgeId))} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(target.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(target.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(target.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(target.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(target.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} /> : null}</CanvasNodePanel>;
+        >{expanded ? <CanvasInspectorProvider value={inspectorValue}><Inspector node={target} /></CanvasInspectorProvider> : null}</CanvasNodePanel>;
       })()}
 
       {/* ONE picker, two doors: a node's `+` (insert, connected) and everything else

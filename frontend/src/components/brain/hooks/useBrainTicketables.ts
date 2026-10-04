@@ -7,8 +7,15 @@ import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 export function useBrainTicketables(ticketProjectId: number | null, activeChatId: number | null) {
   // #ticket autocomplete — tickets available to tag in the composer.
   const [ticketables, setTicketables] = useState<TicketTag[]>([]);
+  // No project in context ⇒ nothing to tag. Cleared while rendering, the moment the
+  // project goes away (React's "adjust state when a prop changes"), not by an effect.
+  const [prevProjectId, setPrevProjectId] = useState(ticketProjectId);
+  if (prevProjectId !== ticketProjectId) {
+    setPrevProjectId(ticketProjectId);
+    if (ticketProjectId == null) setTicketables([]);
+  }
   useEffect(() => {
-    if (ticketProjectId == null) { setTicketables([]); return; }
+    if (ticketProjectId == null) return;
     let live = true;
     tasksApi.list(ticketProjectId).then((tasks) => {
       if (!live) return;

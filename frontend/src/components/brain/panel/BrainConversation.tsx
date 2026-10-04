@@ -12,6 +12,7 @@ import { useBrainPanel } from './BrainPanelContext';
 import { BrainComposer } from './BrainComposer';
 import { BrainComposerArea } from './BrainComposerArea';
 import { BrainConversationHeader } from './BrainConversationHeader';
+import { renderBrainAssistantActions } from './BrainMessageActions';
 import { BrainNewProjectForm } from './BrainNewProjectForm';
 import { BrainProviderCapBanner } from './BrainProviderCapBanner';
 
@@ -149,7 +150,7 @@ export function BrainConversation() {
               // no feature is lost; the model-authored "next step" JSON is lifted out.
               renderMessage={timeline.renderTimelineMessage}
               renderStreaming={timeline.renderTimelineStreaming}
-              renderAssistantActions={timeline.renderTimelineAssistantActions}
+              renderAssistantActions={renderBrainAssistantActions}
               onReplayMessage={timeline.onReplayTimelineMessage}
               // Thumbs live in the shared action row now; the press files a durable
               // rating against the model + MCP tool that served the turn.

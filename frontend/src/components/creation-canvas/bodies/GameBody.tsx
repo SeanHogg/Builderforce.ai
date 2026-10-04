@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from '../CreationCanvas.module.css';
 import { creationObjectDefinition } from '../creationObjectRegistry';
@@ -48,8 +48,14 @@ export function GameBody({ data }: CreationBodyProps) {
   const controls = useMemo(() => (document ? controlLabels(readGameControls(document)) : []), [document]);
 
   // Regenerating replaces the artifact; the running frame must be torn down or
-  // the board keeps playing the previous game under the new title.
-  useEffect(() => { setPlaying(false); setShowDetails(false); }, [runtime, document]);
+  // the board keeps playing the previous game under the new title. Adjusted during
+  // render against the artifact last shown, so the stale frame is never committed.
+  const [shownArtifact, setShownArtifact] = useState({ runtime, document });
+  if (shownArtifact.runtime !== runtime || shownArtifact.document !== document) {
+    setShownArtifact({ runtime, document });
+    setPlaying(false);
+    setShowDetails(false);
+  }
 
   if (!runtime) {
     return <div className={styles.creativeStudioBody}>

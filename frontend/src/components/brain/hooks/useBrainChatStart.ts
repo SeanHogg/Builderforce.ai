@@ -22,6 +22,8 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   setDockedTab: Dispatch<SetStateAction<BrainDockedTab>>;
 }) {
   const tBrain = useTranslations('brain');
+  // The chat hook's methods are individually stable; its result object is not.
+  const { create, setCapability, setMode, activeChatId, activeChat } = chats;
   const [input, setInput] = useState('');
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
@@ -47,10 +49,10 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   const startNewChat = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null; mode?: ChatMode }) => {
     // The mode chosen in the empty state rides EVERY creation path — including the one
     // that fires implicitly when the user just types and hits send (`ensureChatId`).
-    const created = await chats.create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
+    const created = await create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
     if (!isPage) setDockedTab('chat');
     return created;
-  }, [chats, isPage, setDockedTab]);
+  }, [create, isPage, setDockedTab]);
 
   const ensureChatId = useCallback(async () => {
     const c = await startNewChat();
@@ -62,15 +64,15 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   // conversation to every surface instead of living in this browser. Picking one
   // folds a capability block into the system prompt so the model shapes its
   // output as that artifact, and seeds the composer with a starting line.
-  const capabilityId = (getBrainCapability(chats.activeChat?.capability)?.id ?? null) as BrainCapabilityId | null;
+  const capabilityId = (getBrainCapability(activeChat?.capability)?.id ?? null) as BrainCapabilityId | null;
   const selectCapability = useCallback(async (id: BrainCapabilityId | null) => {
     // From the empty state there is no chat yet — start one carrying the choice
     // (same path the "Start new chat" button takes, plus the capability).
-    if (chats.activeChatId == null) {
+    if (activeChatId == null) {
       if (id == null) return;
       await startNewChat({ capability: id });
     } else {
-      await chats.setCapability(chats.activeChatId, id);
+      await setCapability(activeChatId, id);
     }
     if (id) {
       setInput((prev) => (prev.trim() ? prev : tBrain(`capabilities.${id}.starter`)));
@@ -78,7 +80,7 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
       // not a finished message. (Sending the raw seed produced stub replies.)
       setComposerFocusToken((n) => n + 1);
     }
-  }, [chats, startNewChat, tBrain]);
+  }, [activeChatId, setCapability, startNewChat, tBrain]);
   const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
 
   // ---- Mode ("am I asking, or delegating?") --------------------------------
@@ -86,15 +88,15 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   // the conversation rather than the browser. `pendingMode` (declared above, beside the
   // composer state, because `startNewChat` reads it) covers the pre-chat empty state:
   // without it, picking Work and then typing would silently mint a `chat`-mode chat.
-  const chatMode: ChatMode = chats.activeChat
-    ? normalizeChatMode(chats.activeChat.mode)
+  const chatMode: ChatMode = activeChat
+    ? normalizeChatMode(activeChat.mode)
     : pendingMode;
   const selectMode = useCallback(async (mode: ChatMode) => {
     pendingModeRef.current = mode;
     setPendingMode(mode);
-    const id = chats.activeChatId;
-    if (id != null) await chats.setMode(id, mode);
-  }, [chats]);
+    const id = activeChatId;
+    if (id != null) await setMode(id, mode);
+  }, [activeChatId, setMode]);
   // A work option is a STARTING POINT, not a message: seed the composer and drop the
   // caret at the end so the user finishes the brief instead of sending the template.
   const pickWorkOption = useCallback((_id: WorkOptionId, brief: string) => {

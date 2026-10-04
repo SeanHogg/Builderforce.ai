@@ -1,11 +1,6 @@
 import type { CreationFlowNode } from '../CreationNode';
-import type { Edge } from '@xyflow/react';
-import type { CanvasTimelineMessage } from '../canvasBoardTypes';
-import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import { type CanvasResumeShare, type CreationSessionDetail, creationSessionsApi, type CreationSessionSummary, pmoApi, type PmoScopeKind, runtimeApi, tasksApi } from '@/lib/builderforceApi';
+import { creationSessionsApi, pmoApi, type PmoScopeKind, runtimeApi, tasksApi } from '@/lib/builderforceApi';
 import type { CreationNodeData } from '../types';
-import type { IdeProject } from '@/lib/types';
-import type { BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { useFormat } from '@/i18n/useFormat';
 import { useTranslations } from 'next-intl';
@@ -15,6 +10,7 @@ import { creationDeliverables } from '@/lib/creationDeliverables';
 import { faultText } from '@/lib/apiClient';
 import { toFrameBox } from '../useFramedBoard';
 import { frameMemberIds } from '@/domains/canvas/domain/canvasFrame';
+import { useInspectorBindings } from './inspectorContext';
 import { KIND_DETAIL_SECTIONS, type KindSectionProps } from './kindDetailSections';
 import { kindSettingsManifest, kindSettingsSellable } from '@/lib/canvasKindSettings';
 import styles from '../CreationCanvas.module.css';
@@ -30,16 +26,8 @@ import { SourceList } from './datasetInspectorParts';
 import { SellInMarketplace } from '../SellInMarketplace';
 import { CanvasExportActions, canvasExportActionsFor } from '../CanvasExportActions';
 
-export function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onUnpackWorkflow, onBuildWorkflow, onBuildFlow, onRemoveConnection, onOpenEvermindBuild, onLoadEvermindTemplate, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onUnpackWorkflow: () => void; onBuildWorkflow: () => void; onBuildFlow: () => void; onRemoveConnection: (edgeId: string) => void; onOpenEvermindBuild: () => void; onLoadEvermindTemplate: (templateId: 'train-llm' | 'teach-code') => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDiagram: (format: string, diagramId?: string) => Promise<string>; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
-  /** The ONE route from the inspector back to Brain. Learning controls compose
-   *  their own request text (see LearningControls.tsx) rather than each adding a
-   *  callback to a panel that already takes forty. */
-  onAskBrain: (request: string) => void;
-  onResumeTailor: (nodeId: string, request: string) => void;
-  onResumeDetach: (nodeId: string, detachedData: Partial<CreationNodeData>) => void;
-  onResumeShare: (nodeId: string, kind: 'view' | 'embed') => Promise<void>;
-  onResumeSharesList: (nodeId: string) => Promise<CanvasResumeShare[]>;
-  onResumeShareRevoke: (nodeId: string, shareId: string) => Promise<void>; }) {
+export function Inspector({ node }: { node: CreationFlowNode }) {
+  const { nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onUnpackWorkflow, onBuildWorkflow, onBuildFlow, onRemoveConnection, onOpenEvermindBuild, onLoadEvermindTemplate, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke } = useInspectorBindings(node.id);
   const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;

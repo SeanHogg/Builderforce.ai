@@ -17,7 +17,6 @@ export function useBrainSystemContext({
   projects,
   autoApprove,
   effort,
-  thinking,
   webBrowsing,
 }: {
   extraSystem: string | undefined;
@@ -27,7 +26,6 @@ export function useBrainSystemContext({
   projects: Project[];
   autoApprove: boolean;
   effort: BrainEffort;
-  thinking: boolean;
   webBrowsing: boolean;
 }) {
   // The signed-in user's personality — fetched once per session and folded into
@@ -56,7 +54,7 @@ export function useBrainSystemContext({
     const composer = buildComposerDirectives({ effort, web: webBrowsing });
     if (composer) parts.push(composer);
     return parts.length > 0 ? parts.join('\n') : undefined;
-  }, [ctxProjectId, projects, extraSystem, capabilityPrompt, autoApprove, effort, thinking, webBrowsing, personalityBlock, responseInstructions]);
+  }, [ctxProjectId, projects, extraSystem, capabilityPrompt, autoApprove, effort, webBrowsing, personalityBlock, responseInstructions]);
 
   // Per-turn limbic affect (VS Code webview parity). The static personality tone
   // above (`ambientSystem` ← personalityBlock) sets the user's baseline voice;

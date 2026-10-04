@@ -8,7 +8,7 @@ import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CreationFlowNode } from '../CreationNode';
 import type { Edge } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
-import type { CanvasNotices } from '@/domains/canvas/application/PersistCanvas';
+import type { CanvasNotices } from '@/lib/canvasNotices';
 import type { ChatModelSelection } from '@/components/ChatInput';
 
 export interface UseCanvasAgentTestingDeps {

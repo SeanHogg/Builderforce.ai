@@ -31,7 +31,7 @@ import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import type { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import type { Edge } from '@xyflow/react';
 import type { ConfirmFn } from '@/components/ConfirmProvider';
-import type { CanvasNotices } from '@/domains/canvas/application/PersistCanvas';
+import type { CanvasNotices } from '@/lib/canvasNotices';
 import type { ChatModelSelection } from '@/components/ChatInput';
 import type { CanvasJournal } from '@/lib/canvasActionJournal';
 import type { GuestLimitRefusal } from '@/lib/guestLimit';
