@@ -26,6 +26,8 @@ import { SourceList } from './datasetInspectorParts';
 import { SellInMarketplace } from '../SellInMarketplace';
 import { CanvasExportActions, canvasExportActionsFor } from '../CanvasExportActions';
 
+const NO_TASK_ASSIGNEES: { id: string; name: string }[] = [];
+
 export function Inspector({ node }: { node: CreationFlowNode }) {
   const { nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onUnpackWorkflow, onBuildWorkflow, onBuildFlow, onRemoveConnection, onOpenEvermindBuild, onLoadEvermindTemplate, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke } = useInspectorBindings(node.id);
   const fmt = useFormat();
@@ -45,25 +47,32 @@ export function Inspector({ node }: { node: CreationFlowNode }) {
   // existed for this exact purpose (see its own doc comment) and was never called from
   // here, so a task could only ever be assigned to an agent even though `assignedUserId`
   // is a first-class column the read path already renders ("Assigned teammate").
-  const [taskAssignees, setTaskAssignees] = useState<{ id: string; name: string }[]>([]);
+  // Not a task, or not on a server: there is no one to assign — derived here rather than
+  // cleared by the effect, which only ever fetches.
+  const assigneesWanted = node.data.kind === 'task' && persistence === 'server';
+  const [fetchedTaskAssignees, setTaskAssignees] = useState<{ id: string; name: string }[]>([]);
+  const taskAssignees = assigneesWanted ? fetchedTaskAssignees : NO_TASK_ASSIGNEES;
   useEffect(() => {
-    if (node.data.kind !== 'task' || persistence !== 'server') { setTaskAssignees([]); return; }
+    if (!assigneesWanted) return;
     let active = true;
     void tasksApi.assignees().then((result) => { if (active) setTaskAssignees(result); }).catch(() => { if (active) setTaskAssignees([]); });
     return () => { active = false; };
-  }, [node.data.kind, persistence]);
+  }, [assigneesWanted]);
   /** What this ticket cost to build. `runtimeApi.taskCost` (`GET
    *  /api/runtime/tasks/:taskId/cost`, read-through cached) already sums
    *  `llm_usage_log` by `task_id` — this was never called from the board, so a task
    *  assigned to an agent could never show what its runs cost. */
-  const [taskCost, setTaskCost] = useState<{ estimatedCostUsd: number; totalTokens: number; requests: number } | null>(null);
+  // Keyed by the task it was fetched for, so a cost is only ever shown beside its own task.
+  const costTaskMatch = node.data.kind === 'task' && persistence === 'server' ? /^task:(\d+)$/.exec(node.data.resourceId || '') : null;
+  const costTaskId = costTaskMatch ? Number(costTaskMatch[1]) : null;
+  const [fetchedTaskCost, setTaskCost] = useState<{ taskId: number; cost: { estimatedCostUsd: number; totalTokens: number; requests: number } | null } | null>(null);
+  const taskCost = costTaskId !== null && fetchedTaskCost?.taskId === costTaskId ? fetchedTaskCost.cost : null;
   useEffect(() => {
-    const match = node.data.kind === 'task' ? /^task:(\d+)$/.exec(node.data.resourceId || '') : null;
-    if (!match || persistence !== 'server') { setTaskCost(null); return; }
+    if (costTaskId === null) return;
     let active = true;
-    void runtimeApi.taskCost(Number(match[1])).then((result) => { if (active) setTaskCost(result); }).catch(() => { if (active) setTaskCost(null); });
+    void runtimeApi.taskCost(costTaskId).then((result) => { if (active) setTaskCost({ taskId: costTaskId, cost: result }); }).catch(() => { if (active) setTaskCost({ taskId: costTaskId, cost: null }); });
     return () => { active = false; };
-  }, [node.data.kind, node.data.resourceId, persistence]);
+  }, [costTaskId]);
   useEffect(() => {
     if (!focus) return;
     const frame = window.requestAnimationFrame(() => inspectorRef.current?.querySelector<HTMLElement>(`[data-inspector-section="${focus}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));

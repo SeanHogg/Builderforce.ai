@@ -89,6 +89,6 @@ export function useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices,
       setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: t('noticeAgentTestStatusError', { reason: message }) } } : node));
       setNotice(message);
     }
-  }, [brainRuntimeRef, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection.mode, modelSelection.model, nodes, persistence, recordBrainCompletion, setEdges, setNodes, setNotice, t]);
+  }, [brainRuntimeRef, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, recordBrainCompletion, setEdges, setNodes, setNotice, t]);
   return { addAgentKnowledge, runAgentTest };
 }

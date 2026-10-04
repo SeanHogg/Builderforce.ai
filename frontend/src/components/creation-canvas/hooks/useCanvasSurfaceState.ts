@@ -1,10 +1,24 @@
 /** Which surface the board shows, and the per-viewer chrome preferences beside it — bar, prompt placement, phase. */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { canvasSurfaceDefinition, type CanvasSurfaceId, writeCanvasSurface } from '@/lib/canvasSurfaces';
 import { readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { type CanvasPromptPlacement, DEFAULT_CANVAS_PROMPT_PLACEMENT, readCanvasPromptPlacement, writeCanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import { type CanvasPhase, DEFAULT_CANVAS_PHASE, readCanvasPhase, surfacesForPhase, writeCanvasPhase } from '@/lib/canvasPhases';
+
+/**
+ * The stored chrome preferences are READ, not mirrored into state by a mount effect: an
+ * external-store read whose server snapshot is the default, so SSR and hydration render the
+ * default and the client then shows the stored choice — the same two frames the effect gave
+ * (and the pattern `useBrainChatMemory` uses). Nothing else writes these keys, so there is
+ * nothing to subscribe to; a choice made this session is held in state and wins.
+ */
+function subscribeNever() {
+  return () => {};
+}
+const barCollapsedServerSnapshot = () => false;
+const promptPlacementServerSnapshot = () => DEFAULT_CANVAS_PROMPT_PLACEMENT;
+const phaseServerSnapshot = () => DEFAULT_CANVAS_PHASE;
 
 export interface UseCanvasSurfaceStateDeps {
   initialModelComparisonIds: readonly string[];
@@ -38,19 +52,21 @@ export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurfac
   /**
    * Whether the session bar is folded to what the canvas IS DOING.
    *
-   * Read from storage in an effect rather than as the initial state, the way the surface
-   * preference is: reading `localStorage` during render is a hydration mismatch, and the
-   * bar arriving expanded for one frame is the safe direction to be wrong in.
+   * Read from storage as an external store (see `subscribeNever`) rather than as the
+   * initial state: reading `localStorage` into the first render is a hydration mismatch,
+   * and the bar arriving expanded for one frame is the safe direction to be wrong in.
    */
-  const [barCollapsed, setBarCollapsedState] = useState(false);
-  useEffect(() => { setBarCollapsedState(readCanvasBarCollapsed()); }, []);
+  const storedBarCollapsed = useSyncExternalStore(subscribeNever, readCanvasBarCollapsed, barCollapsedServerSnapshot);
+  const [barCollapsedChoice, setBarCollapsedState] = useState<boolean | null>(null);
+  const barCollapsed = barCollapsedChoice ?? storedBarCollapsed;
   /**
-   * Where the prompt lives — floating, docked into Brain, or closed. Read in an effect
-   * for the same reason the folded bar is: reading storage during render is a hydration
-   * mismatch, and a prompt that arrives floating for one frame is the safe direction.
+   * Where the prompt lives — floating, docked into Brain, or closed. Read the way the
+   * folded bar is: storage read into the first render is a hydration mismatch, and a
+   * prompt that arrives floating for one frame is the safe direction.
    */
-  const [promptPlacement, setPromptPlacementState] = useState<CanvasPromptPlacement>(DEFAULT_CANVAS_PROMPT_PLACEMENT);
-  useEffect(() => { setPromptPlacementState(readCanvasPromptPlacement()); }, []);
+  const storedPromptPlacement = useSyncExternalStore(subscribeNever, readCanvasPromptPlacement, promptPlacementServerSnapshot);
+  const [promptPlacementChoice, setPromptPlacementState] = useState<CanvasPromptPlacement | null>(null);
+  const promptPlacement = promptPlacementChoice ?? storedPromptPlacement;
   const setPromptPlacement = useCallback((next: CanvasPromptPlacement) => {
     setPromptPlacementState(next);
     writeCanvasPromptPlacement(next);
@@ -82,11 +98,13 @@ export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurfac
   /**
    * Which stage of ITS OWN methodology this session is in — see `lib/canvasPhases.ts`
    * for why this is not `useFounderJourney()`. Same SSR-safe pattern as `surface`:
-   * a safe default in the initial state, the real preference restored in a mount-only
-   * effect below, because reading `localStorage` during render is a hydration mismatch.
+   * a safe default as the server snapshot, the real preference read as an external store
+   * (see `subscribeNever`), because reading `localStorage` into the first render is a
+   * hydration mismatch.
    */
-  const [phase, setPhaseState] = useState<CanvasPhase>(DEFAULT_CANVAS_PHASE);
-  useEffect(() => { setPhaseState(readCanvasPhase()); }, []);
+  const storedPhase = useSyncExternalStore(subscribeNever, readCanvasPhase, phaseServerSnapshot);
+  const [phaseChoice, setPhaseState] = useState<CanvasPhase | null>(null);
+  const phase = phaseChoice ?? storedPhase;
   const setPhase = useCallback((next: CanvasPhase) => {
     setPhaseState(next);
     writeCanvasPhase(next);

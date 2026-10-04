@@ -19,6 +19,7 @@ import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import type { CreationFlowNode } from '../CreationNode';
 
 export interface UseCanvasTemplatesDeps {
+  commitRevision: (revision: number) => void;
   canEdit: boolean;
   canvasText: CanvasTextTranslator;
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
@@ -40,7 +41,7 @@ export interface UseCanvasTemplatesDeps {
   templateText: (template: CreationTemplate, field: 'name' | 'description') => string;
 }
 
-export function useCanvasTemplates({ canEdit, canvasText, flowRef, locale, persistence, placeAppendedRef, revisionRef, selectedNode, sessionId, setEdges, setFramePresets, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setServerTemplates, setTemplateOpen, t, templateText }: UseCanvasTemplatesDeps) {
+export function useCanvasTemplates({ commitRevision, canEdit, canvasText, flowRef, locale, persistence, placeAppendedRef, revisionRef, selectedNode, sessionId, setEdges, setFramePresets, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setServerTemplates, setTemplateOpen, t, templateText }: UseCanvasTemplatesDeps) {
   const applyTemplate = useCallback((pack: CreationTemplate) => {
     if (!canEdit) return;
     // A pack that still authors a legacy `workflow` card is lowered to a frame of
@@ -108,12 +109,12 @@ export function useCanvasTemplates({ canEdit, canvasText, flowRef, locale, persi
     if (persistence !== 'server' || !canEdit) return;
     setNotice(t('noticeAddingTemplate', { name: template.name }));
     void creationSessionsApi.templates.apply(sessionId, template.id, revisionRef.current).then(async (result) => {
-      revisionRef.current = result.revision;
+      commitRevision(result.revision);
       const detail = await creationSessionsApi.get(sessionId);
       const flow = flowFromSession(detail);
       setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(t('noticeTemplateAdded', { name: template.name }));
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: result.objectIds.map((id) => ({ id })), padding: .2, duration: 400 }), 0);
     }).catch((error) => setNotice(faultText(error, t('noticeTemplateFailed'))));
-  }, [canEdit, flowRef, persistence, revisionRef, sessionId, setEdges, setNodes, setNotice, setPersistedObjectIds, setTemplateOpen, t]);
+  }, [canEdit, commitRevision, flowRef, persistence, revisionRef, sessionId, setEdges, setNodes, setNotice, setPersistedObjectIds, setTemplateOpen, t]);
   return { applyTemplate, applyServerTemplate, addFramePreset, saveFramePreset };
 }

@@ -1,6 +1,7 @@
 /** Starting, queueing and stopping Brain turns. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useRef } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useInsertionEffect, useRef } from 'react';
 import type { CanvasExportAction } from '@/lib/canvasExports';
+import { useLatestRef } from './useLatestRef';
 import { useQueuedTurns } from '@/lib/brain';
 import { creationSessionsApi, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import type { useTranslations } from 'next-intl';
@@ -36,13 +37,11 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
    * always running the newest closure, so a paragraph typed a moment ago is in
    * the file.
    */
-  const exportRef = useRef(exportArtifact);
-  exportRef.current = exportArtifact;
+  const exportRef = useLatestRef(exportArtifact);
   const exportFromNode = useCallback((nodeId: string, action: CanvasExportAction) => {
     void exportRef.current(nodeId, action).then(setNotice);
-  }, [setNotice]);
-  const evaluateCanvasRef = useRef(evaluateCanvas);
-  evaluateCanvasRef.current = evaluateCanvas;
+  }, [exportRef, setNotice]);
+  const evaluateCanvasRef = useLatestRef(evaluateCanvas);
   /**
    * Turns typed while Brain is working.
    *
@@ -107,8 +106,9 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
       return;
     }
     evaluateCanvasRef.current(text);
-  }, [assistantGate.assistantAllowed, prompt, queuedTurns, setPrompt]);
+  }, [assistantGate.assistantAllowed, evaluateCanvasRef, prompt, queuedTurns, setPrompt]);
   // eslint-disable-next-line react-hooks/refs
-  startCanvasTurnRef.current = startCanvasTurn;
+  // Same timing as `useLatestRef`: after commit, before any layout effect.
+  useInsertionEffect(() => { startCanvasTurnRef.current = startCanvasTurn; });
   return { startCanvasTurnRef, exportFromNode, startCanvasTurn, stopCanvasRun, queuedTurns };
 }

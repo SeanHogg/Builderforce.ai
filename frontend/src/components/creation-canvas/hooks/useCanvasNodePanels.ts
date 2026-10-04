@@ -1,14 +1,16 @@
 /** The per-node panel and the object picker — where they open and what they are anchored to. */
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useLayoutEffect, useState } from 'react';
 import type { CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
 import type { CreationObjectGroup } from '../creationObjectRegistry';
 
 export interface UseCanvasNodePanelsDeps {
+  /** The board's element — the cards a panel is anchored to are drawn inside it. */
+  boardRef: RefObject<HTMLDivElement | null>;
   selectedId: string | null;
   setInspectorFocus: Dispatch<SetStateAction<'knowledge' | 'test' | 'evaluation' | 'delivery' | null>>;
 }
 
-export function useCanvasNodePanels({ selectedId, setInspectorFocus }: UseCanvasNodePanelsDeps) {
+export function useCanvasNodePanels({ boardRef, selectedId, setInspectorFocus }: UseCanvasNodePanelsDeps) {
   /**
    * THE ANCHORED PANEL AND THE PICKER — two overlays, one rule.
    *
@@ -62,37 +64,29 @@ export function useCanvasNodePanels({ selectedId, setInspectorFocus }: UseCanvas
   }, []);
 
   /**
-   * The card's box on screen, found through the card itself.
+   * Fills in the box for a panel that was opened without one — the card's box on screen,
+   * found through the card itself.
    *
    * The board actions that open an object's inspector — visualize a dataset, compare
    * projects, expand a pipeline — have a node id and no event. A node's FLOW position
    * would have to be projected through the viewport transform to become a screen box,
-   * which is a second copy of React Flow's own maths; its rendered element already is one.
-   * Null when the card has not painted yet (an object created in the same tick), and the
-   * render falls back to a sensible on-screen position until it has.
-   */
-  const nodeBoxOnScreen = useCallback((nodeId: string) => {
-    if (typeof document === 'undefined') return null;
-    const element = document.querySelector(`[data-node-id="${nodeId}"]`);
-    return element instanceof Element ? boxOf(element.getBoundingClientRect()) : null;
-  }, []);
-
-  /**
-   * Fills in the box for a panel that was opened without one.
+   * which is a second copy of React Flow's own maths; its rendered element (inside the
+   * board's element) already is one.
    *
    * A LAYOUT effect and not a read during render: the card is often created in the same
    * tick as the panel that describes it, so the element does not exist yet when the panel
-   * first renders. Measuring after paint is the only point at which the answer exists, and
+   * first renders. Measuring after layout is the only point at which the answer exists, and
    * doing it here — rather than calling `getBoundingClientRect` from the render body —
-   * keeps the render a pure function of state. Until it resolves, the panel draws at the
-   * fallback position below, which is one frame.
+   * keeps the render a pure function of state. Until the card has painted, the panel draws
+   * at the fallback position below.
    */
   useLayoutEffect(() => {
     if (!nodePanel || nodePanel.box) return;
-    const box = nodeBoxOnScreen(nodePanel.nodeId);
-    if (!box) return;
+    const element = boardRef.current?.querySelector(`[data-node-id="${nodePanel.nodeId}"]`);
+    if (!(element instanceof Element)) return;
+    const box = boxOf(element.getBoundingClientRect());
     setNodePanel((current) => (current && current.nodeId === nodePanel.nodeId && !current.box ? { ...current, box } : current));
-  }, [nodeBoxOnScreen, nodePanel]);
+  }, [boardRef, nodePanel]);
 
   const openNodePanel = useCallback((nodeId: string, panel: CanvasNodePanelId, rect: DOMRect) => {
     setObjectPicker(null);
@@ -125,12 +119,17 @@ export function useCanvasNodePanels({ selectedId, setInspectorFocus }: UseCanvas
    * a plain click on a different card opens that card's own short panel, which
    * `onNodeClick` has already done by the time this runs.
    */
-  useEffect(() => {
-    if (!selectedId) return;
-    setNodePanel((current) => (current && current.expanded && current.nodeId !== selectedId
-      ? { ...current, nodeId: selectedId, panel: null, box: null }
-      : current));
-  }, [selectedId]);
+  // Adjusted while rendering, on the render the selection changed in — not an effect that
+  // commits the stale panel first and then renders again to move it.
+  const [followedSelectedId, setFollowedSelectedId] = useState(selectedId);
+  if (followedSelectedId !== selectedId) {
+    setFollowedSelectedId(selectedId);
+    if (selectedId) {
+      setNodePanel((current) => (current && current.expanded && current.nodeId !== selectedId
+        ? { ...current, nodeId: selectedId, panel: null, box: null }
+        : current));
+    }
+  }
 
   const openInsertPicker = useCallback((nodeId: string, rect: DOMRect) => {
     setNodePanel(null);

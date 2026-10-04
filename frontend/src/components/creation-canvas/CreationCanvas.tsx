@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { ReactFlowProvider, useEdgesState, useNodesState, type Edge, type NodeTypes, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
@@ -9,9 +9,8 @@ import { type ConnectionStyle, DEFAULT_CONNECTION_STYLE } from '@/lib/canvasConn
 import { type CanvasSurfaceNodes } from './CanvasSurfaceRouter';
 import { type CanvasDockPanel } from './CanvasBoardMenuBody';
 import { usePhoneViewport } from '@/lib/usePhoneViewport';
-import { PRESENCE_SEND_INTERVAL_MS } from '@/lib/canvas/livePresence';
 import { useLivePresence } from '@/lib/canvas/useLivePresence';
-import { CANVAS_PRESENCE_FRAME, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
+import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { CanvasDiagnosticsProvider } from './canvasDiagnosticsContext';
 import { CanvasSurfaceProvider } from './canvasSurfaceContext';
 import { CanvasSurfaceActionsProvider } from './canvasSurfaceActions';
@@ -29,7 +28,6 @@ import { CanvasBoardBridgeProvider } from './canvasBoardBridge';
 import { CanvasSpacePresenceProvider } from './canvasSpacePresence';
 import { cardActFor } from '@/domains/canvas/application/CardAct';
 import { createCanvasNotices, type CanvasNotices } from '@/domains/canvas/application/PersistCanvas';
-import { createPresenceRelay, type PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import { type CreationOutcomeMetrics, type CreationSessionDetail, type CreationSessionInvitation, creationSessionsApi, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
 import { creationStorageKey } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { useSharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanvasRoom';
@@ -129,6 +127,8 @@ import { useCanvasPresentation } from './hooks/useCanvasPresentation';
 import { useCanvasDatasetViews } from './hooks/useCanvasDatasetViews';
 import { useCanvasInteraction } from './hooks/useCanvasInteraction';
 import { useCanvasFiles } from './hooks/useCanvasFiles';
+import { useLatestRef } from './hooks/useLatestRef';
+import { useCanvasPresenceRelay } from './hooks/useCanvasPresenceRelay';
 import { useCanvasCardActs } from './hooks/useCanvasCardActs';
 import { useCanvasTurnQueue } from './hooks/useCanvasTurnQueue';
 import { useCanvasResumeShares } from './hooks/useCanvasResumeShares';
@@ -296,7 +296,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * plenty of objects and nothing to run.
    */
   const runnableApp = useMemo(() => sessionHasApp(nodes), [nodes]);
-  const { openObjectPicker, setNodePanel, openNodeInspector, openNodePanel, setObjectPicker, openInsertPicker, nodePanel, anchorFrom, objectPicker, objectPickerOpen } = useCanvasNodePanels({ selectedId, setInspectorFocus });
+  const flowWrapRef = useRef<HTMLDivElement | null>(null);
+  const { openObjectPicker, setNodePanel, openNodeInspector, openNodePanel, setObjectPicker, openInsertPicker, nodePanel, anchorFrom, objectPicker, objectPickerOpen } = useCanvasNodePanels({ boardRef: flowWrapRef, selectedId, setInspectorFocus });
   const { journalRef, recentJournalEvidence, brainRuntimeRef, disableBrainModel, recordBrainCompletion, lastTurnProvenance } = useCanvasBrainRuntime({ sessionId });
 
   const liveSession = useOptionalLiveSession();
@@ -308,13 +309,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const presentMode = liveSession ? liveSession.presentMode : localPresentMode;
   // A ref, because the functional-updater form (`setPresentMode(v => !v)`) has to
   // read the CURRENT value, and the shell's value does not live in this closure.
-  const presentModeRef = useRef(presentMode);
-  presentModeRef.current = presentMode;
+  const presentModeRef = useLatestRef(presentMode);
   const setPresentMode = useCallback((value: boolean | ((current: boolean) => boolean)) => {
     const next = typeof value === 'function' ? value(presentModeRef.current) : value;
     if (liveSession) liveSession.setPresentMode(next);
     else setLocalPresentMode(next);
-  }, [liveSession]);
+  }, [liveSession, presentModeRef]);
   /** The pen currently in hand — `null` means the pointer pans and selects.
    *  Colour, width and the last tool persist, because marking up a board is
    *  twenty strokes in a row and choosing the pen twenty times is not a tool. */
@@ -327,13 +327,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [showHidden, setShowHidden] = useState(false);
   const [localFollowingUserId, setLocalFollowingUserId] = useState<string | null>(null);
   const followingUserId = liveSession ? liveSession.followingUserId : localFollowingUserId;
-  const followingRef = useRef(followingUserId);
-  followingRef.current = followingUserId;
+  const followingRef = useLatestRef(followingUserId);
   const setFollowingUserId = useCallback((value: string | null | ((current: string | null) => string | null)) => {
     const next = typeof value === 'function' ? value(followingRef.current) : value;
     if (liveSession) liveSession.setFollowing(next);
     else setLocalFollowingUserId(next);
-  }, [liveSession]);
+  }, [followingRef, liveSession]);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   /**
@@ -406,10 +405,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * — what matters at this call site is that the two are DIFFERENT verbs, so a
    * new message cannot pick the wrong one by picking the only one.
    */
-  const noticesRef = useRef<CanvasNotices | null>(null);
-  if (!noticesRef.current) noticesRef.current = createCanvasNotices(setNoticeText);
-  const setNotice = useCallback((text: string) => noticesRef.current!.outcome(text), []);
-  const noteSaveState = useCallback(() => noticesRef.current!.saveState(''), []);
+  const [notices] = useState<CanvasNotices>(() => createCanvasNotices(setNoticeText));
+  const setNotice = useCallback((text: string) => notices.outcome(text), [notices]);
+  const noteSaveState = useCallback(() => notices.saveState(''), [notices]);
 
   /**
    * SHARED FREE SESSION (no account).
@@ -461,8 +459,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** A live presence channel exists: the server session's relay, or a shared guest room's. */
   const presenceLive = persistence === 'server' || inRoom;
   /** The guest room's presence send, read by the relay constructed once below. */
-  const sendRoomPresenceRef = useRef(sharedRoom.sendPresence);
-  sendRoomPresenceRef.current = sharedRoom.sendPresence;
+  const sendRoomPresenceRef = useLatestRef(sharedRoom.sendPresence);
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   // Published for the session rail, which lives outside this component's tree
@@ -535,8 +532,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // rather than cleared on unmount — the panel closing already means this stops
   // applying, without needing its own cleanup effect.
   const [outlineHighlightIds, setOutlineHighlightIds] = useState<ReadonlySet<string> | null>(null);
-  const toggleDockPanel = useCallback((panel: CanvasDockPanel) => setDockPanel((current) => (current === panel ? null : panel)), []);
-  const closeDockPanel = useCallback(() => setDockPanel(null), []);
+  const toggleDockPanel = useCallback((panel: CanvasDockPanel) => setDockPanel((current) => (current === panel ? null : panel)), [setDockPanel]);
+  const closeDockPanel = useCallback(() => setDockPanel(null), [setDockPanel]);
   const [fullscreen, setFullscreen] = useState(false);
   /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
   const nativeFullscreenRef = useRef(false);
@@ -555,8 +552,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  session below; `setSessionMode` is the writer that also persists it. */
   const [sessionMode, setSessionMode_] = useState<ChatMode>(NEW_CHAT_MODE);
   const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
+  const [dispatchedBrainAction, setDispatchedBrainAction] = useState<{ objectId: string; action: string } | null>(null);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
-  const [lockBlocked, setLockBlocked] = useState(false);
+  /** Whether the lock on the selected object was refused — recorded against the object it was asked for. */
+  const [lockRefusal, setLockRefusal] = useState<{ objectId: string; blocked: boolean } | null>(null);
   // Locks are server records. A freshly added Canvas node exists in React state
   // before the debounced graph save creates its database row, so attempting to
   // lock it immediately produces a misleading 404. Track confirmed server IDs
@@ -571,6 +570,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
   const hydratedRef = useRef(false);
   const revisionRef = useRef(1);
+  /** The revision as the diagnostics panel shows it. Every write goes through
+   *  `commitRevision`: the ref for the async readers, this for the render. */
+  const [revision, setRevision] = useState(1);
+  const commitRevision = useCallback((next: number) => {
+    revisionRef.current = next;
+    setRevision(next);
+  }, []);
   const lastSavedGraphRef = useRef('');
   const sessionOpenCorrelationRef = useRef(crypto.randomUUID());
   const currentGraphRef = useRef('');
@@ -583,31 +589,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** The live socket, when it is open — the channel pointer frames go out on. */
   const liveSocketRef = useRef<WebSocket | null>(null);
   /** Last outbound presence frame's timestamp + payload, for the send throttle. */
-  /**
-   * This client's ephemeral state on the relay — cursor, viewport, selection,
-   * typing.
-   *
-   * The coalescing throttle that makes a fast drag look like a drag rather than a
-   * teleport lives in `application/PresenceRelay.ts`; what stays here is the
-   * TRANSPORT: this board's socket, or — for an account-less board shared through a
-   * guest room, which has no server socket — that room's relay, which carries the
-   * same frame. Silence when neither is open is correct: on a saved board the
-   * 8-second presence poll is the fallback and carries the cursor on its own.
-   */
-  const presenceRef = useRef<PresenceRelay | null>(null);
-  if (!presenceRef.current) {
-    presenceRef.current = createPresenceRelay({
-      deliver: (state) => {
-        const socket = liveSocketRef.current;
-        if (!socket || socket.readyState !== WebSocket.OPEN) return sendRoomPresenceRef.current(state);
-        try { socket.send(JSON.stringify({ type: CANVAS_PRESENCE_FRAME, ...state })); return true; }
-        catch { return false; } // the socket is closing; the poll takes over
-      },
-    }, { intervalMs: PRESENCE_SEND_INTERVAL_MS });
-  }
-  const sendPresence = useCallback((state: CanvasPresenceState) => presenceRef.current!.send(state), []);
+  /** This client's ephemeral state on the relay — see `useCanvasPresenceRelay`. */
+  const presenceRelay = useCanvasPresenceRelay(liveSocketRef, sendRoomPresenceRef);
+  const sendPresence = useCallback((state: CanvasPresenceState) => presenceRelay.send(state), [presenceRelay]);
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
-  const flowWrapRef = useRef<HTMLDivElement | null>(null);
   /**
    * How much board a layout has to spend, measured now. ONE reader for every
    * placement decision on this canvas — authoring, arranging, pasting — so the
@@ -623,8 +608,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * and for the same reason, as `nodesRef` below: they must see today's measurement
    * without being rebuilt when the window resizes.
    */
-  const layoutViewportRef = useRef(layoutViewport);
-  layoutViewportRef.current = layoutViewport;
+  const layoutViewportRef = useLatestRef(layoutViewport);
   /**
    * "Bring that object forward", reachable from the callbacks declared ABOVE the one
    * that implements it. `revealObject` needs the surface switcher and React Flow and
@@ -645,10 +629,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * by 27 append sites across this component, and as a value it would have to be
    * named in 27 dependency arrays — 22 of which the hooks ratchet then reports,
    * for a helper that is provably stable (it closes over refs only). The ref is
-   * reassigned every render, so it always measures today's board.
+   * refreshed after every commit (`useLatestRef`), so it always measures today's board.
    */
-  const placeAppendedRef = useRef<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>(() => []);
-  placeAppendedRef.current = (current, additions) => placeAppendedCanvasNodes(current, additions, layoutViewport());
+  const placeAppendedRef = useLatestRef<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>(
+    (current, additions) => placeAppendedCanvasNodes(current, additions, layoutViewport()),
+  );
   // The prompt's real height, published to the board as `--composer-space` — the
   // band every bottom-anchored panel and the phone command rail sit above. It
   // was a hardcoded 112px, which the execution chip alone overran.
@@ -715,10 +700,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const mobileViewportFittedRef = useRef(false);
   const { updateBrainDock, toggleFullscreen } = useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, fullscreen, initialSurface, nativeFullscreenRef, phoneViewport, sessionId, setAutoApply, setBrainDock, setFullscreen, setSurfaceState, shellRef });
   const { setAutoApplyMode, setSessionMode, setMemoryMode } = useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setMemoryEnabled, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
-  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard } = useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
+  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
   const showApp = useCallback(() => setSurface('app'), [setSurface]);
   const openApp = useOpenCanvasApp({ setNodes, showApp });
-  useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialBuildOpen, initialBuildOpenedRef, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRef, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
+  useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialBuildOpen, initialBuildOpenedRef, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
   const { liveMembers, presenceSelfId } = useCanvasPresence({ currentUserId, flowRef, followingUserId, inRoom, livePresence, members, sharedRoom });
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
@@ -766,6 +751,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * viewer on a shared board, or an editor whose lock has gone, gets no Edit
    * button rather than one that silently does nothing.
    */
+  // Derived rather than cleared by the lock effect: an object that needs no lock is never
+  // blocked, and a refusal only ever applies to the object it was for.
+  const lockObjectId = shouldAcquireCanvasObjectLock(persistence, selectedId, canEdit, persistedObjectIds) ? selectedId : null;
+  const lockBlocked = lockObjectId !== null && lockRefusal?.objectId === lockObjectId && lockRefusal.blocked;
   const cardsEditable = canEdit && !lockBlocked;
 
   const syncSocialCampaign = useCanvasSocialCampaignSync({ setNodes, setNotice, tSocial });
@@ -781,15 +770,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [brainRunStartedAt, brainTrace, setNodes, thinking, timeline]);
 
   useEffect(() => {
-    if (!shouldAcquireCanvasObjectLock(persistence, selectedId, canEdit, persistedObjectIds)) { setLockBlocked(false); return; }
-    const lockedObjectId = selectedId!;
+    if (lockObjectId === null) return;
+    const lockedObjectId = lockObjectId;
     let stopped = false;
     const acquire = async (action: 'acquire' | 'renew') => {
       try {
         await creationSessionsApi.lock(sessionId, lockedObjectId, action);
-        if (!stopped) setLockBlocked(false);
+        if (!stopped) setLockRefusal({ objectId: lockedObjectId, blocked: false });
       } catch (error) {
-        if (!stopped) { setLockBlocked(true); setNotice(faultText(error, t('noticeObjectLocked'))); }
+        if (!stopped) { setLockRefusal({ objectId: lockedObjectId, blocked: true }); setNotice(faultText(error, t('noticeObjectLocked'))); }
       }
     };
     void acquire('acquire');
@@ -799,7 +788,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       window.clearInterval(timer);
       void creationSessionsApi.lock(sessionId, lockedObjectId, 'release').catch(() => undefined);
     };
-  }, [canEdit, persistedObjectIds, persistence, selectedId, sessionId, setNotice, t]);
+  }, [lockObjectId, sessionId, setNotice, t]);
   const { attachmentBytesStrategy, importDataset } = useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt, historyApplyingRef, historyBaselineRef, hydratedRef, importLabel, journalRef, nodes, persistence, redoStackRef, selectedId, setNodes, setNotice, t, undoStackRef });
   const { selectionIds, redo, undo, deleteObjects, duplicateSelection, copySelection, pasteSelection, openFrame, deleteNodeFromCard, alignSelection, frameSelection, togglePlacementLock, toggleHidden, deleteSelection, exitFrame } = useCanvasEditing({ canEdit, canvasClipboardRef, cardsEditable, edges, flowRef, historyApplyingRef, historyBaselineRef, journalRef, nodes, nodesRef, placeAppendedRef, redoStackRef, selectedId, selectedIds, setEdges, setFrameFocus, setNodePanel, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, t, undoStackRef });
 
@@ -826,7 +815,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const { socialAccountGate, buildSocialFeedNode, importMiroBoard, addSocialFeedToBoard, addSocialCampaignToBoard, boardMedia } = useCanvasConnectedSources({ canEdit, connectedAccountGate, layoutViewportRef, nodes, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, stage, t, tMiro, tSocial });
   const { seatTeammate } = useCanvasTeammates({ addAtCenter, canEdit, nodesRef, placeAppendedRef, revealObjectRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t });
   const { addFilesToCanvas, attachCanvasArtifact, addHostCapture } = useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, seatTeammate, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, stageActive, t });
-  const { applyTemplate, applyServerTemplate, addFramePreset, saveFramePreset } = useCanvasTemplates({ canEdit, canvasText, flowRef, locale, persistence, placeAppendedRef, revisionRef, selectedNode, sessionId, setEdges, setFramePresets, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setServerTemplates, setTemplateOpen, t, templateText });
+  const { applyTemplate, applyServerTemplate, addFramePreset, saveFramePreset } = useCanvasTemplates({ commitRevision, canEdit, canvasText, flowRef, locale, persistence, placeAppendedRef, revisionRef, selectedNode, sessionId, setEdges, setFramePresets, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setServerTemplates, setTemplateOpen, t, templateText });
   const { createBranch, prepareMerge, applyMerge } = useCanvasBranching({ branchParentId, edges, mergeReview, nodes, persistence, requireAccount, sessionId, setMergeReview, setNotice, t, title });
   const { expandProject, compareProjects, expandMockupSet, deliverMockup, loadProjectQuality } = useCanvasProjectActions({ errorText, nodes, openNodeInspector, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, t });
   const { openEvermindTraining, evaluateEvermind, attachEvermindProject, expandEvermindPipeline } = useCanvasEvermindActions({ flowRef, nodes, openNodeInspector, persistence, placeAppendedRef, selectedNode, sessionId, setEdges, setEvermindLiveByNodeId, setNodes, setNotice, setSelectedId, setSelectedIds, setTrainingFocus, t });
@@ -848,17 +837,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const { revealObject, walkthroughRef, walkthroughStops, sessionFiles, downloadCanvasFile } = useCanvasFiles({ edges, exportArtifact, flowRef, nodes, revealObjectRef, setInspectorFocus, setNotice, setSelectedId, setSelectedIds, setSurface, t });
   const { runPollAction, evaluateReleaseGate, runCardActOnObject, cardActBoard } = useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persistence, requireAccount, setEdges, setNodes, setNotice, setSurface, t, tPoll, updateNodeData });
 
-  useEffect(() => {
-    const pending = pendingBrainActions[0];
-    if (!pending) return;
-    const target = nodes.find((node) => node.id === pending.objectId);
-    if (!target) { setPendingBrainActions((current) => current.slice(1)); return; }
-    if (selectedId !== target.id) {
-      setSelectedId(target.id);
-      setSelectedIds([target.id]);
-      return;
+  /**
+   * Brain's queued object actions, one at a time. An action is about ITS object, and
+   * several of them act on the selection, so the object is selected first; a queued
+   * action whose object has gone is dropped. Both are adjusted while rendering — on the
+   * render the queue changed in — and the action that is ready moves to
+   * `dispatchedBrainAction`, which the effect below performs exactly once.
+   */
+  const pendingBrainAction = pendingBrainActions[0];
+  if (pendingBrainAction) {
+    const dropHead = (current: typeof pendingBrainActions) => (current[0] === pendingBrainAction ? current.slice(1) : current);
+    const pendingTarget = nodes.find((node) => node.id === pendingBrainAction.objectId);
+    if (!pendingTarget) setPendingBrainActions(dropHead);
+    else if (selectedId !== pendingTarget.id) {
+      setSelectedId(pendingTarget.id);
+      setSelectedIds([pendingTarget.id]);
+    } else {
+      setDispatchedBrainAction(pendingBrainAction);
+      setPendingBrainActions(dropHead);
     }
-    const finish = () => setPendingBrainActions((current) => current.slice(1));
+  }
+  // An effect EVENT, so a callback changing identity can never perform an action twice:
+  // the effect is keyed on the dispatched action alone.
+  const performBrainAction = useEffectEvent((pending: { objectId: string; action: string }) => {
+    const target = nodes.find((node) => node.id === pending.objectId);
+    if (!target) return;
     if (target.data.kind === 'workflow' && pending.action === 'build') void compileWorkflow(target.id);
     else if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow(target.id);
     else if (target.data.kind === 'website' && pending.action === 'publish') publishWebsite(target.id);
@@ -898,8 +901,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else {
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
-    finish();
-  }, [compareProjects, compileWorkflow, convertObjectToDiagram, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, plotDataset, profileDataset, publishWebsite, runCardActOnObject, runCreativeAction, runPollAction, runWorkflow, selectedId, setEdges, setNodes, setNotice, setPresentMode, startStandup, t, visualizeDataset]);
+  });
+  useEffect(() => {
+    if (dispatchedBrainAction) performBrainAction(dispatchedBrainAction);
+  }, [dispatchedBrainAction]);
   const { exportSession, openHistory, createCheckpoint, restoreRevision, restoreLocalCheckpoint } = useCanvasHistory({ canEdit, checkpointName, edges, flowRef, nodes, persistence, sessionId, setCheckpointName, setEdges, setHistory, setHistoryOpen, setLocalCheckpoints, setNodes, setNotice, t, timeline, title, viewportRef });
 
   const cleanLayout = useCanvasCleanLayout({ boardRef: flowWrapRef, instanceRef: flowRef, setNodes, edges, padding: .16, maxZoom: .9 });
@@ -919,9 +924,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * diagnostic on it put that card back on "Loading…" indefinitely — one request
    * per selection, hundreds in a session.
    */
-  const runWorkflowRef = useRef(runWorkflow);
-  runWorkflowRef.current = runWorkflow;
-  const runWorkflowFromNode = useCallback((nodeId: string) => { runWorkflowRef.current(nodeId); }, []);
+  const runWorkflowRef = useLatestRef(runWorkflow);
+  const runWorkflowFromNode = useCallback((nodeId: string) => { runWorkflowRef.current(nodeId); }, [runWorkflowRef]);
   const openBuiltinAgentSurface = useCallback((nodeId: string, intent: BuiltinAgentSurfaceIntent) => {
     const node = nodes.find((candidate) => candidate.id === nodeId);
     const href = builtinAgentSurfaceHref(node?.data.agentDomain, node?.data.agentSeat, intent);
@@ -932,11 +936,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (canvasSurface() === 'vscode') canvasNavigate(href);
     else router.push(href);
   }, [nodes, router]);
-  const openBuiltinAgentSurfaceRef = useRef(openBuiltinAgentSurface);
-  openBuiltinAgentSurfaceRef.current = openBuiltinAgentSurface;
+  const openBuiltinAgentSurfaceRef = useLatestRef(openBuiltinAgentSurface);
   const openBuiltinAgentSurfaceFromNode = useCallback((nodeId: string, intent: BuiltinAgentSurfaceIntent) => {
     openBuiltinAgentSurfaceRef.current(nodeId, intent);
-  }, []);
+  }, [openBuiltinAgentSurfaceRef]);
   // Brain reaches its Object through BrainSurfaceProvider, not through this memo:
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
@@ -965,7 +968,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // for the WIDE panel directly — the short one has no such section to scroll to.
       setSelectedId(nodeId); setSelectedIds([nodeId]); openNodeInspector(nodeId, focus || null);
     }} />,
-  }), [canRun, cardsEditable, deleteNodeFromCard, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openFrame, openInsertPicker, openNodeInspector, openNodePanel, revealObject, runWorkflowFromNode, setSurface, updateNodeData]);
+  }), [canRun, cardsEditable, deleteNodeFromCard, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openFrame, openInsertPicker, openNodeInspector, openNodePanel, revealObject, runWorkflowFromNode, setDiagnosticsOpen, setHistoryOpen, setOutcomeMetricsOpen, setSelectedId, setSelectedIds, setSurface, updateNodeData]);
   /**
    * An object in the 3D space is drawn by the component that draws it on the board —
    * a website shows its page, an agent its latest response — so the two readings of
@@ -1119,7 +1122,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <CanvasOutcomeMetricsPanel open={outcomeMetricsOpen} setOpen={setOutcomeMetricsOpen} metrics={outcomeMetrics} loading={outcomeMetricsLoading} error={outcomeMetricsError} onRetry={openOutcomeMetrics} buildProofJourneyDiagnostics={buildProofJourneyDiagnostics} />
         <CanvasConversationPanel open={conversationOpen} setOpen={setConversationOpen} timeline={timeline} buildDiagnostics={buildDiagnostics} />
         <CanvasDiagnosticsPanel
-          open={diagnosticsOpen} setOpen={setDiagnosticsOpen} revision={revisionRef.current} realtimeState={realtimeState} objectCount={nodes.length} connectionCount={edges.length}
+          open={diagnosticsOpen} setOpen={setDiagnosticsOpen} revision={revision} realtimeState={realtimeState} objectCount={nodes.length} connectionCount={edges.length}
           thinking={thinking} actionCount={canvasActions.length} scope={resolvedScopeMode} buildDiagnostics={buildDiagnostics}
         />
 

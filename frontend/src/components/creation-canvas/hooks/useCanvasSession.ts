@@ -1,5 +1,6 @@
 /** Loading the session and adopting remote/room board state into this one. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useRef } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo } from 'react';
+import { useLatestRef } from './useLatestRef';
 import { localCreationSnapshot, type LocalCreationSnapshot, readLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { normalizeChatMode } from '@/lib/brain';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -19,6 +20,7 @@ import type { useTranslations } from 'next-intl';
 import type { CreationNodeData } from '../types';
 
 export interface UseCanvasSessionDeps {
+  commitRevision: (revision: number) => void;
   currentGraphRef: RefObject<string>;
   edges: Edge[];
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
@@ -54,7 +56,7 @@ export interface UseCanvasSessionDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef }: UseCanvasSessionDeps) {
+export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef }: UseCanvasSessionDeps) {
   useEffect(() => {
     try {
       if (persistence === 'local') {
@@ -106,7 +108,7 @@ export function useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef,
           pendingViewportRef.current = restoredViewport;
           void flowRef.current?.setViewport(restoredViewport);
         }
-        revisionRef.current = detail.session.canvasRevision ?? detail.session.revision ?? 1;
+        commitRevision(detail.session.canvasRevision ?? detail.session.revision ?? 1);
         lastSavedGraphRef.current = JSON.stringify({ nodes: loadedNodes, edges: loadedEdges });
         currentGraphRef.current = lastSavedGraphRef.current;
         hydratedRef.current = true;
@@ -118,7 +120,7 @@ export function useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef,
         setNotice(faultText(error, t('noticeLoadSessionFailed')));
       }).finally(() => setLoadingSession(false));
     } catch { hydratedRef.current = true; }
-  }, [currentGraphRef, flowRef, hydratedRef, lastSavedGraphRef, noteSaveState, pendingViewportRef, persistence, revisionRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, viewportRef]);
+  }, [commitRevision, currentGraphRef, flowRef, hydratedRef, lastSavedGraphRef, noteSaveState, pendingViewportRef, persistence, revisionRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, viewportRef]);
 
   /**
    * Adopt the room's board. Used for the first load in a shared session and for
@@ -160,7 +162,7 @@ export function useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef,
     setPersistedObjectIds(new Set(decision.board.nodes.map((node) => node.id)));
     setTitle(decision.title);
     setAllMembers(decision.members as CreationSessionDetail['members']);
-    revisionRef.current = decision.revision;
+    commitRevision(decision.revision);
     lastSavedGraphRef.current = decision.signature;
     currentGraphRef.current = decision.signature;
     // A collaborator on a newer deployment can save a kind this build does not
@@ -168,7 +170,7 @@ export function useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef,
     // the initial load, three hundred lines away, said so.
     if (decision.rejected.length) setNotice(t('objectsRejected', { count: decision.rejected.length, kinds: rejectedObjectKinds(decision.rejected) }));
     else setNotice(notice);
-  }, [currentGraphRef, lastSavedGraphRef, revisionRef, setAllMembers, setEdges, setNodes, setNotice, setPersistedObjectIds, setTitle, t]);
+  }, [commitRevision, currentGraphRef, lastSavedGraphRef, setAllMembers, setEdges, setNodes, setNotice, setPersistedObjectIds, setTitle, t]);
 
   const applyRoomSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
     // `noteExchanged` is NOT called here any more: the shared session moved into
@@ -215,14 +217,12 @@ export function useCanvasSession({ currentGraphRef, edges, flowRef, hydratedRef,
     edges,
     viewport,
   }), [edges, nodes, sessionId, timeline, title, viewportRef]);
-  const currentSnapshotRef = useRef(currentSnapshot);
-  currentSnapshotRef.current = currentSnapshot;
+  const currentSnapshotRef = useLatestRef(currentSnapshot);
 
   // Both are read by the hook through a ref, so its pull effect is driven by the
   // ROOM changing rather than by this component re-rendering — which would
   // re-pull the shared board on every keystroke.
-  const applyRoomSnapshotRef = useRef(applyRoomSnapshot);
-  applyRoomSnapshotRef.current = applyRoomSnapshot;
+  const applyRoomSnapshotRef = useLatestRef(applyRoomSnapshot);
 
   const evermindBindingKey = useMemo(() => JSON.stringify(nodes.flatMap((node) => {
     const match = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string'

@@ -1,5 +1,5 @@
 /** The session's files, the walkthrough stops, and downloading a file. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useMemo, useRef } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useInsertionEffect, useMemo, useRef } from 'react';
 import { type CanvasFile, canvasFiles } from '@/lib/canvasDocuments';
 import { canvasWalkthroughStops } from '@/lib/canvasWalkthrough';
 import type { CanvasWalkthroughHandle } from '../CanvasWalkthrough';
@@ -46,7 +46,8 @@ export function useCanvasFiles({ edges, exportArtifact, flowRef, nodes, revealOb
     setSelectedIds([nodeId]);
     void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 });
   }, [flowRef, setInspectorFocus, setSelectedId, setSelectedIds, setSurface]);
-  revealObjectRef.current = revealObject;
+  // Mirrored after commit (the `useLatestRef` timing); only handlers read it.
+  useInsertionEffect(() => { revealObjectRef.current = revealObject; });
 
   /**
    * WHAT THIS BOARD IS, as a walk. Derived from the board's own objects and

@@ -236,7 +236,7 @@ function resolveTabularTarget(stage: CanvasProposalStage, objectId?: string) {
  * measurement is pending.
  */
 function measurementGate(
-  { inFlightUseCaseIdRef, turnToolCallsRef }: Pick<CanvasActionStable, 'inFlightUseCaseId' | 'turnToolCalls'>,
+  { inFlightUseCaseIdRef, turnToolCallsRef }: Pick<CanvasActionStable, 'inFlightUseCaseIdRef' | 'turnToolCallsRef'>,
   kind: CreationObjectKind,
 ): { error: string } | null {
   const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === inFlightUseCaseIdRef.current);

@@ -20,19 +20,19 @@ export function ActivityInspector({ sessionId, objectId, data, persistence, role
   const [resumeField, setResumeField] = useState('summary');
   const canComment = role !== 'viewer';
 
-  const reload = useCallback(async () => {
-    if (persistence !== 'server') return;
-    try {
-      const [commentResult, activityResult] = await Promise.all([
-        creationSessionsApi.comments.list(sessionId, objectId),
-        creationSessionsApi.activity(sessionId, 50),
-      ]);
+  /** The object's comments and the session's recent activity, applied when they land. */
+  const reload = useCallback(() => {
+    if (persistence !== 'server') return Promise.resolve();
+    return Promise.all([
+      creationSessionsApi.comments.list(sessionId, objectId),
+      creationSessionsApi.activity(sessionId, 50),
+    ]).then(([commentResult, activityResult]) => {
       setComments(commentResult.comments);
       setActivity(activityResult.activity.filter((item) => !item.objectId || item.objectId === objectId));
       setStatus(commentResult.comments.length || activityResult.activity.length ? '' : t('noticeNoActivityYet'));
-    } catch (error) {
+    }, (error: unknown) => {
       setStatus(faultText(error, t('noticeLoadActivityFailed')));
-    }
+    });
   }, [objectId, persistence, sessionId, t]);
 
   useEffect(() => { void reload(); }, [reload]);

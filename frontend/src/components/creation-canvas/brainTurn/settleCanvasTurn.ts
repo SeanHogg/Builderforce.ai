@@ -15,7 +15,7 @@ export interface CanvasTurnSettleContext extends Pick<UseCanvasBrainTurnDeps,
   | 'appendTimeline' | 'autoApplyRef' | 'canvasRunRef' | 'describeTurnError' | 'effectiveSelectedIds'
   | 'lastTurnProvenance' | 'nodes' | 'persistence' | 'resolvedScopeMode' | 'scopedNodeIds' | 'sessionId'
   | 'setAcceptedProposalIds' | 'setActiveAgentIds' | 'setAutoApplyPending' | 'setEdges' | 'setGuestLimit'
-  | 'setNodes' | 'setNotice' | 'setProposedChanges' | 'setThinking' | 'stage' | 't' | 'turnUnanswered'> {
+  | 'setNodes' | 'setNotice' | 'setProposedChanges' | 'setThinking' | 'stage' | 't' | 'turnUnansweredRef'> {
   /** The user's request, trimmed. */
   request: string;
   /** The transcript id of the request — every line this turn writes is keyed off it. */

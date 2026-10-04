@@ -14,11 +14,11 @@ import { canonicalTurnAgents } from './turnParticipants';
 
 /** What one group turn reads: the board's live deps plus the facts this turn fixed when it began. */
 export interface CanvasGroupTurnContext extends Pick<UseCanvasBrainTurnDeps,
-  | 'appendTimeline' | 'autoApplyRef' | 'brainRuntime' | 'canvasActions' | 'canvasNotices' | 'confirm'
-  | 'describeTurnError' | 'disableBrainModel' | 'evermindProjectId' | 'journal' | 'memoryEnabled'
+  | 'appendTimeline' | 'autoApplyRef' | 'brainRuntimeRef' | 'canvasActions' | 'canvasNotices' | 'confirm'
+  | 'describeTurnError' | 'disableBrainModel' | 'evermindProjectId' | 'journalRef' | 'memoryEnabled'
   | 'modelSelection' | 'nodes' | 'persistence' | 'recordBrainCompletion' | 'resolvedScopeMode'
   | 'scopedNodeIds' | 'sessionId' | 'sessionMode' | 'setActiveAgentIds' | 'setBrainTrace'
-  | 'setModelSelection' | 'setNodes' | 'stage' | 't' | 'timeline' | 'title' | 'turnToolCalls' | 'turnUnanswered'> {
+  | 'setModelSelection' | 'setNodes' | 'stage' | 't' | 'timeline' | 'title' | 'turnToolCallsRef' | 'turnUnansweredRef'> {
   /** The user's request, trimmed. */
   request: string;
   /** The transcript id of the request — every reply this turn writes is keyed off it. */

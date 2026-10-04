@@ -233,7 +233,8 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
    * the card's size and its position stay in step however the drawing grew.
    */
   const onCanvasPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!drawingMode) return;
+    // Narrowed on `drawing` itself: the pen is what the stroke is drawn with.
+    if (!drawing) return;
     const path = drawingPointsRef.current.splice(0);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const start = path[0];
@@ -298,7 +299,7 @@ export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, c
     setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setSelectedId(node.id);
     setNotice(target ? t('noticeAnnotationAdded', { title: target.data.title }) : t('noticeSketchAdded'));
-  }, [drawing.color, drawing.tool, drawing.width, drawingMode, drawingPointsRef, nodes, placeAppendedRef, setNodes, setNotice, setSelectedId, t]);
+  }, [drawing, drawingPointsRef, nodes, placeAppendedRef, setNodes, setNotice, setSelectedId, t]);
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
     // A follower is watching this pan happen, not reading about it eight seconds later.

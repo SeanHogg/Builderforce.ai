@@ -1,6 +1,6 @@
 /** The Brain's surface on this board — placement, messages, roster, room speech and the surface context value. */
 import { type BrainDockMode, type BrainDockPreferences, brainDockReservedWidth } from '../brainDockPreferences';
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useMemo, useState } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
 import { roomSpeech } from '@/lib/canvas/roomSpeech';
@@ -154,7 +154,19 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
    * working, not just the person who asked. This viewer's own run wins when there
    * is one: it is the one carrying the trace and the Stop.
    */
-  const peerRuns = useMemo(() => peerBrainRuns(livePresence, presenceSelfId, Date.now()), [livePresence, presenceSelfId]);
+  // `peerBrainRuns` clamps a peer's start to this browser's clock (a peer whose clock runs
+  // ahead must not show a negative elapsed time). The clock is read OFF the render path,
+  // once per change to the set of peer runs — not once per cursor frame — and until it
+  // has been read for the current set the starts are shown as sent.
+  const peerRunsKey = useMemo(() => peerBrainRuns(livePresence, presenceSelfId, Infinity).map((run) => `${run.userId}:${run.startedAt}`).join('|'), [livePresence, presenceSelfId]);
+  const [peerRunsClock, setPeerRunsClock] = useState<{ key: string; at: number }>({ key: '', at: Infinity });
+  useEffect(() => {
+    if (peerRunsClock.key === peerRunsKey) return;
+    const handle = window.setTimeout(() => setPeerRunsClock({ key: peerRunsKey, at: Date.now() }), 0);
+    return () => window.clearTimeout(handle);
+  }, [peerRunsClock.key, peerRunsKey]);
+  const peerRunsNow = peerRunsClock.key === peerRunsKey ? peerRunsClock.at : Infinity;
+  const peerRuns = useMemo(() => peerBrainRuns(livePresence, presenceSelfId, peerRunsNow), [livePresence, peerRunsNow, presenceSelfId]);
   const peerRunStartedAt = peerRuns[0]?.startedAt ?? null;
   const brainRunning = thinking || peerRunStartedAt !== null;
   const brainRunShownStartedAt = thinking ? brainRunStartedAt : peerRunStartedAt;

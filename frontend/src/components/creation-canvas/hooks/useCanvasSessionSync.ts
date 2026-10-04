@@ -16,6 +16,7 @@ import type { PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 
 export interface UseCanvasSessionSyncDeps {
+  commitRevision: (revision: number) => void;
   activeMemberIdsRef: RefObject<Set<string>>;
   activePresenceInitializedRef: RefObject<boolean>;
   applyRemoteBoard: (decision: AdoptRemoteBoardDecision, notice: string) => void;
@@ -46,7 +47,7 @@ export interface UseCanvasSessionSyncDeps {
   persistSnapshot: (snapshot: LocalCreationSnapshot) => void;
   persistence: 'local' | 'server';
   presenceLive: boolean;
-  presenceRef: RefObject<PresenceRelay | null>;
+  presenceRelay: PresenceRelay;
   receivePresence: (frame: unknown) => void;
   revisionRef: RefObject<number>;
   saveInFlightRef: RefObject<boolean>;
@@ -72,7 +73,7 @@ export interface UseCanvasSessionSyncDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialBuildOpen, initialBuildOpenedRef, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRef, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
+export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialBuildOpen, initialBuildOpenedRef, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
   useEffect(() => { currentGraphRef.current = JSON.stringify({ nodes, edges }); }, [currentGraphRef, edges, nodes]);
 
   // A persisted viewport is expressed in screen pixels, so restoring a camera
@@ -139,7 +140,7 @@ export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitial
         t,
       ).then((result) => {
         if (result.outcome === 'failed') { setNotice(result.notice); return; }
-        revisionRef.current = result.revision;
+        commitRevision(result.revision);
         lastSavedGraphRef.current = result.signature;
         setPersistedObjectIds(new Set(result.objectIds));
         if (pendingSaveRef.current?.key === attempt.key) pendingSaveRef.current = null;
@@ -156,7 +157,7 @@ export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitial
     return () => window.clearTimeout(handle);
   // `currentSnapshot` changes exactly when edges/nodes/sessionId/timeline/title do, so listing it
   // does not change when the debounce restarts.
-  }, [canEdit, currentSnapshot, edges, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, revisionRef, saveInFlightRef, sessionId, setEdges, setNodes, setNotice, setPersistedObjectIds, storageKey, t, timeline, title, viewportRef]);
+  }, [canEdit, commitRevision, currentSnapshot, edges, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, revisionRef, saveInFlightRef, sessionId, setEdges, setNodes, setNotice, setPersistedObjectIds, storageKey, t, timeline, title, viewportRef]);
 
   // The write reads the room's CURRENT `persistSnapshot` when the debounce fires; the room
   // changing is not itself a reason to write the board again.
@@ -226,9 +227,6 @@ export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitial
     let socket: WebSocket | null = null;
     let retryTimer: number | null = null;
     let retryMs = 1_000;
-    // Created once with the canvas and never replaced, so reading it here is the same relay
-    // the cleanup used to read.
-    const presence = presenceRef.current;
     const syncRevision = async (hint?: number) => {
       if (stopped) return;
       try {
@@ -289,10 +287,10 @@ export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitial
       if (retryTimer != null) window.clearTimeout(retryTimer);
       liveSocketRef.current = null;
       // Drop the pending flush with the socket it was going to be written to.
-      presence?.dispose();
+      presenceRelay.dispose();
       socket?.close();
     };
-  }, [applyRemoteBoard, clearPresence, liveSocketRef, localBoardState, persistence, presenceRef, receivePresence, revisionRef, sessionId, setEdges, setNodes, setRealtimeState, setTimeline, t]);
+  }, [applyRemoteBoard, clearPresence, liveSocketRef, localBoardState, persistence, presenceRelay, receivePresence, revisionRef, sessionId, setEdges, setNodes, setRealtimeState, setTimeline, t]);
 
   /**
    * Composing a prompt is presence too — the cursor label says so. It changes at
