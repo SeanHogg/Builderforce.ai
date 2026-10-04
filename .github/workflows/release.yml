@@ -19,9 +19,30 @@ env:
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
 
 jobs:
+  # One runner per package, in parallel. They used to run one after another in a
+  # single step, so the fifth package waited on four others' type-checks and tests,
+  # and one red package stopped every package listed after it from publishing.
   package-npm:
-    name: Package npm
+    name: Package ${{ matrix.package }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: browser-sdk
+            package: '@seanhogg/builderforce-quality'
+          - dir: sdk
+            package: '@seanhogg/builderforce-sdk'
+          - dir: studio
+            package: '@seanhogg/builderforce-studio'
+          # `file:../studio` copies studio's BUILT dist at install time, which the serial
+          # loop only had because studio happened to be installed (its `prepare` builds
+          # it) earlier in the same step. On its own runner it has to be done first.
+          - dir: studio-embedded
+            package: '@seanhogg/builderforce-studio-embedded'
+            builds-first: studio
+          - dir: voice
+            package: '@seanhogg/builderforce-voice'
     steps:
       - uses: actions/checkout@v7
 
@@ -35,43 +56,73 @@ jobs:
 
       - uses: ./.github/actions/pnpm-store-cache
         with:
-          scope: package-npm
+          scope: package-npm-${{ matrix.dir }}
 
       - uses: ./.github/actions/npm-publish-auth
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
 
-      - name: Build, test, and publish packages with new versions
+      - name: Build the linked ${{ matrix.builds-first }} package
+        if: matrix.builds-first
+        working-directory: ${{ matrix.builds-first }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Install
+        working-directory: ${{ matrix.dir }}
         run: |
-          publish_package() {
-            package_dir="$1"
-            package_name="$2"
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            npm install --no-audit --no-fund
+          fi
 
-            pushd "$package_dir"
-            if [ -f pnpm-lock.yaml ]; then
-              pnpm install --frozen-lockfile
-            else
-              npm install --no-audit --no-fund
-            fi
-            npm run type-check
-            npm test
-            bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" "$package_name"
-            popd
-          }
+      - name: Type-check and test
+        working-directory: ${{ matrix.dir }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh" "npm run type-check" "npm test"
 
-          publish_package browser-sdk @seanhogg/builderforce-quality
-          publish_package sdk @seanhogg/builderforce-sdk
-          publish_package studio @seanhogg/builderforce-studio
-          publish_package studio-embedded @seanhogg/builderforce-studio-embedded
-          publish_package voice @seanhogg/builderforce-voice
+      - name: Publish if the version is new
+        working-directory: ${{ matrix.dir }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" "${{ matrix.package }}"
+
+  # The agent runtime's typecheck and unit suite each take a full runner: concurrently on
+  # one they fight over the same cores and memory. Separate legs, and package-agents
+  # waits for both.
+  verify-agents:
+    name: Verify @seanhogg/builderforce-agents (${{ matrix.script }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        script: [typecheck, 'test:fast']
+    defaults:
+      run:
+        working-directory: agent-runtime
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: package-agents
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run ${{ matrix.script }}
 
   # The on-prem agent CLI every installer (install.sh / install.ps1 / install-cli.sh,
-  # the macOS app) fetches from npm. Its own job, not a sixth `publish_package` line:
-  # it is a pnpm workspace with its own script names and a control-UI build, and a
-  # failure here must not hold back the SDK packages above (or the reverse).
+  # the macOS app) fetches from npm. Its own job, not another package-npm leg: it is a
+  # pnpm workspace with its own script names and a control-UI build, and a failure here
+  # must not hold back the SDK packages above (or the reverse).
   package-agents:
     name: Package @seanhogg/builderforce-agents
     runs-on: ubuntu-latest
+    needs: verify-agents
     defaults:
       run:
         working-directory: agent-runtime
@@ -95,8 +146,6 @@ jobs:
           npm-token: ${{ secrets.NPM_TOKEN }}
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test:fast
 
       # vendor/ and apps/shared/BuilderForceAgentsKit are gitignored (Docker builds
       # exclude them too), so a fresh checkout here has neither the A2UI renderer
@@ -132,9 +181,17 @@ jobs:
   # Microsoft's marketplace licence restricts consumption to Microsoft products,
   # so Open VSX is not a duplicate listing — it is the only way the same VSIX
   # reaches Cursor, Windsurf, VSCodium and Gitpod. One package, two publishes.
-  publish-extension:
-    name: Publish VS Code extension
+  #
+  # Three jobs so nothing waits on what it does not need: the type-check and the unit
+  # suite (verify-extension) run alongside the package-and-activate gate
+  # (package-extension), and only the publish waits on all of them.
+  verify-extension:
+    name: Verify VS Code extension (${{ matrix.script }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        script: [type-check, test]
     steps:
       - uses: actions/checkout@v7
 
@@ -150,7 +207,7 @@ jobs:
         with:
           scope: publish-extension
 
-      - name: Build and package the VSIX
+      - name: ${{ matrix.script }}
         working-directory: clients/vscode
         env:
           # vitest's default fork inherits Node's default old-space ceiling. The
@@ -172,8 +229,34 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile || pnpm install
-          npm run type-check
-          npm test
+          npm run ${{ matrix.script }}
+
+  package-extension:
+    name: Package VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: publish-extension
+
+      - name: Build and package the VSIX
+        working-directory: clients/vscode
+        env:
+          # `vscode:prepublish` runs tsc and the webview's vite build; same ceiling as
+          # the verify legs, which this step used to share a heap setting with.
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          pnpm install --frozen-lockfile || pnpm install
           npx --yes @vscode/vsce package --no-dependencies --out builderforce.vsix
 
       # The gate that the offline suites structurally CANNOT be: it launches a real
@@ -208,6 +291,30 @@ jobs:
       - name: Verify the extension activates in a real VS Code
         working-directory: clients/vscode
         run: xvfb-run -a npm run test:integration
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: builderforce-vsix
+          path: clients/vscode/builderforce.vsix
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-extension:
+    name: Publish VS Code extension
+    runs-on: ubuntu-latest
+    needs: [verify-extension, package-extension]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # The exact VSIX that passed the activation gate, not a rebuild of it.
+      - uses: actions/download-artifact@v4
+        with:
+          name: builderforce-vsix
+          path: clients/vscode
 
       # Publishing is version-gated: re-running the workflow on an unbumped
       # version must be a no-op, not a hard failure, because this job shares a
@@ -442,9 +549,47 @@ jobs:
             fi
           fi
 
+  # The API's two typecheckers and its guards+vitest suite are independent readers of
+  # the same tree, and each is heavy enough to want a whole runner (both OOM'd the
+  # default heap on their own). They run side by side; the migration and deploy wait
+  # on both. No secrets: the suite stubs every binding it touches.
+  verify-api:
+    name: Verify API (${{ matrix.script }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        script: [type-check, test]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: deploy-api
+
+      - name: ${{ matrix.script }}
+        working-directory: api
+        env:
+          # tsc's default ~4 GiB heap is no longer enough for api's type graph
+          # (drizzle-orm, zod 4, pdf-lib, pptxgenjs, yjs, …); it OOM'd mid mark-compact.
+          # run-checks.mjs spawns tsc/tsgo as child node processes, which inherit this.
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          pnpm install --frozen-lockfile
+          npm run ${{ matrix.script }}
+
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest
+    needs: verify-api
     # Binds the job to the `production` GitHub Environment so a required-reviewer rule
     # (or a wait timer, or a branch restriction) can gate the migration + worker deploy
     # WITHOUT another change to this file. Until protection rules are configured on that
@@ -470,15 +615,9 @@ jobs:
       # No global Wrangler here: `deploy:worker` runs through `npm run`, which resolves
       # api's own pinned `wrangler` devDependency. A global install was a second,
       # floating copy nothing in this job called.
-      - name: Verify and deploy API
+      - name: Migrate and deploy API
         working-directory: api
         env:
-          # tsc's default ~4 GiB heap is no longer enough for api's type graph
-          # (drizzle-orm, zod 4, pdf-lib, pptxgenjs, yjs, …); it OOM'd mid mark-compact.
-          # Same fix as the frontend job below: raise the old-space ceiling to what the
-          # hosted runner can spare. run-checks.mjs spawns tsc/tsgo as child node
-          # processes, which inherit this from the step env.
-          NODE_OPTIONS: --max-old-space-size=6144
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
           # One per track in api/scripts/lib/migrationTracks.mjs. The apps track is optional:
@@ -488,8 +627,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           pnpm install --frozen-lockfile
-          npm run type-check
-          npm test
           npm run db:migrate
 
           for attempt in 1 2 3; do
@@ -607,12 +744,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           pnpm install --frozen-lockfile || pnpm install
+          # Two independent gates, run concurrently by run-parallel.sh (both are
+          # light, so a runner of their own would cost more in install than it saves):
+          #
           # brain-ui's own suite. The package is BUILT (exports → dist, its own
           # lockfile and vitest config), so it is not one of the source-only packages
           # the API suite runs, and it ran there only by a glob accident that failed
           # on a missing `react`. Its devDependencies were just installed by
           # ensure-linked-deps above, so this is the one job where it can run.
-          pnpm --dir ../packages/brain-ui run test
+          #
           # THE WHOLE GUARD CHAIN, not a hand-picked three.
           #
           # This job used to name `check:edge-runtime`, `check:declared-deps` and
@@ -628,7 +768,9 @@ jobs:
           # concurrently in ~10s, which is nothing against a ~6-minute Next build, and
           # every one of them answers in milliseconds what `cf-build` answers at the
           # very end.
-          pnpm run check
+          bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh" \
+            "pnpm --dir ../packages/brain-ui run test" \
+            "pnpm run check"
           pnpm run cf-build
           wrangler deploy --no-bundle
 
