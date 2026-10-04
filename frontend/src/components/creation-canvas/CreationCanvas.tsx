@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffectEvent } from '@/hooks/useEffectEvent';
 import { ReactFlowProvider, useEdgesState, useNodesState, type Edge, type NodeTypes, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';

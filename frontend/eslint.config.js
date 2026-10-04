@@ -52,6 +52,22 @@ const config = [
       reportUnusedDisableDirectives: 'off',
     },
   },
+  {
+    // The App Router renders with the React `next` VENDORS, not the `react` in
+    // package.json. Next 15.5's build is a 19.2 canary that has no
+    // `useEffectEvent`, so importing it from 'react' type-checks against 19.2.8
+    // and then throws "useEffectEvent is not a function" in production. Use
+    // `@/hooks/useEffectEvent` until `next` ships a React that exports it.
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{
+          name: 'react',
+          importNames: ['useEffectEvent', 'experimental_useEffectEvent'],
+          message: "Next's vendored React does not export it — import { useEffectEvent } from '@/hooks/useEffectEvent'.",
+        }],
+      }],
+    },
+  },
 ];
 
 module.exports = config;

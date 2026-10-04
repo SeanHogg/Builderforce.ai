@@ -1,5 +1,6 @@
 /** Keeping the session in sync — saving, realtime, polled members and invitations. */
-import { type Dispatch, type RefObject, type SetStateAction, useEffect, useEffectEvent } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'react';
+import { useEffectEvent } from '@/hooks/useEffectEvent';
 import { boardSignature, persistBoard, saveAttemptKey } from '@/domains/canvas/application/PersistCanvas';
 import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
 import { rejectedObjectKinds } from '../canvasBoardLoad';
