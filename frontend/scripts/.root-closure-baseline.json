@@ -10,6 +10,7 @@
     "components/AppToast.module.css",
     "components/AppToast.tsx",
     "components/Avatar.tsx",
+    "components/BrandLockup.tsx",
     "components/ChunkErrorBoundary.tsx",
     "components/ChunkErrorRecovery.tsx",
     "components/ConditionalAppShell.tsx",
