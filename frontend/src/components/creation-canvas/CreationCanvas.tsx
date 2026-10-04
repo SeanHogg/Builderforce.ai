@@ -858,8 +858,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPendingBrainActions(dropHead);
     }
   }
-  // An effect EVENT, so a callback changing identity can never perform an action twice:
-  // the effect is keyed on the dispatched action alone.
+  // An effect EVENT: the effect is keyed on the dispatched action alone, so it never performs twice.
   const performBrainAction = useEffectEvent((pending: { objectId: string; action: string }) => {
     const target = nodes.find((node) => node.id === pending.objectId);
     if (!target) return;
