@@ -549,17 +549,27 @@ jobs:
             fi
           fi
 
-  # The API's two typecheckers and its guards+vitest suite are independent readers of
-  # the same tree, and each is heavy enough to want a whole runner (both OOM'd the
-  # default heap on their own). They run side by side; the migration and deploy wait
-  # on both. No secrets: the suite stubs every binding it touches.
+  # Everything `npm run type-check && npm test` covers, spread over runners that run side
+  # by side; the migration and deploy wait on all of them. No secrets: the suite stubs
+  # every binding it touches.
+  #
+  # vitest is sharded because it was the long pole: ~900 files, 226s wall on one runner,
+  # and almost all of it module import (477s cumulative) rather than tests (41s), which
+  # divides cleanly across machines. The guards are `npm test`'s first half, run once
+  # here rather than in front of every shard.
   verify-api:
-    name: Verify API (${{ matrix.script }})
+    name: Verify API (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        script: [type-check, test]
+        include:
+          - { name: type-check, run: npm run type-check }
+          - { name: guards, run: npm run check }
+          - { name: vitest 1/4, run: npx vitest run --shard=1/4 }
+          - { name: vitest 2/4, run: npx vitest run --shard=2/4 }
+          - { name: vitest 3/4, run: npx vitest run --shard=3/4 }
+          - { name: vitest 4/4, run: npx vitest run --shard=4/4 }
     steps:
       - uses: actions/checkout@v7
 
@@ -575,7 +585,7 @@ jobs:
         with:
           scope: deploy-api
 
-      - name: ${{ matrix.script }}
+      - name: ${{ matrix.name }}
         working-directory: api
         env:
           # tsc's default ~4 GiB heap is no longer enough for api's type graph
@@ -584,7 +594,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile
-          npm run ${{ matrix.script }}
+          ${{ matrix.run }}
 
   deploy-api:
     name: Deploy API
@@ -612,12 +622,20 @@ jobs:
         with:
           scope: deploy-api
 
+      # Container image layer cache for `wrangler deploy` — see
+      # .github/scripts/docker-with-layer-cache.sh. setup-buildx gives a builder that can
+      # read and write the `gha` cache; ghaction-github-runtime exposes the Actions cache
+      # credentials to the `run` step below, which a run step does not get on its own.
+      - uses: docker/setup-buildx-action@v3
+      - uses: crazy-max/ghaction-github-runtime@v3
+
       # No global Wrangler here: `deploy:worker` runs through `npm run`, which resolves
       # api's own pinned `wrangler` devDependency. A global install was a second,
       # floating copy nothing in this job called.
       - name: Migrate and deploy API
         working-directory: api
         env:
+          WRANGLER_DOCKER_BIN: ${{ github.workspace }}/.github/scripts/docker-with-layer-cache.sh
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
           # One per track in api/scripts/lib/migrationTracks.mjs. The apps track is optional:

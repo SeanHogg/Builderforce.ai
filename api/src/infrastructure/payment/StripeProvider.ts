@@ -789,6 +789,27 @@ export class StripeProvider implements PaymentProvider {
             billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'], raw: event,
           };
         }
+        // EVERY OTHER FLOW THAT NAMES ITSELF. A credit pack, a workforce agent, a
+        // site or Spawn subscription, an extension plan: each stamps `purchaseKind`
+        // on its session, and none of them is the workspace's Builderforce plan. They
+        // used to fall through to the plan activation below (defaulting to Pro); now
+        // they arrive as their own event and are settled by the purchase registry.
+        const ownFlow = meta['purchaseKind'];
+        if (ownFlow) {
+          const common = {
+            purchaseKind: ownFlow,
+            checkoutSessionId: obj['id'] as string,
+            ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+            externalCustomerId: customer ?? '',
+            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'],
+            metadata: meta,
+            raw: event,
+          };
+          return obj['mode'] === 'subscription'
+            ? { type: 'addon.activated', externalSubscriptionId: sub ?? '', ...common }
+            : { type: 'checkout.completed', externalSubscriptionId: '', ...common };
+        }
+
         const rawSeats = parseInt(meta['seats'] ?? '1', 10);
 
         // A Checkout Session carries no card details of its own, so read them off the
@@ -826,9 +847,7 @@ export class StripeProvider implements PaymentProvider {
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
         if (meta['purchaseKind'] === 'business_phone') {
           const rawTenantId = Number(meta['tenantId']);
-          const addonType = status === 'active' || status === 'trialing' ? 'addon.activated'
-            : status === 'past_due' || status === 'unpaid' ? 'addon.past_due'
-              : status === 'canceled' ? 'addon.cancelled' : null;
+          const addonType = addonStateOf(status);
           return addonType ? { type: addonType, purchaseKind: 'business_phone', activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']), ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event } : null;
         }
 
@@ -843,6 +862,24 @@ export class StripeProvider implements PaymentProvider {
               : status === 'canceled' ? 'extension.subscription.cancelled' : null;
           return extType
             ? { type: extType, purchaseKind: 'extension_plan', externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event }
+            : null;
+        }
+
+        // Any other self-named subscription (Spawn, a site subscription) is an
+        // add-on of its own flow, for the reason the two branches above give.
+        if (meta['purchaseKind']) {
+          const rawTenantId = Number(meta['tenantId']);
+          const addonType = addonStateOf(status);
+          return addonType
+            ? {
+                type: addonType,
+                purchaseKind: meta['purchaseKind'],
+                ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+                externalCustomerId: customer,
+                externalSubscriptionId: obj['id'] as string,
+                metadata: meta,
+                raw: event,
+              }
             : null;
         }
 
@@ -874,6 +911,18 @@ export class StripeProvider implements PaymentProvider {
             purchaseKind: 'extension_plan',
             externalCustomerId: obj['customer'] as string,
             externalSubscriptionId: obj['id'] as string,
+            raw: event,
+          };
+        }
+        if (meta['purchaseKind']) {
+          const rawTenantId = Number(meta['tenantId']);
+          return {
+            type: 'addon.cancelled',
+            purchaseKind: meta['purchaseKind'],
+            ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+            externalCustomerId: obj['customer'] as string,
+            externalSubscriptionId: obj['id'] as string,
+            metadata: meta,
             raw: event,
           };
         }
@@ -1008,6 +1057,26 @@ function mapSubscriptionStatus(status: string): WebhookEvent['type'] | null {
     // incomplete / incomplete_expired / paused carry no verdict: the customer either
     // hasn't paid yet or is deliberately suspended. `customer.subscription.deleted`
     // handles real terminations.
+    default:
+      return null;
+  }
+}
+
+/**
+ * The add-on lifecycle a self-named subscription's Stripe status maps onto — the
+ * same three verdicts {@link mapSubscriptionStatus} gives a plan, for a recurring
+ * charge that is NOT the plan. Null for statuses that carry no verdict.
+ */
+function addonStateOf(status: string): 'addon.activated' | 'addon.past_due' | 'addon.cancelled' | null {
+  switch (status) {
+    case 'active':
+    case 'trialing':
+      return 'addon.activated';
+    case 'past_due':
+    case 'unpaid':
+      return 'addon.past_due';
+    case 'canceled':
+      return 'addon.cancelled';
     default:
       return null;
   }

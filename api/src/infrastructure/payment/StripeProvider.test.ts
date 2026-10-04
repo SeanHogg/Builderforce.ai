@@ -221,6 +221,52 @@ describe('Business Phone checkout', () => {
   });
 });
 
+describe('self-named purchases never activate the workspace plan', () => {
+  const completed = (mode: string, metadata: Record<string, string>) => JSON.stringify({
+    type: 'checkout.session.completed',
+    data: { object: { id: 'cs_own', mode, customer: 'cus_own', subscription: mode === 'subscription' ? 'sub_own' : null, metadata } },
+  });
+
+  // Regression: a credit pack fell through to `subscription.activated` (default Pro),
+  // and only a customer-id lookup that missed kept it from upgrading the workspace.
+  it('reads a paid credit pack as its own checkout, carrying the signed metadata', async () => {
+    const body = completed('payment', { purchaseKind: 'spawn_tokens', tenantId: '9', packId: 'spawn-10' });
+    const event = await makeProvider().parseWebhook(body, await sign(body));
+    expect(event).toMatchObject({
+      type: 'checkout.completed', purchaseKind: 'spawn_tokens', tenantId: 9, checkoutSessionId: 'cs_own',
+      metadata: { packId: 'spawn-10' },
+    });
+  });
+
+  it('reads a self-named subscription checkout as an add-on activation', async () => {
+    const body = completed('subscription', { purchaseKind: 'spawn_plan', tenantId: '9' });
+    const event = await makeProvider().parseWebhook(body, await sign(body));
+    expect(event).toMatchObject({ type: 'addon.activated', purchaseKind: 'spawn_plan', tenantId: 9, externalSubscriptionId: 'sub_own' });
+  });
+
+  it.each([
+    ['active', 'addon.activated'],
+    ['past_due', 'addon.past_due'],
+    ['canceled', 'addon.cancelled'],
+  ])('maps a self-named subscription in %s to %s, not a plan event', async (status, expected) => {
+    const body = JSON.stringify({
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_own', status, customer: 'cus_own', metadata: { purchaseKind: 'spawn_plan', tenantId: '9' } } },
+    });
+    const event = await makeProvider().parseWebhook(body, await sign(body));
+    expect(event).toMatchObject({ type: expected, purchaseKind: 'spawn_plan', tenantId: 9 });
+  });
+
+  it('cancels a self-named subscription as an add-on when it is deleted', async () => {
+    const body = JSON.stringify({
+      type: 'customer.subscription.deleted',
+      data: { object: { id: 'sub_own', customer: 'cus_own', metadata: { purchaseKind: 'spawn_plan', tenantId: '9' } } },
+    });
+    const event = await makeProvider().parseWebhook(body, await sign(body));
+    expect(event).toMatchObject({ type: 'addon.cancelled', purchaseKind: 'spawn_plan', tenantId: 9 });
+  });
+});
+
 describe('createCardValidationSession — billing profile collection', () => {
   afterEach(() => vi.unstubAllGlobals());
 

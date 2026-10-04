@@ -27,112 +27,49 @@
  * it had already been delivered and billed to us.
  */
 
-import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { ledgerEntries } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { COMM_CREDITS } from '../kernel/denominations';
+import { prepaidBalance, type PrepaidRefusal, type PrepaidReservation } from '../kernel/prepaidBalance';
 
-const balanceKey = (tenantId: number) => `comms:balance:t:${tenantId}`;
+/** The comms account, in US cents — the shared prepaid-balance primitive. */
+const comms = prepaidBalance(COMM_CREDITS, 'comms');
 
-function commsAccount(tenantId: number) {
-  return and(
-    eq(ledgerEntries.tenantId, tenantId),
-    eq(ledgerEntries.accountKind, 'tenant'),
-    eq(ledgerEntries.accountRef, String(tenantId)),
-    eq(ledgerEntries.denomination, COMM_CREDITS),
-  );
+interface CommsMovement {
+  tenantId: number; cents: number; reference: string; memo: string; metadata?: Record<string, unknown>;
 }
 
+const movement = ({ cents, ...rest }: CommsMovement) => ({ ...rest, amount: cents });
+
 /** Unspent communications credit, in US cents. */
-export async function commsBalance(db: Db, env: Env | undefined, tenantId: number): Promise<number> {
-  return getOrSetCached(env, balanceKey(tenantId), async () => {
-    const [row] = await db
-      .select({ total: sql<string>`coalesce(sum(${ledgerEntries.amount}), 0)` })
-      .from(ledgerEntries)
-      .where(commsAccount(tenantId));
-    return Math.round(Number(row?.total ?? 0));
-  }, { kvTtlSeconds: 30 });
+export function commsBalance(db: Db, env: Env | undefined, tenantId: number): Promise<number> {
+  return comms.balance(db, env, tenantId);
 }
 
 /** Credit the account. `reference` is the payment's own id, so a retried webhook
  *  cannot top up twice. Returns false when that reference was already applied. */
-export async function topUpComms(
-  db: Db, env: Env,
-  input: { tenantId: number; cents: number; reference: string; memo: string; metadata?: Record<string, unknown> },
-): Promise<boolean> {
-  if (input.cents <= 0) return false;
-  const inserted = await db.insert(ledgerEntries).values({
-    tenantId: input.tenantId,
-    accountKind: 'tenant',
-    accountRef: String(input.tenantId),
-    denomination: COMM_CREDITS,
-    amount: String(input.cents),
-    entryKind: 'grant',
-    reference: input.reference,
-    memo: input.memo,
-    metadata: input.metadata ?? null,
-  }).onConflictDoNothing().returning({ id: ledgerEntries.id });
-
-  if (inserted.length === 0) return false;
-  await invalidateCached(env, balanceKey(input.tenantId));
-  return true;
+export function topUpComms(db: Db, env: Env, input: CommsMovement): Promise<boolean> {
+  return comms.credit(db, env, movement(input));
 }
 
 /**
- * Debit the account for something that has happened or is about to.
- *
- * Rounds UP, deliberately. A per-message vendor price is fractions of a cent, and
- * rounding down means every single message is billed at less than it cost — a
- * loss that scales exactly with usage. Rounding up costs a tenant at most one
- * cent per event and keeps the platform whole.
- *
+ * Debit the account for something that has happened or is about to. Rounds UP
+ * (see the primitive): a per-message vendor price is fractions of a cent.
  * Idempotent on `reference`: a retried status callback for the same message SID
  * debits once.
  */
-export async function debitComms(
-  db: Db, env: Env,
-  input: { tenantId: number; cents: number; reference: string; memo: string; metadata?: Record<string, unknown> },
-): Promise<boolean> {
-  const amount = Math.ceil(input.cents);
-  if (amount <= 0) return false;
-  const inserted = await db.insert(ledgerEntries).values({
-    tenantId: input.tenantId,
-    accountKind: 'tenant',
-    accountRef: String(input.tenantId),
-    denomination: COMM_CREDITS,
-    amount: String(-amount),
-    entryKind: 'spend',
-    reference: input.reference,
-    memo: input.memo,
-    metadata: input.metadata ?? null,
-  }).onConflictDoNothing().returning({ id: ledgerEntries.id });
-
-  if (inserted.length === 0) return false;
-  await invalidateCached(env, balanceKey(input.tenantId));
-  return true;
+export function debitComms(db: Db, env: Env, input: CommsMovement): Promise<boolean> {
+  return comms.debit(db, env, movement(input));
 }
 
-export type CommsRefusal = { ok: false; reason: 'insufficient_credit'; balance: number; required: number };
-export type CommsReservation = { ok: true; balance: number };
+export type CommsRefusal = PrepaidRefusal;
+export type CommsReservation = PrepaidReservation;
 
-/**
- * Can this tenant afford `cents` right now?
- *
- * Called BEFORE the vendor request. It does not hold or reserve anything — a
- * hold would need a second ledger row per attempt and a reaper for the ones that
- * never settle, which for a sub-cent unit costs more than it protects. The race
- * it leaves open is two concurrent sends both passing at a balance that covers
- * only one, which overdraws by at most one message's price.
- */
-export async function reserveComms(
+/** Can this tenant afford `cents` right now? Called BEFORE the vendor request. */
+export function reserveComms(
   db: Db, env: Env | undefined, tenantId: number, cents: number,
 ): Promise<CommsReservation | CommsRefusal> {
-  const balance = await commsBalance(db, env, tenantId);
-  const required = Math.ceil(cents);
-  if (balance < required) return { ok: false, reason: 'insufficient_credit', balance, required };
-  return { ok: true, balance };
+  return comms.reserve(db, env, tenantId, cents);
 }
 
 export interface CommsLedgerRow {
@@ -144,27 +81,7 @@ export interface CommsLedgerRow {
 }
 
 /** The statement — what the credit was spent on. */
-export async function commsStatement(
-  db: Db, tenantId: number, limit = 50,
-): Promise<CommsLedgerRow[]> {
-  const rows = await db
-    .select({
-      id: ledgerEntries.id,
-      amount: ledgerEntries.amount,
-      entryKind: ledgerEntries.entryKind,
-      memo: ledgerEntries.memo,
-      occurredAt: ledgerEntries.occurredAt,
-    })
-    .from(ledgerEntries)
-    .where(commsAccount(tenantId))
-    .orderBy(desc(ledgerEntries.occurredAt), desc(ledgerEntries.id))
-    .limit(Math.min(Math.max(limit, 1), 200));
-
-  return rows.map((row) => ({
-    id: Number(row.id),
-    cents: Math.round(Number(row.amount)),
-    kind: row.entryKind,
-    memo: row.memo,
-    occurredAt: (row.occurredAt instanceof Date ? row.occurredAt : new Date(row.occurredAt)).toISOString(),
-  }));
+export async function commsStatement(db: Db, tenantId: number, limit = 50): Promise<CommsLedgerRow[]> {
+  const rows = await comms.statement(db, tenantId, limit);
+  return rows.map(({ amount, ...row }) => ({ ...row, cents: amount }));
 }

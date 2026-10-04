@@ -64,9 +64,22 @@ export const COMM_CREDITS = 'comm_credits';
  */
 export const EXTENSION_UNITS = 'extension_units';
 
+/**
+ * SPAWN TOKENS — the prepaid build budget of a Spawn (`spawn.builderforce.ai`)
+ * member, bought in fixed packs and spent one model token per token.
+ *
+ * Not `ai_credits`, although both are model tokens, because the two mean different
+ * things to the ledger. `ai_credits` RAISE a plan's monthly cap and are debited once
+ * a month by `reconcileAiCreditMonth` for whatever overage they covered; Spawn tokens
+ * are a wallet debited on every build. Sharing a denomination would let the month-end
+ * reconcile debit a balance the builds had already spent — the same tokens charged
+ * twice, by two writers that never see each other.
+ */
+export const SPAWN_TOKENS = 'spawn_tokens';
+
 /** Every denomination the platform recognises. A writer using a string outside
  *  this set is a bug, and {@link isDenomination} is how a boundary says so. */
-export const DENOMINATIONS = [USD_CENTS, POINTS, AI_CREDITS, CAMPAIGN_CREDITS, COMM_CREDITS, EXTENSION_UNITS] as const;
+export const DENOMINATIONS = [USD_CENTS, POINTS, AI_CREDITS, CAMPAIGN_CREDITS, COMM_CREDITS, EXTENSION_UNITS, SPAWN_TOKENS] as const;
 
 export type Denomination = (typeof DENOMINATIONS)[number];
 

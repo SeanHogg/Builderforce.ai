@@ -115,6 +115,10 @@ export const users = pgTable('users', {
    *  "Set as default" on /tenants. Applies only while they are still a member;
    *  NULL = always ask. FK declared in SQL (tenants is defined below). (1196) */
   defaultTenantId:        integer('default_tenant_id'),
+  /** The month this person was born, held as its first day — never the day itself.
+   *  Asked once by Spawn's 13+ gate (`application/spawn/spawnAge.ts`); NULL = never
+   *  asked. (1198) */
+  birthMonth:             date('birth_month', { mode: 'string' }),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
@@ -263,6 +267,10 @@ export const tenantApiKeys = pgTable('tenant_api_keys', {
   scopes:           text('scopes'),
   lastUsedAt:       timestamp('last_used_at', { withTimezone: true }),
   revokedAt:        timestamp('revoked_at', { withTimezone: true }),
+  /** The device-flow app the key was minted for (`DEVICE_CLIENTS`: vscode, synapse,
+   *  spawn) — stamped onto the sessions the key is exchanged for. NULL = a key made
+   *  by hand in Settings, or minted before 1199. */
+  client:           varchar('client', { length: 32 }),
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

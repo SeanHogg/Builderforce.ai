@@ -169,7 +169,18 @@ export interface WebhookEvent {
      * idempotent against the redirect — both end at the same purchase row, which
      * the unique index on `(listing, tenant)` makes one.
      */
-    | 'knowledge.purchased';
+    | 'knowledge.purchased'
+    /**
+     * A pay-once purchase of one of the platform's OWN flows — a credit pack, a
+     * workforce agent — named by `purchaseKind` and settled through the purchase
+     * registry (`application/billing/purchaseRegistry.ts`).
+     *
+     * It exists so a paid one-off session can never be read as a plan activation.
+     * Before it, any `mode: 'payment'` session whose kind `parseWebhook` did not
+     * name fell through to `subscription.activated` (defaulting to Pro), and only
+     * a customer-id lookup that happened to miss kept it from upgrading a workspace.
+     */
+    | 'checkout.completed';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
@@ -196,7 +207,14 @@ export interface WebhookEvent {
   discountRedemptionId?: string;
   /** Signed checkout/subscription metadata identifying the attributed referral. */
   salesReferralId?: string;
-  purchaseKind?: 'business_phone' | 'marketplace_listing' | 'knowledge_listing' | 'extension_plan';
+  /**
+   * The flow that opened the session, from its signed metadata. Any event that
+   * carries one belongs to that flow's own bounded context and never moves the
+   * workspace plan (`TenantService.handleWebhookEvent` returns early on it).
+   */
+  purchaseKind?: string;
+  /** `checkout.completed` — the session's signed metadata, for the settler to read. */
+  metadata?: Record<string, string>;
   activationCents?: number;
   monthlyCents?: number;
   cartId?: string;
