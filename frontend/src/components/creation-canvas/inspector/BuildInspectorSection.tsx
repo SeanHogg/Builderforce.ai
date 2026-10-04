@@ -7,7 +7,7 @@ import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { hasCodeWorkspace } from '@/lib/canvasBuildTools';
 import { canvasAppLocalKey } from '@/lib/canvasSessionApp';
 import { useEffect, useState } from 'react';
-import { listIdeProjects } from '@/lib/api';
+import { listIdeProjects } from '@/lib/ideProjectsApi';
 import type { ProjectModality } from '@/lib/modality';
 import styles from '../CreationCanvas.module.css';
 

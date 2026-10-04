@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import { useModalityCopy } from '@/lib/useModalityCopy';
-import { listIdeContainers, updateIdeProject } from '@/lib/api';
+import { listIdeContainers, updateIdeProject } from '@/lib/ideProjectsApi';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';

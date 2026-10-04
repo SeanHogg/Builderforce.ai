@@ -14,7 +14,7 @@
  * project. Canvas, the inspector, the node tile, and Brain's canvas tools all
  * read it rather than re-deriving `resourceId` string shapes.
  */
-import { createIdeProject } from '@/lib/api';
+import { createIdeProject } from '@/lib/ideProjectsApi';
 import { DEFAULT_MODALITY, getModality, type ProjectModality } from '@/lib/modality';
 import type { IdeProject } from '@/lib/types';
 import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';

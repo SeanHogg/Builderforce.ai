@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { brain, creationSessionFoldersApi, creationSessionsApi, workflowDefinitions, type BrainChat, type CreationSessionFolder, type CreationSessionSummary, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
-import { fetchProjects, listIdeProjects, listMyAgents } from '@/lib/api';
+import { fetchProjects, listMyAgents } from '@/lib/api';
+import { listIdeProjects } from '@/lib/ideProjectsApi';
 import type { IdeProject, Project, PublishedAgent } from '@/lib/types';
 import { useModalityCopy } from '@/lib/useModalityCopy';
 import { creationLibraryItems, type CreationLibraryFacet, type CreationLibraryItem } from '@/domains/canvas/domain/creationLibrary';

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ButtonLink } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
-import { fetchIdeProjectByStorage } from '@/lib/api';
+import { fetchIdeProjectByStorage } from '@/lib/ideProjectsApi';
 import { canvasAppPath } from '@/lib/studio/studioHost';
 
 /**
@@ -23,7 +23,7 @@ export function OpenOnCanvasLink({ projectId, publicId }: { projectId: number; p
   useEffect(() => {
     let cancelled = false;
     fetchIdeProjectByStorage(projectId)
-      .then(() => { if (!cancelled) setOnCanvas(true); })
+      .then((build) => { if (!cancelled) setOnCanvas(build != null); })
       .catch(() => { if (!cancelled) setOnCanvas(false); });
     return () => { cancelled = true; };
   }, [projectId]);

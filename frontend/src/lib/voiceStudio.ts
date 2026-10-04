@@ -32,7 +32,7 @@ import {
   type NarrationResult,
   type SpeakerEmbedding,
 } from '@/lib/voiceEngine';
-import { fetchIdeProjectByStorage } from '@/lib/api';
+import { fetchIdeProjectByStorage } from '@/lib/ideProjectsApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CreateCloneInput {
   name: string;
@@ -92,7 +92,7 @@ export function useVoiceStudio(
     }
     let cancelled = false;
     fetchIdeProjectByStorage(storageProjectId)
-      .then((ip) => { if (!cancelled) setIdeProjectId(ip.id); })
+      .then((ip) => { if (!cancelled) setIdeProjectId(ip?.id); })
       .catch(() => { /* fall back to unscoped studio */ });
     return () => { cancelled = true; };
   }, [enabled, storageProjectId]);

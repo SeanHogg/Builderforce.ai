@@ -21,8 +21,8 @@
 import { useTranslations } from 'next-intl';
 import {
   fetchProjects,
-  listIdeProjects,
 } from '@/lib/api';
+import { listIdeProjects } from '@/lib/ideProjectsApi';
 import {
   tasksApi,
   agentHosts,

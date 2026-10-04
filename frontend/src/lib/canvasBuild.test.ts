@@ -101,7 +101,7 @@ describe('createCanvasBuild', () => {
   it('creates the IDE project that seeds the starter template', async () => {
     vi.resetModules();
     const createIdeProject = vi.fn().mockResolvedValue(ideProject);
-    vi.doMock('@/lib/api', () => ({ createIdeProject }));
+    vi.doMock('@/lib/ideProjectsApi', () => ({ createIdeProject }));
     const { createCanvasBuild } = await import('./canvasBuild');
     await createCanvasBuild({ title: '  Marketing site  ', modality: 'mobile', containerProjectId: 7 });
     expect(createIdeProject).toHaveBeenCalledWith({ name: 'Marketing site', modality: 'mobile', containerProjectId: 7 });
@@ -111,7 +111,7 @@ describe('createCanvasBuild', () => {
   it('falls back to a usable name and no parent project', async () => {
     vi.resetModules();
     const createIdeProject = vi.fn().mockResolvedValue(ideProject);
-    vi.doMock('@/lib/api', () => ({ createIdeProject }));
+    vi.doMock('@/lib/ideProjectsApi', () => ({ createIdeProject }));
     const { createCanvasBuild } = await import('./canvasBuild');
     await createCanvasBuild({ title: '   ', modality: 'designer' });
     expect(createIdeProject).toHaveBeenCalledWith({ name: 'New build', modality: 'designer', containerProjectId: null });

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
-import { listIdeProjects, deleteIdeProject } from '@/lib/api';
+import { listIdeProjects, deleteIdeProject } from '@/lib/ideProjectsApi';
 import { persistLastProjectId } from '@/lib/auth';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';

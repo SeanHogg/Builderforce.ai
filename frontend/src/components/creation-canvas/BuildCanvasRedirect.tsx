@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { fetchIdeProjectByStorage, fetchProject } from '@/lib/api';
+import { fetchProject } from '@/lib/api';
+import { fetchIdeProjectByStorage } from '@/lib/ideProjectsApi';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
 import { namesProjectChat, studioChatHref, studioChatLinkFrom } from '@/lib/studio/studioDeepLink';
@@ -20,25 +21,23 @@ export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
     if (!projectRef) return;
     let cancelled = false;
     const chatLink = studioChatLinkFrom(searchParams);
-    void fetchProject(projectRef)
-      .then((project) => {
-        if (namesProjectChat(chatLink)) {
-          if (!cancelled) router.replace(studioChatHref(project.id, chatLink));
-          return null;
-        }
-        return fetchIdeProjectByStorage(project.id);
-      })
-      .then((build) => (build ? creationSessionsApi.openIdeProject(build.id) : null))
-      .then((opened) => {
-        if (cancelled || !opened) return;
-        router.replace(openedBoardHref(opened, {
-          build: '1',
-          prompt: searchParams.get('prompt'),
-        }));
-      })
-      .catch(() => {
-        if (!cancelled) router.replace('/create?filter=build');
-      });
+    const toBuildList = () => { if (!cancelled) router.replace('/create?filter=build'); };
+    void (async () => {
+      const project = await fetchProject(projectRef);
+      if (namesProjectChat(chatLink)) {
+        if (!cancelled) router.replace(studioChatHref(project.id, chatLink));
+        return;
+      }
+      // No build record (a project started in Studio) is an answer, not an error.
+      const build = await fetchIdeProjectByStorage(project.id);
+      if (!build) return toBuildList();
+      const opened = await creationSessionsApi.openIdeProject(build.id);
+      if (cancelled) return;
+      router.replace(openedBoardHref(opened, {
+        build: '1',
+        prompt: searchParams.get('prompt'),
+      }));
+    })().catch(toBuildList);
     return () => { cancelled = true; };
   }, [projectRef, router, searchParams]);
 
