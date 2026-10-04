@@ -5,6 +5,7 @@ import { PlanBadge } from '@/components/PlanBadge';
 import { BuilderProjectsSlideOutPanel } from './builder/BuilderProjectsSlideOutPanel';
 import { WorkspaceBrainColumn } from './builder/WorkspaceBrainColumn';
 import { TeamChatButton } from './brain/TeamChatButton';
+import { DockedBrainProvider } from '@/lib/brain/dockedBrain';
 import { WorkspaceHeader } from '@/components/builder/WorkspaceHeader';
 import { ProjectTitleField } from '@/components/builder/ProjectTitleField';
 import { WorkspaceMoreMenu } from '@/components/builder/WorkspaceMoreMenu';
@@ -78,7 +79,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const showChat = hasDockedBrain && (!narrow || narrowPane === 'chat');
   const showWork = !narrow || !hasDockedBrain || narrowPane === 'work';
 
-  return (
+  const workspace = (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>
       <WorkspaceHeader
         leading={headerLeading}
@@ -176,4 +177,10 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       </div>
     </div>
   );
+
+  // With the Brain docked on the left, every "open a chat" entry point (the team-chat
+  // button) selects it THERE rather than opening the floating drawer as a second panel.
+  return hasDockedBrain
+    ? <DockedBrainProvider reveal={() => ws.setNarrowPane('chat')}>{workspace}</DockedBrainProvider>
+    : workspace;
 }

@@ -7,8 +7,9 @@
  *   • teamId    → a named workforce team's chat    (a team card in TeamsView)
  *   • neither   → the tenant-wide "broader team"   (Workforce header)
  *
- * It resolves-or-creates the chat via the API, then opens the docked Brain drawer on
- * it (the drawer's active chat is controlled by BrainContext, so this selects it and
+ * It resolves-or-creates the chat via the API, then shows it: in the docked Brain when
+ * the surface has one (`useDockedBrain`), otherwise in the floating Brain drawer
+ * (both follow the active chat in BrainContext, so this selects it and
  * lazily loads it even though team chats are excluded from the normal chat list).
  *
  * DRY: the component decides its own visibility — with no Brain context there's nowhere
@@ -19,6 +20,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useOptionalBrainContext } from '@/lib/brain';
+import { useDockedBrain } from '@/lib/brain/dockedBrain';
 import { brain } from '@/lib/builderforceApi';
 
 export interface TeamChatButtonProps {
@@ -46,6 +48,7 @@ export function TeamChatButton({
 }: TeamChatButtonProps) {
   const t = useTranslations('teamChat');
   const brainCtx = useOptionalBrainContext();
+  const docked = useDockedBrain();
   const [loading, setLoading] = useState(false);
 
   const scopeKey = projectId != null ? 'project' : teamId != null ? 'team' : 'broader';
@@ -59,13 +62,15 @@ export function TeamChatButton({
       const id = chatId ?? (await brain.getTeamChat({ projectId, teamId })).id;
       brainCtx.setActiveChatId(id);
       brainCtx.setContext({ initialChatId: id });
-      brainCtx.setOpen(true);
+      // A docked Brain follows the shared selection, so it shows this chat already —
+      // opening the drawer too would put a second chat panel on the screen.
+      if (docked) docked.reveal(); else brainCtx.setOpen(true);
     } catch {
       /* The drawer surfaces load errors; the button just re-enables. */
     } finally {
       setLoading(false);
     }
-  }, [brainCtx, loading, chatId, projectId, teamId]);
+  }, [brainCtx, docked, loading, chatId, projectId, teamId]);
 
   // No Brain drawer to open → nothing to render.
   if (!brainCtx) return null;
