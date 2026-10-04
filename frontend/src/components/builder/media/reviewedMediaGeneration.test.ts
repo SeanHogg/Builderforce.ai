@@ -19,7 +19,7 @@ function port(decisions: MediaReviewDecision[]): MediaStudioPort & { generate: R
   let n = 0;
   return {
     generate: vi.fn(async (request: { prompt: string }) => item(`i${++n}`, request.prompt)),
-    review: vi.fn(async () => decisions.shift() ?? { action: 'discard' }),
+    review: vi.fn(async (): Promise<MediaReviewDecision> => decisions.shift() ?? { action: 'discard' }),
     markUsed: vi.fn(async () => {}),
   };
 }

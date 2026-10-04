@@ -14,7 +14,6 @@ import { VoiceConfigPanel } from './VoiceConfigPanel';
 import { WorkspaceRail } from './WorkspaceRail';
 import type { BuilderWorkspaceState } from './useBuilderWorkspace';
 import { MediaPanel } from './media/MediaPanel';
-import type { MediaStudio } from './media/useMediaStudio';
 
 // WebGPU LoRA training — onnxruntime-web, the tokenizer and the whole training
 // loop, behind ONE tab of this workspace. Statically imported it shipped to
@@ -31,10 +30,8 @@ const AITrainingPanel = dynamic(
  * without an account. The durable-only panes are only ever mounted when there is a
  * project to point them at.
  */
-export function WorkspaceSidePanels({ ws, visible, media }: {
+export function WorkspaceSidePanels({ ws, visible }: {
   ws: BuilderWorkspaceState;
-  /** The project's generated media — the `media` tab, and where the agent's images and clips wait for a decision. */
-  media: MediaStudio;
   /** Whether the work area is on screen at all (a narrow screen may be showing the chat). */
   visible: boolean;
 }) {
@@ -54,7 +51,7 @@ export function WorkspaceSidePanels({ ws, visible, media }: {
       </PaneLayer>
       {ws.rightTabs.includes('media') && (
         <PaneLayer active={rightTab === 'media'}>
-          <MediaPanel studio={media} />
+          <MediaPanel studio={ws.media} />
         </PaneLayer>
       )}
       <PaneLayer active={rightTab === 'files'}>

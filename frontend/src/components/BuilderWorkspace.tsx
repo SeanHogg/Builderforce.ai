@@ -18,7 +18,6 @@ import { useBuilderWorkspace } from '@/components/builder/useBuilderWorkspace';
 import { useArtifactReviews } from '@/components/builder/useArtifactReviews';
 import { useWorkspaceBrainActions } from '@/components/builder/useWorkspaceBrainActions';
 import { useWorkspaceBrainContext } from '@/components/builder/useWorkspaceBrainContext';
-import { useMediaStudio } from '@/components/builder/media/useMediaStudio';
 import styles from '@/components/builder/workspaceChrome.module.css';
 import { serverFileStore } from '@/lib/workspace/workspaceFileStore';
 import type { Project, FileEntry } from '@/lib/types';
@@ -59,9 +58,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
 
   const reviews = useArtifactReviews(project.id);
-  // Generated images and clips: the rail's Media tab, and where the agent's wait for a decision.
-  const { openRail, setNarrowPane } = ws;
-  const media = useMediaStudio(ws.storageProjectId, useCallback(() => openRail('media'), [openRail]));
+  const { setNarrowPane } = ws;
   const revealDockedChat = useCallback(() => setNarrowPane('chat'), [setNarrowPane]);
   useWorkspaceBrainActions({
     store,
@@ -69,7 +66,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     modality,
     targets: { activeFile: editor.activeFile, applyCodeToActiveFile: editor.applyCodeToActiveFile, createProjectFile: editor.createProjectFile, setVoiceText: voice.setText },
     review: reviews,
-    media: media.port,
+    media: ws.media.port,
   });
   const brain = useWorkspaceBrainContext({
     projectId: project.id,
@@ -179,7 +176,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           ) : undefined}
         />
 
-        <WorkspaceSidePanels ws={ws} visible={showWork} media={media} />
+        <WorkspaceSidePanels ws={ws} visible={showWork} />
       </div>
     </div>
   );

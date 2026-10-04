@@ -16,6 +16,7 @@ import { useWorkspaceRun } from './useWorkspaceRun';
 import { useWorkspaceFiles } from './useWorkspaceFiles';
 import { useAutoRun } from './useAutoRun';
 import { usePointAndEdit } from './usePointAndEdit';
+import { useMediaStudio } from './media/useMediaStudio';
 
 /** Below this width panes take turns instead of sitting side by side. */
 export const NARROW_LAYOUT_PX = 760;
@@ -105,6 +106,9 @@ export function useBuilderWorkspace({ store, name, modality: requestedModality, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modality]);
 
+  // Generated images and clips: the rail's Media tab, and where the agent's wait for a decision.
+  const media = useMediaStudio(storageProjectId, useCallback(() => openRail('media'), [openRail]));
+
   // A surface around the workspace (the Studio header, the canvas session bar) opening one of its panels.
   useWorkspaceCommands(store.id, (command) => {
     if (command.type === 'openSettings') { if (durable) setSettingsOpen(true); }
@@ -157,6 +161,7 @@ export function useBuilderWorkspace({ store, name, modality: requestedModality, 
     railOpen,
     setRailOpen,
     openRail,
+    media,
     completedJobs,
     recordCompletedJob,
     settingsOpen,
