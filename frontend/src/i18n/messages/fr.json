@@ -1491,7 +1491,7 @@
     "previewWeb": "Web",
     "previewMobile": "Mobile",
     "previewTitle": "Aperçu",
-    "visualEdit": "Pointer et modifier",
+    "visualEdit": "Sélectionner pour modifier",
     "visualEditHint": "Cliquez sur n'importe quel élément de l'aperçu pour changer son texte ou son style sans passer par l'agent.",
     "visualEditOn": "Sélection — cliquez sur un élément",
     "visualSelected": "Sélectionné {tag} · {file}:{line}",
@@ -1522,13 +1522,11 @@
         "ios": "Projet iOS"
       }
     },
-    "centerDatabase": "Base de données",
+    "centerDatabase": "Données",
     "brainContext": {
-      "codingAgent": "Agent de code",
-      "voiceDirector": "Directeur vocal",
       "context": "Contexte",
       "voice": "Voix",
-      "wholeProject": "tout le projet",
+      "wholeProject": "Tout le projet",
       "noVoice": "aucune sélection"
     },
     "workspace": {
@@ -1558,7 +1556,7 @@
       "failedTitle": "L’aperçu s’est arrêté",
       "failedHint": "La dernière modification a cassé le build. Le terminal indique pourquoi, et Brain voit aussi l’erreur : demandez-lui dans le chat de la corriger.",
       "blockedTitle": "Aperçu en pause : des vérifications échouent",
-      "blockedHint": "Corrigez les vérifications en échec, ou désactivez « Bloquer l’aperçu si les vérifications échouent » dans la barre ci-dessous.",
+      "blockedHint": "Corrigez les vérifications en échec, ou désactivez « Bloquer l’aperçu en cas d’échec des vérifications » dans le panneau du bas (ouvrez-le depuis Terminal).",
       "tryAgain": "Réessayer",
       "showTerminal": "Afficher le terminal",
       "emptyTitle": "Votre application apparaîtra ici",
@@ -1566,7 +1564,36 @@
       "closePanel": "Fermer le panneau",
       "collabConnected": "Collaborateurs connectés",
       "voiceNeedsClone": "Créez ou sélectionnez d’abord une voix",
-      "generating": "Génération…"
+      "generating": "Génération…",
+      "projects": "Projets",
+      "back": "Précédent",
+      "forward": "Suivant",
+      "updatedAgo": "mis à jour {when}",
+      "statusRunning": "En cours",
+      "savedVersion": "Enregistré · v{number}",
+      "versionsHint": "Versions — revenir à un état antérieur",
+      "versions": "Versions",
+      "fixForMe": "Corrige-le pour moi",
+      "fixPrompt": "L'aperçu s'est arrêté avec cette erreur. Trouve la cause et corrige-la.",
+      "failedHintFix": "Une modification récente a cassé le build. Vos versions précédentes sont en sécurité.",
+      "suggestion": {
+        "landing": {
+          "label": "Une page d’accueil pour mon app",
+          "prompt": "Crée une page d’accueil pour mon app appelée [NOM]. Elle doit expliquer ce qu’elle fait, présenter trois fonctionnalités clés et se terminer par un formulaire d’inscription."
+        },
+        "portfolio": {
+          "label": "Un portfolio",
+          "prompt": "Crée un site portfolio pour [VOTRE NOM], [VOTRE MÉTIER]. Avec une section à propos, une grille de projets et un formulaire de contact."
+        },
+        "menu": {
+          "label": "Une carte de restaurant",
+          "prompt": "Crée un site pour mon restaurant, [NOM]. Affiche la carte par rubriques avec les prix, les horaires, l’adresse et un moyen de réserver une table."
+        }
+      },
+      "changeLanded": "Aperçu mis à jour · {count, plural, one {# fichier modifié} other {# fichiers modifiés}}",
+      "changeUndone": "Annulé — la version précédente est rétablie",
+      "changeUndoFailed": "Annulation impossible — ouvrez Versions pour restaurer manuellement",
+      "undo": "Annuler"
     },
     "media": {
       "rendering": "Rendu en cours…",
@@ -11568,15 +11595,12 @@
     "onboardHeading": "Nouveau ici ?",
     "providerCapBanner": "Votre clé API {providers} a atteint sa limite d’utilisation — cette exécution est repassée sur le pool de modèles partagé.",
     "manageApiKeys": "Gérer vos clés API →",
-    "tabChat": "Discussion",
-    "tabHistory": "Historique",
-    "sectionsAria": "Sections de Brain",
     "chatActions": "Actions de la discussion",
     "chatActionsAria": "Actions pour {title}",
     "aiDisclosureAria": "Avis relatif à l’IA",
     "aiDisclosureBody": "Vous interagissez avec des agents d'IA. Les résultats peuvent être inexacts ; vérifiez-les avant de fonder une décision importante dessus. Les actions qui modifient des données nécessitent votre approbation, sauf si vous activez explicitement l'approbation automatique.",
-    "aiDisclosureLink": "Fonctionnement de l'IA, explications et contrôle humain",
-    "aiDisclosureShort": "Les agents d'IA peuvent se tromper, et les modifications nécessitent votre approbation.",
+    "aiDisclosureLink": "Fonctionnement de l’IA",
+    "aiDisclosureShort": "Vous approuvez chaque modification avant sa mise en ligne.",
     "emptyHintWork": "Décrivez le travail. Je l'ouvrirai comme une tâche suivie, je l'affecterai et je mettrai un agent dessus.",
     "emptyGreeting": "Que fait-on maintenant ?",
     "newChatProjectLabel": "Projet",
@@ -11626,7 +11650,11 @@
         "brief": "Prenez un défaut que je vais décrire, trouvez la cause racine plutôt que le symptôme, ouvrez-le comme ticket suivi avec le bon responsable, et mettez un agent dessus. Dites-moi le résultat du lancement — si rien n'a réellement démarré, indiquez précisément ce qui l'a bloqué."
       }
     },
-    "memoryUnavailable": "Cette conversation n’a aucune mémoire de projet à consulter — associez-la d’abord à un projet"
+    "memoryUnavailable": "Cette conversation n’a aucune mémoire de projet à consulter — associez-la d’abord à un projet",
+    "newChatAria": "Nouvelle conversation",
+    "historyShow": "Historique des conversations",
+    "historyHide": "Retour à la conversation",
+    "messagePlaceholderBuild": "Décrivez une modification ou posez une question…"
   },
   "chatMessage": {
     "copy": "Copier",
@@ -32286,7 +32314,12 @@
       "home": "Accueil de Studio",
       "signIn": "Se connecter",
       "getStarted": "Commencer",
-      "signOut": "Se déconnecter"
+      "signOut": "Se déconnecter",
+      "account": "Compte",
+      "planLine": "Forfait {plan}",
+      "managePlan": "Gérer",
+      "settings": "Paramètres",
+      "feedback": "Envoyer un avis"
     },
     "workspace": {
       "title": "Choisir un espace de travail",
@@ -32303,7 +32336,10 @@
       "publish": "Publier",
       "loadFailed": "Impossible d’ouvrir ce projet.",
       "loading": "Ouverture de votre projet…",
-      "signInLead": "Connectez-vous pour ouvrir ce projet."
+      "signInLead": "Connectez-vous pour ouvrir ce projet.",
+      "publishOptions": "Autres options de publication",
+      "publishSite": "Publier le site",
+      "repoAndDeploy": "Dépôt et déploiement"
     }
   },
   "builderSearch": {
@@ -32329,7 +32365,8 @@
     "noProblems": "Aucun problème. Les erreurs de build et d’exécution de votre dernière exécution apparaissent ici.",
     "clearProblems": "Effacer",
     "sourceBuild": "Build",
-    "sourceRuntime": "Exécution"
+    "sourceRuntime": "Exécution",
+    "noProblemsShort": "Aucun problème"
   },
   "builderVersions": {
     "loading": "Chargement des versions…",

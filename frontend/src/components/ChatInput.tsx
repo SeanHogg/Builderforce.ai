@@ -13,6 +13,7 @@ import { AssessmentGateNotice, PendingAttachmentChips, QueuedTurnsReceipt } from
 import { VoiceDictationButton } from './chat-input/VoiceDictationButton';
 import { useAttachmentDropAndPaste } from './chat-input/useAttachmentDropAndPaste';
 import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
+import compactStyles from './chat-input/composerCompact.module.css';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 export type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
 
@@ -160,7 +161,7 @@ export function ChatInput({
   const handleBlur = useCallback(() => setFocused(false), []);
 
   return (
-    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
+    <form onSubmit={handleSubmit} className={[className, compact && compactStyles.compact].filter(Boolean).join(' ') || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
       <AssessmentGateNotice gate={gate} />
       <PromptPanel
         active={active}

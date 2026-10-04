@@ -1491,7 +1491,7 @@
     "previewWeb": "Web",
     "previewMobile": "Móvil",
     "previewTitle": "Vista previa",
-    "visualEdit": "Señalar y editar",
+    "visualEdit": "Seleccionar para editar",
     "visualEditHint": "Haz clic en cualquier elemento de la vista previa para cambiar su texto o estilo sin pedírselo al agente.",
     "visualEditOn": "Seleccionando — haz clic en un elemento",
     "visualSelected": "Seleccionado {tag} · {file}:{line}",
@@ -1522,13 +1522,11 @@
         "ios": "Proyecto iOS"
       }
     },
-    "centerDatabase": "Base de datos",
+    "centerDatabase": "Datos",
     "brainContext": {
-      "codingAgent": "Agente de código",
-      "voiceDirector": "Director de voz",
       "context": "Contexto",
       "voice": "Voz",
-      "wholeProject": "todo el proyecto",
+      "wholeProject": "Todo el proyecto",
       "noVoice": "ninguna seleccionada"
     },
     "workspace": {
@@ -1558,7 +1556,7 @@
       "failedTitle": "La vista previa se detuvo",
       "failedHint": "El último cambio rompió la compilación. La terminal muestra por qué, y Brain también ve el error: pídele en el chat que lo corrija.",
       "blockedTitle": "Vista previa en pausa por comprobaciones fallidas",
-      "blockedHint": "Corrige las comprobaciones fallidas o desactiva «Bloquear la vista previa si fallan las comprobaciones» en la barra inferior.",
+      "blockedHint": "Corrige las comprobaciones fallidas o desactiva «Bloquear la vista previa si fallan las comprobaciones» en el panel inferior (ábrelo desde Terminal).",
       "tryAgain": "Reintentar",
       "showTerminal": "Mostrar terminal",
       "emptyTitle": "Tu app aparecerá aquí",
@@ -1566,7 +1564,36 @@
       "closePanel": "Cerrar panel",
       "collabConnected": "Colaboradores conectados",
       "voiceNeedsClone": "Primero crea o selecciona una voz",
-      "generating": "Generando…"
+      "generating": "Generando…",
+      "projects": "Proyectos",
+      "back": "Atrás",
+      "forward": "Adelante",
+      "updatedAgo": "actualizado {when}",
+      "statusRunning": "En ejecución",
+      "savedVersion": "Guardado · v{number}",
+      "versionsHint": "Versiones: vuelve a cualquier estado anterior",
+      "versions": "Versiones",
+      "fixForMe": "Arréglalo por mí",
+      "fixPrompt": "La vista previa se detuvo con este error. Encuentra la causa y corrígela.",
+      "failedHintFix": "Un cambio reciente rompió la compilación. Tus versiones anteriores están a salvo.",
+      "suggestion": {
+        "landing": {
+          "label": "Una página de inicio para mi app",
+          "prompt": "Crea una página de inicio para mi app llamada [NOMBRE]. Debe explicar qué hace, mostrar tres funciones clave y terminar con un formulario de registro."
+        },
+        "portfolio": {
+          "label": "Un portafolio",
+          "prompt": "Crea un sitio de portafolio para [TU NOMBRE], [A QUÉ TE DEDICAS]. Incluye una sección sobre mí, una cuadrícula de proyectos y un formulario de contacto."
+        },
+        "menu": {
+          "label": "Un menú de restaurante",
+          "prompt": "Crea un sitio web para mi restaurante, [NOMBRE]. Muestra el menú por secciones con precios, el horario, la dirección y una forma de reservar mesa."
+        }
+      },
+      "changeLanded": "Vista previa actualizada · {count, plural, one {# archivo cambiado} other {# archivos cambiados}}",
+      "changeUndone": "Deshecho: la versión anterior ha vuelto",
+      "changeUndoFailed": "No se pudo deshacer: abre Versiones para restaurar a mano",
+      "undo": "Deshacer"
     },
     "media": {
       "rendering": "Renderizando…",
@@ -11568,15 +11595,12 @@
     "onboardHeading": "¿Eres nuevo?",
     "providerCapBanner": "Tu clave de API de {providers} alcanzó su límite de uso; esta ejecución recurrió al grupo de modelos compartido.",
     "manageApiKeys": "Gestionar tus claves de API →",
-    "tabChat": "Chat",
-    "tabHistory": "Historial",
-    "sectionsAria": "Secciones de Brain",
     "chatActions": "Acciones del chat",
     "chatActionsAria": "Acciones de {title}",
     "aiDisclosureAria": "Aviso sobre IA",
     "aiDisclosureBody": "Estás interactuando con agentes de IA. Los resultados pueden ser inexactos; revísalos antes de basar decisiones importantes en ellos. Las acciones que modifican datos requieren tu aprobación, salvo que actives explícitamente la aprobación automática.",
-    "aiDisclosureLink": "Cómo funciona la IA, explicaciones y revisión humana",
-    "aiDisclosureShort": "Los agentes de IA pueden equivocarse y los cambios requieren tu aprobación.",
+    "aiDisclosureLink": "Cómo funciona la IA",
+    "aiDisclosureShort": "Tú apruebas cada cambio antes de publicarlo.",
     "emptyHintWork": "Describe el trabajo. Lo abriré como tarea con seguimiento, le asignaré personal y pondré un agente a ejecutarlo.",
     "emptyGreeting": "¿Qué hacemos ahora?",
     "newChatProjectLabel": "Proyecto",
@@ -11626,7 +11650,11 @@
         "brief": "Toma un defecto que te describiré, encuentra la causa raíz en lugar del síntoma, ábrelo como tique con el responsable adecuado y pon un agente a trabajar en él. Dime el resultado del despacho: si en realidad no arrancó nada, di exactamente qué lo bloqueó."
       }
     },
-    "memoryUnavailable": "Este chat no tiene memoria de proyecto que consultar: vínculalo primero a un proyecto"
+    "memoryUnavailable": "Este chat no tiene memoria de proyecto que consultar: vínculalo primero a un proyecto",
+    "newChatAria": "Nuevo chat",
+    "historyShow": "Historial de chats",
+    "historyHide": "Volver a la conversación",
+    "messagePlaceholderBuild": "Describe un cambio o haz una pregunta…"
   },
   "chatMessage": {
     "copy": "Copiar",
@@ -32286,7 +32314,12 @@
       "home": "Inicio de Studio",
       "signIn": "Iniciar sesión",
       "getStarted": "Empezar",
-      "signOut": "Cerrar sesión"
+      "signOut": "Cerrar sesión",
+      "account": "Cuenta",
+      "planLine": "Plan {plan}",
+      "managePlan": "Gestionar",
+      "settings": "Configuración",
+      "feedback": "Enviar comentarios"
     },
     "workspace": {
       "title": "Elige un espacio de trabajo",
@@ -32303,7 +32336,10 @@
       "publish": "Publicar",
       "loadFailed": "No se pudo abrir este proyecto.",
       "loading": "Abriendo tu proyecto…",
-      "signInLead": "Inicia sesión para abrir este proyecto."
+      "signInLead": "Inicia sesión para abrir este proyecto.",
+      "publishOptions": "Más formas de publicar",
+      "publishSite": "Publicar sitio",
+      "repoAndDeploy": "Repositorio y despliegue"
     }
   },
   "builderSearch": {
@@ -32329,7 +32365,8 @@
     "noProblems": "Sin problemas. Los errores de compilación y de ejecución de tu última ejecución aparecen aquí.",
     "clearProblems": "Borrar",
     "sourceBuild": "Compilación",
-    "sourceRuntime": "Ejecución"
+    "sourceRuntime": "Ejecución",
+    "noProblemsShort": "Sin problemas"
   },
   "builderVersions": {
     "loading": "Cargando versiones…",

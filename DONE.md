@@ -1,3 +1,38 @@
+## ✅ RESOLVED 2026-10-04 — Studio now follows its layout mockup: one header, a framed preview, a status bar, and the project's own chat (frontend 2026.10.11)
+
+The operator compared the shipped Studio with the design canvas (claude.ai artifact "Studio Layout Redesign") and asked why they differed. The pass that shipped it had been built from the old screenshots' complaints, reusing the existing host components, and was never compared with the mockup. This pass works from the mockup.
+
+- **Empty Brain panel (a real bug).** The docked chat shares its selection with the floating drawer, and that selection lives in `sessionStorage` (`brain.drawer.activeChatId`). Opening a project restored whatever chat the tab last had, from any project. Nothing then selected the project's own conversation, so a built site sat next to an empty or foreign thread. New `usePinnedProjectChat` runs once, after the project's chats load. A selection outside the project gives way to its most recent chat. A deep link, ticket or prompt keeps the selection it asked for. Tests: `usePinnedProjectChat.test.ts`.
+- **Header.**
+  - The header reads `Projects / <name>`. The title sizes to the name and no longer looks like a form field.
+  - The view switch says **Data**, not "Database".
+  - A `Saved · vN` chip (`WorkspaceVersionChip`) opens Versions.
+  - The plan, the avatar and Sign out are one account pill with a menu (`StudioAccountControl`: plan and upgrade, settings, feedback, sign out).
+  - Publish is a split button whose ▾ offers the repository and deploy settings.
+  - Team chat moved from the header to the Brain panel's chip row.
+  - The plan logic is one hook, `lib/usePlanSummary.ts`, used by both `PlanBadge` and the pill.
+- **Brain panel.**
+  - `BrainDockedHeader`: ✦ Brain with History (a toggle, still badged), New chat and Expand as icon buttons. The Chat / History tab strip is gone.
+  - The context line is a row of chips: what the agent sees, and Team chat.
+  - Composer: the placeholder is "Describe a change, or ask a question…" on the build surface. The footnote is one line ("You approve every change before it ships. How AI works").
+  - In compact density, the `/` trigger reads as one chip (`⚡ Work · model ▾`). This is CSS only (`composerCompact.module.css`), so VS Code is unchanged.
+- **Preview.**
+  - The toolbar has Back / Forward, which travel through a new `PREVIEW_NAV_MESSAGE` in the overlay the preview already carries.
+  - The address bar adds "updated 12s ago" (`usePreviewFreshness`).
+  - Select to edit is a labelled button.
+  - The app is framed as a page on the workspace ground, not a full-bleed hole.
+  - Stopped preview: shows the recorded error. **Fix it for me** sends it to Brain through a new `DockedBrain.ask`, using the same gate and queue as a typed message. Versions and Show terminal sit beside it.
+  - Empty project: three starter suggestions that fill the chat (never send).
+  - An agent turn landing shows **Preview updated · N files · Undo** (`PreviewChangeToast`). Undo restores the version before the turn.
+- **Status bar.** Closed, the bottom panel reads `● Running · ✓ No problems … Terminal ▴` (`RunStatusItem`). Check and "Block preview on failed checks" are in the opened panel.
+- **Chrome bleed.**
+  - The app's fixed starfield painted over every non-positioned Studio surface. The Studio root is now its own stacking layer.
+  - The Feedback edge tab sat on the preview. On `/studio` the form opens from the account menu (`lib/feedbackEvents.ts`).
+- **One versions recorder.** `useProjectVersions` moved from `VersionsPanel` into `useBuilderWorkspace` (`ws.versions`). The panel, the header chip and the toast read one instance. A second caller would have recorded every turn twice.
+- **i18n.** New and reworded keys in all five catalogs. Removed the now-dead `brain.tabChat`, `brain.tabHistory`, `brain.sectionsAria`, `ide.brainContext.codingAgent` and `ide.brainContext.voiceDirector`.
+- **Tests.** `PreviewStatus.test.tsx`, `PreviewChangeToast.test.tsx`, `usePinnedProjectChat.test.ts`. `BuilderWorkspace.modality.test.tsx` gained breadcrumb, version-chip and status-bar cases.
+- **Still different from the mockup, with blockers:** the readable preview host, the in-chat files-changed card, Build/Ask wording and the collapse button. All four are in the Gap Register. Two deliberate omissions: the "Link ticket" chip (the chat's ticket strip already does it, and a second control would duplicate it) and "vite · :5173" in the status bar (the runtime does not report a server name or port to the UI).
+
 ## ✅ RESOLVED 2026-10-04 — Studio: one chat panel, and generated media is previewed before the app uses it (api 2026.10.8 · frontend 2026.10.10)
 
 Operator report: the 💬 in the Studio header opened a second chat panel on the right while the Brain was already docked on the left. Also asked: how do people see generated images and video before they go into the app? Decision: **always preview first**.

@@ -76,7 +76,8 @@ export function BrainComposer() {
       value={input}
       onChange={setInput}
       onSubmit={handleSend}
-      placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
+      // A builder's chat is about changing the thing on screen, so it says so.
+      placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain(capabilitySurface === 'build' ? 'messagePlaceholderBuild' : 'messagePlaceholder')}
       disabled={false}
       running={conv.sending}
       onStop={conv.stop}

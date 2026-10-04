@@ -1491,7 +1491,7 @@
     "previewWeb": "Web",
     "previewMobile": "Mobile",
     "previewTitle": "Preview",
-    "visualEdit": "Point & edit",
+    "visualEdit": "Select to edit",
     "visualEditHint": "Click any element in the preview to change its text or styling without asking the agent.",
     "visualEditOn": "Picking — click an element",
     "visualSelected": "Selected {tag} · {file}:{line}",
@@ -1522,13 +1522,11 @@
         "ios": "iOS project"
       }
     },
-    "centerDatabase": "Database",
+    "centerDatabase": "Data",
     "brainContext": {
-      "codingAgent": "Coding agent",
-      "voiceDirector": "Voice director",
       "context": "Context",
       "voice": "Voice",
-      "wholeProject": "whole project",
+      "wholeProject": "Whole project",
       "noVoice": "none selected"
     },
     "workspace": {
@@ -1558,7 +1556,7 @@
       "failedTitle": "The preview stopped",
       "failedHint": "The last change broke the build. The terminal shows why, and Brain can see the error too — ask it in the chat to fix it.",
       "blockedTitle": "Preview paused by failing checks",
-      "blockedHint": "Fix the failing checks, or turn off “Block preview on failed checks” in the bar below.",
+      "blockedHint": "Fix the failing checks, or turn off “Block preview on failed checks” in the panel below (open it from Terminal).",
       "tryAgain": "Try again",
       "showTerminal": "Show terminal",
       "emptyTitle": "Your app will appear here",
@@ -1566,7 +1564,36 @@
       "closePanel": "Close panel",
       "collabConnected": "Collaborators connected",
       "voiceNeedsClone": "Create or select a voice first",
-      "generating": "Generating…"
+      "generating": "Generating…",
+      "projects": "Projects",
+      "back": "Back",
+      "forward": "Forward",
+      "updatedAgo": "updated {when}",
+      "statusRunning": "Running",
+      "savedVersion": "Saved · v{number}",
+      "versionsHint": "Versions — go back to any earlier state",
+      "versions": "Versions",
+      "fixForMe": "Fix it for me",
+      "fixPrompt": "The preview stopped with this error. Find the cause and fix it.",
+      "failedHintFix": "A recent change broke the build. Your earlier versions are safe.",
+      "suggestion": {
+        "landing": {
+          "label": "A landing page for my app",
+          "prompt": "Build a landing page for my app called [NAME]. It should explain what it does, show three key features and end with a sign-up form."
+        },
+        "portfolio": {
+          "label": "A portfolio",
+          "prompt": "Build a portfolio site for [YOUR NAME], a [WHAT YOU DO]. Include an about section, a grid of projects and a contact form."
+        },
+        "menu": {
+          "label": "A restaurant menu",
+          "prompt": "Build a website for my restaurant, [NAME]. Show the menu by section with prices, opening hours, the address and a way to book a table."
+        }
+      },
+      "changeLanded": "Preview updated · {count, plural, one {# file} other {# files}} changed",
+      "changeUndone": "Undone — the previous version is back",
+      "changeUndoFailed": "Couldn't undo — open Versions to restore by hand",
+      "undo": "Undo"
     },
     "media": {
       "rendering": "Rendering…",
@@ -11568,15 +11595,12 @@
     "onboardMePrompt": "I'm new here — help me get started. Ask me about what I want to build, explain how usage and costs work, recommend whether the Free or Pro plan fits my timeframe, and help me connect my existing AI account if I have one.",
     "onboardMeHint": "Scope, costs and your plan — I'll walk you through it.",
     "onboardHeading": "New here?",
-    "tabChat": "Chat",
-    "tabHistory": "History",
-    "sectionsAria": "Brain sections",
     "chatActions": "Chat actions",
     "chatActionsAria": "Actions for {title}",
     "aiDisclosureAria": "AI disclosure",
     "aiDisclosureBody": "You are interacting with AI agents. Outputs can be inaccurate; review consequential results before relying on them. Mutating actions require your approval unless you explicitly enable auto-approve.",
-    "aiDisclosureLink": "How AI works, explanations, and human review",
-    "aiDisclosureShort": "AI agents can be wrong, and changes need your approval.",
+    "aiDisclosureLink": "How AI works",
+    "aiDisclosureShort": "You approve every change before it ships.",
     "emptyHintWork": "Describe the job. I'll open it as tracked work, staff it, and put an agent on it.",
     "emptyGreeting": "What should we do next?",
     "newChatProjectLabel": "Project",
@@ -11626,7 +11650,11 @@
         "brief": "Take a defect I'll describe, find the root cause rather than the symptom, open it as a tracked ticket with the right owner, and put an agent on it. Tell me the dispatch outcome — if nothing actually started, say exactly what blocked it."
       }
     },
-    "memoryUnavailable": "This chat has no project memory to recall from — link it to a project first"
+    "memoryUnavailable": "This chat has no project memory to recall from — link it to a project first",
+    "newChatAria": "New chat",
+    "historyShow": "Chat history",
+    "historyHide": "Back to the conversation",
+    "messagePlaceholderBuild": "Describe a change, or ask a question…"
   },
   "chatMessage": {
     "copy": "Copy",
@@ -32286,7 +32314,12 @@
       "home": "Studio home",
       "signIn": "Sign in",
       "getStarted": "Get started",
-      "signOut": "Sign out"
+      "signOut": "Sign out",
+      "account": "Account",
+      "planLine": "{plan} plan",
+      "managePlan": "Manage",
+      "settings": "Settings",
+      "feedback": "Send feedback"
     },
     "workspace": {
       "title": "Choose a workspace",
@@ -32303,7 +32336,10 @@
       "publish": "Publish",
       "loadFailed": "Couldn't open this project.",
       "loading": "Opening your project…",
-      "signInLead": "Sign in to open this project."
+      "signInLead": "Sign in to open this project.",
+      "publishOptions": "More ways to publish",
+      "publishSite": "Publish site",
+      "repoAndDeploy": "Repository & deploy settings"
     }
   },
   "builderSearch": {
@@ -32329,7 +32365,8 @@
     "noProblems": "No problems. Build and runtime errors from your last run appear here.",
     "clearProblems": "Clear",
     "sourceBuild": "Build",
-    "sourceRuntime": "Runtime"
+    "sourceRuntime": "Runtime",
+    "noProblemsShort": "No problems"
   },
   "builderVersions": {
     "loading": "Loading versions…",

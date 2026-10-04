@@ -72,6 +72,7 @@ export function WorkspaceCenter({ ws, hidden = false, overlay }: {
                 runnable={hasRunnableEntry(ws.files)}
                 onRestart={() => { void runner.run(); }}
                 onOpenVersions={ws.rightTabs.includes('versions') ? () => ws.openRail('versions') : undefined}
+                versions={ws.rightTabs.includes('versions') ? ws.versions : undefined}
                 edit={ws.edit}
                 framing={framing}
                 onOpenDevicePanel={canOpenDevicePanel ? () => ws.setDevicePanelOpen(true) : undefined}

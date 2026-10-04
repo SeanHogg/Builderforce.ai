@@ -459,6 +459,56 @@
   }
 }
 
+/* "Preview updated · 3 files · Undo": inverted so it reads over any app. */
+.changeToast {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(420px, calc(100% - 24px));
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--text-primary);
+  color: var(--bg-surface);
+  font-size: var(--font-size-small);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.changeToastAction {
+  min-height: 30px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font-size: var(--font-size-small);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.changeToastAction:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-surface) 16%, transparent);
+}
+
+.changeToastAction:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+@media (pointer: coarse) {
+  .changeToastAction {
+    min-height: 44px;
+  }
+}
+
 /* The error a stopped preview shows, as the build reported it. */
 .failureBox {
   width: 100%;

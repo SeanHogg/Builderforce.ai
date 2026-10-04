@@ -38,6 +38,7 @@ import { useBrainConsolidateFork } from './useBrainConsolidateFork';
 import { useBrainRunTrace } from './useBrainRunTrace';
 import { useBrainRepoContext } from './useBrainRepoContext';
 import { useBrainPanelSeeds } from './useBrainPanelSeeds';
+import { usePinnedProjectChat } from './usePinnedProjectChat';
 import { useBrainTimelineBindings } from './useBrainTimelineBindings';
 import { useBrainChatRowActions } from './useBrainChatRowActions';
 import { useBrainNewProject } from './useBrainNewProject';
@@ -268,6 +269,10 @@ export function useBrainPanelController({
 
   useBrainPanelSeeds({
     chats, conv, isPage, initialChatId, initialPrompt, initialTicket, pinnedProjectId, viewingProjectId, showChatTab,
+  });
+  usePinnedProjectChat({
+    chats,
+    enabled: !isPage && pinnedProjectId != null && initialChatId == null && !initialTicket && !initialPrompt?.trim(),
   });
 
   const rows = useBrainChatRowActions({ chats, isPage, showChatTab });

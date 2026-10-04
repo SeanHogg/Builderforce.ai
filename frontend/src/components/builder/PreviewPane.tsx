@@ -9,8 +9,10 @@ import { navigatePreview } from '@/lib/visualEditor';
 import { DevicePreview } from './DevicePreview';
 import { PreviewStatus, type PreviewStatusState } from './PreviewStatus';
 import { PointAndEditPanel } from './PointAndEditPanel';
+import { PreviewChangeToast } from './PreviewChangeToast';
 import { usePreviewFreshness } from './usePreviewFreshness';
 import type { PointAndEdit } from './usePointAndEdit';
+import type { ProjectVersions } from './useProjectVersions';
 import type { RunPhase, RunStep } from './useWorkspaceRun';
 import styles from './workspaceChrome.module.css';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
@@ -37,7 +39,7 @@ const SIZES: ReadonlyArray<{ id: PreviewSize; icon: IconName; width: string }> =
  * app, framed as a page on the workspace's ground — or, before there is one, a
  * status that says what is happening.
  */
-export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, onOpenVersions, edit, framing, onOpenDevicePanel }: {
+export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, onOpenVersions, versions, edit, framing, onOpenDevicePanel }: {
   projectId: WorkspaceId;
   url: string | undefined;
   phase: RunPhase;
@@ -47,6 +49,8 @@ export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, 
   onRestart: () => void;
   /** Opens the project's versions, when it has them (a durable project). */
   onOpenVersions?: () => void;
+  /** The project's versions, when it has them: an agent turn landing shows "Preview updated · Undo". */
+  versions?: ProjectVersions;
   edit: PointAndEdit;
   framing: PreviewFraming;
   onOpenDevicePanel?: () => void;
@@ -120,6 +124,7 @@ export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, 
             </div>
           </div>
         )}
+        {!status && versions && <PreviewChangeToast versions={versions} />}
         {status && <PreviewStatus state={status} step={step} projectId={projectId} onRetry={onRestart} onOpenVersions={onOpenVersions} />}
       </div>
 

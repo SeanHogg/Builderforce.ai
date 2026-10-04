@@ -54,6 +54,13 @@ vi.mock('@/lib/api', () => ({
   deleteFile: vi.fn(),
   fetchFiles: vi.fn(async () => []),
   updateProject: vi.fn(async () => ({})),
+  // The workspace records one version per agent turn (`useProjectVersions`) and
+  // shows "Saved · vN" in its header.
+  projectCheckpointsApi: {
+    list: vi.fn(async () => [{ id: 1, kind: 'baseline', changed: [] }, { id: 2, kind: 'auto', changed: ['src/App.jsx'] }]),
+    create: vi.fn(async () => ({})),
+    restore: vi.fn(async () => ({ restored: [], removed: [], missing: [] })),
+  },
 }));
 // `AUTH_API_URL` as well as the token: `CodeEditor` pulls in
 // `ChunkErrorBoundary`, which reaches `reportError.ts`, which builds
@@ -169,5 +176,20 @@ describe('BuilderWorkspace center-panel modality switch', () => {
     const header = screen.getByRole('banner');
     expect(header.contains(screen.getByTestId('host-brand'))).toBe(true);
     expect(header.contains(screen.getByTestId('host-actions'))).toBe(true);
+  });
+
+  // The header reads as "Projects / <name>" and says the work is kept ("Saved · v2").
+  it('shows the projects breadcrumb and the saved version in the header', async () => {
+    render(<BuilderWorkspace project={makeProject('designer')} initialFiles={[]} />);
+    const header = screen.getByRole('banner');
+    expect(header.textContent).toContain('ide.workspace.projects');
+    expect(await screen.findByText(/^ide\.workspace\.savedVersion 2$/)).toBeTruthy();
+  });
+
+  // Closed, the bottom panel is a status bar: run state, problems, the Terminal toggle.
+  it('starts with the bottom panel as a status bar', () => {
+    render(<BuilderWorkspace project={makeProject('designer')} initialFiles={[]} />);
+    expect(screen.getByText('builderPanels.noProblemsShort')).toBeTruthy();
+    expect(screen.queryByRole('tablist', { name: 'builderPanels.panelLabel' })).toBeNull();
   });
 });

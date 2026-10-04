@@ -1491,7 +1491,7 @@
     "previewWeb": "Web",
     "previewMobile": "Mobil",
     "previewTitle": "Vorschau",
-    "visualEdit": "Zeigen und bearbeiten",
+    "visualEdit": "Zum Bearbeiten auswählen",
     "visualEditHint": "Klicke auf ein beliebiges Element in der Vorschau, um Text oder Styling direkt zu ändern — ohne den Agenten zu fragen.",
     "visualEditOn": "Auswahl — klicke auf ein Element",
     "visualSelected": "Ausgewählt {tag} · {file}:{line}",
@@ -1522,13 +1522,11 @@
         "ios": "iOS-Projekt"
       }
     },
-    "centerDatabase": "Datenbank",
+    "centerDatabase": "Daten",
     "brainContext": {
-      "codingAgent": "Coding-Agent",
-      "voiceDirector": "Sprachregie",
       "context": "Kontext",
       "voice": "Stimme",
-      "wholeProject": "gesamtes Projekt",
+      "wholeProject": "Gesamtes Projekt",
       "noVoice": "keine ausgewählt"
     },
     "workspace": {
@@ -1558,7 +1556,7 @@
       "failedTitle": "Die Vorschau wurde angehalten",
       "failedHint": "Die letzte Änderung hat den Build kaputt gemacht. Das Terminal zeigt warum, und Brain sieht den Fehler ebenfalls – bitte es im Chat, ihn zu beheben.",
       "blockedTitle": "Vorschau wegen fehlgeschlagener Prüfungen pausiert",
-      "blockedHint": "Behebe die fehlgeschlagenen Prüfungen oder schalte „Vorschau bei fehlgeschlagenen Prüfungen blockieren“ in der Leiste unten aus.",
+      "blockedHint": "Behebe die fehlgeschlagenen Prüfungen oder schalte „Vorschau bei fehlgeschlagenen Prüfungen blockieren“ im Bereich unten aus (über „Terminal“ öffnen).",
       "tryAgain": "Erneut versuchen",
       "showTerminal": "Terminal anzeigen",
       "emptyTitle": "Hier erscheint deine App",
@@ -1566,7 +1564,36 @@
       "closePanel": "Bereich schließen",
       "collabConnected": "Mitwirkende verbunden",
       "voiceNeedsClone": "Erstelle oder wähle zuerst eine Stimme",
-      "generating": "Wird generiert…"
+      "generating": "Wird generiert…",
+      "projects": "Projekte",
+      "back": "Zurück",
+      "forward": "Vorwärts",
+      "updatedAgo": "aktualisiert {when}",
+      "statusRunning": "Läuft",
+      "savedVersion": "Gespeichert · v{number}",
+      "versionsHint": "Versionen — zu einem früheren Stand zurückkehren",
+      "versions": "Versionen",
+      "fixForMe": "Für mich beheben",
+      "fixPrompt": "Die Vorschau ist mit diesem Fehler stehen geblieben. Finde die Ursache und behebe sie.",
+      "failedHintFix": "Eine kürzliche Änderung hat den Build gebrochen. Deine früheren Versionen sind sicher.",
+      "suggestion": {
+        "landing": {
+          "label": "Eine Landingpage für meine App",
+          "prompt": "Erstelle eine Landingpage für meine App namens [NAME]. Sie soll erklären, was die App tut, drei Hauptfunktionen zeigen und mit einem Anmeldeformular enden."
+        },
+        "portfolio": {
+          "label": "Ein Portfolio",
+          "prompt": "Erstelle eine Portfolio-Website für [DEIN NAME], [WAS DU MACHST]. Mit einem Über-mich-Bereich, einem Projektraster und einem Kontaktformular."
+        },
+        "menu": {
+          "label": "Eine Restaurant-Speisekarte",
+          "prompt": "Erstelle eine Website für mein Restaurant [NAME]. Zeige die Speisekarte nach Abschnitten mit Preisen, Öffnungszeiten, die Adresse und eine Möglichkeit, einen Tisch zu reservieren."
+        }
+      },
+      "changeLanded": "Vorschau aktualisiert · {count, plural, one {# Datei} other {# Dateien}} geändert",
+      "changeUndone": "Rückgängig gemacht — die vorherige Version ist wieder da",
+      "changeUndoFailed": "Rückgängig fehlgeschlagen — über „Versionen“ manuell wiederherstellen",
+      "undo": "Rückgängig"
     },
     "media": {
       "rendering": "Wird gerendert…",
@@ -11568,15 +11595,12 @@
     "onboardHeading": "Neu hier?",
     "providerCapBanner": "Dein {providers}-API-Schlüssel hat sein Nutzungslimit erreicht — dieser Lauf ist auf den gemeinsamen Modell-Pool zurückgefallen.",
     "manageApiKeys": "API-Schlüssel verwalten →",
-    "tabChat": "Chat",
-    "tabHistory": "Verlauf",
-    "sectionsAria": "Brain-Bereiche",
     "chatActions": "Chat-Aktionen",
     "chatActionsAria": "Aktionen für {title}",
     "aiDisclosureAria": "KI-Hinweis",
     "aiDisclosureBody": "Sie interagieren mit KI-Agenten. Ergebnisse können fehlerhaft sein; prüfen Sie sie, bevor Sie wichtige Entscheidungen darauf stützen. Ändernde Aktionen erfordern Ihre Freigabe, sofern Sie die automatische Freigabe nicht ausdrücklich aktivieren.",
-    "aiDisclosureLink": "Wie KI funktioniert, Erklärungen und menschliche Prüfung",
-    "aiDisclosureShort": "KI-Agenten können sich irren, und Änderungen erfordern Ihre Freigabe.",
+    "aiDisclosureLink": "Wie KI funktioniert",
+    "aiDisclosureShort": "Du gibst jede Änderung frei, bevor sie live geht.",
     "emptyHintWork": "Beschreiben Sie die Aufgabe. Ich lege sie als nachverfolgte Arbeit an, besetze sie und setze einen Agenten darauf an.",
     "emptyGreeting": "Was machen wir als Nächstes?",
     "newChatProjectLabel": "Projekt",
@@ -11626,7 +11650,11 @@
         "brief": "Nimm einen Fehler, den ich beschreibe, finde die Grundursache statt des Symptoms, lege ihn als nachverfolgtes Ticket mit der richtigen verantwortlichen Person an und setze einen Agenten darauf an. Sag mir das Ergebnis der Übergabe — wenn tatsächlich nichts gestartet ist, nenne genau, was es blockiert hat."
       }
     },
-    "memoryUnavailable": "Dieser Chat hat kein Projektgedächtnis zum Abrufen — verknüpfen Sie ihn zuerst mit einem Projekt"
+    "memoryUnavailable": "Dieser Chat hat kein Projektgedächtnis zum Abrufen — verknüpfen Sie ihn zuerst mit einem Projekt",
+    "newChatAria": "Neuer Chat",
+    "historyShow": "Chatverlauf",
+    "historyHide": "Zurück zum Gespräch",
+    "messagePlaceholderBuild": "Beschreibe eine Änderung oder stelle eine Frage…"
   },
   "chatMessage": {
     "copy": "Kopieren",
@@ -32286,7 +32314,12 @@
       "home": "Studio-Startseite",
       "signIn": "Anmelden",
       "getStarted": "Loslegen",
-      "signOut": "Abmelden"
+      "signOut": "Abmelden",
+      "account": "Konto",
+      "planLine": "Tarif {plan}",
+      "managePlan": "Verwalten",
+      "settings": "Einstellungen",
+      "feedback": "Feedback senden"
     },
     "workspace": {
       "title": "Arbeitsbereich wählen",
@@ -32303,7 +32336,10 @@
       "publish": "Veröffentlichen",
       "loadFailed": "Dieses Projekt konnte nicht geöffnet werden.",
       "loading": "Dein Projekt wird geöffnet …",
-      "signInLead": "Melde dich an, um dieses Projekt zu öffnen."
+      "signInLead": "Melde dich an, um dieses Projekt zu öffnen.",
+      "publishOptions": "Weitere Veröffentlichungsoptionen",
+      "publishSite": "Website veröffentlichen",
+      "repoAndDeploy": "Repository- und Deploy-Einstellungen"
     }
   },
   "builderSearch": {
@@ -32329,7 +32365,8 @@
     "noProblems": "Keine Probleme. Build- und Laufzeitfehler deines letzten Laufs erscheinen hier.",
     "clearProblems": "Leeren",
     "sourceBuild": "Build",
-    "sourceRuntime": "Laufzeit"
+    "sourceRuntime": "Laufzeit",
+    "noProblemsShort": "Keine Probleme"
   },
   "builderVersions": {
     "loading": "Versionen werden geladen …",

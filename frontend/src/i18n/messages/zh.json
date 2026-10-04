@@ -1491,7 +1491,7 @@
     "previewWeb": "网页",
     "previewMobile": "移动端",
     "previewTitle": "预览",
-    "visualEdit": "点选编辑",
+    "visualEdit": "选择以编辑",
     "visualEditHint": "点击预览中的任意元素，即可直接修改其文本或样式，无需询问智能体。",
     "visualEditOn": "选择中 — 请点击一个元素",
     "visualSelected": "已选择 {tag} · {file}:{line}",
@@ -1522,10 +1522,8 @@
         "ios": "iOS 项目"
       }
     },
-    "centerDatabase": "数据库",
+    "centerDatabase": "数据",
     "brainContext": {
-      "codingAgent": "编码智能体",
-      "voiceDirector": "语音导演",
       "context": "上下文",
       "voice": "语音",
       "wholeProject": "整个项目",
@@ -1558,7 +1556,7 @@
       "failedTitle": "预览已停止",
       "failedHint": "最近的更改导致构建失败。终端会显示原因，Brain 也能看到这个错误——在聊天中让它修复即可。",
       "blockedTitle": "检查未通过，预览已暂停",
-      "blockedHint": "请修复未通过的检查，或在下方栏中关闭“检查失败时阻止预览”。",
+      "blockedHint": "修复未通过的检查，或在下方面板中关闭“检查失败时阻止预览”（从“终端”打开该面板）。",
       "tryAgain": "重试",
       "showTerminal": "显示终端",
       "emptyTitle": "你的应用将显示在这里",
@@ -1566,7 +1564,36 @@
       "closePanel": "关闭面板",
       "collabConnected": "协作者已连接",
       "voiceNeedsClone": "请先创建或选择一个声音",
-      "generating": "正在生成…"
+      "generating": "正在生成…",
+      "projects": "项目",
+      "back": "后退",
+      "forward": "前进",
+      "updatedAgo": "{when}更新",
+      "statusRunning": "运行中",
+      "savedVersion": "已保存 · v{number}",
+      "versionsHint": "版本——回到任意之前的状态",
+      "versions": "版本",
+      "fixForMe": "帮我修复",
+      "fixPrompt": "预览因以下错误停止。请找出原因并修复。",
+      "failedHintFix": "最近的一次更改导致构建失败。你之前的版本都安全保存着。",
+      "suggestion": {
+        "landing": {
+          "label": "为我的应用做一个落地页",
+          "prompt": "为我名为 [名称] 的应用做一个落地页。它应说明应用的用途，展示三个主要功能，并以注册表单结尾。"
+        },
+        "portfolio": {
+          "label": "作品集",
+          "prompt": "为 [你的名字]（[你的职业]）做一个作品集网站。包括个人简介、项目网格和联系表单。"
+        },
+        "menu": {
+          "label": "餐厅菜单",
+          "prompt": "为我的餐厅 [名称] 做一个网站。按分类展示带价格的菜单、营业时间、地址，以及预订座位的方式。"
+        }
+      },
+      "changeLanded": "预览已更新 · 更改了 {count} 个文件",
+      "changeUndone": "已撤销——已恢复到上一个版本",
+      "changeUndoFailed": "无法撤销——请打开“版本”手动恢复",
+      "undo": "撤销"
     },
     "media": {
       "rendering": "正在渲染…",
@@ -11568,15 +11595,12 @@
     "onboardHeading": "初次使用？",
     "providerCapBanner": "你的 {providers} API 密钥已达用量上限——本次运行已回退到共享模型池。",
     "manageApiKeys": "管理你的 API 密钥 →",
-    "tabChat": "对话",
-    "tabHistory": "历史记录",
-    "sectionsAria": "Brain 版块",
     "chatActions": "对话操作",
     "chatActionsAria": "“{title}”的操作",
     "aiDisclosureAria": "AI 声明",
     "aiDisclosureBody": "您正在与 AI 智能体互动。输出结果可能不准确；在依据重要结果采取行动前请先复核。除非您明确启用自动批准，否则更改数据的操作都需要您的批准。",
-    "aiDisclosureLink": "AI 的工作方式、解释说明与人工复核",
-    "aiDisclosureShort": "AI 智能体可能出错；更改需经你批准。",
+    "aiDisclosureLink": "AI 如何工作",
+    "aiDisclosureShort": "每处更改在发布前都需你确认。",
     "emptyHintWork": "描述这项工作。我会把它建成可跟踪的任务，配置人员，并派出代理执行。",
     "emptyGreeting": "接下来做什么？",
     "newChatProjectLabel": "项目",
@@ -11626,7 +11650,11 @@
         "brief": "针对我描述的缺陷，找出根本原因而非表面症状，将其建为工单并指定合适的负责人，然后派出代理处理。告诉我派发结果——如果实际上并未启动，请准确说明是什么阻碍了它。"
       }
     },
-    "memoryUnavailable": "本对话没有可调取的项目记忆 — 请先将其关联到某个项目"
+    "memoryUnavailable": "本对话没有可调取的项目记忆 — 请先将其关联到某个项目",
+    "newChatAria": "新对话",
+    "historyShow": "对话历史",
+    "historyHide": "返回对话",
+    "messagePlaceholderBuild": "描述一处更改，或提出一个问题…"
   },
   "chatMessage": {
     "copy": "复制",
@@ -32286,7 +32314,12 @@
       "home": "Studio 首页",
       "signIn": "登录",
       "getStarted": "开始使用",
-      "signOut": "退出登录"
+      "signOut": "退出登录",
+      "account": "账户",
+      "planLine": "{plan} 套餐",
+      "managePlan": "管理",
+      "settings": "设置",
+      "feedback": "发送反馈"
     },
     "workspace": {
       "title": "选择工作区",
@@ -32303,7 +32336,10 @@
       "publish": "发布",
       "loadFailed": "无法打开此项目。",
       "loading": "正在打开你的项目……",
-      "signInLead": "登录后即可打开此项目。"
+      "signInLead": "登录后即可打开此项目。",
+      "publishOptions": "更多发布方式",
+      "publishSite": "发布网站",
+      "repoAndDeploy": "代码库与部署设置"
     }
   },
   "builderSearch": {
@@ -32329,7 +32365,8 @@
     "noProblems": "没有问题。上次运行的构建错误和运行时错误会显示在这里。",
     "clearProblems": "清除",
     "sourceBuild": "构建",
-    "sourceRuntime": "运行时"
+    "sourceRuntime": "运行时",
+    "noProblemsShort": "没有问题"
   },
   "builderVersions": {
     "loading": "正在加载版本……",
