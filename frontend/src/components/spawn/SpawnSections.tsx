@@ -116,7 +116,7 @@ export async function SpawnDownload() {
   return (
     <Section id="download">
       <SectionHead id="download" eyebrow={t('eyebrow')} title={t('title')} lede={t('lede')} />
-      <ul className={styles.cardBody} style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 6, fontSize: '1rem' }}>
+      <ul className={styles.cardBody} style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 6, fontSize: 'var(--font-size-body)' }}>
         {points.map((point) => <li key={point}>{point}</li>)}
       </ul>
       <div className={styles.ctaRow}>

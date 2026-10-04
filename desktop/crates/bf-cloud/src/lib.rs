@@ -6,7 +6,9 @@
 //!     progress, the workspace in use — shared by every app so none re-implements it;
 //!   - [`Session`]: the key exchanged for a short-lived workspace token, refreshed before
 //!     it expires, re-scoped to the chosen workspace, and every API call made with it;
-//!   - [`Session::complete`]: the LLM gateway (the key itself is the gateway credential).
+//!   - [`llm`]: a streamed completion from the LLM gateway (the key itself is the
+//!     gateway credential), and [`tools`]: the platform's tool catalog and its calls —
+//!     together, what a Brain turn needs to answer and to act.
 //!
 //! Each app names itself with an [`AppIdentity`] — Synapse and Spawn sign in separately,
 //! with separate keys, so signing out of one never signs out of the other.
@@ -16,7 +18,9 @@
 pub mod account;
 pub mod device;
 mod error;
+pub mod llm;
 mod session;
+pub mod tools;
 
 pub use account::{Account, SignIn};
 pub use error::CloudError;

@@ -1,5 +1,18 @@
 [
   {
+    "slug": "build-roblox-games-by-talking",
+    "title": "Spawn — build Roblox games by talking",
+    "date": "2026-10-04",
+    "description": "Spawn is a desktop builder for Roblox creators 13 and up. Describe the game, and it builds the parts, the Luau and the UI inside Roblox Studio. It connects by itself, every build is one undo step, failed builds are free, and safety rules for young creators are built in.",
+    "tags": [
+      "spawn",
+      "roblox",
+      "games",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "make-video-scenes-and-movies-on-the-canvas",
     "title": "Describe a story, get a movie — video on the canvas",
     "date": "2026-10-04",

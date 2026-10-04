@@ -3,8 +3,8 @@
 //!
 //! A message addressed to an agent is posted with `addressedTo` metadata and the platform
 //! dispatches that agent's reply (it runs with its own tools, as the person). Any other
-//! message is for the Brain, which in Synapse answers here with the private Evermind's
-//! recall as context ([`super::brain`]).
+//! message is for the Brain, which in Synapse answers here — streaming, with the platform's
+//! tools and the private Evermind's recall as context ([`super::brain`]).
 
 use super::{brain, Cloud, Res};
 use crate::agents::Agents;
@@ -13,7 +13,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 fn api(c: &Cloud, method: &str, path: &str, body: Option<Value>) -> Res<Value> {
     let s = c.require()?;
@@ -34,16 +34,27 @@ pub async fn chat_create(cloud: State<'_, Arc<Cloud>>, title: Option<String>) ->
     .await
 }
 
-/// The transcript, and whether the Brain is still writing its reply here.
+/// The transcript, and the Brain's reply here while it is being written (`live`: the
+/// answer so far, the tool in use, a tool waiting for approval).
 #[tauri::command]
 pub async fn chat_messages(cloud: State<'_, Arc<Cloud>>, chat_id: i64) -> Res<Value> {
     blocking(cloud, move |c| {
         let v = api(c, "GET", &format!("/api/brain/chats/{chat_id}/messages?limit=100"), None)?;
-        let replying = c.replying.lock().unwrap().contains(&chat_id);
-        let reply_error = c.reply_errors.lock().unwrap().get(&chat_id).cloned();
-        Ok(json!({ "messages": v.get("messages").cloned().unwrap_or(json!([])), "replying": replying, "replyError": reply_error }))
+        let live = c.replies.get(chat_id);
+        Ok(json!({
+            "messages": v.get("messages").cloned().unwrap_or(json!([])),
+            "replying": live.is_some(),
+            "live": live,
+            "replyError": c.replies.error(chat_id),
+        }))
     })
     .await
+}
+
+/// The person's answer to the tool the Brain is waiting on in `chat_id`.
+#[tauri::command]
+pub async fn chat_tool_decide(cloud: State<'_, Arc<Cloud>>, chat_id: i64, approve: bool) -> Res<()> {
+    blocking(cloud, move |c| if c.replies.decide(chat_id, approve) { Ok(()) } else { Err("nothing is waiting for an answer".into()) }).await
 }
 
 #[tauri::command]
@@ -110,6 +121,7 @@ pub struct Recipient {
 /// Brain: it answers here, in the background — `chat_messages` says while it writes.
 #[tauri::command]
 pub async fn chat_send(
+    app: AppHandle,
     cloud: State<'_, Arc<Cloud>>,
     agents: State<'_, Arc<Agents>>,
     chat_id: i64,
@@ -130,7 +142,7 @@ pub async fn chat_send(
         }
         api(c, "POST", &format!("/api/brain/chats/{chat_id}/messages"), Some(json!({ "messages": [message] })))?;
         if to.is_none() {
-            brain::reply_in_background(shared, chat_id, agents);
+            brain::reply_in_background(app, shared, chat_id, agents);
         }
         Ok(())
     })

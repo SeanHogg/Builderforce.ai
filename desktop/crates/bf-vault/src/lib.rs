@@ -1,16 +1,17 @@
 //! Synapse's secrets, kept in the operating system's credential store (Windows Credential
-//! Manager, the macOS Keychain) under one service name. Two things live here: the
-//! passwords skills use without anyone seeing them, and the builderforce.ai sign-in key.
-//! Values never pass through a file Synapse writes.
+//! Manager, the macOS Keychain, the Secret Service on Linux) under one service name. Two
+//! things live here: the passwords skills use without anyone seeing them, and the
+//! builderforce.ai sign-in key. Values never pass through a file Synapse writes.
 //!
-//! Where there is no supported store (Linux, for now), saving fails with a clear error and
-//! nothing is found, so a caller degrades to "not saved" rather than to a plaintext file.
+//! Where there is no store — another OS, or a Linux session with no Secret Service running
+//! (a bare server, a headless shell) — saving fails with a clear error and nothing is
+//! found, so a caller degrades to "not saved" rather than to a plaintext file.
 
 use anyhow::Result;
 
 const SERVICE: &str = "Synapse";
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 mod store {
     use super::SERVICE;
     use anyhow::Result;
@@ -32,7 +33,7 @@ mod store {
     }
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod store {
     use anyhow::Result;
 
@@ -43,11 +44,6 @@ mod store {
         None
     }
     pub fn delete(_name: &str) {}
-}
-
-/// Whether secrets can be kept on this system.
-pub fn supported() -> bool {
-    cfg!(any(windows, target_os = "macos"))
 }
 
 /// Keep `value` under `name`, replacing what was there.
@@ -66,4 +62,20 @@ pub fn delete(name: &str) {
 /// The entry name of a skill's secret parameter.
 pub fn skill_secret(skill_id: &str, param: &str) -> String {
     format!("skill:{skill_id}:{param}")
+}
+
+#[cfg(test)]
+mod tests {
+    /// Writes to the real credential store, so it runs only when asked:
+    /// `cargo test -p bf-vault -- --ignored` (on Linux, inside a session with a Secret
+    /// Service — e.g. `dbus-run-session` with `gnome-keyring-daemon --unlock`).
+    #[test]
+    #[ignore]
+    fn round_trips_through_the_os_store() {
+        let name = "bf-vault:self-test";
+        super::save(name, "s3cret").expect("save");
+        assert_eq!(super::load(name).as_deref(), Some("s3cret"));
+        super::delete(name);
+        assert_eq!(super::load(name), None);
+    }
 }

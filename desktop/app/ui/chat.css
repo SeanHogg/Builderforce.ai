@@ -36,7 +36,10 @@
 .msg { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); max-width: 88%; }
 .msg-user { align-self: flex-end; background: var(--accent-soft); border-color: transparent; }
 .msg-agent { border-left: 3px solid var(--cyan); }
-.msg-pending .msg-body { font-style: italic; }
+.msg-pending .msg-body.muted { font-style: italic; }
+.live-activity { font-style: italic; }
+.live-ask { gap: 8px; padding: 10px; margin-top: 4px; }
+.live-args { margin: 0; padding: 6px 8px; max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--radius-sm); background: var(--sunken); border: 1px solid var(--border); font-family: var(--font-mono); }
 .msg-error { align-self: center; background: var(--bad-soft); border-color: transparent; max-width: 100%; }
 .msg-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
 .msg-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }

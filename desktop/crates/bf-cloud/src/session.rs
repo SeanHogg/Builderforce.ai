@@ -11,7 +11,6 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const REFRESH_MARGIN: Duration = Duration::from_secs(60);
-const LLM_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
@@ -161,21 +160,18 @@ impl Session {
         Ok(serde_json::from_value(v.get("tenants").cloned().unwrap_or(Value::Array(vec![]))).unwrap_or_default())
     }
 
-    /// One non-streamed completion from the LLM gateway (the key is its credential). The
-    /// gateway routes the model; `model` pins one.
-    pub fn complete(&self, messages: &Value, model: Option<&str>) -> Result<String, CloudError> {
-        let mut body = json!({ "messages": messages, "stream": false });
-        if let Some(m) = model {
-            body["model"] = json!(m);
-        }
-        let res = ureq::post(&format!("{}/llm/v1/chat/completions", self.base))
-            .timeout(LLM_TIMEOUT)
-            .set("authorization", &format!("Bearer {}", self.key))
-            .send_json(body);
-        let v: Value = match res {
-            Err(ureq::Error::Status(401, _)) => return Err(CloudError::KeyRejected),
-            other => other.map_err(CloudError::from_ureq)?.into_json().map_err(|e| CloudError::Unreachable(e.to_string()))?,
+    /// A call to the LLM gateway (`/llm/v1/...`), where the key itself is the credential —
+    /// the completions and the platform tools the Brain drives ([`crate::llm`],
+    /// [`crate::tools`]). A refused key is [`CloudError::KeyRejected`].
+    pub(crate) fn gateway(&self, method: &str, path: &str, body: Option<&Value>, timeout: Duration) -> Result<ureq::Response, CloudError> {
+        let req = ureq::request(method, &format!("{}/llm/v1{path}", self.base)).timeout(timeout).set("authorization", &format!("Bearer {}", self.key));
+        let res = match body {
+            Some(b) => req.send_json(b.clone()),
+            None => req.call(),
         };
-        Ok(v.pointer("/choices/0/message/content").and_then(Value::as_str).unwrap_or_default().to_string())
+        match res {
+            Err(ureq::Error::Status(401, _)) => Err(CloudError::KeyRejected),
+            other => other.map_err(CloudError::from_ureq),
+        }
     }
 }

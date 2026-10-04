@@ -14,3 +14,8 @@ keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
+
+# The freedesktop Secret Service over D-Bus (GNOME Keyring, KWallet) — what a Linux
+# desktop session offers. Building needs libdbus-1-dev; the release workflow installs it.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

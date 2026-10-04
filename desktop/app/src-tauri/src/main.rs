@@ -130,6 +130,7 @@ fn main() {
             cloud::chat::chat_uninvite,
             cloud::chat::agent_pool,
             cloud::chat::chat_send,
+            cloud::chat::chat_tool_decide,
             cloud::request::cloud_request,
         ])
         .setup(|app| {

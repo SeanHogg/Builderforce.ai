@@ -1,8 +1,8 @@
 // Chat: one of the workspace's Brain chats (picked in the sidebar), the agents assigned to
 // it, and the composer. Signed out, it is the sign-in. A message to the Brain is answered
-// here with the private Evermind's recall; a message to an agent is answered by that agent,
-// with its own tools, as you.
-import { h, invoke, route, showError } from "../bridge.js";
+// here — streamed in, with the workspace's tools and the private Evermind's recall; a
+// message to an agent is answered by that agent, with its own tools, as you.
+import { h, invoke, listen, route, showError } from "../bridge.js";
 import { t } from "../i18n.js";
 import { openWeb, subscribeAccount } from "../cloud/accountStore.js";
 import { signInCard } from "../cloud/accountPanel.js";
@@ -10,6 +10,7 @@ import { agentPool, agentsBar, assignedName, resetAgentPool } from "../chat/agen
 import { refreshChats, subscribeChats } from "../chat/chatStore.js";
 import { startChat } from "../chat/sidebarChats.js";
 import { composer } from "../chat/composer.js";
+import { liveReply } from "../chat/liveReply.js";
 import { awaitingAgent, renderTranscript } from "../chat/transcript.js";
 
 const FAST_MS = 2000;
@@ -21,6 +22,7 @@ export function render(host, params) {
   const openBtn = h("button", { class: "ghost small", type: "button", text: t("chat.openWeb") });
   const agents = agentsBar(() => loadAgents());
   const transcript = h("ul", { class: "transcript", attrs: { "aria-live": "polite" } });
+  const live = liveReply();
   const write = composer(send);
   const conversation = h("section", { class: "chat-main", hidden: true }, h("div", { class: "row between wrap chat-head" }, title, openBtn), agents.el, transcript, write.el);
   const empty = h(
@@ -37,6 +39,21 @@ export function render(host, params) {
   let workspace;
   let alive = true;
   const wanted = Number(params.get("id")) || null;
+
+  // The Brain's reply as it is written; once it is done, the transcript holds it.
+  const stopLive = listen("brain-reply", ({ payload }) => {
+    if (!alive || payload.chatId !== chatId) return;
+    if (!payload.live) {
+      loadMessages();
+      return;
+    }
+    live.update(chatId, payload.live);
+    if (!live.el.isConnected) {
+      transcript.querySelector(".chat-empty")?.remove();
+      transcript.append(live.el);
+    }
+    if (transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 160) transcript.scrollTop = transcript.scrollHeight;
+  });
 
   openBtn.addEventListener("click", () => chatId != null && openWeb(`/brainstorm?chat=${chatId}`).catch(showError));
 
@@ -58,8 +75,10 @@ export function render(host, params) {
     let fast = false;
     try {
       const r = await invoke("chat_messages", { chatId });
-      renderTranscript(transcript, r.messages ?? [], r);
-      fast = r.replying || awaitingAgent(r.messages ?? []);
+      if (r.live) live.update(chatId, r.live);
+      renderTranscript(transcript, r.messages ?? [], { live: r.live ? live.el : null, replyError: r.replyError });
+      // The Brain's reply streams in through events; only an agent's answer is polled for.
+      fast = awaitingAgent(r.messages ?? []);
     } catch (e) {
       showError(e);
     }
@@ -116,6 +135,7 @@ export function render(host, params) {
   return () => {
     alive = false;
     clearTimeout(timer);
+    stopLive.then((stop) => stop());
     stopChats();
     stopAccount();
     signIn.stop();

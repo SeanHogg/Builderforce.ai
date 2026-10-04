@@ -7,6 +7,8 @@ const tauri = window.__TAURI__;
 export const invoke = tauri.core.invoke;
 export const dialog = tauri.dialog;
 export const opener = tauri.opener;
+/** Subscribe to an event the app emits; resolves to the unsubscribe. */
+export const listen = tauri.event.listen;
 
 export const call = (op, body) => invoke("call", { op, body: body ?? null });
 

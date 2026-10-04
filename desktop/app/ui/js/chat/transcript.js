@@ -28,7 +28,8 @@ function author(m, md) {
 
 const at = (m) => (m.createdAt ? Date.parse(m.createdAt) : null);
 
-export function renderTranscript(list, messages, { replying, replyError }) {
+/** `live`: the Brain's reply being written (its element from `liveReply`), or null. */
+export function renderTranscript(list, messages, { live, replyError }) {
   const shown = messages.filter((m) => (m.role === "user" || m.role === "assistant") && String(m.content ?? "").trim());
   const rows = shown.map((m) => {
     const md = meta(m);
@@ -47,7 +48,7 @@ export function renderTranscript(list, messages, { replying, replyError }) {
       h("div", { class: "msg-body", text: String(m.content) }),
     );
   });
-  if (replying) rows.push(h("li", { class: "msg msg-assistant msg-pending" }, h("div", { class: "msg-head" }, h("strong", { text: t("chat.brain") })), h("div", { class: "msg-body muted", text: t("chat.thinking") })));
+  if (live) rows.push(live);
   if (replyError) rows.push(h("li", { class: "msg msg-error", attrs: { role: "status" } }, h("div", { class: "msg-body", text: t("chat.replyFailed", { reason: replyError }) })));
   if (rows.length === 0) rows.push(h("li", { class: "chat-empty muted", text: t("chat.emptyConversation") }));
   const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;

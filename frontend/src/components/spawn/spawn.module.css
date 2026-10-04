@@ -4,9 +4,9 @@
  * light mode in globals.css), so every surface reads in both themes.
  */
 .root {
-  --spawn-a: var(--purple-bright, #8b5cf6);
-  --spawn-b: var(--pink-bright, #ec4899);
-  --spawn-c: var(--cyan-bright, #00e5cc);
+  --spawn-a: var(--purple-bright);
+  --spawn-b: var(--pink-bright);
+  --spawn-c: var(--cyan-bright);
   --spawn-glow: color-mix(in srgb, var(--spawn-a) 22%, transparent);
   min-height: 100vh;
   display: flex;
@@ -41,7 +41,7 @@
   color: var(--text-primary);
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: 1.35rem;
+  font-size: var(--font-size-section);
   letter-spacing: -0.02em;
 }
 .brandMark {
@@ -49,10 +49,10 @@
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--spawn-a), var(--spawn-b));
-  color: var(--text-on-accent, #fff);
-  font-size: 1.1rem;
+  color: var(--text-on-accent);
+  font-size: var(--font-size-card-title);
   box-shadow: 0 6px 20px var(--spawn-glow);
 }
 .nav {
@@ -93,8 +93,8 @@
   letter-spacing: 0.08em;
   font-size: var(--font-size-eyebrow);
 }
-.h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.6rem, 4vw, 2.4rem); line-height: 1.1; }
-.lede { margin: 0; color: var(--text-secondary); font-size: clamp(1rem, 2vw, 1.15rem); line-height: 1.55; }
+.h2 { margin: 0; font-family: var(--font-display); font-size: var(--font-size-page-title); line-height: 1.1; }
+.lede { margin: 0; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.55; }
 
 /* ── Hero ────────────────────────────────────────────────────────────── */
 .hero {
@@ -107,7 +107,7 @@
 .heroTitle {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2.4rem, 7vw, 4.4rem);
+  font-size: var(--font-size-hero);
   line-height: 1;
   letter-spacing: -0.03em;
 }
@@ -125,14 +125,14 @@
   gap: 8px;
   min-height: 48px;
   padding: 0 22px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-weight: 800;
   text-decoration: none;
   border: 0;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: var(--font-size-card-title);
   background: linear-gradient(135deg, var(--spawn-a), var(--spawn-b));
-  color: var(--text-on-accent, #fff);
+  color: var(--text-on-accent);
   box-shadow: 0 10px 30px var(--spawn-glow);
 }
 .cta:disabled { opacity: 0.6; cursor: progress; }
@@ -147,7 +147,7 @@
 
 /* The hero's "app window" picture: a chat beside a Studio viewport. */
 .window {
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   background: var(--surface-card, var(--bg-elevated));
   box-shadow: 0 30px 80px var(--spawn-glow);
@@ -159,7 +159,7 @@
 .windowChat { padding: 16px; display: grid; gap: 10px; align-content: start; border-right: 1px solid var(--border-subtle); }
 .bubble {
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: var(--font-size-small);
   line-height: 1.45;
   background: var(--bg-elevated, var(--surface-card));
@@ -172,7 +172,7 @@
 }
 .block {
   position: absolute;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   box-shadow: inset 0 -6px 0 color-mix(in srgb, var(--bg-deep) 35%, transparent);
 }
 @media (max-width: 560px) {
@@ -192,12 +192,12 @@
   gap: 8px;
   align-content: start;
   padding: 20px;
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-subtle);
   background: var(--surface-card, var(--bg-elevated));
 }
-.cardIcon { font-size: 1.6rem; line-height: 1; }
-.cardTitle { margin: 0; font-size: 1.05rem; font-weight: 800; }
+.cardIcon { font-size: var(--font-size-section); line-height: 1; }
+.cardTitle { margin: 0; font-size: var(--font-size-card-title); font-weight: 800; }
 .cardBody { margin: 0; color: var(--text-secondary); line-height: 1.5; font-size: var(--font-size-small); }
 .step { composes: card; position: relative; padding-top: 44px; }
 .stepNumber {
@@ -206,17 +206,17 @@
   left: 20px;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: grid;
   place-items: center;
   font-weight: 900;
-  font-size: 0.8rem;
+  font-size: var(--font-size-small);
   background: linear-gradient(135deg, var(--spawn-a), var(--spawn-b));
-  color: var(--text-on-accent, #fff);
+  color: var(--text-on-accent);
 }
 
 /* ── Compare table ───────────────────────────────────────────────────── */
-.tableWrap { overflow-x: auto; border-radius: 16px; border: 1px solid var(--border-subtle); }
+.tableWrap { overflow-x: auto; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); }
 .table { width: 100%; border-collapse: collapse; min-width: 520px; background: var(--surface-card, var(--bg-elevated)); }
 .table th, .table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-small); }
 .table th { color: var(--text-secondary); font-weight: 700; }
@@ -232,17 +232,17 @@
     linear-gradient(var(--surface-card, var(--bg-elevated)), var(--surface-card, var(--bg-elevated))) padding-box,
     linear-gradient(135deg, var(--spawn-a), var(--spawn-b)) border-box;
 }
-.price { margin: 0; font-family: var(--font-display); font-size: 2.2rem; font-weight: 900; }
-.priceUnit { font-size: 1rem; color: var(--text-secondary); font-weight: 600; }
+.price { margin: 0; font-family: var(--font-display); font-size: var(--font-size-page-title); font-weight: 900; }
+.priceUnit { font-size: var(--font-size-card-title); color: var(--text-secondary); font-weight: 600; }
 .pack { composes: card; text-align: center; justify-items: center; }
-.packPrice { margin: 0; font-size: 1.6rem; font-weight: 900; font-family: var(--font-display); }
+.packPrice { margin: 0; font-size: var(--font-size-section); font-weight: 900; font-family: var(--font-display); }
 .packTokens { margin: 0; font-weight: 700; color: var(--spawn-a); }
-.packButton { composes: cta; width: 100%; min-height: 44px; font-size: 0.95rem; }
+.packButton { composes: cta; width: 100%; min-height: 44px; font-size: var(--font-size-body); }
 
 /* ── FAQ ─────────────────────────────────────────────────────────────── */
 .faq { display: grid; gap: 10px; }
 .faqItem {
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: var(--surface-card, var(--bg-elevated));
   padding: 4px 16px;
@@ -254,20 +254,20 @@
 .account { width: min(760px, 100%); margin: 0 auto; padding: clamp(24px, 6vh, 56px) 16px 64px; display: grid; gap: 20px; }
 .panel { composes: card; gap: 14px; }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.balance { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 6vw, 2.8rem); font-weight: 900; }
+.balance { margin: 0; font-family: var(--font-display); font-size: var(--font-size-page-title); font-weight: 900; }
 .select {
   min-height: 44px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: var(--bg-elevated, var(--surface-card));
   color: var(--text-primary);
   font: inherit;
 }
-.status { padding: 4px 10px; border-radius: 999px; font-weight: 800; font-size: var(--font-size-eyebrow); }
+.status { padding: 4px 10px; border-radius: var(--radius-full); font-weight: 800; font-size: var(--font-size-eyebrow); }
 .statusOk { composes: status; background: var(--success-bg); color: var(--success-text, var(--success)); }
 .statusWarn { composes: status; background: var(--warning-bg); color: var(--warning-text, var(--warning)); }
-.notice { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--info-bg); color: var(--text-primary); }
+.notice { margin: 0; padding: 12px 14px; border-radius: var(--radius-lg); background: var(--info-bg); color: var(--text-primary); }
 .error { margin: 0; color: var(--error-text); }
 .activity { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .activity li { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; font-size: var(--font-size-small); color: var(--text-secondary); }

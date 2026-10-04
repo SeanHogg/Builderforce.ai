@@ -24,6 +24,16 @@ import { runSpawnBuild } from '../../application/spawn/spawnBuild';
 const AgeBody = z.object({ year: z.number().int(), month: z.number().int() });
 const PackBody = z.object({ packId: zNonEmptyString });
 const SessionBody = z.object({ sessionId: zNonEmptyString });
+/** The plugin's place snapshot is shape-checked here and BOUNDED by `readBuildRequest`. */
+const BuildBody = z.object({
+  prompt: z.string(),
+  place: z.object({
+    tree: z.string().optional(),
+    scripts: z.array(z.object({ path: z.string(), kind: z.string(), source: z.string() })).optional(),
+    errors: z.array(z.string()).optional(),
+  }).optional(),
+  history: z.array(z.object({ role: z.string(), text: z.string() })).optional(),
+});
 
 export function createSpawnRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -68,7 +78,7 @@ export function createSpawnRoutes(db: Db): Hono<HonoEnv> {
 
   // The builder. The body is the plugin's place snapshot; `readBuildRequest` bounds it.
   router.post('/build', async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    const body = await parseBody(c, BuildBody);
     return c.json(await runSpawnBuild(db, c.env as Env, { ...who(c), body }));
   });
 
