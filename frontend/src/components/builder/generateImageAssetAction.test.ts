@@ -5,7 +5,10 @@ import { generateImageAssetAction } from './generateImageAssetAction';
 const generateImage = vi.fn<typeof GenerateImage>();
 const action = generateImageAssetAction(generateImage);
 
-beforeEach(() => generateImage.mockReset());
+// Braces matter: a function RETURNED from beforeEach is run as a teardown, and
+// mockReset() returns the mock — so an expression body would call the mock again
+// after every test (and fail the one whose mock throws).
+beforeEach(() => { generateImage.mockReset(); });
 
 describe('generate_image_asset', () => {
   it('returns the durable URL the gateway produced', async () => {
