@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreationCanvas } from './CreationCanvas';
 
 /**
@@ -86,6 +86,10 @@ function addBuilder() {
 // now only cuts off heavy mounts when this file runs alongside the rest of
 // `src/components` rather than on its own.
 describe('Builder objects on the Canvas', () => {
+  // The App surface is a remembered place (`writeCanvasSurface`), so a test that opens
+  // it would otherwise start the next render there instead of on the board.
+  beforeEach(() => localStorage.clear());
+
   it('offers exactly the IDE project types and reports that no workspace exists yet', () => {
     render(<CreationCanvas sessionId="builder-type-test" persistence="local" />);
 
@@ -113,16 +117,16 @@ describe('Builder objects on the Canvas', () => {
     expect(screen.getAllByText('Mobile').length).toBeGreaterThan(0);
   });
 
-  // An IDE project is a tenant resource, so an anonymous draft has to be claimed
-  // first rather than the button silently doing nothing.
-  it('asks an anonymous session to create an account before provisioning a workspace', async () => {
-    render(<CreationCanvas sessionId="builder-gate-test" persistence="local" />);
+  // A guest is not refused: the workspace is held in this browser (`localFileStore`)
+  // and the App surface opens on it; "Keep your work" later promotes it to a project.
+  it('gives an anonymous session a browser-held workspace and opens the App surface', async () => {
+    render(<CreationCanvas sessionId="builder-guest-test" persistence="local" />);
 
     addBuilder();
     fireEvent.click(screen.getByRole('button', { name: 'Create the workspace' }));
 
-    const gate = await screen.findByRole('dialog', { name: 'Create an account to build' });
-    expect(within(gate).getByText(/stored against your account/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('canvas-app-surface')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /create an account/i })).not.toBeInTheDocument();
   });
 
   it('grows an authored Website into a connected Builder that builds a website', async () => {

@@ -18,6 +18,7 @@
 import { searchEntries, type WorkspaceFileStore } from './workspaceFileStore';
 import type { LocalWorkspaceId } from './workspaceId';
 import type { FileEntry } from '@/lib/types';
+import { reportBackgroundFailure } from '@/lib/reportError';
 
 const DB_NAME = 'builderforce-local-workspaces';
 const DB_VERSION = 1;
@@ -80,8 +81,14 @@ async function writeRecord(key: string, files: Map<string, string> | null): Prom
       tx.onerror = () => reject(tx.error);
     });
     db.close();
-  } catch {
+  } catch (error) {
     // The in-memory copy still holds the write; it simply will not survive a reload.
+    void reportBackgroundFailure({
+      title: 'LocalWorkspacePersistFailed',
+      message: error instanceof Error ? error.message : String(error),
+      level: 'warning',
+      context: { workspaceKey: key, operation: files ? 'write' : 'delete' },
+    });
   }
 }
 

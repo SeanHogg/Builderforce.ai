@@ -183,7 +183,7 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
     const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
       ?? (selectedNode?.data.kind === 'website' ? selectedNode : nodes.find((node) => node.data.kind === 'website'));
     if (!target) { setNotice(t('noticeNeedWebsite')); return; }
-    if (persistence !== 'server') { requireAccount('publish', 'Create an account to publish', 'Save this session to publish the Website as a live Builderforce site.'); return; }
+    if (persistence !== 'server') { requireAccount('publish', t('noticeWebsiteAccountTitle'), t('noticeWebsiteAccountBody')); return; }
     setNotice(t('noticePublishingWebsite'));
     void ensureCanvasProject(target.id, target.data.title)
       .then((projectId) => publishWebsiteTo(target, projectId))

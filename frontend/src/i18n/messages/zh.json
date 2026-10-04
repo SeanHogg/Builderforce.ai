@@ -21824,6 +21824,8 @@
     "noticeSavingToAccount": "正在保存…",
     "noticeSaveToAccountFailed": "无法将此会话保存到你的账户。请稍后重试。",
     "noticeNeedWebsite": "请添加一个网站对象以发布",
+    "noticeWebsiteAccountTitle": "创建账户以发布",
+    "noticeWebsiteAccountBody": "保存此会话，即可将网站发布为在线的 Builderforce 站点。",
     "noticeWebsiteProjectFailed": "无法为此网站创建项目，发布未启动",
     "noticePublishingWebsite": "正在构建并发布网站…",
     "noticeNeedVideo": "请添加一个视频对象以生成",

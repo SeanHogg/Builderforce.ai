@@ -21,7 +21,6 @@ import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract
 import type { DrawingPreferences } from '../drawingPreferences';
 import type { useTranslations } from 'next-intl';
 import type { LocalCreationSnapshot } from '@/domains/canvas/infrastructure/localCanvasStore';
-import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 
 export interface UseCanvasInteractionDeps {
   canEdit: boolean;
@@ -58,14 +57,12 @@ export interface UseCanvasInteractionDeps {
   setOutcomeMetricsOpen: Dispatch<SetStateAction<boolean>>;
   setSelectedId: Dispatch<SetStateAction<string | null>>;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
-  storageKey: string;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
-  timeline: CanvasTimelineMessage[];
   title: string;
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, connectionStyle, currentSnapshot, cursorRef, drawing, drawingPointsRef, edges, flowRef, framedBoardRef, guestLimit, hydratedRef, nodes, onNodesChange, openNodeInspector, openNodePanel, persistSnapshot, persistence, placeAppendedRef, presenceLive, sendPresence, sessionId, setBrainDock, setConnectionStyleState, setDiagnosticsOpen, setEdges, setHistoryOpen, setInspectorFocus, setNodes, setNotice, setOutcomeMetricsOpen, setSelectedId, setSelectedIds, storageKey, t, timeline, title, viewportRef }: UseCanvasInteractionDeps) {
+export function useCanvasInteraction({ canEdit, canvasGesture, connectionKind, connectionStyle, currentSnapshot, cursorRef, drawing, drawingPointsRef, edges, flowRef, framedBoardRef, guestLimit, hydratedRef, nodes, onNodesChange, openNodeInspector, openNodePanel, persistSnapshot, persistence, placeAppendedRef, presenceLive, sendPresence, sessionId, setBrainDock, setConnectionStyleState, setDiagnosticsOpen, setEdges, setHistoryOpen, setInspectorFocus, setNodes, setNotice, setOutcomeMetricsOpen, setSelectedId, setSelectedIds, t, title, viewportRef }: UseCanvasInteractionDeps) {
   // Derived here rather than passed in, so `drawingMode` narrows `drawing` the way it did in the component.
   const drawingMode = drawing !== null;
   // What a primary drag on empty board does, and how forgiving the board is about a

@@ -1,3 +1,20 @@
+## ✅ RESOLVED 2026-10-04 — The Creation Canvas god files are split, and the Brain's 68 canvas tools are no longer rebuilt on every edit
+
+Gap Register entry "Codebase review 2026-09-05 — `CreationCanvas.tsx` is 13,857 lines and its size ratchet cannot see it grow".
+
+- **`CreationCanvas.tsx` 14,642 → 1,171 lines.** `CanvasInner` is now a composition root: about 50 `hooks/useCanvas*` hooks (session, session sync, presence, scope, editing, interaction, proposal review, Brain turn, publishing, surface state, …), `brainTurn/` (snapshot, participants, group turn, settle), and module helpers (`canvasSeed`, `canvasBoardLoad`, `canvasNodeHelpers`, `canvasArtifactExport`, `canvasFileDrop`, `canvasReleaseEvidence`, `canvasAgentTest`, `canvasProjectSync`, …). Chrome lives in `chrome/`, the stage in `stage/`, and the lazy panels in `canvasLazyPanels`.
+- **`canvasActions` (one 4,258-line `useMemo` with 33 deps, `nodes`/`edges` among them) → `actions/*.ts`,** 16 domain modules of 186–361 lines plus `context.ts`. The tools read the live board through getters on a stable `CanvasActionContext`, so a board edit no longer rebuilds them. Before, `stageImageAsset` was re-created on every render and sat in the deps, which rebuilt all 68 tools on every render, not only on edits.
+- **The 74-prop Inspector → `inspector/CanvasInspector.tsx`,** which reads its bindings from `CanvasInspectorProvider`. The kind sections are separate files.
+- **`CreationNode.tsx` 3,102 → 391 lines.** About 40 `*Body` renderers moved to `bodies/<kind>Body.tsx` behind a typed registry and `CreationNodeActionsContext`. **`BrainPanel.tsx` 1,961 → 37** (19 hooks, 16 panel modules), **`ChatInput` 785 → 262**, **`CanvasCommands` 722 → 143**.
+- **React rules.** All 122 split files, `CreationCanvas.tsx` included, are at 0 react-hooks findings; its baseline of 92 is gone. Render-time ref writes go through `hooks/useLatestRef.ts` (insertion-effect sync). Factories that closed over refs became module-level builders. Stale closures were fixed by real deps, and inputs no hook read were dropped. No `eslint-disable` was added.
+- **The size ratchet now sees size.** `check-frontend-architecture.mjs` holds a per-file line ceiling (`oversizedProductionFileLines`): growth fails ("split it, do not raise the ceiling"), shrinkage is reported as slack, and a new file over 800 lines fails. The `CreationCanvas.tsx` ceiling is 1,172.
+- **Found and fixed on the way.**
+  - Hardcoded English scope labels, lock/hidden notices, review-applied notices and the website publish account prompt are now localized in all five catalogs, with ICU plurals; "1 reviewed Brain changes" now reads "1 … change".
+  - The test-only offline-turn branch is out of production; `src/test/canvasTurnRunnerMock.ts` replaces it.
+  - A comment-only catch in `localFileStore.writeRecord` now reports through `reportBackgroundFailure`.
+  - The object lock no longer releases and re-acquires on every save.
+  - `CreationCanvas.build.test.tsx` now asserts the guest flow, a browser-held workspace on the App surface. It also clears storage between tests, so the remembered App surface no longer leaks from one test into the next.
+
 ## ✅ RESOLVED 2026-10-04 — The canvas App surface IS the Studio workspace (frontend 2026.10.5)
 
 Pressing **App** on a canvas now opens the full Studio workspace in place. It replaces the old single-document preview frame. Operator decisions (2026-10-04): a guest runs a browser-held workspace that "Keep your work" promotes; existing code cards are converted silently; one primary app per session, with a switcher only when there is a second.

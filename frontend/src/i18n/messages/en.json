@@ -21824,6 +21824,8 @@
     "noticeSavingToAccount": "Saving…",
     "noticeSaveToAccountFailed": "This session could not be saved to your account. Try again in a moment.",
     "noticeNeedWebsite": "Add a Website object to publish",
+    "noticeWebsiteAccountTitle": "Create an account to publish",
+    "noticeWebsiteAccountBody": "Save this session to publish the Website as a live Builderforce site.",
     "noticeWebsiteProjectFailed": "Could not create a Project for this Website — publish was not started",
     "noticePublishingWebsite": "Building and publishing the Website…",
     "noticeNeedVideo": "Add a Video object to generate",

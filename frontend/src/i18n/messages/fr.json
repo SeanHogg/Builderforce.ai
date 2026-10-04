@@ -21824,6 +21824,8 @@
     "noticeSavingToAccount": "Enregistrement…",
     "noticeSaveToAccountFailed": "Cette session n'a pas pu être enregistrée dans votre compte. Réessayez dans un instant.",
     "noticeNeedWebsite": "Ajoutez un objet Site web à publier",
+    "noticeWebsiteAccountTitle": "Créez un compte pour publier",
+    "noticeWebsiteAccountBody": "Enregistrez cette session pour publier le site web en tant que site Builderforce en ligne.",
     "noticeWebsiteProjectFailed": "Impossible de créer un projet pour ce site web — la publication n'a pas démarré",
     "noticePublishingWebsite": "Construction et publication du site web…",
     "noticeNeedVideo": "Ajoutez un objet Vidéo à générer",

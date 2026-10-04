@@ -21824,6 +21824,8 @@
     "noticeSavingToAccount": "Guardando…",
     "noticeSaveToAccountFailed": "No se pudo guardar esta sesión en tu cuenta. Inténtalo de nuevo en un momento.",
     "noticeNeedWebsite": "Añade un objeto Sitio web para publicar",
+    "noticeWebsiteAccountTitle": "Crea una cuenta para publicar",
+    "noticeWebsiteAccountBody": "Guarda esta sesión para publicar el sitio web como un sitio de Builderforce en vivo.",
     "noticeWebsiteProjectFailed": "No se pudo crear un proyecto para este sitio web; no se inició la publicación",
     "noticePublishingWebsite": "Compilando y publicando el sitio web…",
     "noticeNeedVideo": "Añade un objeto Vídeo para generar",

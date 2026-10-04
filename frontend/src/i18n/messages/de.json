@@ -21824,6 +21824,8 @@
     "noticeSavingToAccount": "Wird gespeichert…",
     "noticeSaveToAccountFailed": "Diese Sitzung konnte nicht in deinem Konto gespeichert werden. Versuche es gleich noch einmal.",
     "noticeNeedWebsite": "Füge ein Website-Objekt zum Veröffentlichen hinzu",
+    "noticeWebsiteAccountTitle": "Erstelle ein Konto zum Veröffentlichen",
+    "noticeWebsiteAccountBody": "Speichere diese Sitzung, um die Website als live Builderforce-Seite zu veröffentlichen.",
     "noticeWebsiteProjectFailed": "Für diese Website konnte kein Projekt erstellt werden – die Veröffentlichung wurde nicht gestartet",
     "noticePublishingWebsite": "Website wird erstellt und veröffentlicht…",
     "noticeNeedVideo": "Füge ein Video-Objekt zum Generieren hinzu",
