@@ -1,3 +1,19 @@
+## ✅ RESOLVED 2026-10-04 — Synapse's Brain acts with the workspace's tools and streams its answer (desktop 2026.10.2)
+
+**Was:** in Synapse the Brain's reply was one non-streamed gateway completion with Evermind recall (`app/src-tauri/src/cloud/brain.rs`). It could answer but not act. The web and VS Code Brains run the agent loop with platform tools. The reply also appeared all at once after a 2-second poll.
+
+**Now:** the Brain turn runs the same client-side loop as the other surfaces:
+- `bf-cloud::tools`: `Session::platform_tools(surface)` and `call_platform_tool`, over the one server catalog (`GET /llm/v1/mcp/tools`, `POST /llm/v1/mcp/call`). Synapse asks for the `delivery` surface (projects, tickets, boards, specs, OKRs, connectors), not the platform's administration tools.
+- `bf-cloud::llm`: `Session::stream_chat`, an SSE reader that hands over `delta.content` as it arrives and stitches `delta.tool_calls` by index. It also reads a whole JSON body when the gateway ignores `stream`. The one-shot `Session::complete` had only the Brain as a caller and was removed.
+- `cloud/live.rs` (`Replies`): each chat's reply in flight (the draft so far, the tool in use, a pending approval). It replaces the `replying`/`reply_errors` sets. The brain thread emits `brain-reply` events, and `chat_messages` returns `live` so a reopened view picks the reply up mid-stream.
+- Read-only tools run at once. A tool that changes something, or that does not declare `mutates: false`, waits for **Approve / Decline** in the transcript (`chat_tool_decide`). Silence for 5 minutes counts as a decline. A decline reaches the model as `{cancelled: true}`.
+- There is no limit on tool calls. After 5 tool failures in a row, the next round runs without tools, so the model answers from what it already has.
+- Window: `chat/liveReply.js` updates the streaming bubble in place, and the transcript is no longer polled for the Brain's reply. New strings are in all five locales: `chat.usingTool`, `chat.toolAsk`, `chat.toolAskBody`, `chat.toolApprove`, `chat.toolDeny`, plus an updated `chat.intro`.
+
+**Also:** `bf-vault` gained its Secret Service backend on Linux, and the dead `bf_vault::supported()` was removed. That entry stays in the roadmap until it is built on Linux.
+
+**Verified:** `cargo test -p bf-cloud -p bf-vault`: 6 passed. `cargo test -p synapse cloud::`: 5 passed. `cargo check -p spawn`: passes. The Windows Credential Manager round-trip passes. All changed JS passes `node --check`. Live use with a signed-in account is tracked under the existing "build-verified, not yet exercised with a real account" entry.
+
 ## ✅ RESOLVED 2026-10-04 — Spawn: a Roblox game builder for creators 13+, with its own site, desktop app, membership and token packs (api 2026.10.10 · frontend 2026.10.16 · desktop 2026.10.1)
 
 **What shipped.** Spawn (`spawn.builderforce.ai`) builds Roblox games from a description, in Roblox Studio. Competitive brief: Superbullet's 7-step setup (app + plugin + Rojo bridge + local server), billing on failed attempts and no young-creator safety layer are the gaps it closes.

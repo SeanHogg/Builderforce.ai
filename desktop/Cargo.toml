@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/bf-index", "crates/bf-context", "crates/bf-memory", "crates/bf-teach", "crates/bf-vault", "crates/bf-cloud", "crates/bf-roblox", "app/src-tauri", "spawn/src-tauri"]
 
 [workspace.package]
-version = "2026.10.1"
+version = "2026.10.2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/SeanHogg/Builderforce.ai"

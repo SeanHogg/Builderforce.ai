@@ -1,7 +1,7 @@
 {
   "name": "@builderforce/synapse-console",
   "private": true,
-  "version": "2026.10.1",
+  "version": "2026.10.2",
   "description": "The shared React surfaces Synapse renders from builderforce.ai's own packages — today the Evermind console (Teach, Test, Check, Maintain) — bundled into one ES module the window loads on demand. Output: ../ui/vendor/evermind.js (committed, like the VS Code webview bundle, and rebuilt by the desktop release).",
   "type": "module",
   "scripts": {
