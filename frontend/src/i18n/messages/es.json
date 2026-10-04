@@ -1380,6 +1380,11 @@
     "settingsRepoTitle": "Ajustes y repositorio",
     "blockOnFailHint": "Cuando está activado, se bloquea Ejecutar si las últimas comprobaciones fallan",
     "runChecksHint": "Ejecuta comprobación de tipos, linting y compilación en el navegador para validar el código",
+    "checksFailed": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
+    "checksPassed": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
+    "gateRun": "Bloquear ejecución",
+    "checking": "Comprobando…",
+    "check": "Comprobar",
     "detailedConfigHint": "La memoria, el modelo, la inferencia, la personalidad y la voz de este proyecto se configuran en los paneles del Builder. Aquí puedes cambiarle el nombre y establecer su Proyecto padre.",
     "createOpen": "Crear y abrir",
     "creating": "Creando…",
@@ -1524,6 +1529,14 @@
       "booting": "⏳ Iniciando…",
       "ready": "✅ Listo",
       "error": "⚠️ Error del entorno"
+    },
+    "brainContext": {
+      "codingAgent": "Agente de código",
+      "voiceDirector": "Director de voz",
+      "context": "Contexto",
+      "voice": "Voz",
+      "wholeProject": "todo el proyecto",
+      "noVoice": "ninguna seleccionada"
     }
   },
   "references": {
@@ -11364,13 +11377,12 @@
     "createNewProject": "+ Crear nuevo proyecto",
     "brainTitle": "Brain",
     "emptyHint": "Dime qué te gustaría lograr y te ayudaré a conseguirlo.",
-    "startNewChat": "Iniciar nuevo chat",
     "capabilities": {
       "makingLabel": "Creando",
       "pickerAria": "¿Qué quieres crear?",
       "none": "Cualquier cosa",
-      "tilesHintBrainstorm": "…o empieza por lo que quieres crear",
-      "tilesHintBuild": "…o empieza por lo que quieres construir",
+      "tilesHintBrainstorm": "Empieza por lo que quieres crear",
+      "tilesHintBuild": "Empieza por lo que quieres construir",
       "document": {
         "label": "Documento",
         "hint": "Redacta un documento estructurado con títulos, secciones y tablas.",
@@ -11457,7 +11469,6 @@
     "allProjects": "Todos",
     "noProject": "Sin proyecto",
     "openFullBrainStorm": "Abrir Brain Storm completo",
-    "expand": "Expandir ↗",
     "closeBrain": "Cerrar Brain",
     "assignToProject": "Asignar al proyecto:",
     "assignChatToProjectAria": "Asignar chat al proyecto",
@@ -11480,6 +11491,8 @@
     "queuedCount": "{count, plural, one {# mensaje en cola} other {# mensajes en cola}}",
     "onboardMe": "Ayúdame a empezar",
     "onboardMePrompt": "Soy nuevo aquí: ayúdame a empezar. Pregúntame qué quiero construir, explícame cómo funcionan el uso y los costes, recomiéndame si el plan Free o Pro se ajusta a mi plazo y ayúdame a conectar mi cuenta de IA existente si tengo una.",
+    "onboardMeHint": "Alcance, costes y tu plan: te guío paso a paso.",
+    "onboardHeading": "¿Eres nuevo?",
     "providerCapBanner": "Tu clave de API de {providers} alcanzó su límite de uso; esta ejecución recurrió al grupo de modelos compartido.",
     "manageApiKeys": "Gestionar tus claves de API →",
     "tabChat": "Chat",
@@ -11490,7 +11503,9 @@
     "aiDisclosureAria": "Aviso sobre IA",
     "aiDisclosureBody": "Estás interactuando con agentes de IA. Los resultados pueden ser inexactos; revísalos antes de basar decisiones importantes en ellos. Las acciones que modifican datos requieren tu aprobación, salvo que actives explícitamente la aprobación automática.",
     "aiDisclosureLink": "Cómo funciona la IA, explicaciones y revisión humana",
+    "aiDisclosureShort": "Los agentes de IA pueden equivocarse y los cambios requieren tu aprobación.",
     "emptyHintWork": "Describe el trabajo. Lo abriré como tarea con seguimiento, le asignaré personal y pondré un agente a ejecutarlo.",
+    "emptyGreeting": "¿Qué hacemos ahora?",
     "newChatProjectLabel": "Proyecto",
     "newChatProjectAria": "Proyecto para esta nueva conversación",
     "modes": {
@@ -11506,7 +11521,7 @@
     },
     "workOptions": {
       "pickerAria": "¿Qué quieres que se haga?",
-      "tilesHint": "…o delega uno de estos",
+      "tilesHint": "Encárgame un trabajo",
       "audit_spreadsheet": {
         "label": "Auditar una hoja de cálculo",
         "hint": "Revisa las fórmulas y detecta lo erróneo y lo frágil.",

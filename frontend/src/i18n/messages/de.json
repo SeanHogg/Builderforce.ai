@@ -1380,6 +1380,11 @@
     "settingsRepoTitle": "Einstellungen & Repository",
     "blockOnFailHint": "Wenn aktiviert, wird die Ausführung blockiert, solange die letzten Prüfungen fehlschlagen",
     "runChecksHint": "Typprüfung, Linting und Build im Browser ausführen, um den Code zu validieren",
+    "checksFailed": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+    "checksPassed": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
+    "gateRun": "Ausführung sperren",
+    "checking": "Prüfe…",
+    "check": "Prüfen",
     "detailedConfigHint": "Speicher, Modell, Inferenz, Persönlichkeit und Stimme dieses Projekts werden in den Builder-Panels konfiguriert. Hier benennst du es um und legst sein übergeordnetes Projekt fest.",
     "createOpen": "Erstellen & öffnen",
     "creating": "Wird erstellt…",
@@ -1524,6 +1529,14 @@
       "booting": "⏳ Wird gestartet …",
       "ready": "✅ Bereit",
       "error": "⚠️ Laufzeitfehler"
+    },
+    "brainContext": {
+      "codingAgent": "Coding-Agent",
+      "voiceDirector": "Sprachregie",
+      "context": "Kontext",
+      "voice": "Stimme",
+      "wholeProject": "gesamtes Projekt",
+      "noVoice": "keine ausgewählt"
     }
   },
   "references": {
@@ -11364,13 +11377,12 @@
     "createNewProject": "+ Neues Projekt erstellen",
     "brainTitle": "Brain",
     "emptyHint": "Sag mir, was du erreichen möchtest, und ich helfe dir dabei.",
-    "startNewChat": "Neuen Chat starten",
     "capabilities": {
       "makingLabel": "Erstellen",
       "pickerAria": "Was möchtest du erstellen?",
       "none": "Beliebig",
-      "tilesHintBrainstorm": "…oder beginne mit dem, was du erstellen willst",
-      "tilesHintBuild": "…oder beginne mit dem, was du bauen willst",
+      "tilesHintBrainstorm": "Beginne mit dem, was du erstellen willst",
+      "tilesHintBuild": "Beginne mit dem, was du bauen willst",
       "document": {
         "label": "Dokument",
         "hint": "Schreibe ein strukturiertes Dokument mit Überschriften, Abschnitten und Tabellen.",
@@ -11457,7 +11469,6 @@
     "allProjects": "Alle",
     "noProject": "Kein Projekt",
     "openFullBrainStorm": "Vollständiges Brain Storm öffnen",
-    "expand": "Erweitern ↗",
     "closeBrain": "Brain schließen",
     "assignToProject": "Projekt zuweisen:",
     "assignChatToProjectAria": "Chat einem Projekt zuweisen",
@@ -11480,6 +11491,8 @@
     "queuedCount": "{count, plural, one {# Nachricht in Warteschlange} other {# Nachrichten in Warteschlange}}",
     "onboardMe": "Hilf mir beim Einstieg",
     "onboardMePrompt": "Ich bin neu hier – hilf mir beim Einstieg. Frag mich, was ich bauen möchte, erkläre, wie Nutzung und Kosten funktionieren, empfiehl, ob der Free- oder Pro-Plan zu meinem Zeitrahmen passt, und hilf mir, mein vorhandenes KI-Konto zu verbinden, falls ich eines habe.",
+    "onboardMeHint": "Umfang, Kosten und Tarif – ich führe dich Schritt für Schritt durch.",
+    "onboardHeading": "Neu hier?",
     "providerCapBanner": "Dein {providers}-API-Schlüssel hat sein Nutzungslimit erreicht — dieser Lauf ist auf den gemeinsamen Modell-Pool zurückgefallen.",
     "manageApiKeys": "API-Schlüssel verwalten →",
     "tabChat": "Chat",
@@ -11490,7 +11503,9 @@
     "aiDisclosureAria": "KI-Hinweis",
     "aiDisclosureBody": "Sie interagieren mit KI-Agenten. Ergebnisse können fehlerhaft sein; prüfen Sie sie, bevor Sie wichtige Entscheidungen darauf stützen. Ändernde Aktionen erfordern Ihre Freigabe, sofern Sie die automatische Freigabe nicht ausdrücklich aktivieren.",
     "aiDisclosureLink": "Wie KI funktioniert, Erklärungen und menschliche Prüfung",
+    "aiDisclosureShort": "KI-Agenten können sich irren, und Änderungen erfordern Ihre Freigabe.",
     "emptyHintWork": "Beschreiben Sie die Aufgabe. Ich lege sie als nachverfolgte Arbeit an, besetze sie und setze einen Agenten darauf an.",
+    "emptyGreeting": "Was machen wir als Nächstes?",
     "newChatProjectLabel": "Projekt",
     "newChatProjectAria": "Projekt für diese neue Unterhaltung",
     "modes": {
@@ -11506,7 +11521,7 @@
     },
     "workOptions": {
       "pickerAria": "Was soll erledigt werden?",
-      "tilesHint": "…oder übergeben Sie eine dieser Aufgaben",
+      "tilesHint": "Übergib mir eine Aufgabe",
       "audit_spreadsheet": {
         "label": "Tabelle prüfen",
         "hint": "Formeln prüfen, Fehler und fragile Stellen finden.",

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 
 // Shared, mutable mock state (hoisted so the vi.mock factories can read it).
-const state = vi.hoisted(() => ({ pathname: '/', hasTenant: false, open: true }));
+const state = vi.hoisted(() => ({ pathname: '/', hasTenant: false, open: true, inlineBrain: false }));
 const takePendingPrompt = vi.hoisted(() => vi.fn((): string | null => null));
 
 vi.mock('next/navigation', () => ({ usePathname: () => state.pathname }));
@@ -21,6 +21,7 @@ vi.mock('@/lib/brain', () => ({
     initialChatId: null,
   }),
   takePendingPrompt,
+  useInlineBrainMounted: () => state.inlineBrain,
 }));
 // BrainPanel (authed) and GuestBrainPanel (logged-out) both pull in the whole
 // brain runtime; stub both — we only assert WHICH branch FloatingBrain renders,
@@ -35,6 +36,7 @@ describe('FloatingBrain visibility + auth gating', () => {
     state.pathname = '/';
     state.hasTenant = false;
     state.open = true;
+    state.inlineBrain = false;
     takePendingPrompt.mockClear();
     takePendingPrompt.mockReturnValue(null);
   });
@@ -83,5 +85,19 @@ describe('FloatingBrain visibility + auth gating', () => {
       expect(container.firstChild).toBeNull();
       cleanup();
     }
+  });
+
+  it('shows the corner launcher while the drawer is closed', () => {
+    state.open = false;
+    const { container } = render(<FloatingBrain />);
+    expect(container.querySelector('.brain-launcher')).not.toBeNull();
+  });
+
+  it('hides the corner launcher while a page docks the Brain inline (Studio / IDE column)', () => {
+    // The launcher would only open a second copy of the conversation already on screen.
+    state.open = false;
+    state.inlineBrain = true;
+    const { container } = render(<FloatingBrain />);
+    expect(container.querySelector('.brain-launcher')).toBeNull();
   });
 });

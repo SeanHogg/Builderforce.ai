@@ -123,3 +123,7 @@ export {
   onBrainDataChanged,
   type BrainDataChangedEvent,
 } from './brainDataEvent';
+
+// "This page already docks the Brain" — lets the floating launcher stand down instead
+// of offering a second copy of the conversation already on screen.
+export { useRegisterInlineBrain, useInlineBrainMounted } from './inlineBrainHost';

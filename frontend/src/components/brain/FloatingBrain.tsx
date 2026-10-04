@@ -15,7 +15,7 @@ import { BrainMark } from './BrainMark';
 import { BrainPanel } from './BrainPanel';
 import { GuestBrainPanel } from './GuestBrainPanel';
 import { MigrationPanelHost } from '@/components/integrations/MigrationPanelHost';
-import { useBrainContext, takePendingPrompt } from '@/lib/brain';
+import { useBrainContext, takePendingPrompt, useInlineBrainMounted } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { useAttention } from '@/lib/useAttention';
 import { useAuth } from '@/lib/AuthContext';
@@ -32,6 +32,11 @@ export function FloatingBrain() {
   // so we never run two pollers at once).
   const { counts } = useAttention(undefined, hasTenant && !open);
   const [pendingPrompt, setPendingPrompt] = useState<string | undefined>(undefined);
+  // A page that docks the Brain in its own layout (Studio / IDE column, project details)
+  // already shows this conversation; a corner button opening a second copy of it beside
+  // the first is noise. The drawer still opens when something asks for it (a seeded
+  // prompt, a deep link) — only the launcher stands down.
+  const inlineBrainMounted = useInlineBrainMounted();
   // A page-published seed (e.g. the IDE `?prompt=`) wins over the sign-in handoff.
   const initialPrompt = ctxInitialPrompt ?? pendingPrompt;
 
@@ -105,7 +110,7 @@ export function FloatingBrain() {
       <MigrationPanelHost />
 
       {/* Floating launcher */}
-      {!open && (
+      {!open && !inlineBrainMounted && (
         <>
           <button
             type="button"

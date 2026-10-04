@@ -2,7 +2,7 @@
  * Capability picker — "what are we making?" for a Brain chat.
  *
  * Two presentations of ONE option list (see lib/brain/capabilities.ts):
- *   - `layout="tiles"` — the empty state, under "Start new chat".
+ *   - `layout="tiles"` — the empty state's starter list (shared `StarterTiles` shape).
  *   - `layout="compact"` — a select in the composer toolbar, to change or clear
  *     the capability mid-chat.
  *
@@ -12,7 +12,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
-import { Icon } from '@/components/ui/Icon';
+import { StarterGroup, StarterTile } from './StarterTiles';
 import {
   capabilitiesForSurface,
   type BrainCapabilityId,
@@ -54,47 +54,21 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: 640, padding: '0 16px' }}>
-      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center', marginBottom: 10 }}>
-        {t(surface === 'build' ? 'tilesHintBuild' : 'tilesHintBrainstorm')}
-      </div>
-      <div
-        role="group"
-        aria-label={t('pickerAria')}
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}
-      >
-        {options.map((c) => {
-          const active = value === c.id;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onSelect(active ? null : c.id)}
-              disabled={disabled}
-              aria-pressed={active}
-              title={t(`${c.id}.hint`)}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                minHeight: 84,
-                padding: '12px 8px',
-                borderRadius: 'var(--radius-lg)',
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                background: active ? 'var(--accent-subtle, rgba(59,130,246,0.12))' : 'var(--bg-elevated)',
-                color: 'var(--text-primary)',
-                cursor: disabled ? 'default' : 'pointer',
-                textAlign: 'center',
-              }}
-            >
-              <span aria-hidden><Icon source={c.icon} size={24} /></span>
-              <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600 }}>{t(`${c.id}.label`)}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <StarterGroup heading={t(surface === 'build' ? 'tilesHintBuild' : 'tilesHintBrainstorm')} ariaLabel={t('pickerAria')}>
+      {options.map((c) => {
+        const active = value === c.id;
+        return (
+          <StarterTile
+            key={c.id}
+            icon={c.icon}
+            label={t(`${c.id}.label`)}
+            hint={t(`${c.id}.hint`)}
+            pressed={active}
+            disabled={disabled}
+            onClick={() => onSelect(active ? null : c.id)}
+          />
+        );
+      })}
+    </StarterGroup>
   );
 }

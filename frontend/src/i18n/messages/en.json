@@ -1380,6 +1380,11 @@
     "settingsRepoTitle": "Settings & repository",
     "blockOnFailHint": "When on, Run is blocked while the last checks are failing",
     "runChecksHint": "Run type-check, lint and build in the browser to validate the code",
+    "checksFailed": "{count, plural, one {# check failed} other {# checks failed}}",
+    "checksPassed": "{count, plural, one {# check passed} other {# checks passed}}",
+    "gateRun": "Gate Run",
+    "checking": "Checking…",
+    "check": "Check",
     "detailedConfigHint": "Memory, model, inference, personality and voice for this project are configured in the Builder's panels. This is where you rename it and set its parent Project.",
     "createOpen": "Create & open",
     "creating": "Creating…",
@@ -1524,6 +1529,14 @@
       "booting": "⏳ Starting…",
       "ready": "✅ Ready",
       "error": "⚠️ Runtime error"
+    },
+    "brainContext": {
+      "codingAgent": "Coding agent",
+      "voiceDirector": "Voice director",
+      "context": "Context",
+      "voice": "Voice",
+      "wholeProject": "whole project",
+      "noVoice": "none selected"
     }
   },
   "references": {
@@ -11366,13 +11379,12 @@
     "createNewProject": "+ Create new project",
     "brainTitle": "Brain",
     "emptyHint": "Tell me what you'd like to accomplish, and I'll help you get it done.",
-    "startNewChat": "Start new chat",
     "capabilities": {
       "makingLabel": "Making",
       "pickerAria": "What are you making?",
       "none": "Anything",
-      "tilesHintBrainstorm": "…or start from what you want to make",
-      "tilesHintBuild": "…or start from what you want to build",
+      "tilesHintBrainstorm": "Start from what you want to make",
+      "tilesHintBuild": "Start from what you want to build",
       "document": {
         "label": "Document",
         "hint": "Write a structured document with headings, sections, and tables.",
@@ -11459,7 +11471,6 @@
     "allProjects": "All",
     "noProject": "No project",
     "openFullBrainStorm": "Open full Brain Storm",
-    "expand": "Expand ↗",
     "closeBrain": "Close Brain",
     "assignToProject": "Assign to project:",
     "assignChatToProjectAria": "Assign chat to project",
@@ -11482,6 +11493,8 @@
     "queuedCount": "{count, plural, one {# message queued} other {# messages queued}}",
     "onboardMe": "Help me get started",
     "onboardMePrompt": "I'm new here — help me get started. Ask me about what I want to build, explain how usage and costs work, recommend whether the Free or Pro plan fits my timeframe, and help me connect my existing AI account if I have one.",
+    "onboardMeHint": "Scope, costs and your plan — I'll walk you through it.",
+    "onboardHeading": "New here?",
     "tabChat": "Chat",
     "tabHistory": "History",
     "sectionsAria": "Brain sections",
@@ -11490,7 +11503,9 @@
     "aiDisclosureAria": "AI disclosure",
     "aiDisclosureBody": "You are interacting with AI agents. Outputs can be inaccurate; review consequential results before relying on them. Mutating actions require your approval unless you explicitly enable auto-approve.",
     "aiDisclosureLink": "How AI works, explanations, and human review",
+    "aiDisclosureShort": "AI agents can be wrong, and changes need your approval.",
     "emptyHintWork": "Describe the job. I'll open it as tracked work, staff it, and put an agent on it.",
+    "emptyGreeting": "What should we do next?",
     "newChatProjectLabel": "Project",
     "newChatProjectAria": "Project for this new conversation",
     "modes": {
@@ -11506,7 +11521,7 @@
     },
     "workOptions": {
       "pickerAria": "What do you want done?",
-      "tilesHint": "…or hand over one of these",
+      "tilesHint": "Hand over a job",
       "audit_spreadsheet": {
         "label": "Audit a spreadsheet",
         "hint": "Check the formulas, find what's wrong and what's fragile.",

@@ -1380,6 +1380,11 @@
     "settingsRepoTitle": "Paramètres et dépôt",
     "blockOnFailHint": "Lorsque activé, l'exécution est bloquée tant que les dernières vérifications échouent",
     "runChecksHint": "Exécuter la vérification de types, le linting et la compilation dans le navigateur pour valider le code",
+    "checksFailed": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+    "checksPassed": "{count, plural, one {# vérification réussie} other {# vérifications réussies}}",
+    "gateRun": "Bloquer l'exécution",
+    "checking": "Vérification…",
+    "check": "Vérifier",
     "detailedConfigHint": "La mémoire, le modèle, l'inférence, la personnalité et la voix de ce projet se configurent dans les panneaux de l'Builder. C'est ici que vous le renommez et définissez son Projet parent.",
     "createOpen": "Créer et ouvrir",
     "creating": "Création…",
@@ -1524,6 +1529,14 @@
       "booting": "⏳ Démarrage…",
       "ready": "✅ Prêt",
       "error": "⚠️ Erreur d’exécution"
+    },
+    "brainContext": {
+      "codingAgent": "Agent de code",
+      "voiceDirector": "Directeur vocal",
+      "context": "Contexte",
+      "voice": "Voix",
+      "wholeProject": "tout le projet",
+      "noVoice": "aucune sélection"
     }
   },
   "references": {
@@ -11364,13 +11377,12 @@
     "createNewProject": "+ Créer un nouveau projet",
     "brainTitle": "Brain",
     "emptyHint": "Dites-moi ce que vous voulez accomplir, et je vous aiderai à y parvenir.",
-    "startNewChat": "Démarrer une nouvelle discussion",
     "capabilities": {
       "makingLabel": "Création",
       "pickerAria": "Que voulez-vous créer ?",
       "none": "Peu importe",
-      "tilesHintBrainstorm": "…ou partez de ce que vous voulez créer",
-      "tilesHintBuild": "…ou partez de ce que vous voulez construire",
+      "tilesHintBrainstorm": "Partez de ce que vous voulez créer",
+      "tilesHintBuild": "Partez de ce que vous voulez construire",
       "document": {
         "label": "Document",
         "hint": "Rédigez un document structuré avec titres, sections et tableaux.",
@@ -11457,7 +11469,6 @@
     "allProjects": "Tous",
     "noProject": "Aucun projet",
     "openFullBrainStorm": "Ouvrir Brain Storm en entier",
-    "expand": "Développer ↗",
     "closeBrain": "Fermer Brain",
     "assignToProject": "Attribuer au projet :",
     "assignChatToProjectAria": "Attribuer la discussion au projet",
@@ -11480,6 +11491,8 @@
     "queuedCount": "{count, plural, one {# message en file} other {# messages en file}}",
     "onboardMe": "Aidez-moi à démarrer",
     "onboardMePrompt": "Je suis nouveau ici — aidez-moi à démarrer. Demandez-moi ce que je veux créer, expliquez comment fonctionnent l'usage et les coûts, recommandez si le plan Free ou Pro convient à mon échéance, et aidez-moi à connecter mon compte IA existant si j'en ai un.",
+    "onboardMeHint": "Périmètre, coûts et formule : je vous guide pas à pas.",
+    "onboardHeading": "Nouveau ici ?",
     "providerCapBanner": "Votre clé API {providers} a atteint sa limite d’utilisation — cette exécution est repassée sur le pool de modèles partagé.",
     "manageApiKeys": "Gérer vos clés API →",
     "tabChat": "Discussion",
@@ -11490,7 +11503,9 @@
     "aiDisclosureAria": "Avis relatif à l’IA",
     "aiDisclosureBody": "Vous interagissez avec des agents d'IA. Les résultats peuvent être inexacts ; vérifiez-les avant de fonder une décision importante dessus. Les actions qui modifient des données nécessitent votre approbation, sauf si vous activez explicitement l'approbation automatique.",
     "aiDisclosureLink": "Fonctionnement de l'IA, explications et contrôle humain",
+    "aiDisclosureShort": "Les agents d'IA peuvent se tromper, et les modifications nécessitent votre approbation.",
     "emptyHintWork": "Décrivez le travail. Je l'ouvrirai comme une tâche suivie, je l'affecterai et je mettrai un agent dessus.",
+    "emptyGreeting": "Que fait-on maintenant ?",
     "newChatProjectLabel": "Projet",
     "newChatProjectAria": "Projet de cette nouvelle conversation",
     "modes": {
@@ -11506,7 +11521,7 @@
     },
     "workOptions": {
       "pickerAria": "Que voulez-vous faire faire ?",
-      "tilesHint": "…ou déléguez l'une de ces missions",
+      "tilesHint": "Confiez-moi une tâche",
       "audit_spreadsheet": {
         "label": "Auditer un tableur",
         "hint": "Vérifiez les formules, repérez les erreurs et les fragilités.",

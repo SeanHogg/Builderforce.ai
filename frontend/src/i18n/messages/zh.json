@@ -1380,6 +1380,11 @@
     "settingsRepoTitle": "设置与代码库",
     "blockOnFailHint": "开启后，当上次检查失败时将阻止运行",
     "runChecksHint": "在浏览器中运行类型检查、代码检查和构建以验证代码",
+    "checksFailed": "{count} 项检查未通过",
+    "checksPassed": "{count} 项检查已通过",
+    "gateRun": "检查通过才运行",
+    "checking": "检查中…",
+    "check": "检查",
     "detailedConfigHint": "该项目的记忆、模型、推理、个性和语音在 Builder 的面板中配置。在此可重命名并设置其父项目。",
     "createOpen": "创建并打开",
     "creating": "正在创建…",
@@ -1524,6 +1529,14 @@
       "booting": "⏳ 正在启动……",
       "ready": "✅ 就绪",
       "error": "⚠️ 运行环境错误"
+    },
+    "brainContext": {
+      "codingAgent": "编码智能体",
+      "voiceDirector": "语音导演",
+      "context": "上下文",
+      "voice": "语音",
+      "wholeProject": "整个项目",
+      "noVoice": "未选择"
     }
   },
   "references": {
@@ -11364,13 +11377,12 @@
     "createNewProject": "+ 创建新项目",
     "brainTitle": "Brain",
     "emptyHint": "告诉我你想完成什么，我来帮你实现。",
-    "startNewChat": "开始新会话",
     "capabilities": {
       "makingLabel": "创作",
       "pickerAria": "你想创作什么？",
       "none": "不限",
-      "tilesHintBrainstorm": "……或从你想创作的内容开始",
-      "tilesHintBuild": "……或从你想构建的内容开始",
+      "tilesHintBrainstorm": "从你想创作的内容开始",
+      "tilesHintBuild": "从你想构建的内容开始",
       "document": {
         "label": "文档",
         "hint": "撰写包含标题、章节和表格的结构化文档。",
@@ -11457,7 +11469,6 @@
     "allProjects": "全部",
     "noProject": "无项目",
     "openFullBrainStorm": "打开完整的 Brain Storm",
-    "expand": "展开 ↗",
     "closeBrain": "关闭 Brain",
     "assignToProject": "分配到项目：",
     "assignChatToProjectAria": "将会话分配到项目",
@@ -11480,6 +11491,8 @@
     "queuedCount": "已排队 {count} 条消息",
     "onboardMe": "帮我快速上手",
     "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。",
+    "onboardMeHint": "范围、费用和套餐——我来一步步带你了解。",
+    "onboardHeading": "初次使用？",
     "providerCapBanner": "你的 {providers} API 密钥已达用量上限——本次运行已回退到共享模型池。",
     "manageApiKeys": "管理你的 API 密钥 →",
     "tabChat": "对话",
@@ -11490,7 +11503,9 @@
     "aiDisclosureAria": "AI 声明",
     "aiDisclosureBody": "您正在与 AI 智能体互动。输出结果可能不准确；在依据重要结果采取行动前请先复核。除非您明确启用自动批准，否则更改数据的操作都需要您的批准。",
     "aiDisclosureLink": "AI 的工作方式、解释说明与人工复核",
+    "aiDisclosureShort": "AI 智能体可能出错；更改需经你批准。",
     "emptyHintWork": "描述这项工作。我会把它建成可跟踪的任务，配置人员，并派出代理执行。",
+    "emptyGreeting": "接下来做什么？",
     "newChatProjectLabel": "项目",
     "newChatProjectAria": "此新对话所属的项目",
     "modes": {
@@ -11506,7 +11521,7 @@
     },
     "workOptions": {
       "pickerAria": "您希望完成什么？",
-      "tilesHint": "……或者交办以下任务之一",
+      "tilesHint": "交给我一项任务",
       "audit_spreadsheet": {
         "label": "审查电子表格",
         "hint": "检查公式，找出错误和脆弱之处。",

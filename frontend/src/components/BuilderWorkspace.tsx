@@ -23,7 +23,7 @@ import { EvermindStudioPanel } from './EvermindStudioPanel';
 import { FinetuneStudioPanel } from './FinetuneStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { BuilderProjectsSlideOutPanel } from './builder/BuilderProjectsSlideOutPanel';
-import { BrainPanel } from './brain/BrainPanel';
+import { WorkspaceBrainColumn } from './builder/WorkspaceBrainColumn';
 import { TeamChatButton } from './brain/TeamChatButton';
 import { BuilderSettingsPanel } from './BuilderSettingsPanel';
 import { useToast } from '@/components/ToastProvider';
@@ -1203,7 +1203,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                 color: failed > 0 ? 'var(--error)' : 'var(--emerald-bright)',
               }}
             >
-              <Icon name={failed > 0 ? 'close' : 'check'} size={14} /> {failed > 0 ? `${failed} check${failed > 1 ? 's' : ''} failed` : `${passed} check${passed > 1 ? 's' : ''} passed`}
+              <Icon name={failed > 0 ? 'close' : 'check'} size={14} /> {failed > 0 ? t('checksFailed', { count: failed }) : t('checksPassed', { count: passed })}
             </span>
           );
         })()}
@@ -1221,7 +1221,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               onChange={(e) => setGateRunOnChecks(e.target.checked)}
               style={{ cursor: 'pointer' }}
             />
-            Gate Run
+            {t('gateRun')}
           </label>
         )}
         {modalityDef.showChecks && (
@@ -1238,7 +1238,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               opacity: (isChecking || isRunning) ? 0.6 : 1,
             }}
           >
-            {!isChecking && <Icon name="check" size={14} />} {isChecking ? 'Checking…' : 'Check'}
+            {!isChecking && <Icon name="check" size={14} />} {isChecking ? t('checking') : t('check')}
           </button>
         )}
         {modalityDef.showRunButton && (() => {
@@ -1319,45 +1319,18 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           registers the same actions, so the agent can create/apply files or set
           the narration lines. */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Docked left panel (Designer + Voice) — context strip + agent chat */}
+        {/* Docked left panel (Designer + Voice): the shared Brain, naming what it sees. */}
         {hasDockedBrain && (
-          <div style={{
-            width: 340, minWidth: 340, flexShrink: 0,
-            borderRight: '1px solid var(--border-subtle)',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
-            background: 'var(--bg-base)',
-          }}>
-            {/* Context strip — what the agent currently "sees" / drives */}
-            <div style={{
-              flexShrink: 0, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6,
-              borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
-              fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden',
-            }}>
-              <span title={modality === 'voice' ? 'Voice director' : 'Coding agent'} style={{ fontSize: '0.9rem' }}>
-                {modality === 'voice' ? <Icon source="🎙" size="1em" /> : <Icon source="🤖" size="1em" />}
-              </span>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-                {modality === 'voice' ? 'Voice:' : 'Context:'}
-              </span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {modality === 'voice'
-                  ? (voice.clones.find((c) => c.id === voice.selectedCloneId)?.name ?? 'none selected')
-                  : (activeFile ? activeFile : 'whole project')}
-              </span>
-            </div>
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              <BrainPanel
-                variant="docked"
-                pinnedProjectId={projectIdNum}
-                modality={modality}
-                extraSystem={extraSystem}
-                initialChatId={initialChatId}
-                initialPrompt={initialPrompt}
-                initialTicket={initialTicket}
-                capabilitySurface="build"
-              />
-            </div>
-          </div>
+          <WorkspaceBrainColumn
+            projectId={projectIdNum}
+            modality={modality}
+            extraSystem={extraSystem}
+            activeFile={activeFile}
+            voiceName={voice.clones.find((c) => c.id === voice.selectedCloneId)?.name}
+            initialChatId={initialChatId}
+            initialPrompt={initialPrompt}
+            initialTicket={initialTicket}
+          />
         )}
         {/* Center panel — content depends on the active modality, chrome stays consistent */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>

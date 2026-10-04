@@ -7,7 +7,9 @@
  */
 
 import { Icon } from '@/components/ui/Icon';
-import { BrainMark } from './BrainMark';
+import { BrainDockedHeader, type BrainDockedTab } from './BrainDockedHeader';
+import { BrainEmptyState } from './BrainEmptyState';
+import { AiDisclosure } from './AiDisclosure';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
@@ -55,7 +57,6 @@ import { UnreadBadge } from '@/components/UnreadBadge';
 import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
-import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
 import { WorkOptionsPicker } from '@/components/brain/WorkOptionsPicker';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
 import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
@@ -79,6 +80,7 @@ import {
   chatRosterFromParticipants,
   useQueuedTurns,
   NEW_CHAT_MODE,
+  useRegisterInlineBrain,
   type ChatMode,
   type WorkOptionId,
   type BrainCapabilityId,
@@ -181,6 +183,11 @@ export interface BrainPanelProps {
   capabilitySurface?: BrainCapabilitySurface;
   /** Docked only: close handler for the drawer chrome. */
   onClose?: () => void;
+  /**
+   * Docked only: what the agent currently sees, as the host words it (the IDE's open
+   * file, the voice director's clone). Rendered as the header's subtitle.
+   */
+  headerContext?: React.ReactNode;
 }
 
 export function BrainPanel({
@@ -194,9 +201,13 @@ export function BrainPanel({
   initialTicket,
   capabilitySurface = 'brainstorm',
   onClose,
+  headerContext,
 }: BrainPanelProps) {
   const fmt = useFormat();
   const isPage = variant === 'page';
+  // No close handler => the Brain is part of the page's own layout, not the drawer;
+  // the floating launcher stands down rather than offer a second copy of this chat.
+  useRegisterInlineBrain(!onClose);
   const tTimeline = useTranslations('brain.timeline');
   const tCommon = useTranslations('common');
   const tRepo = useTranslations('repoContext');
@@ -248,7 +259,7 @@ export function BrainPanel({
    * a returning user can reach any earlier chat without giving up thread height.
    * The full-page variant keeps its permanent sidebar and ignores this.
    */
-  const [dockedTab, setDockedTab] = useState<'chat' | 'history'>('chat');
+  const [dockedTab, setDockedTab] = useState<BrainDockedTab>('chat');
   /** Which chat row has its rename/summarize/delete/assign actions revealed. */
   const [actionsChatId, setActionsChatId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -1462,6 +1473,28 @@ export function BrainPanel({
     />
   );
 
+  // The composer's footer, pinned at the bottom in BOTH states of the docked panel so
+  // the input does not jump when the first message turns the empty state into a thread.
+  // Composer chrome uses the shared --chat-ctl-* metrics (globals.css) so the toolbar,
+  // the input box and the docked panel breathe the same amount in a ~310px column.
+  const composerArea = (
+    <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
+      {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
+      {pendingQuestion && (
+        <PendingQuestionBanner
+          payload={pendingQuestion.payload}
+          labels={askLabels}
+          onAnswer={onAnswerTimelineQuestion}
+          onReveal={revealPendingQuestion}
+        />
+      )}
+      {promptComposer}
+      {conv.uploading && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
+      {/* Docked: the AI notice is a footnote under the input, not a banner over the thread. */}
+      {!isPage && <AiDisclosure variant="footnote" />}
+    </div>
+  );
+
   const conversation = (
     <>
       {/* The message AND the fix: a 402/429 gets an Upgrade / Add-a-card action from
@@ -1496,20 +1529,15 @@ export function BrainPanel({
         </div>
       )}
       {chats.activeChatId == null ? (
-        <div className={isPage ? 'bs-empty' : undefined} style={isPage ? undefined : { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 'var(--font-size-page-title)' }}><BrainMark /></div>
-          <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
-          <div style={{ fontSize: 'var(--font-size-small)' }}>{tBrain(chatMode === 'work' ? 'emptyHintWork' : 'emptyHint')}</div>
-          {/* The mode goes ABOVE the composer, at full size: it decides what the very
-              first turn is allowed to do, so it has to be a visible choice rather than
-              a toolbar control the user finds afterwards. Choosing here rides into the
-              chat `startNewChat` creates (see `pendingMode`). */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
-            <ChatModeToggle value={chatMode} onChange={selectMode} />
-            {/* File the conversation as it starts. New chats otherwise inherit the
-                global scope silently, so a user with no project in scope had no way to
-                put THIS conversation somewhere without first creating it. */}
-            {pinnedProjectId == null && (
+        <>
+          <BrainEmptyState
+            layout={isPage ? 'page' : 'docked'}
+            mode={chatMode}
+            onModeChange={selectMode}
+            // File the conversation as it starts. New chats otherwise inherit the global
+            // scope silently, so a user with no project in scope had no way to put THIS
+            // conversation somewhere without first creating it.
+            controls={pinnedProjectId == null ? (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                 {tBrain('newChatProjectLabel')}
                 <ThemeSelect
@@ -1523,39 +1551,18 @@ export function BrainPanel({
                   style={{ minWidth: 140, padding: '4px 8px', fontSize: 'var(--font-size-small)' }}
                 />
               </label>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '10px 18px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}>
-              {tBrain('startNewChat')}
-            </button>
-            {/* Onboarding entry point — starts a chat seeded so the Brain guides a
-                new user (scope, costs, plan recommendation, connecting an AI account). */}
-            <button
-              type="button"
-              onClick={() => { void startNewChat(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
-              style={{ padding: '10px 18px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'transparent', color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}
-            >
-              
-              <Icon source="✨" size="1em" /> {tBrain('onboardMe')}
-            </button>
-          </div>
-          <div style={{ width: '100%', maxWidth: 720, marginTop: 12 }}>{promptComposer}</div>
-          {/* WORK: the jobs people actually hand over. Picking one fills the composer
-              with a complete brief to edit. Self-gating on the mode. */}
-          <WorkOptionsPicker mode={chatMode} onPick={pickWorkOption} />
-          {/* CHAT: …or start from what you want to make. Picking one opens a chat
-              already in that capability. The two are alternatives, not a stack — a
-              user in Work mode is delegating a job, not choosing an export format. */}
-          {chatMode !== 'work' && (
-            <BrainCapabilityPicker
-              surface={capabilitySurface}
-              value={capabilityId}
-              onSelect={selectCapability}
-              layout="tiles"
-            />
-          )}
-        </div>
+            ) : undefined}
+            composer={isPage ? promptComposer : undefined}
+            // WORK: the jobs people hand over (each fills the composer with a brief to
+            // edit). CHAT: what you want to make (opens a chat in that capability). The
+            // two are alternatives, not a stack.
+            starters={chatMode === 'work'
+              ? <WorkOptionsPicker mode={chatMode} onPick={pickWorkOption} />
+              : <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="tiles" />}
+            onOnboard={() => { void startNewChat(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
+          />
+          {!isPage && composerArea}
+        </>
       ) : (
         <>
           {isPage && pinnedProjectId == null && (
@@ -1617,23 +1624,7 @@ export function BrainPanel({
               ratings={conv.ratings}
             />
           </div>
-          {/* Composer chrome uses the shared --chat-ctl-* metrics (globals.css) so the
-              toolbar, the input box and the docked panel breathe the same amount —
-              docked, this is a ~310px column, where the old fixed 12/16px padding and
-              8px stack gaps ate most of the width. */}
-          <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
-            {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
-            {pendingQuestion && (
-              <PendingQuestionBanner
-                payload={pendingQuestion.payload}
-                labels={askLabels}
-                onAnswer={onAnswerTimelineQuestion}
-                onReveal={revealPendingQuestion}
-              />
-            )}
-            {promptComposer}
-            {conv.uploading && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
-          </div>
+          {composerArea}
         </>
       )}
       {repoPickerOpen && (
@@ -1689,77 +1680,39 @@ export function BrainPanel({
           </div>
           <div className="bs-chat-list">{chatRows}</div>
         </div>
-        <div className="bs-main"><AiDisclosure />{conversation}</div>
+        <div className="bs-main"><AiDisclosure variant="banner" />{conversation}</div>
       </div>
       </AssigneeProfilesProvider>
     );
   }
 
-  // Docked drawer
+  // Docked: the drawer AND a page's own column (Studio / IDE, project details).
+  const expandHref = (() => {
+    // Carry the ACTIVE chat (and its project) so the full page opens the SAME
+    // conversation; expanding a docked chat used to look like it deleted the chat.
+    const qs = new URLSearchParams();
+    if (chats.activeChatId != null) qs.set('chat', String(chats.activeChatId));
+    const proj = pinnedProjectId ?? ctxProjectId ?? null;
+    if (proj != null) qs.set('project', String(proj));
+    const q = qs.toString();
+    return q ? `/brainstorm?${q}` : '/brainstorm';
+  })();
+
   return (
     <AssigneeProfilesProvider>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-      <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}><BrainMark /> {tBrain('brainTitle')}</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-          {/* No plan chip here. The composer at the bottom of THIS panel renders
-              the same one, a few hundred pixels below and at the point where the
-              allowance is actually spent — two chips saying "FREE · UPGRADE" in
-              one drawer read as a dunning notice, not as status. */}
-          {captureButton}
-          <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>{tBrain('newChat')}</button>
-          {/* Expand → full Brain Storm page. Carry the ACTIVE chat id (and the
-              project it's scoped to) so the page opens the SAME conversation
-              instead of a blank one — otherwise expanding a docked chat (e.g. the
-              Designer/Website Builder chat) looked like it "deleted" the chat. */}
-          <Link
-            href={(() => {
-              const qs = new URLSearchParams();
-              if (chats.activeChatId != null) qs.set('chat', String(chats.activeChatId));
-              const proj = pinnedProjectId ?? ctxProjectId ?? null;
-              if (proj != null) qs.set('project', String(proj));
-              const s = qs.toString();
-              return s ? `/brainstorm?${s}` : '/brainstorm';
-            })()}
-            title={tBrain('openFullBrainStorm')}
-            style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}
-          >{tBrain('expand')}</Link>
-          {onClose && (
-            <button type="button" onClick={onClose} aria-label={tBrain('closeBrain')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 'var(--font-size-card-title)', cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
-          )}
-        </div>
-      </div>
-      {/* Conversation and history are peers, not a disclosure stacked on top of
-          the thread: in a ~440px drawer the old accordion ate a third of the
-          reading height and still hid past chats one click deep. */}
-      <div role="tablist" aria-label={tBrain('sectionsAria')} style={{ flexShrink: 0, display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
-        {DOCKED_TABS.map(({ id, labelKey }) => {
-          const selected = dockedTab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`brain-tab-${id}`}
-              aria-selected={selected}
-              aria-controls={`brain-tabpanel-${id}`}
-              onClick={() => setDockedTab(id)}
-              style={{
-                flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '6px 10px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-                background: selected ? 'var(--bg-elevated)' : 'var(--bg-base)',
-                color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tBrain(labelKey)}</span>
-              {/* History carries the "there is something waiting in another chat"
-                  signal, so switching tabs is worth doing rather than guessing. */}
-              {id === 'history' && <UnreadBadge count={historyUnread} size={16} />}
-            </button>
-          );
-        })}
-      </div>
+      {/* No plan chip in the header: the composer below renders it, at the point where
+          the allowance is actually spent. */}
+      <BrainDockedHeader
+        tab={dockedTab}
+        onTabChange={setDockedTab}
+        historyUnread={historyUnread}
+        onNewChat={() => { setDockedTab('chat'); void startNewChat(); }}
+        expandHref={expandHref}
+        onClose={onClose}
+        actions={captureButton}
+        context={headerContext}
+      />
       {dockedTab === 'history' ? (
         <div id="brain-tabpanel-history" role="tabpanel" aria-labelledby="brain-tab-history" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <div style={{ padding: '8px 12px' }}>
@@ -1770,28 +1723,11 @@ export function BrainPanel({
         </div>
       ) : (
         <div id="brain-tabpanel-chat" role="tabpanel" aria-labelledby="brain-tab-chat" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <AiDisclosure />
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{conversation}</div>
+          {conversation}
         </div>
       )}
     </div>
     </AssigneeProfilesProvider>
-  );
-}
-
-/** Docked drawer sections. Order is the tab order. */
-const DOCKED_TABS = [
-  { id: 'chat', labelKey: 'tabChat' },
-  { id: 'history', labelKey: 'tabHistory' },
-] as const;
-
-function AiDisclosure() {
-  const tBrain = useTranslations('brain');
-  return (
-    <aside aria-label={tBrain('aiDisclosureAria')} style={{ flexShrink: 0, padding: '7px 12px', fontSize: 'var(--font-size-eyebrow)', lineHeight: 1.45, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
-      {tBrain('aiDisclosureBody')}{' '}
-      <Link href="/legal/ai-transparency">{tBrain('aiDisclosureLink')}</Link>.
-    </aside>
   );
 }
 
