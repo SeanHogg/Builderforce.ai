@@ -27,16 +27,19 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'nvidia/nemotron-3-ultra-550b-a55b',            tier: 'FREE', label: 'Nemotron 3 Ultra 550B (NIM)',    brand: 'NVIDIA'    },
   { id: 'nvidia/nemotron-3-super-120b-a12b',            tier: 'FREE', label: 'Nemotron 3 Super 120B (NIM)',    brand: 'NVIDIA'    },
   { id: 'moonshotai/kimi-k2.6',                         tier: 'FREE', label: 'Kimi K2.6 (NIM)',                brand: 'Moonshot'  },
-  { id: 'z-ai/glm-5.2',                                 tier: 'FREE', label: 'GLM 5.2 (NIM)',                  brand: 'Z.AI'      },
-  { id: 'deepseek-ai/deepseek-v4-flash-0731',           tier: 'FREE', label: 'DeepSeek V4 Flash (NIM)',        brand: 'DeepSeek'  },
-  { id: 'openai/gpt-oss-120b',                          tier: 'FREE', label: 'GPT-OSS 120B (NIM)',             brand: 'OpenAI'    },
+  { id: 'moonshotai/kimi-k3',                           tier: 'FREE', label: 'Kimi K3 (NIM)',                  brand: 'Moonshot'  },
+  { id: 'z-ai/glm-5.3',                                 tier: 'FREE', label: 'GLM 5.3 (NIM)',                  brand: 'Z.AI'      },
+  { id: 'deepseek-ai/deepseek-v4.1-flash',              tier: 'FREE', label: 'DeepSeek V4.1 Flash (NIM)',      brand: 'DeepSeek'  },
+  { id: 'nvidia/nemotron-3.5-lightning-30b-a3b',        tier: 'FREE', label: 'Nemotron 3.5 Lightning 30B (NIM)', brand: 'NVIDIA'  },
+  { id: 'openai/gpt-oss-20b',                           tier: 'FREE', label: 'GPT-OSS 20B (NIM)',              brand: 'OpenAI'    },
   { id: 'mistralai/mistral-large-2-instruct',           tier: 'FREE', label: 'Mistral Large 2 (NIM)',          brand: 'Mistral'   },
-  { id: 'mistralai/mistral-nemotron',                   tier: 'FREE', label: 'Mistral Nemotron (NIM)',         brand: 'NVIDIA'    },
-  { id: 'meta/llama-3.3-70b-instruct',                  tier: 'FREE', label: 'Llama 3.3 70B (NIM)',            brand: 'Meta'      },
-  { id: 'stepfun-ai/step-3.7-flash',                    tier: 'FREE', label: 'Step 3.7 Flash (NIM)',           brand: 'StepFun'   },
   { id: 'google/gemma-4-31b-it',                        tier: 'FREE', label: 'Gemma 4 31B (NIM)',              brand: 'Google'    },
-  { id: 'nvidia/nemotron-mini-4b-instruct',             tier: 'FREE', label: 'Nemotron Mini 4B (NIM)',         brand: 'NVIDIA'    },
-  { id: 'nvidia/nemotron-nano-12b-v2-vl',               tier: 'FREE', label: 'Nemotron Nano 12B VL (NIM)',     brand: 'NVIDIA',    capabilities: ['vision'] },
+  { id: 'meta/llama-3.2-11b-vision-instruct',           tier: 'FREE', label: 'Llama 3.2 11B Vision (NIM)',     brand: 'Meta',      capabilities: ['vision'] },
+  // RETIRED by NIM in the 2026-10-04 snapshot refresh, no same-family successor served:
+  // `openai/gpt-oss-120b` (NIM now serves only 20B — a size downgrade, so no supersession
+  // row), `mistralai/mistral-nemotron`, `meta/llama-3.3-70b-instruct`,
+  // `stepfun-ai/step-3.7-flash`, `nvidia/nemotron-mini-4b-instruct`,
+  // `nvidia/nemotron-nano-12b-v2-vl` (the NIM vision slot is now Llama 3.2 11B Vision).
   // DELIBERATELY ABSENT: `minimaxai/minimax-m2.7`. NIM has retired it, and the only
   // MiniMax id it still serves is `minimax-m3` — the generation that was rolled back
   // on 2026-08-17 for 404ing and hanging mid-stream. Re-listing M3 would put a model

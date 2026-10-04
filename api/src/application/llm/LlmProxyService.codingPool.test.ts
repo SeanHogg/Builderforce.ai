@@ -239,10 +239,14 @@ describe('canonicalModelId (superseded → live successor)', () => {
     // every stale id map to an OpenRouter model, the exact swap this guards against.
     // A bare `claude-*` must map to a bare `claude-*`; `anthropic/x` to `anthropic/y`.
     const namespaceOf = (id: string) => (id.includes('/') ? id.slice(0, id.indexOf('/')) : '');
+    // The FAMILY is the model name with its version / size / date tokens removed —
+    // `claude-opus-4-8` → `claude-opus`, `glm-5.2` → `glm`, `deepseek-v4-flash-0731` →
+    // `deepseek-flash`, `granite-4.1-8b` → `granite`. So opus → sonnet still fails, while a
+    // version bump inside one family passes whatever the vendor's naming shape.
+    const familyOf = (id: string) => id.split('/').pop()!.split('-').filter((t) => !/^v?\d/.test(t)).join('-');
     for (const [from, to] of Object.entries(SUPERSEDED_MODEL_IDS)) {
       expect(namespaceOf(to), `${from} → ${to} must stay in one namespace`).toBe(namespaceOf(from));
-      expect(to.split('/').pop()!.split('-')[1], `${from} → ${to} must stay in one model family`)
-        .toBe(from.split('/').pop()!.split('-')[1]);
+      expect(familyOf(to), `${from} → ${to} must stay in one model family`).toBe(familyOf(from));
     }
   });
 

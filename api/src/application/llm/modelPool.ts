@@ -154,7 +154,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   'cohere/north-mini-code:free',              // code-specialized, 256K context
   'nvidia/nemotron-3-super-120b-a12b:free',   // agentic reasoning fallback
   'google/gemma-4-26b-a4b-it:free',           // multimodal tools + structured output
-  'openai/gpt-oss-20b:free',                  // compact tool-capable reliability tail
+  'nvidia/nemotron-3.5-lightning:free',       // compact tool-capable reliability tail
   // DIRECT-ANTHROPIC reliability floor (NVIDIA-of-last-resort). Served by the
   // `anthropic` vendor on the operator's CLAUDE_API_KEY — a vendor-diverse path
   // independent of OpenRouter. These are `autoRoute: false`, so they never enter a
@@ -206,6 +206,10 @@ export const SUPERSEDED_MODEL_IDS: Readonly<Record<string, string>> = {
   // produce weaker output with nothing in the trace saying the model changed.
   'anthropic/claude-sonnet-4-6': 'anthropic/claude-sonnet-5',
   'anthropic/claude-sonnet-4-5': 'anthropic/claude-sonnet-5',
+  // NIM (FREE) and OpenRouter (STANDARD) bumps from the 2026-10-04 snapshot refresh.
+  'z-ai/glm-5.2': 'z-ai/glm-5.3',
+  'deepseek-ai/deepseek-v4-flash-0731': 'deepseek-ai/deepseek-v4.1-flash',
+  'ibm-granite/granite-4.1-8b': 'ibm-granite/granite-4.2-8b',
 };
 
 /** Hard ceiling on {@link SUPERSEDED_MODEL_IDS} chain-following — a mis-edit that

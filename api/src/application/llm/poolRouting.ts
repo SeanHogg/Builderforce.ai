@@ -45,7 +45,7 @@ const VISION_MODELS: ReadonlySet<string> = new Set([
   'anthropic/claude-sonnet-5',
   'openai/gpt-4.1',
   'google/gemini-2.5-pro',
-  'nvidia/nemotron-nano-12b-v2-vl:free',
+  'google/gemma-4-26b-a4b-it:free',
   'microsoft/phi-4-multimodal-instruct',
 ]);
 

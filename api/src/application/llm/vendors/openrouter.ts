@@ -35,20 +35,21 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA'     },
   { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside'   },
   { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', tier: 'FREE', label: 'Nemotron 3 Nano Omni 30B Reasoning (Free)', brand: 'NVIDIA' },
-  { id: 'openai/gpt-oss-20b:free',                   tier: 'FREE', label: 'GPT-OSS 20B (Free)',                  brand: 'OpenAI'     },
   { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', label: 'Gemma 4 31B (Free)',                  brand: 'Google'     },
   { id: 'poolside/laguna-xs-2.1:free',               tier: 'FREE', label: 'Laguna XS 2.1 (Free)',                brand: 'Poolside'   },
   { id: 'cohere/north-mini-code:free',               tier: 'FREE', label: 'North Mini Code (Free)',              brand: 'Cohere'     },
-  { id: 'nvidia/nemotron-3-nano-30b-a3b:free',       tier: 'FREE', label: 'Nemotron 3 Nano 30B (Free)',         brand: 'NVIDIA'     },
-  { id: 'nvidia/nemotron-nano-12b-v2-vl:free',       tier: 'FREE', label: 'Nemotron Nano 12B v2 VL (Free)',     brand: 'NVIDIA'     },
-  { id: 'nvidia/nemotron-nano-9b-v2:free',           tier: 'FREE', label: 'Nemotron Nano 9B v2 (Free)',         brand: 'NVIDIA'     },
-  { id: 'z-ai/glm-5.2:free',                         tier: 'FREE', label: 'GLM 5.2 (Free)',                      brand: 'Z.AI'       },
+  { id: 'nvidia/nemotron-3.5-lightning:free',        tier: 'FREE', label: 'Nemotron 3.5 Lightning (Free)',      brand: 'NVIDIA'     },
+  { id: 'qwen/qwen3.8-27b:free',                     tier: 'FREE', label: 'Qwen 3.8 27B (Free)',                 brand: 'Qwen'       },
+  // Free slugs retired on 2026-10-04 with no free successor (each still exists PAID,
+  // and mapping free → paid is a tier change, so they are dropped, not superseded):
+  // `openai/gpt-oss-20b:free`, `nvidia/nemotron-3-nano-30b-a3b:free`,
+  // `nvidia/nemotron-nano-12b-v2-vl:free`, `nvidia/nemotron-nano-9b-v2:free`, `z-ai/glm-5.2:free`.
 
   // ── STANDARD tier — paid low-cost models, prefixed in the paid pool so
   //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.
   { id: 'meta-llama/llama-3.1-8b-instruct',          tier: 'STANDARD', label: 'Llama 3.1 8B Instruct',    brand: 'Meta'      },
   { id: 'google/gemma-3-12b-it',                     tier: 'STANDARD', label: 'Gemma 3 12B Instruct',     brand: 'Google'    },
-  { id: 'ibm-granite/granite-4.1-8b',                tier: 'STANDARD', label: 'Granite 4.1 8B',           brand: 'IBM'       },
+  { id: 'ibm-granite/granite-4.2-8b',                tier: 'STANDARD', label: 'Granite 4.2 8B',           brand: 'IBM'       },
   { id: 'qwen/qwen3.5-9b',                           tier: 'STANDARD', label: 'Qwen 3.5 9B',              brand: 'Qwen'      },
   { id: 'z-ai/glm-4.7',                              tier: 'STANDARD', label: 'GLM 4.7',                  brand: 'Z.AI'      },
   { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
